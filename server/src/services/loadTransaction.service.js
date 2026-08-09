@@ -5,7 +5,9 @@ const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
 const employeeLedgerService = require('./employeeLedger.service');
+const supplierLedgerService = require('./supplierLedger.service');
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
+const commissionEngineService = require('./commissionEngine.service');
 
 const ApiError = require('../utils/ApiError');
 
@@ -153,6 +155,7 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
 
   if (!transaction.customerId) {
     await employeeLedgerService.deletePurchaseAdvanceForReference(transaction._id, 'LoadTransaction');
+    await supplierLedgerService.deleteCustomerSaleOffsetForReference(transaction._id, 'LoadTransaction');
     return;
   }
 
@@ -197,9 +200,25 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
     createdBy: transaction.createdBy,
     updatedBy: transaction.updatedBy,
   });
+
+  await supplierLedgerService.syncPurchaseFromCustomerSale({
+    organizationId: transaction.organizationId,
+    branchId: transaction.branchId,
+    customerId: transaction.customerId,
+    referenceId: transaction._id,
+    referenceModel: 'LoadTransaction',
+    reference,
+    description: saleDescription,
+    unpaidAmount: unpaid,
+    transactionDate: transaction.date,
+    createdBy: transaction.createdBy,
+    updatedBy: transaction.updatedBy,
+  });
 };
 
 const createLoadTransaction = async (transactionBody) => {
+  // '' from "no salesman selected" would fail the ObjectId cast — normalize to null.
+  transactionBody.salesmanId = transactionBody.salesmanId || null;
   const linkedCustomer = await resolveLinkedCustomer({
     customerId: transactionBody.customerId,
     organizationId: transactionBody.organizationId,
@@ -233,6 +252,8 @@ const createLoadTransaction = async (transactionBody) => {
 
   await syncCustomerLedgerForLoadTransaction(transaction);
 
+  commissionEngineService.syncCommissionForLoadTransaction(transaction, transaction.createdBy).catch(() => {});
+
   return transaction;
 };
 
@@ -255,12 +276,12 @@ const queryLoadTransactions = async (filter, options) => {
   return LoadTransaction.paginate(queryFilter, {
     ...queryOptions,
     sortBy: queryOptions.sortBy || 'date:desc,createdAt:desc',
-    populate: 'customerId',
+    populate: ['customerId', { path: 'salesmanId', select: 'name email' }],
   });
 };
 
 const getLoadTransactionById = async (transactionId) => {
-  const transaction = await LoadTransaction.findById(transactionId);
+  const transaction = await LoadTransaction.findById(transactionId).populate('salesmanId', 'name email');
   if (!transaction) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Load transaction not found');
   }
@@ -268,6 +289,9 @@ const getLoadTransactionById = async (transactionId) => {
 };
 
 const updateLoadTransaction = async (transactionId, updateBody) => {
+  if ('salesmanId' in updateBody) {
+    updateBody.salesmanId = updateBody.salesmanId || null;
+  }
   const transaction = await getLoadTransactionById(transactionId);
   const previousPayment = {
     method: transaction.paymentMethod,
@@ -320,6 +344,8 @@ const updateLoadTransaction = async (transactionId, updateBody) => {
 
   await syncCustomerLedgerForLoadTransaction(transaction);
 
+  commissionEngineService.syncCommissionForLoadTransaction(transaction, transaction.createdBy).catch(() => {});
+
   return transaction;
 };
 
@@ -340,6 +366,7 @@ const deleteLoadTransaction = async (transactionId) => {
   await walletEntryService.deleteEntriesByReference(transaction._id, 'LoadTransaction');
   await customerLedgerService.deleteLedgerEntriesByReference(transaction._id);
   await employeeLedgerService.deletePurchaseAdvanceForReference(transaction._id, 'LoadTransaction');
+  await supplierLedgerService.deleteCustomerSaleOffsetForReference(transaction._id, 'LoadTransaction');
   if (transaction.paymentMethod === 'wallet' && transaction.paymentWalletType && Number(transaction.receivedAmount || 0) > 0) {
     await walletService.adjustWalletBalance({
       organizationId: transaction.organizationId,
@@ -350,6 +377,14 @@ const deleteLoadTransaction = async (transactionId) => {
       userId: transaction.createdBy,
     });
   }
+
+  await commissionEngineService.reverseCommissionOnDelete({
+    sale: transaction,
+    referenceModel: 'LoadTransaction',
+    reason: 'Load transaction deleted',
+    userId: transaction.createdBy,
+  });
+
   await transaction.deleteOne();
   return transaction;
 };

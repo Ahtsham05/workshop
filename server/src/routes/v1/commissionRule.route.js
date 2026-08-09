@@ -18,6 +18,10 @@ router
   .get(auth('viewCommissionRules'), validate(commissionRuleValidation.resolveCommissionRate), commissionRuleController.resolveCommissionRate);
 
 router
+  .route('/salesman-module-rates')
+  .get(auth('viewCommissionRules'), validate(commissionRuleValidation.getSalesmanModuleRates), commissionRuleController.getSalesmanModuleRates);
+
+router
   .route('/:commissionRuleId')
   .get(auth('viewCommissionRules'), validate(commissionRuleValidation.getCommissionRule), commissionRuleController.getCommissionRule)
   .patch(auth('manageCommissionRules'), validate(commissionRuleValidation.updateCommissionRule), commissionRuleController.updateCommissionRule)

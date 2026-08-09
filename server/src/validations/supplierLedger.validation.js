@@ -51,6 +51,13 @@ const getSupplierBalance = {
   }),
 };
 
+const getBalanceBeforeReference = {
+  params: Joi.object().keys({
+    supplierId: Joi.string().custom(objectId),
+    referenceId: Joi.string().custom(objectId),
+  }),
+};
+
 const updateLedgerEntry = {
   params: Joi.object().keys({
     entryId: Joi.required().custom(objectId),
@@ -77,6 +84,7 @@ module.exports = {
   getLedgerEntries,
   getLedgerEntry,
   getSupplierBalance,
+  getBalanceBeforeReference,
   updateLedgerEntry,
   deleteLedgerEntry,
 };

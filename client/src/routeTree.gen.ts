@@ -23,6 +23,7 @@ import { Route as AuthenticatedPurchaseSuggestionsImport } from './routes/_authe
 import { Route as AuthenticatedInsightsImport } from './routes/_authenticated/insights'
 import { Route as AuthenticatedCashRegisterImport } from './routes/_authenticated/cash-register'
 import { Route as AuthenticatedCashBookImport } from './routes/_authenticated/cash-book'
+import { Route as AuthenticatedBranchOverviewImport } from './routes/_authenticated/branch-overview'
 import { Route as AuthenticatedBarcodeGeneratorImport } from './routes/_authenticated/barcode-generator'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
 import { Route as AuthenticatedAiAssistantImport } from './routes/_authenticated/ai-assistant'
@@ -237,6 +238,13 @@ const AuthenticatedCashBookRoute = AuthenticatedCashBookImport.update({
   path: '/cash-book',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+
+const AuthenticatedBranchOverviewRoute =
+  AuthenticatedBranchOverviewImport.update({
+    id: '/branch-overview',
+    path: '/branch-overview',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedBarcodeGeneratorRoute =
   AuthenticatedBarcodeGeneratorImport.update({
@@ -1300,6 +1308,13 @@ declare module '@tanstack/react-router' {
       path: '/barcode-generator'
       fullPath: '/barcode-generator'
       preLoaderRoute: typeof AuthenticatedBarcodeGeneratorImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/branch-overview': {
+      id: '/_authenticated/branch-overview'
+      path: '/branch-overview'
+      fullPath: '/branch-overview'
+      preLoaderRoute: typeof AuthenticatedBranchOverviewImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/cash-book': {
@@ -2446,6 +2461,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAiAssistantRoute: typeof AuthenticatedAiAssistantRoute
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
   AuthenticatedBarcodeGeneratorRoute: typeof AuthenticatedBarcodeGeneratorRoute
+  AuthenticatedBranchOverviewRoute: typeof AuthenticatedBranchOverviewRoute
   AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedCashRegisterRoute: typeof AuthenticatedCashRegisterRoute
   AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
@@ -2525,6 +2541,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAiAssistantRoute: AuthenticatedAiAssistantRoute,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
   AuthenticatedBarcodeGeneratorRoute: AuthenticatedBarcodeGeneratorRoute,
+  AuthenticatedBranchOverviewRoute: AuthenticatedBranchOverviewRoute,
   AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedCashRegisterRoute: AuthenticatedCashRegisterRoute,
   AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
@@ -2630,6 +2647,7 @@ export interface FileRoutesByFullPath {
   '/ai-assistant': typeof AuthenticatedAiAssistantRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
+  '/branch-overview': typeof AuthenticatedBranchOverviewRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
@@ -2780,6 +2798,7 @@ export interface FileRoutesByTo {
   '/ai-assistant': typeof AuthenticatedAiAssistantRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
+  '/branch-overview': typeof AuthenticatedBranchOverviewRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
@@ -2930,6 +2949,7 @@ export interface FileRoutesById {
   '/_authenticated/ai-assistant': typeof AuthenticatedAiAssistantRoute
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/_authenticated/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
+  '/_authenticated/branch-overview': typeof AuthenticatedBranchOverviewRoute
   '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/cash-register': typeof AuthenticatedCashRegisterRoute
   '/_authenticated/insights': typeof AuthenticatedInsightsRoute
@@ -3084,6 +3104,7 @@ export interface FileRouteTypes {
     | '/ai-assistant'
     | '/barcode-demo'
     | '/barcode-generator'
+    | '/branch-overview'
     | '/cash-book'
     | '/cash-register'
     | '/insights'
@@ -3233,6 +3254,7 @@ export interface FileRouteTypes {
     | '/ai-assistant'
     | '/barcode-demo'
     | '/barcode-generator'
+    | '/branch-overview'
     | '/cash-book'
     | '/cash-register'
     | '/insights'
@@ -3381,6 +3403,7 @@ export interface FileRouteTypes {
     | '/_authenticated/ai-assistant'
     | '/_authenticated/barcode-demo'
     | '/_authenticated/barcode-generator'
+    | '/_authenticated/branch-overview'
     | '/_authenticated/cash-book'
     | '/_authenticated/cash-register'
     | '/_authenticated/insights'
@@ -3581,6 +3604,7 @@ export const routeTree = rootRoute
         "/_authenticated/ai-assistant",
         "/_authenticated/barcode-demo",
         "/_authenticated/barcode-generator",
+        "/_authenticated/branch-overview",
         "/_authenticated/cash-book",
         "/_authenticated/cash-register",
         "/_authenticated/insights",
@@ -3721,6 +3745,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/barcode-generator": {
       "filePath": "_authenticated/barcode-generator.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/branch-overview": {
+      "filePath": "_authenticated/branch-overview.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/cash-book": {

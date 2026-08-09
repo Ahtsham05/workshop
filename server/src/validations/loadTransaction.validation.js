@@ -19,6 +19,7 @@ const createLoadTransaction = {
     date: Joi.date().default(() => new Date()).custom(notFutureDate),
     type: Joi.string().valid('normal', 'package').default('normal'),
     network: Joi.string().default('none'),
+    salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
   }),
 };
 
@@ -58,6 +59,7 @@ const updateLoadTransaction = {
       date: Joi.date().custom(notFutureDate),
       type: Joi.string().valid('normal', 'package'),
       network: Joi.string(),
+      salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
     })
     .min(1),
 };

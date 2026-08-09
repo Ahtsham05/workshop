@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { SalesmanField } from '@/components/salesman-field'
 import {
   Table,
   TableBody,
@@ -72,6 +73,12 @@ type InvoiceForm = {
   customerPhone: string
   notes: string
   date: string
+  salesmanId: string
+}
+
+function salesmanName(ref: { name?: string; email?: string } | string | null | undefined): string {
+  if (!ref) return '—'
+  return typeof ref === 'string' ? ref : ref.name || ref.email || '—'
 }
 
 const fmtDate = (v?: string) => (v ? formatBusinessDateTime(v) : '-')
@@ -90,6 +97,7 @@ const initialInvoiceForm = (): InvoiceForm => ({
   customerPhone: '',
   notes: '',
   date: toBusinessDateTimeLocal(),
+  salesmanId: '',
 })
 
 const EMPTY_CUSTOMERS: Array<{
@@ -130,7 +138,7 @@ export default function ServicesPage({
   const { data: invoiceData } = useGetServiceInvoicesQuery(
     invoiceSearch.trim() ? { page: 1, limit: 1000 } : { page: invoicePage, limit: invoiceLimit },
   )
-  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true })
+  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true, includeSuppliers: true })
 
   const customers = useMemo(
     () => (Array.isArray(customersData) ? customersData : EMPTY_CUSTOMERS),
@@ -140,11 +148,11 @@ export default function ServicesPage({
   const customerSelectOptions = useMemo(
     () =>
       customers
-        .map((c: { id?: string; _id?: string; name?: string; phone?: string; mobile?: string; isEmployeeAccount?: boolean }) => ({
+        .map((c: { id?: string; _id?: string; name?: string; phone?: string; mobile?: string; isEmployeeAccount?: boolean; isSupplierAccount?: boolean }) => ({
           value: c.id || c._id || '',
           label: c.name || '',
           sublabel: c.phone || c.mobile || undefined,
-          badge: c.isEmployeeAccount ? 'Employee' : undefined,
+          badge: c.isEmployeeAccount ? 'Employee' : c.isSupplierAccount ? 'Supplier' : undefined,
         }))
         .filter((option) => option.value),
     [customers],
@@ -337,6 +345,7 @@ export default function ServicesPage({
           unitPrice: line.unitPrice,
           quantity: line.quantity,
         })),
+        salesmanId: invoiceForm.salesmanId || undefined,
       }
 
       let inv: ServiceInvoiceRecord
@@ -382,6 +391,7 @@ export default function ServicesPage({
       customerPhone: invoice.customerPhone || '',
       notes: invoice.notes || '',
       date: invoice.date ? toBusinessDateTimeLocal(new Date(invoice.date)) : toBusinessDateTimeLocal(),
+      salesmanId: invoice.salesmanId?.id || invoice.salesmanId?._id || invoice.salesmanId || '',
     })
     setInvoiceLines(
       (invoice.items || []).map((item: any) => ({
@@ -657,6 +667,14 @@ export default function ServicesPage({
                 </div>
 
                 <div className='space-y-1.5'>
+                  <SalesmanField
+                    value={invoiceForm.salesmanId}
+                    onValueChange={(v) => setInvoiceForm({ ...invoiceForm, salesmanId: v })}
+                    id='service-salesman'
+                  />
+                </div>
+
+                <div className='space-y-1.5'>
                   <Label>Notes</Label>
                   <Textarea rows={2} value={invoiceForm.notes} onChange={(e) => setInvoiceForm({ ...invoiceForm, notes: e.target.value })} />
                 </div>
@@ -851,13 +869,14 @@ export default function ServicesPage({
                         <TableHead>Customer</TableHead>
                         <TableHead className='text-right'>Items</TableHead>
                         <TableHead className='text-right'>Total</TableHead>
+                        <TableHead>Salesman</TableHead>
                         <TableHead className='text-right'>Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredInvoices.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={6} className='text-center py-8 text-muted-foreground'>
+                          <TableCell colSpan={7} className='text-center py-8 text-muted-foreground'>
                             {invoiceSearch.trim() ? 'No results found' : 'No service invoices found'}
                           </TableCell>
                         </TableRow>
@@ -872,6 +891,7 @@ export default function ServicesPage({
                           </TableCell>
                           <TableCell className='text-right'>{invoice.items?.length ?? 0}</TableCell>
                           <TableCell className='text-right font-semibold'>{fmtAmt(invoice.totalAmount)}</TableCell>
+                          <TableCell className='text-sm text-muted-foreground'>{salesmanName((invoice as any).salesmanId)}</TableCell>
                           <TableCell className='text-right'>
                             <div className='flex justify-end items-center gap-2'>
                               <WhatsAppSendButton

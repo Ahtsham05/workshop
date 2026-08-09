@@ -364,6 +364,7 @@ const getPendingInvoiceSummaryByCustomer = catchAsync(async (req, res) => {
   // and left out.
   const customerFilter = {
     isEmployeeAccount: { $ne: true },
+    isSupplierAccount: { $ne: true },
     $or: [{ balance: { $ne: 0 } }, { _id: { $in: [...pendingByCustomerId.keys()].map(toObjectId) } }],
   };
   applyBranchFilter(customerFilter, req);

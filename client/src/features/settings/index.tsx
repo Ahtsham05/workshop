@@ -9,6 +9,7 @@ import {
   IconBrandWhatsapp,
   IconDeviceMobile,
   IconPrinter,
+  IconLanguage,
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
 import SidebarNav from './components/sidebar-nav'
@@ -46,6 +47,11 @@ export default function Settings() {
 }
 
 const sidebarNavItems = [
+  {
+    title: 'Display',
+    icon: <IconLanguage size={18} />,
+    href: '/settings/display',
+  },
   {
     title: 'Offline Mode',
     icon: <IconCloudDownload size={18} />,

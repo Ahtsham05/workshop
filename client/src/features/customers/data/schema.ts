@@ -32,6 +32,10 @@ export const customerSchema = z.object({
   whatsapp: z.string().optional(),
   balance: z.number().optional(),
   address: z.string().optional(), // customer address is optional
+  isEmployeeAccount: z.boolean().optional(), // hidden shadow account for billing an employee as a customer
+  linkedEmployeeId: z.string().optional(),
+  isSupplierAccount: z.boolean().optional(), // hidden shadow account for billing a supplier as a customer
+  linkedSupplierId: z.string().optional(),
   createdAt: z.string().optional(), // timestamp of when the customer was created (optional)
   updatedAt: z.string().optional(), // timestamp of when the customer was last updated (optional)
 });

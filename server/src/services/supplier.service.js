@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Supplier } = require('../models');
+const { Supplier, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const supplierLedgerService = require('./supplierLedger.service');
 const accountsSystemService = require('./accountsSystem.service');
@@ -30,6 +30,41 @@ const createSupplier = async (supplierBody) => {
     // Accounting must never block supplier creation.
   }
 
+  await ensureSupplierCustomerAccount(supplier);
+
+  return supplier;
+};
+
+/**
+ * Every supplier gets a hidden "shadow" Customer record so the normal sale
+ * screens (Invoice, Load top-up, SIM sale, Services) can sell products/
+ * services to them on account — a supplier can also be a customer. It never
+ * appears in the Customers list (isSupplierAccount) and unpaid balances are
+ * mirrored into this supplier's own ledger as a debit note by
+ * supplierLedger.service.js, netting against what the business owes them.
+ * Idempotent — safe to call on suppliers created before this feature shipped.
+ * @param {Supplier} supplier
+ * @returns {Promise<Supplier>}
+ */
+const ensureSupplierCustomerAccount = async (supplier) => {
+  if (supplier.customerId) return supplier;
+
+  const customer = await Customer.create({
+    organizationId: supplier.organizationId,
+    branchId: supplier.branchId,
+    createdBy: supplier.createdBy,
+    name: supplier.name,
+    nameUrdu: supplier.nameUrdu,
+    email: supplier.email,
+    phone: supplier.phone,
+    whatsapp: supplier.whatsapp,
+    address: supplier.address,
+    isSupplierAccount: true,
+    linkedSupplierId: supplier._id,
+  });
+
+  supplier.customerId = customer._id;
+  await supplier.save();
   return supplier;
 };
 
@@ -78,6 +113,21 @@ const updateSupplierById = async (supplierId, updateBody) => {
   const originalBalance = Number(supplier.balance || 0);
   Object.assign(supplier, updates);
   await supplier.save();
+
+  await ensureSupplierCustomerAccount(supplier);
+  if (supplier.customerId) {
+    await Customer.updateOne(
+      { _id: supplier.customerId },
+      {
+        name: supplier.name,
+        nameUrdu: supplier.nameUrdu,
+        email: supplier.email,
+        phone: supplier.phone,
+        whatsapp: supplier.whatsapp,
+        address: supplier.address,
+      },
+    );
+  }
 
   if (Object.prototype.hasOwnProperty.call(updateBody, 'balance')) {
     const newBalance = Number(supplier.balance || 0);
@@ -176,6 +226,7 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}) => {
 
 module.exports = {
   createSupplier,
+  ensureSupplierCustomerAccount,
   querySuppliers,
   getSupplierById,
   updateSupplierById,

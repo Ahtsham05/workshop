@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { ProductHistoryDialog } from './product-history-dialog'
 import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
 import { usePermissions } from '@/context/permission-context'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 
 interface ProductCatalogProps {
   categorizedProducts: Category[]
@@ -50,6 +51,7 @@ export function ProductCatalog({
   selectedCustomerName
 }: ProductCatalogProps) {
   const { t } = useLanguage()
+  const { showUrdu } = useUrduDisplay()
   const { hasPermission } = usePermissions()
   const canViewCost = hasPermission('viewProducts')
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([])
@@ -268,7 +270,7 @@ export function ProductCatalog({
                     <span className={getTextClasses(category.name, 'text-xs text-center truncate w-full')}>
                       {category.name}
                     </span>
-                    {category.nameUrdu?.trim() ? (
+                    {showUrdu && category.nameUrdu?.trim() ? (
                       <span
                         className={cn(
                           'w-full truncate text-center text-xs rtl',
@@ -311,7 +313,7 @@ export function ProductCatalog({
                   <div className='flex items-center gap-2'>
                   <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
                     <h3 className={getTextClasses(category.name, 'font-semibold text-base')}>{category.name}</h3>
-                    {category.nameUrdu?.trim() ? (
+                    {showUrdu && category.nameUrdu?.trim() ? (
                       <span
                         className={cn('text-sm rtl', getUrduSecondaryNameClasses(category.nameUrdu))}
                         dir='rtl'
@@ -412,7 +414,7 @@ export function ProductCatalog({
                             >
                               {product.name}
                             </p>
-                            {product.nameUrdu?.trim() ? (
+                            {showUrdu && product.nameUrdu?.trim() ? (
                               <p
                                 dir="rtl"
                                 className={cn(

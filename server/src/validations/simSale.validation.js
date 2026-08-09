@@ -18,6 +18,7 @@ const createSimSale = {
     paymentMethod: Joi.string().valid('cash', 'bank', 'jazzcash', 'easypaisa', 'wallet').default('cash'),
     paymentWalletType: Joi.string().trim().allow(''),
     notes: Joi.string().allow(''),
+    salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
   }),
 };
 
@@ -62,6 +63,7 @@ const updateSimSale = {
       paymentMethod: Joi.string().valid('cash', 'bank', 'jazzcash', 'easypaisa', 'wallet'),
       paymentWalletType: Joi.string().trim().allow(''),
       notes: Joi.string().allow(''),
+      salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
     })
     .min(1),
 };

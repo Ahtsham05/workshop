@@ -10,6 +10,7 @@ import { RouterProvider, createRouter, createHashHistory } from '@tanstack/react
 import { FontProvider } from './context/font-context'
 import { ThemeProvider } from './context/theme-context'
 import { LanguageProvider } from './context/language-context'
+import { UrduDisplayProvider } from './context/urdu-display-context'
 // Apply stored language to <html> before first render to avoid layout flash
 import { getStoredLanguage, applyLanguageToDocument } from './i18n'
 applyLanguageToDocument(getStoredLanguage())
@@ -55,8 +56,10 @@ if (!rootElement.innerHTML) {
               <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
                 <LanguageProvider>
                   <FontProvider>
-                    <RouterProvider router={router} />
-                    <Toaster />
+                    <UrduDisplayProvider>
+                      <RouterProvider router={router} />
+                      <Toaster />
+                    </UrduDisplayProvider>
                   </FontProvider>
                 </LanguageProvider>
               </ThemeProvider>

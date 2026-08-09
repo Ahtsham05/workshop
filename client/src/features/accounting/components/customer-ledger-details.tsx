@@ -54,7 +54,7 @@ import {
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, resolveSheetFormat, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format';
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template';
 import { PrintFormatButton } from '@/components/print-format-button';
-import { balanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
+import { balanceBeforeFromLedgerEntry, fetchSupplierBalanceBeforeInvoice } from '@/features/invoice/utils/invoice-print-balance';
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
 import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
@@ -201,6 +201,7 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
       </div>
       <div>
         <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -248,6 +249,7 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
             )}
           </TableBody>
         </Table>
+        </div>
       </div>
     </div>
   );
@@ -348,6 +350,7 @@ function SalesReturnDialogContent({
       </div>
       <div>
         <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -376,6 +379,7 @@ function SalesReturnDialogContent({
             )}
           </TableBody>
         </Table>
+        </div>
       </div>
     </div>
   );
@@ -1227,7 +1231,11 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
 
       const invoice = await dispatch(invoiceApi.endpoints.getInvoiceById.initiate(rid)).unwrap();
       const { name: customerName, nameUrdu: customerNameUrdu } = resolveInvoiceCustomerForPrint(invoice, customer.name);
-      const previousBalance = balanceBeforeFromLedgerEntry(entry);
+      // This customer may be a supplier's shadow account — its own CustomerLedger balance
+      // only reflects sales, ignoring purchases. The supplier ledger nets both together.
+      const previousBalance = customer?.isSupplierAccount && customer?.linkedSupplierId
+        ? -(await fetchSupplierBalanceBeforeInvoice(customer.linkedSupplierId, rid))
+        : balanceBeforeFromLedgerEntry(entry);
 
       const customerIdStr =
         resolveCustomerIdString(invoice.customerId) || String(customer._id || customer.id || '')
@@ -1584,7 +1592,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       </Dialog>
 
       <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[80vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Invoice Details')}</DialogTitle>
           </DialogHeader>
@@ -1599,7 +1607,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           if (!open) setViewingSalesReturnId(null);
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[80vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Sales Return')}</DialogTitle>
           </DialogHeader>
@@ -1617,7 +1625,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           if (!open) setViewingSimSaleId(null);
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[85vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('SIM sale details')}</DialogTitle>
           </DialogHeader>
@@ -1635,7 +1643,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           if (!open) setViewingLoadTxId(null);
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[85vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Load sale details')}</DialogTitle>
           </DialogHeader>
@@ -1653,7 +1661,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           if (!open) setViewingCashWithdrawalId(null);
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[85vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Cash Management transaction')}</DialogTitle>
           </DialogHeader>
@@ -1665,7 +1673,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       </Dialog>
 
       <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Payment Receipt')}</DialogTitle>
           </DialogHeader>

@@ -124,6 +124,16 @@ export function createEmptyOrderManualItem(): OrderItem {
   }
 }
 
+/** A fresh order starts with this many empty rows pre-added so the buyer can jump
+ * straight into selecting products instead of clicking "Add Row" repeatedly — more rows
+ * are still appended automatically once these fill up (see addNewRowAndOpenProduct
+ * below). */
+const NEW_ORDER_ROW_COUNT = 12
+
+function createInitialOrderItems(): OrderItem[] {
+  return Array.from({ length: NEW_ORDER_ROW_COUNT }, () => createEmptyOrderManualItem())
+}
+
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
 function buildInitialDraft(
@@ -133,7 +143,7 @@ function buildInitialDraft(
   if (!editing) {
     return {
       supplier: {},
-      items: [createEmptyOrderManualItem()],
+      items: createInitialOrderItems(),
       orderDate: todayISO(),
       expectedDeliveryDate: '',
       notes: '',
@@ -309,12 +319,16 @@ export default function PurchaseOrderPanel({
   }, [draft.items.length])
 
   useEffect(() => {
-    const first = draft.items[0]
-    const oneEmptyManual =
-      draft.items.length === 1 &&
-      first?.isManualEntry &&
-      !(first.product?.id || (first.product as { _id?: string })?._id)
-    if (oneEmptyManual && !autoOpenDoneRef.current && !editing) {
+    // Fresh order (every row still an untouched empty manual entry) — auto-open the
+    // first row's product picker. Matches on "all rows empty" rather than a single row
+    // so this still fires now that a new order starts pre-populated with several empty
+    // rows.
+    const allEmptyManual =
+      draft.items.length > 0 &&
+      draft.items.every(
+        (item) => item.isManualEntry && !(item.product?.id || (item.product as { _id?: string })?._id)
+      )
+    if (allEmptyManual && !autoOpenDoneRef.current && !editing) {
       autoOpenDoneRef.current = true
       queueMicrotask(() => setProductSelectOpen('manual-0'))
     }
@@ -909,7 +923,7 @@ export default function PurchaseOrderPanel({
               )}
               <Button size='sm' variant='outline' onClick={addNewRowAndOpenProduct} className='gap-1'>
                 <Plus className='h-4 w-4' />
-                Add item
+                Add Row
               </Button>
             </div>
           </div>

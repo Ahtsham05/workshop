@@ -57,6 +57,14 @@ const SupplierSchema = new mongoose.Schema({
     overallScore: { type: Number, default: null }, // 0-100, weighted composite (see supplierScoring.service.js)
     lastScoredAt: { type: Date, default: null },
   },
+  // Shadow Customer record so this supplier can also be billed through the
+  // normal sale flows (Invoice/Load/Sim-Sale/Service) — see customer.model.js
+  // isSupplierAccount. Unpaid balances are mirrored into this supplier's own
+  // ledger as a debit note (see supplierLedger.service.js syncPurchaseFromCustomerSale).
+  customerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Customer',
+  },
 }, {
   timestamps: true,
 });

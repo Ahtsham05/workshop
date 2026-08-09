@@ -27,7 +27,7 @@ import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format';
+import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, resolveSheetFormat, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format';
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template';
 import { PrintFormatButton } from '@/components/print-format-button';
 import { expiryBadge } from '@/features/reports/utils/expiry-badge';
@@ -39,12 +39,21 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
 import { purchaseApi, useGetPurchaseByIdQuery } from '@/stores/purchase.api';
+import { invoiceApi, useGetInvoiceByIdQuery } from '@/stores/invoice.api';
 import { returnsApi, useGetPurchaseReturnByIdQuery } from '@/stores/returns.api';
 import { PaymentReceipt } from './payment-receipt';
 import { mobileShopApi, useGetLoadPurchaseByIdQuery } from '@/stores/mobile-shop.api';
+import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '@/features/invoice/utils/print-utils';
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils';
-import { supplierBalanceBeforeFromLedgerEntry } from '@/features/invoice/utils/invoice-print-balance';
+import { supplierBalanceBeforeFromLedgerEntry, fetchBalanceBeforeInvoice } from '@/features/invoice/utils/invoice-print-balance';
+import { withCustomerContactForPrint } from '@/features/invoice/utils/invoice-print-whatsapp';
+import {
+  fetchAndStashPrintContact,
+  resolveCustomerIdString,
+  stashPrintContact,
+  type PrintWindowContact,
+} from '@/features/invoice/utils/invoice-print-contact-bridge';
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
 import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
@@ -71,6 +80,9 @@ interface LedgerEntry {
   description: string;
   reference?: string;
   referenceId?: string;  // Links to purchase invoice if auto-generated
+  // Source collection of referenceId — 'Purchase' (default/legacy) or 'Invoice' for
+  // debit-note entries created when this supplier is also billed as a customer.
+  referenceModel?: string;
   debit: number;
   credit: number;
   balance: number;
@@ -86,6 +98,22 @@ function formatLedgerInvoiceType(entry: LedgerEntry, t: (key: string) => string)
   if (k === 'credit') return t('Credit');
   if (k === 'pending') return t('Pending');
   return raw;
+}
+
+// For debit-note entries created when this supplier is also billed as a customer —
+// the invoice's "customer" is this supplier's own shadow Customer account.
+function resolveInvoiceCustomerForPrint(invoice: any, fallbackName: string): { name: string; nameUrdu?: string } {
+  if (invoice.customerId === 'walk-in') {
+    return { name: invoice.walkInCustomerName || 'Walk-in', nameUrdu: undefined };
+  }
+  const cid = invoice.customerId;
+  if (cid && typeof cid === 'object') {
+    return {
+      name: cid.name || invoice.customerName || fallbackName,
+      nameUrdu: cid.nameUrdu?.trim() || undefined,
+    };
+  }
+  return { name: invoice.customerName || fallbackName, nameUrdu: undefined };
 }
 
 interface SupplierLedgerDetailsProps {
@@ -150,6 +178,7 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
       </div>
       <div>
         <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -187,6 +216,130 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
             )}
           </TableBody>
         </Table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Invoice dialog content — for debit-note entries created when this supplier is
+// also billed as a customer (see supplierLedger.service.js syncPurchaseFromCustomerSale).
+// referenceId on those rows points at an Invoice, not a Purchase.
+function InvoiceDialogContent({ invoiceId, supplierName }: { invoiceId?: string; supplierName: string }) {
+  const { t } = useLanguage();
+
+  if (!invoiceId) {
+    return <div className="text-center py-8 text-gray-500">{t('No invoice selected')}</div>;
+  }
+
+  const { data: invoiceData, isLoading, error } = useGetInvoiceByIdQuery(invoiceId);
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>;
+  }
+
+  if (error || !invoiceData) {
+    return <div className="text-center py-8 text-red-500">{t('Failed to load invoice details')}</div>;
+  }
+
+  const formatDate = (date: any) => {
+    try {
+      if (!date) return '-';
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) return '-';
+      return format(dateObj, 'MMM dd, yyyy');
+    } catch {
+      return '-';
+    }
+  };
+
+  const formatCurrency = (amount: any) => {
+    const num = Number(amount);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-sm text-gray-500">{t('Invoice Number')}</p>
+          <p className="font-medium">{invoiceData.invoiceNumber || '-'}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Date')}</p>
+          <p className="font-medium">{formatDate(invoiceData.invoiceDate || invoiceData.date)}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Customer')}</p>
+          <p className="font-medium">{invoiceData.customer?.name || supplierName}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Total Amount')}</p>
+          <p className="font-medium text-lg">Rs{formatCurrency(invoiceData.total || invoiceData.totalAmount)}</p>
+          {Number(invoiceData.discount || 0) > 0 && (
+            <p className="text-xs text-green-600">-Rs{formatCurrency(invoiceData.discount)} {t('discount')}</p>
+          )}
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Status')}</p>
+          <Badge>{invoiceData.status || 'N/A'}</Badge>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{t('Type')}</p>
+          <Badge variant="outline">{invoiceData.type || 'N/A'}</Badge>
+        </div>
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
+        <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('Product')}</TableHead>
+              <TableHead>Variant</TableHead>
+              <TableHead>Batch #</TableHead>
+              <TableHead>Expiry</TableHead>
+              <TableHead>{t('Quantity')}</TableHead>
+              <TableHead>{t('price')}</TableHead>
+              <TableHead className="text-right">{t('Total')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {invoiceData.items && invoiceData.items.length > 0 ? (
+              invoiceData.items.map((item: any, index: number) => {
+                const variantLabel = item.variantId?.attributes
+                  ? Object.values(item.variantId.attributes).join(' / ')
+                  : ''
+                return (
+                <TableRow key={index}>
+                  <TableCell className="max-w-[200px] truncate" title={item.name || item.product?.name || item.productName || '-'}>{item.name || item.product?.name || item.productName || '-'}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{variantLabel || '—'}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{item.batchNumber || '—'}</TableCell>
+                  <TableCell>{expiryBadge(item.batchId?.expiryDate)}</TableCell>
+                  <TableCell>{item.quantity || 0}</TableCell>
+                  <TableCell>Rs{formatCurrency(item.unitPrice || item.price)}</TableCell>
+                  <TableCell className="text-right">
+                    {Number(item.discountAmount || 0) > 0 && (
+                      <div className="text-xs text-muted-foreground line-through">
+                        Rs{formatCurrency((item.quantity || 0) * (item.unitPrice || item.price || 0))}
+                      </div>
+                    )}
+                    Rs{formatCurrency(item.subtotal || item.total)}
+                    {Number(item.discountAmount || 0) > 0 && (
+                      <div className="text-xs text-green-600">-Rs{formatCurrency(item.discountAmount)}</div>
+                    )}
+                  </TableCell>
+                </TableRow>
+                )
+              })
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-gray-500">{t('No items')}</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        </div>
       </div>
     </div>
   );
@@ -285,6 +438,7 @@ function PurchaseReturnDialogContent({
       </div>
       <div>
         <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -313,6 +467,7 @@ function PurchaseReturnDialogContent({
             )}
           </TableBody>
         </Table>
+        </div>
       </div>
     </div>
   );
@@ -466,6 +621,8 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [viewingPurchase, setViewingPurchase] = useState<any>(null);
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<string | null>(null);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [viewingPurchaseReturnId, setViewingPurchaseReturnId] = useState<string | null>(null);
   const [purchaseReturnDialogOpen, setPurchaseReturnDialogOpen] = useState(false);
   const [viewingLoadPurchaseId, setViewingLoadPurchaseId] = useState<string | null>(null);
@@ -583,6 +740,11 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   const handleViewLinkedSupplierEntry = (entry: LedgerEntry) => {
     const id = entry.referenceId != null ? String(entry.referenceId) : '';
     if (!id) return;
+    if (entry.referenceModel === 'Invoice') {
+      setViewingInvoiceId(id);
+      setInvoiceDialogOpen(true);
+      return;
+    }
     if (entry.transactionType === 'purchase_return') {
       setViewingPurchaseReturnId(id);
       setPurchaseReturnDialogOpen(true);
@@ -804,6 +966,103 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
     }
   };
 
+  // Debit-note entries created when this supplier is also billed as a customer (see
+  // supplierLedger.service.js syncPurchaseFromCustomerSale) — referenceId points at an
+  // Invoice, not a Purchase, so it prints like a normal sale invoice/receipt.
+  const canPrintLinkedInvoiceEntry = (entry: LedgerEntry) =>
+    Boolean(entry.referenceId) && entry.referenceModel === 'Invoice';
+
+  const handlePrintLinkedInvoice = async (entry: LedgerEntry, paperSize: PaperSize = defaultPaperSize) => {
+    const rid = entry.referenceId ? String(entry.referenceId) : '';
+    const rowId = String(entry.id || entry._id || '');
+    if (!rid || !rowId) return;
+    setPrintingRowId(rowId);
+    try {
+      const invoice = await dispatch(invoiceApi.endpoints.getInvoiceById.initiate(rid)).unwrap();
+      const { name: customerName, nameUrdu: customerNameUrdu } = resolveInvoiceCustomerForPrint(invoice, supplier.name);
+
+      const customerIdStr =
+        resolveCustomerIdString(invoice.customerId) || '';
+      const previousBalance = await fetchBalanceBeforeInvoice(customerIdStr, rid, supplier._id || supplier.id);
+      const invoiceTotal = Number(invoice.total || 0);
+      const invoicePaid = Number(invoice.paidAmount || 0);
+
+      let contactPhone = supplier.phone?.trim();
+      let contactWhatsapp = supplier.whatsapp?.trim();
+      stashPrintContact({ customerId: customerIdStr, phone: contactPhone, whatsapp: contactWhatsapp });
+      try {
+        const fetched = await fetchAndStashPrintContact(customerIdStr);
+        contactPhone = fetched.phone || contactPhone;
+        contactWhatsapp = fetched.whatsapp || contactWhatsapp;
+      } catch {
+        /* use cached / prompt in print window */
+      }
+
+      const printContact: PrintWindowContact = {
+        customerId: customerIdStr,
+        phone: contactPhone,
+        whatsapp: contactWhatsapp || contactPhone,
+      };
+
+      const printData = withCustomerContactForPrint({
+        invoiceNumber: invoice.invoiceNumber,
+        items: (invoice.items || []).map((item: any) => ({
+          name: item.name,
+          nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal ?? (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+          discountAmount: item.discountAmount,
+          imeis: item.imeis,
+        })),
+        customerId: invoice.customerId,
+        customerName,
+        customerNameUrdu,
+        walkInCustomerName: invoice.walkInCustomerName,
+        type: invoice.type,
+        subtotal: invoice.subtotal ?? 0,
+        tax: invoice.tax ?? 0,
+        discount: invoice.discount ?? 0,
+        total: invoice.total ?? 0,
+        paidAmount: invoice.paidAmount ?? 0,
+        balance: invoice.balance ?? 0,
+        notes: invoice.notes,
+        invoiceAddress: branchData?.location?.address?.trim() || undefined,
+        invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
+        deliveryCharge: invoice.deliveryCharge ?? 0,
+        serviceCharge: invoice.serviceCharge ?? 0,
+        companyName: orgData?.name || branchData?.name,
+        companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
+        companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
+        companyPhone: branchData?.phone,
+        companyEmail: branchData?.email,
+        companyLogo: orgData?.logo?.url,
+        isTrial: orgData?.subscription?.isTrial,
+        language: invoice.language,
+        isUrduOnly: invoice.isUrduOnly,
+        userPreferredLanguage: preferredLanguage as 'en' | 'ur',
+        invoiceNote: branchData?.invoiceNote,
+        printInUrdu: getInvoicePrintInUrdu(),
+        previousBalance,
+        newBalance: previousBalance + invoiceTotal - invoicePaid,
+      }, invoice, { phone: contactPhone, whatsapp: contactWhatsapp || contactPhone });
+
+      if (PAPER_FORMATS[paperSize].family === 'thermal') {
+        openPrintWindowForFormat(generateInvoiceHTML(printData, resolveThermalSize(paperSize)), paperSize, printContact);
+      } else {
+        const sheetSize = resolveSheetFormat(paperSize, printOrientation);
+        openPrintWindowForFormat(generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate), sheetSize, printContact);
+      }
+      toast.success(t('print_invoice_btn'));
+    } catch (error) {
+      console.error(error);
+      toast.error(t('print_error'));
+    } finally {
+      setPrintingRowId(null);
+    }
+  };
+
   const getTransactionTypeLabel = (entry: LedgerEntry) => {
     const type = entry.transactionType;
     const manual = isManualEntry(entry);
@@ -849,6 +1108,15 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
 
   const renderLedgerActions = (entry: LedgerEntry) => (
     <div className="flex justify-end gap-1 flex-nowrap items-center shrink-0">
+      {canPrintLinkedInvoiceEntry(entry) && (
+        <PrintFormatButton
+          size="sm"
+          defaultPaperSize={defaultPaperSize}
+          disabled={printingRowId === String(entry.id || entry._id)}
+          onPrint={(paperSize) => handlePrintLinkedInvoice(entry, paperSize)}
+          label=""
+        />
+      )}
       {canPrintLinkedSupplierEntry(entry) && (
         usesPurchaseA4Print(entry) ? (
           <PrintFormatButton
@@ -1005,11 +1273,26 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
       </Dialog>
 
       <Dialog open={purchaseDialogOpen} onOpenChange={setPurchaseDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[80vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Purchase Details')}</DialogTitle>
           </DialogHeader>
           <PurchaseDialogContent purchaseId={viewingPurchase?.id} supplierName={supplier.name} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={invoiceDialogOpen}
+        onOpenChange={(open) => {
+          setInvoiceDialogOpen(open);
+          if (!open) setViewingInvoiceId(null);
+        }}
+      >
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[80vh] overflow-y-auto overflow-x-hidden">
+          <DialogHeader>
+            <DialogTitle>{t('Sale Details')}</DialogTitle>
+          </DialogHeader>
+          <InvoiceDialogContent invoiceId={viewingInvoiceId ?? undefined} supplierName={supplier.name} />
         </DialogContent>
       </Dialog>
 
@@ -1020,7 +1303,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
           if (!open) setViewingPurchaseReturnId(null);
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[80vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Purchase Return')}</DialogTitle>
           </DialogHeader>
@@ -1038,7 +1321,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
           if (!open) setViewingLoadPurchaseId(null);
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[85vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Load purchase details')}</DialogTitle>
           </DialogHeader>
@@ -1050,7 +1333,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
       </Dialog>
 
       <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>{t('Payment Receipt')}</DialogTitle>
           </DialogHeader>

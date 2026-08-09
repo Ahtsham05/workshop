@@ -36,6 +36,8 @@ const getCustomers = {
     // through the Invoice screen. Regular customer lists/pickers must not
     // show them unless a caller (e.g. the Invoice customer picker) opts in.
     includeEmployees: Joi.boolean(),
+    // Same pattern for suppliers who can also be billed as a customer.
+    includeSuppliers: Joi.boolean(),
   }),
 };
 

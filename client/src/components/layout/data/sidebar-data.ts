@@ -36,7 +36,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -231,7 +231,7 @@ export const sidebarData: SidebarData = {
             { title: 'Expenses', url: '/accounting?tab=expenses' as never, icon: IconCash, permission: 'viewAccounting' },
             { title: 'Customer Ledgers', url: '/accounting?tab=customers' as never, icon: IconUsers, permission: 'viewCustomers' },
             { title: 'Supplier Ledgers', url: '/accounting?tab=suppliers' as never, icon: IconBuilding, permission: 'viewSuppliers' },
-            { title: 'Recurring', url: '/accounting?tab=recurring' as never, icon: IconCalendarEvent, permission: 'viewAccounting' },
+            { title: 'Recurring Expense', url: '/accounting?tab=recurring' as never, icon: IconCalendarEvent, permission: 'viewAccounting' },
             { title: 'My Personal Account', url: '/accounting?tab=wallet' as never, icon: IconCreditCard, permission: 'viewAccounting' },
           ],
         },
@@ -448,6 +448,13 @@ export const sidebarData: SidebarData = {
           url: '/branches',
           icon: IconBuildingStore,
           permission: 'viewBranches',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
+          title: 'Branch Performance',
+          url: '/branch-overview',
+          icon: Building2,
+          systemRole: ['superAdmin', 'system_admin'],
           excludedSchoolRoles: ['teacher'],
         },
         {

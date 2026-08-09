@@ -130,7 +130,7 @@ const hi: Record<string, string> = {
   "walk_in_customer": "वॉक-इन ग्राहक",
   "select_customer": "ग्राहक चुनें",
   "no_customers_found": "कोई ग्राहक नहीं मिला",
-  "add_item": "आइटम जोड़ें",
+  "add_item": "पंक्ति जोड़ें",
   "no_items_added": "कोई आइटम नहीं जोड़ा गया",
   "select_product": "उत्पाद चुनें",
   "no_products_found": "कोई उत्पाद नहीं मिला",

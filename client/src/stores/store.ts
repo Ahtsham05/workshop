@@ -22,6 +22,7 @@ import { salesmanCommissionPaymentApi } from './salesmanCommissionPayment.api';
 import { hrApi } from './hr.api';
 import { organizationApi } from './organization.api';
 import { branchApi } from './branch.api';
+import { branchOverviewApi } from './branchOverview.api';
 import { membershipApi } from './membership.api';
 import { subscriptionApi } from './subscription.api';
 import { userPreferencesApi } from './user-preferences.api';
@@ -79,6 +80,7 @@ export const store = configureStore({
     [hrApi.reducerPath]: hrApi.reducer,
     [organizationApi.reducerPath]: organizationApi.reducer,
     [branchApi.reducerPath]: branchApi.reducer,
+    [branchOverviewApi.reducerPath]: branchOverviewApi.reducer,
     [membershipApi.reducerPath]: membershipApi.reducer,
     [subscriptionApi.reducerPath]: subscriptionApi.reducer,
     [userPreferencesApi.reducerPath]: userPreferencesApi.reducer,
@@ -129,6 +131,7 @@ export const store = configureStore({
       hrApi.middleware,
       organizationApi.middleware,
       branchApi.middleware,
+      branchOverviewApi.middleware,
       membershipApi.middleware,
       subscriptionApi.middleware,
       userPreferencesApi.middleware,

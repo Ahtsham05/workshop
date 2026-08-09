@@ -112,10 +112,13 @@ const deleteCustomerById = async (customerId) => {
   return customer;
 };
 
-const getAllCustomers = async (filter = {}, { includeEmployees = false } = {}) => {
+const getAllCustomers = async (filter = {}, { includeEmployees = false, includeSuppliers = false } = {}) => {
   const query = { ...filter };
   if (!includeEmployees) {
     query.isEmployeeAccount = { $ne: true };
+  }
+  if (!includeSuppliers) {
+    query.isSupplierAccount = { $ne: true };
   }
   return Customer.find(query);
 }

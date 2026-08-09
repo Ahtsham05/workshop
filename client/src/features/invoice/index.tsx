@@ -122,6 +122,16 @@ export function createEmptyManualInvoiceItem(): InvoiceItem {
   }
 }
 
+/** A fresh invoice starts with this many empty rows pre-added so a cashier can jump
+ * straight into selecting products instead of clicking "Add Row" repeatedly — more
+ * rows are still appended automatically once these fill up (see addNewRowAndOpenProduct
+ * in invoice-panel.tsx). */
+const NEW_INVOICE_ROW_COUNT = 12
+
+function createInitialInvoiceItems(): InvoiceItem[] {
+  return Array.from({ length: NEW_INVOICE_ROW_COUNT }, () => createEmptyManualInvoiceItem())
+}
+
 export interface Invoice {
   items: InvoiceItem[]
   customerId?: string
@@ -236,7 +246,7 @@ export default function InvoicePage() {
 
   // State for invoice
   const [invoice, setInvoice] = useState<Invoice>({
-    items: [createEmptyManualInvoiceItem()],
+    items: createInitialInvoiceItems(),
     language: preferredLanguage,
     isUrduOnly: getInitialUrduOnlyPreference(),
     customerId: search.customerId?.trim() || 'walk-in',
@@ -351,7 +361,7 @@ export default function InvoicePage() {
   const resetSaleInvoiceForm = useCallback(() => {
     const preferredUrduOnly = getInitialUrduOnlyPreference()
     setInvoice({
-      items: [createEmptyManualInvoiceItem()],
+      items: createInitialInvoiceItems(),
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
       customerId: 'walk-in',
@@ -585,12 +595,13 @@ export default function InvoicePage() {
         toast.error('Failed to fetch products')
       })
 
-    // Fetch customers (including employees' shadow accounts, so staff can be
-    // billed like a customer through this same search box)
+    // Fetch customers (including employees' and suppliers' shadow accounts, so
+    // staff and suppliers can be billed like a customer through this same search box)
     const fetchCustomersPromise = dispatch(fetchCustomers({
       page: 1,
       limit: 1000,
-      includeEmployees: true
+      includeEmployees: true,
+      includeSuppliers: true
     }))
       .then((data) => {
         console.log('Customers response:', data)
@@ -774,11 +785,10 @@ export default function InvoicePage() {
     console.log('Current stock from products state:', currentStock)
     console.log('Product stock from parameter:', product.stockQuantity)
     
-    // Check stock availability — only for variant/batch-tracked items. Simple
-    // products may sell into negative stock; a purchase entry brings it back up.
+    // Overselling is allowed for every product, variant/batch-tracked included — a
+    // purchase entry brings the balance back up.
     if (variantId && currentStock <= 0) {
-      toast.error(`${product.name} is out of stock`)
-      return;
+      toast.warning(`${product.name} - selling into negative stock`)
     }
     
     // Match by (productId, variantId) — two different variants of the same product
@@ -813,151 +823,62 @@ export default function InvoicePage() {
       console.log('Requested additional quantity:', quantity) 
       console.log('New total quantity would be:', newQuantity)
       
-      // Calculate actual available stock including items already in invoice
+      // Calculate actual available stock including items already in invoice — surfaced
+      // as a heads-up only. Overselling is allowed for every product, variant/batch
+      // items included; a purchase entry brings the balance back up.
       const totalAvailableStock = currentStock + (existingItem.stockQuantity || existingItem.quantity)
-      console.log('Total available stock (current + existing):', totalAvailableStock)
-      
-      // Check if new quantity exceeds total available stock — variant/batch items only.
       if (variantId && recalculatedLine.stockQuantity > totalAvailableStock) {
-        const perUnitImpact = existingItem.quantity > 0
-          ? (existingItem.stockQuantity || existingItem.quantity) / existingItem.quantity
-          : 1
-        const availableStockToAdd = totalAvailableStock - (existingItem.stockQuantity || existingItem.quantity)
-        const availableQuantity = Math.floor(availableStockToAdd / perUnitImpact)
-        console.log('Available quantity to add:', availableQuantity)
-        
-        if (availableQuantity <= 0) {
-          toast.error(`${product.name} - No more stock available (Current: ${existingItem.quantity}, Total Available: ${totalAvailableStock})`)
-          console.log('ERROR: No more stock available')
-          return;
-        } else {
-          toast.warning(`${product.name} - Only ${availableQuantity} more units available (Requested: ${quantity}, Available: ${availableQuantity})`)
-          // Add only the available quantity
-          actualQuantityAdded = availableQuantity
-          const finalQuantity = existingItem.quantity + actualQuantityAdded
-          const partialLine = calculateInvoiceLineValues({
-            product,
-            quantity: finalQuantity,
-            unit: existingItem.unit,
-            unitPrice: existingItem.unitPrice,
-            cost: existingItem.cost,
-            conversionFactor: existingItem.conversionFactor,
-          })
-          if (!partialLine) {
-            toast.error(`Missing unit conversion for ${product.name}`)
-            return
-          }
-          
-          console.log('PARTIAL ADD: Adding', actualQuantityAdded, 'units')
+        toast.warning(`${product.name} - selling into negative stock (Available: ${totalAvailableStock}, Total: ${recalculatedLine.stockQuantity})`)
+      }
 
-          // Re-apply the existing line's discount (if any) to the recalculated gross —
-          // increasing quantity must not silently drop a discount already set on this line.
-          const partialNet = applyLineDiscount(partialLine, existingItem.discountType, existingItem.discountValue)
-          newItems = [...invoice.items]
-          newItems[existingItemIndex] = {
-            ...existingItem,
-            quantity: finalQuantity,
-            subtotal: partialNet.subtotal,
-            profit: partialNet.profit,
-            discountAmount: partialNet.discountAmount,
-            stockQuantity: partialLine.stockQuantity,
-            conversionFactor: partialLine.conversionFactor
-          }
-        }
-      } else {
-        // Stock is sufficient
-        actualQuantityAdded = quantity
+      // Stock is sufficient
+      actualQuantityAdded = quantity
 
-        console.log('FULL ADD: Adding', actualQuantityAdded, 'units')
-        console.log('Updating existing item:', existingItem.name, 'New quantity:', newQuantity)
+      console.log('FULL ADD: Adding', actualQuantityAdded, 'units')
+      console.log('Updating existing item:', existingItem.name, 'New quantity:', newQuantity)
 
-        // Same re-apply-existing-discount reasoning as the partial-add branch above.
-        const fullNet = applyLineDiscount(recalculatedLine, existingItem.discountType, existingItem.discountValue)
-        newItems = [...invoice.items]
-        newItems[existingItemIndex] = {
-          ...existingItem,
-          quantity: newQuantity,
-          subtotal: fullNet.subtotal,
-          profit: fullNet.profit,
-          discountAmount: fullNet.discountAmount,
-          stockQuantity: recalculatedLine.stockQuantity,
-          conversionFactor: recalculatedLine.conversionFactor
-        }
+      // Same re-apply-existing-discount reasoning as the partial-add branch above.
+      const fullNet = applyLineDiscount(recalculatedLine, existingItem.discountType, existingItem.discountValue)
+      newItems = [...invoice.items]
+      newItems[existingItemIndex] = {
+        ...existingItem,
+        quantity: newQuantity,
+        subtotal: fullNet.subtotal,
+        profit: fullNet.profit,
+        discountAmount: fullNet.discountAmount,
+        stockQuantity: recalculatedLine.stockQuantity,
+        conversionFactor: recalculatedLine.conversionFactor
       }
     } else {
-      // Add new item - check stock for requested quantity — variant/batch items only.
+      // Add new item — overselling is allowed for every product, variant/batch items
+      // included; a purchase entry brings the balance back up.
       if (variantId && defaultLine.stockQuantity > currentStock) {
-        toast.error(`${product.name} - Requested quantity (${quantity}) exceeds stock (${currentStock})`)
-        if (currentStock > 0) {
-          // Add available stock instead
-          const perUnitImpact = defaultLine.stockQuantity / quantity
-          actualQuantityAdded = Math.max(1, Math.floor(currentStock / perUnitImpact))
-          const cappedLine = calculateInvoiceLineValues({
-            product,
-            quantity: actualQuantityAdded,
-            unit: defaultLine.lineUnit,
-            unitPrice: unitPriceFromBatch,
-            cost: product.cost,
-            conversionFactor: defaultLine.conversionFactor,
-          })
-          if (!cappedLine) {
-            toast.error(`Missing unit conversion for ${product.name}`)
-            return
-          }
-          const newItem: InvoiceItem = {
-            id: `${productId}_${Date.now()}_${Math.random()}`,
-            productId: productId,
-            variantId,
-            batchId,
-            batchNumber,
-            name: product.name,
-            nameUrdu: product.nameUrdu,
-            image: product.image,
-            quantity: actualQuantityAdded,
-            unit: cappedLine.lineUnit,
-            conversionFactor: cappedLine.conversionFactor,
-            stockQuantity: cappedLine.stockQuantity,
-            unitPrice: unitPriceFromBatch,
-            // Use the auto-selected batch's actual cost when known — different batches
-            // can have been bought at different prices.
-            cost: defaultBatch?.costPerUnit ?? product.cost,
-            subtotal: cappedLine.subtotal,
-            profit: cappedLine.subtotal - ((defaultBatch?.costPerUnit ?? product.cost) * cappedLine.stockQuantity)
-          }
-          
-          toast.info(`Added ${actualQuantityAdded} ${cappedLine.lineUnit} of ${product.name} (maximum available)`)
-          console.log('Adding new item with max stock:', newItem)
-          newItems = [...invoice.items, newItem]
-        } else {
-          return;
-        }
-      } else {
-        // Stock is sufficient
-        actualQuantityAdded = quantity
-        const newItem: InvoiceItem = {
-          id: `${productId}_${Date.now()}_${Math.random()}`,
-          productId: productId,
-          variantId,
-          batchId,
-          batchNumber,
-          name: product.name,
-          nameUrdu: product.nameUrdu,
-          image: product.image,
-          quantity,
-          unit: defaultLine.lineUnit,
-          conversionFactor: defaultLine.conversionFactor,
-          stockQuantity: defaultLine.stockQuantity,
-          unitPrice: unitPriceFromBatch,
-          // Use the auto-selected batch's actual cost when known — different batches
-          // can have been bought at different prices.
-          cost: defaultBatch?.costPerUnit ?? product.cost,
-          subtotal: defaultLine.subtotal,
-          profit: defaultLine.subtotal - ((defaultBatch?.costPerUnit ?? product.cost) * defaultLine.stockQuantity)
-        }
-
-        console.log('Adding new item:', newItem)
-        newItems = [...invoice.items, newItem]
+        toast.warning(`${product.name} - selling into negative stock (Current: ${currentStock}, Requested: ${quantity})`)
       }
+      actualQuantityAdded = quantity
+      const newItem: InvoiceItem = {
+        id: `${productId}_${Date.now()}_${Math.random()}`,
+        productId: productId,
+        variantId,
+        batchId,
+        batchNumber,
+        name: product.name,
+        nameUrdu: product.nameUrdu,
+        image: product.image,
+        quantity,
+        unit: defaultLine.lineUnit,
+        conversionFactor: defaultLine.conversionFactor,
+        stockQuantity: defaultLine.stockQuantity,
+        unitPrice: unitPriceFromBatch,
+        // Use the auto-selected batch's actual cost when known — different batches
+        // can have been bought at different prices.
+        cost: defaultBatch?.costPerUnit ?? product.cost,
+        subtotal: defaultLine.subtotal,
+        profit: defaultLine.subtotal - ((defaultBatch?.costPerUnit ?? product.cost) * defaultLine.stockQuantity)
+      }
+
+      console.log('Adding new item:', newItem)
+      newItems = [...invoice.items, newItem]
     }
     
     // Update stock in real-time — skipped for variant items: the `products` cache only
@@ -1073,22 +994,29 @@ export default function InvoicePage() {
           const orderedBatches = primaryBatch ? [primaryBatch, ...batches.filter(b => b.id !== primaryBatch.id)] : batches
           const { allocations, remaining } = autoAllocateBatches(orderedBatches, newQuantity)
           if (remaining > 0) {
-            toast.error(`${currentItem.name} - Only ${newQuantity - remaining} unit(s) available across all batches`)
-            return
-          }
-          nextBatchAllocations = allocations.length > 1 ? allocations : undefined
-          if (allocations.length > 0) {
-            nextBatchId = allocations[0].batchId
-            nextBatchNumber = allocations[0].batchNumber
+            // Batches can't fully cover this quantity — overselling is allowed, so keep
+            // it a single line against the primary (or first) batch rather than blocking
+            // the sale; a purchase brings that batch's real quantity back into positive
+            // territory.
+            toast.warning(`${currentItem.name} - selling into negative stock (Available across all batches: ${newQuantity - remaining})`)
+            nextBatchId = primaryBatch?.id ?? orderedBatches[0]?.id ?? nextBatchId
+            nextBatchNumber = primaryBatch?.batchNumber ?? orderedBatches[0]?.batchNumber ?? nextBatchNumber
+            nextBatchAllocations = undefined
+          } else {
+            nextBatchAllocations = allocations.length > 1 ? allocations : undefined
+            if (allocations.length > 0) {
+              nextBatchId = allocations[0].batchId
+              nextBatchNumber = allocations[0].batchNumber
+            }
           }
         }
       } else {
         // Not batch-tracked at all (trackExpiry-only, or a real variant with no batches)
-        // — fall back to total variant stock, same as before.
+        // — fall back to total variant stock. Overselling is allowed; a purchase entry
+        // brings the balance back up.
         const available = catalogEntry?.stockQuantity ?? 0
         if (newQuantity > available) {
-          toast.error(`${currentItem.name} - Only ${available} unit(s) available`)
-          return
+          toast.warning(`${currentItem.name} - selling into negative stock (Available: ${available})`)
         }
       }
 
@@ -1349,7 +1277,7 @@ export default function InvoicePage() {
     const preferredUrduOnly = getInitialUrduOnlyPreference()
     // Reset invoice state
     setInvoice({
-      items: [createEmptyManualInvoiceItem()],
+      items: createInitialInvoiceItems(),
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
       customerId: 'walk-in',
@@ -1520,7 +1448,7 @@ export default function InvoicePage() {
     
     // Reset invoice state for new invoice
     setInvoice({
-      items: [createEmptyManualInvoiceItem()],
+      items: createInitialInvoiceItems(),
       language: preferredUrduOnly ? 'ur' : preferredLanguage,
       isUrduOnly: preferredUrduOnly,
       customerId: 'walk-in',

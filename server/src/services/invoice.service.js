@@ -1,12 +1,13 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Invoice, Product, Customer, CustomerLedger, Organization, Inventory, Batch } = require('../models');
+const { Invoice, Product, Customer, CustomerLedger, Organization, Batch } = require('../models');
 const batchService = require('./batch.service');
 const ApiError = require('../utils/ApiError');
 const { resolveInvoiceLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 const customerLedgerService = require('./customerLedger.service');
 const employeeLedgerService = require('./employeeLedger.service');
+const supplierLedgerService = require('./supplierLedger.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
@@ -275,21 +276,14 @@ const createInvoice = async (invoiceBody, userId) => {
   const batchIds = !isQuotation
     ? [...new Set(invoiceBody.items.filter((i) => i.variantId).flatMap((i) => getItemBatchAllocations(i).map((a) => String(a.batchId))))]
     : [];
-  const variantIdsNeedingInventory = !isQuotation
-    ? [...new Set(invoiceBody.items.filter((i) => i.variantId && getItemBatchAllocations(i).length === 0).map((i) => String(i.variantId)))]
-    : [];
 
-  const [productsList, batchesList, inventoriesList] = await Promise.all([
+  const [productsList, batchesList] = await Promise.all([
     productIds.length ? Product.find({ _id: { $in: productIds } }) : Promise.resolve([]),
     batchIds.length ? Batch.find({ _id: { $in: batchIds } }) : Promise.resolve([]),
-    variantIdsNeedingInventory.length
-      ? Inventory.find({ variantId: { $in: variantIdsNeedingInventory } })
-      : Promise.resolve([]),
   ]);
 
   const productById = new Map(productsList.map((p) => [String(p._id), p]));
   const batchById = new Map(batchesList.map((b) => [String(b._id), b]));
-  const inventoryByVariantId = new Map(inventoriesList.map((inv) => [String(inv.variantId), inv]));
 
   // Validate products and calculate totals
   const validatedItems = [];
@@ -323,24 +317,17 @@ const createInvoice = async (invoiceBody, userId) => {
               `Batch allocation for ${item.name || product.name} totals ${allocatedTotal}, but the line quantity is ${item.quantity}`
             );
           }
+          // Overselling into negative stock is allowed (same policy as plain products —
+          // a purchase entry brings the balance back up). Still block selling from a
+          // batch that isn't active (depleted/expired/inactive).
           for (const alloc of allocations) {
             const batch = batchById.get(String(alloc.batchId));
-            const available = batch?.quantity ?? 0;
-            if (!batch || batch.status !== 'active' || available < alloc.quantity) {
+            if (!batch || batch.status !== 'active') {
               throw new ApiError(
                 httpStatus.BAD_REQUEST,
-                `Insufficient stock in batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name || product.name}. Available: ${available}, Requested: ${alloc.quantity}`
+                `Batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name || product.name} is not active`
               );
             }
-          }
-        } else {
-          const inventory = inventoryByVariantId.get(String(item.variantId));
-          const available = inventory?.quantity ?? 0;
-          if (available < item.quantity) {
-            throw new ApiError(
-              httpStatus.BAD_REQUEST,
-              `Insufficient stock for ${item.name || product.name}. Available: ${available}, Requested: ${item.quantity}`
-            );
           }
         }
       }
@@ -542,6 +529,14 @@ const createInvoice = async (invoiceBody, userId) => {
     await employeeLedgerService.syncPurchaseFromInvoice(invoice);
   } catch (error) {
     console.error('Failed to sync employee ledger for invoice:', error);
+  }
+
+  // Same, but for a supplier's shadow customer account — nets the unpaid
+  // balance against what the business owes that supplier.
+  try {
+    await supplierLedgerService.syncPurchaseFromInvoice(invoice);
+  } catch (error) {
+    console.error('Failed to sync supplier ledger for invoice:', error);
   }
 
   // Update product stock quantities (quotations do not affect stock until converted).
@@ -860,24 +855,17 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
                 `Batch allocation for ${item.name || product.name} totals ${allocatedTotal}, but the line quantity is ${item.quantity}`
               );
             }
+            // Overselling into negative stock is allowed (same policy as plain products
+            // — a purchase entry brings the balance back up). Still block selling from a
+            // batch that isn't active (depleted/expired/inactive).
             for (const alloc of allocations) {
               const batch = await Batch.findById(alloc.batchId);
-              const available = batch?.quantity ?? 0;
-              if (!batch || batch.status !== 'active' || available < alloc.quantity) {
+              if (!batch || batch.status !== 'active') {
                 throw new ApiError(
                   httpStatus.BAD_REQUEST,
-                  `Insufficient stock in batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name || product.name}. Available: ${available}, Requested: ${alloc.quantity}`
+                  `Batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name || product.name} is not active`
                 );
               }
-            }
-          } else {
-            const inventory = await Inventory.findOne({ variantId: item.variantId });
-            const available = inventory?.quantity ?? 0;
-            if (available < item.quantity) {
-              throw new ApiError(
-                httpStatus.BAD_REQUEST,
-                `Insufficient stock for ${item.name || product.name}. Available: ${available}, Requested: ${item.quantity}`
-              );
             }
           }
         }
@@ -1173,6 +1161,13 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     console.error('Failed to sync employee ledger for invoice:', error);
   }
 
+  // Keep the supplier ledger mirror (if any) in sync with the latest balance.
+  try {
+    await supplierLedgerService.syncPurchaseFromInvoice(invoice);
+  } catch (error) {
+    console.error('Failed to sync supplier ledger for invoice:', error);
+  }
+
   // Return populated invoice with customerName
   return getInvoiceById(invoiceId);
 };
@@ -1247,6 +1242,12 @@ const deleteInvoiceById = async (invoiceId) => {
     console.error('Failed to delete employee ledger entry for invoice:', error);
   }
 
+  try {
+    await supplierLedgerService.deleteCustomerSaleOffsetForInvoice(invoice._id);
+  } catch (error) {
+    console.error('Failed to delete supplier ledger entry for invoice:', error);
+  }
+
   await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
   await walletEntryService.deleteEntriesByReference(invoice._id, 'Invoice');
   accountsSystemService
@@ -1275,8 +1276,9 @@ const deleteInvoiceById = async (invoiceId) => {
 
   // Reverse any commission earned on this invoice — the sale no longer exists.
   try {
-    await salesmanCommissionLedgerService.reverseCommissionForInvoice({
-      invoiceId: invoice._id,
+    await salesmanCommissionLedgerService.reverseCommissionForReference({
+      referenceId: invoice._id,
+      referenceModel: 'Invoice',
       organizationId: invoice.organizationId,
       branchId: invoice.branchId,
       salesmanUserId: invoice.salesmanId,
@@ -1316,28 +1318,20 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
 
   for (const item of invoice.items) {
     if (item.variantId) {
-      const stockQty = getStockQuantityFromItem(item);
       const allocations = getItemBatchAllocations(item);
+      // Overselling into negative stock is allowed (same policy as plain products — a
+      // purchase entry brings the balance back up). Still block selling from a batch
+      // that isn't active (depleted/expired/inactive).
       if (allocations.length > 0) {
         for (const alloc of allocations) {
           const batch = await Batch.findById(alloc.batchId);
-          const available = batch?.quantity ?? 0;
-          if (!batch || batch.status !== 'active' || available < alloc.quantity) {
+          if (!batch || batch.status !== 'active') {
             throw new ApiError(
               httpStatus.BAD_REQUEST,
-              `Insufficient stock in batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name}. Available: ${available}, Required: ${alloc.quantity}`,
+              `Batch ${batch?.batchNumber || alloc.batchNumber || ''} for ${item.name} is not active`,
             );
           }
         }
-        continue;
-      }
-      const inventory = await Inventory.findOne({ variantId: item.variantId });
-      const available = inventory?.quantity ?? 0;
-      if (available < stockQty) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Insufficient stock for ${item.name}. Available: ${available}, Required: ${stockQty}`,
-        );
       }
       continue;
     }
@@ -1477,6 +1471,12 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
     await employeeLedgerService.syncPurchaseFromInvoice(invoice);
   } catch (error) {
     console.error('Failed to sync employee ledger on quotation conversion:', error);
+  }
+
+  try {
+    await supplierLedgerService.syncPurchaseFromInvoice(invoice);
+  } catch (error) {
+    console.error('Failed to sync supplier ledger on quotation conversion:', error);
   }
 
   return getInvoiceById(invoice._id);

@@ -54,6 +54,8 @@ export interface LoadTransactionRecord {
   paymentMethod: 'cash' | 'bank' | 'wallet'
   paymentWalletType?: string
   date: string
+  /** Salesman credited with this sale for commission purposes — a User id. */
+  salesmanId?: string
 }
 
 export interface CreateLoadTransactionInput {
@@ -71,6 +73,7 @@ export interface CreateLoadTransactionInput {
   paymentMethod: 'cash' | 'bank' | 'wallet'
   paymentWalletType?: string
   date: string
+  salesmanId?: string
 }
 
 export interface CashWithdrawalRecord {
@@ -202,6 +205,8 @@ export interface RepairJobRecord {
   date: string
   completedAt?: string
   deliveredAt?: string
+  /** Salesman credited with this sale for commission purposes — a User id. */
+  salesmanId?: string
 }
 
 export interface ServiceCatalogRecord {
@@ -245,6 +250,8 @@ export interface ServiceInvoiceRecord {
   paymentMethod?: 'cash' | 'jazzcash' | 'easypaisa' | 'bank' | 'card'
   date: string
   notes?: string
+  /** Salesman credited with this sale for commission purposes — a User id. */
+  salesmanId?: string
 }
 
 export interface CreateServiceInvoiceInput {
@@ -254,6 +261,7 @@ export interface CreateServiceInvoiceInput {
   date?: string
   notes?: string
   items: ServiceInvoiceItemInput[]
+  salesmanId?: string
 }
 
 export type UpdateServiceInvoiceInput = Partial<CreateServiceInvoiceInput>
@@ -528,6 +536,8 @@ export interface SimSaleRecord {
   notes?: string
   createdAt?: string
   createdBy?: { name?: string; email?: string } | string
+  /** Salesman credited with this sale for commission purposes — a User id. */
+  salesmanId?: string
 }
 
 export interface CreateSimSaleInput {
@@ -546,6 +556,7 @@ export interface CreateSimSaleInput {
   paymentMethod?: 'cash' | 'bank' | 'jazzcash' | 'easypaisa' | 'wallet'
   paymentWalletType?: string
   notes?: string
+  salesmanId?: string
 }
 
 export interface AgentBillRecord {

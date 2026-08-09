@@ -28,15 +28,17 @@ const writeEntry = async (entryBody, session) => {
 };
 
 /**
- * Net commission currently standing for one invoice (credited minus already reversed) —
- * used both to avoid double-crediting and to cap how much a return can claw back.
+ * Net commission currently standing for one sale (credited minus already reversed) — used
+ * both to avoid double-crediting and to cap how much a reversal/return can claw back.
+ * Works across any sale type — Invoice, SimSale, LoadTransaction, RepairJob,
+ * ServiceInvoice — since `referenceModel` is what scopes the match, not a hardcoded type.
  */
-const getNetCommissionForInvoice = async (invoiceId, session) => {
+const getNetCommissionForReference = async (referenceId, referenceModel, session) => {
   const pipeline = [
     {
       $match: {
-        referenceId: new mongoose.Types.ObjectId(invoiceId),
-        referenceModel: 'Invoice',
+        referenceId: new mongoose.Types.ObjectId(referenceId),
+        referenceModel,
         transactionType: { $in: ['commission_earned', 'commission_reversed'] },
       },
     },
@@ -49,10 +51,10 @@ const getNetCommissionForInvoice = async (invoiceId, session) => {
   return round2(result.credit - result.debit);
 };
 
-const getOriginalCommissionEntry = async (invoiceId, session) => {
+const getOriginalCommissionEntry = async (referenceId, referenceModel, session) => {
   const query = SalesmanCommissionLedger.findOne({
-    referenceId: invoiceId,
-    referenceModel: 'Invoice',
+    referenceId,
+    referenceModel,
     transactionType: 'commission_earned',
   }).select('credit rate');
   if (session) query.session(session);
@@ -60,43 +62,54 @@ const getOriginalCommissionEntry = async (invoiceId, session) => {
 };
 
 /**
- * Credit commission for a completed sale. Idempotent — a second call for the same
- * invoice (e.g. re-finalize, edit-triggered re-save) is a no-op once an entry exists.
+ * Credit commission for a completed sale of any type. Idempotent — a second call for the
+ * same reference (e.g. re-save on edit) is a no-op once an entry exists.
  * @param {Object} params
- * @param {Object} params.invoice - Mongoose Invoice document (needs salesmanId, total, etc.)
+ * @param {ObjectId} params.organizationId
+ * @param {ObjectId} params.branchId
+ * @param {ObjectId} params.salesmanUserId
+ * @param {ObjectId} params.referenceId - the sale document's _id
+ * @param {string} params.referenceModel - 'Invoice' | 'SimSale' | 'LoadTransaction' | 'RepairJob' | 'ServiceInvoice'
+ * @param {string} [params.reference] - human-readable number (invoice #, job #, etc.) for display
+ * @param {number} params.saleAmount - the amount commission is calculated against
+ * @param {Date} [params.date] - transaction date, and the date used to resolve the applicable rate
  * @param {ObjectId} params.userId
  * @param {import('mongoose').ClientSession} [session]
  */
-const creditCommissionEarned = async ({ invoice, userId }, session) => {
-  if (!invoice || !invoice.salesmanId) return null;
+const creditCommissionEarned = async (
+  { organizationId, branchId, salesmanUserId, referenceId, referenceModel, reference, saleAmount, date, userId },
+  session
+) => {
+  if (!salesmanUserId || !referenceId || !referenceModel) return null;
 
-  const existing = await getOriginalCommissionEntry(invoice._id, session);
+  const existing = await getOriginalCommissionEntry(referenceId, referenceModel, session);
   if (existing) return existing;
 
   const { rate } = await commissionRuleService.resolveCommissionRate({
-    organizationId: invoice.organizationId,
-    branchId: invoice.branchId,
-    salesmanUserId: invoice.salesmanId,
-    date: invoice.invoiceDate || invoice.createdAt || new Date(),
+    organizationId,
+    branchId,
+    salesmanUserId,
+    date: date || new Date(),
+    module: referenceModel,
   });
   if (!rate || rate <= 0) return null;
 
-  const amount = round2(invoice.total * (rate / 100));
+  const amount = round2(Number(saleAmount || 0) * (rate / 100));
   if (amount <= 0) return null;
 
   return writeEntry(
     {
-      organizationId: invoice.organizationId,
-      branchId: invoice.branchId,
-      salesmanUserId: invoice.salesmanId,
+      organizationId,
+      branchId,
+      salesmanUserId,
       transactionType: 'commission_earned',
-      transactionDate: invoice.invoiceDate || new Date(),
-      reference: invoice.invoiceNumber,
-      referenceId: invoice._id,
-      referenceModel: 'Invoice',
+      transactionDate: date || new Date(),
+      reference,
+      referenceId,
+      referenceModel,
       credit: amount,
       rate,
-      saleAmount: invoice.total,
+      saleAmount,
       createdBy: userId,
     },
     session
@@ -104,11 +117,15 @@ const creditCommissionEarned = async ({ invoice, userId }, session) => {
 };
 
 /**
- * Fully reverse whatever commission is still outstanding for an invoice (cancel/delete).
+ * Fully reverse whatever commission is still outstanding for a sale (cancel/delete) —
+ * works across any sale type, see creditCommissionEarned.
  */
-const reverseCommissionForInvoice = async ({ invoiceId, organizationId, branchId, salesmanUserId, reason, userId }, session) => {
+const reverseCommissionForReference = async (
+  { referenceId, referenceModel, organizationId, branchId, salesmanUserId, reason, userId },
+  session
+) => {
   if (!salesmanUserId) return null;
-  const net = await getNetCommissionForInvoice(invoiceId, session);
+  const net = await getNetCommissionForReference(referenceId, referenceModel, session);
   if (net <= 0) return null;
 
   return writeEntry(
@@ -117,8 +134,8 @@ const reverseCommissionForInvoice = async ({ invoiceId, organizationId, branchId
       branchId,
       salesmanUserId,
       transactionType: 'commission_reversed',
-      referenceId: invoiceId,
-      referenceModel: 'Invoice',
+      referenceId,
+      referenceModel,
       debit: net,
       notes: reason,
       createdBy: userId,
@@ -130,7 +147,9 @@ const reverseCommissionForInvoice = async ({ invoiceId, organizationId, branchId
 /**
  * Proportionally claw back commission for a (possibly partial) sales return, capped at
  * whatever's still outstanding for the invoice so repeated/overlapping returns can never
- * push the invoice's net commission below zero.
+ * push the invoice's net commission below zero. Invoice-specific (sales returns only
+ * exist against Invoice sales in this app) — other sale types just fully reverse via
+ * reverseCommissionForReference on delete since they have no partial-return concept.
  * @param {Object} salesReturn - Mongoose SalesReturn document
  * @param {Object} invoice - the original Invoice document
  * @param {import('mongoose').ClientSession} [session]
@@ -138,14 +157,14 @@ const reverseCommissionForInvoice = async ({ invoiceId, organizationId, branchId
 const reverseCommissionForSalesReturn = async (salesReturn, invoice, session) => {
   if (!invoice || !invoice.salesmanId || !invoice.total) return null;
 
-  const original = await getOriginalCommissionEntry(invoice._id, session);
+  const original = await getOriginalCommissionEntry(invoice._id, 'Invoice', session);
   if (!original || original.credit <= 0) return null;
 
   const proportion = Math.min(1, Number(salesReturn.totalAmount || 0) / Number(invoice.total));
   const proportionalAmount = round2(original.credit * proportion);
   if (proportionalAmount <= 0) return null;
 
-  const net = await getNetCommissionForInvoice(invoice._id, session);
+  const net = await getNetCommissionForReference(invoice._id, 'Invoice', session);
   const reversalAmount = Math.min(proportionalAmount, net);
   if (reversalAmount <= 0) return null;
 
@@ -243,12 +262,12 @@ const deleteEntriesByReference = async (referenceId, referenceModel, salesmanUse
 
 module.exports = {
   creditCommissionEarned,
-  reverseCommissionForInvoice,
+  reverseCommissionForReference,
   reverseCommissionForSalesReturn,
   recordCommissionPayment,
   recalculateBalances,
   deleteEntriesByReference,
-  getNetCommissionForInvoice,
+  getNetCommissionForReference,
   queryLedgerEntries,
   getCurrentBalance,
 };

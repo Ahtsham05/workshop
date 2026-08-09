@@ -108,6 +108,14 @@ const serviceInvoiceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    // Salesman credited with this sale for commission purposes — see invoice.model.js's
+    // identical field for why this is separate from createdBy.
+    salesmanId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,

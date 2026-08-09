@@ -269,12 +269,9 @@ const sellFromBatch = async (batchId, quantity, { userId, refType, refId } = {})
   if (batch.status !== 'active') {
     throw new ApiError(httpStatus.BAD_REQUEST, `Batch ${batch.batchNumber} is ${batch.status}`);
   }
-  if (batch.quantity < quantity) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      `Insufficient stock in batch ${batch.batchNumber}. Available: ${batch.quantity}, Requested: ${quantity}`
-    );
-  }
+  // Overselling into negative stock is allowed — same policy as legacy Product
+  // stockQuantity (see invoice.service.js) — a purchase entry brings the balance back
+  // up, so no floor check here.
 
   const updatedBatch = await Batch.findOneAndUpdate(
     { _id: batchId },

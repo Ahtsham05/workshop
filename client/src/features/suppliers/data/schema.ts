@@ -32,6 +32,7 @@ export const supplierSchema = z.object({
   whatsapp: z.string().optional(),
   address: z.string().optional(), // supplier address is optional
   balance: z.number().optional(),
+  customerId: z.string().optional(), // linked shadow Customer record so this supplier can also be billed as a customer
   createdAt: z.string().optional(), // timestamp of when the supplier was created (optional)
   updatedAt: z.string().optional(), // timestamp of when the supplier was last updated (optional)
 });

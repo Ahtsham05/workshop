@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 
 export interface BilingualNameProps {
   primary: string
@@ -23,7 +24,8 @@ export function BilingualName({
   secondaryClassName,
   truncate = false,
 }: BilingualNameProps) {
-  const u = secondary?.trim()
+  const { showUrdu } = useUrduDisplay()
+  const u = showUrdu ? secondary?.trim() : undefined
   return (
     <div
       className={cn(

@@ -32,13 +32,13 @@ const createCommissionRule = catchAsync(async (req, res) => {
     entityId: rule._id,
     entityName: entityName(rule),
     after: rule.toObject ? rule.toObject() : rule,
-    fields: ['scope', 'branchId', 'salesmanUserId', 'rate', 'effectiveFrom', 'effectiveTo', 'isActive'],
+    fields: ['scope', 'branchId', 'salesmanUserId', 'module', 'rate', 'effectiveFrom', 'effectiveTo', 'isActive'],
   });
   res.status(httpStatus.CREATED).send(rule);
 });
 
 const getCommissionRules = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['scope', 'branchId', 'salesmanUserId', 'isActive']);
+  const filter = pick(req.query, ['scope', 'branchId', 'salesmanUserId', 'module', 'isActive']);
   const { organizationId } = getBranchContext(req);
   filter.organizationId = organizationId;
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
@@ -93,6 +93,18 @@ const resolveCommissionRate = catchAsync(async (req, res) => {
     organizationId,
     branchId,
     salesmanUserId: req.query.salesmanUserId,
+    module: req.query.module,
+    date: req.query.date,
+  });
+  res.send(result);
+});
+
+const getSalesmanModuleRates = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = getBranchContext(req);
+  const result = await commissionRuleService.getSalesmanModuleRates({
+    organizationId,
+    branchId,
+    salesmanUserId: req.query.salesmanUserId,
     date: req.query.date,
   });
   res.send(result);
@@ -105,4 +117,5 @@ module.exports = {
   updateCommissionRule,
   deleteCommissionRule,
   resolveCommissionRate,
+  getSalesmanModuleRates,
 };

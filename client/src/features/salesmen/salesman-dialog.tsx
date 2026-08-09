@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,6 +7,14 @@ import {
   useCreateSalesmanProfileMutation,
   useUpdateSalesmanProfileMutation,
 } from '@/stores/salesmanProfile.api';
+import {
+  CommissionModule,
+  COMMISSION_MODULES,
+  SalesmanModuleRates,
+  useLazyGetSalesmanModuleRatesQuery,
+  useCreateCommissionRuleMutation,
+  useUpdateCommissionRuleMutation,
+} from '@/stores/commissionRule.api';
 import { useGetUsersQuery } from '@/stores/users.api';
 import {
   Dialog,
@@ -38,11 +46,20 @@ const salesmanSchema = z.object({
   phone: z.string(),
   cnic: z.string(),
   defaultCommissionRate: z.coerce.number().min(0).max(100),
+  moduleRates: z.record(z.string()),
   isActive: z.boolean(),
   notes: z.string(),
 });
 
 type SalesmanFormValues = z.infer<typeof salesmanSchema>;
+
+/** Per-module override that already exists for this salesman, as of dialog open — used
+ * both to prefill the fields and to know whether clearing one should deactivate a rule
+ * rather than just leaving a blank input. */
+type ModuleOverrides = Partial<Record<CommissionModule, { rate: number; ruleId: string | null }>>;
+
+const emptyModuleRates = (): Record<CommissionModule, string> =>
+  Object.fromEntries(COMMISSION_MODULES.map((m) => [m.value, ''])) as Record<CommissionModule, string>;
 
 interface SalesmanDialogProps {
   open: boolean;
@@ -56,10 +73,14 @@ interface SalesmanDialogProps {
 export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, onSuccess }: SalesmanDialogProps) {
   const { t } = useLanguage();
   const isEdit = !!profile;
+  const [overrides, setOverrides] = useState<ModuleOverrides>({});
 
   const { data: usersData } = useGetUsersQuery({ limit: 200 }, { skip: !open });
   const [createProfile, { isLoading: isCreating }] = useCreateSalesmanProfileMutation();
   const [updateProfile, { isLoading: isUpdating }] = useUpdateSalesmanProfileMutation();
+  const [fetchModuleRates, { isFetching: isLoadingRates }] = useLazyGetSalesmanModuleRatesQuery();
+  const [createRule, { isLoading: isCreatingRule }] = useCreateCommissionRuleMutation();
+  const [updateRule, { isLoading: isUpdatingRule }] = useUpdateCommissionRuleMutation();
 
   const userOptions = useMemo(() => {
     const users = usersData?.results || [];
@@ -76,6 +97,7 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
       phone: '',
       cnic: '',
       defaultCommissionRate: 0,
+      moduleRates: emptyModuleRates(),
       isActive: true,
       notes: '',
     },
@@ -83,26 +105,78 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
   });
 
   useEffect(() => {
+    if (!open) return;
+
     if (profile) {
+      const userId = typeof profile.userId === 'string' ? profile.userId : profile.userId.id;
       form.reset({
-        userId: typeof profile.userId === 'string' ? profile.userId : profile.userId.id,
+        userId,
         phone: profile.phone || '',
         cnic: profile.cnic || '',
         defaultCommissionRate: profile.defaultCommissionRate ?? 0,
+        moduleRates: emptyModuleRates(),
         isActive: profile.status !== 'inactive',
         notes: profile.notes || '',
       });
+      setOverrides({});
+
+      // Only prefill a module field when this salesman has an EXPLICIT rule for that
+      // module (source === 'salesman') — otherwise the field should stay blank, since it
+      // just means "inherits the general/branch/org rate", not "this salesman's rate is X".
+      fetchModuleRates({ salesmanUserId: userId })
+        .unwrap()
+        .then((rates: SalesmanModuleRates) => {
+          const nextOverrides: ModuleOverrides = {};
+          const nextModuleRates = emptyModuleRates();
+          for (const m of COMMISSION_MODULES) {
+            const resolved = rates[m.value];
+            if (resolved?.source === 'salesman') {
+              nextOverrides[m.value] = { rate: resolved.rate, ruleId: resolved.ruleId };
+              nextModuleRates[m.value] = String(resolved.rate);
+            }
+          }
+          setOverrides(nextOverrides);
+          form.setValue('moduleRates', nextModuleRates);
+        })
+        .catch(() => {});
     } else {
       form.reset({
         userId: '',
         phone: '',
         cnic: '',
         defaultCommissionRate: 0,
+        moduleRates: emptyModuleRates(),
         isActive: true,
         notes: '',
       });
+      setOverrides({});
     }
-  }, [profile, form]);
+  }, [profile, open, form, fetchModuleRates]);
+
+  /** After the profile is saved, reconcile the 5 module-rate fields against whatever
+   * salesman-specific rules already exist — create/replace when a field has a new value,
+   * deactivate the existing rule when a field that had one is cleared back to blank. */
+  const syncModuleRates = async (salesmanUserId: string, moduleRates: Record<string, string>) => {
+    await Promise.all(
+      COMMISSION_MODULES.map(async (m) => {
+        const raw = moduleRates[m.value];
+        const value = raw === '' || raw === undefined ? null : Number(raw);
+        const existing = overrides[m.value];
+
+        if (value !== null && value > 0) {
+          if (existing && existing.rate === value) return; // unchanged
+          await createRule({
+            scope: 'salesman',
+            salesmanUserId,
+            module: m.value,
+            rate: value,
+          }).unwrap();
+        } else if (existing?.ruleId) {
+          await updateRule({ id: existing.ruleId, data: { isActive: false } }).unwrap();
+        }
+      })
+    );
+  };
 
   const onSubmit: SubmitHandler<SalesmanFormValues> = async (data) => {
     try {
@@ -115,9 +189,11 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
       };
       if (isEdit && profile) {
         await updateProfile({ id: profile.id, data: body }).unwrap();
+        await syncModuleRates(data.userId, data.moduleRates);
         toast.success(t('salesman_updated_successfully') || 'Salesman updated successfully');
       } else {
         await createProfile({ userId: data.userId, ...body }).unwrap();
+        await syncModuleRates(data.userId, data.moduleRates);
         toast.success(t('salesman_created_successfully') || 'Salesman created successfully');
       }
       onSuccess();
@@ -128,9 +204,11 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
     }
   };
 
+  const isSaving = isCreating || isUpdating || isCreatingRule || isUpdatingRule;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? t('edit_salesman') || 'Edit Salesman' : t('add_salesman') || 'Add Salesman'}</DialogTitle>
           <DialogDescription>
@@ -202,18 +280,46 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
               name="defaultCommissionRate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('default_commission_rate') || 'Default Commission Rate (%)'}</FormLabel>
+                  <FormLabel>{t('general_commission_rate') || 'General Rate (%)'}</FormLabel>
                   <FormControl>
                     <Input type="number" min={0} max={100} step="0.1" {...field} />
                   </FormControl>
                   <FormDescription>
-                    {t('default_commission_rate_hint') ||
-                      '% of the sale amount this salesman earns, used when no more specific rule applies.'}
+                    {t('general_commission_rate_hint') ||
+                      'Fallback used for any module below that’s left blank (and not covered by a branch/organization rule).'}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <div className="rounded-lg border p-4 space-y-3">
+              <div>
+                <p className="text-sm font-medium">{t('commission_rates_by_module') || 'Commission Rates by Module'}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t('commission_rates_by_module_hint') ||
+                    'Set a different rate per module — leave blank to use the General Rate above. e.g. Sales 1%, Services 2.5%.'}
+                  {isLoadingRates && ` (${t('loading') || 'loading...'})`}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {COMMISSION_MODULES.map((m) => (
+                  <FormField
+                    key={m.value}
+                    control={form.control}
+                    name={`moduleRates.${m.value}`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">{m.label}</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0} max={100} step="0.1" placeholder="—" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
 
             <FormField
               control={form.control}
@@ -258,12 +364,8 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
               >
                 {t('cancel') || 'Cancel'}
               </Button>
-              <Button type="submit" disabled={isCreating || isUpdating}>
-                {isCreating || isUpdating
-                  ? t('saving') || 'Saving...'
-                  : isEdit
-                  ? t('update') || 'Update'
-                  : t('create') || 'Create'}
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? t('saving') || 'Saving...' : isEdit ? t('update') || 'Update' : t('create') || 'Create'}
               </Button>
             </DialogFooter>
           </form>

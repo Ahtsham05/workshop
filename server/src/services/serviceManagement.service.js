@@ -10,6 +10,8 @@ const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
 const employeeLedgerService = require('./employeeLedger.service');
+const supplierLedgerService = require('./supplierLedger.service');
+const commissionEngineService = require('./commissionEngine.service');
 
 const sanitizeId = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -70,6 +72,7 @@ const syncServiceInvoiceCustomerLedger = async (invoice) => {
 
   if (!invoice.customerId) {
     await employeeLedgerService.deletePurchaseAdvanceForReference(invoice._id, 'ServiceInvoice');
+    await supplierLedgerService.deleteCustomerSaleOffsetForReference(invoice._id, 'ServiceInvoice');
     return;
   }
 
@@ -97,6 +100,20 @@ const syncServiceInvoiceCustomerLedger = async (invoice) => {
   }
 
   await employeeLedgerService.syncPurchaseFromCustomerSale({
+    organizationId: invoice.organizationId,
+    branchId: invoice.branchId,
+    customerId: invoice.customerId,
+    referenceId: invoice._id,
+    referenceModel: 'ServiceInvoice',
+    reference: invoice.invoiceNumber,
+    description,
+    unpaidAmount: invoice.totalAmount,
+    transactionDate: invoice.date,
+    createdBy: invoice.createdBy,
+    updatedBy: invoice.updatedBy,
+  });
+
+  await supplierLedgerService.syncPurchaseFromCustomerSale({
     organizationId: invoice.organizationId,
     branchId: invoice.branchId,
     customerId: invoice.customerId,
@@ -285,6 +302,7 @@ const createServiceInvoice = async (invoiceBody) => {
         paymentMethod: normalizedBody.paymentMethod || 'cash',
         date: normalizedBody.date || new Date(),
         notes: normalizedBody.notes || '',
+        salesmanId: normalizedBody.salesmanId || null,
         createdBy: normalizedBody.createdBy,
         updatedBy: normalizedBody.updatedBy,
       });
@@ -298,6 +316,7 @@ const createServiceInvoice = async (invoiceBody) => {
   }
 
   await syncServiceInvoiceRecords(invoice);
+  commissionEngineService.syncCommissionForServiceInvoice(invoice, invoice.createdBy).catch(() => {});
   return invoice;
 };
 
@@ -358,11 +377,12 @@ const queryServiceInvoices = async (filter, options) => {
   return ServiceInvoice.paginate(queryFilter, {
     ...queryOptions,
     sortBy: queryOptions.sortBy || 'date:desc',
+    populate: [{ path: 'salesmanId', select: 'name email' }],
   });
 };
 
 const getServiceInvoiceById = async (invoiceId) => {
-  const invoice = await ServiceInvoice.findById(invoiceId);
+  const invoice = await ServiceInvoice.findById(invoiceId).populate('salesmanId', 'name email');
   if (!invoice) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Service invoice not found');
   }
@@ -402,10 +422,12 @@ const updateServiceInvoiceById = async (invoiceId, updateBody, userId) => {
     invoice.date = parseBusinessDateTime(updateBody.date) || new Date();
   }
   if (updateBody.notes !== undefined) invoice.notes = updateBody.notes || '';
+  if (updateBody.salesmanId !== undefined) invoice.salesmanId = updateBody.salesmanId || null;
   invoice.updatedBy = userId;
 
   await invoice.save();
   await syncServiceInvoiceRecords(invoice);
+  commissionEngineService.syncCommissionForServiceInvoice(invoice, userId).catch(() => {});
   return invoice;
 };
 
@@ -414,6 +436,15 @@ const deleteServiceInvoiceById = async (invoiceId) => {
   await cashBookService.deleteEntriesByReference(invoice._id, 'ServiceInvoice');
   await customerLedgerService.deleteLedgerEntriesByReference(invoice._id);
   await employeeLedgerService.deletePurchaseAdvanceForReference(invoice._id, 'ServiceInvoice');
+  await supplierLedgerService.deleteCustomerSaleOffsetForReference(invoice._id, 'ServiceInvoice');
+
+  await commissionEngineService.reverseCommissionOnDelete({
+    sale: invoice,
+    referenceModel: 'ServiceInvoice',
+    reason: 'Service invoice deleted',
+    userId: invoice.updatedBy || invoice.createdBy,
+  });
+
   await invoice.deleteOne();
   return invoice;
 };

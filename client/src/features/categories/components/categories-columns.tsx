@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Category } from '@/stores/category.slice'
 import { useCategories } from '../context/categories-context'
 import { useLanguage } from '@/context/language-context'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils'
 export function useCategoryColumns(): ColumnDef<Category>[] {
   const { dispatch } = useCategories()
   const { t, language } = useLanguage()
+  const { showUrdu } = useUrduDisplay()
 
   const selectColumn: ColumnDef<Category> = {
     id: 'select',
@@ -59,7 +61,7 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
     },
     cell: ({ row }) => {
       const category = row.original
-      const urdu = category.nameUrdu?.trim()
+      const urdu = showUrdu ? category.nameUrdu?.trim() : undefined
       return (
         <div className={`flex items-start gap-3 ${language === 'ur' ? 'flex-row-reverse' : ''}`}>
           <Avatar className="h-8 w-8 shrink-0">

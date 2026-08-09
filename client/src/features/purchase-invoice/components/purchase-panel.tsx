@@ -648,16 +648,20 @@ export default function PurchasePanel({
       purchaseAutoOpenDoneRef.current = false
       return
     }
-    const first = purchase.items[0]
-    const oneEmptyManual =
-      purchase.items.length === 1 &&
-      first?.isManualEntry &&
-      !(first.product?.id || (first.product as { _id?: string })?._id)
-    if (oneEmptyManual && !purchaseAutoOpenDoneRef.current) {
+    // Fresh purchase (every row still an untouched empty manual entry) — auto-open the
+    // first row's product picker. Matches on "all rows empty" rather than a single row
+    // so this still fires now that a new purchase starts pre-populated with several
+    // empty rows.
+    const allEmptyManual =
+      purchase.items.length > 0 &&
+      purchase.items.every(
+        (item) => item.isManualEntry && !(item.product?.id || (item.product as { _id?: string })?._id)
+      )
+    if (allEmptyManual && !purchaseAutoOpenDoneRef.current) {
       purchaseAutoOpenDoneRef.current = true
       queueMicrotask(() => setProductSelectOpen('manual-0'))
     }
-    if (!oneEmptyManual) {
+    if (!allEmptyManual) {
       purchaseAutoOpenDoneRef.current = false
     }
   }, [isEditing, purchase.items])
@@ -1502,7 +1506,7 @@ export default function PurchasePanel({
               className='flex items-center gap-1'
             >
               <Plus className='h-4 w-4' />
-              {t('Add Item')}
+              {t('add_item')}
             </Button>
             </div>
           </div>

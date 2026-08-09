@@ -3,9 +3,12 @@ const { paginate, toJSON } = require('./plugins');
 
 /**
  * A configured commission rate, scoped to the whole organization, one branch, or one
- * salesman. Resolution (see commissionRule.service.resolveCommissionRate) always prefers
- * the most specific scope that has an active rule covering the date in question, falling
- * back to SalesmanProfile.defaultCommissionRate when no rule matches at all.
+ * salesman, and optionally to one sale module (Invoice/SimSale/LoadTransaction/RepairJob/
+ * ServiceInvoice — null means "every module"). Resolution (see
+ * commissionRule.service.resolveCommissionRate) always prefers the most specific scope
+ * with an active rule covering the date in question, preferring a module-specific rule
+ * over a general one at each scope level, falling back to SalesmanProfile.defaultCommissionRate
+ * when nothing matches at all.
  */
 const commissionRuleSchema = mongoose.Schema(
   {
@@ -34,6 +37,14 @@ const commissionRuleSchema = mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Which sale type this rate applies to — the same values used as `referenceModel` on
+    // SalesmanCommissionLedger entries. null = a general rate that applies to every module
+    // that has no more specific module rule at the same (or a more specific) scope level.
+    module: {
+      type: String,
+      enum: ['Invoice', 'SimSale', 'LoadTransaction', 'RepairJob', 'ServiceInvoice'],
+      default: null,
+    },
     // % of sale amount (revenue) — see the commission-basis decision in the roadmap.
     rate: { type: Number, required: true, min: 0, max: 100 },
     effectiveFrom: { type: Date, required: true, default: Date.now },
@@ -47,7 +58,7 @@ const commissionRuleSchema = mongoose.Schema(
   { timestamps: true }
 );
 
-commissionRuleSchema.index({ organizationId: 1, scope: 1, branchId: 1, salesmanUserId: 1, effectiveFrom: -1 });
+commissionRuleSchema.index({ organizationId: 1, scope: 1, branchId: 1, salesmanUserId: 1, module: 1, effectiveFrom: -1 });
 
 commissionRuleSchema.plugin(toJSON);
 commissionRuleSchema.plugin(paginate);

@@ -58,6 +58,7 @@ const createServiceInvoice = {
       )
       .min(1)
       .required(),
+    salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
   }),
 };
 
@@ -95,6 +96,7 @@ const updateServiceInvoice = {
           })
         )
         .min(1),
+      salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
     })
     .min(1),
 };

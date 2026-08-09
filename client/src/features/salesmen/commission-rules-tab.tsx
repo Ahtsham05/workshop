@@ -4,7 +4,10 @@ import {
   useDeleteCommissionRuleMutation,
   useLazyResolveCommissionRateQuery,
   CommissionRule,
+  CommissionModule,
+  COMMISSION_MODULES,
 } from '@/stores/commissionRule.api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useGetAllSalesmanProfilesQuery } from '@/stores/salesmanProfile.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +31,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+function moduleLabel(module: CommissionRule['module']): string {
+  if (!module) return 'All Modules';
+  return COMMISSION_MODULES.find((m) => m.value === module)?.label || module;
+}
+
 function scopeLabel(rule: CommissionRule): string {
   if (rule.scope === 'salesman') {
     const s = rule.salesmanUserId;
@@ -47,6 +55,7 @@ export function CommissionRulesTab() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState<CommissionRule | null>(null);
   const [previewSalesmanId, setPreviewSalesmanId] = useState('');
+  const [previewModule, setPreviewModule] = useState<CommissionModule | '__all__'>('__all__');
 
   const { data, isLoading, refetch } = useGetCommissionRulesQuery({ page: 1, limit: 100 });
   const [deleteRule, { isLoading: isDeleting }] = useDeleteCommissionRuleMutation();
@@ -125,10 +134,30 @@ export function CommissionRulesTab() {
                 placeholder={t('select_salesman') || 'Select a salesman...'}
               />
             </div>
+            <div className="w-full sm:w-52">
+              <Select value={previewModule} onValueChange={(v) => setPreviewModule(v as CommissionModule | '__all__')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{t('all_modules') || 'General (no module)'}</SelectItem>
+                  {COMMISSION_MODULES.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button
               variant="outline"
               disabled={!previewSalesmanId || isPreviewing}
-              onClick={() => resolveRate({ salesmanUserId: previewSalesmanId })}
+              onClick={() =>
+                resolveRate({
+                  salesmanUserId: previewSalesmanId,
+                  module: previewModule === '__all__' ? undefined : previewModule,
+                })
+              }
             >
               {isPreviewing ? t('checking') || 'Checking...' : t('check_rate') || 'Check Rate'}
             </Button>
@@ -171,6 +200,7 @@ export function CommissionRulesTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t('applies_to') || 'Applies To'}</TableHead>
+                    <TableHead>{t('module') || 'Module'}</TableHead>
                     <TableHead>{t('commission_rate') || 'Rate'}</TableHead>
                     <TableHead>{t('effective_from') || 'From'}</TableHead>
                     <TableHead>{t('effective_to') || 'To'}</TableHead>
@@ -188,6 +218,9 @@ export function CommissionRulesTab() {
                           </Badge>
                           {scopeLabel(rule)}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={rule.module ? 'outline' : 'secondary'}>{moduleLabel(rule.module)}</Badge>
                       </TableCell>
                       <TableCell>{rule.rate}%</TableCell>
                       <TableCell>{format(new Date(rule.effectiveFrom), 'MMM dd, yyyy')}</TableCell>
@@ -221,7 +254,7 @@ export function CommissionRulesTab() {
                   ))}
                   {rules.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         {t('no_commission_rules_found') ||
                           'No rules yet — salesmen fall back to their own default commission rate.'}
                       </TableCell>

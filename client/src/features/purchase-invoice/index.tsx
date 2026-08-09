@@ -105,6 +105,16 @@ export function createEmptyPurchaseManualItem(): PurchaseItem {
   };
 }
 
+/** A fresh purchase starts with this many empty rows pre-added so the buyer can jump
+ * straight into selecting products instead of clicking "Add Row" repeatedly — more rows
+ * are still appended automatically once these fill up (see addNewPurchaseRowAndOpenProduct
+ * in purchase-panel.tsx). */
+const NEW_PURCHASE_ROW_COUNT = 12;
+
+function createInitialPurchaseItems(): PurchaseItem[] {
+  return Array.from({ length: NEW_PURCHASE_ROW_COUNT }, () => createEmptyPurchaseManualItem());
+}
+
 // Purchase Interface - no types, no payments
 export interface Purchase {
   _id?: string;
@@ -151,7 +161,7 @@ const PurchaseInvoicePage = () => {
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
     supplier: {} as Supplier,
-    items: [createEmptyPurchaseManualItem()],
+    items: createInitialPurchaseItems(),
     subtotal: 0,
     total: 0,
     discountType: 'fixed',
@@ -241,7 +251,7 @@ const PurchaseInvoicePage = () => {
     setPurchase({
       invoiceNumber: '',
       supplier: {} as Supplier,
-      items: [createEmptyPurchaseManualItem()],
+      items: createInitialPurchaseItems(),
       subtotal: 0,
       total: 0,
       discountType: 'fixed',
@@ -765,7 +775,7 @@ const PurchaseInvoicePage = () => {
     setPurchase({
       invoiceNumber: '',
       supplier: {} as Supplier,
-      items: [createEmptyPurchaseManualItem()],
+      items: createInitialPurchaseItems(),
       subtotal: 0,
       total: 0,
       discountType: 'fixed',
@@ -788,7 +798,7 @@ const PurchaseInvoicePage = () => {
     setPurchase({
       invoiceNumber: '',
       supplier: {} as Supplier,
-      items: [createEmptyPurchaseManualItem()],
+      items: createInitialPurchaseItems(),
       subtotal: 0,
       total: 0,
       discountType: 'fixed',

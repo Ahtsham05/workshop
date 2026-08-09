@@ -167,7 +167,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   console.log('Type Filter Value:', typeFilter)
   
   const { data: invoicesResponse, isLoading, error } = useGetInvoicesQuery(queryParams)
-  const { data: customersData } = useGetAllCustomersQuery(undefined)
+  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true, includeSuppliers: true })
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
@@ -314,7 +314,10 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         typeof invoice.customerId === 'object'
           ? invoice.customerId?._id || invoice.customerId?.id
           : invoice.customerId
-      const previousBalance = await fetchBalanceBeforeInvoice(customerId, invoice._id || invoice.id)
+      // A supplier's shadow-customer account has its own isolated CustomerLedger balance —
+      // pull the supplier's true net balance (purchases + sales combined) instead when linked.
+      const linkedSupplierId = customerMap.get(customerId)?.linkedSupplierId
+      const previousBalance = await fetchBalanceBeforeInvoice(customerId, invoice._id || invoice.id, linkedSupplierId)
       const invoiceTotal = Number(invoice.total || 0)
       const invoicePaid = Number(invoice.paidAmount || 0)
       

@@ -1,5 +1,7 @@
 const Joi = require('joi');
 
+const MODULES = ['Invoice', 'SimSale', 'LoadTransaction', 'RepairJob', 'ServiceInvoice'];
+
 const scopedBody = {
   scope: Joi.string().valid('organization', 'branch', 'salesman').required(),
   branchId: Joi.when('scope', {
@@ -12,6 +14,8 @@ const scopedBody = {
     then: Joi.string().required(),
     otherwise: Joi.string().optional().allow(null, ''),
   }),
+  // null/omitted = a general rate covering every module with no more specific rule.
+  module: Joi.string().valid(...MODULES).allow(null).optional(),
   rate: Joi.number().min(0).max(100).required(),
   effectiveFrom: Joi.date().optional(),
   effectiveTo: Joi.date().allow(null).optional(),
@@ -28,6 +32,7 @@ const getCommissionRules = {
     scope: Joi.string().valid('organization', 'branch', 'salesman'),
     branchId: Joi.string(),
     salesmanUserId: Joi.string(),
+    module: Joi.string().valid(...MODULES),
     isActive: Joi.boolean(),
     limit: Joi.number(),
     page: Joi.number(),
@@ -63,6 +68,14 @@ const deleteCommissionRule = {
 const resolveCommissionRate = {
   query: Joi.object().keys({
     salesmanUserId: Joi.string().required(),
+    module: Joi.string().valid(...MODULES).optional(),
+    date: Joi.date().optional(),
+  }),
+};
+
+const getSalesmanModuleRates = {
+  query: Joi.object().keys({
+    salesmanUserId: Joi.string().required(),
     date: Joi.date().optional(),
   }),
 };
@@ -74,4 +87,5 @@ module.exports = {
   updateCommissionRule,
   deleteCommissionRule,
   resolveCommissionRate,
+  getSalesmanModuleRates,
 };

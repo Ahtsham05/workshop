@@ -356,7 +356,7 @@ const ur: Record<string, string> = {
     "create_new_invoice": "نئی انوائس بنائیں",
     "invoice_details": "انوائس کی تفصیلات",
     "invoice_items": "انوائس آئٹمز",
-    "add_item": "آئٹم شامل کریں",
+    "add_item": "قطار شامل کریں",
     "select_product": "پروڈکٹ منتخب کریں",
     "select_product_for_manual_entries": "محفوظ کرنے سے پہلے تمام دستی اندراجات کے لیے پروڈکٹ منتخب کریں",
     "product_catalog": "پروڈکٹ کیٹالاگ",

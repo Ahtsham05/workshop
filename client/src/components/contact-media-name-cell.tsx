@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useLanguage } from '@/context/language-context'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { User } from 'lucide-react'
@@ -45,6 +46,7 @@ export function ContactMediaNameCell({
   compact = false,
 }: ContactMediaNameCellProps) {
   const { t } = useLanguage()
+  const { showUrdu } = useUrduDisplay()
   const [preview, setPreview] = useState<{ url: string; title: string } | null>(null)
 
   const profileUrl = picture?.url?.trim()
@@ -146,7 +148,7 @@ export function ContactMediaNameCell({
               >
                 {name}
               </LongText>
-              {nameUrdu ? (
+              {showUrdu && nameUrdu ? (
                 <span
                   className={cn(
                     'min-w-0 truncate leading-snug',

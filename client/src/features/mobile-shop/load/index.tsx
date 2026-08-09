@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } fr
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { store } from '@/stores/store'
+import { SalesmanField } from '@/components/salesman-field'
 import {
   resolveWalletId,
   normalizeWalletResults,
@@ -174,6 +175,7 @@ type LoadSaleFormState = {
   paymentWalletType: string
   mobileNumber: string
   date: string
+  salesmanId: string
 }
 
 type WithdrawalFormState = {
@@ -257,6 +259,7 @@ const initialSaleForm: LoadSaleFormState = {
   paymentWalletType: '',
   mobileNumber: '',
   date: getBusinessToday(),
+  salesmanId: '',
 }
 
 const initialWithdrawalForm: WithdrawalFormState = {
@@ -289,6 +292,11 @@ function buildPurchaseFormWithWallet(wallet: WalletLike): PurchaseFormState {
     walletType: wallet.type || '',
     commissionRate: String(wallet.commissionRate ?? 0),
   }
+}
+
+function salesmanName(ref: { name?: string; email?: string } | string | null | undefined): string {
+  if (!ref) return '—'
+  return typeof ref === 'string' ? ref : ref.name || ref.email || '—'
 }
 
 function buildSaleFormWithWallet(wallet: WalletLike, customerId?: string): LoadSaleFormState {
@@ -607,7 +615,7 @@ function LoadManagementPage({
   const branchName = useBranchName()
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
-  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true })
+  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true, includeSuppliers: true })
   const suppliersRedux = useSelector((state: RootState) => state.supplier.data)
   const { data: purchasesData, refetch: refetchPurchases } = useGetLoadPurchasesQuery(
     purchaseSearch.trim() ? { page: 1, limit: 1000 } : { page: purchasePage, limit: purchaseLimit },
@@ -1062,6 +1070,7 @@ function LoadManagementPage({
         network: 'none',
         paymentMethod: saleForm.paymentMethod,
         paymentWalletType: saleForm.paymentMethod === 'wallet' ? saleForm.paymentWalletType : undefined,
+        salesmanId: saleForm.salesmanId || undefined,
       }).unwrap()
       toast.success('Load sold successfully!')
       setSavedReceipt(buildLoadSaleReceipt(sold))
@@ -1487,6 +1496,7 @@ function LoadManagementPage({
       paymentWalletType: t.paymentWalletType || '',
       mobileNumber: t.mobileNumber === 'N/A' ? '' : (t.mobileNumber || ''),
       date: toBusinessCalendarDate(new Date(t.date)),
+      salesmanId: t.salesmanId?.id || t.salesmanId?._id || t.salesmanId || '',
     })
     setIsSaleReceivedAmountManual(true)
     setEditingTransaction(t)
@@ -1512,6 +1522,7 @@ function LoadManagementPage({
           paymentMethod: saleForm.paymentMethod,
           paymentWalletType: saleForm.paymentMethod === 'wallet' ? saleForm.paymentWalletType : undefined,
           date: parseBusinessDateTimeLocal(saleForm.date || getBusinessToday()),
+          salesmanId: saleForm.salesmanId || undefined,
         },
       }).unwrap()
       toast.success('Transaction updated!')
@@ -1976,7 +1987,7 @@ function LoadManagementPage({
                         value: c.id || c._id,
                         label: c.name,
                         sublabel: c.phone || c.mobile || undefined,
-                        badge: c.isEmployeeAccount ? 'Employee' : undefined,
+                        badge: c.isEmployeeAccount ? 'Employee' : c.isSupplierAccount ? 'Supplier' : undefined,
                       }))}
                       value={saleForm.customerId}
                       onValueChange={(v) => handleSaleChange('customerId', v)}
@@ -2057,6 +2068,14 @@ function LoadManagementPage({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className='space-y-2 md:max-w-xs'>
+                    <SalesmanField
+                      value={saleForm.salesmanId}
+                      onValueChange={(v) => handleSaleChange('salesmanId', v)}
+                      id='sale-salesman'
+                    />
                   </div>
 
                   <div className='grid gap-4 md:grid-cols-2'>
@@ -2146,6 +2165,7 @@ function LoadManagementPage({
                         <TableHead>Method</TableHead>
                         <TableHead>Payment Wallet</TableHead>
                         <TableHead className='text-green-600 font-bold'>Profit</TableHead>
+                        <TableHead>Salesman</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2164,6 +2184,7 @@ function LoadManagementPage({
                           <TableCell className='text-sm capitalize'>{t.paymentMethod || 'cash'}</TableCell>
                           <TableCell>{(t as any).paymentWalletType || '—'}</TableCell>
                           <TableCell className='text-green-600 font-bold'>Rs {Number(t.profit || 0).toFixed(2)}</TableCell>
+                          <TableCell className='text-sm text-muted-foreground'>{salesmanName((t as any).salesmanId)}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
                               <ListPrintButton onClick={() => setPreviewReceipt(buildLoadSaleReceipt(t))} />
@@ -2545,7 +2566,7 @@ function LoadManagementPage({
                           value: c.id || c._id,
                           label: c.name,
                           sublabel: c.phone || c.mobile || undefined,
-                          badge: c.isEmployeeAccount ? 'Employee' : undefined,
+                          badge: c.isEmployeeAccount ? 'Employee' : c.isSupplierAccount ? 'Supplier' : undefined,
                         })),
                       ]}
                       value={withdrawalForm.customerId}

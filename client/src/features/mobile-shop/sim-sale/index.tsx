@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { Button } from '@/components/ui/button'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import { SalesmanField } from '@/components/salesman-field'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,6 +85,12 @@ type SimSaleFormState = {
   customerLocation: string
   paymentMethod: 'cash' | 'bank' | 'jazzcash' | 'easypaisa' | 'wallet'
   paymentWalletType: string
+  salesmanId: string
+}
+
+function salesmanName(ref: { name?: string; email?: string } | string | null | undefined): string {
+  if (!ref) return '—'
+  return typeof ref === 'string' ? ref : ref.name || ref.email || '—'
 }
 
 const makeEmptyForm = (): SimSaleFormState => ({
@@ -101,6 +108,7 @@ const makeEmptyForm = (): SimSaleFormState => ({
   customerLocation: '',
   paymentMethod: 'cash',
   paymentWalletType: '',
+  salesmanId: '',
 })
 
 export default function SimSalePage({ initialCustomerId }: { initialCustomerId?: string }) {
@@ -123,7 +131,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
 
   const { data: walletsData } = useGetWalletsQuery()
-  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true })
+  const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true, includeSuppliers: true })
   const { data: salesData, isLoading } = useGetSimSalesQuery(
     simSearch.trim() ? { page: 1, limit: 1000 } : { page, limit },
   )
@@ -270,6 +278,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
       customerLocation: form.customerLocation || undefined,
       paymentMethod: form.paymentMethod,
       paymentWalletType: form.paymentMethod === 'wallet' ? (form.paymentWalletType || undefined) : undefined,
+      salesmanId: form.salesmanId || undefined,
     }
 
     try {
@@ -335,6 +344,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
       customerLocation: sale.customerLocation || '',
       paymentMethod: sale.paymentMethod || 'cash',
       paymentWalletType: sale.paymentWalletType || '',
+      salesmanId: sale.salesmanId?.id || sale.salesmanId?._id || sale.salesmanId || '',
     })
     setEditingId(sale.id)
     setShowForm(true)
@@ -459,7 +469,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                       value: c.id || c._id,
                       label: c.name,
                       sublabel: c.phone || c.mobile || undefined,
-                      badge: c.isEmployeeAccount ? 'Employee' : undefined,
+                      badge: c.isEmployeeAccount ? 'Employee' : c.isSupplierAccount ? 'Supplier' : undefined,
                     }))}
                     value={form.customerId}
                     onValueChange={v => handleChange('customerId', v)}
@@ -581,6 +591,14 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                     </Select>
                   </div>
                 )}
+
+                <div className='space-y-2'>
+                  <SalesmanField
+                    value={form.salesmanId}
+                    onValueChange={v => handleChange('salesmanId', v)}
+                    id='sim-salesman'
+                  />
+                </div>
               </div>
 
               {/* Right-side amounts */}
@@ -702,6 +720,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                         <TableHead>Payment Method</TableHead>
                         <TableHead>Payment Wallet</TableHead>
                         {canViewCreatedBy && <TableHead>Created By</TableHead>}
+                        <TableHead>Salesman</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -731,6 +750,9 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                               <CreatedByCell createdBy={sale.createdBy} />
                             </TableCell>
                           )}
+                          <TableCell className='text-sm text-muted-foreground'>
+                            {salesmanName(sale.salesmanId)}
+                          </TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
                               <ListPrintButton onClick={() => setPreviewReceipt(buildSimSaleReceipt(sale))} />

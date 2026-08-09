@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { SupplierLedger, Supplier } = require('../models');
+const { SupplierLedger, Supplier, Customer, Invoice } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { normalizeCustomerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildSupplierPurchaseLedgerEntries } = require('../utils/ledgerSettlement');
@@ -315,6 +315,46 @@ const getSupplierBalance = async (supplierId) => {
 };
 
 /**
+ * Running balance immediately before a debit-note (customer-sale offset) linked to
+ * referenceId — mirrors customerLedger.service.js's getBalanceBeforeReference, but
+ * for the debit_note entries created when this supplier is also billed as a customer
+ * (see syncPurchaseFromCustomerSale above). Used to print an accurate "previous
+ * balance" on the sale receipt, reflecting the supplier's true net position rather
+ * than an isolated customer-only figure.
+ * @param {ObjectId} supplierId
+ * @param {ObjectId} referenceId - id of the source sale document (Invoice, etc.)
+ * @returns {Promise<Number>}
+ */
+const getBalanceBeforeReference = async (supplierId, referenceId) => {
+  if (!supplierId || !referenceId) {
+    return 0;
+  }
+
+  const debitNoteEntry = await SupplierLedger.findOne({
+    supplier: supplierId,
+    referenceId,
+    transactionType: 'debit_note',
+  }).sort({ transactionDate: 1, createdAt: 1 });
+
+  if (debitNoteEntry) {
+    return debitNoteEntry.balance - (Number(debitNoteEntry.credit) || 0) + (Number(debitNoteEntry.debit) || 0);
+  }
+
+  const invoice = await Invoice.findById(referenceId).select('invoiceDate');
+  if (!invoice) {
+    return 0;
+  }
+
+  const invoiceDate = invoice.invoiceDate || new Date();
+  const priorEntry = await SupplierLedger.findOne({
+    supplier: supplierId,
+    transactionDate: { $lt: invoiceDate },
+  }).sort({ transactionDate: -1, createdAt: -1 });
+
+  return priorEntry ? priorEntry.balance : 0;
+};
+
+/**
  * Get supplier ledger summary
  * @param {ObjectId} supplierId
  * @returns {Promise<Object>}
@@ -580,11 +620,128 @@ const syncOpeningBalanceEntry = async ({
   await recalculateBalances(supplierId, recalcFrom);
 };
 
+const deleteCustomerSaleOffsetForReference = async (referenceId, referenceModel) => {
+  const existing = await SupplierLedger.findOne({ referenceId, referenceModel, transactionType: 'debit_note' });
+  if (!existing) return null;
+  const supplierId = existing.supplier;
+  await existing.deleteOne();
+  await recalculateBalances(supplierId);
+  return null;
+};
+
+/**
+ * Mirror a supplier's unpaid store purchase — from ANY sale-to-customer
+ * module (Invoice, mobile Load top-up, SIM sale, Service/repair invoice,
+ * etc.) sold to their shadow Customer account — into their own Supplier
+ * Ledger as a debit note, netting it against what the business owes that
+ * supplier. Fully paid amounts don't touch the balance (nothing is owed);
+ * the source document itself is the history. Safe to call on every save of
+ * the source document — it's a no-op for non-supplier customers and keeps
+ * the mirrored entry in sync as that document is edited.
+ * @param {Object} params
+ * @param {string} params.customerId
+ * @param {ObjectId} params.referenceId - id of the source document (invoice, load transaction, etc.)
+ * @param {string} params.referenceModel - e.g. 'Invoice', 'LoadTransaction', 'SimSale', 'ServiceInvoice'
+ * @param {string} params.reference - short human label, e.g. "Invoice #123"
+ * @param {string} params.description - what was bought, e.g. item/service names
+ * @param {number} params.unpaidAmount
+ * @param {Date} [params.transactionDate]
+ * @param {ObjectId} params.organizationId
+ * @param {ObjectId} params.branchId
+ * @param {ObjectId} [params.createdBy]
+ * @param {ObjectId} [params.updatedBy]
+ */
+const syncPurchaseFromCustomerSale = async ({
+  organizationId,
+  branchId,
+  customerId,
+  referenceId,
+  referenceModel,
+  reference,
+  description,
+  unpaidAmount,
+  transactionDate,
+  createdBy,
+  updatedBy,
+}) => {
+  if (!customerId || customerId === 'walk-in') {
+    return deleteCustomerSaleOffsetForReference(referenceId, referenceModel);
+  }
+
+  const customer = await Customer.findById(customerId).select('isSupplierAccount linkedSupplierId');
+  if (!customer || !customer.isSupplierAccount || !customer.linkedSupplierId) {
+    return deleteCustomerSaleOffsetForReference(referenceId, referenceModel);
+  }
+
+  const unpaid = Number(unpaidAmount || 0);
+  if (unpaid <= 0) {
+    return deleteCustomerSaleOffsetForReference(referenceId, referenceModel);
+  }
+
+  const existing = await SupplierLedger.findOne({
+    supplier: customer.linkedSupplierId,
+    referenceId,
+    referenceModel,
+    transactionType: 'debit_note',
+  });
+
+  const payload = {
+    organizationId,
+    branchId,
+    supplier: customer.linkedSupplierId,
+    transactionType: 'debit_note',
+    transactionDate: transactionDate || new Date(),
+    reference: reference || 'Store Sale',
+    referenceId,
+    referenceModel,
+    description: description || 'Store sale',
+    debit: unpaid,
+    credit: 0,
+    paymentMethod: 'Account Offset',
+    notes: `Unpaid balance on ${reference || 'store sale'}, offset against amount owed to supplier`,
+    createdBy: updatedBy || createdBy,
+    updatedBy: updatedBy || createdBy,
+  };
+
+  if (existing) {
+    Object.assign(existing, payload);
+    await existing.save();
+    await recalculateBalances(customer.linkedSupplierId);
+    return existing;
+  }
+
+  return createLedgerEntry(payload);
+};
+
+/**
+ * Convenience wrapper for the Invoice module (see invoice.service.js).
+ * @param {Invoice} invoice
+ */
+const syncPurchaseFromInvoice = async (invoice) => {
+  const itemNames = (invoice.items || []).map((item) => item.name).filter(Boolean).join(', ');
+  return syncPurchaseFromCustomerSale({
+    organizationId: invoice.organizationId,
+    branchId: invoice.branchId,
+    customerId: invoice.customerId,
+    referenceId: invoice._id,
+    referenceModel: 'Invoice',
+    reference: `Invoice #${invoice.invoiceNumber}`,
+    description: itemNames ? `Store sale: ${itemNames}` : `Store sale - Invoice #${invoice.invoiceNumber}`,
+    unpaidAmount: invoice.balance,
+    transactionDate: invoice.invoiceDate,
+    createdBy: invoice.createdBy,
+    updatedBy: invoice.updatedBy,
+  });
+};
+
+const deleteCustomerSaleOffsetForInvoice = (invoiceId) => deleteCustomerSaleOffsetForReference(invoiceId, 'Invoice');
+
 module.exports = {
   createLedgerEntry,
   queryLedgerEntries,
   getLedgerEntryById,
   getSupplierBalance,
+  getBalanceBeforeReference,
   getSupplierLedgerSummary,
   updateLedgerEntry,
   deleteLedgerEntry,
@@ -593,4 +750,8 @@ module.exports = {
   deleteLedgerEntriesByReference,
   syncOpeningBalanceEntry,
   recalculateBalances,
+  syncPurchaseFromCustomerSale,
+  syncPurchaseFromInvoice,
+  deleteCustomerSaleOffsetForReference,
+  deleteCustomerSaleOffsetForInvoice,
 };

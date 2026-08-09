@@ -20,6 +20,9 @@ const getCustomers = catchAsync(async (req, res) => {
   if (req.query.includeEmployees !== 'true' && req.query.includeEmployees !== true) {
     filter.isEmployeeAccount = { $ne: true };
   }
+  if (req.query.includeSuppliers !== 'true' && req.query.includeSuppliers !== true) {
+    filter.isSupplierAccount = { $ne: true };
+  }
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await customerService.queryCustomers(filter, options);
   res.send(result);
@@ -48,6 +51,7 @@ const getAllCustomers = catchAsync(async (req, res) => {
   applyBranchFilter(filter, req);
   const customers = await customerService.getAllCustomers(filter, {
     includeEmployees: req.query.includeEmployees === 'true',
+    includeSuppliers: req.query.includeSuppliers === 'true',
   });
   res.send(customers);
 })

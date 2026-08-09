@@ -5,6 +5,8 @@ import { z } from 'zod';
 import {
   CommissionRule,
   CommissionRuleScope,
+  CommissionModule,
+  COMMISSION_MODULES,
   useCreateCommissionRuleMutation,
   useUpdateCommissionRuleMutation,
 } from '@/stores/commissionRule.api';
@@ -41,6 +43,7 @@ const ruleSchema = z
     scope: z.enum(['organization', 'branch', 'salesman']),
     branchId: z.string(),
     salesmanUserId: z.string(),
+    module: z.string(),
     rate: z.coerce.number().min(0).max(100),
     effectiveFrom: z.string().min(1, 'Effective from date is required'),
     effectiveTo: z.string(),
@@ -97,6 +100,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
       scope: 'organization',
       branchId: '',
       salesmanUserId: '',
+      module: '__all__',
       rate: 0,
       effectiveFrom: toDateInput(new Date().toISOString()),
       effectiveTo: '',
@@ -114,6 +118,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
         scope: rule.scope,
         branchId: typeof rule.branchId === 'string' ? rule.branchId : rule.branchId?.id || '',
         salesmanUserId: typeof rule.salesmanUserId === 'string' ? rule.salesmanUserId : rule.salesmanUserId?.id || '',
+        module: rule.module || '__all__',
         rate: rule.rate,
         effectiveFrom: toDateInput(rule.effectiveFrom),
         effectiveTo: toDateInput(rule.effectiveTo),
@@ -125,6 +130,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
         scope: 'organization',
         branchId: '',
         salesmanUserId: '',
+        module: '__all__',
         rate: 0,
         effectiveFrom: toDateInput(new Date().toISOString()),
         effectiveTo: '',
@@ -153,6 +159,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
           scope: data.scope,
           branchId: data.scope === 'branch' ? data.branchId : undefined,
           salesmanUserId: data.scope === 'salesman' ? data.salesmanUserId : undefined,
+          module: data.module === '__all__' ? null : (data.module as CommissionModule),
           rate: data.rate,
           effectiveFrom: data.effectiveFrom,
           effectiveTo: data.effectiveTo || null,
@@ -250,6 +257,35 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
                 )}
               />
             )}
+
+            <FormField
+              control={form.control}
+              name="module"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('module') || 'Module'}</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={isEdit}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t('all_modules') || 'All Modules (general rate)'}</SelectItem>
+                      {COMMISSION_MODULES.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    {t('module_rule_hint') || 'A specific module beats a general rate at the same scope.'}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}

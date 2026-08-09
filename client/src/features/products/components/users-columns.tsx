@@ -8,12 +8,14 @@ import { Product } from '../data/schema'
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
 import { useLanguage } from '@/context/language-context'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
 
 export const useProductColumns = (): ColumnDef<Product>[] => {
   const { t } = useLanguage()
-  
+  const { showUrdu } = useUrduDisplay()
+
   return [
   {
     id: 'select',
@@ -41,7 +43,7 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     header: ({ column }) => <DataTableColumnHeader column={column} title='product_name' />,
     cell: ({ row }) => {
       const product = row.original
-      const urdu = product.nameUrdu?.trim()
+      const urdu = showUrdu ? product.nameUrdu?.trim() : undefined
       return (
         <div className='flex min-w-0 items-center gap-2'>
           {product.image?.url ? (

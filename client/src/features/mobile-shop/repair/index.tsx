@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { SalesmanField } from '@/components/salesman-field'
 import {
   Dialog,
   DialogContent,
@@ -88,6 +89,7 @@ type RepairFormState = {
   paymentMethod: string
   walletType: string
   date: string
+  salesmanId: string
 }
 
 type CompleteDialogState = {
@@ -119,6 +121,11 @@ type StockFormState = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function salesmanName(ref: { name?: string; email?: string } | string | null | undefined): string {
+  if (!ref) return '—'
+  return typeof ref === 'string' ? ref : ref.name || ref.email || '—'
+}
+
 const makeInitialForm = (): RepairFormState => ({
   customerName: '',
   phone: '',
@@ -133,6 +140,7 @@ const makeInitialForm = (): RepairFormState => ({
   paymentMethod: 'cash',
   walletType: '',
   date: toBusinessDateTimeLocal(),
+  salesmanId: '',
 })
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -653,6 +661,12 @@ export default function RepairPage() {
                 </div>
               </div>
 
+              <SalesmanField
+                value={form.salesmanId}
+                onValueChange={(v) => setField('salesmanId', v)}
+                id='repair-salesman'
+              />
+
               {/* Balance preview */}
               {(Number(form.charges) > 0 || Number(form.advanceAmount) > 0) && (
                 <div className='rounded-md bg-muted p-3 text-sm flex justify-between'>
@@ -705,13 +719,14 @@ export default function RepairPage() {
                   <TableHead>Advance</TableHead>
                   <TableHead className='text-destructive'>Balance</TableHead>
                   <TableHead className='text-green-600'>Profit</TableHead>
+                  <TableHead>Salesman</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className='text-center text-muted-foreground py-8'>
+                    <TableCell colSpan={9} className='text-center text-muted-foreground py-8'>
                       No repair jobs found
                     </TableCell>
                   </TableRow>
@@ -749,6 +764,7 @@ export default function RepairPage() {
                           <span className='text-muted-foreground text-xs'>—</span>
                         )}
                       </TableCell>
+                      <TableCell className='text-sm text-muted-foreground'>{salesmanName((repair as any).salesmanId)}</TableCell>
                       <TableCell>
                         <div className='flex flex-wrap items-center gap-1'>
                           {repair.status === 'in_progress' && (

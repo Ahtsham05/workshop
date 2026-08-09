@@ -131,7 +131,7 @@ const ar: Record<string, string> = {
   "walk_in_customer": "عميل عرضي",
   "select_customer": "اختر العميل",
   "no_customers_found": "لم يتم العثور على عملاء",
-  "add_item": "إضافة بند",
+  "add_item": "إضافة صف",
   "no_items_added": "لم يتم إضافة بنود",
   "select_product": "اختر المنتج",
   "no_products_found": "لم يتم العثور على منتجات",

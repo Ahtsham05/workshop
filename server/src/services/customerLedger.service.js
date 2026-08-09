@@ -581,7 +581,7 @@ const deleteLedgerEntry = async (id) => {
  * @returns {Promise<Array>}
  */
 const getAllCustomersWithBalances = async (filter = {}) => {
-  const customers = await Customer.find({ isEmployeeAccount: { $ne: true }, ...filter }).select(
+  const customers = await Customer.find({ isEmployeeAccount: { $ne: true }, isSupplierAccount: { $ne: true }, ...filter }).select(
     'name nameUrdu phone whatsapp email balance picture idCardFront idCardBack',
   );
   

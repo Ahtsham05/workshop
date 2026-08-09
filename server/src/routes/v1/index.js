@@ -35,6 +35,7 @@ const companyRoute = require('./company.route');
 const unitsRoute = require('./units.route');
 const organizationRoute = require('./organization.route');
 const branchRoute = require('./branch.route');
+const branchOverviewRoute = require('./branchOverview.route');
 const membershipRoute = require('./membership.route');
 const walletRoute = require('./wallet.route');
 const walletTransferRoute = require('./walletTransfer.route');
@@ -268,6 +269,10 @@ const defaultRoutes = [
   {
     path: '/branches',
     route: branchRoute
+  },
+  {
+    path: '/branch-overview',
+    route: branchOverviewRoute
   },
   {
     path: '/memberships',
@@ -620,6 +625,7 @@ const protectedPaths = [
   '/units',
   '/organizations',
   '/branches',
+  '/branch-overview',
   '/memberships',
   '/wallets',
   '/load-purchases',

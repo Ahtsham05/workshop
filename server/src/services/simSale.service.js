@@ -6,7 +6,9 @@ const walletEntryService = require('./walletEntry.service');
 const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
 const employeeLedgerService = require('./employeeLedger.service');
+const supplierLedgerService = require('./supplierLedger.service');
 const inventorySyncService = require('./inventorySync.service');
+const commissionEngineService = require('./commissionEngine.service');
 
 const sanitizeId = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -182,6 +184,7 @@ const syncCustomerLedgerForSimSale = async (sale) => {
 
   if (!sale.customerId) {
     await employeeLedgerService.deletePurchaseAdvanceForReference(sale._id, 'SimSale');
+    await supplierLedgerService.deleteCustomerSaleOffsetForReference(sale._id, 'SimSale');
     return;
   }
 
@@ -217,10 +220,26 @@ const syncCustomerLedgerForSimSale = async (sale) => {
     createdBy: sale.createdBy,
     updatedBy: sale.updatedBy,
   });
+
+  await supplierLedgerService.syncPurchaseFromCustomerSale({
+    organizationId: sale.organizationId,
+    branchId: sale.branchId,
+    customerId: sale.customerId,
+    referenceId: sale._id,
+    referenceModel: 'SimSale',
+    reference,
+    description,
+    unpaidAmount: sale.saleAmount,
+    transactionDate: sale.date,
+    createdBy: sale.createdBy,
+    updatedBy: sale.updatedBy,
+  });
 };
 
 const createSimSale = async (body) => {
   const { organizationId, branchId } = body;
+  // '' from "no salesman selected" would fail the ObjectId cast — normalize to null.
+  body.salesmanId = body.salesmanId || null;
 
   const [linkedCustomer, linkedProduct, jobNumber] = await Promise.all([
     resolveLinkedCustomer({ customerId: body.customerId, organizationId, branchId }),
@@ -289,6 +308,8 @@ const createSimSale = async (body) => {
   // Sync customer ledger if customer selected
   await syncCustomerLedgerForSimSale(sale);
 
+  commissionEngineService.syncCommissionForSimSale(sale, sale.createdBy).catch(() => {});
+
   return sale;
 };
 
@@ -330,13 +351,17 @@ const querySimSales = async (filter, options) => {
     'productId',
     'customerId',
     { path: 'createdBy', select: 'name email' },
+    { path: 'salesmanId', select: 'name email' },
   ];
 
   return SimSale.paginate(queryFilter, queryOptions);
 };
 
 const getSimSaleById = async (id) => {
-  const sale = await SimSale.findById(id).populate('productId customerId').populate('createdBy', 'name email');
+  const sale = await SimSale.findById(id)
+    .populate('productId customerId')
+    .populate('createdBy', 'name email')
+    .populate('salesmanId', 'name email');
   if (!sale) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sim sale not found');
   }
@@ -344,6 +369,9 @@ const getSimSaleById = async (id) => {
 };
 
 const updateSimSale = async (saleId, updateBody) => {
+  if ('salesmanId' in updateBody) {
+    updateBody.salesmanId = updateBody.salesmanId || null;
+  }
   const sale = await SimSale.findById(saleId);
   if (!sale) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sim sale not found');
@@ -456,6 +484,8 @@ const updateSimSale = async (saleId, updateBody) => {
 
   await syncCustomerLedgerForSimSale(sale);
 
+  commissionEngineService.syncCommissionForSimSale(sale, sale.createdBy).catch(() => {});
+
   return sale;
 };
 
@@ -490,6 +520,7 @@ const deleteSimSale = async (saleId) => {
   await walletEntryService.deleteEntriesByReference(sale._id, 'SimSale');
   await customerLedgerService.deleteLedgerEntriesByReference(sale._id);
   await employeeLedgerService.deletePurchaseAdvanceForReference(sale._id, 'SimSale');
+  await supplierLedgerService.deleteCustomerSaleOffsetForReference(sale._id, 'SimSale');
 
   if (sale.paymentMethod === 'wallet' && sale.paymentWalletType && Number(sale.saleAmount || 0) > 0) {
     await walletService.adjustWalletBalance({
@@ -501,6 +532,13 @@ const deleteSimSale = async (saleId) => {
       userId: sale.createdBy,
     });
   }
+
+  await commissionEngineService.reverseCommissionOnDelete({
+    sale,
+    referenceModel: 'SimSale',
+    reason: 'Sim sale deleted',
+    userId: sale.createdBy,
+  });
 
   await sale.deleteOne();
 };

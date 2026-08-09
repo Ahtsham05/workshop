@@ -31,17 +31,14 @@ const adjustInventory = async (variantId, { quantityDelta, reason, userId, type,
     throw new ApiError(httpStatus.NOT_FOUND, 'Inventory row not found for this variant');
   }
 
+  // Overselling into negative stock is allowed — same policy as legacy Product
+  // stockQuantity (see invoice.service.js) — a purchase entry brings the balance back
+  // up, so no floor check here.
   const updated = await Inventory.findOneAndUpdate(
     { _id: inventory._id },
     { $inc: { quantity: quantityDelta } },
     { new: true, session }
   );
-
-  if (updated.quantity < 0) {
-    // Roll back — don't allow stock to go negative.
-    await Inventory.updateOne({ _id: inventory._id }, { $inc: { quantity: -quantityDelta } }, { session });
-    throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock. Available: ${inventory.quantity}, Requested: ${-quantityDelta}`);
-  }
 
   await InventoryTransaction.create(
     [{

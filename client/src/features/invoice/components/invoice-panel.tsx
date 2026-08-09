@@ -9,7 +9,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 // import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, History } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History } from 'lucide-react'
 import type { ImeiRecord, ImeiEntryInput } from '@/stores/imei.api'
 import {
   entryImei,
@@ -88,6 +88,7 @@ import { getElectronAPI } from '@/lib/sync/electron'
 import { isApiUnreachable } from '@/lib/auth-cache'
 import { normalizeInvoiceNotesHtml } from '@/lib/rich-text-utils'
 import { BilingualName } from '@/components/bilingual-name'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 import { isWholesaleRetailBusiness } from '@/lib/business-types'
@@ -169,6 +170,7 @@ export function InvoicePanel({
   stickyActionsContainer = null,
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
+  const { showUrdu } = useUrduDisplay()
   const dispatch = useDispatch<AppDispatch>()
   const { hasPermission } = usePermissions()
   const canCreateCustomer = hasPermission('createCustomers' as never)
@@ -236,10 +238,12 @@ export function InvoicePanel({
       return
     }
     const first = invoice.items[0]
+    // Fresh invoice (every row still an untouched empty manual entry) — auto-open the
+    // first row's product picker so a cashier can start typing immediately instead of
+    // clicking into it. Matches on "all rows empty" rather than a single row so this
+    // still fires now that a new invoice starts pre-populated with several empty rows.
     if (
-      invoice.items.length === 1 &&
-      first?.isManualEntry &&
-      !first?.productId &&
+      invoice.items.every((item) => item.isManualEntry && !item.productId) &&
       first?.id &&
       autoOpenedInvoiceItemIdRef.current !== first.id
     ) {
@@ -522,15 +526,32 @@ export function InvoicePanel({
     }
   }, [invoice.customerId, invoice.type, setInvoice])
 
+  // A supplier-as-customer's own shadow-customer balance only reflects sales made
+  // to them — it ignores what the business owes them from purchases. Their linked
+  // Supplier ledger already nets both sides together (see supplierLedger.service.js
+  // syncPurchaseFromCustomerSale), so that's the accurate number to show here.
+  // Supplier balance convention is positive = payable (we owe them); this component's
+  // customerBalance convention is positive = receivable (they owe us) — negate.
+  const fetchBalanceForCustomerId = async (customerId: string): Promise<number> => {
+    if (!customerId || customerId === 'walk-in') return 0
+    const linkedCustomer = customers.find((c) => (c._id || c.id) === customerId)
+    if (linkedCustomer?.isSupplierAccount && linkedCustomer?.linkedSupplierId) {
+      const url = `${summery.fetchSupplierBalance.url}/${linkedCustomer.linkedSupplierId}${summery.fetchSupplierBalance.urlSuffix || ''}`
+      const response = await Axios.get(url)
+      return -(response.data.balance || 0)
+    }
+    const url = `${summery.fetchCustomerBalance.url}/${customerId}${summery.fetchCustomerBalance.urlSuffix || ''}`
+    const response = await Axios.get(url)
+    return response.data.balance || 0
+  }
+
   // Fetch customer balance when customer is selected
   useEffect(() => {
     const fetchCustomerBalance = async () => {
       if (invoice.customerId && invoice.customerId !== 'walk-in') {
         setLoadingBalance(true)
         try {
-          const url = `${summery.fetchCustomerBalance.url}/${invoice.customerId}${summery.fetchCustomerBalance.urlSuffix || ''}`
-          const response = await Axios.get(url)
-          setCustomerBalance(response.data.balance || 0)
+          setCustomerBalance(await fetchBalanceForCustomerId(invoice.customerId))
         } catch (error) {
           console.error('Failed to fetch customer balance:', error)
           setCustomerBalance(0)
@@ -541,9 +562,9 @@ export function InvoicePanel({
         setCustomerBalance(0)
       }
     }
-    
+
     fetchCustomerBalance()
-  }, [invoice.customerId])
+  }, [invoice.customerId, customers])
 
   // Filter customers by name, Urdu name, or phone. Memoized — this component
   // re-renders on nearly every keystroke anywhere in the form (qty, discount, etc.),
@@ -650,15 +671,13 @@ export function InvoicePanel({
       return
     }
 
-    // Check if we have enough stock for the current quantity — variant/batch items
-    // only. Simple products may sell into negative stock; a purchase entry brings the
-    // balance back up.
+    // Overselling is allowed for every product, variant/batch-tracked included — a
+    // purchase entry brings the balance back up. Just surface a heads-up instead of
+    // blocking the sale.
     if (variantId && lineValues.stockQuantity > currentStock) {
-      toast.error(`${product.name} - Not enough stock available. Current stock: ${currentStock}, Required: ${lineValues.stockQuantity}`)
-      console.log('ERROR: Not enough stock for current quantity')
-      return
+      toast.warning(`${product.name} - selling into negative stock (Current: ${currentStock}, Required: ${lineValues.stockQuantity})`)
     }
-    
+
     // Preserve any discount already set on this row (e.g. entered before a product was
     // picked) by re-applying it to the newly resolved gross line.
     const selectionNet = applyLineDiscount(
@@ -1435,9 +1454,7 @@ export function InvoicePanel({
       let updatedBalance = customerBalance
       if (invoice.customerId && invoice.customerId !== 'walk-in') {
         try {
-          const url = `${summery.fetchCustomerBalance.url}/${invoice.customerId}${summery.fetchCustomerBalance.urlSuffix || ''}`
-          const response = await Axios.get(url)
-          updatedBalance = response.data.balance || 0
+          updatedBalance = await fetchBalanceForCustomerId(invoice.customerId)
           setCustomerBalance(updatedBalance)
           console.log('Customer balance refreshed:', updatedBalance)
         } catch (error) {
@@ -1812,7 +1829,7 @@ export function InvoicePanel({
                               })
                               
                               if (selectedCustomer) {
-                                const urdu = selectedCustomer.nameUrdu?.trim()
+                                const urdu = showUrdu ? selectedCustomer.nameUrdu?.trim() : undefined
                                 return (
                                   <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full min-w-0 pl-1">
                                     <ContactPhotoCell
@@ -1826,6 +1843,9 @@ export function InvoicePanel({
                                       </span>
                                       {selectedCustomer.isEmployeeAccount ? (
                                         <Briefcase className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('Employee')} />
+                                      ) : null}
+                                      {selectedCustomer.isSupplierAccount ? (
+                                        <Truck className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('Supplier')} />
                                       ) : null}
                                       {urdu ? (
                                         <span dir="rtl" className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(urdu))} title={urdu}>
@@ -1967,7 +1987,13 @@ export function InvoicePanel({
                                         {t('Employee')}
                                       </Badge>
                                     ) : null}
-                                    {customer.nameUrdu?.trim() ? (
+                                    {customer.isSupplierAccount ? (
+                                      <Badge variant="outline" className="flex items-center gap-1 shrink-0 px-1.5 py-0 text-[10px] font-normal">
+                                        <Truck className="h-2.5 w-2.5" />
+                                        {t('Supplier')}
+                                      </Badge>
+                                    ) : null}
+                                    {showUrdu && customer.nameUrdu?.trim() ? (
                                       <span
                                         dir="rtl"
                                         className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(customer.nameUrdu))}
@@ -2330,7 +2356,7 @@ export function InvoicePanel({
                                         {item.name || t('select_product')}
                                         {!item.productId && ' *'}
                                       </span>
-                                      {item.nameUrdu?.trim() ? (
+                                      {showUrdu && item.nameUrdu?.trim() ? (
                                         <span
                                           className={cn('min-w-0 truncate rtl text-xs shrink', getUrduSecondaryNameClasses(item.nameUrdu))}
                                           dir='rtl'
@@ -2404,7 +2430,7 @@ export function InvoicePanel({
                                                 <span className={getTextClasses(catalogItem.name, 'text-sm font-medium truncate shrink-0')} title={catalogItem.name}>
                                                   {catalogItem.name}
                                                 </span>
-                                                {catalogItem.nameUrdu?.trim() ? (
+                                                {showUrdu && catalogItem.nameUrdu?.trim() ? (
                                                   <span
                                                     dir="rtl"
                                                     className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
@@ -3087,6 +3113,11 @@ export function InvoicePanel({
               <>
                 <Separator className="my-2" />
                 <div className='space-y-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg'>
+                  {customers.find((c) => (c._id || c.id) === invoice.customerId)?.isSupplierAccount ? (
+                    <p className="text-xs text-muted-foreground -mt-1 mb-1">
+                      {t('Net balance with this supplier — includes purchases and sales combined')}
+                    </p>
+                  ) : null}
                   <div className='flex justify-between items-center text-sm'>
                     <span className="font-medium">{t('Previous Balance')}:</span>
                     <span className={`font-bold ${customerBalance > 0 ? 'text-red-600' : customerBalance < 0 ? 'text-green-600' : 'text-gray-600'}`}>

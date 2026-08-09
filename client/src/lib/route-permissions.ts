@@ -85,6 +85,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/users-management', anyPermission: ['viewUsers'] },
   { prefix: '/roles', anyPermission: ['viewRoles'] },
   { prefix: '/branches', anyPermission: ['viewBranches'] },
+  { prefix: '/branch-overview', systemRoles: ['superAdmin', 'system_admin'] },
   { prefix: '/staff', anyPermission: ['viewStaff'] },
   { prefix: '/salesmen', anyPermission: ['viewSalesmen'] },
 

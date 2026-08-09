@@ -35,6 +35,13 @@ const supplierLedgerSchema = new mongoose.Schema({
   referenceId: {
     type: mongoose.Schema.Types.ObjectId, // ID of purchase, payment, etc.
   },
+  // Source collection of referenceId, e.g. 'Purchase', 'Invoice', 'LoadTransaction',
+  // 'SimSale', 'ServiceInvoice'. Only populated for entries that need disambiguation
+  // (e.g. customer-sale debit-note offsets) — older Purchase-linked entries leave it unset.
+  referenceModel: {
+    type: String,
+    trim: true,
+  },
   description: {
     type: String,
     required: true,

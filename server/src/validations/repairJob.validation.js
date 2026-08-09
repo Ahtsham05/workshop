@@ -20,6 +20,7 @@ const createRepairJob = {
     color: Joi.string().allow(''),
     accessories: Joi.string().allow(''),
     date: Joi.date(),
+    salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
   }),
 };
 
@@ -57,6 +58,7 @@ const updateRepairJob = {
       color: Joi.string().allow(''),
       accessories: Joi.string().allow(''),
       date: Joi.date(),
+      salesmanId: Joi.string().custom(objectId).allow('', null).optional(),
     })
     .min(1),
 };

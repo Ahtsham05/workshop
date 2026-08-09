@@ -26,6 +26,14 @@ router
   .get(auth('viewPayments', 'viewAccounting', 'manageLedgers', 'viewSuppliers'), validate(supplierLedgerValidation.getSupplierBalance), supplierLedgerController.getSupplierBalance);
 
 router
+  .route('/supplier/:supplierId/balance-before/:referenceId')
+  .get(
+    auth('viewPayments', 'viewAccounting', 'manageLedgers', 'viewSuppliers'),
+    validate(supplierLedgerValidation.getBalanceBeforeReference),
+    supplierLedgerController.getBalanceBeforeReference,
+  );
+
+router
   .route('/supplier/:supplierId/summary')
   .get(auth('viewPayments', 'viewAccounting', 'manageLedgers', 'viewSuppliers'), validate(supplierLedgerValidation.getSupplierBalance), supplierLedgerController.getSupplierLedgerSummary);
 

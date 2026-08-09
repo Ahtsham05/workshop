@@ -66,6 +66,7 @@ import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { cn } from '@/lib/utils'
 import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
@@ -92,6 +93,7 @@ interface PendingInvoiceConverterProps {
 
 export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceConverterProps) {
   const { t } = useLanguage()
+  const { showUrdu } = useUrduDisplay()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
@@ -432,7 +434,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   const printInvoice = async (invoiceData: any, paperSize: PaperSize = defaultPaperSize) => {
     try {
       const refId = invoiceData._id || invoiceData.id
-      const previousBalance = await fetchBalanceBeforeInvoice(selectedCustomerId, refId)
+      const previousBalance = await fetchBalanceBeforeInvoice(selectedCustomerId, refId, selectedCustomer?.linkedSupplierId)
       const printData = buildPrintData(invoiceData, previousBalance)
       const printContact: PrintWindowContact = {
         customerId: selectedCustomerId,
@@ -474,6 +476,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
       const previousBalance = await fetchBalanceBeforeInvoice(
         selectedCustomerId,
         billGroup.creditInvoiceId,
+        selectedCustomer?.linkedSupplierId,
       )
       const printData = buildPrintData(
         {
@@ -741,7 +744,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     <span className="truncate font-medium shrink-0" title={row.name}>
                                       {row.name}
                                     </span>
-                                    {row.nameUrdu?.trim() ? (
+                                    {showUrdu && row.nameUrdu?.trim() ? (
                                       <span
                                         className={cn(
                                           'min-w-0 truncate text-sm rtl',
@@ -855,7 +858,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                         className="h-6 w-6 shrink-0 rounded-full"
                       />
                       <span className="truncate" title={selectedCustomer?.name}>{selectedCustomer?.name}</span>
-                      {selectedCustomer?.nameUrdu?.trim() ? (
+                      {showUrdu && selectedCustomer?.nameUrdu?.trim() ? (
                         <span
                           className={cn('truncate text-sm text-muted-foreground rtl', getUrduSecondaryNameClasses(selectedCustomer.nameUrdu))}
                           dir="rtl"

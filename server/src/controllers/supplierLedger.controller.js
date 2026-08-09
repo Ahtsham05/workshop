@@ -30,6 +30,14 @@ const getSupplierBalance = catchAsync(async (req, res) => {
   res.send({ balance });
 });
 
+const getBalanceBeforeReference = catchAsync(async (req, res) => {
+  const balanceBefore = await supplierLedgerService.getBalanceBeforeReference(
+    req.params.supplierId,
+    req.params.referenceId,
+  );
+  res.send({ balanceBefore });
+});
+
 const getSupplierLedgerSummary = catchAsync(async (req, res) => {
   const summary = await supplierLedgerService.getSupplierLedgerSummary(req.params.supplierId);
   res.send(summary);
@@ -57,6 +65,7 @@ module.exports = {
   getLedgerEntries,
   getLedgerEntry,
   getSupplierBalance,
+  getBalanceBeforeReference,
   getSupplierLedgerSummary,
   updateLedgerEntry,
   deleteLedgerEntry,

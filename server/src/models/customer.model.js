@@ -56,6 +56,21 @@ const CustomerSchema = new mongoose.Schema({
     index: true,
     sparse: true,
   },
+  // Shadow customer record auto-provisioned for a Supplier so a supplier can
+  // also be billed as a customer (sold products/services) through the normal
+  // Invoice/Load/Sim-Sale/Service flows. Hidden from the Customers list by
+  // default; unpaid purchases are mirrored into that supplier's ledger as a
+  // debit note, netting against what the business owes them.
+  isSupplierAccount: {
+    type: Boolean,
+    default: false,
+  },
+  linkedSupplierId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Supplier',
+    index: true,
+    sparse: true,
+  },
 }, {
   timestamps: true,
 });

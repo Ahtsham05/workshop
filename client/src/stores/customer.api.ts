@@ -103,8 +103,13 @@ export const customerApi = createApi({
 
     // Get all customers (for dropdowns)
     getAllCustomers: builder.query({
-      query: (params?: { includeEmployees?: boolean }) =>
-        params?.includeEmployees ? '/all?includeEmployees=true' : '/all',
+      query: (params?: { includeEmployees?: boolean; includeSuppliers?: boolean }) => {
+        const searchParams = new URLSearchParams()
+        if (params?.includeEmployees) searchParams.set('includeEmployees', 'true')
+        if (params?.includeSuppliers) searchParams.set('includeSuppliers', 'true')
+        const queryString = searchParams.toString()
+        return queryString ? `/all?${queryString}` : '/all'
+      },
       providesTags: ['Customer'],
     }),
   }),

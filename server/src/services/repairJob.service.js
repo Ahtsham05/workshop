@@ -4,6 +4,7 @@ const ApiError = require('../utils/ApiError');
 const { parseBusinessDateTime, applyBusinessDateRange } = require('../utils/businessTimezone');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
+const commissionEngineService = require('./commissionEngine.service');
 
 const normalizeRepairJobDates = (body) => {
   const next = { ...body };
@@ -12,6 +13,10 @@ const normalizeRepairJobDates = (body) => {
     if (parsed) {
       next.date = parsed;
     }
+  }
+  // '' from "no salesman selected" would fail the ObjectId cast — normalize to null.
+  if ('salesmanId' in next) {
+    next.salesmanId = next.salesmanId || null;
   }
   return next;
 };
@@ -66,6 +71,7 @@ const syncRepairCashEntry = async (repairJob, previous = null) => {
 const createRepairJob = async (repairJobBody) => {
   const repairJob = await RepairJob.create(normalizeRepairJobDates(repairJobBody));
   await syncRepairCashEntry(repairJob);
+  commissionEngineService.syncCommissionForRepairJob(repairJob, repairJob.createdBy).catch(() => {});
   return repairJob;
 };
 
@@ -82,11 +88,12 @@ const queryRepairJobs = async (filter, options) => {
   return RepairJob.paginate(queryFilter, {
     ...queryOptions,
     sortBy: queryOptions.sortBy || 'date:desc',
+    populate: [{ path: 'salesmanId', select: 'name email' }],
   });
 };
 
 const getRepairJobById = async (repairJobId) => {
-  const repairJob = await RepairJob.findById(repairJobId);
+  const repairJob = await RepairJob.findById(repairJobId).populate('salesmanId', 'name email');
   if (!repairJob) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Repair job not found');
   }
@@ -113,6 +120,7 @@ const updateRepairJobById = async (repairJobId, updateBody, userId) => {
 
   await repairJob.save();
   await syncRepairCashEntry(repairJob, previous);
+  commissionEngineService.syncCommissionForRepairJob(repairJob, userId).catch(() => {});
   return repairJob;
 };
 
@@ -130,6 +138,14 @@ const deleteRepairJobById = async (repairJobId) => {
     walletType: repairJob.walletType,
     userId: repairJob.updatedBy || repairJob.createdBy,
   });
+
+  await commissionEngineService.reverseCommissionOnDelete({
+    sale: repairJob,
+    referenceModel: 'RepairJob',
+    reason: 'Repair job deleted',
+    userId: repairJob.updatedBy || repairJob.createdBy,
+  });
+
   await repairJob.deleteOne();
   return repairJob;
 };
