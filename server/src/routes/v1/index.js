@@ -20,6 +20,10 @@ const salesmanProfileRoute = require('./salesmanProfile.route');
 const commissionRuleRoute = require('./commissionRule.route');
 const salesmanCommissionLedgerRoute = require('./salesmanCommissionLedger.route');
 const salesmanCommissionPaymentRoute = require('./salesmanCommissionPayment.route');
+const partnerRoute = require('./partner.route');
+const partnerProfitShareRuleRoute = require('./partnerProfitShareRule.route');
+const partnerProfitShareLedgerRoute = require('./partnerProfitShareLedger.route');
+const partnerPaymentRoute = require('./partnerPayment.route');
 const purchaseRoute = require('./purchase.route');
 const purchaseOrderRoute = require('./purchaseOrder.route');
 const invoiceRoute = require('./invoice.route');
@@ -209,6 +213,22 @@ const defaultRoutes = [
   {
     path: '/commission-payments',
     route: salesmanCommissionPaymentRoute,
+  },
+  {
+    path: '/partners',
+    route: partnerRoute,
+  },
+  {
+    path: '/partner-profit-share-rules',
+    route: partnerProfitShareRuleRoute,
+  },
+  {
+    path: '/partner-profit-share-ledger',
+    route: partnerProfitShareLedgerRoute,
+  },
+  {
+    path: '/partner-payments',
+    route: partnerPaymentRoute,
   },
   {
     path: '/purchases',
@@ -612,6 +632,10 @@ const protectedPaths = [
   '/commission-rules',
   '/commission-ledger',
   '/commission-payments',
+  '/partners',
+  '/partner-profit-share-rules',
+  '/partner-profit-share-ledger',
+  '/partner-payments',
   '/purchases',
   '/purchase-orders',
   '/invoices',

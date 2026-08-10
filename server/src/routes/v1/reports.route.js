@@ -85,6 +85,10 @@ router
   .route('/salesman-commission')
   .get(auth('viewReports'), reportsController.getSalesmanCommissionReport);
 
+router
+  .route('/partner-profit-share')
+  .get(auth('viewReports'), reportsController.getPartnerProfitShareReport);
+
 module.exports = router;
 
 /**

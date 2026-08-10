@@ -124,14 +124,18 @@ export function createEmptyOrderManualItem(): OrderItem {
   }
 }
 
-/** A fresh order starts with this many empty rows pre-added so the buyer can jump
- * straight into selecting products instead of clicking "Add Row" repeatedly — more rows
- * are still appended automatically once these fill up (see addNewRowAndOpenProduct
- * below). */
+/** With the catalog hidden, a fresh order starts with this many empty rows pre-added so
+ * the buyer can jump straight into selecting products instead of clicking "Add Row"
+ * repeatedly — more rows are still appended automatically once these fill up (see
+ * addNewRowAndOpenProduct below). When the catalog is visible, clicking a tile always
+ * appends its own new row, so only one placeholder row is needed — mirrors
+ * invoice/index.tsx's identical NEW_INVOICE_ROW_COUNT pattern. */
 const NEW_ORDER_ROW_COUNT = 12
+const NEW_ORDER_ROW_COUNT_WITH_CATALOG = 1
 
-function createInitialOrderItems(): OrderItem[] {
-  return Array.from({ length: NEW_ORDER_ROW_COUNT }, () => createEmptyOrderManualItem())
+function createInitialOrderItems(showProductCatalog: boolean): OrderItem[] {
+  const count = showProductCatalog ? NEW_ORDER_ROW_COUNT_WITH_CATALOG : NEW_ORDER_ROW_COUNT
+  return Array.from({ length: count }, () => createEmptyOrderManualItem())
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -139,11 +143,12 @@ const todayISO = () => new Date().toISOString().slice(0, 10)
 function buildInitialDraft(
   editing?: PurchaseOrder | null,
   purchasableCatalog: PurchaseCatalogItem[] = EMPTY_PURCHASE_CATALOG,
+  showProductCatalog: boolean = true,
 ): PurchaseOrderDraft {
   if (!editing) {
     return {
       supplier: {},
-      items: createInitialOrderItems(),
+      items: createInitialOrderItems(showProductCatalog),
       orderDate: todayISO(),
       expectedDeliveryDate: '',
       notes: '',
@@ -254,7 +259,9 @@ export default function PurchaseOrderPanel({
   stickyActionsContainer = null,
 }: Props) {
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG } = useGetPurchasableCatalogQuery()
-  const [draft, setDraft] = useState<PurchaseOrderDraft>(() => buildInitialDraft(editing, purchasableCatalog))
+  const [draft, setDraft] = useState<PurchaseOrderDraft>(() =>
+    buildInitialDraft(editing, purchasableCatalog, showProductCatalog)
+  )
   const [supplierSelectOpen, setSupplierSelectOpen] = useState(false)
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState('')
@@ -307,7 +314,7 @@ export default function PurchaseOrderPanel({
     // the catalog refetches (which would wipe out in-progress unsaved edits). The
     // effect closure still captures whatever `purchasableCatalog` value is current at
     // the moment `editing` changes, since React re-creates the closure every render.
-    setDraft(buildInitialDraft(editing, purchasableCatalog))
+    setDraft(buildInitialDraft(editing, purchasableCatalog, showProductCatalog))
     autoOpenDoneRef.current = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing])

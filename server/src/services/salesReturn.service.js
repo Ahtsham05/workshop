@@ -9,6 +9,7 @@ const inventoryService = require('./inventory.service');
 const batchService = require('./batch.service');
 const imeiService = require('./imei.service');
 const salesmanCommissionLedgerService = require('./salesmanCommissionLedger.service');
+const partnerProfitShareLedgerService = require('./partnerProfitShareLedger.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 
@@ -243,6 +244,10 @@ const createSalesReturn = async (returnBody) => {
 
     // 8. Claw back commission proportional to the returned amount (inside transaction)
     await salesmanCommissionLedgerService.reverseCommissionForSalesReturn(salesReturn, invoice, session);
+
+    // 9. Claw back every partner's/investor's profit share proportional to the returned
+    // amount (inside transaction) — mirrors step 8 above for the commission ledger.
+    await partnerProfitShareLedgerService.reverseShareForSalesReturn(salesReturn, invoice, session);
 
     await session.commitTransaction();
 

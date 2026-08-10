@@ -50,6 +50,7 @@ import { CompleteReport } from './components/complete-report'
 import { MobilePhoneReport } from './components/mobile-phone-report'
 import { DailySalesSummaryReport } from './components/daily-sales-summary-report'
 import { SalesmanCommissionReport } from './components/salesman-commission-report'
+import { PartnerProfitShareReport } from './components/partner-profit-share-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -257,6 +258,7 @@ export default function ReportsPage() {
             <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
             <TabsTrigger value='ledger' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sale & Purchase')}</TabsTrigger>
             <TabsTrigger value='salesman-commission' className='text-xs sm:text-sm px-2 sm:px-3'>Salesman Commission</TabsTrigger>
+            <TabsTrigger value='partner-profit-share' className='text-xs sm:text-sm px-2 sm:px-3'>Partners</TabsTrigger>
             <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Products')}</TabsTrigger>
             <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customers')}</TabsTrigger>
             <TabsTrigger value='aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Aging')}</TabsTrigger>
@@ -340,6 +342,10 @@ export default function ReportsPage() {
 
         <TabsContent value='salesman-commission' className='mt-6'>
           <SalesmanCommissionReport ref={activeTab === 'salesman-commission' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+        </TabsContent>
+
+        <TabsContent value='partner-profit-share' className='mt-6'>
+          <PartnerProfitShareReport ref={activeTab === 'partner-profit-share' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
         </TabsContent>
 
         <TabsContent value='products' className='mt-6'>

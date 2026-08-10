@@ -19,6 +19,10 @@ import { salesmanProfileApi } from './salesmanProfile.api';
 import { commissionRuleApi } from './commissionRule.api';
 import { salesmanCommissionLedgerApi } from './salesmanCommissionLedger.api';
 import { salesmanCommissionPaymentApi } from './salesmanCommissionPayment.api';
+import { partnerApi } from './partner.api';
+import { partnerProfitShareRuleApi } from './partnerProfitShareRule.api';
+import { partnerProfitShareLedgerApi } from './partnerProfitShareLedger.api';
+import { partnerPaymentApi } from './partnerPayment.api';
 import { hrApi } from './hr.api';
 import { organizationApi } from './organization.api';
 import { branchApi } from './branch.api';
@@ -77,6 +81,10 @@ export const store = configureStore({
     [commissionRuleApi.reducerPath]: commissionRuleApi.reducer,
     [salesmanCommissionLedgerApi.reducerPath]: salesmanCommissionLedgerApi.reducer,
     [salesmanCommissionPaymentApi.reducerPath]: salesmanCommissionPaymentApi.reducer,
+    [partnerApi.reducerPath]: partnerApi.reducer,
+    [partnerProfitShareRuleApi.reducerPath]: partnerProfitShareRuleApi.reducer,
+    [partnerProfitShareLedgerApi.reducerPath]: partnerProfitShareLedgerApi.reducer,
+    [partnerPaymentApi.reducerPath]: partnerPaymentApi.reducer,
     [hrApi.reducerPath]: hrApi.reducer,
     [organizationApi.reducerPath]: organizationApi.reducer,
     [branchApi.reducerPath]: branchApi.reducer,
@@ -128,6 +136,10 @@ export const store = configureStore({
       commissionRuleApi.middleware,
       salesmanCommissionLedgerApi.middleware,
       salesmanCommissionPaymentApi.middleware,
+      partnerApi.middleware,
+      partnerProfitShareRuleApi.middleware,
+      partnerProfitShareLedgerApi.middleware,
+      partnerPaymentApi.middleware,
       hrApi.middleware,
       organizationApi.middleware,
       branchApi.middleware,

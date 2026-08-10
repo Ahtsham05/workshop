@@ -36,7 +36,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2 } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -469,6 +469,13 @@ export const sidebarData: SidebarData = {
           url: '/salesmen',
           icon: Handshake,
           permission: 'viewSalesmen',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
+          title: 'Partners & Investors',
+          url: '/partners',
+          icon: HandCoins,
+          permission: 'viewPartners',
           excludedSchoolRoles: ['teacher'],
         },
         {
@@ -997,6 +1004,7 @@ export const sidebarData: SidebarData = {
             { title: 'Purchases Report', url: '/reports?tab=purchases' as never, icon: Receipt },
             { title: 'Sale & Purchase Report', url: '/reports?tab=ledger' as never, icon: Scale },
             { title: 'Salesman Commission Report', url: '/reports?tab=salesman-commission' as never, icon: Handshake },
+            { title: 'Partners Report', url: '/reports?tab=partner-profit-share' as never, icon: HandCoins },
             { title: 'Products Report', url: '/reports?tab=products' as never, icon: IconCategory },
             { title: 'Customers Report', url: '/reports?tab=customers' as never, icon: IconUsers },
             { title: 'Customer Aging Report', url: '/reports?tab=aging' as never, icon: AlarmClock },

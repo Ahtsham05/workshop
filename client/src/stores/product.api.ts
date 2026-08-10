@@ -37,6 +37,20 @@ export interface ProductWithTracking {
   defaultVariantId?: string
 }
 
+export interface ProductSearchResult {
+  id?: string
+  _id?: string
+  name: string
+}
+
+export interface ProductSearchResponse {
+  results: ProductSearchResult[]
+  page: number
+  limit: number
+  totalPages: number
+  totalResults: number
+}
+
 export const productApi = createApi({
   reducerPath: 'productApi',
   baseQuery: baseQueryWithAuth,
@@ -46,7 +60,13 @@ export const productApi = createApi({
       query: (productId) => `/${productId}`,
       providesTags: (_result, _err, productId) => [{ type: 'Product', id: productId }],
     }),
+    // Name search for lightweight pickers (e.g. the partner profit-share rule dialog's
+    // product select) — reuses the same paginate search/fieldName pattern every other
+    // list endpoint in this app supports, not a separate search implementation.
+    searchProducts: builder.query<ProductSearchResponse, { search?: string; limit?: number }>({
+      query: (params) => ({ url: '', params: { ...params, fieldName: 'name', limit: params.limit ?? 20 } }),
+    }),
   }),
 })
 
-export const { useGetProductQuery } = productApi
+export const { useGetProductQuery, useSearchProductsQuery } = productApi

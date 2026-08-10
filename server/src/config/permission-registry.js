@@ -247,6 +247,21 @@ const PERMISSION_GROUPS = [
     label: 'Commission Ledger',
     permissions: ['viewCommissionLedger', 'manageCommissionPayments'],
   },
+  {
+    id: 'partners',
+    label: 'Partners & Investors',
+    permissions: ['viewPartners', 'createPartners', 'editPartners', 'deletePartners'],
+  },
+  {
+    id: 'partner_profit_share_rules',
+    label: 'Partner Profit-Share Rules',
+    permissions: ['viewPartnerProfitShareRules', 'managePartnerProfitShareRules'],
+  },
+  {
+    id: 'partner_profit_share_ledger',
+    label: 'Partner Ledger & Payouts',
+    permissions: ['viewPartnerProfitShareLedger', 'managePartnerPayments'],
+  },
 ];
 
 const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))];
@@ -281,7 +296,7 @@ const PERMISSION_TAB_GROUPS = {
     'new_phones',
   ],
   reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger'],
+  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
 };
 
 const sanitizePermissions = (input = {}) => {

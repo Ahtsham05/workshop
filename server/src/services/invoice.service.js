@@ -13,6 +13,7 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
 const commissionEngineService = require('./commissionEngine.service');
+const partnerProfitShareEngineService = require('./partnerProfitShareEngine.service');
 const salesmanCommissionLedgerService = require('./salesmanCommissionLedger.service');
 const imeiService = require('./imei.service');
 const inventorySyncService = require('./inventorySync.service');
@@ -467,6 +468,7 @@ const createInvoice = async (invoiceBody, userId) => {
   await syncWalkInInvoiceCashEntry(invoice);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
+  partnerProfitShareEngineService.syncPartnerShareForInvoice(invoice, userId).catch(() => {});
 
   // Create customer ledger entry for non-walk-in customers
   if (invoice.customerId && invoice.customerId !== 'walk-in' && invoice.type !== 'pending' && invoice.type !== 'quotation') {
@@ -1043,6 +1045,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   await syncInvoiceCashAndWalletEntries(invoice, originalPaymentMethod, originalWalletType, originalPaidAmount);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
+  partnerProfitShareEngineService.syncPartnerShareForInvoice(invoice, userId).catch(() => {});
 
   const newCustomerId = invoice.customerId;
   const isConvertedPending =
@@ -1382,6 +1385,7 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
   await syncInvoiceCashAndWalletEntries(invoice, 'cash', '', 0);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
+  partnerProfitShareEngineService.syncPartnerShareForInvoice(invoice, userId).catch(() => {});
 
   for (const item of invoice.items) {
     const stockQty = getStockQuantityFromItem(item);
@@ -1500,6 +1504,7 @@ const finalizeInvoice = async (invoiceId, userId) => {
   await invoice.save();
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
+  partnerProfitShareEngineService.syncPartnerShareForInvoice(invoice, userId).catch(() => {});
 
   return invoice;
 };
@@ -1530,6 +1535,7 @@ const processPayment = async (invoiceId, paymentData, userId) => {
   await syncWalkInInvoiceCashEntry(invoice);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
+  partnerProfitShareEngineService.syncPartnerShareForInvoice(invoice, userId).catch(() => {});
 
   return invoice;
 };

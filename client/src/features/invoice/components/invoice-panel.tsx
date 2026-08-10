@@ -2340,17 +2340,13 @@ export function InvoicePanel({
                                       onEnterAdvance(e, () => focusField(qtyInputRefs.current[item.id]))
                                     }
                                   }}
-                                  className={`w-full justify-between min-h-8 h-auto py-1 text-xs ${
-                                    !item.productId ? 'border-red-500 bg-red-50' : ''
-                                  }`}
+                                  className="w-full justify-between min-h-8 h-auto py-1 text-xs"
                                 >
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
                                     <Search className="w-3 h-3 flex-shrink-0" />
                                     <span className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0 text-left'>
                                       <span
-                                        className={getTextClasses(item.name || t('select_product'), `truncate shrink-0 ${
-                                          !item.productId ? 'text-red-500' : 'text-muted-foreground'
-                                        }`)}
+                                        className={getTextClasses(item.name || t('select_product'), 'truncate shrink-0 text-muted-foreground')}
                                         title={item.name || t('select_product')}
                                       >
                                         {item.name || t('select_product')}

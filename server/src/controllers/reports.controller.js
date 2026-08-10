@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer, SalesmanCommissionLedger } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer, SalesmanCommissionLedger, PartnerProfitShareLedger } = require('../models');
 const { cashBookService, stockAdjustmentService, mobileDashboardService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
@@ -4658,6 +4658,174 @@ const getSalesmanCommissionReport = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Partner / investor profit-share report — mirrors getSalesmanCommissionReport's shape
+ * (summary + daily trend + per-entity breakdown with expandable ledger detail), adapted
+ * for PartnerProfitShareLedger. Adds a `byProduct` breakdown on top, since a partner's
+ * entitlement can be scoped to one specific product (see partnerProfitShareRule.model.js)
+ * — showing which products are driving the most partner payout is the one thing this
+ * report needs that the salesman one doesn't.
+ */
+const getPartnerProfitShareReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+  const inRange = { $gte: start, $lte: end };
+
+  const [byType, byPartnerType, trend, currentBalances, entryDetail, byProduct] = await Promise.all([
+    // Overall totals within the period, one row per transaction type.
+    PartnerProfitShareLedger.aggregate([
+      { $match: { ...scope, transactionDate: inRange } },
+      { $group: { _id: '$transactionType', credit: { $sum: '$credit' }, debit: { $sum: '$debit' }, count: { $sum: 1 }, saleProfit: { $sum: '$saleProfit' } } },
+    ]),
+    // Per-partner breakdown within the period, one row per (partner, type).
+    PartnerProfitShareLedger.aggregate([
+      { $match: { ...scope, transactionDate: inRange } },
+      { $group: { _id: { partnerId: '$partnerId', type: '$transactionType' }, credit: { $sum: '$credit' }, debit: { $sum: '$debit' }, count: { $sum: 1 }, saleProfit: { $sum: '$saleProfit' } } },
+      { $lookup: { from: 'partners', localField: '_id.partnerId', foreignField: '_id', as: 'partner' } },
+      { $unwind: { path: '$partner', preserveNullAndEmptyArrays: true } },
+      { $project: { partnerId: '$_id.partnerId', type: '$_id.type', credit: 1, debit: 1, count: 1, saleProfit: 1, name: '$partner.name', partnerType: '$partner.partnerType' } },
+    ]),
+    // Daily trend of profit share earned within the period, for the chart.
+    PartnerProfitShareLedger.aggregate([
+      { $match: { ...scope, transactionDate: inRange, transactionType: 'share_earned' } },
+      { $group: { _id: businessDateGroup('$transactionDate'), earned: { $sum: '$credit' }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]),
+    // Current (all-time, not period-bound) outstanding balance per partner — a partner
+    // can be owed money earned before this report's date range.
+    PartnerProfitShareLedger.aggregate([
+      { $match: scope },
+      { $sort: { partnerId: 1, transactionDate: 1, createdAt: 1 } },
+      { $group: { _id: '$partnerId', balance: { $last: '$balance' } } },
+      { $lookup: { from: 'partners', localField: '_id', foreignField: '_id', as: 'partner' } },
+      { $unwind: { path: '$partner', preserveNullAndEmptyArrays: true } },
+      { $project: { partnerId: '$_id', balance: 1, name: '$partner.name', partnerType: '$partner.partnerType' } },
+    ]),
+    // Ledger-entry rows behind each partner's totals, for the report's expandable detail.
+    PartnerProfitShareLedger.find({
+      ...scope,
+      transactionDate: inRange,
+      transactionType: { $in: ['share_earned', 'share_reversed'] },
+    })
+      .select('partnerId productId transactionType transactionDate reference referenceId saleProfit rate shareType credit debit notes')
+      .populate('productId', 'name')
+      .sort({ transactionDate: -1 })
+      .lean(),
+    // Per-product breakdown of profit share earned within the period — product-scoped
+    // rules only, org/branch-scoped entries have no productId.
+    PartnerProfitShareLedger.aggregate([
+      { $match: { ...scope, transactionDate: inRange, transactionType: 'share_earned', productId: { $ne: null } } },
+      { $group: { _id: '$productId', earned: { $sum: '$credit' }, saleProfit: { $sum: '$saleProfit' }, count: { $sum: 1 } } },
+      { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
+      { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+      { $project: { productId: '$_id', earned: 1, saleProfit: 1, count: 1, name: '$product.name' } },
+      { $sort: { earned: -1 } },
+    ]),
+  ]);
+
+  const typeSummary = (type) => byType.find((b) => b._id === type) || { credit: 0, debit: 0, count: 0, saleProfit: 0 };
+  const earned = typeSummary('share_earned');
+  const reversed = typeSummary('share_reversed');
+  const paid = typeSummary('share_payment');
+
+  const partnersMap = new Map();
+  for (const row of byPartnerType) {
+    const key = String(row.partnerId);
+    if (!partnersMap.has(key)) {
+      partnersMap.set(key, {
+        partnerId: key,
+        name: row.name || 'Unknown',
+        partnerType: row.partnerType || 'business_partner',
+        saleCount: 0,
+        profitBase: 0,
+        earned: 0,
+        reversed: 0,
+        paid: 0,
+        currentBalance: 0,
+        entries: [],
+      });
+    }
+    const entry = partnersMap.get(key);
+    if (row.type === 'share_earned') {
+      entry.saleCount = row.count;
+      entry.profitBase = roundReportAmount(row.saleProfit);
+      entry.earned = roundReportAmount(row.credit);
+    } else if (row.type === 'share_reversed') {
+      entry.reversed = roundReportAmount(row.debit);
+    } else if (row.type === 'share_payment') {
+      entry.paid = roundReportAmount(row.debit);
+    }
+  }
+
+  // Surface partners who owe a balance carried over from before this period, even if
+  // they had no activity within it — otherwise a "This Month" view could silently hide
+  // real outstanding money.
+  for (const b of currentBalances) {
+    const key = String(b.partnerId);
+    const rounded = roundReportAmount(b.balance);
+    if (!partnersMap.has(key)) {
+      if (rounded === 0) continue;
+      partnersMap.set(key, {
+        partnerId: key,
+        name: b.name || 'Unknown',
+        partnerType: b.partnerType || 'business_partner',
+        saleCount: 0,
+        profitBase: 0,
+        earned: 0,
+        reversed: 0,
+        paid: 0,
+        currentBalance: rounded,
+        entries: [],
+      });
+    } else {
+      partnersMap.get(key).currentBalance = rounded;
+    }
+  }
+
+  for (const row of entryDetail) {
+    const entry = partnersMap.get(String(row.partnerId));
+    if (!entry) continue;
+    entry.entries.push({
+      transactionType: row.transactionType,
+      date: row.transactionDate,
+      reference: row.reference || '',
+      referenceId: row.referenceId,
+      productName: (row.productId && row.productId.name) || null,
+      saleProfit: roundReportAmount(row.saleProfit),
+      rate: row.rate,
+      shareType: row.shareType,
+      amount: roundReportAmount(row.transactionType === 'share_earned' ? row.credit : row.debit),
+      notes: row.notes || '',
+    });
+  }
+
+  const partners = Array.from(partnersMap.values()).sort((a, b) => b.earned - a.earned);
+  const totalOutstanding = currentBalances.reduce((sum, b) => sum + (b.balance || 0), 0);
+
+  res.status(httpStatus.OK).send({
+    summary: {
+      totalEarned: roundReportAmount(earned.credit),
+      totalReversed: roundReportAmount(reversed.debit),
+      totalPaid: roundReportAmount(paid.debit),
+      netShare: roundReportAmount(earned.credit - reversed.debit),
+      totalProfitBase: roundReportAmount(earned.saleProfit),
+      totalSaleCount: earned.count,
+      activePartnersCount: partners.length,
+      totalOutstanding: roundReportAmount(totalOutstanding),
+    },
+    trend: trend.map((t) => ({ date: t._id, earned: roundReportAmount(t.earned), count: t.count })),
+    partners,
+    byProduct: byProduct.map((p) => ({
+      productId: String(p.productId),
+      name: p.name || 'Unknown Product',
+      earned: roundReportAmount(p.earned),
+      saleProfit: roundReportAmount(p.saleProfit),
+      count: p.count,
+    })),
+    period: { startDate: start, endDate: end },
+  });
+});
+
 module.exports = {
   getSalesInvoiceDetails,
   getPurchaseInvoiceDetails,
@@ -4673,4 +4841,5 @@ module.exports = {
   getSalesPurchaseSummaryReport,
   getDailySalesSummaryReport,
   getSalesmanCommissionReport,
+  getPartnerProfitShareReport,
 };

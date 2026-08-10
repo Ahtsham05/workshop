@@ -1119,10 +1119,61 @@ export interface SalesmanCommissionReport {
   period: { startDate: string; endDate: string }
 }
 
+export interface PartnerProfitShareEntryRow {
+  transactionType: 'share_earned' | 'share_reversed'
+  date: string
+  reference: string
+  referenceId?: string
+  productName?: string | null
+  saleProfit: number
+  rate?: number
+  shareType?: 'percentage_of_profit' | 'fixed_per_unit'
+  amount: number
+  notes: string
+}
+
+export interface PartnerProfitShareReportRow {
+  partnerId: string
+  name: string
+  partnerType: 'business_partner' | 'product_investor'
+  saleCount: number
+  profitBase: number
+  earned: number
+  reversed: number
+  paid: number
+  currentBalance: number
+  entries: PartnerProfitShareEntryRow[]
+}
+
+export interface PartnerProfitShareProductRow {
+  productId: string
+  name: string
+  earned: number
+  saleProfit: number
+  count: number
+}
+
+export interface PartnerProfitShareReport {
+  summary: {
+    totalEarned: number
+    totalReversed: number
+    totalPaid: number
+    netShare: number
+    totalProfitBase: number
+    totalSaleCount: number
+    activePartnersCount: number
+    totalOutstanding: number
+  }
+  trend: { date: string; earned: number; count: number }[]
+  partners: PartnerProfitShareReportRow[]
+  byProduct: PartnerProfitShareProductRow[]
+  period: { startDate: string; endDate: string }
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport', 'DailySalesSummaryReport', 'SalesmanCommissionReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport', 'DailySalesSummaryReport', 'SalesmanCommissionReport', 'PartnerProfitShareReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -1504,6 +1555,15 @@ export const reportsApi = createApi({
       },
       providesTags: ['SalesmanCommissionReport'],
     }),
+    getPartnerProfitShareReport: builder.query<PartnerProfitShareReport, { startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/partner-profit-share?${searchParams.toString()}`
+      },
+      providesTags: ['PartnerProfitShareReport'],
+    }),
   }),
 })
 
@@ -1544,4 +1604,5 @@ export const {
   useGetSalesPurchaseSummaryReportQuery,
   useGetDailySalesSummaryReportQuery,
   useGetSalesmanCommissionReportQuery,
+  useGetPartnerProfitShareReportQuery,
 } = reportsApi

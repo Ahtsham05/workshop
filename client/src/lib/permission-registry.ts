@@ -45,7 +45,10 @@ export type PermissionKey =
   | 'viewAuditLogs' | 'viewCreatedBy'
   | 'viewSalesmen' | 'createSalesmen' | 'editSalesmen' | 'deleteSalesmen'
   | 'viewCommissionRules' | 'manageCommissionRules'
-  | 'viewCommissionLedger' | 'manageCommissionPayments';
+  | 'viewCommissionLedger' | 'manageCommissionPayments'
+  | 'viewPartners' | 'createPartners' | 'editPartners' | 'deletePartners'
+  | 'viewPartnerProfitShareRules' | 'managePartnerProfitShareRules'
+  | 'viewPartnerProfitShareLedger' | 'managePartnerPayments';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -109,6 +112,9 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'salesmen', label: 'Salesmen', permissions: ['viewSalesmen', 'createSalesmen', 'editSalesmen', 'deleteSalesmen'] },
   { id: 'commission_rules', label: 'Commission Rules', permissions: ['viewCommissionRules', 'manageCommissionRules'] },
   { id: 'commission_ledger', label: 'Commission Ledger', permissions: ['viewCommissionLedger', 'manageCommissionPayments'] },
+  { id: 'partners', label: 'Partners & Investors', permissions: ['viewPartners', 'createPartners', 'editPartners', 'deletePartners'] },
+  { id: 'partner_profit_share_rules', label: 'Partner Profit-Share Rules', permissions: ['viewPartnerProfitShareRules', 'managePartnerProfitShareRules'] },
+  { id: 'partner_profit_share_ledger', label: 'Partner Ledger & Payouts', permissions: ['viewPartnerProfitShareLedger', 'managePartnerPayments'] },
 ];
 
 export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))] as PermissionKey[];
@@ -124,7 +130,7 @@ export const PERMISSION_TAB_GROUPS = {
   reports_hr: [
     'reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',
   ],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger'],
+  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
 } as const;
 
 export type PermissionTabId = keyof typeof PERMISSION_TAB_GROUPS;

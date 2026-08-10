@@ -105,14 +105,18 @@ export function createEmptyPurchaseManualItem(): PurchaseItem {
   };
 }
 
-/** A fresh purchase starts with this many empty rows pre-added so the buyer can jump
- * straight into selecting products instead of clicking "Add Row" repeatedly — more rows
- * are still appended automatically once these fill up (see addNewPurchaseRowAndOpenProduct
- * in purchase-panel.tsx). */
+/** With the catalog hidden, a fresh purchase starts with this many empty rows pre-added
+ * so the buyer can jump straight into selecting products instead of clicking "Add Row"
+ * repeatedly — more rows are still appended automatically once these fill up (see
+ * addNewPurchaseRowAndOpenProduct in purchase-panel.tsx). When the catalog is visible,
+ * clicking a tile always appends its own new row, so only one placeholder row is needed —
+ * mirrors invoice/index.tsx's identical NEW_INVOICE_ROW_COUNT pattern. */
 const NEW_PURCHASE_ROW_COUNT = 12;
+const NEW_PURCHASE_ROW_COUNT_WITH_CATALOG = 1;
 
-function createInitialPurchaseItems(): PurchaseItem[] {
-  return Array.from({ length: NEW_PURCHASE_ROW_COUNT }, () => createEmptyPurchaseManualItem());
+function createInitialPurchaseItems(showProductCatalog: boolean): PurchaseItem[] {
+  const count = showProductCatalog ? NEW_PURCHASE_ROW_COUNT_WITH_CATALOG : NEW_PURCHASE_ROW_COUNT;
+  return Array.from({ length: count }, () => createEmptyPurchaseManualItem());
 }
 
 // Purchase Interface - no types, no payments
@@ -161,7 +165,7 @@ const PurchaseInvoicePage = () => {
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
     supplier: {} as Supplier,
-    items: createInitialPurchaseItems(),
+    items: createInitialPurchaseItems(getInitialShowProductCatalog()),
     subtotal: 0,
     total: 0,
     discountType: 'fixed',
@@ -251,7 +255,7 @@ const PurchaseInvoicePage = () => {
     setPurchase({
       invoiceNumber: '',
       supplier: {} as Supplier,
-      items: createInitialPurchaseItems(),
+      items: createInitialPurchaseItems(showProductCatalog),
       subtotal: 0,
       total: 0,
       discountType: 'fixed',
@@ -263,7 +267,7 @@ const PurchaseInvoicePage = () => {
       notes: '',
       date: new Date().toISOString(),
     });
-  }, []);
+  }, [showProductCatalog]);
 
   const purchaseHeldList = useMemo(() => listPurchaseHeld(), [heldUiEpoch]);
 
@@ -775,7 +779,7 @@ const PurchaseInvoicePage = () => {
     setPurchase({
       invoiceNumber: '',
       supplier: {} as Supplier,
-      items: createInitialPurchaseItems(),
+      items: createInitialPurchaseItems(showProductCatalog),
       subtotal: 0,
       total: 0,
       discountType: 'fixed',
@@ -787,7 +791,7 @@ const PurchaseInvoicePage = () => {
       notes: '',
       date: new Date().toISOString(),
     });
-  }, []);
+  }, [showProductCatalog]);
 
   // Switch to create view
   const handleCreateNew = useCallback(() => {
@@ -798,7 +802,7 @@ const PurchaseInvoicePage = () => {
     setPurchase({
       invoiceNumber: '',
       supplier: {} as Supplier,
-      items: createInitialPurchaseItems(),
+      items: createInitialPurchaseItems(showProductCatalog),
       subtotal: 0,
       total: 0,
       discountType: 'fixed',
@@ -810,7 +814,7 @@ const PurchaseInvoicePage = () => {
       notes: '',
       date: new Date().toISOString(),
     });
-  }, []);
+  }, [showProductCatalog]);
 
   // Handle edit
   const handleEdit = useCallback((purchaseToEdit: any) => {

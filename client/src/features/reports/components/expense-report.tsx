@@ -30,9 +30,6 @@ import {
   TrendingDown,
   Receipt,
   BarChart2,
-  ChevronDown,
-  ChevronUp,
-  ChevronsUpDown,
   Plus,
   X,
   Search,
@@ -84,7 +81,6 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
     const [activeCategory, setActiveCategory] = useState<string | null>(null)
     const [detailData, setDetailData] = useState<any[]>([])
     const [detailLoading, setDetailLoading] = useState(false)
-    const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
     const [categorySearch, setCategorySearch] = useState('')
 
     useEffect(() => {
@@ -126,7 +122,6 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
       async (catName: string) => {
         setActiveCategory(catName)
         setSheetOpen(true)
-        setExpandedRows(new Set())
         setDetailLoading(true)
         try {
           const result = await fetchCategory({ startDate, endDate, category: catName }).unwrap()
@@ -145,22 +140,6 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
       openCategoryDetail(openCategoryRequest.name)
       onOpenCategoryHandled?.()
     }, [openCategoryRequest?.id, openCategoryDetail, onOpenCategoryHandled])
-
-    const toggleRow = useCallback((i: number) => {
-      setExpandedRows((prev) => {
-        const next = new Set(prev)
-        next.has(i) ? next.delete(i) : next.add(i)
-        return next
-      })
-    }, [])
-
-    const toggleAll = useCallback(() => {
-      if (expandedRows.size === detailData.length) {
-        setExpandedRows(new Set())
-      } else {
-        setExpandedRows(new Set(detailData.map((_, i) => i)))
-      }
-    }, [expandedRows.size, detailData])
 
     if (isLoading) {
       return <Skeleton className={categoriesOnly ? 'h-[480px] w-full' : 'h-[500px] w-full'} />
@@ -394,7 +373,8 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent
             side="right"
-            className="w-full sm:max-w-2xl p-0 flex flex-col"
+            className="w-full sm:max-w-3xl lg:max-w-5xl p-0 flex flex-col"
+            showCloseButton={false}
           >
             <SheetHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
               <div className="flex items-center justify-between gap-2">
@@ -415,7 +395,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
                       {t('Add Expense')}
                     </Button>
                   )}
-                  <Button variant="ghost" size="icon" onClick={() => setSheetOpen(false)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSheetOpen(false)}>
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -425,12 +405,6 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
                   <p className="text-sm text-muted-foreground">
                     {detailData.length} {t('entries')} · {fmt(detailTotal)} {t('total')}
                   </p>
-                  {detailData.length > 0 && (
-                    <Button variant="outline" size="sm" onClick={toggleAll} className="h-7 text-xs gap-1">
-                      <ChevronsUpDown className="h-3 w-3" />
-                      {expandedRows.size === detailData.length ? t('Collapse All') : t('Expand All')}
-                    </Button>
-                  )}
                 </div>
               )}
             </SheetHeader>
@@ -449,69 +423,44 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-8" />
+                      <TableHead>{t('Expense #')}</TableHead>
                       <TableHead>{t('Date')}</TableHead>
                       <TableHead>{t('Description')}</TableHead>
                       <TableHead>{t('Vendor')}</TableHead>
+                      <TableHead>{t('Reference')}</TableHead>
                       <TableHead>{t('Payment')}</TableHead>
                       <TableHead className="text-right">{t('Amount')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {detailData.map((exp, idx) => (
-                      <>
-                        <TableRow
-                          key={exp._id || idx}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => toggleRow(idx)}
-                        >
-                          <TableCell className="py-2">
-                            {expandedRows.has(idx)
-                              ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                              : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-                          </TableCell>
-                          <TableCell className="py-2 text-sm whitespace-nowrap">
-                            {exp.date ? format(new Date(exp.date), 'dd MMM yyyy') : '—'}
-                          </TableCell>
-                          <TableCell className="py-2 text-sm font-medium">{exp.description}</TableCell>
-                          <TableCell className="py-2 text-sm text-muted-foreground">{exp.vendor || '—'}</TableCell>
-                          <TableCell className="py-2">
-                            <Badge variant="outline" className="text-xs">{exp.paymentMethod}</Badge>
-                          </TableCell>
-                          <TableCell className="py-2 text-right font-semibold text-sm">
-                            {fmt(exp.amount)}
-                          </TableCell>
-                        </TableRow>
-
-                        {expandedRows.has(idx) && (
-                          <TableRow key={`${exp._id}-detail`} className="bg-muted/30 hover:bg-muted/30">
-                            <TableCell />
-                            <TableCell colSpan={5} className="py-3 px-4">
-                              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
-                                <div>
-                                  <span className="font-medium text-foreground">{t('Expense #')}: </span>
-                                  {exp.expenseNumber || '—'}
-                                </div>
-                                <div>
-                                  <span className="font-medium text-foreground">{t('Reference')}: </span>
-                                  {exp.reference || '—'}
-                                </div>
-                                {exp.notes && (
-                                  <div className="col-span-2">
-                                    <span className="font-medium text-foreground">{t('Notes')}: </span>
-                                    {exp.notes}
-                                  </div>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </>
+                      <TableRow key={exp._id || idx}>
+                        <TableCell className="py-2 text-sm font-mono text-muted-foreground whitespace-nowrap">
+                          {exp.expenseNumber || '—'}
+                        </TableCell>
+                        <TableCell className="py-2 text-sm whitespace-nowrap">
+                          {exp.date ? format(new Date(exp.date), 'dd MMM yyyy') : '—'}
+                        </TableCell>
+                        <TableCell className="py-2 text-sm">
+                          <div className="font-medium">{exp.description}</div>
+                          {exp.notes && (
+                            <div className="text-xs text-muted-foreground mt-0.5">{exp.notes}</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-2 text-sm text-muted-foreground whitespace-nowrap">{exp.vendor || '—'}</TableCell>
+                        <TableCell className="py-2 text-sm text-muted-foreground whitespace-nowrap">{exp.reference || '—'}</TableCell>
+                        <TableCell className="py-2">
+                          <Badge variant="outline" className="text-xs">{exp.paymentMethod}</Badge>
+                        </TableCell>
+                        <TableCell className="py-2 text-right font-semibold text-sm whitespace-nowrap">
+                          {fmt(exp.amount)}
+                        </TableCell>
+                      </TableRow>
                     ))}
                   </TableBody>
                   <TableFooter>
                     <TableRow>
-                      <TableCell colSpan={5} className="font-semibold">
+                      <TableCell colSpan={6} className="font-semibold">
                         {t('Total')}
                       </TableCell>
                       <TableCell className="text-right font-bold text-base">
