@@ -9,6 +9,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -27,11 +35,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useDeleteWalletMutation, useGetWalletsQuery, useUpsertWalletMutation } from '@/stores/mobile-shop.api'
+import { useDeleteWalletMutation, useGetWalletsQuery, useUpsertWalletMutation, type BankAccountType } from '@/stores/mobile-shop.api'
+import { Link } from '@tanstack/react-router'
 import {
   Edit2,
   Trash2,
-  Wallet,
+  Landmark,
+  ScrollText,
 } from 'lucide-react'
 import { format, isValid } from 'date-fns'
 import {
@@ -66,7 +76,23 @@ type WalletRecord = {
   commissionRate?: number
   withdrawalCommissionRate?: number
   depositCommissionRate?: number
+  accountType?: BankAccountType
+  bankName?: string
+  accountNumber?: string
+  branchName?: string
   updatedAt?: string
+}
+
+const ACCOUNT_TYPE_LABELS: Record<BankAccountType, string> = {
+  cash: 'Cash',
+  bank: 'Bank',
+  mobile_wallet: 'Mobile Wallet',
+}
+
+const ACCOUNT_TYPE_BADGE_CLASS: Record<BankAccountType, string> = {
+  cash: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
+  bank: 'bg-blue-100 text-blue-700 hover:bg-blue-100',
+  mobile_wallet: 'bg-purple-100 text-purple-700 hover:bg-purple-100',
 }
 
 export default function WalletPage() {
@@ -81,6 +107,10 @@ export default function WalletPage() {
   const [commissionRate, setCommissionRate] = useState('0')
   const [withdrawalCommissionRate, setWithdrawalCommissionRate] = useState('0')
   const [depositCommissionRate, setDepositCommissionRate] = useState('0')
+  const [accountType, setAccountType] = useState<BankAccountType | ''>('')
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [branchName, setBranchName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [walletToDelete, setWalletToDelete] = useState<{ id: string; type: string } | null>(null)
 
@@ -104,7 +134,7 @@ export default function WalletPage() {
     event.preventDefault()
 
     if (!walletName.trim()) {
-      toast.error('Wallet name is required')
+      toast.error('Account name is required')
       return
     }
 
@@ -115,17 +145,25 @@ export default function WalletPage() {
         commissionRate: Number(commissionRate),
         withdrawalCommissionRate: Number(withdrawalCommissionRate),
         depositCommissionRate: Number(depositCommissionRate),
+        accountType,
+        bankName: accountType === 'bank' ? bankName : '',
+        accountNumber: accountType === 'bank' ? accountNumber : '',
+        branchName: accountType === 'bank' ? branchName : '',
         ...(editingId && { id: editingId }),
       }).unwrap()
-      toast.success(editingId ? 'Wallet updated' : 'Wallet created')
+      toast.success(editingId ? 'Bank account updated' : 'Bank account created')
       setWalletName('')
       setBalance('0')
       setCommissionRate('0')
       setWithdrawalCommissionRate('0')
       setDepositCommissionRate('0')
+      setAccountType('')
+      setBankName('')
+      setAccountNumber('')
+      setBranchName('')
       setEditingId(null)
     } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to save wallet')
+      toast.error(error?.data?.message || 'Failed to save bank account')
     }
   }
 
@@ -136,6 +174,10 @@ export default function WalletPage() {
     setCommissionRate(String(wallet.commissionRate ?? 0))
     setWithdrawalCommissionRate(String(wallet.withdrawalCommissionRate ?? 0))
     setDepositCommissionRate(String(wallet.depositCommissionRate ?? 0))
+    setAccountType(wallet.accountType ?? '')
+    setBankName(wallet.bankName ?? '')
+    setAccountNumber(wallet.accountNumber ?? '')
+    setBranchName(wallet.branchName ?? '')
   }
 
   const handleCancel = () => {
@@ -145,6 +187,10 @@ export default function WalletPage() {
     setCommissionRate('0')
     setWithdrawalCommissionRate('0')
     setDepositCommissionRate('0')
+    setAccountType('')
+    setBankName('')
+    setAccountNumber('')
+    setBranchName('')
   }
 
   const handleDeleteWallet = async () => {
@@ -163,35 +209,81 @@ export default function WalletPage() {
 
   return (
     <MobilePageShell
-      title='Wallet Management'
+      title='Bank Accounts'
       description={
         isMobileShop
-          ? `Create and manage your wallets (JazzCash, EasyPaisa, Bank Account, SIM Card, etc.) · ${MOBILE_FORM_KEYBOARD_HINT}`
-          : `Create and manage your bank accounts and cash-in-hand wallets · ${MOBILE_FORM_KEYBOARD_HINT}`
+          ? `Create and manage your bank accounts and payment wallets (JazzCash, EasyPaisa, Bank Account, SIM Card, etc.) · ${MOBILE_FORM_KEYBOARD_HINT}`
+          : `Create and manage your bank accounts and cash-in-hand accounts · ${MOBILE_FORM_KEYBOARD_HINT}`
       }
     >
       <div className='grid gap-6 lg:grid-cols-[1fr_2fr]'>
         <Card>
           <CardHeader>
-            <CardTitle>{editingId ? 'Edit Wallet' : 'Add New Wallet'}</CardTitle>
+            <CardTitle>{editingId ? 'Edit Bank Account' : 'Add Bank Account'}</CardTitle>
           </CardHeader>
           <CardContent>
             <form data-mobile-form='wallet' className='space-y-4' onSubmit={handleSubmit}>
               <div className='space-y-2'>
-                <Label htmlFor='wallet-name'>Wallet Name</Label>
+                <Label htmlFor='wallet-name'>Account Name</Label>
                 <Input
                   id='wallet-name'
-                  placeholder='e.g., JazzCash, Zong Load, EasyPaisa'
+                  placeholder={isMobileShop ? 'e.g., JazzCash, Zong Load, EasyPaisa, HBL Bank' : 'e.g., HBL Bank, Cash in Hand'}
                   value={walletName}
                   onChange={(event) => setWalletName(event.target.value)}
                   {...walletEnter.enterProps('wallet-name')}
                 />
-                <p className='text-xs text-muted-foreground'>
-                  Include &quot;Load&quot; in the name for load purchase/sale wallets
-                </p>
+                {isMobileShop && (
+                  <p className='text-xs text-muted-foreground'>
+                    Include &quot;Load&quot; in the name for load purchase/sale wallets
+                  </p>
+                )}
               </div>
               <div className='space-y-2'>
-                <Label htmlFor='balance'>Balance (Rs)</Label>
+                <Label htmlFor='account-type'>Account Type</Label>
+                <Select value={accountType || undefined} onValueChange={(value) => setAccountType(value as BankAccountType)}>
+                  <SelectTrigger id='account-type'>
+                    <SelectValue placeholder='Select account type (optional)' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='cash'>Cash</SelectItem>
+                    <SelectItem value='bank'>Bank</SelectItem>
+                    {isMobileShop && <SelectItem value='mobile_wallet'>Mobile Wallet</SelectItem>}
+                  </SelectContent>
+                </Select>
+              </div>
+              {accountType === 'bank' && (
+                <div className='border rounded-lg p-3 space-y-3 bg-muted/30'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='bank-name'>Bank Name</Label>
+                    <Input
+                      id='bank-name'
+                      placeholder='e.g., Habib Bank Limited'
+                      value={bankName}
+                      onChange={(event) => setBankName(event.target.value)}
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='account-number'>Account Number / IBAN</Label>
+                    <Input
+                      id='account-number'
+                      placeholder='e.g., PK00HABB0000000000000000'
+                      value={accountNumber}
+                      onChange={(event) => setAccountNumber(event.target.value)}
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='branch-name'>Branch Name</Label>
+                    <Input
+                      id='branch-name'
+                      placeholder='e.g., Main Branch, Lahore'
+                      value={branchName}
+                      onChange={(event) => setBranchName(event.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+              <div className='space-y-2'>
+                <Label htmlFor='balance'>Opening Balance (Rs)</Label>
                 <Input
                   id='balance'
                   min='0'
@@ -255,7 +347,7 @@ export default function WalletPage() {
               )}
               <div className='flex gap-2'>
                 <Button className='flex-1' disabled={isSaving} type='submit'>
-                  {isSaving ? 'Saving...' : editingId ? 'Update Wallet' : 'Create Wallet'}
+                  {isSaving ? 'Saving...' : editingId ? 'Update Bank Account' : 'Add Bank Account'}
                 </Button>
                 {editingId && (
                   <Button variant='outline' onClick={handleCancel} type='button'>
@@ -269,23 +361,24 @@ export default function WalletPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Your Wallets ({wallets.length})</CardTitle>
+            <CardTitle>Your Bank Accounts ({wallets.length})</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className='flex items-center justify-center h-40'>
-                <p className='text-muted-foreground'>Loading wallets...</p>
+                <p className='text-muted-foreground'>Loading bank accounts...</p>
               </div>
             ) : wallets.length === 0 ? (
               <div className='flex flex-col items-center justify-center h-40 gap-2'>
-                <Wallet className='h-10 w-10 text-muted-foreground/40' />
-                <p className='text-muted-foreground'>No wallets yet. Add one to get started!</p>
+                <Landmark className='h-10 w-10 text-muted-foreground/40' />
+                <p className='text-muted-foreground'>No bank accounts yet. Add one to get started!</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Wallet Name</TableHead>
+                    <TableHead>Account Name</TableHead>
+                    <TableHead>Account Type</TableHead>
                     {isMobileShop && <TableHead>Type</TableHead>}
                     <TableHead>Balance</TableHead>
                     {isMobileShop && (
@@ -304,8 +397,22 @@ export default function WalletPage() {
                     const loadWallet = isLoadWalletName(wallet.type)
                     return (
                       <TableRow key={resolveWalletId(wallet) || wallet.type}>
-                        <TableCell className='font-medium max-w-[200px]'>
+                        <TableCell className='font-medium max-w-[220px]'>
                           <span className='line-clamp-2'>{wallet.type}</span>
+                          {(wallet.bankName || wallet.accountNumber) && (
+                            <span className='block text-xs font-normal text-muted-foreground line-clamp-1'>
+                              {[wallet.bankName, wallet.accountNumber].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {wallet.accountType ? (
+                            <Badge variant='secondary' className={ACCOUNT_TYPE_BADGE_CLASS[wallet.accountType]}>
+                              {ACCOUNT_TYPE_LABELS[wallet.accountType]}
+                            </Badge>
+                          ) : (
+                            <span className='text-xs text-muted-foreground'>—</span>
+                          )}
                         </TableCell>
                         {isMobileShop && (
                           <TableCell>
@@ -341,12 +448,17 @@ export default function WalletPage() {
                         </TableCell>
                         <TableCell>
                           <div className='flex flex-wrap items-center justify-end gap-1'>
+                            <Button size='sm' variant='outline' className='h-8' asChild title='View statement'>
+                              <Link to='/bank-account-statement' search={{ walletType: wallet.type }}>
+                                <ScrollText className='h-4 w-4' />
+                              </Link>
+                            </Button>
                             <Button
                               size='sm'
                               variant='outline'
                               className='h-8'
                               onClick={() => handleEdit(wallet)}
-                              title='Edit wallet'
+                              title='Edit bank account'
                             >
                               <Edit2 className='h-4 w-4' />
                             </Button>
@@ -357,7 +469,7 @@ export default function WalletPage() {
                               onClick={() =>
                                 setWalletToDelete({ id: resolveWalletId(wallet), type: wallet.type })
                               }
-                              title='Delete wallet'
+                              title='Delete bank account'
                             >
                               <Trash2 className='h-4 w-4' />
                             </Button>
@@ -376,9 +488,9 @@ export default function WalletPage() {
       <AlertDialog open={!!walletToDelete} onOpenChange={(open) => !open && setWalletToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete wallet?</AlertDialogTitle>
+            <AlertDialogTitle>Delete bank account?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete wallet &quot;{walletToDelete?.type}&quot; only if it has zero balance and no linked records.
+              This will permanently delete bank account &quot;{walletToDelete?.type}&quot; only if it has zero balance and no linked records.
               If transactions exist, deletion will be blocked to keep history safe.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -389,7 +501,7 @@ export default function WalletPage() {
               onClick={handleDeleteWallet}
               disabled={isDeleting}
             >
-              {isDeleting ? 'Deleting...' : 'Delete Wallet'}
+              {isDeleting ? 'Deleting...' : 'Delete Bank Account'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

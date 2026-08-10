@@ -58,6 +58,7 @@ import {
   isWalletOptionValue,
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options'
+import { SplitPaymentFields } from '@/components/split-payment-fields'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
@@ -524,14 +525,22 @@ export default function PurchasePanel({
   // during the child's render (not via setState) so the Sale Price Enter handler can
   // read it synchronously without an extra render round-trip.
   const itemNeedsBatchRef = useRef<Record<number, boolean>>({})
+  // Opens (or advances past) a row's batch dialog — likewise written directly during
+  // the child's render. A plain callback registry rather than a DOM ref: the batch
+  // field has no visible input to focus, and driving it through `.focus()` on a proxy
+  // button backfired — Radix's Dialog restores focus to its trigger on close, which
+  // re-fired that focus handler and kept appending new rows after every batch save.
+  const itemBatchTriggerRef = useRef<Record<number, () => void>>({})
   const setItemFieldRef = (index: number, field: string) => (el: HTMLInputElement | null) => {
     itemFieldRefs.current[`${index}:${field}`] = el
   }
   const focusItemField = (index: number, field: string) => focusField(itemFieldRefs.current[`${index}:${field}`])
   const paymentTypeTriggerRef = useRef<HTMLButtonElement>(null)
+  const paymentMethodTriggerRef = useRef<HTMLButtonElement>(null)
   const purchaseDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
   const [paymentTypeSelectOpen, setPaymentTypeSelectOpen] = useState(false)
+  const [, setPaymentMethodSelectOpen] = useState(false)
 
   // Auto-scroll items list when items change
   useEffect(() => {
@@ -556,14 +565,23 @@ export default function PurchasePanel({
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
   const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
   const [buyUsedPhoneOpen, setBuyUsedPhoneOpen] = useState(false)
-  // Paying a supplier is a money-out action — show wallet balances so the user can avoid overdrawing.
+  // Purchase Type (Cash = settled now vs Credit = may owe a balance) is a separate concern
+  // from Payment Method (which real account absorbs whatever's paid right now) — a Credit
+  // purchase can still be partially paid from a real account, so both fields are shown.
+  const PURCHASE_TYPE_OPTIONS = useMemo(
+    () => [
+      { value: 'cash', label: t('cash') || 'Cash' },
+      { value: 'credit', label: t('credit') || 'Credit' },
+    ],
+    [t],
+  )
+  // Paying a supplier is a money-out action — show wallet balances so the user can avoid
+  // overdrawing. No generic 'Bank Transfer'/'Card' placeholders — every real account (bank or
+  // mobile wallet) is already selectable here by its own name.
   const purchasePaymentMethodOptions = useMemo(
     () =>
       buildMergedPaymentOptions(
-        [
-          { value: 'Cash', label: t('cash') },
-          { value: 'Credit', label: t('credit') },
-        ],
+        [{ value: 'cash', label: t('cash') || 'Cash' }],
         wallets,
         true,
       ),
@@ -666,8 +684,11 @@ export default function PurchasePanel({
     }
   }, [isEditing, purchase.items])
 
+  // Purchase Type "Cash" always means fully paid right now — whichever account it went
+  // through. Credit purchases (or a Cash purchase with split payment on) show an editable
+  // Paid Amount input instead (see the JSX below).
   useEffect(() => {
-    if (purchase.paymentType === 'Cash') {
+    if (purchase.type === 'cash' && !purchase.splitPaymentMethod) {
       const currentTotal = calculateTotals().total
       if ((purchase.paidAmount || 0) !== currentTotal || (purchase.balance || 0) !== 0) {
         setPurchase((prev) => ({
@@ -677,7 +698,7 @@ export default function PurchasePanel({
         }))
       }
     }
-  }, [purchase.paymentType, purchase.paidAmount, purchase.balance, calculateTotals, setPurchase])
+  }, [purchase.type, purchase.splitPaymentMethod, purchase.paidAmount, purchase.balance, calculateTotals, setPurchase])
 
   // Print functionality
   const printPurchase = useCallback(
@@ -845,7 +866,7 @@ export default function PurchasePanel({
   // there with no keyboard path onward.
   const advanceAfterSaleFields = useCallback((index: number) => {
     if (itemNeedsBatchRef.current[index]) {
-      focusItemField(index, 'batchNumber')
+      itemBatchTriggerRef.current[index]?.()
     } else {
       addNewPurchaseRowAndOpenProduct()
     }
@@ -975,17 +996,19 @@ export default function PurchasePanel({
       console.log('Supplier ID:', supplierId)
       console.log('Totals:', totals)
 
-      // Validate and normalize paymentType
-      const validPaymentTypes = ['Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet'];
-      let paymentType = purchase.paymentType || 'Cash';
-      if (!validPaymentTypes.includes(paymentType)) {
-        console.warn(`Invalid paymentType: ${paymentType}, defaulting to 'Cash'`);
-        paymentType = 'Cash';
-      }
-      if (paymentType === 'Wallet' && !purchase.walletType) {
+      // Validate and normalize the payment fields
+      const purchaseType: 'cash' | 'credit' = purchase.type === 'credit' ? 'credit' : 'cash'
+      const paymentMethod: 'cash' | 'wallet' = purchase.paymentMethod === 'wallet' ? 'wallet' : 'cash'
+      if (paymentMethod === 'wallet' && !purchase.walletType) {
         toast.error(t('Please select a wallet for wallet payment'))
         return
       }
+      const splitPaymentMethod = purchase.splitPaymentMethod
+      if (splitPaymentMethod === 'wallet' && !purchase.splitWalletType) {
+        toast.error('Please select an account for the split payment')
+        return
+      }
+      const splitPaidAmount = splitPaymentMethod ? Math.max(0, Math.min(Number(purchase.splitPaidAmount || 0), purchase.paidAmount || 0)) : 0
 
       // Map to backend format
       const purchaseData = {
@@ -1029,8 +1052,12 @@ export default function PurchasePanel({
         totalAmount: totals.total,
         paidAmount: purchase.paidAmount || 0,
         balance: resolvePurchaseInvoiceBalance(totals.total, purchase.paidAmount || 0),
-        paymentType: paymentType,
-        walletType: paymentType === 'Wallet' ? purchase.walletType : undefined,
+        type: purchaseType,
+        paymentMethod: paymentMethod,
+        walletType: paymentMethod === 'wallet' ? purchase.walletType : undefined,
+        splitPaymentMethod: splitPaymentMethod,
+        splitWalletType: splitPaymentMethod === 'wallet' ? purchase.splitWalletType : undefined,
+        splitPaidAmount: splitPaidAmount,
         purchaseDate: purchase.date || new Date().toISOString(),
         notes: purchase.notes?.trim() || undefined,
       }
@@ -1095,7 +1122,10 @@ export default function PurchasePanel({
           const purchaseForPrint = {
             ...result,
             supplier: purchase.supplier,
-            items: purchase.items,
+            // Not purchase.items — that still includes the trailing empty manual row(s)
+            // the form always keeps ready for the next entry, which printed as bogus
+            // "Unknown Product" lines.
+            items: validItems,
           }
           printPurchase(purchaseForPrint, printType)
         }
@@ -1149,7 +1179,9 @@ export default function PurchasePanel({
         items: payload.items.length > 0 ? payload.items : prev.items,
         date: payload.date || prev.date,
         notes: payload.notes ?? prev.notes,
-        paymentType: payload.paymentType || prev.paymentType,
+        // OCR only reliably distinguishes "credit terms" from everything else — it can't
+        // know which of the user's real accounts was used, so paymentMethod stays as-is.
+        type: payload.paymentType === 'Credit' ? 'credit' : prev.type,
       }))
     },
     [setPurchase],
@@ -1381,32 +1413,20 @@ export default function PurchasePanel({
             </div>
 
             <div>
-              <Label htmlFor="payment-type" className="mb-2">{t('Payment Type')}</Label>
+              <Label htmlFor="purchase-type" className="mb-2">{t('Purchase Type') || 'Purchase Type'}</Label>
               <Select
-                value={
-                  purchase.paymentType === 'Wallet' && purchase.walletType
-                    ? toWalletOptionValue(purchase.walletType)
-                    : purchase.paymentType || 'Cash'
-                }
+                value={purchase.type || 'cash'}
                 onOpenChange={setPaymentTypeSelectOpen}
-                onValueChange={(value: string) => {
-                  const isWallet = isWalletOptionValue(value)
-                  const nextPaymentType = isWallet ? 'Wallet' : (value as 'Cash' | 'Credit')
+                onValueChange={(value: 'cash' | 'credit') => {
                   const currentTotal = calculateTotals().total
                   setPurchase((prev) => {
-                    const switchingCashToCredit = prev.paymentType === 'Cash' && nextPaymentType === 'Credit'
-                    // Wallet payment means "paid right now from that wallet", same as Cash —
-                    // it should default to fully paid, not owed like Credit. The paid-amount
-                    // field stays editable afterward for the rare partial-wallet-payment case.
-                    const nextPaid = nextPaymentType === 'Cash' || nextPaymentType === 'Wallet'
-                      ? currentTotal
-                      : switchingCashToCredit
-                        ? 0
-                        : (prev.paidAmount || 0)
+                    const switchingCashToCredit = (prev.type || 'cash') === 'cash' && value === 'credit'
+                    // Cash type always means "fully paid right now" — Credit starts unpaid
+                    // (unless switching back from Credit, which keeps whatever was entered).
+                    const nextPaid = value === 'cash' ? currentTotal : (switchingCashToCredit ? 0 : (prev.paidAmount || 0))
                     return {
                       ...prev,
-                      paymentType: nextPaymentType,
-                      walletType: isWallet ? getWalletTypeFromOptionValue(value) : undefined,
+                      type: value,
                       paidAmount: nextPaid,
                       balance: resolvePurchaseInvoiceBalance(currentTotal, nextPaid),
                     }
@@ -1425,18 +1445,13 @@ export default function PurchasePanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {purchasePaymentMethodOptions.map((option) => (
+                  {PURCHASE_TYPE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {wallets.length === 0 && (
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  {t('No wallets configured. Add one from the Wallet page.') || 'No wallets configured. Add one from the Wallet page.'}
-                </p>
-              )}
             </div>
 
             <div>
@@ -1956,9 +1971,8 @@ export default function PurchasePanel({
                       onBatchNumberChange={updateItemBatchNumber}
                       onExpiryDateChange={updateItemExpiryDate}
                       onBatchCostChange={updateItemBatchCost}
-                      registerFieldRef={(field) => setItemFieldRef(index, field)}
-                      focusFieldByName={(field) => focusItemField(index, field)}
                       onNeedsBatchChange={(i, needsBatch) => { itemNeedsBatchRef.current[i] = needsBatch }}
+                      onRegisterBatchTrigger={(i, trigger) => { itemBatchTriggerRef.current[i] = trigger }}
                       onLastFieldEnter={addNewPurchaseRowAndOpenProduct}
                     />
                   </div>
@@ -2063,10 +2077,50 @@ export default function PurchasePanel({
               </div>
             )}
 
+            <div className="border-t pt-3">
+              <Label htmlFor="payment-method" className="mb-2">{t('Payment Method') || 'Payment Method'}</Label>
+              <Select
+                value={
+                  purchase.paymentMethod === 'wallet' && purchase.walletType
+                    ? toWalletOptionValue(purchase.walletType)
+                    : 'cash'
+                }
+                onOpenChange={setPaymentMethodSelectOpen}
+                onValueChange={(value: string) => {
+                  const isWallet = isWalletOptionValue(value)
+                  setPurchase((prev) => ({
+                    ...prev,
+                    paymentMethod: isWallet ? 'wallet' : 'cash',
+                    walletType: isWallet ? getWalletTypeFromOptionValue(value) : undefined,
+                    // The split leg's bucket is derived from this field — stale once it changes.
+                    splitPaymentMethod: undefined,
+                    splitWalletType: undefined,
+                    splitPaidAmount: 0,
+                  }))
+                }}
+              >
+                <SelectTrigger ref={paymentMethodTriggerRef} className='w-full'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {purchasePaymentMethodOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {wallets.length === 0 && (
+                <p className='mt-1 text-xs text-muted-foreground'>
+                  {t('No wallets configured. Add one from the Wallet page.') || 'No wallets configured. Add one from the Wallet page.'}
+                </p>
+              )}
+            </div>
+
             {/* Paid Amount Input */}
-            <div className="border-t pt-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="paid-amount" className="whitespace-nowrap">
+            <div className="pt-3 space-y-2">
+              <div>
+                <Label htmlFor="paid-amount" className="mb-2 block">
                   {t('Paid Amount')}:
                 </Label>
                 <Input
@@ -2074,7 +2128,7 @@ export default function PurchasePanel({
                   type="text"
                   inputMode="decimal"
                   value={getNumericDraftValue('paidAmount', purchase.paidAmount || 0)}
-                  disabled={purchase.paymentType === 'Cash'}
+                  disabled={purchase.type === 'cash' && !purchase.splitPaymentMethod}
                   onChange={(e) =>
                     handleNumericDraftChange('paidAmount', e.target.value, (value) => {
                       const currentTotal = calculateTotals().total
@@ -2087,7 +2141,7 @@ export default function PurchasePanel({
                   }
                   onBlur={() => clearNumericDraft('paidAmount')}
                   placeholder="0.00"
-                  className="flex-1"
+                  className="w-full"
                 />
               </div>
               {/* {purchase.paidAmount !== undefined && purchase.paidAmount < totals.total && (
@@ -2096,6 +2150,17 @@ export default function PurchasePanel({
                   <span>Rs{(totals.total - (purchase.paidAmount || 0)).toFixed(2)}</span>
                 </div>
               )} */}
+              <SplitPaymentFields
+                primaryMethod={purchase.paymentMethod === 'wallet' ? 'wallet' : 'cash'}
+                wallets={wallets}
+                paidAmount={purchase.paidAmount || 0}
+                value={{
+                  splitPaymentMethod: purchase.splitPaymentMethod,
+                  splitWalletType: purchase.splitWalletType,
+                  splitPaidAmount: purchase.splitPaidAmount,
+                }}
+                onChange={(patch) => setPurchase((prev) => ({ ...prev, ...patch }))}
+              />
             </div>
 
             {/* Supplier Balance After Payment - Only show in create mode */}

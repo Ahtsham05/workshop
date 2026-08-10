@@ -62,8 +62,8 @@ const paymentTypeColors: Record<string, string> = {
 export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, PurchaseReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t, language } = useLanguage()
-    const { data, isLoading } = useGetPurchaseReportQuery({ startDate, endDate })
-    const { data: detailData, isLoading: detailLoading } = useGetPurchaseInvoiceDetailsQuery({
+    const { data, isFetching: isLoading } = useGetPurchaseReportQuery({ startDate, endDate })
+    const { data: detailData, isFetching: detailLoading } = useGetPurchaseInvoiceDetailsQuery({
       startDate,
       endDate,
     })

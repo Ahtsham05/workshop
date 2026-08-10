@@ -76,6 +76,16 @@ const PERMISSION_GROUPS = [
     permissions: ['viewCashBook', 'manageCashBook', 'viewCashRegister', 'manageCashRegister'],
   },
   {
+    id: 'payment_vouchers',
+    label: 'Payments & Receipts',
+    permissions: ['viewPaymentVouchers', 'managePaymentVouchers'],
+  },
+  {
+    id: 'bank_reconciliation',
+    label: 'Bank Reconciliation',
+    permissions: ['viewBankReconciliation', 'manageBankReconciliation'],
+  },
+  {
     id: 'accounts_system',
     label: 'Accounts System',
     permissions: ['viewAccountsSystem', 'manageAccountsSystem'],
@@ -281,6 +291,8 @@ const PERMISSION_TAB_GROUPS = {
     'brands',
     'accounting',
     'cash',
+    'payment_vouchers',
+    'bank_reconciliation',
     'accounts_system',
   ],
   mobile_shop: [

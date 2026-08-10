@@ -87,8 +87,8 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
 
     const dates = useMemo(() => getPresetDates(preset, startDate, endDate), [preset, startDate, endDate])
 
-    const { data: roiData, isLoading: roiLoading } = useGetRoiReportQuery(dates)
-    const { data: monthlyData, isLoading: monthlyLoading } = useGetMonthlyRoiQuery(dates)
+    const { data: roiData, isFetching: roiLoading } = useGetRoiReportQuery(dates)
+    const { data: monthlyData, isFetching: monthlyLoading } = useGetMonthlyRoiQuery(dates)
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

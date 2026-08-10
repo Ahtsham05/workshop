@@ -22,7 +22,7 @@ const STATUS_ORDER: StockTransferReportStatus[] = ['suggested', 'approved', 'in_
 export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, StockTransferReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
-    const { data, isLoading } = useGetStockTransferReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetStockTransferReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

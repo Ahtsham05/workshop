@@ -23,7 +23,7 @@ interface StockAdjustmentReportProps {
 export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, StockAdjustmentReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
-    const { data, isLoading } = useGetStockAdjustmentReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetStockAdjustmentReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

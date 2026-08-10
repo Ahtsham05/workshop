@@ -1,5 +1,30 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
+import { reportsApi } from './reports.api'
+import { bankReconciliationApi } from './bankReconciliation.api'
+
+/** Every mutation below that invalidates this slice's own 'Wallets'/'CashBook' tags
+ *  (Load Purchase, Cash Withdrawal, Wallet Transfer, Repair, Bill Payment, Installment,
+ *  Sim Sale, Agent Bill, ...) moves a Bank Account's balance or posts a Cash Book entry
+ *  server-side too — but reportsApi (Bank Account Statement / Bank & Cash Position) and
+ *  bankReconciliationApi (the Bank Reconciliation workspace) are separate RTK Query
+ *  slices, so tag invalidation here never reaches them; those pages would otherwise keep
+ *  showing a stale balance until an unrelated action happens to refetch them. Same class
+ *  of bug as `wallet-cache-invalidation.ts` fixes for the other, standalone API slices —
+ *  this one is scoped to reportsApi/bankReconciliationApi only, since this file already
+ *  invalidates its own Wallets/CashBook/MobileDashboard tags via `invalidatesTags`. */
+const invalidateReportsAndReconciliation = async (
+  _arg: unknown,
+  { dispatch, queryFulfilled }: { dispatch: (action: unknown) => unknown; queryFulfilled: Promise<unknown> },
+) => {
+  try {
+    await queryFulfilled
+    dispatch(reportsApi.util.invalidateTags(['WalletBalanceStatement', 'BankPositionReport', 'BankReconciliationSessionsReport']))
+    dispatch(bankReconciliationApi.util.invalidateTags(['ReconciliationSummary', 'UnreconciledEntries']))
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
 
 interface PaginatedResult<T> {
   results: T[]
@@ -9,6 +34,8 @@ interface PaginatedResult<T> {
   totalResults: number
 }
 
+export type BankAccountType = 'cash' | 'bank' | 'mobile_wallet'
+
 export interface WalletRecord {
   id: string
   type: string
@@ -17,6 +44,10 @@ export interface WalletRecord {
   commissionRate: number
   withdrawalCommissionRate: number
   depositCommissionRate: number
+  accountType?: BankAccountType
+  bankName?: string
+  accountNumber?: string
+  branchName?: string
   updatedAt?: string
 }
 
@@ -657,13 +688,14 @@ export const mobileShopApi = createApi({
       }),
       providesTags: ['Wallets'],
     }),
-    upsertWallet: builder.mutation<WalletRecord, { type: string; balance: number; commissionRate?: number; withdrawalCommissionRate?: number; depositCommissionRate?: number; id?: string }>({
+    upsertWallet: builder.mutation<WalletRecord, { type: string; balance: number; commissionRate?: number; withdrawalCommissionRate?: number; depositCommissionRate?: number; accountType?: BankAccountType | ''; bankName?: string; accountNumber?: string; branchName?: string; id?: string }>({
       query: (body) => ({
         url: '/wallets',
         method: 'POST',
         body,
       }),
       invalidatesTags: ['Wallets', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteWallet: builder.mutation<void, string>({
       query: (id) => ({
@@ -671,6 +703,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'SimSales', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getLoadPurchases: builder.query<PaginatedResult<LoadPurchaseRecord>, { page?: number; limit?: number } | void>({
       query: (params) => {
@@ -687,6 +720,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateLoadPurchase: builder.mutation<LoadPurchaseRecord, { id: string; body: Partial<CreateLoadPurchaseInput> }>({
       query: ({ id, body }) => ({
@@ -695,6 +729,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteLoadPurchase: builder.mutation<void, string>({
       query: (id) => ({
@@ -702,6 +737,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getLoadPurchaseById: builder.query<LoadPurchaseRecord, string>({
       query: (id) => `/load-purchases/${id}`,
@@ -722,6 +758,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateLoadTransaction: builder.mutation<LoadTransactionRecord, { id: string; body: Partial<CreateLoadTransactionInput> }>({
       query: ({ id, body }) => ({
@@ -730,6 +767,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteLoadTransaction: builder.mutation<void, string>({
       query: (id) => ({
@@ -737,6 +775,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getLoadTransactionById: builder.query<LoadTransactionRecord, string>({
       query: (id) => `/load-transactions/${id}`,
@@ -761,6 +800,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     createCashWithdrawalsBatch: builder.mutation<CashWithdrawalRecord[], CreateCashWithdrawalsBatchInput>({
       query: (body) => ({
@@ -770,6 +810,7 @@ export const mobileShopApi = createApi({
         timeout: 120000,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateCashWithdrawal: builder.mutation<CashWithdrawalRecord, { id: string; body: Partial<CreateCashWithdrawalInput> }>({
       query: ({ id, body }) => ({
@@ -778,6 +819,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteCashWithdrawal: builder.mutation<void, string>({
       query: (id) => ({
@@ -785,6 +827,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteCashWithdrawalsBatch: builder.mutation<{ deleted: number; failed: number }, { ids: string[] }>({
       query: (body) => ({
@@ -794,6 +837,7 @@ export const mobileShopApi = createApi({
         timeout: 120000,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getWalletTransfers: builder.query<PaginatedResult<WalletTransferRecord>, { page?: number; limit?: number; walletType?: string } | void>({
       query: (params) => {
@@ -811,6 +855,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['WalletTransfers', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteWalletTransfer: builder.mutation<void, string>({
       query: (id) => ({
@@ -818,6 +863,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['WalletTransfers', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getRepairJobs: builder.query<PaginatedResult<RepairJobRecord>, { page?: number; limit?: number; status?: string } | void>({
       query: (params) => {
@@ -835,6 +881,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateRepairJob: builder.mutation<RepairJobRecord, { id: string; body: Partial<RepairJobRecord> }>({
       query: ({ id, body }) => ({
@@ -843,6 +890,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteRepairJob: builder.mutation<void, string>({
       query: (id) => ({
@@ -850,6 +898,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
 
     // ─── Services Catalog ───────────────────────────────────────────────────
@@ -913,6 +962,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateServiceInvoice: builder.mutation<ServiceInvoiceRecord, { id: string; body: UpdateServiceInvoiceInput }>({
       query: ({ id, body }) => ({
@@ -921,6 +971,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteServiceInvoice: builder.mutation<void, string>({
       query: (id) => ({
@@ -928,6 +979,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
 
     // ─── Repair Stock Ledger ─────────────────────────────────────────────────
@@ -944,6 +996,7 @@ export const mobileShopApi = createApi({
     createRepairStockPurchase: builder.mutation<RepairStockEntry, CreateRepairStockPurchaseInput>({
       query: (body) => ({ url: '/repair-stock', method: 'POST', body }),
       invalidatesTags: ['RepairStock', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     createRepairStockUsage: builder.mutation<RepairStockEntry, CreateRepairStockUsageInput>({
       query: (body) => ({ url: '/repair-stock/use', method: 'POST', body }),
@@ -952,6 +1005,7 @@ export const mobileShopApi = createApi({
     deleteRepairStockEntry: builder.mutation<void, string>({
       query: (id) => ({ url: `/repair-stock/${id}`, method: 'DELETE' }),
       invalidatesTags: ['RepairStock', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getRepairStockSummary: builder.query<RepairStockSummary, void>({
       query: () => '/repair-stock/summary',
@@ -976,6 +1030,7 @@ export const mobileShopApi = createApi({
     setOpeningBalance: builder.mutation<{ amount: number; id: string | null }, { amount: number }>({
       query: (body) => ({ url: '/cash-book/opening-balance', method: 'POST', body }),
       invalidatesTags: ['CashBook'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getCashBookSummary: builder.query<CashBookSummary, CashBookQueryParams | void>({
       query: (params) => {
@@ -1053,10 +1108,12 @@ export const mobileShopApi = createApi({
     createBillPayment: builder.mutation<BillPaymentRecord, CreateBillPaymentInput>({
       query: (body) => ({ url: '/bill-payments', method: 'POST', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     createBillPaymentsBatch: builder.mutation<BillPaymentRecord[], CreateBillPaymentsBatchInput>({
       query: (body) => ({ url: '/bill-payments/batch', method: 'POST', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     settleCombinedBill: builder.mutation<
       { newBill: BillPaymentRecord; oldBill: BillPaymentRecord },
@@ -1064,14 +1121,17 @@ export const mobileShopApi = createApi({
     >({
       query: (body) => ({ url: '/bill-payments/settle-combined', method: 'POST', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateBillPayment: builder.mutation<BillPaymentRecord, { id: string; body: Partial<CreateBillPaymentInput> }>({
       query: ({ id, body }) => ({ url: `/bill-payments/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteBillPayment: builder.mutation<void, string>({
       query: (id) => ({ url: `/bill-payments/${id}`, method: 'DELETE' }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getBillPaymentReceipt: builder.query<BillPaymentReceipt, string>({
       query: (id) => `/bill-payments/${id}/receipt`,
@@ -1137,6 +1197,7 @@ export const mobileShopApi = createApi({
     createInstallmentPlan: builder.mutation<InstallmentPlanRecord, Partial<InstallmentPlanRecord> & { paymentMethod?: string; walletType?: string }>({
       query: (body) => ({ url: '/installments', method: 'POST', body }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateInstallmentPlan: builder.mutation<InstallmentPlanRecord, { id: string; body: Partial<InstallmentPlanRecord> }>({
       query: ({ id, body }) => ({ url: `/installments/${id}`, method: 'PATCH', body }),
@@ -1145,6 +1206,7 @@ export const mobileShopApi = createApi({
     deleteInstallmentPlan: builder.mutation<void, string>({
       query: (id) => ({ url: `/installments/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     recordInstallmentPayment: builder.mutation<
       { payment: InstallmentPaymentRecord; plan: InstallmentPlanRecord },
@@ -1152,6 +1214,7 @@ export const mobileShopApi = createApi({
     >({
       query: ({ planId, ...body }) => ({ url: `/installments/${planId}/payments`, method: 'POST', body }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getInstallmentPayments: builder.query<
       PaginatedResult<InstallmentPaymentRecord>,
@@ -1167,6 +1230,7 @@ export const mobileShopApi = createApi({
     deleteInstallmentPayment: builder.mutation<void, { planId: string; paymentId: string }>({
       query: ({ planId, paymentId }) => ({ url: `/installments/${planId}/payments/${paymentId}`, method: 'DELETE' }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getInstallmentSummary: builder.query<InstallmentSummary, void>({
       query: () => '/installments/summary',
@@ -1190,14 +1254,17 @@ export const mobileShopApi = createApi({
     createSimSale: builder.mutation<SimSaleRecord, CreateSimSaleInput>({
       query: (body) => ({ url: '/sim-sales', method: 'POST', body }),
       invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateSimSale: builder.mutation<SimSaleRecord, { id: string; body: Partial<CreateSimSaleInput> }>({
       query: ({ id, body }) => ({ url: `/sim-sales/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     deleteSimSale: builder.mutation<void, string>({
       query: (id) => ({ url: `/sim-sales/${id}`, method: 'DELETE' }),
       invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
 
     // ─── Agent Bills (bilalmulazim7086@gmail.com) ─────────────────────────────
@@ -1215,6 +1282,7 @@ export const mobileShopApi = createApi({
     createAgentBillsBatch: builder.mutation<AgentBillRecord[], CreateAgentBillsBatchInput>({
       query: (body) => ({ url: '/agent-bills/batch', method: 'POST', body }),
       invalidatesTags: ['AgentBills', 'CashBook', 'MobileDashboard', 'Wallets'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     updateAgentBill: builder.mutation<AgentBillRecord, { id: string } & Partial<AgentBillRecord>>({
       query: ({ id, ...body }) => ({ url: `/agent-bills/${id}`, method: 'PATCH', body }),
@@ -1223,6 +1291,7 @@ export const mobileShopApi = createApi({
     deleteAgentBill: builder.mutation<void, string>({
       query: (id) => ({ url: `/agent-bills/${id}`, method: 'DELETE' }),
       invalidatesTags: ['AgentBills', 'CashBook', 'MobileDashboard', 'Wallets'],
+      onQueryStarted: invalidateReportsAndReconciliation,
     }),
     getAgentBillReport: builder.query<AgentBillReport, { startDate?: string; endDate?: string; companyId?: string } | void>({
       query: (params) => {

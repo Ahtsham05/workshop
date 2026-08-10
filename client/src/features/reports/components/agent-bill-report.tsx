@@ -78,7 +78,7 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
 
     const [companyFilter, setCompanyFilter] = useState<string>('all')
 
-    const { data, isLoading } = useGetAgentBillReportQuery({
+    const { data, isFetching: isLoading } = useGetAgentBillReportQuery({
       startDate,
       endDate,
       companyId: companyFilter !== 'all' ? companyFilter : undefined,

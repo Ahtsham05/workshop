@@ -15,6 +15,7 @@ const {
 } = require('../models');
 const { startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
 const { refreshOverdueStatuses } = require('./billPayment.service');
+const { resolveCashInHandBalance } = require('./wallet.service');
 
 const toObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id;
@@ -141,7 +142,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
           }
         : {}),
     }).select('amount paymentMethod isPaid'),
-    Wallet.find({ organizationId, ...(branchId ? { branchId } : {}) }).select('type balance'),
+    Wallet.find({ organizationId, ...(branchId ? { branchId } : {}) }).select('type balance accountType'),
     BillPayment.find({
       ...billBaseMatch,
       ...billPeriodFilter,
@@ -226,6 +227,18 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const totalServiceIncome = serviceInvoices.reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0);
   const totalServiceProfit = totalServiceIncome;
   const serviceInvoiceCount = serviceInvoices.length;
+
+  // A cash-type wallet's stored `balance` only reflects wallet-ledger-driven movements —
+  // Cash Book (fed by every module) is the complete, trustworthy number, so the dashboard
+  // stat card should read that instead. Same reasoning as `wallet.service.js`'s
+  // `queryWallets`/`getWalletById` overlay.
+  const cashWallets = wallets.filter((wallet) => wallet.accountType === 'cash');
+  if (cashWallets.length > 0) {
+    const liveCashBalance = await resolveCashInHandBalance(organizationId, branchId);
+    cashWallets.forEach((wallet) => {
+      wallet.balance = liveCashBalance;
+    });
+  }
 
   const walletBalances = wallets.reduce(
     (accumulator, wallet) => {

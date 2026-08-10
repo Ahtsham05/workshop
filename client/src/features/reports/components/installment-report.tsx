@@ -27,7 +27,7 @@ const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'o
 export const InstallmentReport = forwardRef<{ exportToExcel: () => void }, InstallmentReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
-    const { data, isLoading, isError } = useGetInstallmentReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading, isError } = useGetInstallmentReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

@@ -99,6 +99,7 @@ import {
   isWalletOptionValue,
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options'
+import { SplitPaymentFields } from '@/components/split-payment-fields'
 import { usePermissions } from '@/context/permission-context'
 import {
   EntityCreateEmptyPrompt,
@@ -178,14 +179,12 @@ export function InvoicePanel({
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !SHOW_INVOICE_PAYMENT_METHOD_UI })
   const wallets = walletsData?.results?.filter(w => w.isActive) ?? []
   // Sale invoices receive cash — never show wallet balances in the dropdown (money-in form).
+  // No generic 'Bank Transfer'/'Card' placeholders — every real account (bank or mobile
+  // wallet) is already selectable here by its own name.
   const paymentMethodOptions = useMemo(
     () =>
       buildMergedPaymentOptions(
-        [
-          { value: 'cash', label: t('cash') || 'Cash' },
-          { value: 'bank', label: t('bank_transfer') || 'Bank Transfer' },
-          { value: 'card', label: t('card') || 'Card' },
-        ],
+        [{ value: 'cash', label: t('cash') || 'Cash' }],
         wallets,
         false,
       ),
@@ -202,6 +201,16 @@ export function InvoicePanel({
     [salesmen],
   )
   const [paidAmountInput, setPaidAmountInput] = useState('')
+  // Cash-type invoices never show/edit Paid Amount normally (it's just the total) — but once
+  // split-mode reveals the field, seed its draft from the real value so it doesn't start blank.
+  const wasCashSplitEditable = useRef(false)
+  useEffect(() => {
+    const isCashSplitEditable = invoice.type === 'cash' && Boolean(invoice.splitPaymentMethod)
+    if (isCashSplitEditable && !wasCashSplitEditable.current) {
+      setPaidAmountInput(String(invoice.paidAmount ?? 0))
+    }
+    wasCashSplitEditable.current = isCashSplitEditable
+  }, [invoice.type, invoice.splitPaymentMethod, invoice.paidAmount])
   const [showProfitDetails, setShowProfitDetails] = useState(false)
   const [customerSelectOpen, setCustomerSelectOpen] = useState(false)
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
@@ -1263,8 +1272,8 @@ export function InvoicePanel({
           total: totals.total,
           totalProfit: totals.totalProfit,
           totalCost: totals.totalCost,
-          paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
-          balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount,
+          paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+          balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
         }),
       }
     })
@@ -1308,6 +1317,10 @@ export function InvoicePanel({
     try {
       if (SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.paymentMethod === 'wallet' && !invoice.walletType) {
         toast.error('Please select a wallet for wallet payment')
+        return
+      }
+      if (SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.splitPaymentMethod === 'wallet' && !invoice.splitWalletType) {
+        toast.error('Please select an account for the split payment')
         return
       }
 
@@ -1382,6 +1395,9 @@ export function InvoicePanel({
         splitPayment: invoice.splitPayment,
         paymentMethod: invoice.paymentMethod || 'cash',
         walletType: invoice.paymentMethod === 'wallet' ? (invoice.walletType || '') : undefined,
+        splitPaymentMethod: invoice.splitPaymentMethod,
+        splitWalletType: invoice.splitPaymentMethod === 'wallet' ? (invoice.splitWalletType || '') : undefined,
+        splitPaidAmount: invoice.splitPaymentMethod ? Math.max(0, Math.min(Number(invoice.splitPaidAmount || 0), invoice.paidAmount || 0)) : 0,
         loyaltyPoints: invoice.loyaltyPoints,
         couponCode: invoice.couponCode,
         returnPolicy: invoice.returnPolicy,
@@ -3012,9 +3028,24 @@ export function InvoicePanel({
                     }
                     onValueChange={(val: string) => {
                       if (isWalletOptionValue(val)) {
-                        setInvoice(prev => ({ ...prev, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(val) }))
+                        setInvoice(prev => ({
+                          ...prev,
+                          paymentMethod: 'wallet',
+                          walletType: getWalletTypeFromOptionValue(val),
+                          // The split leg's bucket is derived from this field — stale once it changes.
+                          splitPaymentMethod: undefined,
+                          splitWalletType: undefined,
+                          splitPaidAmount: 0,
+                        }))
                       } else {
-                        setInvoice(prev => ({ ...prev, paymentMethod: val as 'cash' | 'bank' | 'card', walletType: undefined }))
+                        setInvoice(prev => ({
+                          ...prev,
+                          paymentMethod: val as 'cash',
+                          walletType: undefined,
+                          splitPaymentMethod: undefined,
+                          splitWalletType: undefined,
+                          splitPaidAmount: 0,
+                        }))
                       }
                     }}
                   >
@@ -3036,24 +3067,40 @@ export function InvoicePanel({
               </div>
             )}
 
+            {invoice.type !== 'pending' && invoice.type !== 'quotation' && (invoice.type === 'credit' || (invoice.type === 'cash' && invoice.splitPaymentMethod)) && (
+              <div>
+                <Label htmlFor="paidAmount">{t('paid_amount')}</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  showVoiceInput={false}
+                  value={paidAmountInput}
+                  onChange={(e) => handlePaidAmountChange(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+            )}
+
+            {SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
+              <SplitPaymentFields
+                primaryMethod={invoice.paymentMethod === 'wallet' ? 'wallet' : 'cash'}
+                wallets={wallets}
+                paidAmount={invoice.paidAmount || 0}
+                value={{
+                  splitPaymentMethod: invoice.splitPaymentMethod,
+                  splitWalletType: invoice.splitWalletType,
+                  splitPaidAmount: invoice.splitPaidAmount,
+                }}
+                onChange={(patch) => setInvoice(prev => ({ ...prev, ...patch }))}
+              />
+            )}
+
             {invoice.type !== 'pending' && invoice.type !== 'quotation' && (
               <>
-                {invoice.type === 'credit' && (
-                  <div>
-                    <Label htmlFor="paidAmount">{t('paid_amount')}</Label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      showVoiceInput={false}
-                      value={paidAmountInput}
-                      onChange={(e) => handlePaidAmountChange(e.target.value)}
-                      placeholder="0.00"
-                    />
-                  </div>
-                )}
-
-                {/* Cash Received & Change Calculator — only for cash payments */}
-                {invoice.type === 'cash' && (!invoice.paymentMethod || invoice.paymentMethod === 'cash') && (
+                {/* Cash Received & Change Calculator — only for pure-cash payments. Hidden once
+                    splitting is on: "amount given by customer" no longer means the whole total
+                    was cash, so the change math would be wrong. */}
+                {invoice.type === 'cash' && (!invoice.paymentMethod || invoice.paymentMethod === 'cash') && !invoice.splitPaymentMethod && (
                   <div className='space-y-3 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'>
                     <h4 className='text-sm font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2'>
                       <Banknote className='h-4 w-4' />

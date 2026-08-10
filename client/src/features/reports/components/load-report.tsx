@@ -24,7 +24,7 @@ interface LoadReportProps {
 export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
-    const { data, isLoading } = useGetLoadReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetLoadReportQuery({ startDate, endDate })
     const [selectedWallet, setSelectedWallet] = useState<string | null>(null)
 
     const loadWallets = useMemo(

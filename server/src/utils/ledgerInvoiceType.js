@@ -14,7 +14,7 @@ const resolveInvoiceLedgerInvoiceType = (invoice) =>
 
 /** Purchase: Credit vs everything else (cash terms). */
 const resolvePurchaseLedgerInvoiceType = (purchase) =>
-  String(purchase?.paymentType || 'Cash') === 'Credit' ? 'credit' : 'cash';
+  String(purchase?.type || 'cash').toLowerCase() === 'credit' ? 'credit' : 'cash';
 
 module.exports = {
   normalizeCustomerInvoiceType,

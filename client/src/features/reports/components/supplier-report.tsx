@@ -19,7 +19,7 @@ interface SupplierReportProps {
 export const SupplierReport = forwardRef<{ exportToExcel: () => void }, SupplierReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t, language } = useLanguage()
-    const { data, isLoading } = useGetSupplierReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetSupplierReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

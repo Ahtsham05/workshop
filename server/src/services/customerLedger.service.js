@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { CustomerLedger, Customer, Invoice } = require('../models');
+const { CustomerLedger, Customer, Invoice, Wallet } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { normalizeCustomerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
@@ -123,9 +123,27 @@ const syncCashBookFromCustomerLedger = async (entry) => {
   const debitAmt = Number(entry.debit) || 0;
   const creditAmt = Number(entry.credit) || 0;
 
+  // A wallet-tagged entry normally gets no Cash Book line (the Wallet ledger already
+  // captures that movement) — UNLESS the named wallet is itself a "cash" account type
+  // (e.g. the default "Cash in Hand" account), in which case it genuinely IS cash and
+  // Cash Book / Cash-in-Hand summary must still reflect it, tagged plainly as 'cash'.
+  // Same reasoning/fix as supplierLedger.service.js's syncCashBookFromSupplierLedger.
+  let cashBookPaymentMethod = entry.paymentMethod || 'cash';
+  let treatWalletAsCash = false;
+  if (isWalletLedgerMethod(entry.paymentMethod)) {
+    const walletName = parseWalletType(entry.paymentMethod);
+    const wallet = walletName
+      ? await Wallet.findOne({ organizationId: entry.organizationId, branchId: entry.branchId, type: walletName }).select('accountType')
+      : null;
+    if (wallet && wallet.accountType === 'cash') {
+      treatWalletAsCash = true;
+      cashBookPaymentMethod = 'cash';
+    }
+  }
+
   const cashLike =
     Boolean(entry.paymentMethod && String(entry.paymentMethod).trim()) &&
-    !isWalletLedgerMethod(entry.paymentMethod) &&
+    (!isWalletLedgerMethod(entry.paymentMethod) || treatWalletAsCash) &&
     !isCreditLedgerPayment(entry.paymentMethod);
 
   const createCashBookLine = ({ type, amount, source }) =>
@@ -135,7 +153,7 @@ const syncCashBookFromCustomerLedger = async (entry) => {
       type,
       source,
       amount,
-      paymentMethod: entry.paymentMethod || 'cash',
+      paymentMethod: cashBookPaymentMethod,
       referenceId: entry._id,
       referenceModel: 'CustomerLedger',
       description: entry.description || 'Customer ledger',

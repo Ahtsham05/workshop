@@ -61,6 +61,19 @@ function focusNextInChain(fieldIds: string[], currentId: string, scope: ParentNo
 export function makeEnterChain(fieldIds: string[], options: EnterChainOptions = {}) {
   const getScope = () => resolveScope(options.scopeRef)
 
+  /** Move focus from `currentId` to the next chained field — callable directly (e.g. after
+   * a combobox selection completes) as well as from a keydown handler. */
+  const advance = (currentId: string) => {
+    const scope = getScope()
+    const advanced = focusNextInChain(fieldIds, currentId, scope)
+    if (advanced) return
+
+    if (options.submitButtonRef?.current) {
+      focusField(options.submitButtonRef.current, false)
+    }
+    options.onLast?.()
+  }
+
   const handler =
     (currentId: string) => (e: ReactKeyboardEvent<HTMLElement>) => {
       if (e.key !== 'Enter') return
@@ -80,15 +93,7 @@ export function makeEnterChain(fieldIds: string[], options: EnterChainOptions = 
 
       e.preventDefault()
       e.stopPropagation()
-
-      const scope = getScope()
-      const advanced = focusNextInChain(fieldIds, currentId, scope)
-      if (advanced) return
-
-      if (options.submitButtonRef?.current) {
-        focusField(options.submitButtonRef.current, false)
-      }
-      options.onLast?.()
+      advance(currentId)
     }
 
   const enterProps = (fieldId: string) => {
@@ -111,7 +116,14 @@ export function makeEnterChain(fieldIds: string[], options: EnterChainOptions = 
     }
   }
 
-  return { enterProps, focusFirst, fieldIds }
+  /** Focus an arbitrary chained field by id (e.g. a newly-appended row's first field). */
+  const focusById = (fieldId: string) => {
+    const scope = getScope()
+    const el = findFieldElement(fieldId, scope)
+    if (isEnterFieldFocusable(el)) focusField(el)
+  }
+
+  return { enterProps, focusFirst, focusById, advance, fieldIds }
 }
 
 /**

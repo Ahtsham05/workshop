@@ -98,7 +98,7 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
 
     const [companyFilter, setCompanyFilter] = useState<string>('all')
 
-    const { data, isLoading } = useGetBillPaymentReportQuery({
+    const { data, isFetching: isLoading } = useGetBillPaymentReportQuery({
       startDate,
       endDate,
       billType: billTypeFilter !== 'all' ? billTypeFilter : undefined,

@@ -126,8 +126,16 @@ const InvoiceSchema = new mongoose.Schema({
     },
     // Wallet name when paymentMethod is 'wallet' (e.g. 'JazzCash', 'EasyPaisa')
     walletType: { type: String },
+    // Optional second payment leg — e.g. customer paid partly cash, partly from a wallet/bank
+    // account in the same sale. Always the opposite "bucket" from `paymentMethod` (cash vs
+    // wallet) so the two legs land in different ledgers (Cash Book vs Wallet Entry) and never
+    // collide on the same reference key.
+    splitPaymentMethod: { type: String, enum: ['cash', 'wallet'] },
+    splitWalletType: { type: String },
+    splitPaidAmount: { type: Number, default: 0, min: 0 },
 
-    // POS features
+    // POS features (legacy/unused — kept for backward compatibility with any historical data;
+    // superseded by paymentMethod/walletType + splitPaymentMethod/splitWalletType/splitPaidAmount)
     splitPayment: [splitPaymentSchema],
     loyaltyPoints: { type: Number, default: 0, min: 0 },
     couponCode: { type: String },

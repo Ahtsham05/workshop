@@ -132,8 +132,20 @@ export interface Purchase {
   discountValue?: number;
   paidAmount?: number;
   balance?: number;
-  paymentType?: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit' | 'Wallet';
+  // Settlement status — does the unpaid remainder become a real Supplier Ledger debt?
+  // Separate from `paymentMethod` (which account absorbs `paidAmount`) so a Credit purchase
+  // can still be paid partially right now from a real account.
+  type?: 'cash' | 'credit';
+  paymentMethod?: 'cash' | 'wallet';
   walletType?: string;
+  // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account) —
+  // always the opposite bucket from `paymentMethod`.
+  splitPaymentMethod?: 'cash' | 'wallet';
+  splitWalletType?: string;
+  splitPaidAmount?: number;
+  // Legacy combined status+account field, still present on records read from the server for
+  // backward-compat display — no longer written to directly by this form.
+  paymentType?: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit' | 'Wallet';
   notes?: string;
   date: string;
   createdAt?: string;
@@ -172,8 +184,12 @@ const PurchaseInvoicePage = () => {
     discountValue: 0,
     paidAmount: 0,
     balance: 0,
-    paymentType: 'Cash',
+    type: 'cash',
+    paymentMethod: 'cash',
     walletType: undefined,
+    splitPaymentMethod: undefined,
+    splitWalletType: undefined,
+    splitPaidAmount: 0,
     notes: '',
     date: new Date().toISOString(),
   });
@@ -262,8 +278,12 @@ const PurchaseInvoicePage = () => {
       discountValue: 0,
       paidAmount: 0,
       balance: 0,
-      paymentType: 'Cash',
+      type: 'cash',
+      paymentMethod: 'cash',
       walletType: undefined,
+      splitPaymentMethod: undefined,
+      splitWalletType: undefined,
+      splitPaidAmount: 0,
       notes: '',
       date: new Date().toISOString(),
     });
@@ -482,7 +502,7 @@ const PurchaseInvoicePage = () => {
           balance: match.balance,
           picture: match.picture,
         },
-        paymentType: 'Credit',
+        type: 'credit',
       };
     });
   }, [search.supplierId, suppliersData, currentView, isEditing]);
@@ -786,8 +806,12 @@ const PurchaseInvoicePage = () => {
       discountValue: 0,
       paidAmount: 0,
       balance: 0,
-      paymentType: 'Cash',
+      type: 'cash',
+      paymentMethod: 'cash',
       walletType: undefined,
+      splitPaymentMethod: undefined,
+      splitWalletType: undefined,
+      splitPaidAmount: 0,
       notes: '',
       date: new Date().toISOString(),
     });
@@ -809,8 +833,12 @@ const PurchaseInvoicePage = () => {
       discountValue: 0,
       paidAmount: 0,
       balance: 0,
-      paymentType: 'Cash',
+      type: 'cash',
+      paymentMethod: 'cash',
       walletType: undefined,
+      splitPaymentMethod: undefined,
+      splitWalletType: undefined,
+      splitPaidAmount: 0,
       notes: '',
       date: new Date().toISOString(),
     });
@@ -893,13 +921,23 @@ const PurchaseInvoicePage = () => {
     
     console.log('Transformed items:', transformedItems);
     
+    // Older purchases only have the legacy `paymentType` string — derive `type`/`paymentMethod`
+    // from it when the new fields aren't present on the record being edited.
+    const legacyPaymentType = purchaseToEdit.paymentType || 'Cash';
+    const derivedType = purchaseToEdit.type || (legacyPaymentType === 'Credit' ? 'credit' : 'cash');
+    const derivedPaymentMethod = purchaseToEdit.paymentMethod || (legacyPaymentType === 'Wallet' ? 'wallet' : 'cash');
+
     setPurchase({
       ...purchaseToEdit,
       items: transformedItems,
       supplier: purchaseToEdit.supplier || ({} as Supplier),
       date: purchaseToEdit.purchaseDate || purchaseToEdit.date || new Date().toISOString(),
-      paymentType: purchaseToEdit.paymentType || 'Cash', // Ensure paymentType has valid default
+      type: derivedType,
+      paymentMethod: derivedPaymentMethod,
       walletType: purchaseToEdit.walletType || undefined,
+      splitPaymentMethod: purchaseToEdit.splitPaymentMethod || undefined,
+      splitWalletType: purchaseToEdit.splitWalletType || undefined,
+      splitPaidAmount: purchaseToEdit.splitPaidAmount || 0,
       discountType: purchaseToEdit.discountType || 'fixed',
       discountValue: purchaseToEdit.discountValue || 0,
     });

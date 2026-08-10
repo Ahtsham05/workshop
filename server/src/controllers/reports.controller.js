@@ -1,8 +1,9 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer, SalesmanCommissionLedger, PartnerProfitShareLedger } = require('../models');
-const { cashBookService, stockAdjustmentService, mobileDashboardService } = require('../services');
+const ApiError = require('../utils/ApiError');
+const { Invoice, Product, Customer, Purchase, Supplier, Expense, SalesReturn, PurchaseReturn, LoadTransaction, LoadPurchase, Wallet, RepairJob, ServiceInvoice, CashWithdrawal, BillPayment, SimSale, InstallmentPlan, InstallmentPayment, CustomerLedger, SupplierLedger, PersonalLedger, ProductVariant, Batch, Inventory, StockAdjustment, InventoryTransfer, Imei, WalletTransfer, SalesmanCommissionLedger, PartnerProfitShareLedger, WalletEntry, BankReconciliationSession } = require('../models');
+const { cashBookService, stockAdjustmentService, mobileDashboardService, walletService } = require('../services');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 
 /**
@@ -4826,6 +4827,161 @@ const getPartnerProfitShareReport = catchAsync(async (req, res) => {
   });
 });
 
+/* ── Bank & Cash Position (cross-account rollup) ──────────────────────────── */
+const getBankPositionReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+
+  const wallets = await Wallet.find(scope).sort({ type: 1 }).lean();
+
+  if (wallets.length === 0) {
+    return res.status(httpStatus.OK).send({
+      accounts: [],
+      totals: { totalBalance: 0, totalUnreconciled: 0, accountsNeedingAttention: 0 },
+    });
+  }
+
+  const walletIds = wallets.map((w) => w._id);
+  const walletTypes = wallets.map((w) => w.type);
+
+  const [unreconciledRows, lastSessionRows] = await Promise.all([
+    WalletEntry.aggregate([
+      { $match: { ...scope, walletType: { $in: walletTypes }, isReconciled: { $ne: true } } },
+      { $group: { _id: '$walletType', count: { $sum: 1 } } },
+    ]),
+    BankReconciliationSession.aggregate([
+      { $match: { ...scope, bankAccountId: { $in: walletIds } } },
+      { $sort: { statementEndDate: -1 } },
+      { $group: { _id: '$bankAccountId', lastSession: { $first: '$$ROOT' } } },
+    ]),
+  ]);
+
+  const unreconciledMap = new Map(unreconciledRows.map((r) => [r._id, r.count]));
+  const lastSessionMap = new Map(lastSessionRows.map((r) => [String(r._id), r.lastSession]));
+
+  const accounts = await Promise.all(
+    wallets.map(async (wallet) => {
+      const currentBalance =
+        wallet.accountType === 'cash'
+          ? await walletService.resolveCashInHandBalance(scope.organizationId, scope.branchId)
+          : wallet.balance || 0;
+      const lastSession = lastSessionMap.get(String(wallet._id)) || null;
+      const unreconciledCount = unreconciledMap.get(wallet.type) || 0;
+      const lastDifference = lastSession ? roundReportAmount(lastSession.difference) : null;
+
+      return {
+        bankAccountId: String(wallet._id),
+        bankAccountName: wallet.type,
+        accountType: wallet.accountType || 'other',
+        bankName: wallet.bankName || null,
+        accountNumber: wallet.accountNumber || null,
+        currentBalance: roundReportAmount(currentBalance),
+        // Statement-matching reconciliation doesn't apply to a cash-type account (no
+        // external bank statement exists for physical cash — it's reconciled by counting
+        // the drawer against Cash Book on the Track Cash page instead). unreconciledCount/
+        // lastReconciledAt/lastDifference below are kept as-is (WalletEntry-only, so
+        // structurally incomplete for a cash-type account) purely as historical data —
+        // `reconciliationApplicable: false` tells the client not to compute a Needs
+        // Attention status from them.
+        reconciliationApplicable: wallet.accountType !== 'cash',
+        unreconciledCount,
+        lastReconciledAt: lastSession ? lastSession.statementEndDate : null,
+        lastReconciledBalance: lastSession ? roundReportAmount(lastSession.statementClosingBalance) : null,
+        lastDifference,
+      };
+    })
+  );
+
+  const totalBalance = roundReportAmount(accounts.reduce((sum, a) => sum + a.currentBalance, 0));
+  const totalUnreconciled = accounts
+    .filter((a) => a.reconciliationApplicable)
+    .reduce((sum, a) => sum + a.unreconciledCount, 0);
+  const accountsNeedingAttention = accounts.filter(
+    (a) => a.reconciliationApplicable && (a.unreconciledCount > 0 || !a.lastReconciledAt || Math.abs(a.lastDifference || 0) > 0.01)
+  ).length;
+
+  res.status(httpStatus.OK).send({
+    accounts,
+    totals: { totalBalance, totalUnreconciled, accountsNeedingAttention },
+  });
+});
+
+/* ── Bank Reconciliation Report (all sessions, all accounts) ─────────────── */
+const getBankReconciliationSessionsReport = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { start, end } = parseRange(req.query);
+
+  const filter = { ...scope, statementEndDate: { $gte: start, $lte: end } };
+
+  const sessions = await BankReconciliationSession.find(filter)
+    .sort({ statementEndDate: -1 })
+    .populate('createdBy', 'name email')
+    .lean();
+
+  const results = sessions.map((s) => ({
+    _id: String(s._id),
+    bankAccountId: String(s.bankAccountId),
+    bankAccountName: s.bankAccountName,
+    statementStartDate: s.statementStartDate,
+    statementEndDate: s.statementEndDate,
+    statementClosingBalance: roundReportAmount(s.statementClosingBalance),
+    bookClosingBalance: roundReportAmount(s.bookClosingBalance),
+    difference: roundReportAmount(s.difference),
+    matchedCount: s.matchedCount,
+    createdBy: s.createdBy ? { name: s.createdBy.name, email: s.createdBy.email } : null,
+    createdAt: s.createdAt,
+  }));
+
+  const summary = {
+    totalSessions: results.length,
+    balancedSessions: results.filter((s) => Math.abs(s.difference) < 0.01).length,
+    totalMatchedEntries: results.reduce((sum, s) => sum + (s.matchedCount || 0), 0),
+  };
+
+  res.status(httpStatus.OK).send({ results, summary, period: { startDate: start, endDate: end } });
+});
+
+/* ── Bank Reconciliation Report — single session detail (printable) ──────── */
+const getBankReconciliationSessionDetail = catchAsync(async (req, res) => {
+  const scope = buildScope(req);
+  const { sessionId } = req.params;
+
+  const session = await BankReconciliationSession.findOne({ _id: sessionId, ...scope })
+    .populate('createdBy', 'name email')
+    .lean();
+
+  if (!session) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Reconciliation session not found');
+  }
+
+  const entries = await WalletEntry.find({ ...scope, reconciledSessionId: session._id })
+    .sort({ date: 1 })
+    .lean();
+
+  res.status(httpStatus.OK).send({
+    session: {
+      _id: String(session._id),
+      bankAccountId: String(session.bankAccountId),
+      bankAccountName: session.bankAccountName,
+      statementStartDate: session.statementStartDate,
+      statementEndDate: session.statementEndDate,
+      statementClosingBalance: roundReportAmount(session.statementClosingBalance),
+      bookClosingBalance: roundReportAmount(session.bookClosingBalance),
+      difference: roundReportAmount(session.difference),
+      matchedCount: session.matchedCount,
+      createdBy: session.createdBy ? { name: session.createdBy.name, email: session.createdBy.email } : null,
+      createdAt: session.createdAt,
+    },
+    entries: entries.map((e) => ({
+      _id: String(e._id),
+      date: e.date,
+      type: e.type,
+      amount: roundReportAmount(e.amount),
+      description: e.description || '',
+      referenceModel: e.referenceModel,
+    })),
+  });
+});
+
 module.exports = {
   getSalesInvoiceDetails,
   getPurchaseInvoiceDetails,
@@ -4842,4 +4998,7 @@ module.exports = {
   getDailySalesSummaryReport,
   getSalesmanCommissionReport,
   getPartnerProfitShareReport,
+  getBankPositionReport,
+  getBankReconciliationSessionsReport,
+  getBankReconciliationSessionDetail,
 };

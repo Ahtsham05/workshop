@@ -69,10 +69,27 @@ const PurchaseSchema = new mongoose.Schema({
   discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
   discount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for the whole purchase
   totalAmount: { type: Number, required: true },
-  paidAmount: { type: Number, default: 0 }, // Amount paid at time of purchase
-  balance: { type: Number, default: 0 }, // Remaining balance (totalAmount - paidAmount)
+  paidAmount: { type: Number, default: 0 }, // Amount paid at time of purchase — total across payment + split legs
+  balance: { type: Number, default: 0 }, // Remaining balance (totalAmount - paidAmount) — negative means overpaid
+  // Settlement status — does the unpaid remainder become a real Supplier Ledger debt?
+  // Kept separate from `paymentMethod` (which account the paidAmount itself went through),
+  // mirroring Invoice's `type`/`paymentMethod` split — a Credit purchase can still be paid
+  // partially right now from a real account, which `paymentType` alone couldn't represent.
+  type: { type: String, enum: ['cash', 'credit'], default: 'cash' },
+  // Which account absorbed `paidAmount` (minus any split leg below). 'wallet' pairs with `walletType`.
+  paymentMethod: { type: String, enum: ['cash', 'wallet'], default: 'cash' },
+  // Legacy combined status+account field — kept for backward compatibility with existing
+  // reports/accounting code that reads it directly (`Cash`/`Credit`/`Wallet`). Server-derived
+  // from `type`+`paymentMethod` on every save; no longer trusted from client input.
   paymentType: { type: String, enum: ['Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet'], default: 'Cash' },
   walletType: { type: String, trim: true },
+  // Optional second payment leg — e.g. supplier paid partly cash, partly from a wallet/bank
+  // account in the same transaction. Always the opposite "bucket" from `paymentMethod` (cash
+  // vs wallet) so the two legs land in different ledgers (Cash Book vs Wallet Entry) and never
+  // collide on the same reference key.
+  splitPaymentMethod: { type: String, enum: ['cash', 'wallet'] },
+  splitWalletType: { type: String, trim: true },
+  splitPaidAmount: { type: Number, default: 0, min: 0 },
   notes: { type: String },
   status: { type: Boolean, default: false },
 }, {

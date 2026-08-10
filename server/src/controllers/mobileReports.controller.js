@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, WalletEntry, RepairJob, ServiceInvoice, CashWithdrawal, SimSale, Purchase } = require('../models');
+const { Expense, Invoice, LoadPurchase, LoadTransaction, Wallet, WalletEntry, RepairJob, ServiceInvoice, CashWithdrawal, SimSale, Purchase, CashBookEntry } = require('../models');
+const { resolveCashInHandBalance } = require('../services/wallet.service');
 const { isValidObjectId } = mongoose;
 
 const { parseBusinessDateBoundary: parseDateBoundary, toBusinessCalendarDate, eachBusinessCalendarDate, BUSINESS_TZ } = require('../utils/businessTimezone');
@@ -175,6 +176,31 @@ const getExpenseReport = catchAsync(async (req, res) => {
   res.send({ range, expenses, loadPurchases });
 });
 
+// Friendly title per CashBookEntry.source, for the rows a cash-type Bank Account
+// pulls in from Cash Book (see getWalletBalanceStatement) that have no more specific
+// referenceModel-based title below. Mirrors CASH_MODULE_LABELS' referenceModel-keyed
+// map in cashBook.service.js, but keyed by `source` since that's what's on every row.
+const CASH_BOOK_SOURCE_TITLES = {
+  sale: 'Sale Payment',
+  load: 'Load Transaction',
+  repair: 'Repair Payment',
+  service: 'Service Payment',
+  purchase: 'Purchase Payment',
+  expense: 'Expense',
+  other: 'Cash Transaction',
+  sales_return: 'Sales Return',
+  purchase_return: 'Purchase Return',
+  bill_payment: 'Bill Payment',
+  opening_balance: 'Opening Balance',
+  installment: 'Installment Payment',
+  wallet: 'Wallet Transaction',
+  used_phone_buyback: 'Used Phone Buyback',
+  commission_payment: 'Commission Payment',
+  partner_share_payment: 'Partner Share Payment',
+  payment_voucher: 'Payment Voucher',
+  receipt_voucher: 'Receipt Voucher',
+};
+
 /**
  * Wallet Balance Statement
  * Returns day-by-day opening balance → sold → profit → closing balance.
@@ -205,7 +231,12 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   const walletMatch = { organizationId, type: walletType };
   if (branchId) walletMatch.branchId = branchId;
   const wallet = await Wallet.findOne(walletMatch);
-  const currentBalance = wallet ? wallet.balance : 0;
+  const currentBalance =
+    wallet && wallet.accountType === 'cash'
+      ? await resolveCashInHandBalance(organizationId, branchId)
+      : wallet
+        ? wallet.balance
+        : 0;
 
   const txBaseMatch = { organizationId, walletType };
   if (branchId) txBaseMatch.branchId = branchId;
@@ -262,6 +293,41 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   const totalWalletInAfter = walletEntryAfterRes[0] ? walletEntryAfterRes[0].totalIn : 0;
   const totalWalletOutAfter = walletEntryAfterRes[0] ? walletEntryAfterRes[0].totalOut : 0;
 
+  // A cash-type Bank Account (e.g. the default "Cash in Hand") has no WalletEntry trail
+  // of its own for most modules — Invoice/Purchase/Expense/etc. post its cash leg straight
+  // to CashBookEntry instead (CashBookEntry carries no walletType; it's the org/branch's
+  // single cash ledger, same scoping resolveCashInHandBalance already uses). Only the
+  // voucher/ledger sources (Payment/Receipt Voucher, Supplier/Customer Ledger) post BOTH —
+  // a WalletEntry for the balance move *and* a CashBookEntry mirror for Cash Book visibility
+  // — so those must be excluded here by (referenceId, referenceModel) to avoid double-counting
+  // the same movement twice into the after-end correction.
+  const isCashWallet = !!(wallet && wallet.accountType === 'cash');
+  let cashBookImpactAfterEnd = 0;
+  if (isCashWallet) {
+    const [walletEntryAfterEndDocs, cashBookAfterEndDocs] = await Promise.all([
+      WalletEntry.find({ organizationId, ...(branchId ? { branchId } : {}), walletType, date: { $gt: end } })
+        .select('referenceId referenceModel')
+        .lean(),
+      // paymentMethod: 'cash' matches getCashInHandSummary's own filter exactly (see
+      // cashBook.service.js) — the live balance this page's currentBalance/closingAtEnd
+      // are built from only ever counts 'cash'-tagged rows, so the detail list must use
+      // the identical filter or the two would silently disagree.
+      CashBookEntry.find({ organizationId, ...(branchId ? { branchId } : {}), paymentMethod: 'cash', date: { $gt: end } })
+        .select('referenceId referenceModel type amount')
+        .lean(),
+    ]);
+    const walletEntryAfterEndKeys = new Set(
+      walletEntryAfterEndDocs
+        .filter((e) => e.referenceId && e.referenceModel)
+        .map((e) => `${e.referenceId}:${e.referenceModel}`)
+    );
+    cashBookImpactAfterEnd = cashBookAfterEndDocs.reduce((sum, entry) => {
+      const key = entry.referenceId && entry.referenceModel ? `${entry.referenceId}:${entry.referenceModel}` : null;
+      if (key && walletEntryAfterEndKeys.has(key)) return sum;
+      return sum + (entry.type === 'income' ? Number(entry.amount || 0) : -Number(entry.amount || 0));
+    }, 0);
+  }
+
   // closingAtEnd = currentBalance - (all wallet impacts after end)
   const totalImpactAfterEnd =
     -totalLoadAfter +
@@ -270,11 +336,12 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     totalSimSaleLoadAfter +
     totalLoadPurchaseAfter +
     totalWalletInAfter -
-    totalWalletOutAfter;
+    totalWalletOutAfter +
+    cashBookImpactAfterEnd;
   const closingAtEnd = currentBalance - totalImpactAfterEnd;
 
   // ── 3. Daily aggregation within range ──
-  const [dailyLoad, dailyCash, dailySimSale, dailyLoadPurchase, loadDetails, cashDetails, simSaleDetails, loadPurchaseDetails, walletEntriesInRange] = await Promise.all([
+  const [dailyLoad, dailyCash, dailySimSale, dailyLoadPurchase, loadDetails, cashDetails, simSaleDetails, loadPurchaseDetails, walletEntriesInRange, cashBookEntriesInRange] = await Promise.all([
     LoadTransaction.aggregate([
       { $match: { ...txBaseMatch, date: { $gte: start, $lte: end } } },
       {
@@ -349,14 +416,45 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       .sort({ date: 1, createdAt: 1 })
       .select('date createdAt type amount referenceId referenceModel description')
       .lean(),
+    isCashWallet
+      ? CashBookEntry.find({ organizationId, ...(branchId ? { branchId } : {}), paymentMethod: 'cash', date: { $gte: start, $lte: end } })
+        .sort({ date: 1, createdAt: 1 })
+        .select('date createdAt type source amount referenceId referenceModel description notes')
+        .lean()
+      : Promise.resolve([]),
   ]);
 
-  const invoiceRefIds = walletEntriesInRange
-    .filter((entry) => entry.referenceModel === 'Invoice' && entry.referenceId)
-    .map((entry) => entry.referenceId);
-  const purchaseRefIds = walletEntriesInRange
-    .filter((entry) => entry.referenceModel === 'Purchase' && entry.referenceId)
-    .map((entry) => entry.referenceId);
+  // Voucher/ledger sources post both a WalletEntry (balance move) and a CashBookEntry
+  // (Cash Book mirror) for a cash-type account — same (referenceId, referenceModel) pair
+  // in both, per module 2f/2c/3's sync services. Everything else (Invoice/Purchase/Expense/
+  // RepairJob/BillPayment/...) only ever posts the CashBookEntry side for a cash-type
+  // account, so it's excluded from this set and passes through untouched below.
+  const walletEntryRefKeys = new Set(
+    walletEntriesInRange
+      .filter((entry) => entry.referenceId && entry.referenceModel)
+      .map((entry) => `${entry.referenceId}:${entry.referenceModel}`)
+  );
+  const cashBookOnlyEntries = cashBookEntriesInRange.filter((entry) => {
+    const key = entry.referenceId && entry.referenceModel ? `${entry.referenceId}:${entry.referenceModel}` : null;
+    return !key || !walletEntryRefKeys.has(key);
+  });
+
+  const invoiceRefIds = [
+    ...walletEntriesInRange
+      .filter((entry) => entry.referenceModel === 'Invoice' && entry.referenceId)
+      .map((entry) => entry.referenceId),
+    ...cashBookOnlyEntries
+      .filter((entry) => entry.referenceModel === 'Invoice' && entry.referenceId)
+      .map((entry) => entry.referenceId),
+  ];
+  const purchaseRefIds = [
+    ...walletEntriesInRange
+      .filter((entry) => entry.referenceModel === 'Purchase' && entry.referenceId)
+      .map((entry) => entry.referenceId),
+    ...cashBookOnlyEntries
+      .filter((entry) => entry.referenceModel === 'Purchase' && entry.referenceId)
+      .map((entry) => entry.referenceId),
+  ];
 
   const [invoiceRefs, purchaseRefs] = await Promise.all([
     invoiceRefIds.length > 0
@@ -542,6 +640,10 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     } else if (entry.referenceModel === 'WalletTransfer') {
       title = entry.type === 'in' ? 'Transfer from My Personal Account' : 'Transfer to My Personal Account';
       customerName = 'My Personal Account';
+    } else if (entry.referenceModel === 'PaymentVoucher') {
+      title = 'Payment Voucher';
+    } else if (entry.referenceModel === 'ReceiptVoucher') {
+      title = 'Receipt Voucher';
     }
 
     ensureBucket(dateKey).push({
@@ -561,6 +663,55 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       extraCharge: 0,
       profit: 0,
       paymentMethod: `wallet (${walletType})`,
+      notes,
+    });
+  });
+
+  cashBookOnlyEntries.forEach((entry) => {
+    const dateKey = toCalendarDateKey(entry.date);
+    const impact = entry.type === 'income' ? Number(entry.amount || 0) : -Number(entry.amount || 0);
+    let title = CASH_BOOK_SOURCE_TITLES[entry.source] || 'Cash Transaction';
+    let accountNumber = '';
+    let customerName = '';
+    let notes = entry.description || entry.notes || '';
+
+    if (entry.referenceModel === 'Invoice') {
+      const inv = invoiceRefMap[String(entry.referenceId)];
+      title = entry.type === 'income' ? 'Sale Payment Received' : 'Sale Refund Paid';
+      accountNumber = inv?.invoiceNumber || '';
+      customerName =
+        inv?.customerName ||
+        inv?.walkInCustomerName ||
+        (inv?.customerId && customerMap[String(inv.customerId)] ? customerMap[String(inv.customerId)].name : '') ||
+        '';
+    } else if (entry.referenceModel === 'Purchase') {
+      const pur = purchaseRefMap[String(entry.referenceId)];
+      title = entry.type === 'expense' ? 'Purchase Payment Sent' : 'Purchase Refund Received';
+      accountNumber = pur?.invoiceNumber || '';
+      customerName = pur?.supplier?.name || '';
+    } else if (entry.referenceModel === 'SupplierLedger') {
+      title = entry.type === 'expense' ? 'Supplier Payment' : 'Supplier Refund';
+    } else if (entry.referenceModel === 'CustomerLedger') {
+      title = entry.type === 'income' ? 'Customer Receipt' : 'Customer Refund';
+    }
+
+    ensureBucket(dateKey).push({
+      id: String(entry._id),
+      date: entry.date,
+      createdAt: entry.createdAt,
+      source: 'cash_book',
+      referenceModel: entry.referenceModel || '',
+      transactionType: entry.type === 'income' ? 'cash_in' : 'cash_out',
+      title,
+      accountNumber,
+      customerName,
+      network: '',
+      amount: Number(entry.amount || 0),
+      walletImpact: impact,
+      cashAmount: Number(entry.amount || 0),
+      extraCharge: 0,
+      profit: 0,
+      paymentMethod: 'cash',
       notes,
     });
   });

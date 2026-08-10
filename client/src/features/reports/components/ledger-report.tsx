@@ -214,9 +214,9 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
     const [searchQuery, setSearchQuery] = useState('')
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
-    const { data: salesDetailData, isLoading: salesLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
-    const { data: purchaseDetailData, isLoading: purchaseLoading } = useGetPurchaseInvoiceDetailsQuery({ startDate, endDate })
-    const { data: activityData, isLoading: activityLoading } = useGetActivitySummaryReportQuery({ startDate, endDate })
+    const { data: salesDetailData, isFetching: salesLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
+    const { data: purchaseDetailData, isFetching: purchaseLoading } = useGetPurchaseInvoiceDetailsQuery({ startDate, endDate })
+    const { data: activityData, isFetching: activityLoading } = useGetActivitySummaryReportQuery({ startDate, endDate })
 
     const isLoading = salesLoading || purchaseLoading || activityLoading
 

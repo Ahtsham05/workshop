@@ -89,6 +89,9 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/staff', anyPermission: ['viewStaff'] },
   { prefix: '/salesmen', anyPermission: ['viewSalesmen'] },
   { prefix: '/partners', anyPermission: ['viewPartners'] },
+  { prefix: '/payment-vouchers', anyPermission: ['viewPaymentVouchers'] },
+  { prefix: '/bank-account-statement', anyPermission: ['viewWallet'] },
+  { prefix: '/bank-reconciliation', anyPermission: ['viewBankReconciliation'] },
 
   // Subscription (platform admins)
   { prefix: '/subscription', systemRoles: ['superAdmin', 'system_admin'] },

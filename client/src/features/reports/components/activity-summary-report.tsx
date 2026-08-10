@@ -300,7 +300,7 @@ export const ActivitySummaryReport = forwardRef<
   const [activeSection, setActiveSection] = useState<string | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
-  const { data, isLoading } = useGetActivitySummaryReportQuery({
+  const { data, isFetching: isLoading } = useGetActivitySummaryReportQuery({
     startDate,
     endDate,
   })

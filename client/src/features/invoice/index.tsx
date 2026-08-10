@@ -167,6 +167,11 @@ export interface Invoice {
   // Payment method (how customer paid)
   paymentMethod?: 'cash' | 'wallet' | 'bank' | 'card'
   walletType?: string
+  // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account) —
+  // always the opposite bucket from `paymentMethod`.
+  splitPaymentMethod?: 'cash' | 'wallet'
+  splitWalletType?: string
+  splitPaidAmount?: number
   // Additional POS features
   splitPayment?: SplitPayment[]
   loyaltyPoints?: number
@@ -267,6 +272,9 @@ export default function InvoicePage() {
     balance: 0,
     paymentMethod: 'cash',
     walletType: undefined,
+    splitPaymentMethod: undefined,
+    splitWalletType: undefined,
+    splitPaidAmount: 0,
     splitPayment: [],
     loyaltyPoints: 0,
     deliveryCharge: 0,
@@ -382,6 +390,9 @@ export default function InvoicePage() {
       balance: 0,
       paymentMethod: 'cash',
       walletType: undefined,
+      splitPaymentMethod: undefined,
+      splitWalletType: undefined,
+      splitPaidAmount: 0,
       splitPayment: [],
       loyaltyPoints: 0,
       deliveryCharge: 0,
@@ -918,8 +929,10 @@ export default function InvoicePage() {
       total: totals.total,
       totalProfit: totals.totalProfit,
       totalCost: totals.totalCost,
-      paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
-      balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount
+      // Once split-mode is on, the total being distributed is user-edited, not auto-forced —
+      // an unrelated item/quantity change shouldn't silently wipe out what was typed in.
+      paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+      balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount
     }))
     
     toast.success(`${product.name} added to invoice`)
@@ -955,8 +968,10 @@ export default function InvoicePage() {
       total: totals.total,
       totalProfit: totals.totalProfit,
       totalCost: totals.totalCost,
-      paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
-      balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount
+      // Once split-mode is on, the total being distributed is user-edited, not auto-forced —
+      // an unrelated item/quantity change shouldn't silently wipe out what was typed in.
+      paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+      balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount
     }))
   }, [invoice, calculateTotals, setProducts])
 
@@ -1055,8 +1070,8 @@ export default function InvoicePage() {
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
-        paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
-        balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount
       }))
       return
     }
@@ -1161,8 +1176,10 @@ export default function InvoicePage() {
       total: totals.total,
       totalProfit: totals.totalProfit,
       totalCost: totals.totalCost,
-      paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
-      balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount
+      // Once split-mode is on, the total being distributed is user-edited, not auto-forced —
+      // an unrelated item/quantity change shouldn't silently wipe out what was typed in.
+      paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+      balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount
     }))
   }, [invoice, calculateTotals, removeFromInvoice, products, setProducts, sellableCatalog])
 
@@ -1207,8 +1224,8 @@ export default function InvoicePage() {
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
-        paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
-        balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount,
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
       }
     })
   }, [calculateTotals])
@@ -1237,8 +1254,8 @@ export default function InvoicePage() {
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
-        paidAmount: prev.type === 'cash' ? totals.total : prev.paidAmount,
-        balance: prev.type === 'cash' ? 0 : totals.total - prev.paidAmount,
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
       }
     })
   }, [calculateTotals])
@@ -1298,6 +1315,9 @@ export default function InvoicePage() {
       balance: 0,
       paymentMethod: 'cash',
       walletType: undefined,
+      splitPaymentMethod: undefined,
+      splitWalletType: undefined,
+      splitPaidAmount: 0,
       splitPayment: [],
       loyaltyPoints: 0,
       deliveryCharge: 0,
@@ -1388,6 +1408,9 @@ export default function InvoicePage() {
       balance: invoiceData.balance || 0,
       paymentMethod: invoiceData.paymentMethod || 'cash',
       walletType: invoiceData.walletType || undefined,
+      splitPaymentMethod: invoiceData.splitPaymentMethod || undefined,
+      splitWalletType: invoiceData.splitWalletType || undefined,
+      splitPaidAmount: invoiceData.splitPaidAmount || 0,
       splitPayment: invoiceData.splitPayment || [],
       loyaltyPoints: invoiceData.loyaltyPoints || 0,
       deliveryCharge: invoiceData.deliveryCharge || 0,
@@ -1469,6 +1492,9 @@ export default function InvoicePage() {
       balance: 0,
       paymentMethod: 'cash',
       walletType: undefined,
+      splitPaymentMethod: undefined,
+      splitWalletType: undefined,
+      splitPaidAmount: 0,
       splitPayment: [],
       loyaltyPoints: 0,
       deliveryCharge: 0,

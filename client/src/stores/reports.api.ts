@@ -598,10 +598,10 @@ export interface WalletBalanceDetailItem {
   id: string
   date: string
   createdAt?: string
-  source: 'load' | 'cash_withdrawal' | 'sim_sale' | 'load_purchase' | 'wallet_entry'
-  /** Which model a 'wallet_entry' row came from (e.g. 'WalletTransfer') — unset for other sources. */
+  source: 'load' | 'cash_withdrawal' | 'sim_sale' | 'load_purchase' | 'wallet_entry' | 'cash_book'
+  /** Which model a 'wallet_entry'/'cash_book' row came from (e.g. 'WalletTransfer', 'Invoice') — unset for other sources. */
   referenceModel?: string
-  transactionType: 'load_sale' | 'withdrawal' | 'deposit' | 'sim_sale_load' | 'load_purchase' | 'wallet_in' | 'wallet_out'
+  transactionType: 'load_sale' | 'withdrawal' | 'deposit' | 'sim_sale_load' | 'load_purchase' | 'wallet_in' | 'wallet_out' | 'cash_in' | 'cash_out'
   title: string
   accountNumber: string
   customerName: string
@@ -1170,10 +1170,74 @@ export interface PartnerProfitShareReport {
   period: { startDate: string; endDate: string }
 }
 
+export interface BankPositionAccountRow {
+  bankAccountId: string
+  bankAccountName: string
+  accountType: 'cash' | 'bank' | 'mobile_wallet' | 'other'
+  bankName: string | null
+  accountNumber: string | null
+  currentBalance: number
+  /** false for a cash-type account — it has no bank statement to reconcile against, so
+   * unreconciledCount/lastReconciledAt/lastDifference below are historical only and should
+   * not drive a Needs Attention status. */
+  reconciliationApplicable: boolean
+  unreconciledCount: number
+  lastReconciledAt: string | null
+  lastReconciledBalance: number | null
+  lastDifference: number | null
+}
+
+export interface BankPositionReport {
+  accounts: BankPositionAccountRow[]
+  totals: {
+    totalBalance: number
+    totalUnreconciled: number
+    accountsNeedingAttention: number
+  }
+}
+
+export interface BankReconciliationSessionRow {
+  _id: string
+  bankAccountId: string
+  bankAccountName: string
+  statementStartDate: string | null
+  statementEndDate: string
+  statementClosingBalance: number
+  bookClosingBalance: number
+  difference: number
+  matchedCount: number
+  createdBy: { name: string; email: string } | null
+  createdAt: string
+}
+
+export interface BankReconciliationSessionsReport {
+  results: BankReconciliationSessionRow[]
+  summary: {
+    totalSessions: number
+    balancedSessions: number
+    totalMatchedEntries: number
+  }
+  period: { startDate: string; endDate: string }
+}
+
+export interface BankReconciliationSessionEntry {
+  _id: string
+  date: string
+  type: 'in' | 'out'
+  amount: number
+  description: string
+  referenceModel: string
+}
+
+export interface BankReconciliationSessionDetail {
+  session: BankReconciliationSessionRow
+  entries: BankReconciliationSessionEntry[]
+}
+
 export const reportsApi = createApi({
   reducerPath: 'reportsApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport', 'DailySalesSummaryReport', 'SalesmanCommissionReport', 'PartnerProfitShareReport'],
+  tagTypes: ['SalesReport', 'PurchaseReport', 'ProductReport', 'ProductDetailReport', 'CustomerReport', 'AgingReport', 'SupplierReport', 'SupplierAgingReport', 'ExpenseReport', 'ProfitLoss', 'ProfitLossFull', 'Inventory', 'Tax', 'SalesReturnsReport', 'PurchaseReturnsReport', 'LoadReport', 'WalletWiseReport', 'WalletBalanceStatement', 'RepairReport', 'ServiceReport', 'RoiReport', 'MonthlyRoi', 'SimSaleReport', 'InstallmentReport', 'ActivitySummaryReport', 'SalesPurchaseSummaryReport', 'StockAdjustmentReport', 'StockTransferReport', 'DailySalesSummaryReport', 'SalesmanCommissionReport', 'PartnerProfitShareReport', 'BankPositionReport', 'BankReconciliationSessionsReport'],
   endpoints: (builder) => ({
     getSalesReport: builder.query<{
       data: SalesReportData[]
@@ -1564,6 +1628,22 @@ export const reportsApi = createApi({
       },
       providesTags: ['PartnerProfitShareReport'],
     }),
+    getBankPositionReport: builder.query<BankPositionReport, void>({
+      query: () => '/bank-position',
+      providesTags: ['BankPositionReport'],
+    }),
+    getBankReconciliationSessionsReport: builder.query<BankReconciliationSessionsReport, { startDate?: string; endDate?: string }>({
+      query: (params) => {
+        const searchParams = new URLSearchParams()
+        if (params.startDate) searchParams.set('startDate', params.startDate)
+        if (params.endDate) searchParams.set('endDate', params.endDate)
+        return `/bank-reconciliation-sessions?${searchParams.toString()}`
+      },
+      providesTags: ['BankReconciliationSessionsReport'],
+    }),
+    getBankReconciliationSessionDetail: builder.query<BankReconciliationSessionDetail, string>({
+      query: (sessionId) => `/bank-reconciliation-sessions/${sessionId}`,
+    }),
   }),
 })
 
@@ -1605,4 +1685,7 @@ export const {
   useGetDailySalesSummaryReportQuery,
   useGetSalesmanCommissionReportQuery,
   useGetPartnerProfitShareReportQuery,
+  useGetBankPositionReportQuery,
+  useGetBankReconciliationSessionsReportQuery,
+  useLazyGetBankReconciliationSessionDetailQuery,
 } = reportsApi

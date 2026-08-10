@@ -92,7 +92,7 @@ export const SalesPurchaseSummaryReport = forwardRef<
   const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
   const showCashBookFeatures = isCashBookBusiness(org?.businessType || user?.businessType)
 
-  const { data, isLoading } = useGetSalesPurchaseSummaryReportQuery({ startDate, endDate })
+  const { data, isFetching: isLoading } = useGetSalesPurchaseSummaryReportQuery({ startDate, endDate })
 
   const visibleModules = useMemo(
     () => (data?.modules ?? []).filter((row) => !row.mobileOnly || isMobileShop),

@@ -148,11 +148,11 @@ export default function Dashboard() {
                 link={{ to: '/cash-register' }}
               />
               <StatCard
-                title={t('Wallet Balance')}
+                title={t('Bank Accounts Balance')}
                 value={stats?.walletBalance || 0}
                 icon={<WalletCards className='h-4 w-4' />}
                 valuePrefix='Rs '
-                description={t('Total balance across all wallets')}
+                description={t('Total balance across all bank accounts')}
                 isLoading={statsLoading}
                 tone='cyan'
                 link={{ to: '/mobile-shop/wallet' }}

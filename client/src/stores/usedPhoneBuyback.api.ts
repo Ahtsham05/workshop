@@ -1,7 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 import { imeiApi } from './imei.api'
-import { mobileShopApi } from './mobile-shop.api'
+import { invalidateWalletCaches } from './wallet-cache-invalidation'
 
 export type BuybackGrade = 'A' | 'B' | 'C' | 'D'
 export type BuybackPtaStatus = 'approved' | 'non_pta' | 'blocked' | 'unknown'
@@ -150,7 +150,7 @@ const invalidateDownstreamCaches = async (
   try {
     await queryFulfilled
     dispatch(imeiApi.util.invalidateTags(['Imei']))
-    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
+    invalidateWalletCaches(dispatch)
   } catch {
     // create/delete already failed — nothing to invalidate
   }

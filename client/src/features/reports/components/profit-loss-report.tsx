@@ -65,7 +65,7 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
       [preset, startDate, endDate]
     )
 
-    const { data, isLoading } = useGetProfitLossFullReportQuery(dates)
+    const { data, isFetching: isLoading } = useGetProfitLossFullReportQuery(dates)
 
     const fmt = (v: number) =>
       new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)

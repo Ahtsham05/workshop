@@ -98,6 +98,14 @@ const createInvoice = {
       then: Joi.required(),
       otherwise: Joi.allow('').optional(),
     }),
+    // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account).
+    splitPaymentMethod: Joi.string().valid('cash', 'wallet').allow(null, ''),
+    splitWalletType: Joi.string().trim().when('splitPaymentMethod', {
+      is: 'wallet',
+      then: Joi.required(),
+      otherwise: Joi.allow('').optional(),
+    }),
+    splitPaidAmount: Joi.number().min(0).optional(),
     loyaltyPoints: Joi.number().min(0).default(0),
     couponCode: Joi.string().allow('').optional(),
     returnPolicy: Joi.string().allow('').optional(),
@@ -173,6 +181,14 @@ const updateInvoice = {
       then: Joi.required(),
       otherwise: Joi.allow('').optional(),
     }),
+    // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account).
+    splitPaymentMethod: Joi.string().valid('cash', 'wallet').allow(null, ''),
+    splitWalletType: Joi.string().trim().when('splitPaymentMethod', {
+      is: 'wallet',
+      then: Joi.required(),
+      otherwise: Joi.allow('').optional(),
+    }),
+    splitPaidAmount: Joi.number().min(0).optional(),
     loyaltyPoints: Joi.number().min(0).optional(),
     couponCode: Joi.string().allow('').optional(),
     returnPolicy: Joi.string().allow('').optional(),

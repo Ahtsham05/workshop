@@ -35,18 +35,18 @@ interface ProductReportProps {
 export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t, language } = useLanguage()
-    const { data, isLoading } = useGetProductReportQuery({ startDate, endDate })
-    const { data: categoryData, isLoading: categoryLoading } = useGetProductsByCategoryQuery({
+    const { data, isFetching: isLoading } = useGetProductReportQuery({ startDate, endDate })
+    const { data: categoryData, isFetching: categoryLoading } = useGetProductsByCategoryQuery({
       period: 'custom',
       startDate,
       endDate,
     })
-    const { data: brandData, isLoading: brandLoading } = useGetProductsByBrandQuery({
+    const { data: brandData, isFetching: brandLoading } = useGetProductsByBrandQuery({
       period: 'custom',
       startDate,
       endDate,
     })
-    const { data: subCategoryData, isLoading: subCategoryLoading } = useGetProductsBySubCategoryQuery({
+    const { data: subCategoryData, isFetching: subCategoryLoading } = useGetProductsBySubCategoryQuery({
       period: 'custom',
       startDate,
       endDate,
@@ -1034,7 +1034,7 @@ function CategoryTransactionsPanel({
   endDate: string
 }) {
   const { t } = useLanguage()
-  const { data, isLoading } = useGetCategoryProductsQuery({ categoryId, period: 'custom', startDate, endDate })
+  const { data, isFetching: isLoading } = useGetCategoryProductsQuery({ categoryId, period: 'custom', startDate, endDate })
   return <ProductTransactionsTable items={data} isLoading={isLoading} emptyLabel={t('No products found in this category')} />
 }
 
@@ -1048,7 +1048,7 @@ function SubCategoryTransactionsPanel({
   endDate: string
 }) {
   const { t } = useLanguage()
-  const { data, isLoading } = useGetSubCategoryProductsQuery({ subCategoryId, period: 'custom', startDate, endDate })
+  const { data, isFetching: isLoading } = useGetSubCategoryProductsQuery({ subCategoryId, period: 'custom', startDate, endDate })
   return <ProductTransactionsTable items={data} isLoading={isLoading} emptyLabel={t('No products found in this sub-category')} />
 }
 
@@ -1062,6 +1062,6 @@ function BrandTransactionsPanel({
   endDate: string
 }) {
   const { t } = useLanguage()
-  const { data, isLoading } = useGetBrandProductsQuery({ brandId, period: 'custom', startDate, endDate })
+  const { data, isFetching: isLoading } = useGetBrandProductsQuery({ brandId, period: 'custom', startDate, endDate })
   return <ProductTransactionsTable items={data} isLoading={isLoading} emptyLabel={t('No products found for this brand')} />
 }

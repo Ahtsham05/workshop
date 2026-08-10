@@ -74,7 +74,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
   ({ startDate, endDate, mode = 'full', refreshTrigger = 0, onAddExpense, openCategoryRequest, onOpenCategoryHandled }, ref) => {
     const categoriesOnly = mode === 'categories'
     const { t } = useLanguage()
-    const { data, isLoading, refetch } = useGetExpenseReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading, refetch } = useGetExpenseReportQuery({ startDate, endDate })
     const [fetchCategory] = useLazyGetExpenseReportQuery()
 
     const [sheetOpen, setSheetOpen] = useState(false)

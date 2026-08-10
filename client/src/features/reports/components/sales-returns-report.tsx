@@ -23,7 +23,7 @@ interface SalesReturnsReportProps {
 export const SalesReturnsReport = forwardRef<{ exportToExcel: () => void }, SalesReturnsReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t, language } = useLanguage()
-    const { data, isLoading } = useGetSalesReturnsReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetSalesReturnsReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

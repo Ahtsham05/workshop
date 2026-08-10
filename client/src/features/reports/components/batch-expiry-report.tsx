@@ -22,7 +22,7 @@ export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((
   const [filter, setFilter] = useState<ExpiryFilter>('all')
   // Server-side `days` only filters "expiring within N days" — "expired" and "all"
   // are easiest to apply client-side since both need the full active-batch list anyway.
-  const { data, isLoading } = useGetBatchExpiryReportQuery(
+  const { data, isFetching: isLoading } = useGetBatchExpiryReportQuery(
     filter !== 'all' && filter !== 'expired' ? { days: Number(filter) } : undefined,
   )
 

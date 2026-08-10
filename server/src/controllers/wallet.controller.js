@@ -16,6 +16,7 @@ const upsertWallet = catchAsync(async (req, res) => {
 const getWallets = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['type']);
   applyBranchFilter(filter, req);
+  await walletService.ensureDefaultCashWallet({ ...getBranchContext(req), userId: req.user.id });
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await walletService.queryWallets(filter, options);
   res.send({

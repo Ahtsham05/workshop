@@ -4,21 +4,23 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolk
 import { imeiApi } from './imei.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
-import { mobileShopApi } from './mobile-shop.api'
+import { invalidateWalletCaches } from './wallet-cache-invalidation'
 
 /** Purchase mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
- *  batchApi/mobileShopApi, so receiving/editing/deleting a purchase doesn't auto-invalidate
- *  the IMEI picker, the product catalog's stock+batch chips, the per-variant batch list, or
- *  the Cash Book page (purchases post cash-book entries server-side) — those would
- *  otherwise stay stale until a full page reload. Force that refresh explicitly on every
- *  mutation that can change stock or create/restock a batch. */
+ *  batchApi/the wallet-cache slices, so receiving/editing/deleting a purchase doesn't
+ *  auto-invalidate the IMEI picker, the product catalog's stock+batch chips, the
+ *  per-variant batch list, or the Bank Accounts/Cash Book/Bank Statement/Reconciliation
+ *  pages (purchases post cash-book + wallet entries server-side) — those would otherwise
+ *  stay stale (showing the pre-purchase balance) until an unrelated action happens to
+ *  refetch them, or a full page reload. Force that refresh explicitly on every mutation
+ *  that can change stock, create/restock a batch, or move a bank account's balance. */
 const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
   try {
     await queryFulfilled
     dispatch(imeiApi.util.invalidateTags(['Imei']))
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
     dispatch(batchApi.util.invalidateTags(['Batch']))
-    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
+    invalidateWalletCaches(dispatch)
   } catch {
     // mutation failed — nothing to invalidate
   }

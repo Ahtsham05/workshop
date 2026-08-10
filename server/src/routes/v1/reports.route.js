@@ -89,6 +89,18 @@ router
   .route('/partner-profit-share')
   .get(auth('viewReports'), reportsController.getPartnerProfitShareReport);
 
+router
+  .route('/bank-position')
+  .get(auth('viewReports'), reportsController.getBankPositionReport);
+
+router
+  .route('/bank-reconciliation-sessions')
+  .get(auth('viewReports'), reportsController.getBankReconciliationSessionsReport);
+
+router
+  .route('/bank-reconciliation-sessions/:sessionId')
+  .get(auth('viewReports'), reportsController.getBankReconciliationSessionDetail);
+
 module.exports = router;
 
 /**

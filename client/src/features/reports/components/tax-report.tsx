@@ -17,7 +17,7 @@ interface TaxReportProps {
 export const TaxReport = forwardRef<{ exportToExcel: () => void }, TaxReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
-    const { data, isLoading } = useGetTaxReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetTaxReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

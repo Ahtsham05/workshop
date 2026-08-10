@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { SupplierLedger, Supplier, Customer, Invoice } = require('../models');
+const { SupplierLedger, Supplier, Customer, Invoice, Wallet } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { normalizeCustomerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildSupplierPurchaseLedgerEntries } = require('../utils/ledgerSettlement');
@@ -129,9 +129,29 @@ const syncCashBookFromSupplierLedger = async (entry) => {
   const isPaymentMade = transactionType === 'payment_made';
   const amount = Number(isPaymentMade ? entry.debit : entry.credit) || 0;
 
-  if (amount <= 0 || isWalletLedgerMethod(entry.paymentMethod)) {
+  if (amount <= 0) {
     await cashBookService.deleteEntriesByReference(entry._id, 'SupplierLedger');
     return null;
+  }
+
+  let cashBookPaymentMethod = entry.paymentMethod || 'cash';
+
+  if (isWalletLedgerMethod(entry.paymentMethod)) {
+    // Normally a wallet-tagged payment gets no Cash Book line — the Wallet ledger already
+    // captures that movement, and mirroring it here would double-count it in Cash Book's own
+    // totals. The one exception: a Bank Account flagged `accountType: 'cash'` (e.g. the
+    // default "Cash in Hand" account) genuinely IS cash leaving/entering the till, so Cash
+    // Book / Cash-in-Hand summary must still reflect it, tagged plainly as 'cash'.
+    const walletName = parseWalletType(entry.paymentMethod);
+    const wallet = walletName
+      ? await Wallet.findOne({ organizationId: entry.organizationId, branchId: entry.branchId, type: walletName }).select('accountType')
+      : null;
+
+    if (!wallet || wallet.accountType !== 'cash') {
+      await cashBookService.deleteEntriesByReference(entry._id, 'SupplierLedger');
+      return null;
+    }
+    cashBookPaymentMethod = 'cash';
   }
 
   return cashBookService.upsertReferenceEntry({
@@ -140,7 +160,7 @@ const syncCashBookFromSupplierLedger = async (entry) => {
     type: isPaymentMade ? 'expense' : 'income',
     source: 'purchase',
     amount,
-    paymentMethod: entry.paymentMethod || 'cash',
+    paymentMethod: cashBookPaymentMethod,
     referenceId: entry._id,
     referenceModel: 'SupplierLedger',
     description: entry.description || 'Supplier payment entry',

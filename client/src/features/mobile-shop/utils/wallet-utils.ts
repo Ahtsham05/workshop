@@ -8,6 +8,7 @@ export type WalletLike = {
   depositCommissionRate?: number
   updatedAt?: string
   isActive?: boolean
+  accountType?: string
 }
 
 /** Wallets whose name contains "load" use load purchase/sale flows */
@@ -19,6 +20,17 @@ export function filterLoadWallets<T extends WalletLike>(wallets: T[]): T[] {
 
 export function filterCashWallets<T extends WalletLike>(wallets: T[]): T[] {
   return wallets.filter((w) => !isLoadWalletName(w.type || ''))
+}
+
+/** Wallets eligible to be the "other side" of a Cash Management Send/Received transfer —
+ *  Load-named wallets excluded (their own purchase/sale flow), and — unlike
+ *  `filterCashWallets` above — the cash-type account itself (e.g. "Cash in Hand") is
+ *  excluded too: a transfer's whole point is exchanging between a real wallet and
+ *  cash-in-hand, so cash-in-hand can never be its own counterparty. `filterCashWallets`
+ *  is intentionally left as-is for consumers viewing cash-in-hand's own activity (e.g.
+ *  the Bank Accounts Report), where it correctly stays selectable. */
+export function filterCashCounterpartyWallets<T extends WalletLike>(wallets: T[]): T[] {
+  return wallets.filter((w) => !isLoadWalletName(w.type || '') && w.accountType !== 'cash')
 }
 
 /** Normalize wallet id from API (id or legacy _id) */

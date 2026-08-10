@@ -37,7 +37,7 @@ const fmt = (v: number) =>
 
 export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }, SalesmanCommissionReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { data, isLoading } = useGetSalesmanCommissionReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetSalesmanCommissionReportQuery({ startDate, endDate })
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
     const toggleExpanded = (salesmanUserId: string) => {

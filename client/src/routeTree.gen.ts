@@ -20,12 +20,15 @@ import { Route as AuthenticatedStockAdjustmentsImport } from './routes/_authenti
 import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedPurchaseSuggestionsImport } from './routes/_authenticated/purchase-suggestions'
+import { Route as AuthenticatedPaymentVouchersImport } from './routes/_authenticated/payment-vouchers'
 import { Route as AuthenticatedInsightsImport } from './routes/_authenticated/insights'
 import { Route as AuthenticatedCashRegisterImport } from './routes/_authenticated/cash-register'
 import { Route as AuthenticatedCashBookImport } from './routes/_authenticated/cash-book'
 import { Route as AuthenticatedBranchOverviewImport } from './routes/_authenticated/branch-overview'
 import { Route as AuthenticatedBarcodeGeneratorImport } from './routes/_authenticated/barcode-generator'
 import { Route as AuthenticatedBarcodeDemoImport } from './routes/_authenticated/barcode-demo'
+import { Route as AuthenticatedBankReconciliationImport } from './routes/_authenticated/bank-reconciliation'
+import { Route as AuthenticatedBankAccountStatementImport } from './routes/_authenticated/bank-account-statement'
 import { Route as AuthenticatedAiAssistantImport } from './routes/_authenticated/ai-assistant'
 import { Route as AuthenticatedActivitiesImport } from './routes/_authenticated/activities'
 import { Route as errors503Import } from './routes/(errors)/503'
@@ -222,6 +225,13 @@ const AuthenticatedPurchaseSuggestionsRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedPaymentVouchersRoute =
+  AuthenticatedPaymentVouchersImport.update({
+    id: '/payment-vouchers',
+    path: '/payment-vouchers',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedInsightsRoute = AuthenticatedInsightsImport.update({
   id: '/insights',
   path: '/insights',
@@ -259,6 +269,20 @@ const AuthenticatedBarcodeDemoRoute = AuthenticatedBarcodeDemoImport.update({
   path: '/barcode-demo',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+
+const AuthenticatedBankReconciliationRoute =
+  AuthenticatedBankReconciliationImport.update({
+    id: '/bank-reconciliation',
+    path: '/bank-reconciliation',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedBankAccountStatementRoute =
+  AuthenticatedBankAccountStatementImport.update({
+    id: '/bank-account-statement',
+    path: '/bank-account-statement',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedAiAssistantRoute = AuthenticatedAiAssistantImport.update({
   id: '/ai-assistant',
@@ -1305,6 +1329,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAiAssistantImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/bank-account-statement': {
+      id: '/_authenticated/bank-account-statement'
+      path: '/bank-account-statement'
+      fullPath: '/bank-account-statement'
+      preLoaderRoute: typeof AuthenticatedBankAccountStatementImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/bank-reconciliation': {
+      id: '/_authenticated/bank-reconciliation'
+      path: '/bank-reconciliation'
+      fullPath: '/bank-reconciliation'
+      preLoaderRoute: typeof AuthenticatedBankReconciliationImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/barcode-demo': {
       id: '/_authenticated/barcode-demo'
       path: '/barcode-demo'
@@ -1345,6 +1383,13 @@ declare module '@tanstack/react-router' {
       path: '/insights'
       fullPath: '/insights'
       preLoaderRoute: typeof AuthenticatedInsightsImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/payment-vouchers': {
+      id: '/_authenticated/payment-vouchers'
+      path: '/payment-vouchers'
+      fullPath: '/payment-vouchers'
+      preLoaderRoute: typeof AuthenticatedPaymentVouchersImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/purchase-suggestions': {
@@ -2475,12 +2520,15 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedActivitiesRoute: typeof AuthenticatedActivitiesRoute
   AuthenticatedAiAssistantRoute: typeof AuthenticatedAiAssistantRoute
+  AuthenticatedBankAccountStatementRoute: typeof AuthenticatedBankAccountStatementRoute
+  AuthenticatedBankReconciliationRoute: typeof AuthenticatedBankReconciliationRoute
   AuthenticatedBarcodeDemoRoute: typeof AuthenticatedBarcodeDemoRoute
   AuthenticatedBarcodeGeneratorRoute: typeof AuthenticatedBarcodeGeneratorRoute
   AuthenticatedBranchOverviewRoute: typeof AuthenticatedBranchOverviewRoute
   AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedCashRegisterRoute: typeof AuthenticatedCashRegisterRoute
   AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
+  AuthenticatedPaymentVouchersRoute: typeof AuthenticatedPaymentVouchersRoute
   AuthenticatedPurchaseSuggestionsRoute: typeof AuthenticatedPurchaseSuggestionsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSchoolRoute: typeof AuthenticatedSchoolRouteWithChildren
@@ -2556,12 +2604,16 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedActivitiesRoute: AuthenticatedActivitiesRoute,
   AuthenticatedAiAssistantRoute: AuthenticatedAiAssistantRoute,
+  AuthenticatedBankAccountStatementRoute:
+    AuthenticatedBankAccountStatementRoute,
+  AuthenticatedBankReconciliationRoute: AuthenticatedBankReconciliationRoute,
   AuthenticatedBarcodeDemoRoute: AuthenticatedBarcodeDemoRoute,
   AuthenticatedBarcodeGeneratorRoute: AuthenticatedBarcodeGeneratorRoute,
   AuthenticatedBranchOverviewRoute: AuthenticatedBranchOverviewRoute,
   AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedCashRegisterRoute: AuthenticatedCashRegisterRoute,
   AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
+  AuthenticatedPaymentVouchersRoute: AuthenticatedPaymentVouchersRoute,
   AuthenticatedPurchaseSuggestionsRoute: AuthenticatedPurchaseSuggestionsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSchoolRoute: AuthenticatedSchoolRouteWithChildren,
@@ -2663,12 +2715,15 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/activities': typeof AuthenticatedActivitiesRoute
   '/ai-assistant': typeof AuthenticatedAiAssistantRoute
+  '/bank-account-statement': typeof AuthenticatedBankAccountStatementRoute
+  '/bank-reconciliation': typeof AuthenticatedBankReconciliationRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/branch-overview': typeof AuthenticatedBranchOverviewRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
+  '/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/school': typeof AuthenticatedSchoolRouteWithChildren
@@ -2815,12 +2870,15 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/activities': typeof AuthenticatedActivitiesRoute
   '/ai-assistant': typeof AuthenticatedAiAssistantRoute
+  '/bank-account-statement': typeof AuthenticatedBankAccountStatementRoute
+  '/bank-reconciliation': typeof AuthenticatedBankReconciliationRoute
   '/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/branch-overview': typeof AuthenticatedBranchOverviewRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
+  '/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/stock-adjustments': typeof AuthenticatedStockAdjustmentsRoute
@@ -2967,12 +3025,15 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/activities': typeof AuthenticatedActivitiesRoute
   '/_authenticated/ai-assistant': typeof AuthenticatedAiAssistantRoute
+  '/_authenticated/bank-account-statement': typeof AuthenticatedBankAccountStatementRoute
+  '/_authenticated/bank-reconciliation': typeof AuthenticatedBankReconciliationRoute
   '/_authenticated/barcode-demo': typeof AuthenticatedBarcodeDemoRoute
   '/_authenticated/barcode-generator': typeof AuthenticatedBarcodeGeneratorRoute
   '/_authenticated/branch-overview': typeof AuthenticatedBranchOverviewRoute
   '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/cash-register': typeof AuthenticatedCashRegisterRoute
   '/_authenticated/insights': typeof AuthenticatedInsightsRoute
+  '/_authenticated/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/_authenticated/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
@@ -3123,12 +3184,15 @@ export interface FileRouteTypes {
     | '/503'
     | '/activities'
     | '/ai-assistant'
+    | '/bank-account-statement'
+    | '/bank-reconciliation'
     | '/barcode-demo'
     | '/barcode-generator'
     | '/branch-overview'
     | '/cash-book'
     | '/cash-register'
     | '/insights'
+    | '/payment-vouchers'
     | '/purchase-suggestions'
     | '/reports'
     | '/school'
@@ -3274,12 +3338,15 @@ export interface FileRouteTypes {
     | '/503'
     | '/activities'
     | '/ai-assistant'
+    | '/bank-account-statement'
+    | '/bank-reconciliation'
     | '/barcode-demo'
     | '/barcode-generator'
     | '/branch-overview'
     | '/cash-book'
     | '/cash-register'
     | '/insights'
+    | '/payment-vouchers'
     | '/purchase-suggestions'
     | '/reports'
     | '/stock-adjustments'
@@ -3424,12 +3491,15 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/activities'
     | '/_authenticated/ai-assistant'
+    | '/_authenticated/bank-account-statement'
+    | '/_authenticated/bank-reconciliation'
     | '/_authenticated/barcode-demo'
     | '/_authenticated/barcode-generator'
     | '/_authenticated/branch-overview'
     | '/_authenticated/cash-book'
     | '/_authenticated/cash-register'
     | '/_authenticated/insights'
+    | '/_authenticated/payment-vouchers'
     | '/_authenticated/purchase-suggestions'
     | '/_authenticated/reports'
     | '/_authenticated/school'
@@ -3626,12 +3696,15 @@ export const routeTree = rootRoute
         "/_authenticated/settings",
         "/_authenticated/activities",
         "/_authenticated/ai-assistant",
+        "/_authenticated/bank-account-statement",
+        "/_authenticated/bank-reconciliation",
         "/_authenticated/barcode-demo",
         "/_authenticated/barcode-generator",
         "/_authenticated/branch-overview",
         "/_authenticated/cash-book",
         "/_authenticated/cash-register",
         "/_authenticated/insights",
+        "/_authenticated/payment-vouchers",
         "/_authenticated/purchase-suggestions",
         "/_authenticated/reports",
         "/_authenticated/school",
@@ -3764,6 +3837,14 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/ai-assistant.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/bank-account-statement": {
+      "filePath": "_authenticated/bank-account-statement.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/bank-reconciliation": {
+      "filePath": "_authenticated/bank-reconciliation.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/barcode-demo": {
       "filePath": "_authenticated/barcode-demo.tsx",
       "parent": "/_authenticated"
@@ -3786,6 +3867,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/insights": {
       "filePath": "_authenticated/insights.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/payment-vouchers": {
+      "filePath": "_authenticated/payment-vouchers.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/purchase-suggestions": {

@@ -51,6 +51,7 @@ import { MobilePhoneReport } from './components/mobile-phone-report'
 import { DailySalesSummaryReport } from './components/daily-sales-summary-report'
 import { SalesmanCommissionReport } from './components/salesman-commission-report'
 import { PartnerProfitShareReport } from './components/partner-profit-share-report'
+import { BankPositionReport } from './components/bank-position-report'
 
 export default function ReportsPage() {
   const { t } = useLanguage()
@@ -276,7 +277,10 @@ export default function ReportsPage() {
               <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
             )}
             {canAccess('wallet') && (
-              <TabsTrigger value='my-wallet' className='text-xs sm:text-sm px-2 sm:px-3'>Wallets</TabsTrigger>
+              <TabsTrigger value='my-wallet' className='text-xs sm:text-sm px-2 sm:px-3'>Bank Accounts</TabsTrigger>
+            )}
+            {canAccess('wallet') && (
+              <TabsTrigger value='bank-position' className='text-xs sm:text-sm px-2 sm:px-3'>Bank &amp; Cash Position</TabsTrigger>
             )}
             {isMobileShop && canAccess('repair') && (
               <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
@@ -418,6 +422,12 @@ export default function ReportsPage() {
           {canAccess('wallet')
             ? <MyWalletReport ref={activeTab === 'my-wallet' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
             : <LockedFeatureCard featureName='My Wallet Report' currentPlan={getPlanLabel(planType)} />}
+        </TabsContent>
+
+        <TabsContent value='bank-position' className='mt-6'>
+          {canAccess('wallet')
+            ? <BankPositionReport ref={activeTab === 'bank-position' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+            : <LockedFeatureCard featureName='Bank & Cash Position Report' currentPlan={getPlanLabel(planType)} />}
         </TabsContent>
 
         {isMobileShop && (

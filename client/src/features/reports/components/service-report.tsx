@@ -77,7 +77,7 @@ const paymentLabel: Record<string, string> = {
 
 export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { data, isLoading } = useGetServiceReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetServiceReportQuery({ startDate, endDate })
     const [fetchDetail, { data: detailData, isFetching: detailLoading }] =
       useLazyGetServiceReportQuery()
 

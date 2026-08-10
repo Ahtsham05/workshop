@@ -1,5 +1,21 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
+import { invalidateWalletCaches } from './wallet-cache-invalidation';
+
+// A commission payment posts a Cash Book entry (and, when paid from a real wallet, a
+// wallet entry) server-side — see `invalidateWalletCaches` for the full list of caches
+// that would otherwise show a stale balance until an unrelated action refetches them.
+const invalidateWalletsOnSettled = async (
+  _arg: unknown,
+  { dispatch, queryFulfilled }: { dispatch: (action: unknown) => unknown; queryFulfilled: Promise<unknown> },
+) => {
+  try {
+    await queryFulfilled;
+    invalidateWalletCaches(dispatch);
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+};
 
 export interface SalesmanCommissionPayment {
   id: string;
@@ -34,10 +50,12 @@ export const salesmanCommissionPaymentApi = createApi({
     createCommissionPayment: builder.mutation<SalesmanCommissionPayment, CreateCommissionPaymentRequest>({
       query: (body) => ({ url: '/commission-payments', method: 'POST', body }),
       invalidatesTags: ['CommissionPayment'],
+      onQueryStarted: invalidateWalletsOnSettled,
     }),
     deleteCommissionPayment: builder.mutation<void, string>({
       query: (id) => ({ url: `/commission-payments/${id}`, method: 'DELETE' }),
       invalidatesTags: ['CommissionPayment'],
+      onQueryStarted: invalidateWalletsOnSettled,
     }),
   }),
 });

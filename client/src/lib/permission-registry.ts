@@ -11,6 +11,8 @@ export type PermissionKey =
   | 'viewBrands' | 'createBrands' | 'editBrands' | 'deleteBrands'
   | 'viewAccounting' | 'manageExpenses' | 'manageLedgers' | 'managePersonalWallet'
   | 'viewCashBook' | 'manageCashBook' | 'viewCashRegister' | 'manageCashRegister'
+  | 'viewPaymentVouchers' | 'managePaymentVouchers'
+  | 'viewBankReconciliation' | 'manageBankReconciliation'
   | 'viewAccountsSystem' | 'manageAccountsSystem'
   | 'viewWallet' | 'manageWallet'
   | 'viewLoadManagement' | 'manageLoadManagement'
@@ -72,6 +74,8 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'brands', label: 'Brands', permissions: ['viewBrands', 'createBrands', 'editBrands', 'deleteBrands'] },
   { id: 'accounting', label: 'Accounts & Expenses', permissions: ['viewAccounting', 'manageExpenses', 'manageLedgers', 'managePersonalWallet'] },
   { id: 'cash', label: 'Cash Book & Register', permissions: ['viewCashBook', 'manageCashBook', 'viewCashRegister', 'manageCashRegister'] },
+  { id: 'payment_vouchers', label: 'Payments & Receipts', permissions: ['viewPaymentVouchers', 'managePaymentVouchers'] },
+  { id: 'bank_reconciliation', label: 'Bank Reconciliation', permissions: ['viewBankReconciliation', 'manageBankReconciliation'] },
   { id: 'accounts_system', label: 'Accounts System', permissions: ['viewAccountsSystem', 'manageAccountsSystem'] },
   { id: 'wallet', label: 'Mobile Shop — Wallet', permissions: ['viewWallet', 'manageWallet'] },
   { id: 'load', label: 'Mobile Shop — Load Management', permissions: ['viewLoadManagement', 'manageLoadManagement'] },
@@ -122,7 +126,7 @@ export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.pe
 export const PERMISSION_TAB_GROUPS = {
   business: [
     'products', 'imei_tracking', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
-    'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'accounts_system',
+    'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system',
   ],
   mobile_shop: [
     'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones',

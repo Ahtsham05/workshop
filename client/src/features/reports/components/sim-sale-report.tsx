@@ -34,7 +34,7 @@ const COLORS = [
 export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t, language } = useLanguage()
-    const { data, isLoading, isError } = useGetSimSaleReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading, isError } = useGetSimSaleReportQuery({ startDate, endDate })
     const [fetchProductDetail] = useLazyGetSimSaleReportQuery()
 
     const [sheetOpen, setSheetOpen] = useState(false)

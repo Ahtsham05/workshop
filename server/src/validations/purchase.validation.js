@@ -37,13 +37,28 @@ const createPurchase = {
     discount: Joi.number().min(0).optional(),
     totalAmount: Joi.number().required(),
     paidAmount: Joi.number().min(0),
-    balance: Joi.number().min(0),
-    paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet'),
-    walletType: Joi.string().trim().when('paymentType', {
-      is: 'Wallet',
+    balance: Joi.number(),
+    // Settlement status (does the unpaid remainder become a Supplier Ledger debt) — kept
+    // separate from `paymentMethod` (which account absorbs `paidAmount`) so a Credit purchase
+    // can still specify a real account for whatever's paid right now.
+    type: Joi.string().valid('cash', 'credit'),
+    paymentMethod: Joi.string().valid('cash', 'wallet'),
+    walletType: Joi.string().trim().when('paymentMethod', {
+      is: 'wallet',
       then: Joi.required(),
       otherwise: Joi.allow('').optional(),
     }),
+    // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account).
+    splitPaymentMethod: Joi.string().valid('cash', 'wallet').allow(null, ''),
+    splitWalletType: Joi.string().trim().when('splitPaymentMethod', {
+      is: 'wallet',
+      then: Joi.required(),
+      otherwise: Joi.allow('').optional(),
+    }),
+    splitPaidAmount: Joi.number().min(0),
+    // Legacy field — accepted-but-ignored for backward compatibility with older clients;
+    // the server always derives and stores it from `type`+`paymentMethod`.
+    paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet').optional(),
     purchaseDate: Joi.date(),
     notes: Joi.string().allow(''),
   }),
@@ -98,13 +113,28 @@ const updatePurchase = {
     discount: Joi.number().min(0).optional(),
     totalAmount: Joi.number(),
     paidAmount: Joi.number().min(0),
-    balance: Joi.number().min(0),
-    paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet'),
-    walletType: Joi.string().trim().when('paymentType', {
-      is: 'Wallet',
+    balance: Joi.number(),
+    // Settlement status (does the unpaid remainder become a Supplier Ledger debt) — kept
+    // separate from `paymentMethod` (which account absorbs `paidAmount`) so a Credit purchase
+    // can still specify a real account for whatever's paid right now.
+    type: Joi.string().valid('cash', 'credit'),
+    paymentMethod: Joi.string().valid('cash', 'wallet'),
+    walletType: Joi.string().trim().when('paymentMethod', {
+      is: 'wallet',
       then: Joi.required(),
       otherwise: Joi.allow('').optional(),
     }),
+    // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account).
+    splitPaymentMethod: Joi.string().valid('cash', 'wallet').allow(null, ''),
+    splitWalletType: Joi.string().trim().when('splitPaymentMethod', {
+      is: 'wallet',
+      then: Joi.required(),
+      otherwise: Joi.allow('').optional(),
+    }),
+    splitPaidAmount: Joi.number().min(0),
+    // Legacy field — accepted-but-ignored for backward compatibility with older clients;
+    // the server always derives and stores it from `type`+`paymentMethod`.
+    paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet').optional(),
     purchaseDate: Joi.date(),
     notes: Joi.string().allow(''),
   }),

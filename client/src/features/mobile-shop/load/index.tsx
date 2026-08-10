@@ -10,7 +10,7 @@ import {
   readWalletNavFromUrl,
   mergeWalletNavSearch,
   filterLoadWallets,
-  filterCashWallets,
+  filterCashCounterpartyWallets,
   isLoadWalletName,
   type WalletLike,
 } from '@/features/mobile-shop/utils/wallet-utils'
@@ -400,7 +400,7 @@ function LoadManagementPage({
   )
 
   const pageWallets = useMemo(
-    () => (isCashManagementMode ? filterCashWallets(wallets) : filterLoadWallets(wallets)),
+    () => (isCashManagementMode ? filterCashCounterpartyWallets(wallets) : filterLoadWallets(wallets)),
     [wallets, isCashManagementMode],
   )
 

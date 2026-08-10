@@ -136,30 +136,30 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
       [startDate, endDate],
     )
 
-    const { data: pnl, isLoading: pnlLoading } = useGetProfitLossFullReportQuery(
+    const { data: pnl, isFetching: pnlLoading } = useGetProfitLossFullReportQuery(
       { from: startDate, to: endDate },
       { skip: !canAccess('profit_loss') },
     )
-    const { data: walletWise, isLoading: walletWiseLoading } = useGetWalletWiseReportQuery({ startDate, endDate })
-    const { data: services, isLoading: servicesLoading } = useGetServiceReportQuery({ startDate, endDate })
+    const { data: walletWise, isFetching: walletWiseLoading } = useGetWalletWiseReportQuery({ startDate, endDate })
+    const { data: services, isFetching: servicesLoading } = useGetServiceReportQuery({ startDate, endDate })
     const { data: billPayments } = useGetBillPaymentReportQuery(
       { startDate, endDate },
       { skip: !canAccess('bill_payment') },
     )
-    const { data: agentBills, isLoading: agentBillsLoading } = useGetAgentBillReportQuery(
+    const { data: agentBills, isFetching: agentBillsLoading } = useGetAgentBillReportQuery(
       { startDate, endDate },
       { skip: !isAgentBillUser },
     )
-    const { data: repair, isLoading: repairLoading } = useGetRepairReportQuery(
+    const { data: repair, isFetching: repairLoading } = useGetRepairReportQuery(
       { startDate, endDate },
       { skip: !canAccess('repair') },
     )
-    const { data: expenses, isLoading: expensesLoading } = useGetExpenseReportQuery({ startDate, endDate, groupRecurring: true })
+    const { data: expenses, isFetching: expensesLoading } = useGetExpenseReportQuery({ startDate, endDate, groupRecurring: true })
     const { data: salesPurchase } = useGetSalesPurchaseSummaryReportQuery({ startDate, endDate })
     const { data: activitySummary } = useGetActivitySummaryReportQuery({ startDate, endDate })
-    const { data: customers, isLoading: customersLoading } = useGetCustomerReportQuery({ startDate, endDate, top: 100 })
-    const { data: suppliers, isLoading: suppliersLoading } = useGetSupplierReportQuery({ startDate, endDate })
-    const { data: productReport, isLoading: productLoading } = useGetProductReportQuery({ startDate, endDate })
+    const { data: customers, isFetching: customersLoading } = useGetCustomerReportQuery({ startDate, endDate, top: 100 })
+    const { data: suppliers, isFetching: suppliersLoading } = useGetSupplierReportQuery({ startDate, endDate })
+    const { data: productReport, isFetching: productLoading } = useGetProductReportQuery({ startDate, endDate })
 
     const isLoading = pnlLoading || walletWiseLoading || servicesLoading || repairLoading || expensesLoading || productLoading
 

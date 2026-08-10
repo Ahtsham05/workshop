@@ -34,7 +34,7 @@ const STATUS_LABEL: Record<string, string> = {
 export const RepairReport = forwardRef<{ exportToExcel: () => void }, RepairReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
-    const { data, isLoading } = useGetRepairReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetRepairReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

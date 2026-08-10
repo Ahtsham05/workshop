@@ -50,8 +50,8 @@ export function WalletSelectionGrid({
 }: WalletSelectionGridProps) {
   const isLoad = variant === 'load'
   const emptyLabel = isLoad
-    ? 'No load wallets yet. Create one in Wallet Management (include "Load" in the name).'
-    : 'No cash wallets yet. Create one in Wallet Management (JazzCash, EasyPaisa, etc.).'
+    ? 'No load wallets yet. Create one in Bank Accounts (include "Load" in the name).'
+    : 'No cash wallets yet. Create one in Bank Accounts (JazzCash, EasyPaisa, etc.).'
 
   if (isLoading) {
     return (

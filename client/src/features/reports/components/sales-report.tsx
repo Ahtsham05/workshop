@@ -206,16 +206,16 @@ const moduleColors: Record<string, string> = {
 export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReportProps>(
   ({ startDate, endDate, isMobileShop = false }, ref) => {
     const { t, language } = useLanguage()
-    const { data, isLoading } = useGetSalesReportQuery({ startDate, endDate, groupBy: 'day' })
-    const { data: detailData, isLoading: detailLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetSalesReportQuery({ startDate, endDate, groupBy: 'day' })
+    const { data: detailData, isFetching: detailLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
 
     const user = useSelector((state: RootState) => state.auth.data?.user)
     const isAgentBillUser = user?.email === AGENT_BILL_EMAIL
-    const { data: activityData, isLoading: activityLoading } = useGetActivitySummaryReportQuery(
+    const { data: activityData, isFetching: activityLoading } = useGetActivitySummaryReportQuery(
       { startDate, endDate },
       { skip: !isMobileShop }
     )
-    const { data: agentBillData, isLoading: agentBillLoading } = useGetAgentBillReportQuery(
+    const { data: agentBillData, isFetching: agentBillLoading } = useGetAgentBillReportQuery(
       { startDate, endDate },
       { skip: !isMobileShop || !isAgentBillUser }
     )

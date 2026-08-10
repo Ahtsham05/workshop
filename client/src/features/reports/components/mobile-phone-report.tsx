@@ -54,8 +54,8 @@ const getImeiSummary = (b: PhoneBuybackRecord) =>
   typeof b.imeiRecordId === 'object' && b.imeiRecordId !== null ? b.imeiRecordId : null
 
 function UsedPhonesTab({ startDate, endDate }: MobilePhoneReportProps) {
-  const { data: stats, isLoading: statsLoading } = useGetUsedPhoneStatsQuery({ dateFrom: startDate, dateTo: endDate })
-  const { data, isLoading } = useGetBuybacksQuery({ dateFrom: startDate, dateTo: endDate, limit: 50, sortBy: 'buybackDate:-1' })
+  const { data: stats, isFetching: statsLoading } = useGetUsedPhoneStatsQuery({ dateFrom: startDate, dateTo: endDate })
+  const { data, isFetching: isLoading } = useGetBuybacksQuery({ dateFrom: startDate, dateTo: endDate, limit: 50, sortBy: 'buybackDate:-1' })
   const rows = data?.results ?? []
 
   return (
@@ -188,8 +188,8 @@ function NewPhonesTab({ startDate, endDate }: MobilePhoneReportProps) {
     [productsRedux],
   )
 
-  const { data: stats, isLoading: statsLoading } = useGetNewPhoneStatsQuery({ dateFrom: startDate, dateTo: endDate })
-  const { data, isLoading } = useGetImeisQuery(
+  const { data: stats, isFetching: statsLoading } = useGetNewPhoneStatsQuery({ dateFrom: startDate, dateTo: endDate })
+  const { data, isFetching: isLoading } = useGetImeisQuery(
     { productId: phoneProductIds, status: 'sold', dateFrom: startDate, dateTo: endDate, limit: 50, sortBy: 'saleDate:-1' },
     { skip: !phoneProductIds },
   )

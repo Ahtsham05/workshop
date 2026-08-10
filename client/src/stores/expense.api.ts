@@ -1,14 +1,15 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
-import { mobileShopApi } from './mobile-shop.api'
+import { invalidateWalletCaches } from './wallet-cache-invalidation'
 
-/** Paying an expense posts a cash-book entry server-side, but expenseApi is a separate
- *  RTK Query slice from mobileShopApi (which owns the Cash Book page's cache), so that
- *  page would otherwise keep showing stale totals until a full reload. */
+/** Paying an expense posts a cash-book entry (and, when paid from a real wallet, a wallet
+ *  entry) server-side, but expenseApi is a separate RTK Query slice from every cache that
+ *  displays that — see `invalidateWalletCaches` for the full list — so those pages would
+ *  otherwise keep showing stale totals/balances until a full reload. */
 const invalidateCashBook = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
   try {
     await queryFulfilled
-    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
+    invalidateWalletCaches(dispatch)
   } catch {
     // mutation failed — nothing to invalidate
   }

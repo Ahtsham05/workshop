@@ -43,6 +43,9 @@ const branchOverviewRoute = require('./branchOverview.route');
 const membershipRoute = require('./membership.route');
 const walletRoute = require('./wallet.route');
 const walletTransferRoute = require('./walletTransfer.route');
+const paymentVoucherRoute = require('./paymentVoucher.route');
+const receiptVoucherRoute = require('./receiptVoucher.route');
+const bankReconciliationRoute = require('./bankReconciliation.route');
 const loadPurchaseRoute = require('./loadPurchase.route');
 const loadTransactionRoute = require('./loadTransaction.route');
 const simSaleRoute = require('./simSale.route');
@@ -305,6 +308,18 @@ const defaultRoutes = [
   {
     path: '/wallet-transfers',
     route: walletTransferRoute,
+  },
+  {
+    path: '/payment-vouchers',
+    route: paymentVoucherRoute,
+  },
+  {
+    path: '/receipt-vouchers',
+    route: receiptVoucherRoute,
+  },
+  {
+    path: '/bank-reconciliation',
+    route: bankReconciliationRoute,
   },
   {
     path: '/load-purchases',
@@ -652,6 +667,9 @@ const protectedPaths = [
   '/branch-overview',
   '/memberships',
   '/wallets',
+  '/payment-vouchers',
+  '/receipt-vouchers',
+  '/bank-reconciliation',
   '/load-purchases',
   '/load-transactions',
   '/repairs',

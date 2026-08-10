@@ -8,6 +8,10 @@ const upsertWallet = {
     commissionRate: Joi.number().min(0).max(100).default(0),
     withdrawalCommissionRate: Joi.number().min(0).max(100).default(0),
     depositCommissionRate: Joi.number().min(0).max(100).default(0),
+    accountType: Joi.string().valid('cash', 'bank', 'mobile_wallet').allow('', null),
+    bankName: Joi.string().trim().allow('', null),
+    accountNumber: Joi.string().trim().allow('', null),
+    branchName: Joi.string().trim().allow('', null),
     id: Joi.string(),
   }),
 };

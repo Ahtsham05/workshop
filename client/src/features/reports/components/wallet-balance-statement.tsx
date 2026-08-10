@@ -103,7 +103,7 @@ export function WalletBalanceStatement({
   const [viewMode, setViewMode] = useState<'summary' | 'number-wise'>('summary')
   const skip = !walletType
 
-  const { data: rawData, isLoading } = useGetWalletBalanceStatementQuery(
+  const { data: rawData, isFetching: isLoading } = useGetWalletBalanceStatementQuery(
     { walletType: walletType!, startDate, endDate },
     { skip }
   )

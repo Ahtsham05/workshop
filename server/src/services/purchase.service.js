@@ -120,13 +120,62 @@ const resolveItemNetUnitCost = (item, purchaseSubtotal, purchaseDiscount) => {
   return netLineTotal / quantity;
 };
 
-const resolvePurchaseLedgerPaymentMethod = (purchase) => {
-  const type = String(purchase.paymentType || 'Cash');
-  if (type === 'Wallet') {
-    const walletName = String(purchase.walletType || '').trim();
-    return walletName ? `Wallet (${walletName})` : 'Wallet';
+/**
+ * Which settlement-status ('Cash'/'Wallet'/'Credit') string to keep storing on the legacy
+ * `paymentType` field, derived from the new `type`+`paymentMethod` fields. Kept in sync purely
+ * for backward compatibility with reports/accounting code that still reads `paymentType`
+ * directly — client input for this field is no longer trusted.
+ */
+const derivePurchasePaymentType = (purchase) => {
+  if (purchase.type === 'credit') return 'Credit';
+  return purchase.paymentMethod === 'wallet' ? 'Wallet' : 'Cash';
+};
+
+/**
+ * Resolve which portion of `paidAmount` is a Cash Book entry vs a Wallet Entry, and which
+ * wallet, from (paymentMethod, walletType, splitPaymentMethod, splitWalletType, splitPaidAmount).
+ * The split leg is always validated (client + Joi) to be the opposite bucket from the primary
+ * leg, so there is at most one cash-bucket amount and one wallet-bucket amount per purchase —
+ * never two of the same kind that could collide on the same Cash Book/Wallet Entry reference key.
+ */
+const resolvePurchasePaymentLegs = (source) => {
+  if (!source) return { cashAmount: 0, walletAmount: 0, walletType: '' };
+
+  const paidAmount = Number(source.paidAmount || 0);
+  const splitAmount = Math.max(0, Math.min(Number(source.splitPaidAmount || 0), paidAmount));
+  const isWalletPrimary = source.paymentMethod === 'wallet' && source.walletType;
+  const splitMethod = source.splitPaymentMethod;
+
+  if (isWalletPrimary) {
+    const cashAmount = splitMethod === 'cash' ? splitAmount : 0;
+    return {
+      cashAmount,
+      walletAmount: Math.max(0, paidAmount - cashAmount),
+      walletType: String(source.walletType).trim(),
+    };
   }
-  return type;
+
+  if (splitMethod === 'wallet' && source.splitWalletType) {
+    const walletAmount = splitAmount;
+    return {
+      cashAmount: Math.max(0, paidAmount - walletAmount),
+      walletAmount,
+      walletType: String(source.splitWalletType).trim(),
+    };
+  }
+
+  return { cashAmount: paidAmount, walletAmount: 0, walletType: '' };
+};
+
+const resolvePurchaseLedgerPaymentMethod = (purchase) => {
+  const legs = resolvePurchasePaymentLegs(purchase);
+  if (legs.cashAmount > 0 && legs.walletAmount > 0) {
+    return `Cash + Wallet (${legs.walletType})`;
+  }
+  if (legs.walletAmount > 0) {
+    return `Wallet (${legs.walletType})`;
+  }
+  return 'Cash';
 };
 
 const DEFAULT_PURCHASE_INVOICE_SEQ = 5000;
@@ -157,20 +206,23 @@ const generateNextPurchaseInvoiceNumber = async () => {
   return `INV-${maxSeq + 1}`;
 };
 
-const syncPurchaseCashAndWalletEntries = async (purchase, previousPaymentType, previousWalletType, previousPaidAmount) => {
-  const paidAmount = Number(purchase.paidAmount || 0);
-  const paymentType = String(purchase.paymentType || 'Cash');
-  const isWalletPayment = paymentType === 'Wallet' && purchase.walletType;
+/**
+ * Sync Cash Book + Wallet Entry + Wallet.balance for a purchase's payment, from the resolved
+ * cash/wallet legs. `previous` is a plain snapshot of the pre-update payment fields (or `null`
+ * on create) — used only to compute the correct wallet-balance delta on edits; Cash Book /
+ * Wallet Entry themselves are always fully re-derived via idempotent upsert/delete.
+ */
+const syncPurchaseCashAndWalletEntries = async (purchase, previous) => {
+  const current = resolvePurchasePaymentLegs(purchase);
+  const prior = resolvePurchasePaymentLegs(previous);
 
-  const isCashPayment = cashBookService.isCashPaymentMethod(paymentType);
-
-  if (paidAmount > 0 && isCashPayment) {
+  if (current.cashAmount > 0) {
     await cashBookService.upsertReferenceEntry({
       organizationId: purchase.organizationId,
       branchId: purchase.branchId,
       type: 'expense',
       source: 'purchase',
-      amount: paidAmount,
+      amount: current.cashAmount,
       paymentMethod: 'cash',
       referenceId: purchase._id,
       referenceModel: 'Purchase',
@@ -182,13 +234,13 @@ const syncPurchaseCashAndWalletEntries = async (purchase, previousPaymentType, p
     await cashBookService.deleteEntriesByReference(purchase._id, 'Purchase');
   }
 
-  if (isWalletPayment && paidAmount > 0) {
+  if (current.walletAmount > 0 && current.walletType) {
     await walletEntryService.upsertReferenceEntry({
       organizationId: purchase.organizationId,
       branchId: purchase.branchId,
-      walletType: purchase.walletType.trim(),
+      walletType: current.walletType,
       type: 'out',
-      amount: paidAmount,
+      amount: current.walletAmount,
       referenceId: purchase._id,
       referenceModel: 'Purchase',
       description: `Wallet payment sent for Purchase #${purchase.invoiceNumber}`,
@@ -200,54 +252,48 @@ const syncPurchaseCashAndWalletEntries = async (purchase, previousPaymentType, p
     await walletEntryService.deleteEntriesByReference(purchase._id, 'Purchase');
   }
 
-  if (isWalletPayment) {
-    const walletType = purchase.walletType.trim();
-    const prevType = String(previousPaymentType || 'Cash');
-    const prevPaid = Number(previousPaidAmount || 0);
-
-    if (prevType === 'Wallet' && previousWalletType && prevPaid > 0) {
-      const previousWallet = previousWalletType.trim();
-      if (previousWallet === walletType) {
-        const delta = paidAmount - prevPaid;
-        if (delta !== 0) {
-          await walletService.adjustWalletBalance({
-            organizationId: purchase.organizationId,
-            branchId: purchase.branchId,
-            type: walletType,
-            amount: Math.abs(delta),
-            operation: delta > 0 ? 'deduct' : 'add',
-            userId: purchase.updatedBy || purchase.createdBy,
-          });
-        }
-        return;
+  // Wallet.balance direct adjustment — delta-aware against whatever the wallet leg was before.
+  if (current.walletAmount > 0 && current.walletType) {
+    if (prior.walletAmount > 0 && prior.walletType === current.walletType) {
+      const delta = current.walletAmount - prior.walletAmount;
+      if (delta !== 0) {
+        await walletService.adjustWalletBalance({
+          organizationId: purchase.organizationId,
+          branchId: purchase.branchId,
+          type: current.walletType,
+          amount: Math.abs(delta),
+          operation: delta > 0 ? 'deduct' : 'add',
+          userId: purchase.updatedBy || purchase.createdBy,
+        });
       }
+      return;
+    }
 
+    if (prior.walletAmount > 0 && prior.walletType) {
       await walletService.adjustWalletBalance({
         organizationId: purchase.organizationId,
         branchId: purchase.branchId,
-        type: previousWallet,
-        amount: prevPaid,
+        type: prior.walletType,
+        amount: prior.walletAmount,
         operation: 'add',
         userId: purchase.updatedBy || purchase.createdBy,
       });
     }
 
-    if (paidAmount > 0) {
-      await walletService.adjustWalletBalance({
-        organizationId: purchase.organizationId,
-        branchId: purchase.branchId,
-        type: walletType,
-        amount: paidAmount,
-        operation: 'deduct',
-        userId: purchase.updatedBy || purchase.createdBy,
-      });
-    }
-  } else if (String(previousPaymentType || 'Cash') === 'Wallet' && previousWalletType && Number(previousPaidAmount || 0) > 0) {
     await walletService.adjustWalletBalance({
       organizationId: purchase.organizationId,
       branchId: purchase.branchId,
-      type: previousWalletType.trim(),
-      amount: Number(previousPaidAmount),
+      type: current.walletType,
+      amount: current.walletAmount,
+      operation: 'deduct',
+      userId: purchase.updatedBy || purchase.createdBy,
+    });
+  } else if (prior.walletAmount > 0 && prior.walletType) {
+    await walletService.adjustWalletBalance({
+      organizationId: purchase.organizationId,
+      branchId: purchase.branchId,
+      type: prior.walletType,
+      amount: prior.walletAmount,
       operation: 'add',
       userId: purchase.updatedBy || purchase.createdBy,
     });
@@ -264,11 +310,14 @@ const createPurchase = async (purchaseBody) => {
 
   const normalizedBody = {
     ...purchaseBody,
+    type: purchaseBody.type || 'cash',
+    paymentMethod: purchaseBody.paymentMethod || 'cash',
     balance:
       purchaseBody.paidAmount !== undefined
         ? resolvePurchaseInvoiceBalance(purchaseBody.totalAmount, purchaseBody.paidAmount)
         : purchaseBody.balance,
   };
+  normalizedBody.paymentType = derivePurchasePaymentType(normalizedBody);
 
   // The purchase record and every stock/batch/inventory/serial write it triggers must
   // succeed or fail together. Before this, a duplicate serial/IMEI (or any other error)
@@ -414,7 +463,7 @@ const createPurchase = async (purchaseBody) => {
     await session.endSession();
   }
 
-  await syncPurchaseCashAndWalletEntries(purchase, null, null, 0);
+  await syncPurchaseCashAndWalletEntries(purchase, null);
   postPurchaseToAccounts(purchase);
 
   // Create supplier ledger entry if supplier is provided
@@ -518,7 +567,15 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const originalPaidAmount = purchase.paidAmount || 0;
   const originalSupplier = purchase.supplier?._id || purchase.supplier;
   const originalPaymentType = purchase.paymentType;
-  const originalWalletType = purchase.walletType || null;
+  // Snapshot of every payment-leg field, for delta-aware Cash Book/Wallet resync below.
+  const previousPaymentLegSnapshot = {
+    paymentMethod: purchase.paymentMethod,
+    walletType: purchase.walletType,
+    splitPaymentMethod: purchase.splitPaymentMethod,
+    splitWalletType: purchase.splitWalletType,
+    paidAmount: purchase.paidAmount,
+    splitPaidAmount: purchase.splitPaidAmount,
+  };
   const businessType = await getOrganizationBusinessType(purchase.organizationId);
   const supplierIdForUpdate = updateBody.supplier || originalSupplier;
   const supplierDocForUpdate = supplierIdForUpdate ? await Supplier.findById(supplierIdForUpdate).select('name') : null;
@@ -821,11 +878,12 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
 
   // Now update the purchase itself
   Object.assign(purchase, updateBody);
+  purchase.paymentType = derivePurchasePaymentType(purchase);
   if (purchase.paidAmount !== undefined) {
     purchase.balance = resolvePurchaseInvoiceBalance(purchase.totalAmount, purchase.paidAmount);
   }
   await purchase.save();
-  await syncPurchaseCashAndWalletEntries(purchase, originalPaymentType, originalWalletType, originalPaidAmount);
+  await syncPurchaseCashAndWalletEntries(purchase, previousPaymentLegSnapshot);
   postPurchaseToAccounts(purchase);
 
   // Update supplier ledger entries if amounts or supplier changed
@@ -996,12 +1054,13 @@ const deletePurchaseById = async (purchaseId) => {
     )
     .catch(() => {});
 
-  if (purchase.paymentType === 'Wallet' && purchase.walletType && Number(purchase.paidAmount || 0) > 0) {
+  const deletedLegs = resolvePurchasePaymentLegs(purchase);
+  if (deletedLegs.walletAmount > 0 && deletedLegs.walletType) {
     await walletService.adjustWalletBalance({
       organizationId: purchase.organizationId,
       branchId: purchase.branchId,
-      type: purchase.walletType.trim(),
-      amount: Number(purchase.paidAmount),
+      type: deletedLegs.walletType,
+      amount: deletedLegs.walletAmount,
       operation: 'add',
       userId: purchase.updatedBy || purchase.createdBy,
     });

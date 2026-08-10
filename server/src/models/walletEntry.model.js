@@ -58,6 +58,22 @@ const walletEntrySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    // Bank Reconciliation — has this "book" movement been matched off against a real bank
+    // statement line yet? Kept directly on the ledger entry (not a separate join table) so
+    // every existing WalletEntry writer/reader needs zero changes; these fields are purely
+    // additive and default to "not reconciled".
+    isReconciled: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    reconciledAt: {
+      type: Date,
+    },
+    reconciledSessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'BankReconciliationSession',
+    },
   },
   {
     timestamps: true,
@@ -69,6 +85,7 @@ walletEntrySchema.plugin(paginate);
 
 walletEntrySchema.index({ organizationId: 1, branchId: 1, walletType: 1, date: -1 });
 walletEntrySchema.index({ referenceId: 1, referenceModel: 1, type: 1 }, { unique: true });
+walletEntrySchema.index({ organizationId: 1, branchId: 1, walletType: 1, isReconciled: 1 });
 
 const WalletEntry = mongoose.model('WalletEntry', walletEntrySchema);
 

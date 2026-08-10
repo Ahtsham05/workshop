@@ -1,5 +1,21 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
+import { invalidateWalletCaches } from './wallet-cache-invalidation';
+
+// A partner payment posts a Cash Book entry (and, when paid from a real wallet, a wallet
+// entry) server-side — see `invalidateWalletCaches` for the full list of caches that would
+// otherwise show a stale balance until an unrelated action refetches them.
+const invalidateWalletsOnSettled = async (
+  _arg: unknown,
+  { dispatch, queryFulfilled }: { dispatch: (action: unknown) => unknown; queryFulfilled: Promise<unknown> },
+) => {
+  try {
+    await queryFulfilled;
+    invalidateWalletCaches(dispatch);
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+};
 
 export interface PartnerPayment {
   id: string;
@@ -34,10 +50,12 @@ export const partnerPaymentApi = createApi({
     createPartnerPayment: builder.mutation<PartnerPayment, CreatePartnerPaymentRequest>({
       query: (body) => ({ url: '/partner-payments', method: 'POST', body }),
       invalidatesTags: ['PartnerPayment'],
+      onQueryStarted: invalidateWalletsOnSettled,
     }),
     deletePartnerPayment: builder.mutation<void, string>({
       query: (id) => ({ url: `/partner-payments/${id}`, method: 'DELETE' }),
       invalidatesTags: ['PartnerPayment'],
+      onQueryStarted: invalidateWalletsOnSettled,
     }),
   }),
 });

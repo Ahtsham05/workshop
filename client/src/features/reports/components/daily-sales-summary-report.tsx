@@ -119,7 +119,7 @@ function ModuleDetailCard({ module: m }: { module: DailySalesSummaryModule }) {
 export const DailySalesSummaryReport = forwardRef<{ exportToExcel: () => void }, DailySalesSummaryReportProps>(
   ({ startDate, endDate }, ref) => {
     const branchName = useBranchName()
-    const { data, isLoading } = useGetDailySalesSummaryReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetDailySalesSummaryReportQuery({ startDate, endDate })
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

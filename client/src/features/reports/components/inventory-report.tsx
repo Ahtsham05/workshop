@@ -56,7 +56,7 @@ function StockStatusBadge({ status }: { status: string }) {
 export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
   const { t, language } = useLanguage()
   const [status, setStatus] = useState<string>('all')
-  const { data, isLoading } = useGetInventoryReportQuery({ status: status === 'all' ? '' : status })
+  const { data, isFetching: isLoading } = useGetInventoryReportQuery({ status: status === 'all' ? '' : status })
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   const toggleRow = (id: string) => {

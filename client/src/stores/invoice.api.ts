@@ -4,22 +4,23 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolk
 import { imeiApi } from './imei.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
-import { mobileShopApi } from './mobile-shop.api'
+import { invalidateWalletCaches } from './wallet-cache-invalidation'
 
 /** Invoice mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
- *  batchApi/mobileShopApi, so a sale's effect on stock/IMEI status, or on the cash book
- *  (invoices post cash-book entries server-side), doesn't auto-invalidate the IMEI
- *  picker, the product catalog's stock+batch chips, the per-variant batch list, or the
- *  Cash Book page — those would otherwise stay stale until a full page reload. Force
- *  that refresh explicitly whenever an invoice is created/updated/deleted/cancelled/
- *  converted, or paid. */
+ *  batchApi/the wallet-cache slices, so a sale's effect on stock/IMEI status, or on the
+ *  cash book / bank account balance (invoices post cash-book + wallet entries server-side),
+ *  doesn't auto-invalidate the IMEI picker, the product catalog's stock+batch chips, the
+ *  per-variant batch list, or the Bank Accounts/Cash Book/Bank Statement/Reconciliation
+ *  pages — those would otherwise stay stale (showing the pre-invoice balance) until an
+ *  unrelated action happens to refetch them, or a full page reload. Force that refresh
+ *  explicitly whenever an invoice is created/updated/deleted/cancelled/converted, or paid. */
 const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
   try {
     await queryFulfilled
     dispatch(imeiApi.util.invalidateTags(['Imei']))
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
     dispatch(batchApi.util.invalidateTags(['Batch']))
-    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
+    invalidateWalletCaches(dispatch)
   } catch {
     // mutation failed — nothing to invalidate
   }
@@ -78,7 +79,7 @@ const onInvoiceCreated = async (invoiceData: any, { dispatch, queryFulfilled }: 
     await queryFulfilled
     dispatch(imeiApi.util.invalidateTags(['Imei']))
     dispatch(batchApi.util.invalidateTags(['Batch']))
-    dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
+    invalidateWalletCaches(dispatch)
     patchPurchaseCatalogStockForSale(dispatch, invoiceData)
   } catch {
     // mutation failed — nothing to invalidate

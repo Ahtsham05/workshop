@@ -114,37 +114,81 @@ const resolveInvoicePaymentMethod = (invoice) => {
 };
 
 const resolveInvoiceLedgerPaymentMethod = (invoice) => {
-  const method = (invoice.paymentMethod || 'cash').toLowerCase();
-  if (method === 'wallet') {
-    const walletName = (invoice.walletType || '').trim();
-    return walletName ? `Wallet (${walletName})` : 'Wallet';
+  const legs = resolveInvoicePaymentLegs(invoice);
+  if (legs.cashAmount > 0 && legs.walletAmount > 0) {
+    return `Cash + Wallet (${legs.walletType})`;
   }
+  if (legs.walletAmount > 0) {
+    return `Wallet (${legs.walletType})`;
+  }
+  const method = (invoice.paymentMethod || 'cash').toLowerCase();
   if (method === 'bank') return 'Bank Transfer';
   if (method === 'card') return 'Card';
   return 'Cash';
 };
 
-const syncInvoiceCashAndWalletEntries = async (invoice, previousPaymentMethod, previousWalletType, previousPaidAmount) => {
-  const paidAmount = Number(invoice.paidAmount || 0);
-  const isWalkIn = !invoice.customerId || invoice.customerId === 'walk-in';
-  const method = (invoice.paymentMethod || 'cash').toLowerCase();
-  const isWalletPayment = method === 'wallet' && invoice.walletType;
+/**
+ * Resolve which portion of `paidAmount` is a Cash Book entry vs a Wallet Entry, and which
+ * wallet, from (paymentMethod, walletType, splitPaymentMethod, splitWalletType, splitPaidAmount).
+ * The split leg is always the opposite bucket from the primary leg (enforced client + Joi side),
+ * so there is at most one cash-bucket amount and one wallet-bucket amount per invoice — never
+ * two of the same kind that could collide on the same Cash Book/Wallet Entry reference key.
+ */
+const resolveInvoicePaymentLegs = (source) => {
+  if (!source) return { cashAmount: 0, walletAmount: 0, walletType: '' };
+
+  const paidAmount = Number(source.paidAmount || 0);
+  const splitAmount = Math.max(0, Math.min(Number(source.splitPaidAmount || 0), paidAmount));
+  const method = (source.paymentMethod || 'cash').toLowerCase();
+  const isWalletPrimary = method === 'wallet' && source.walletType;
+  const splitMethod = source.splitPaymentMethod;
+
+  if (isWalletPrimary) {
+    const cashAmount = splitMethod === 'cash' ? splitAmount : 0;
+    return {
+      cashAmount,
+      walletAmount: Math.max(0, paidAmount - cashAmount),
+      walletType: String(source.walletType).trim(),
+    };
+  }
+
+  if (splitMethod === 'wallet' && source.splitWalletType) {
+    const walletAmount = splitAmount;
+    return {
+      cashAmount: Math.max(0, paidAmount - walletAmount),
+      walletAmount,
+      walletType: String(source.splitWalletType).trim(),
+    };
+  }
+
+  // Primary is cash/bank/card (bank/card are legacy — no longer offered in the UI, but older
+  // invoices may still carry them) — all non-wallet, so all of it is the Cash Book bucket.
+  return { cashAmount: paidAmount, walletAmount: 0, walletType: '' };
+};
+
+/**
+ * Sync Cash Book + Wallet Entry + Wallet.balance for an invoice's payment, from the resolved
+ * cash/wallet legs. `previous` is a plain snapshot of the pre-update payment fields (or `null`
+ * on create) — used only to compute the correct wallet-balance delta on edits; Cash Book /
+ * Wallet Entry themselves are always fully re-derived via idempotent upsert/delete.
+ */
+const syncInvoiceCashAndWalletEntries = async (invoice, previous) => {
+  const current = resolveInvoicePaymentLegs(invoice);
+  const prior = resolveInvoicePaymentLegs(previous);
 
   // Cash book: any non-wallet receipt (cash / bank / card / cheque) — wallet payments
   // live in the Wallet module only. The Invoice module is the single source of
   // truth for invoice cashbook lines so the customer ledger doesn't double-count.
-  const shouldCreateCashBookEntry = paidAmount > 0 && !isWalletPayment;
-
-  if (!shouldCreateCashBookEntry || paidAmount <= 0) {
-    await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
-  } else {
-    const cashBookPaymentMethod = resolveInvoicePaymentMethod(invoice);
+  if (current.cashAmount > 0) {
+    // A split leg's cash-book bucket is always plain cash (the new UI only offers cash/wallet
+    // as split buckets); otherwise preserve the original cash/bank/card tag for legacy invoices.
+    const cashBookPaymentMethod = current.walletAmount > 0 ? 'cash' : resolveInvoicePaymentMethod(invoice);
     await cashBookService.upsertReferenceEntry({
       organizationId: invoice.organizationId,
       branchId: invoice.branchId,
       type: 'income',
       source: 'sale',
-      amount: paidAmount,
+      amount: current.cashAmount,
       paymentMethod: cashBookPaymentMethod,
       referenceId: invoice._id,
       referenceModel: 'Invoice',
@@ -152,16 +196,18 @@ const syncInvoiceCashAndWalletEntries = async (invoice, previousPaymentMethod, p
       date: invoice.invoiceDate || invoice.createdAt || new Date(),
       createdBy: invoice.createdBy,
     });
+  } else {
+    await cashBookService.deleteEntriesByReference(invoice._id, 'Invoice');
   }
 
   // Wallet ledger: invoice wallet receipts should live in Wallet entries, not CashBook.
-  if (isWalletPayment && paidAmount > 0) {
+  if (current.walletAmount > 0 && current.walletType) {
     await walletEntryService.upsertReferenceEntry({
       organizationId: invoice.organizationId,
       branchId: invoice.branchId,
-      walletType: invoice.walletType.trim(),
+      walletType: current.walletType,
       type: 'in',
-      amount: paidAmount,
+      amount: current.walletAmount,
       referenceId: invoice._id,
       referenceModel: 'Invoice',
       description: `Wallet payment received for Invoice #${invoice.invoiceNumber}`,
@@ -173,64 +219,48 @@ const syncInvoiceCashAndWalletEntries = async (invoice, previousPaymentMethod, p
     await walletEntryService.deleteEntriesByReference(invoice._id, 'Invoice');
   }
 
-  // --- Wallet balance adjustment ---
-  if (isWalletPayment) {
-    const walletTypeName = invoice.walletType.trim();
-    const prevMethod = (previousPaymentMethod || 'cash').toLowerCase();
-    const prevPaid = Number(previousPaidAmount || 0);
-
-    // Reverse previous wallet credit if the invoice had a different wallet payment before
-    if (prevMethod === 'wallet' && previousWalletType && prevPaid > 0) {
-      const prevWalletName = previousWalletType.trim();
-      if (prevWalletName !== walletTypeName || prevPaid !== paidAmount) {
-        // Deduct the old amount from the old wallet (if same wallet, we'll net below)
-        if (prevWalletName !== walletTypeName) {
-          await walletService.adjustWalletBalance({
-            organizationId: invoice.organizationId,
-            branchId: invoice.branchId,
-            type: prevWalletName,
-            amount: prevPaid,
-            operation: 'deduct',
-            userId: invoice.updatedBy || invoice.createdBy,
-          });
-        } else {
-          // Same wallet, different amount — adjust the delta
-          const delta = paidAmount - prevPaid;
-          if (delta !== 0) {
-            await walletService.adjustWalletBalance({
-              organizationId: invoice.organizationId,
-              branchId: invoice.branchId,
-              type: walletTypeName,
-              amount: Math.abs(delta),
-              operation: delta > 0 ? 'add' : 'deduct',
-              userId: invoice.updatedBy || invoice.createdBy,
-            });
-          }
-          return; // Done
-        }
-      } else {
-        return; // No change
+  // Wallet.balance direct adjustment — delta-aware against whatever the wallet leg was before.
+  if (current.walletAmount > 0 && current.walletType) {
+    if (prior.walletAmount > 0 && prior.walletType === current.walletType) {
+      const delta = current.walletAmount - prior.walletAmount;
+      if (delta !== 0) {
+        await walletService.adjustWalletBalance({
+          organizationId: invoice.organizationId,
+          branchId: invoice.branchId,
+          type: current.walletType,
+          amount: Math.abs(delta),
+          operation: delta > 0 ? 'add' : 'deduct',
+          userId: invoice.updatedBy || invoice.createdBy,
+        });
       }
+      return;
     }
 
-    // Credit the new wallet with the paid amount
-    if (paidAmount > 0) {
+    if (prior.walletAmount > 0 && prior.walletType) {
       await walletService.adjustWalletBalance({
         organizationId: invoice.organizationId,
         branchId: invoice.branchId,
-        type: walletTypeName,
-        amount: paidAmount,
-        operation: 'add',
+        type: prior.walletType,
+        amount: prior.walletAmount,
+        operation: 'deduct',
         userId: invoice.updatedBy || invoice.createdBy,
       });
     }
-  } else if (previousPaymentMethod === 'wallet' && previousWalletType && Number(previousPaidAmount || 0) > 0) {
-    // Payment method changed away from wallet — deduct from old wallet
+
     await walletService.adjustWalletBalance({
       organizationId: invoice.organizationId,
       branchId: invoice.branchId,
-      type: previousWalletType.trim(),
-      amount: Number(previousPaidAmount),
+      type: current.walletType,
+      amount: current.walletAmount,
+      operation: 'add',
+      userId: invoice.updatedBy || invoice.createdBy,
+    });
+  } else if (prior.walletAmount > 0 && prior.walletType) {
+    await walletService.adjustWalletBalance({
+      organizationId: invoice.organizationId,
+      branchId: invoice.branchId,
+      type: prior.walletType,
+      amount: prior.walletAmount,
       operation: 'deduct',
       userId: invoice.updatedBy || invoice.createdBy,
     });
@@ -239,7 +269,7 @@ const syncInvoiceCashAndWalletEntries = async (invoice, previousPaymentMethod, p
 
 // Legacy wrapper for the create path (no previous payment info)
 const syncWalkInInvoiceCashEntry = (invoice) =>
-  syncInvoiceCashAndWalletEntries(invoice, null, null, 0);
+  syncInvoiceCashAndWalletEntries(invoice, null);
 
 /**
  * Create an invoice
@@ -773,8 +803,15 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   const originalPaidAmount = invoice.paidAmount || 0;
   const originalCustomerId = invoice.customerId;
   const originalType = invoice.type;
-  const originalPaymentMethod = invoice.paymentMethod || 'cash';
-  const originalWalletType = invoice.walletType || null;
+  // Snapshot of every payment-leg field, for delta-aware Cash Book/Wallet resync below.
+  const previousPaymentLegSnapshot = {
+    paymentMethod: invoice.paymentMethod,
+    walletType: invoice.walletType,
+    splitPaymentMethod: invoice.splitPaymentMethod,
+    splitWalletType: invoice.splitWalletType,
+    paidAmount: invoice.paidAmount,
+    splitPaidAmount: invoice.splitPaidAmount,
+  };
   const businessType = await getOrganizationBusinessType(invoice.organizationId);
   
   // Prevent updating finalized invoices unless specifically allowed
@@ -1042,7 +1079,7 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
 
   await invoice.save();
   console.log('Invoice updated successfully');
-  await syncInvoiceCashAndWalletEntries(invoice, originalPaymentMethod, originalWalletType, originalPaidAmount);
+  await syncInvoiceCashAndWalletEntries(invoice, previousPaymentLegSnapshot);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
   partnerProfitShareEngineService.syncPartnerShareForInvoice(invoice, userId).catch(() => {});
@@ -1261,14 +1298,15 @@ const deleteInvoiceById = async (invoiceId) => {
     )
     .catch(() => {});
 
-  // Reverse wallet balance if invoice was paid via wallet
-  if (invoice.paymentMethod === 'wallet' && invoice.walletType && Number(invoice.paidAmount || 0) > 0) {
+  // Reverse wallet balance if invoice was paid (in full or via a split) through a wallet
+  const deletedLegs = resolveInvoicePaymentLegs(invoice);
+  if (deletedLegs.walletAmount > 0 && deletedLegs.walletType) {
     try {
       await walletService.adjustWalletBalance({
         organizationId: invoice.organizationId,
         branchId: invoice.branchId,
-        type: invoice.walletType.trim(),
-        amount: Number(invoice.paidAmount),
+        type: deletedLegs.walletType,
+        amount: deletedLegs.walletAmount,
         operation: 'deduct',
         userId: invoice.updatedBy || invoice.createdBy,
       });
@@ -1382,7 +1420,7 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
   }
 
   await invoice.save();
-  await syncInvoiceCashAndWalletEntries(invoice, 'cash', '', 0);
+  await syncInvoiceCashAndWalletEntries(invoice, null);
   postInvoiceToAccounts(invoice);
   commissionEngineService.syncCommissionForInvoice(invoice, userId).catch(() => {});
   partnerProfitShareEngineService.syncPartnerShareForInvoice(invoice, userId).catch(() => {});

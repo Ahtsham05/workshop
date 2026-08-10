@@ -26,7 +26,7 @@ interface ProductDetailDialogProps {
 
 export function ProductDetailDialog({ productId, startDate, endDate, onClose }: ProductDetailDialogProps) {
   const { t, language } = useLanguage()
-  const { data, isLoading } = useGetProductDetailReportQuery(
+  const { data, isFetching: isLoading } = useGetProductDetailReportQuery(
     { productId: productId!, startDate, endDate },
     { skip: !productId }
   )

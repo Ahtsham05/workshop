@@ -60,6 +60,19 @@ interface Props {
   required?: boolean
   error?: string
   className?: string
+  id?: string
+  'data-enter-field'?: string
+  onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>
+  onKeyDownCapture?: React.KeyboardEventHandler<HTMLButtonElement>
+  /** Called right after an existing category is picked — e.g. to auto-advance an Enter-key
+   * field chain to the next field once a selection completes. */
+  onSelected?: () => void
+  /** Hide the built-in "Category" title above the trigger — for compact contexts (e.g. a
+   * table cell) where a surrounding column header already conveys it. */
+  hideTitle?: boolean
+  /** Set false to hide the per-category edit/delete icons (creating a brand-new category
+   * from the list still works) — for read-only-ish contexts like a table row. */
+  allowManage?: boolean
 }
 
 const resolveCategoryId = (cat: ExpenseCategory) => cat.id || cat._id || ''
@@ -79,6 +92,13 @@ export function TransactionCategoryPicker({
   required = false,
   error,
   className,
+  id,
+  'data-enter-field': dataEnterField,
+  onKeyDown,
+  onKeyDownCapture,
+  onSelected,
+  hideTitle = false,
+  allowManage = true,
 }: Props) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
@@ -193,6 +213,7 @@ export function TransactionCategoryPicker({
         setNewCatName('')
         setSearch('')
         setOpen(false)
+        onSelected?.()
       }}
     >
       <div className="flex w-full min-w-0 items-center gap-2">
@@ -202,7 +223,7 @@ export function TransactionCategoryPicker({
         />
         <span className="flex-1 truncate">{cat.name}</span>
         {value === cat.name && <Check className="h-4 w-4 shrink-0 text-primary" />}
-        {isPersistedCategory(cat) ? (
+        {allowManage && isPersistedCategory(cat) ? (
           <div
             className="flex shrink-0 items-center gap-0.5"
             onClick={(e) => e.stopPropagation()}
@@ -336,10 +357,12 @@ export function TransactionCategoryPicker({
   return (
     <>
       <div className={cn('space-y-1', className)}>
-        <Label>
-          {walletMode ? t('Wallet Category') : t('Category')}
-          {required ? <span className="text-red-500"> *</span> : null}
-        </Label>
+        {!hideTitle && (
+          <Label>
+            {walletMode ? t('Wallet Category') : t('Category')}
+            {required ? <span className="text-red-500"> *</span> : null}
+          </Label>
+        )}
         {walletMode ? (
           <p className="text-xs text-muted-foreground">
             {t('Categories here are only for My Wallet, not Products or Business Expenses.')}
@@ -374,11 +397,23 @@ export function TransactionCategoryPicker({
         >
           <PopoverTrigger asChild>
             <Button
+              id={id}
               type="button"
               variant="outline"
               role="combobox"
               aria-expanded={open}
               disabled={listLoading}
+              data-enter-field={dataEnterField}
+              onKeyDown={(e) => {
+                // Enter is never intercepted here — closed opens natively, open lets
+                // Command handle selection. Chain-advancement happens via `onSelected`.
+                if (e.key === 'Enter') return
+                onKeyDown?.(e)
+              }}
+              onKeyDownCapture={(e) => {
+                if (e.key === 'Enter') return
+                onKeyDownCapture?.(e)
+              }}
               className={cn('w-full justify-between font-normal', error && 'border-red-500')}
             >
               {listLoading ? (

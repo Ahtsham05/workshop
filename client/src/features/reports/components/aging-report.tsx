@@ -70,7 +70,7 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
   const [asOfDate, setAsOfDate] = useState<Date>(() => new Date())
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const queryAsOfDate = format(asOfDate, 'yyyy-MM-dd')
-  const { data, isLoading } = useGetCustomerAgingReportQuery({ asOfDate: queryAsOfDate })
+  const { data, isFetching: isLoading } = useGetCustomerAgingReportQuery({ asOfDate: queryAsOfDate })
 
   useImperativeHandle(ref, () => ({
     exportToExcel: () => {

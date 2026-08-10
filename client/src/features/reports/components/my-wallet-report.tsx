@@ -34,20 +34,28 @@ interface MyWalletReportProps {
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
 
+// Receive vs Send is really just the sign of the account's own impact — deriving it from
+// walletImpact (rather than pattern-matching transactionType strings) means this keeps
+// working for every source this filter lets through, present or future, without needing
+// its own case added here every time.
 function formatReceiveSendTitle(item: WalletBalanceDetailItem) {
-  if (item.transactionType === 'withdrawal' || item.transactionType === 'wallet_in') return 'Receive'
-  if (item.transactionType === 'deposit' || item.transactionType === 'wallet_out') return 'Send'
-  return item.title
+  return item.walletImpact >= 0 ? 'Receive' : 'Send'
 }
 
-/** Rows this ledger shows besides customer cash withdrawals — currently just Wallet ⇄ My
- *  Account transfers, so JazzCash/EasyPaisa balance history stays reconciled here too. */
+/** Rows this ledger shows besides customer cash withdrawals — Wallet ⇄ My Account transfers
+ *  (so JazzCash/EasyPaisa balance history stays reconciled here too), plus a cash-type
+ *  account's own CashWithdrawal activity. A cash-type Bank Account (e.g. "Cash in Hand")
+ *  has no WalletEntry trail of its own for most modules — its CashWithdrawal side only ever
+ *  reaches this report through the Cash Book merge (`source: 'cash_book'`), never the direct
+ *  `cash_withdrawal` source the non-cash-wallet side uses. See [[bank-accounts-payments-roadmap]]. */
 const isWalletTransferItem = (item: WalletBalanceDetailItem) =>
   item.source === 'wallet_entry' && item.referenceModel === 'WalletTransfer'
+const isCashWithdrawalItem = (item: WalletBalanceDetailItem) =>
+  item.source === 'cash_withdrawal' || (item.source === 'cash_book' && item.referenceModel === 'CashWithdrawal')
 
 export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWalletReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { data: walletsData, isLoading: walletsLoading } = useGetWalletsQuery(undefined, {
+    const { data: walletsData, isFetching: walletsLoading } = useGetWalletsQuery(undefined, {
       refetchOnFocus: true,
       refetchOnReconnect: true,
       refetchOnMountOrArgChange: true,
@@ -67,7 +75,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
       }
     }, [selectedWallet, cashWallets])
 
-    const { data, isLoading: statementLoading } = useGetWalletBalanceStatementQuery(
+    const { data, isFetching: statementLoading } = useGetWalletBalanceStatementQuery(
       {
         walletType: selectedWallet,
         startDate,
@@ -104,7 +112,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
 
       data.rows.forEach((row) => {
         row.detailItems
-          .filter((item) => item.source === 'cash_withdrawal' || isWalletTransferItem(item))
+          .filter((item) => isCashWithdrawalItem(item) || isWalletTransferItem(item))
           .forEach((item) => {
             runningBalance += item.walletImpact
             result.push({
@@ -114,8 +122,8 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
               accountNumber: item.accountNumber || '—',
               accountType: item.customerAccountType || item.network || '—',
               customerName: item.customerName || '—',
-              receiveAmount: item.transactionType === 'withdrawal' || item.transactionType === 'wallet_in' ? item.amount : 0,
-              sendAmount: item.transactionType === 'deposit' || item.transactionType === 'wallet_out' ? item.amount : 0,
+              receiveAmount: item.walletImpact >= 0 ? item.amount : 0,
+              sendAmount: item.walletImpact < 0 ? item.amount : 0,
               profit: item.profit || 0,
               balance: runningBalance,
             })

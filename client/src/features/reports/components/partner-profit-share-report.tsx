@@ -42,7 +42,7 @@ const PARTNER_TYPE_LABEL: Record<string, string> = {
 
 export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }, PartnerProfitShareReportProps>(
   ({ startDate, endDate }, ref) => {
-    const { data, isLoading } = useGetPartnerProfitShareReportQuery({ startDate, endDate })
+    const { data, isFetching: isLoading } = useGetPartnerProfitShareReportQuery({ startDate, endDate })
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
     const toggleExpanded = (partnerId: string) => {
