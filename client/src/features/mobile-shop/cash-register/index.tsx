@@ -108,10 +108,12 @@ export default function CashRegisterPage() {
     }
   }, [saveRegister, counts, notes, t])
 
-  const fieldOrder = useMemo(
-    () => PKR_DENOMINATIONS.map((d) => denominationKey(d.value, d.kind)),
-    [],
-  )
+  const fieldOrder = useMemo(() => {
+    const noteDenoms = PKR_DENOMINATIONS.filter((d) => d.kind === 'note')
+    const orderedNotes = noteSortDirection === 'desc' ? [...noteDenoms].reverse() : noteDenoms
+    const coinDenoms = PKR_DENOMINATIONS.filter((d) => d.kind === 'coin')
+    return [...orderedNotes, ...coinDenoms].map((d) => denominationKey(d.value, d.kind))
+  }, [noteSortDirection])
 
   const { register, onEnter, focusFirst } = useEnterFieldRefs(fieldOrder, {
     onLast: () => notesRef.current?.focus(),
