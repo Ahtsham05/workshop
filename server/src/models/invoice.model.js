@@ -256,8 +256,13 @@ InvoiceSchema.methods.calculateTotals = function() {
 
 // Method to finalize invoice
 InvoiceSchema.methods.finalize = function() {
-    if (this.type === 'cash') {
-        // Cash sales are collected immediately — keep DB consistent with totals
+    if (this.type === 'cash' && !this.splitPaymentMethod) {
+        // Cash sales are collected immediately — keep DB consistent with totals.
+        // Skipped when a split payment leg is active: there `paidAmount` is a
+        // deliberately user-edited figure (see SplitPaymentFields) that the
+        // primary/split leg amounts were derived from — forcing it back to
+        // `total` here would silently invalidate that split (see resolveInvoicePaymentLegs
+        // in invoice.service.js, which trusts `paidAmount` as the basis for both legs).
         this.paidAmount = this.total;
         this.balance = 0;
         this.status = 'paid';

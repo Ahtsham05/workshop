@@ -1071,10 +1071,17 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
   // still re-resolve total/balance, not just item edits.
   invoice.calculateTotals();
 
-  if (invoice.type === 'cash') {
+  if (invoice.type === 'cash' && !invoice.splitPaymentMethod) {
+    // Skipped when a split payment leg is active — see the matching comment on
+    // Invoice.finalize() in invoice.model.js. `calculateTotals()` above already set
+    // `balance = total - paidAmount` from the (possibly partial, split-across-two-legs)
+    // paidAmount the client sent; forcing paidAmount back to `total` here would silently
+    // invalidate the cash/wallet split resolved from it in resolveInvoicePaymentLegs.
     invoice.paidAmount = invoice.total;
     invoice.balance = 0;
     invoice.status = 'paid';
+  } else if (invoice.type === 'cash') {
+    invoice.status = invoice.balance <= 0 ? 'paid' : 'finalized';
   }
 
   await invoice.save();
