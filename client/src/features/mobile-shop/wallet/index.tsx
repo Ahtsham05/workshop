@@ -453,26 +453,30 @@ export default function WalletPage() {
                                 <ScrollText className='h-4 w-4' />
                               </Link>
                             </Button>
-                            <Button
-                              size='sm'
-                              variant='outline'
-                              className='h-8'
-                              onClick={() => handleEdit(wallet)}
-                              title='Edit bank account'
-                            >
-                              <Edit2 className='h-4 w-4' />
-                            </Button>
-                            <Button
-                              size='sm'
-                              variant='outline'
-                              className='h-8 text-red-600 hover:text-red-700'
-                              onClick={() =>
-                                setWalletToDelete({ id: resolveWalletId(wallet), type: wallet.type })
-                              }
-                              title='Delete bank account'
-                            >
-                              <Trash2 className='h-4 w-4' />
-                            </Button>
+                            {wallet.accountType !== 'cash' && (
+                              <>
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  className='h-8'
+                                  onClick={() => handleEdit(wallet)}
+                                  title='Edit bank account'
+                                >
+                                  <Edit2 className='h-4 w-4' />
+                                </Button>
+                                <Button
+                                  size='sm'
+                                  variant='outline'
+                                  className='h-8 text-red-600 hover:text-red-700'
+                                  onClick={() =>
+                                    setWalletToDelete({ id: resolveWalletId(wallet), type: wallet.type })
+                                  }
+                                  title='Delete bank account'
+                                >
+                                  <Trash2 className='h-4 w-4' />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

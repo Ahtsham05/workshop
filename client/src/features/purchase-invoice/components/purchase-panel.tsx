@@ -1008,7 +1008,10 @@ export default function PurchasePanel({
         toast.error('Please select an account for the split payment')
         return
       }
-      const splitPaidAmount = splitPaymentMethod ? Math.max(0, Math.min(Number(purchase.splitPaidAmount || 0), purchase.paidAmount || 0)) : 0
+      // The split leg is an independent amount, not carved out of Paid Amount — the two
+      // legs add up to what was actually paid (see split-payment-fields.tsx).
+      const splitPaidAmount = splitPaymentMethod ? Math.max(0, Number(purchase.splitPaidAmount || 0)) : 0
+      const totalPaidAmount = (purchase.paidAmount || 0) + splitPaidAmount
 
       // Map to backend format
       const purchaseData = {
@@ -1050,8 +1053,8 @@ export default function PurchasePanel({
         discountValue: purchase.discountValue || 0,
         discount: totals.discount,
         totalAmount: totals.total,
-        paidAmount: purchase.paidAmount || 0,
-        balance: resolvePurchaseInvoiceBalance(totals.total, purchase.paidAmount || 0),
+        paidAmount: totalPaidAmount,
+        balance: resolvePurchaseInvoiceBalance(totals.total, totalPaidAmount),
         type: purchaseType,
         paymentMethod: paymentMethod,
         walletType: paymentMethod === 'wallet' ? purchase.walletType : undefined,
@@ -1162,6 +1165,9 @@ export default function PurchasePanel({
   )
 
   const totals = calculateTotals()
+  // The split leg is an independent amount that adds to Paid Amount, not carved out of it —
+  // see split-payment-fields.tsx. This is what's actually been paid so far.
+  const totalPaidNow = (purchase.paidAmount || 0) + (purchase.splitPaymentMethod ? (purchase.splitPaidAmount || 0) : 0)
   const isLoading = savingType !== null
 
   useInvoiceSaveShortcuts(
@@ -2180,17 +2186,17 @@ export default function PurchasePanel({
                   <span className="font-medium">{t('Current Purchase')}:</span>
                   <span className="font-bold text-red-600">Rs{totals.total.toFixed(2)} (Cr)</span>
                 </div>
-                {(purchase.paidAmount || 0) > 0 && (
+                {totalPaidNow > 0 && (
                   <div className='flex justify-between items-center text-sm'>
                     <span className="font-medium">{t('Paid Now')}:</span>
-                    <span className="font-bold text-green-600">-Rs{(purchase.paidAmount || 0).toFixed(2)} (Dr)</span>
+                    <span className="font-bold text-green-600">-Rs{totalPaidNow.toFixed(2)} (Dr)</span>
                   </div>
                 )}
                 <Separator />
                 <div className='flex justify-between items-center'>
                   <span className="font-bold">{t('Net Balance')}:</span>
-                  <span className={`font-bold text-lg ${(supplierBalance + totals.total - (purchase.paidAmount || 0)) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    Rs{Math.abs(supplierBalance + totals.total - (purchase.paidAmount || 0)).toFixed(2)} {(supplierBalance + totals.total - (purchase.paidAmount || 0)) > 0 ? '(Payable)' : '(Receivable)'}
+                  <span className={`font-bold text-lg ${(supplierBalance + totals.total - totalPaidNow) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    Rs{Math.abs(supplierBalance + totals.total - totalPaidNow).toFixed(2)} {(supplierBalance + totals.total - totalPaidNow) > 0 ? '(Payable)' : '(Receivable)'}
                   </span>
                 </div>
               </div>

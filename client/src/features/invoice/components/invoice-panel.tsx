@@ -190,6 +190,9 @@ export function InvoicePanel({
       ),
     [wallets, t],
   )
+  // The split leg is an independent amount that adds to Paid Amount, not carved out of it —
+  // see split-payment-fields.tsx. This is what's actually been paid so far.
+  const totalPaidNow = (invoice.paidAmount || 0) + (invoice.splitPaymentMethod ? (invoice.splitPaidAmount || 0) : 0)
   const { data: salesmen } = useGetAllSalesmanProfilesQuery({ status: 'active' })
   const salesmanOptions = useMemo(
     () =>
@@ -1348,6 +1351,11 @@ export function InvoicePanel({
         }
       }
 
+      // The split leg is an independent amount, not carved out of Paid Amount — the two
+      // legs add up to what was actually paid (see split-payment-fields.tsx).
+      const splitPaidAmountForSave = invoice.splitPaymentMethod ? Math.max(0, Number(invoice.splitPaidAmount || 0)) : 0
+      const totalPaidAmountForSave = (invoice.paidAmount || 0) + splitPaidAmountForSave
+
       const invoiceData = {
         items: validItems.map(item => ({
           productId: item.productId,
@@ -1384,8 +1392,8 @@ export function InvoicePanel({
         total: invoice.total,
         totalProfit: invoice.totalProfit,
         totalCost: invoice.totalCost,
-        paidAmount: invoice.paidAmount,
-        balance: invoice.balance,
+        paidAmount: totalPaidAmountForSave,
+        balance: invoice.total - totalPaidAmountForSave,
         salesmanId: invoice.salesmanId || undefined,
         notes: normalizeInvoiceNotesHtml(invoice.notes || ''),
         receivedByName: invoice.type === 'pending' ? (invoice.receivedByName || '').trim() : undefined,
@@ -1397,7 +1405,7 @@ export function InvoicePanel({
         walletType: invoice.paymentMethod === 'wallet' ? (invoice.walletType || '') : undefined,
         splitPaymentMethod: invoice.splitPaymentMethod,
         splitWalletType: invoice.splitPaymentMethod === 'wallet' ? (invoice.splitWalletType || '') : undefined,
-        splitPaidAmount: invoice.splitPaymentMethod ? Math.max(0, Math.min(Number(invoice.splitPaidAmount || 0), invoice.paidAmount || 0)) : 0,
+        splitPaidAmount: splitPaidAmountForSave,
         loyaltyPoints: invoice.loyaltyPoints,
         couponCode: invoice.couponCode,
         returnPolicy: invoice.returnPolicy,
@@ -3086,6 +3094,7 @@ export function InvoicePanel({
                 primaryMethod={invoice.paymentMethod === 'wallet' ? 'wallet' : 'cash'}
                 wallets={wallets}
                 paidAmount={invoice.paidAmount || 0}
+                showBalance={false}
                 value={{
                   splitPaymentMethod: invoice.splitPaymentMethod,
                   splitWalletType: invoice.splitWalletType,
@@ -3175,17 +3184,17 @@ export function InvoicePanel({
                     <span className="font-medium">{t('Current Amount')}:</span>
                     <span className="font-bold text-red-600">Rs{invoice.total.toFixed(2)} (Dr)</span>
                   </div>
-                  {invoice.paidAmount > 0 && (
+                  {totalPaidNow > 0 && (
                     <div className='flex justify-between items-center text-sm'>
                       <span className="font-medium">{t('Paid Now')}:</span>
-                      <span className="font-bold text-green-600">-Rs{invoice.paidAmount.toFixed(2)} (Cr)</span>
+                      <span className="font-bold text-green-600">-Rs{totalPaidNow.toFixed(2)} (Cr)</span>
                     </div>
                   )}
                   <Separator />
                   <div className='flex justify-between items-center'>
                     <span className="font-bold">{t('Net Balance')}:</span>
-                    <span className={`font-bold text-lg ${(customerBalance + invoice.total - invoice.paidAmount) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      Rs{Math.abs(customerBalance + invoice.total - invoice.paidAmount).toFixed(2)} {(customerBalance + invoice.total - invoice.paidAmount) > 0 ? '(Receivable)' : '(Payable)'}
+                    <span className={`font-bold text-lg ${(customerBalance + invoice.total - totalPaidNow) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      Rs{Math.abs(customerBalance + invoice.total - totalPaidNow).toFixed(2)} {(customerBalance + invoice.total - totalPaidNow) > 0 ? '(Receivable)' : '(Payable)'}
                     </span>
                   </div>
                 </div>
