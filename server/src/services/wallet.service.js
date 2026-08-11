@@ -62,6 +62,28 @@ const createOrUpdateWallet = async ({
   // '' (cleared select) must not hit Mongoose's enum validator — normalize to undefined.
   const normalizedAccountType = accountType || undefined;
 
+  // Cash-type is meant to be a singular concept per branch — the "Cash in Hand" account
+  // that Cash Book balance gets overlaid onto (see overlayCashInHandBalances/
+  // resolveCashInHandBalance above). A second wallet accidentally marked cash-type would
+  // silently start showing/using that same live Cash Book figure instead of its own real
+  // balance, masking its true balance and, once any transaction touches it, corrupting its
+  // stored balance too (adjustWalletBalance bases cash-type math on Cash Book, not the
+  // stored field). Block it outright rather than letting it happen quietly.
+  if (normalizedAccountType === 'cash') {
+    const existingCashWallet = await Wallet.findOne({
+      organizationId,
+      branchId,
+      accountType: 'cash',
+      ...(id ? { _id: { $ne: id } } : {}),
+    });
+    if (existingCashWallet) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `"${existingCashWallet.type}" is already this branch's Cash account — only one Cash-type account is allowed per branch. Choose "Bank" or "Mobile Wallet" instead.`
+      );
+    }
+  }
+
   if (id) {
     wallet = await Wallet.findOne({ _id: id, organizationId, branchId });
     if (!wallet) {

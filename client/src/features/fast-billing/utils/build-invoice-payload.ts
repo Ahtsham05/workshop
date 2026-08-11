@@ -1,4 +1,4 @@
-import type { CartLine, PaymentMethod } from '../types'
+import type { CartLine, PaymentMethod, SaleType } from '../types'
 import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 
 export type FastBillCustomer = {
@@ -10,7 +10,15 @@ type BuildPayloadArgs = {
   cart: CartLine[]
   customer: FastBillCustomer
   walkInCustomerName: string
+  saleType: SaleType
   paymentMethod: PaymentMethod
+  walletType: string
+  // Optional second payment leg — e.g. paid partly cash, partly via a bank account.
+  // Always the opposite bucket from `paymentMethod` (enforced by the UI), see
+  // components/split-payment-fields.tsx.
+  splitPaymentMethod?: 'cash' | 'wallet'
+  splitWalletType?: string
+  splitPaidAmount?: number
   discountType: DiscountType
   discountValue: number
   paidAmount: number
@@ -46,7 +54,12 @@ export function buildInvoicePayload({
   cart,
   customer,
   walkInCustomerName,
+  saleType,
   paymentMethod,
+  walletType,
+  splitPaymentMethod,
+  splitWalletType,
+  splitPaidAmount,
   discountType,
   discountValue,
   paidAmount,
@@ -84,13 +97,26 @@ export function buildInvoicePayload({
   const totalProfit = round2(items.reduce((sum, item) => sum + item.profit, 0))
   const totalCost = round2(items.reduce((sum, item) => sum + item.cost * item.quantity, 0))
 
+  // The split leg is an independent amount that ADDS to the primary Paid Amount, not
+  // carved out of it — see split-payment-fields.tsx. A plain cash sale with no split is
+  // always fully collected (server also enforces this via Invoice.finalize()); credit
+  // sales and any split-active sale trust the primary+split sum the cashier entered.
+  const splitAmount = splitPaymentMethod ? Math.max(0, Number(splitPaidAmount || 0)) : 0
+  const paidForInvoice = saleType === 'credit' || splitPaymentMethod
+    ? round2(Math.max(0, paidAmount || 0) + splitAmount)
+    : total
+
   return {
     items,
     customerId: customer ? customer.id : 'walk-in',
     customerName: customer ? customer.name : undefined,
     walkInCustomerName: customer ? undefined : walkInCustomerName || 'Walk-in Customer',
-    type: paymentMethod === 'credit' ? 'credit' : 'cash',
-    paymentMethod: paymentMethod === 'credit' ? 'cash' : paymentMethod,
+    type: saleType === 'credit' ? 'credit' : 'cash',
+    paymentMethod,
+    walletType: paymentMethod === 'wallet' ? (walletType || '') : undefined,
+    splitPaymentMethod,
+    splitWalletType: splitPaymentMethod === 'wallet' ? (splitWalletType || '') : undefined,
+    splitPaidAmount: splitAmount,
     subtotal,
     tax: 0,
     discountType,
@@ -99,7 +125,7 @@ export function buildInvoicePayload({
     total,
     totalProfit,
     totalCost,
-    paidAmount: paymentMethod === 'credit' ? paidAmount : total,
+    paidAmount: paidForInvoice,
     language: 'en',
   }
 }

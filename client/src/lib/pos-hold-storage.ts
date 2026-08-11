@@ -148,6 +148,12 @@ export type FastBillWorkspaceSnapshot = {
   customerId: string | null
   customerName: string
   paymentMethod: string
+  // Optional — absent on drafts saved before the Bank Accounts / split-payment feature.
+  walletType?: string
+  saleType?: string
+  splitPaymentMethod?: string
+  splitWalletType?: string
+  splitPaidAmount?: number
   discountType: string
   discountValue: number
   paidAmount: number

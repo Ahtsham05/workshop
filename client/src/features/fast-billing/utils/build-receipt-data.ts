@@ -1,5 +1,5 @@
 import type { PrintInvoiceData } from '@/features/invoice/utils/print-utils'
-import type { CartLine, PaymentMethod } from '../types'
+import type { CartLine, SaleType } from '../types'
 import { computeCartSubtotal } from './build-invoice-payload'
 import type { FastBillCustomer } from './build-invoice-payload'
 import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
@@ -9,10 +9,12 @@ type BuildReceiptArgs = {
   cart: CartLine[]
   customer: FastBillCustomer
   walkInCustomerName: string
-  paymentMethod: PaymentMethod
+  saleType: SaleType
   discountType: DiscountType
   discountValue: number
   paidAmount: number
+  splitPaymentMethod?: 'cash' | 'wallet'
+  splitPaidAmount?: number
 }
 
 export function buildReceiptData({
@@ -20,16 +22,19 @@ export function buildReceiptData({
   cart,
   customer,
   walkInCustomerName,
-  paymentMethod,
+  saleType,
   discountType,
   discountValue,
   paidAmount,
+  splitPaymentMethod,
+  splitPaidAmount,
 }: BuildReceiptArgs): PrintInvoiceData {
   const subtotal = computeCartSubtotal(cart)
   const discount = computeDiscountAmount(subtotal, discountType, discountValue)
   const total = Math.max(0, subtotal - discount)
-  const isCredit = paymentMethod === 'credit'
-  const paid = isCredit ? paidAmount : total
+  const isCredit = saleType === 'credit'
+  const splitAmount = splitPaymentMethod ? Math.max(0, Number(splitPaidAmount || 0)) : 0
+  const paid = isCredit || splitPaymentMethod ? Math.max(0, (paidAmount || 0) + splitAmount) : total
 
   return {
     invoiceNumber,

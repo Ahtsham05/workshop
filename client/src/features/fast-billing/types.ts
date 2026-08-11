@@ -38,7 +38,30 @@ export type CartLine = {
   imeis?: ImeiEntryInput[]
 }
 
-export type PaymentMethod = 'cash' | 'card' | 'credit'
+// The account bucket money actually moves through — mirrors Invoice/Purchase's
+// paymentMethod field. 'wallet' always pairs with a walletType (a real Bank Account /
+// mobile wallet name); there is no generic 'card'/'bank' placeholder anymore — every
+// real account is selectable by its own name via buildMergedPaymentOptions.
+export type PaymentMethod = 'cash' | 'wallet'
+
+// Whether the sale is collected now or put on the customer's account — independent of
+// PaymentMethod (a credit sale can still take a cash/wallet down payment).
+export type SaleType = 'cash' | 'credit'
+
+/**
+ * Normalizes a possibly-stale (pre-Bank-Accounts-feature) persisted payment state —
+ * old localStorage drafts/held carts may still carry the legacy 3-way
+ * `paymentMethod: 'cash' | 'card' | 'credit'` scheme. 'card' folds into plain 'cash'
+ * (it was never a real account), 'credit' becomes the new `saleType`.
+ */
+export function normalizePaymentState(
+  storedPaymentMethod?: string,
+  storedSaleType?: string,
+): { saleType: SaleType; paymentMethod: PaymentMethod } {
+  const saleType: SaleType = storedSaleType === 'credit' || storedPaymentMethod === 'credit' ? 'credit' : 'cash'
+  const paymentMethod: PaymentMethod = storedPaymentMethod === 'wallet' ? 'wallet' : 'cash'
+  return { saleType, paymentMethod }
+}
 
 export function cartLineKey(item: Pick<PurchaseCatalogItem, 'productId' | 'variantId'>): string {
   return item.variantId ? `${item.productId}:${item.variantId}` : item.productId

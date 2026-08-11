@@ -9,6 +9,8 @@ import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/store
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
+import type { SplitPaymentValue } from '@/components/split-payment-fields'
 import type { ImeiEntryInput, ImeiRecord } from '@/stores/imei.api'
 import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
 import { entryImei, SerialNumberDialog } from '@/components/serial-batch-line-controls'
@@ -33,7 +35,7 @@ import { AddToCartDialog } from './components/add-to-cart-dialog'
 import { playBeep } from './utils/beep'
 import { buildInvoicePayload, computeCartSubtotal, computeCartItemDiscountTotal, type FastBillCustomer } from './utils/build-invoice-payload'
 import { buildReceiptData } from './utils/build-receipt-data'
-import { catalogItemToCartLine, cartLineKey, type CartLine, type PaymentMethod } from './types'
+import { catalogItemToCartLine, cartLineKey, normalizePaymentState, type CartLine, type PaymentMethod, type SaleType } from './types'
 import { parseQuantityPrefix } from './utils/quantity-prefix'
 import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 
@@ -57,7 +59,12 @@ export default function FastBillingPage() {
   const [cart, setCart] = useState<CartLine[]>([])
   const [customer, setCustomer] = useState<FastBillCustomer>(null)
   const [walkInCustomerName, setWalkInCustomerName] = useState('')
+  const [saleType, setSaleType] = useState<SaleType>('cash')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
+  const [walletType, setWalletType] = useState('')
+  const [splitPaymentMethod, setSplitPaymentMethod] = useState<'cash' | 'wallet' | undefined>(undefined)
+  const [splitWalletType, setSplitWalletType] = useState('')
+  const [splitPaidAmount, setSplitPaidAmount] = useState(0)
   const [discountType, setDiscountType] = useState<DiscountType>('fixed')
   const [discountValue, setDiscountValue] = useState(0)
   const [paidAmount, setPaidAmount] = useState(0)
@@ -67,15 +74,24 @@ export default function FastBillingPage() {
   const [recentItems, setRecentItems] = useState<PurchaseCatalogItem[]>([])
   const [dialogItem, setDialogItem] = useState<PurchaseCatalogItem | null>(null)
 
+  const { data: walletsData } = useGetWalletsQuery(undefined)
+  const wallets = useMemo(() => walletsData?.results?.filter((w) => w.isActive) ?? [], [walletsData])
+
   const restoredRef = useRef(false)
   useEffect(() => {
     if (restoredRef.current) return
     restoredRef.current = true
     const ws = loadFastBillWorkspace()
     if (ws) {
+      const normalized = normalizePaymentState(ws.paymentMethod, ws.saleType)
       setCart((ws.cart as unknown as CartLine[]) || [])
       setCustomer(ws.customerId ? { id: ws.customerId, name: ws.customerName } : null)
-      setPaymentMethod((ws.paymentMethod as PaymentMethod) || 'cash')
+      setSaleType(normalized.saleType)
+      setPaymentMethod(normalized.paymentMethod)
+      setWalletType(normalized.paymentMethod === 'wallet' ? ws.walletType || '' : '')
+      setSplitPaymentMethod(ws.splitPaymentMethod === 'wallet' || ws.splitPaymentMethod === 'cash' ? ws.splitPaymentMethod : undefined)
+      setSplitWalletType(ws.splitWalletType || '')
+      setSplitPaidAmount(ws.splitPaidAmount || 0)
       setDiscountType((ws.discountType as DiscountType) || 'fixed')
       setDiscountValue(ws.discountValue || 0)
       setPaidAmount(ws.paidAmount || 0)
@@ -89,20 +105,65 @@ export default function FastBillingPage() {
       customerId: customer?.id ?? null,
       customerName: customer?.name ?? '',
       paymentMethod,
+      walletType,
+      saleType,
+      splitPaymentMethod,
+      splitWalletType,
+      splitPaidAmount,
       discountType,
       discountValue,
       paidAmount,
     })
-  }, [cart, customer, paymentMethod, discountType, discountValue, paidAmount])
+  }, [cart, customer, paymentMethod, walletType, saleType, splitPaymentMethod, splitWalletType, splitPaidAmount, discountType, discountValue, paidAmount])
 
   const subtotal = computeCartSubtotal(cart)
   const itemDiscountTotal = computeCartItemDiscountTotal(cart)
   const discount = computeDiscountAmount(subtotal, discountType, discountValue)
   const total = Math.max(0, subtotal - discount)
 
+  // Pure cash sale (no split leg) is always fully collected — keeps Paid Amount live-synced
+  // to the running total as items change. Credit sales and any split-active sale leave
+  // paidAmount as a deliberately user-edited figure (down payment / primary leg amount).
   useEffect(() => {
-    if (paymentMethod !== 'credit') setPaidAmount(total)
-  }, [total, paymentMethod])
+    if (saleType === 'cash' && !splitPaymentMethod) setPaidAmount(total)
+  }, [total, saleType, splitPaymentMethod])
+
+  const handlePaymentMethodChange = useCallback((method: PaymentMethod, nextWalletType?: string) => {
+    setPaymentMethod(method)
+    setWalletType(method === 'wallet' ? (nextWalletType || '') : '')
+    // The split leg's bucket is derived from this field — stale once it changes.
+    setSplitPaymentMethod(undefined)
+    setSplitWalletType('')
+    setSplitPaidAmount(0)
+  }, [])
+
+  const handleSaleTypeChange = useCallback((type: SaleType) => {
+    setSaleType(type)
+    setPaidAmount(type === 'cash' ? total : 0)
+    // A stale split leg from before the switch would otherwise get summed on top of the
+    // freshly-reset paidAmount above (paidAmount + splitPaidAmount overshooting total) —
+    // clear it so the cashier re-adds a split deliberately for the new sale type.
+    setSplitPaymentMethod(undefined)
+    setSplitWalletType('')
+    setSplitPaidAmount(0)
+  }, [total])
+
+  const handleSplitPaymentChange = useCallback((patch: SplitPaymentValue) => {
+    setSplitPaymentMethod(patch.splitPaymentMethod)
+    setSplitWalletType(patch.splitWalletType || '')
+    setSplitPaidAmount(patch.splitPaidAmount || 0)
+  }, [])
+
+  const toggleSplitPayment = useCallback(() => {
+    setSplitPaymentMethod((prev) => {
+      if (prev) {
+        setSplitWalletType('')
+        setSplitPaidAmount(0)
+        return undefined
+      }
+      return paymentMethod === 'wallet' ? 'cash' : 'wallet'
+    })
+  }, [paymentMethod])
 
   const barcodeIndex = useMemo(() => {
     const map = new Map<string, PurchaseCatalogItem>()
@@ -452,7 +513,12 @@ export default function FastBillingPage() {
     setCart([])
     setCustomer(null)
     setWalkInCustomerName('')
+    setSaleType('cash')
     setPaymentMethod('cash')
+    setWalletType('')
+    setSplitPaymentMethod(undefined)
+    setSplitWalletType('')
+    setSplitPaidAmount(0)
     setDiscountType('fixed')
     setDiscountValue(0)
     setPaidAmount(0)
@@ -474,6 +540,11 @@ export default function FastBillingPage() {
         customerId: customer?.id ?? null,
         customerName: customer?.name ?? '',
         paymentMethod,
+        walletType,
+        saleType,
+        splitPaymentMethod,
+        splitWalletType,
+        splitPaidAmount,
         discountType,
         discountValue,
         paidAmount,
@@ -482,12 +553,18 @@ export default function FastBillingPage() {
     setHeld(listFastBillHeld())
     resetSale()
     toast.success('Cart held')
-  }, [cart, customer, walkInCustomerName, paymentMethod, discountType, discountValue, paidAmount, resetSale])
+  }, [cart, customer, walkInCustomerName, paymentMethod, walletType, saleType, splitPaymentMethod, splitWalletType, splitPaidAmount, discountType, discountValue, paidAmount, resetSale])
 
   const resumeHeld = useCallback((record: FastBillHeldRecord) => {
+    const normalized = normalizePaymentState(record.snapshot.paymentMethod, record.snapshot.saleType)
     setCart((record.snapshot.cart as unknown as CartLine[]) || [])
     setCustomer(record.snapshot.customerId ? { id: record.snapshot.customerId, name: record.snapshot.customerName } : null)
-    setPaymentMethod((record.snapshot.paymentMethod as PaymentMethod) || 'cash')
+    setSaleType(normalized.saleType)
+    setPaymentMethod(normalized.paymentMethod)
+    setWalletType(normalized.paymentMethod === 'wallet' ? record.snapshot.walletType || '' : '')
+    setSplitPaymentMethod(record.snapshot.splitPaymentMethod === 'wallet' || record.snapshot.splitPaymentMethod === 'cash' ? record.snapshot.splitPaymentMethod : undefined)
+    setSplitWalletType(record.snapshot.splitWalletType || '')
+    setSplitPaidAmount(record.snapshot.splitPaidAmount || 0)
     setDiscountType((record.snapshot.discountType as DiscountType) || 'fixed')
     setDiscountValue(record.snapshot.discountValue || 0)
     setPaidAmount(record.snapshot.paidAmount || 0)
@@ -505,6 +582,15 @@ export default function FastBillingPage() {
   const handleCharge = useCallback(async () => {
     if (cart.length === 0) return
 
+    if (paymentMethod === 'wallet' && !walletType) {
+      toast.error('Please select a bank account for the payment')
+      return
+    }
+    if (splitPaymentMethod === 'wallet' && !splitWalletType) {
+      toast.error('Please select an account for the split payment')
+      return
+    }
+
     // IMEI/serial-tracked lines must have exactly one number selected per unit sold —
     // same check invoice-panel.tsx runs before save.
     for (const line of cart) {
@@ -519,7 +605,20 @@ export default function FastBillingPage() {
     }
 
     try {
-      const payload = buildInvoicePayload({ cart, customer, walkInCustomerName, paymentMethod, discountType, discountValue, paidAmount })
+      const payload = buildInvoicePayload({
+        cart,
+        customer,
+        walkInCustomerName,
+        saleType,
+        paymentMethod,
+        walletType,
+        splitPaymentMethod,
+        splitWalletType,
+        splitPaidAmount,
+        discountType,
+        discountValue,
+        paidAmount,
+      })
       const result = await createInvoice(payload).unwrap()
       playBeep('success')
       toast.success(`Invoice ${result.invoiceNumber} created`)
@@ -529,10 +628,12 @@ export default function FastBillingPage() {
         cart,
         customer,
         walkInCustomerName,
-        paymentMethod,
+        saleType,
         discountType,
         discountValue,
         paidAmount,
+        splitPaymentMethod,
+        splitPaidAmount,
       })
       receiptData.printInUrdu = getInvoicePrintInUrdu()
       receiptData.companyName = orgData?.name || branchData?.name
@@ -563,7 +664,12 @@ export default function FastBillingPage() {
     cart,
     customer,
     walkInCustomerName,
+    saleType,
     paymentMethod,
+    walletType,
+    splitPaymentMethod,
+    splitWalletType,
+    splitPaidAmount,
     discountType,
     discountValue,
     paidAmount,
@@ -586,17 +692,17 @@ export default function FastBillingPage() {
       switch (e.key) {
         case '1':
           e.preventDefault()
-          setPaymentMethod('cash')
+          handleSaleTypeChange('cash')
           break
         case '2':
-          e.preventDefault()
-          setPaymentMethod('card')
-          break
-        case '3':
           if (customer) {
             e.preventDefault()
-            setPaymentMethod('credit')
+            handleSaleTypeChange('credit')
           }
+          break
+        case '3':
+          e.preventDefault()
+          toggleSplitPayment()
           break
         case 'h':
         case 'H':
@@ -617,7 +723,7 @@ export default function FastBillingPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleCharge, customer, holdCurrentCart, resetSale])
+  }, [handleCharge, customer, holdCurrentCart, resetSale, handleSaleTypeChange, toggleSplitPayment])
 
   return (
     <div className='flex flex-col'>
@@ -629,8 +735,8 @@ export default function FastBillingPage() {
           <div>
             <h1 className='text-xl font-bold tracking-tight'>Fast Billing</h1>
             <p className='text-xs text-muted-foreground'>
-              Type <span className='font-mono'>3*</span> for qty 3 · ↑↓ + Enter to pick · Alt+1/2/3 payment ·
-              Alt+H hold · Alt+L held · Ctrl+Enter charge
+              Type <span className='font-mono'>3*</span> for qty 3 · ↑↓ + Enter to pick · Alt+1 cash · Alt+2 credit ·
+              Alt+3 split · Alt+H hold · Alt+L held · Ctrl+Enter charge
             </p>
           </div>
         </div>
@@ -769,8 +875,16 @@ export default function FastBillingPage() {
               }}
               discount={discount}
               total={total}
+              saleType={saleType}
+              onSaleTypeChange={handleSaleTypeChange}
               paymentMethod={paymentMethod}
-              onPaymentMethodChange={setPaymentMethod}
+              walletType={walletType}
+              onPaymentMethodChange={handlePaymentMethodChange}
+              wallets={wallets}
+              splitPaymentMethod={splitPaymentMethod}
+              splitWalletType={splitWalletType}
+              splitPaidAmount={splitPaidAmount}
+              onSplitPaymentChange={handleSplitPaymentChange}
               customer={customer}
               onCustomerChange={setCustomer}
               walkInCustomerName={walkInCustomerName}
