@@ -7,6 +7,11 @@ const createAdvancePayment = {
     amount: Joi.number().min(0.01).required(),
     transactionDate: Joi.date(),
     paymentMethod: Joi.string().allow('', null),
+    walletType: Joi.string().trim().when('paymentMethod', {
+      is: 'wallet',
+      then: Joi.required(),
+      otherwise: Joi.allow('', null).optional(),
+    }),
     description: Joi.string().allow('', null),
     notes: Joi.string().allow('', null),
   }),
@@ -21,6 +26,11 @@ const payEmployee = {
       recoverySource: Joi.string().valid('pay', 'standalone').default('pay'),
       transactionDate: Joi.date(),
       paymentMethod: Joi.string().allow('', null),
+      walletType: Joi.string().trim().when('paymentMethod', {
+        is: 'wallet',
+        then: Joi.required(),
+        otherwise: Joi.allow('', null).optional(),
+      }),
       notes: Joi.string().allow('', null),
       // Pay Employee dialog's "Affect Expense & Cash Book" switch. Defaults on.
       affectsBooks: Joi.boolean().default(true),
@@ -57,6 +67,11 @@ const updateLedgerEntry = {
       debit: Joi.number().min(0),
       credit: Joi.number().min(0),
       paymentMethod: Joi.string().allow('', null),
+      walletType: Joi.string().trim().when('paymentMethod', {
+        is: 'wallet',
+        then: Joi.required(),
+        otherwise: Joi.allow('', null).optional(),
+      }),
     })
     .min(1),
 };

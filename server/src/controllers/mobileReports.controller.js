@@ -644,6 +644,12 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       title = 'Payment Voucher';
     } else if (entry.referenceModel === 'ReceiptVoucher') {
       title = 'Receipt Voucher';
+    } else if (entry.referenceModel === 'EmployeeLedger') {
+      title = 'Employee Payment';
+    } else if (entry.referenceModel === 'SalesmanCommissionPayment') {
+      title = 'Commission Payment';
+    } else if (entry.referenceModel === 'PartnerPayment') {
+      title = 'Partner Share Payment';
     }
 
     ensureBucket(dateKey).push({

@@ -75,6 +75,12 @@ const employeeLedgerSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // Bank Account / mobile wallet name when paymentMethod === 'wallet' (e.g. 'JazzCash',
+    // 'HBL Bank') — same convention as Invoice/Purchase/PaymentVoucher's walletType.
+    walletType: {
+      type: String,
+      trim: true,
+    },
     notes: {
       type: String,
       trim: true,

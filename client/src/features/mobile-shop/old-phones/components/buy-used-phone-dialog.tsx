@@ -253,7 +253,9 @@ export function BuyUsedPhoneDialog({
 
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
-  const basePaymentMethods = [{ value: 'cash', label: 'Cash' }, { value: 'bank', label: 'Bank Transfer' }]
+  // No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
+  // Bank Account/mobile wallet) is selectable by its own name via buildMergedPaymentOptions.
+  const basePaymentMethods = [{ value: 'cash', label: 'Cash' }]
   // Buying a used phone is money-out — show wallet balances so staff can see what's available.
   const paymentMethodOptions = buildMergedPaymentOptions(basePaymentMethods, wallets, true)
 

@@ -25,12 +25,18 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLanguage } from '@/context/language-context';
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options';
 import toast from 'react-hot-toast';
 
 const paymentSchema = z
   .object({
     amount: z.coerce.number().positive(),
-    paymentMethod: z.enum(['cash', 'bank', 'wallet']),
+    paymentMethod: z.enum(['cash', 'wallet']),
     walletType: z.string(),
     reference: z.string(),
     notes: z.string(),
@@ -62,6 +68,14 @@ export function CommissionPaymentDialog({
   const { t } = useLanguage();
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !open });
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? [];
+  // Paying a salesman is money-out — show wallet balances so staff can avoid
+  // overdrawing. No generic 'Bank Transfer' placeholder — every real account (Cash in
+  // Hand or a named Bank Account/mobile wallet) is selectable by its own name.
+  const paymentMethodOptions = buildMergedPaymentOptions(
+    [{ value: 'cash', label: t('cash') || 'Cash' }],
+    wallets,
+    true,
+  );
   const [createPayment, { isLoading }] = useCreateCommissionPaymentMutation();
 
   const form = useForm<PaymentFormValues>({
@@ -87,8 +101,6 @@ export function CommissionPaymentDialog({
       });
     }
   }, [open, balance, form]);
-
-  const paymentMethod = form.watch('paymentMethod');
 
   const onSubmit: SubmitHandler<PaymentFormValues> = async (data) => {
     if (data.amount > balance) {
@@ -141,52 +153,41 @@ export function CommissionPaymentDialog({
             <FormField
               control={form.control}
               name="paymentMethod"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('payment_method') || 'Payment Method'}</FormLabel>
-                  <Select value={field.value} onValueChange={(v) => field.onChange(v as 'cash' | 'bank' | 'wallet')}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="cash">{t('cash') || 'Cash'}</SelectItem>
-                      <SelectItem value="bank">{t('bank_transfer') || 'Bank Transfer'}</SelectItem>
-                      <SelectItem value="wallet">{t('wallet') || 'Wallet'}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {paymentMethod === 'wallet' && (
-              <FormField
-                control={form.control}
-                name="walletType"
-                render={({ field }) => (
+              render={({ field }) => {
+                const currentWalletType = form.watch('walletType');
+                return (
                   <FormItem>
-                    <FormLabel>{t('wallet') || 'Wallet'} *</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <FormLabel>{t('payment_method') || 'Payment Method'}</FormLabel>
+                    <Select
+                      value={field.value === 'wallet' && currentWalletType ? toWalletOptionValue(currentWalletType) : field.value}
+                      onValueChange={(v) => {
+                        if (isWalletOptionValue(v)) {
+                          field.onChange('wallet');
+                          form.setValue('walletType', getWalletTypeFromOptionValue(v), { shouldValidate: true });
+                        } else {
+                          field.onChange('cash');
+                          form.setValue('walletType', '', { shouldValidate: true });
+                        }
+                      }}
+                    >
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder={t('select_wallet') || 'Select a wallet...'} />
+                          <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {wallets.map((w) => (
-                          <SelectItem key={w.id} value={w.type}>
-                            {w.type} (Rs {w.balance.toFixed(2)})
+                        {paymentMethodOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
-                )}
-              />
-            )}
+                );
+              }}
+            />
 
             <FormField
               control={form.control}

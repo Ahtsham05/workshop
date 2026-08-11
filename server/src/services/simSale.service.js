@@ -15,10 +15,13 @@ const sanitizeId = (value) => {
   return value;
 };
 
-const getLedgerPaymentMethodLabel = (paymentMethod) => {
+// Legacy 'bank'/'jazzcash'/'easypaisa' values may still exist on sales created before
+// the payment method picker was unified onto real Bank Accounts (see sim-sale/index.tsx)
+// — tolerated here for old records, no longer offered in the UI for new/edited sales.
+const getLedgerPaymentMethodLabel = (paymentMethod, paymentWalletType) => {
   const normalized = String(paymentMethod || 'cash').toLowerCase();
+  if (normalized === 'wallet') return paymentWalletType ? `Wallet (${paymentWalletType})` : 'Wallet';
   if (normalized === 'bank') return 'Bank Transfer';
-  if (normalized === 'wallet') return 'Wallet';
   if (normalized === 'jazzcash') return 'JazzCash';
   if (normalized === 'easypaisa') return 'EasyPaisa';
   return 'Cash';
@@ -202,7 +205,7 @@ const syncCustomerLedgerForSimSale = async (sale) => {
     description,
     debit: Number(sale.saleAmount) || 0,
     credit: 0,
-    paymentMethod: getLedgerPaymentMethodLabel(sale.paymentMethod),
+    paymentMethod: getLedgerPaymentMethodLabel(sale.paymentMethod, sale.paymentWalletType),
     invoiceType: 'cash',
     notes: sale.notes || '',
   });

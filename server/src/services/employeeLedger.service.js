@@ -1,9 +1,10 @@
 const httpStatus = require('http-status');
-const { EmployeeLedger, Employee, Customer } = require('../models');
+const { EmployeeLedger, Employee, Customer, Wallet } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const expenseService = require('./expense.service');
 const expenseCategoryService = require('./expenseCategory.service');
+const walletEntryService = require('./walletEntry.service');
 
 const EXPENSE_SYNC_TYPES = new Set(['salary_payment']);
 const CASHBOOK_SYNC_TYPES = new Set(['salary_payment', 'advance_payment']);
@@ -25,6 +26,19 @@ const getCashBookAmount = (entry) => {
   return Number(entry.credit || 0);
 };
 
+/** True when this entry's paymentMethod names a real Bank Account/mobile wallet
+ * (not the "Cash in Hand" cash-type account, which is genuinely cash). */
+const isRealWalletPayment = async (entry) => {
+  const method = String(entry.paymentMethod || '').trim().toLowerCase();
+  if (method !== 'wallet' || !entry.walletType) return false;
+  const wallet = await Wallet.findOne({
+    organizationId: entry.organizationId,
+    branchId: entry.branchId,
+    type: entry.walletType,
+  }).select('accountType');
+  return !(wallet && wallet.accountType === 'cash');
+};
+
 const syncCashBookFromEmployeeLedger = async (entry) => {
   if (!entry) return null;
 
@@ -35,6 +49,16 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
 
   const amount = getCashBookAmount(entry);
   if (amount <= 0) {
+    await cashBookService.deleteEntriesByReference(entry._id, 'EmployeeLedger');
+    return null;
+  }
+
+  // A payment made from a real Bank Account/mobile wallet gets no Cash Book line — the
+  // Wallet ledger (see syncWalletFromEmployeeLedger below) already captures that
+  // movement. Only "Cash in Hand" (accountType 'cash') and any other non-wallet method
+  // are genuinely cash and belong in Cash Book. Same pattern as customerLedger/
+  // supplierLedger/simSale services.
+  if (await isRealWalletPayment(entry)) {
     await cashBookService.deleteEntriesByReference(entry._id, 'EmployeeLedger');
     return null;
   }
@@ -51,13 +75,54 @@ const syncCashBookFromEmployeeLedger = async (entry) => {
     type: 'expense',
     source: 'expense',
     amount,
-    paymentMethod: entry.paymentMethod || 'cash',
+    // Reaching this line means isRealWalletPayment was false — genuinely cash either way
+    // (a plain cash payment, or a wallet payment from the cash-type "Cash in Hand"
+    // account). Always tagged lowercase 'cash' — getCashInHandSummary/getSummary match
+    // paymentMethod by exact string, so anything else (including the legacy capitalized
+    // 'Cash' this dialog used to hardcode) silently never counted as cash-in-hand.
+    paymentMethod: 'cash',
     referenceId: entry._id,
     referenceModel: 'EmployeeLedger',
     description: `${label} to ${employeeName}${referenceText}`,
     notes: entry.notes || '',
     date: entry.transactionDate || new Date(),
     createdBy: entry.updatedBy || entry.createdBy,
+  });
+};
+
+/**
+ * Wallet ledger + real Wallet.balance leg for a salary/advance payment paid via a real
+ * Bank Account/mobile wallet — mirrors salesmanCommissionPayment.service.js's
+ * syncPaymentCashEntry. Obeys the exact same eligibility gate as Cash Book
+ * (shouldSyncCashBook) — the "Affect Expense & Cash Book" switch means "this payment's
+ * cash/wallet movement was already recorded elsewhere," so both legs must skip together.
+ * `previousSnapshot` (paymentMethod/walletType/amount before this save) lets an edit
+ * correctly reverse a stale wallet effect — see walletEntryService.syncWalletPayment.
+ */
+const syncWalletFromEmployeeLedger = async (entry, previousSnapshot = null) => {
+  if (!entry) return null;
+  const syncable = shouldSyncCashBook(entry);
+  const employeeName = entry.employee?.firstName
+    ? `${entry.employee.firstName} ${entry.employee.lastName || ''}`.trim()
+    : 'Employee';
+  const label = entry.transactionType === 'advance_payment' ? 'Advance payment' : 'Salary payment';
+
+  return walletEntryService.syncWalletPayment({
+    organizationId: entry.organizationId,
+    branchId: entry.branchId,
+    referenceId: entry._id,
+    referenceModel: 'EmployeeLedger',
+    direction: 'out',
+    amount: syncable ? getCashBookAmount(entry) : 0,
+    paymentMethod: syncable ? String(entry.paymentMethod || '').trim().toLowerCase() : undefined,
+    walletType: syncable ? entry.walletType : undefined,
+    previousPaymentMethod: previousSnapshot ? String(previousSnapshot.paymentMethod || '').trim().toLowerCase() : undefined,
+    previousWalletType: previousSnapshot?.walletType,
+    previousAmount: previousSnapshot?.amount,
+    description: `${label} to ${employeeName}`,
+    date: entry.transactionDate || new Date(),
+    createdBy: entry.createdBy,
+    updatedBy: entry.updatedBy || entry.createdBy,
   });
 };
 
@@ -121,6 +186,7 @@ const createLedgerEntry = async (ledgerBody) => {
   await recalculateBalances(ledgerBody.employee);
   const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
   await syncCashBookFromEmployeeLedger(updatedEntry);
+  await syncWalletFromEmployeeLedger(updatedEntry);
   return updatedEntry;
 };
 
@@ -130,6 +196,14 @@ const updateLedgerEntryById = async (ledgerId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
 
+  // Captured before the save so syncWalletFromEmployeeLedger can reverse whatever wallet
+  // effect the entry actually had — not what its new paymentMethod/amount happen to be.
+  const previousWalletSnapshot = {
+    paymentMethod: entry.paymentMethod,
+    walletType: entry.walletType,
+    amount: shouldSyncCashBook(entry) ? getCashBookAmount(entry) : 0,
+  };
+
   Object.assign(entry, updateBody);
   await entry.save();
 
@@ -137,6 +211,7 @@ const updateLedgerEntryById = async (ledgerId, updateBody) => {
   await recalculateBalances(employeeId);
   const updatedEntry = await EmployeeLedger.findById(entry._id).populate('employee', 'firstName lastName employeeId');
   await syncCashBookFromEmployeeLedger(updatedEntry);
+  await syncWalletFromEmployeeLedger(updatedEntry, previousWalletSnapshot);
   await syncExpenseForLedgerEntry(updatedEntry);
   return updatedEntry;
 };
@@ -153,6 +228,22 @@ const deleteLedgerEntryById = async (ledgerId) => {
     : '';
 
   await cashBookService.deleteEmployeeLedgerPaymentCashBook(entry, employeeName);
+  // Only reverse the wallet balance if this entry was actually eligible to move it in
+  // the first place (shouldSyncCashBook) — otherwise (e.g. "Affect Expense & Cash Book"
+  // was off) no wallet deduction was ever applied for it to reverse.
+  if (shouldSyncCashBook(entry)) {
+    await walletEntryService.reverseWalletPayment({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      referenceId: entry._id,
+      referenceModel: 'EmployeeLedger',
+      direction: 'out',
+      amount: getCashBookAmount(entry),
+      paymentMethod: String(entry.paymentMethod || '').trim().toLowerCase(),
+      walletType: entry.walletType,
+      userId: entry.updatedBy || entry.createdBy,
+    });
+  }
   await expenseService.deleteExpenseByLedgerReference(entry._id, entry, entry.employee);
   await entry.deleteOne();
   await recalculateBalances(employeeId);
@@ -269,6 +360,7 @@ const payEmployee = async (paymentBody) => {
     recoverySource,
     transactionDate,
     paymentMethod,
+    walletType,
     notes,
     organizationId,
     branchId,
@@ -321,6 +413,7 @@ const payEmployee = async (paymentBody) => {
       debit: 0,
       credit: numericAmount,
       paymentMethod: paymentMethod || 'Cash',
+      walletType: paymentMethod === 'wallet' ? walletType : undefined,
       notes: normalizedNotes,
       affectsBooks,
       createdBy,
@@ -347,6 +440,7 @@ const payEmployee = async (paymentBody) => {
       debit: 0,
       credit: recoveryAmount,
       paymentMethod: paymentMethod || 'Cash',
+      walletType: paymentMethod === 'wallet' ? walletType : undefined,
       notes: normalizedNotes,
       affectsBooks,
       createdBy,

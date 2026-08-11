@@ -197,10 +197,9 @@ export default function RepairPage() {
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
-  const baseRepairPaymentMethods = [
-    { value: 'cash', label: 'Cash' },
-    { value: 'bank', label: 'Bank Transfer' },
-  ]
+  // No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
+  // Bank Account/mobile wallet) is selectable by its own name.
+  const baseRepairPaymentMethods = [{ value: 'cash', label: 'Cash' }]
   // Collecting from the customer is money-in — hide wallet balances.
   const repairPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, false)
   // Buying repair parts/stock is money-out — show wallet balances.

@@ -66,9 +66,12 @@ interface CustomerOption {
 // any effect/memo keyed on it even though the data hasn't changed.
 const EMPTY_CUSTOMERS: CustomerOption[] = []
 
+// No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
+// Bank Account/mobile wallet) is selectable by its own name via buildMergedPaymentOptions
+// below. 'credit' is kept — it's a genuine sale *type* (nothing paid yet), not a payment
+// method placeholder, see the isCredit handling in handleSell.
 const SELL_BASE_PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
-  { value: 'bank', label: 'Bank Transfer' },
   { value: 'credit', label: 'Credit / Pay Later' },
 ]
 

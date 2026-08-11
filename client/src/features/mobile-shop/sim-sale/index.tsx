@@ -3,6 +3,12 @@ import { toast } from 'sonner'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { Button } from '@/components/ui/button'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
 import { SalesmanField } from '@/components/salesman-field'
 import {
   AlertDialog,
@@ -83,7 +89,7 @@ type SimSaleFormState = {
   customerMobile: string
   customerCNIC: string
   customerLocation: string
-  paymentMethod: 'cash' | 'bank' | 'jazzcash' | 'easypaisa' | 'wallet'
+  paymentMethod: 'cash' | 'wallet'
   paymentWalletType: string
   salesmanId: string
 }
@@ -147,6 +153,15 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
   const sales = salesData?.results ?? []
   const totalPages = salesData?.totalPages ?? 1
 
+  // Collecting payment from the customer is money-in — hide wallet balances. No generic
+  // 'Bank'/'JazzCash'/'EasyPaisa' placeholders — every real account (Cash in Hand or a
+  // named Bank Account/mobile wallet) is selectable by its own name, same convention as
+  // every other module (see wallet-payment-options.ts).
+  const simSalePaymentMethodOptions = useMemo(
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets.filter((w) => w.isActive), false),
+    [wallets],
+  )
+
   const filteredSales = useMemo(() => {
     if (!simSearch.trim()) return sales
     const lower = simSearch.toLowerCase()
@@ -186,7 +201,6 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
   const commission = saleAmount - purchaseAmount
 
   const selectedWallet = wallets.find(w => w.type === form.walletType)
-  const selectedPaymentWallet = wallets.find(w => w.type === form.paymentWalletType)
   const selectedProductRow = form.productId
     ? products.find(
         (p: any) => p.id === form.productId || p._id === form.productId
@@ -208,19 +222,6 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
         simAmount: selectedProduct ? String(Number(cost ?? 0)) : '',
         saleAmount: selectedProduct ? String(Number(price ?? 0)) : prev.saleAmount,
       }))
-      return
-    }
-    if (field === 'paymentMethod') {
-      setForm(prev => ({
-        ...prev,
-        paymentMethod: value as SimSaleFormState['paymentMethod'],
-        paymentWalletType: value === 'wallet' ? prev.paymentWalletType : '',
-      }))
-      return
-    }
-    if (field === 'paymentWalletType') {
-      const normalizedValue = value === '__none__' ? '' : value
-      setForm(prev => ({ ...prev, paymentWalletType: normalizedValue }))
       return
     }
     if (field === 'walletType') {
@@ -543,54 +544,38 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                   />
                 </div>
 
-                {/* Payment Method */}
+                {/* Payment Method — merged with real Bank Accounts/mobile wallets, same
+                    convention as every other module (no separate wallet sub-picker needed:
+                    picking a real account here directly sets paymentMethod:'wallet' +
+                    paymentWalletType). */}
                 <div className='space-y-2'>
                   <Label>Payment Method</Label>
                   <Select
-                    value={form.paymentMethod}
-                    onValueChange={v => handleChange('paymentMethod', v)}
+                    value={
+                      form.paymentMethod === 'wallet' && form.paymentWalletType
+                        ? toWalletOptionValue(form.paymentWalletType)
+                        : form.paymentMethod
+                    }
+                    onValueChange={v => {
+                      if (isWalletOptionValue(v)) {
+                        setForm(prev => ({ ...prev, paymentMethod: 'wallet', paymentWalletType: getWalletTypeFromOptionValue(v) }))
+                      } else {
+                        setForm(prev => ({ ...prev, paymentMethod: 'cash', paymentWalletType: '' }))
+                      }
+                    }}
                   >
                     <SelectTrigger {...simEnter.enterProps('sim-payment-method')}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value='cash'>Cash</SelectItem>
-                      <SelectItem value='bank'>Bank</SelectItem>
-                      <SelectItem value='jazzcash'>JazzCash</SelectItem>
-                      <SelectItem value='easypaisa'>EasyPaisa</SelectItem>
-                      <SelectItem value='wallet'>Wallet</SelectItem>
+                      {simSalePaymentMethodOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
-
-                {form.paymentMethod === 'wallet' && (
-                  <div className='space-y-2'>
-                    <Label>
-                      Payment Wallet
-                      {selectedPaymentWallet && (
-                        <span className='ml-2 text-xs text-muted-foreground'>
-                          Balance: {selectedPaymentWallet.balance?.toFixed(2)}
-                        </span>
-                      )}
-                    </Label>
-                    <Select
-                      value={form.paymentWalletType || '__none__'}
-                      onValueChange={v => handleChange('paymentWalletType', v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder='Select payment wallet' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='__none__'>-- None --</SelectItem>
-                        {wallets.filter(w => w.isActive).map(w => (
-                          <SelectItem key={w.id} value={w.type}>
-                            {w.type} — {w.balance?.toFixed(2)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
 
                 <div className='space-y-2'>
                   <SalesmanField

@@ -91,11 +91,10 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
 
   const { data: walletsData } = useGetWalletsQuery()
   const activeWallets = walletsData?.results?.filter((w) => w.isActive) ?? []
+  // No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
+  // Bank Account/mobile wallet) is selectable by its own name.
   const paymentOptions = buildMergedPaymentOptions(
-    [
-      { value: 'cash', label: 'Cash' },
-      { value: 'bank', label: 'Bank Transfer' },
-    ],
+    [{ value: 'cash', label: 'Cash' }],
     activeWallets,
     false,
   )

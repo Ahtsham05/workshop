@@ -784,28 +784,14 @@ function LoadManagementPage({
   const canEditSaleReceivedAmount = Boolean(saleForm.customerId)
 
   // Buying load is money-out (show wallet balances); selling load is money-in (hide them).
+  // No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
+  // Bank Account/mobile wallet) is selectable by its own name.
   const purchasePaymentMethodOptions = useMemo(
-    () =>
-      buildMergedPaymentOptions(
-        [
-          { value: 'cash', label: 'Cash' },
-          { value: 'bank', label: 'Bank Transfer' },
-        ],
-        wallets,
-        true,
-      ),
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, true),
     [wallets],
   )
   const salePaymentMethodOptions = useMemo(
-    () =>
-      buildMergedPaymentOptions(
-        [
-          { value: 'cash', label: 'Cash' },
-          { value: 'bank', label: 'Bank Transfer' },
-        ],
-        wallets,
-        false,
-      ),
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, false),
     [wallets],
   )
 

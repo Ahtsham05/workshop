@@ -111,14 +111,12 @@ export function LedgerEntryForm({
   // Receiving from a customer / recording a purchase is money-in — hide balances.
   const showWalletBalance = ledgerType === 'supplier' && formData.transactionType === 'payment_made';
 
+  // No generic 'Bank Transfer'/'Cheque'/'Card'/'Credit' placeholders — those were static
+  // text with no real ledger behind them. Every real account (Cash in Hand or a named
+  // Bank Account / mobile wallet) is selectable by its own name, same convention as
+  // Invoice/Purchase/Fast Billing's payment method pickers (see wallet-payment-options.ts).
   const mergedPaymentMethods = buildMergedPaymentOptions(
-    [
-      { value: 'Cash', label: t('Cash') },
-      { value: 'Bank Transfer', label: t('Bank Transfer') },
-      { value: 'Cheque', label: t('Cheque') },
-      { value: 'Card', label: t('Card') },
-      { value: 'Credit', label: t('Credit') },
-    ],
+    [{ value: 'Cash', label: t('Cash') }],
     wallets,
     showWalletBalance,
   );

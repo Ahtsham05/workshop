@@ -67,9 +67,12 @@ function FormSection({ icon, title, tone, children }: { icon: ReactNode; title: 
   )
 }
 
+// No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
+// Bank Account/mobile wallet) is selectable by its own name via buildMergedPaymentOptions
+// below. 'Credit' is kept — it's a genuine purchase *type* (nothing paid to supplier yet),
+// not a payment method placeholder, see the isCredit handling in handleSubmit.
 const BASE_PAYMENT_METHODS = [
   { value: 'Cash', label: 'Cash' },
-  { value: 'Bank Transfer', label: 'Bank Transfer' },
   { value: 'Credit', label: 'Credit / Pay Later' },
 ]
 

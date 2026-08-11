@@ -54,6 +54,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmployeePayrollMonthlySummary } from './employee-payroll-monthly';
+import { useGetWalletsQuery } from '@/stores/mobile-shop.api';
+import {
+  buildMergedPaymentOptions,
+  getWalletTypeFromOptionValue,
+  isWalletOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options';
 
 const toLocalDateInputValue = (value = new Date()) => {
   const d = value instanceof Date ? value : new Date(value);
@@ -100,8 +107,21 @@ export default function PayrollManagement() {
     advanceRecovery: '',
     paymentDate: toLocalDateInputValue(),
     notes: '',
+    paymentMethod: 'cash' as 'cash' | 'wallet',
+    walletType: '',
   });
   const [payAffectsBooks, setPayAffectsBooks] = useState(loadPayAffectsBooksPreference);
+
+  const { data: walletsData } = useGetWalletsQuery();
+  const wallets = walletsData?.results?.filter((w) => w.isActive) ?? [];
+  // Paying an employee is money-out — show wallet balances so staff can avoid
+  // overdrawing. No generic 'Bank Transfer' placeholder — every real account (Cash in
+  // Hand or a named Bank Account/mobile wallet) is selectable by its own name.
+  const payrollPaymentMethodOptions = buildMergedPaymentOptions(
+    [{ value: 'cash', label: t('Cash') || 'Cash' }],
+    wallets,
+    true,
+  );
 
   const handlePayAffectsBooksChange = (checked: boolean) => {
     setPayAffectsBooks(checked);
@@ -111,6 +131,8 @@ export default function PayrollManagement() {
     amount: '',
     paymentDate: toLocalDateInputValue(),
     notes: '',
+    paymentMethod: 'cash' as 'cash' | 'wallet',
+    walletType: '',
   });
   const [ledgerRecoverData, setLedgerRecoverData] = useState({
     amount: '',
@@ -187,13 +209,18 @@ export default function PayrollManagement() {
       toast.error(t('Please select employee'));
       return;
     }
+    if (ledgerPaymentData.paymentMethod === 'wallet' && !ledgerPaymentData.walletType) {
+      toast.error(t('Please select a bank account'));
+      return;
+    }
     try {
       const result: any = await createEmployeePayment({
         employee: selectedEmployeeLedger,
         amount: Number(ledgerPaymentData.amount || 0),
         advanceRecovery: Number(ledgerPaymentData.advanceRecovery || 0),
         transactionDate: ledgerPaymentData.paymentDate,
-        paymentMethod: 'Cash',
+        paymentMethod: ledgerPaymentData.paymentMethod,
+        walletType: ledgerPaymentData.paymentMethod === 'wallet' ? ledgerPaymentData.walletType : undefined,
         notes: ledgerPaymentData.notes || undefined,
         affectsBooks: payAffectsBooks,
       }).unwrap();
@@ -208,6 +235,8 @@ export default function PayrollManagement() {
         advanceRecovery: '',
         paymentDate: toLocalDateInputValue(),
         notes: '',
+        paymentMethod: 'cash',
+        walletType: '',
       });
       refetch();
       refetchEmployeeLedger();
@@ -222,12 +251,17 @@ export default function PayrollManagement() {
       toast.error(t('Please select employee'));
       return;
     }
+    if (ledgerAdvanceData.paymentMethod === 'wallet' && !ledgerAdvanceData.walletType) {
+      toast.error(t('Please select a bank account'));
+      return;
+    }
     try {
       await createEmployeeAdvancePayment({
         employee: selectedEmployeeLedger,
         amount: Number(ledgerAdvanceData.amount),
         transactionDate: ledgerAdvanceData.paymentDate,
-        paymentMethod: 'Cash',
+        paymentMethod: ledgerAdvanceData.paymentMethod,
+        walletType: ledgerAdvanceData.paymentMethod === 'wallet' ? ledgerAdvanceData.walletType : undefined,
         notes: ledgerAdvanceData.notes || undefined,
       }).unwrap();
       toast.success(t('Advance recorded'));
@@ -236,6 +270,8 @@ export default function PayrollManagement() {
         amount: '',
         paymentDate: toLocalDateInputValue(),
         notes: '',
+        paymentMethod: 'cash',
+        walletType: '',
       });
       refetch();
       refetchEmployeeLedger();
@@ -1048,6 +1084,34 @@ export default function PayrollManagement() {
               </div>
             )}
             <div className="space-y-2">
+              <Label>{t('Pay Via')}</Label>
+              <Select
+                value={
+                  ledgerPaymentData.paymentMethod === 'wallet' && ledgerPaymentData.walletType
+                    ? toWalletOptionValue(ledgerPaymentData.walletType)
+                    : ledgerPaymentData.paymentMethod
+                }
+                onValueChange={(v) => {
+                  if (isWalletOptionValue(v)) {
+                    setLedgerPaymentData({ ...ledgerPaymentData, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) });
+                  } else {
+                    setLedgerPaymentData({ ...ledgerPaymentData, paymentMethod: 'cash', walletType: '' });
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {payrollPaymentMethodOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>{t('Payment Date')}</Label>
               <Input
                 type="date"
@@ -1110,6 +1174,34 @@ export default function PayrollManagement() {
               <p className="text-xs text-muted-foreground">
                 {t('This will not appear in the Expense report; it will still be recorded in the Cash Book and can be recovered later from a salary payment.')}
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('Pay Via')}</Label>
+              <Select
+                value={
+                  ledgerAdvanceData.paymentMethod === 'wallet' && ledgerAdvanceData.walletType
+                    ? toWalletOptionValue(ledgerAdvanceData.walletType)
+                    : ledgerAdvanceData.paymentMethod
+                }
+                onValueChange={(v) => {
+                  if (isWalletOptionValue(v)) {
+                    setLedgerAdvanceData({ ...ledgerAdvanceData, paymentMethod: 'wallet', walletType: getWalletTypeFromOptionValue(v) });
+                  } else {
+                    setLedgerAdvanceData({ ...ledgerAdvanceData, paymentMethod: 'cash', walletType: '' });
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {payrollPaymentMethodOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>{t('Payment Date')}</Label>

@@ -441,12 +441,10 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   // Settling a bill is money-out (paying the utility company) — show wallet balances
-  // so the cashier can see which one actually has enough to cover it.
+  // so the cashier can see which one actually has enough to cover it. No generic
+  // 'Bank Transfer' placeholder — every real account is selectable by its own name.
   const payoutMethodOptions = buildMergedPaymentOptions(
-    [
-      { value: 'cash', label: 'Cash' },
-      { value: 'bank', label: 'Bank Transfer' },
-    ],
+    [{ value: 'cash', label: 'Cash' }],
     wallets,
     true,
   )
@@ -718,12 +716,10 @@ export default function BillPaymentsPage() {
   const [lookupOutstanding] = useLazyGetBillPaymentsQuery()
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
-  // Collecting a bill payment at the counter is money-in — hide wallet balances.
+  // Collecting a bill payment at the counter is money-in — hide wallet balances. No
+  // generic 'Bank Transfer' placeholder — every real account is selectable by its own name.
   const billPaymentMethodOptions = buildMergedPaymentOptions(
-    [
-      { value: 'cash', label: 'Cash' },
-      { value: 'bank', label: 'Bank Transfer' },
-    ],
+    [{ value: 'cash', label: 'Cash' }],
     wallets,
     false,
   )

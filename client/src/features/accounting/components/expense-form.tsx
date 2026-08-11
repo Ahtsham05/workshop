@@ -58,7 +58,12 @@ interface ExpenseFormProps {
   isEdit?: boolean
 }
 
-const paymentMethods = ['Cash', 'Bank Transfer', 'Card', 'Cheque']
+// No generic 'Bank Transfer'/'Card'/'Cheque' placeholders — every real account (Cash in
+// Hand or a named Bank Account/mobile wallet) is selectable by its own name via
+// buildMergedPaymentOptions below. The server's Joi enum still tolerates the old values on
+// existing/edited expense records — see expense.validation.js — only the offered UI list
+// is narrowed.
+const paymentMethods = ['Cash']
 
 export function ExpenseForm({
   expense,

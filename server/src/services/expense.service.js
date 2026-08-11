@@ -334,8 +334,23 @@ const deleteExpenseByLedgerReference = async (ledgerId, entry = null, employeeDo
     }).sort({ createdAt: -1 });
   }
   if (!expense) return null;
-  return deleteExpenseById(expense._id);
+  // Deliberately NOT deleteExpenseById: this Expense is always created with
+  // skipCashBookSync (upsertExpenseFromEmployeeLedger above never posts its own Cash
+  // Book/Wallet entries — employeeLedger.service.js's syncCashBookFromEmployeeLedger/
+  // syncWalletFromEmployeeLedger already own that movement against the ledger entry
+  // itself). deleteExpenseById unconditionally reverses a wallet balance for any
+  // paymentMethod:'Wallet' expense regardless of whether it ever actually moved that
+  // balance — routing through it here would double-reverse the wallet on top of
+  // employeeLedger.service.js's own reversal. Same reasoning as
+  // salesmanCommissionPayment.service.js's deleteExpenseForPayment (raw deleteMany).
+  await Expense.deleteMany({ _id: expense._id });
+  return expense;
 };
+
+// Employee Ledger stores paymentMethod as lowercase 'cash'/'wallet' (matching the
+// Bank-Accounts-merged picker used app-wide), but Expense.paymentMethod is a strict
+// Mongoose enum of capitalized labels — normalize here rather than at every caller.
+const EMPLOYEE_LEDGER_EXPENSE_PAYMENT_METHOD = { cash: 'Cash', wallet: 'Wallet' };
 
 const upsertExpenseFromEmployeeLedger = async (entry, employeeDoc) => {
   if (!entry || !employeeDoc) return null;
@@ -346,6 +361,7 @@ const upsertExpenseFromEmployeeLedger = async (entry, employeeDoc) => {
     return null;
   }
 
+  const normalizedMethod = String(entry.paymentMethod || '').trim().toLowerCase();
   const employeeName = `${employeeDoc.firstName} ${employeeDoc.lastName}`.trim();
   const label = entry.transactionType === 'advance_payment' ? 'Advance payment' : 'Salary payment';
   const description = `${label} to ${employeeName}`;
@@ -355,7 +371,8 @@ const upsertExpenseFromEmployeeLedger = async (entry, employeeDoc) => {
     category: employeeName,
     description,
     amount,
-    paymentMethod: entry.paymentMethod || 'Cash',
+    paymentMethod: EMPLOYEE_LEDGER_EXPENSE_PAYMENT_METHOD[normalizedMethod] || entry.paymentMethod || 'Cash',
+    walletType: normalizedMethod === 'wallet' ? entry.walletType : undefined,
     date: entry.transactionDate || new Date(),
     reference: entry.reference || undefined,
     notes: entry.notes || '',

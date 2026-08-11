@@ -187,12 +187,11 @@ export default function InstallmentsPage() {
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(initialPaymentForm)
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
-  // Collecting a down payment / installment from the customer is money-in — hide wallet balances.
+  // Collecting a down payment / installment from the customer is money-in — hide wallet
+  // balances. No generic 'Bank' placeholder — every real account (Cash in Hand or a named
+  // Bank Account/mobile wallet) is selectable by its own name.
   const installmentPaymentMethodOptions = buildMergedPaymentOptions(
-    [
-      { value: 'cash', label: 'Cash' },
-      { value: 'bank', label: 'Bank' },
-    ],
+    [{ value: 'cash', label: 'Cash' }],
     wallets,
     false,
   )
