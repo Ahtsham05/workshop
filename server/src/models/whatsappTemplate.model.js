@@ -35,6 +35,7 @@ const whatsappTemplateSchema = mongoose.Schema(
       type: String,
       enum: [
         'invoice',
+        'quotation',
         'fee',
         'attendance',
         'result',

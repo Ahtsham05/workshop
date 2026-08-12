@@ -3,16 +3,21 @@ import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
+import { invalidateWalletCaches } from './wallet-cache-invalidation'
 import type { DiscountType } from '@/features/purchase-invoice/utils/discount'
 
 // Receiving items creates a real Purchase (and batches) behind the scenes — refresh
 // the product catalog's stock+batch chips and the per-variant batch list, which live
-// in separate RTK Query slices and won't auto-refetch otherwise.
+// in separate RTK Query slices and won't auto-refetch otherwise. It can also move a
+// Bank Account/Wallet balance and post a Cash Book entry (paymentMethod/splitPaymentMethod),
+// same as Purchase Invoice — see invalidateWalletCaches for why that needs its own explicit
+// cross-slice invalidation instead of just relying on this slice's own tags.
 const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
   try {
     await queryFulfilled
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
     dispatch(batchApi.util.invalidateTags(['Batch']))
+    invalidateWalletCaches(dispatch)
   } catch {
     // mutation failed — nothing to invalidate
   }
@@ -242,8 +247,12 @@ export const purchaseOrderApi = createApi({
         receivedAt?: string
         notes?: string
         paidAmount?: number
-        paymentType?: string
+        type?: 'cash' | 'credit'
+        paymentMethod?: 'cash' | 'wallet'
         walletType?: string
+        splitPaymentMethod?: 'cash' | 'wallet'
+        splitWalletType?: string
+        splitPaidAmount?: number
         discountType?: DiscountType
         discountValue?: number
       }

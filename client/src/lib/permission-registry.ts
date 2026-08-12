@@ -50,7 +50,10 @@ export type PermissionKey =
   | 'viewCommissionLedger' | 'manageCommissionPayments'
   | 'viewPartners' | 'createPartners' | 'editPartners' | 'deletePartners'
   | 'viewPartnerProfitShareRules' | 'managePartnerProfitShareRules'
-  | 'viewPartnerProfitShareLedger' | 'managePartnerPayments';
+  | 'viewPartnerProfitShareLedger' | 'managePartnerPayments'
+  | 'viewCommunicationLog' | 'createCommunicationLog' | 'editCommunicationLog' | 'deleteCommunicationLog'
+  | 'viewReminders' | 'createReminders' | 'editReminders' | 'deleteReminders'
+  | 'viewLeads' | 'viewAllLeads' | 'createLeads' | 'editLeads' | 'deleteLeads' | 'convertLeads';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -77,6 +80,9 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'payment_vouchers', label: 'Payments & Receipts', permissions: ['viewPaymentVouchers', 'managePaymentVouchers'] },
   { id: 'bank_reconciliation', label: 'Bank Reconciliation', permissions: ['viewBankReconciliation', 'manageBankReconciliation'] },
   { id: 'accounts_system', label: 'Accounts System', permissions: ['viewAccountsSystem', 'manageAccountsSystem'] },
+  { id: 'communication_log', label: 'Communication Log', permissions: ['viewCommunicationLog', 'createCommunicationLog', 'editCommunicationLog', 'deleteCommunicationLog'] },
+  { id: 'reminders', label: 'Tasks & Reminders', permissions: ['viewReminders', 'createReminders', 'editReminders', 'deleteReminders'] },
+  { id: 'leads', label: 'CRM Leads', permissions: ['viewLeads', 'viewAllLeads', 'createLeads', 'editLeads', 'deleteLeads', 'convertLeads'] },
   { id: 'wallet', label: 'Mobile Shop — Wallet', permissions: ['viewWallet', 'manageWallet'] },
   { id: 'load', label: 'Mobile Shop — Load Management', permissions: ['viewLoadManagement', 'manageLoadManagement'] },
   { id: 'sim_sales', label: 'Mobile Shop — Sim Sale', permissions: ['viewSimSales', 'manageSimSales'] },
@@ -126,7 +132,7 @@ export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.pe
 export const PERMISSION_TAB_GROUPS = {
   business: [
     'products', 'imei_tracking', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
-    'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system',
+    'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system', 'leads',
   ],
   mobile_shop: [
     'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones',

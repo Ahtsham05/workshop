@@ -56,6 +56,11 @@ export async function sendInvoiceReceiptWhatsApp(params: {
   phone: string
   caption?: string
   template?: InvoiceTemplate
+  /** WhatsAppTemplate.internalCategory to fall back to outside Meta's 24h window —
+   * defaults to 'invoice' (the existing behavior). Pass 'quotation' when sending a
+   * quotation (e.g. from the CRM Leads module) so the approved fallback template, once
+   * created, uses quotation wording instead of invoice wording. */
+  templateCategory?: string
 }): Promise<{ success: boolean; message?: string; error?: string }> {
   const phone = params.phone.trim()
   if (!phone) {
@@ -74,18 +79,22 @@ export async function sendInvoiceReceiptWhatsApp(params: {
   // Falls back to the invoice_pdf template's own greeting when no name is known — Meta
   // rejects an empty template parameter, so this must never be ''.
   const customerName = params.printData.walkInCustomerName || params.printData.customerName || 'there'
+  const documentLabel = params.templateCategory === 'quotation' ? 'Quotation' : 'Invoice'
 
   try {
+    // The generic /send-document endpoint (not /send-invoice-pdf, which hardcodes the
+    // 'invoice' template category) — lets a quotation fall back to the quotation_pdf
+    // approved template outside the 24h window instead of the invoice one.
     const result = await store
       .dispatch(
-        whatsappApi.endpoints.sendInvoicePdfWhatsApp.initiate({
+        whatsappApi.endpoints.sendWhatsAppDocument.initiate({
           phone,
           pdfBase64,
           filename,
           caption:
             params.caption ||
-            `Invoice ${params.printData.invoiceNumber}${companyName ? ` from ${companyName}` : ''}`,
-          invoiceNumber: params.printData.invoiceNumber,
+            `${documentLabel} ${params.printData.invoiceNumber}${companyName ? ` from ${companyName}` : ''}`,
+          templateCategory: params.templateCategory || 'invoice',
           templateParams: [customerName, params.printData.invoiceNumber],
         }),
       )

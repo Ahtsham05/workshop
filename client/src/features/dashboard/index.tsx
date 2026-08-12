@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { isPast, isToday } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { StatCard, type StatCardLink } from './components/stat-card'
@@ -11,6 +12,8 @@ import { TopCustomers } from './components/top-customers'
 import { QuickActions } from './components/quick-actions'
 import { DashboardDateFilter } from './components/dashboard-date-filter'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
+import { useGetLeadStatsQuery } from '@/stores/lead.api'
+import { useRemindersFeed } from '@/hooks/use-reminders-feed'
 import {
   dashboardRangeQueryParams,
   getComparisonLabel,
@@ -35,6 +38,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Briefcase,
+  Target,
+  AlarmClock,
 } from 'lucide-react'
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
@@ -92,6 +97,31 @@ export default function Dashboard() {
   const simSaleCost = (stats?.totalSimSale || 0) - (stats?.totalSimSaleProfit || 0)
   const repairCost = (stats?.totalRepairIncome || 0) - (stats?.totalRepairProfit || 0)
   const totalCost = inventorySaleCost + simSaleCost + repairCost
+
+  // Leads & Reminders cards — independent of the big dashboard-stats query, so their
+  // own loading state is tracked separately from `statsLoading`.
+  const { data: leadStats, isLoading: leadStatsLoading } = useGetLeadStatsQuery()
+  const openPipelineValue = useMemo(
+    () => (leadStats?.byStage || [])
+      .filter((s) => s.stage !== 'won' && s.stage !== 'lost')
+      .reduce((sum, s) => sum + s.totalValue, 0),
+    [leadStats],
+  )
+  const { active: activeReminders, enabled: remindersEnabled } = useRemindersFeed()
+  const dueTodayOrOverdueCount = useMemo(
+    () => activeReminders.filter((r) => {
+      const due = new Date(r.dueAt)
+      return isToday(due) || isPast(due)
+    }).length,
+    [activeReminders],
+  )
+  const overdueCount = useMemo(
+    () => activeReminders.filter((r) => {
+      const due = new Date(r.dueAt)
+      return isPast(due) && !isToday(due)
+    }).length,
+    [activeReminders],
+  )
 
   if (!isPlatformAdmin && !hasExplicitPermission('viewDashboard')) {
     return <Navigate to={getDefaultHomeRoute(user)} replace />
@@ -324,6 +354,29 @@ export default function Dashboard() {
             tone='rose'
             link={{ to: '/accounting', search: { tab: 'wallet' } }}
           />
+          <StatCard
+            title={t('Leads')}
+            value={leadStats?.totalCount || 0}
+            icon={<Target className='h-4 w-4' />}
+            description={
+              openPipelineValue > 0
+                ? `Rs ${openPipelineValue.toLocaleString()} ${t('open pipeline')} · ${leadStats?.conversionRate ?? 0}% ${t('conversion')}`
+                : t('Track and convert leads through your sales pipeline')
+            }
+            isLoading={leadStatsLoading}
+            tone='violet'
+            link={{ to: '/leads' }}
+          />
+          {remindersEnabled && (
+            <StatCard
+              title={t('Tasks Due Today')}
+              value={dueTodayOrOverdueCount}
+              icon={<AlarmClock className='h-4 w-4' />}
+              description={overdueCount > 0 ? `${overdueCount} ${t('overdue')}` : t('Follow-ups and reminders')}
+              tone='amber'
+              link={{ to: '/reminders' }}
+            />
+          )}
           {showMobileCards && (
             <>
               <StatCard

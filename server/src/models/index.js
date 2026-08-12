@@ -144,3 +144,10 @@ module.exports.AuditLog = require('./auditLog.model');
 // SMS Gateway
 module.exports.SmsDevice = require('./smsDevice.model');
 module.exports.SmsGatewayMessage = require('./smsGatewayMessage.model');
+
+// Communication Log + Tasks & Reminders
+module.exports.CommunicationLog = require('./communicationLog.model');
+module.exports.Reminder = require('./reminder.model');
+
+// CRM Leads
+module.exports.Lead = require('./lead.model');

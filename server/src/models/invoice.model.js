@@ -81,7 +81,12 @@ const InvoiceSchema = new mongoose.Schema({
     },
     customerName: { type: String },
     walkInCustomerName: { type: String }, // New field for walk-in customer names
-    
+
+    // Set when this (usually a 'quotation'-type) invoice was created from the CRM
+    // Leads module, so it shows up on the lead's activity timeline. A lead can carry
+    // several of these across revisions before it converts — optional, never required.
+    leadId: { type: mongoose.Schema.Types.ObjectId, ref: 'Lead', index: true, sparse: true },
+
     // Invoice type and status
     type: { 
         type: String, 

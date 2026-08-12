@@ -57,11 +57,13 @@ import { Route as AuthenticatedSalesmenIndexImport } from './routes/_authenticat
 import { Route as AuthenticatedSalesReturnsIndexImport } from './routes/_authenticated/sales-returns/index'
 import { Route as AuthenticatedRolesIndexImport } from './routes/_authenticated/roles/index'
 import { Route as AuthenticatedRestaurantIndexImport } from './routes/_authenticated/restaurant/index'
+import { Route as AuthenticatedRemindersIndexImport } from './routes/_authenticated/reminders/index'
 import { Route as AuthenticatedPurchaseReturnsIndexImport } from './routes/_authenticated/purchase-returns/index'
 import { Route as AuthenticatedPurchaseOrdersIndexImport } from './routes/_authenticated/purchase-orders/index'
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedPartnersIndexImport } from './routes/_authenticated/partners/index'
+import { Route as AuthenticatedLeadsIndexImport } from './routes/_authenticated/leads/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
 import { Route as AuthenticatedHrIndexImport } from './routes/_authenticated/hr/index'
 import { Route as AuthenticatedHelpCenterIndexImport } from './routes/_authenticated/help-center/index'
@@ -466,6 +468,13 @@ const AuthenticatedRestaurantIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedRemindersIndexRoute =
+  AuthenticatedRemindersIndexImport.update({
+    id: '/reminders/',
+    path: '/reminders/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedPurchaseReturnsIndexRoute =
   AuthenticatedPurchaseReturnsIndexImport.update({
     id: '/purchase-returns/',
@@ -502,6 +511,12 @@ const AuthenticatedPartnersIndexRoute = AuthenticatedPartnersIndexImport.update(
     getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
+
+const AuthenticatedLeadsIndexRoute = AuthenticatedLeadsIndexImport.update({
+  id: '/leads/',
+  path: '/leads/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 const AuthenticatedInvoiceIndexRoute = AuthenticatedInvoiceIndexImport.update({
   id: '/invoice/',
@@ -1791,6 +1806,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvoiceIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/leads/': {
+      id: '/_authenticated/leads/'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof AuthenticatedLeadsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/partners/': {
       id: '/_authenticated/partners/'
       path: '/partners'
@@ -1824,6 +1846,13 @@ declare module '@tanstack/react-router' {
       path: '/purchase-returns'
       fullPath: '/purchase-returns'
       preLoaderRoute: typeof AuthenticatedPurchaseReturnsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/reminders/': {
+      id: '/_authenticated/reminders/'
+      path: '/reminders'
+      fullPath: '/reminders'
+      preLoaderRoute: typeof AuthenticatedRemindersIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/restaurant/': {
@@ -2572,11 +2601,13 @@ interface AuthenticatedRouteChildren {
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedHrIndexRoute: typeof AuthenticatedHrIndexRoute
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
+  AuthenticatedLeadsIndexRoute: typeof AuthenticatedLeadsIndexRoute
   AuthenticatedPartnersIndexRoute: typeof AuthenticatedPartnersIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
   AuthenticatedPurchaseOrdersIndexRoute: typeof AuthenticatedPurchaseOrdersIndexRoute
   AuthenticatedPurchaseReturnsIndexRoute: typeof AuthenticatedPurchaseReturnsIndexRoute
+  AuthenticatedRemindersIndexRoute: typeof AuthenticatedRemindersIndexRoute
   AuthenticatedRestaurantIndexRoute: typeof AuthenticatedRestaurantIndexRoute
   AuthenticatedRolesIndexRoute: typeof AuthenticatedRolesIndexRoute
   AuthenticatedSalesReturnsIndexRoute: typeof AuthenticatedSalesReturnsIndexRoute
@@ -2663,6 +2694,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedHrIndexRoute: AuthenticatedHrIndexRoute,
   AuthenticatedInvoiceIndexRoute: AuthenticatedInvoiceIndexRoute,
+  AuthenticatedLeadsIndexRoute: AuthenticatedLeadsIndexRoute,
   AuthenticatedPartnersIndexRoute: AuthenticatedPartnersIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedPurchaseInvoiceIndexRoute:
@@ -2670,6 +2702,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPurchaseOrdersIndexRoute: AuthenticatedPurchaseOrdersIndexRoute,
   AuthenticatedPurchaseReturnsIndexRoute:
     AuthenticatedPurchaseReturnsIndexRoute,
+  AuthenticatedRemindersIndexRoute: AuthenticatedRemindersIndexRoute,
   AuthenticatedRestaurantIndexRoute: AuthenticatedRestaurantIndexRoute,
   AuthenticatedRolesIndexRoute: AuthenticatedRolesIndexRoute,
   AuthenticatedSalesReturnsIndexRoute: AuthenticatedSalesReturnsIndexRoute,
@@ -2781,11 +2814,13 @@ export interface FileRoutesByFullPath {
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
+  '/leads': typeof AuthenticatedLeadsIndexRoute
   '/partners': typeof AuthenticatedPartnersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/purchase-orders': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
+  '/reminders': typeof AuthenticatedRemindersIndexRoute
   '/restaurant': typeof AuthenticatedRestaurantIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
@@ -2934,11 +2969,13 @@ export interface FileRoutesByTo {
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
+  '/leads': typeof AuthenticatedLeadsIndexRoute
   '/partners': typeof AuthenticatedPartnersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/purchase-orders': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/purchase-returns': typeof AuthenticatedPurchaseReturnsIndexRoute
+  '/reminders': typeof AuthenticatedRemindersIndexRoute
   '/restaurant': typeof AuthenticatedRestaurantIndexRoute
   '/roles': typeof AuthenticatedRolesIndexRoute
   '/sales-returns': typeof AuthenticatedSalesReturnsIndexRoute
@@ -3091,11 +3128,13 @@ export interface FileRoutesById {
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/hr/': typeof AuthenticatedHrIndexRoute
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
+  '/_authenticated/leads/': typeof AuthenticatedLeadsIndexRoute
   '/_authenticated/partners/': typeof AuthenticatedPartnersIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
   '/_authenticated/purchase-orders/': typeof AuthenticatedPurchaseOrdersIndexRoute
   '/_authenticated/purchase-returns/': typeof AuthenticatedPurchaseReturnsIndexRoute
+  '/_authenticated/reminders/': typeof AuthenticatedRemindersIndexRoute
   '/_authenticated/restaurant/': typeof AuthenticatedRestaurantIndexRoute
   '/_authenticated/roles/': typeof AuthenticatedRolesIndexRoute
   '/_authenticated/sales-returns/': typeof AuthenticatedSalesReturnsIndexRoute
@@ -3250,11 +3289,13 @@ export interface FileRouteTypes {
     | '/help-center'
     | '/hr'
     | '/invoice'
+    | '/leads'
     | '/partners'
     | '/products'
     | '/purchase-invoice'
     | '/purchase-orders'
     | '/purchase-returns'
+    | '/reminders'
     | '/restaurant'
     | '/roles'
     | '/sales-returns'
@@ -3402,11 +3443,13 @@ export interface FileRouteTypes {
     | '/help-center'
     | '/hr'
     | '/invoice'
+    | '/leads'
     | '/partners'
     | '/products'
     | '/purchase-invoice'
     | '/purchase-orders'
     | '/purchase-returns'
+    | '/reminders'
     | '/restaurant'
     | '/roles'
     | '/sales-returns'
@@ -3557,11 +3600,13 @@ export interface FileRouteTypes {
     | '/_authenticated/help-center/'
     | '/_authenticated/hr/'
     | '/_authenticated/invoice/'
+    | '/_authenticated/leads/'
     | '/_authenticated/partners/'
     | '/_authenticated/products/'
     | '/_authenticated/purchase-invoice/'
     | '/_authenticated/purchase-orders/'
     | '/_authenticated/purchase-returns/'
+    | '/_authenticated/reminders/'
     | '/_authenticated/restaurant/'
     | '/_authenticated/roles/'
     | '/_authenticated/sales-returns/'
@@ -3748,11 +3793,13 @@ export const routeTree = rootRoute
         "/_authenticated/help-center/",
         "/_authenticated/hr/",
         "/_authenticated/invoice/",
+        "/_authenticated/leads/",
         "/_authenticated/partners/",
         "/_authenticated/products/",
         "/_authenticated/purchase-invoice/",
         "/_authenticated/purchase-orders/",
         "/_authenticated/purchase-returns/",
+        "/_authenticated/reminders/",
         "/_authenticated/restaurant/",
         "/_authenticated/roles/",
         "/_authenticated/sales-returns/",
@@ -4148,6 +4195,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/invoice/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/leads/": {
+      "filePath": "_authenticated/leads/index.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/partners/": {
       "filePath": "_authenticated/partners/index.tsx",
       "parent": "/_authenticated"
@@ -4166,6 +4217,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/purchase-returns/": {
       "filePath": "_authenticated/purchase-returns/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/reminders/": {
+      "filePath": "_authenticated/reminders/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/restaurant/": {

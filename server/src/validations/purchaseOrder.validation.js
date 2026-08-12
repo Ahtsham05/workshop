@@ -111,13 +111,29 @@ const receiveItems = {
   body: Joi.object().keys({
     receivedAt: Joi.date().optional(),
     notes: Joi.string().allow('').optional(),
-    paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet').optional(),
-    walletType: Joi.string().trim().when('paymentType', {
-      is: 'Wallet',
+    paidAmount: Joi.number().min(0).optional(),
+    // Settlement status (does the unpaid remainder become a Supplier Ledger debt on the
+    // Purchase this receipt creates) — separate from `paymentMethod` (which account absorbs
+    // `paidAmount` right now). Mirrors purchase.validation.js#createPurchase.
+    type: Joi.string().valid('cash', 'credit').optional(),
+    paymentMethod: Joi.string().valid('cash', 'wallet').optional(),
+    walletType: Joi.string().trim().when('paymentMethod', {
+      is: 'wallet',
       then: Joi.required(),
       otherwise: Joi.allow('').optional(),
     }),
-    paidAmount: Joi.number().min(0).optional(),
+    // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account).
+    splitPaymentMethod: Joi.string().valid('cash', 'wallet').allow(null, '').optional(),
+    splitWalletType: Joi.string().trim().when('splitPaymentMethod', {
+      is: 'wallet',
+      then: Joi.required(),
+      otherwise: Joi.allow('').optional(),
+    }),
+    splitPaidAmount: Joi.number().min(0).optional(),
+    // Legacy field — accepted-but-ignored for backward compatibility with older clients; the
+    // underlying Purchase always derives and stores it from `type`+`paymentMethod` (see
+    // purchase.service.js#createPurchase / derivePurchasePaymentType).
+    paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet').optional(),
     // Overall discount override for the Purchase this receipt produces — omitted means
     // auto-prorate the order's own overall discount rate, see receiveItems in
     // purchaseOrder.service.js.

@@ -482,8 +482,19 @@ const receiveItems = async (orderId, body, ctx) => {
 
   const purchaseTotal = purchaseSubtotal - overallDiscountAmount;
   const paidAmount = Number(body.paidAmount || 0);
-  const paymentType = body.paymentType || 'Cash';
+  // Settlement status ('type') and which real account absorbs paidAmount right now
+  // ('paymentMethod'/'walletType', plus an optional second/'split' leg) are the same two
+  // orthogonal fields createPurchase's generic payment pipeline already understands — see
+  // purchase.service.js#createPurchase / derivePurchasePaymentType / resolvePurchasePaymentLegs.
+  // The legacy `body.paymentType` is intentionally not read here: createPurchase always
+  // re-derives the stored `paymentType` from `type`+`paymentMethod` and ignores whatever the
+  // client sends for it, so deriving it here too would just be dead, misleading code.
+  const type = body.type === 'credit' ? 'credit' : 'cash';
+  const paymentMethod = body.paymentMethod === 'wallet' ? 'wallet' : 'cash';
   const walletType = body.walletType;
+  const splitPaymentMethod = body.splitPaymentMethod || undefined;
+  const splitWalletType = body.splitWalletType;
+  const splitPaidAmount = Number(body.splitPaidAmount || 0);
 
   const invoiceNumber = await purchaseService.generateNextPurchaseInvoiceNumber();
 
@@ -502,8 +513,12 @@ const receiveItems = async (orderId, body, ctx) => {
     totalAmount: purchaseTotal,
     paidAmount,
     balance: Math.max(0, purchaseTotal - paidAmount),
-    paymentType,
-    walletType: paymentType === 'Wallet' ? walletType : undefined,
+    type,
+    paymentMethod,
+    walletType: paymentMethod === 'wallet' ? walletType : undefined,
+    splitPaymentMethod,
+    splitWalletType: splitPaymentMethod === 'wallet' ? splitWalletType : undefined,
+    splitPaidAmount,
     notes: body.notes || `Goods received against PO ${order.orderNumber}`,
   };
 

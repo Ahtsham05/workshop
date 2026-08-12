@@ -1,5 +1,7 @@
+import { isPast, isToday } from 'date-fns'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   FileText,
   ShoppingCart,
@@ -13,6 +15,13 @@ import {
   Wrench,
   Signal,
   Banknote,
+  Target,
+  AlarmClock,
+  ClipboardList,
+  HandCoins,
+  Landmark,
+  ClipboardEdit,
+  Handshake,
 } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { useNavigate } from '@tanstack/react-router'
@@ -20,6 +29,7 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { isMobileShopBusiness } from '@/lib/business-types'
+import { useRemindersFeed } from '@/hooks/use-reminders-feed'
 
 export function QuickActions() {
   const { t } = useLanguage()
@@ -27,6 +37,14 @@ export function QuickActions() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const isMobileShop = isMobileShopBusiness(org?.businessType || user?.businessType)
+
+  // Reuses the one shared reminders poll (see reminders-nav-badge.tsx) — never call
+  // useGetRemindersQuery directly, or this becomes a second independent poll timer.
+  const { active: activeReminders } = useRemindersFeed()
+  const dueTodayCount = activeReminders.filter((r) => {
+    const due = new Date(r.dueAt)
+    return isToday(due) || isPast(due)
+  }).length
 
   const mobileShopActions = [
     {
@@ -118,7 +136,53 @@ export function QuickActions() {
     },
   ]
 
-  const renderRow = (actions: typeof defaultActions) => (
+  const usefulActions = [
+    {
+      icon: <Target className='h-5 w-5' />,
+      label: t('Leads'),
+      onClick: () => navigate({ to: '/leads' }),
+      color: 'bg-violet-500 hover:bg-violet-600',
+    },
+    {
+      icon: <AlarmClock className='h-5 w-5' />,
+      label: t('Tasks & Reminders'),
+      onClick: () => navigate({ to: '/reminders' }),
+      color: 'bg-amber-500 hover:bg-amber-600',
+      badge: dueTodayCount > 0 ? dueTodayCount : undefined,
+    },
+    {
+      icon: <ClipboardList className='h-5 w-5' />,
+      label: t('Purchase Orders'),
+      onClick: () => navigate({ to: '/purchase-orders' }),
+      color: 'bg-sky-500 hover:bg-sky-600',
+    },
+    {
+      icon: <HandCoins className='h-5 w-5' />,
+      label: t('Payments & Receipts'),
+      onClick: () => navigate({ to: '/payment-vouchers' }),
+      color: 'bg-emerald-500 hover:bg-emerald-600',
+    },
+    {
+      icon: <Landmark className='h-5 w-5' />,
+      label: t('Bank Accounts'),
+      onClick: () => navigate({ to: '/mobile-shop/wallet' }),
+      color: 'bg-fuchsia-500 hover:bg-fuchsia-600',
+    },
+    {
+      icon: <ClipboardEdit className='h-5 w-5' />,
+      label: t('Stock Adjustments'),
+      onClick: () => navigate({ to: '/stock-adjustments' }),
+      color: 'bg-slate-500 hover:bg-slate-600',
+    },
+    {
+      icon: <Handshake className='h-5 w-5' />,
+      label: t('Salesmen'),
+      onClick: () => navigate({ to: '/salesmen' }),
+      color: 'bg-lime-500 hover:bg-lime-600',
+    },
+  ]
+
+  const renderRow = (actions: (typeof defaultActions[number] & { badge?: number })[]) => (
     <div className='grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4'>
       {actions.map((action, index) => (
         <Button
@@ -128,7 +192,14 @@ export function QuickActions() {
           variant='default'
         >
           {action.icon}
-          <span className='text-sm font-medium text-wrap text-center'>{action.label}</span>
+          <span className='flex items-center justify-center gap-1.5 text-sm font-medium text-wrap text-center'>
+            {action.label}
+            {!!action.badge && (
+              <Badge className='rounded-full border border-white/40 bg-red-500 px-1.5 py-0 text-[10px] font-semibold text-white hover:bg-red-500'>
+                {action.badge > 99 ? '99+' : action.badge}
+              </Badge>
+            )}
+          </span>
         </Button>
       ))}
     </div>
@@ -139,6 +210,7 @@ export function QuickActions() {
       <CardContent className='flex flex-col gap-4 pt-6'>
         {renderRow(defaultActions)}
         {isMobileShop && renderRow(mobileShopActions)}
+        {renderRow(usefulActions)}
       </CardContent>
     </Card>
   )

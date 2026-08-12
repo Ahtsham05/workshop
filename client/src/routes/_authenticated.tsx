@@ -19,6 +19,9 @@ import { restoreSessionFromCache } from '@/lib/auth-cache'
 import { looksLikeJwt } from '@/lib/auth-token'
 import { LocalDatabaseSetupBanner } from '@/features/settings/local-database/local-database-setup-banner'
 import { setActiveOrganizationBusinessType } from '@/lib/organization-context'
+import { PushNotificationPrompt } from '@/components/push-notification-prompt'
+import { useReminderWatchdog } from '@/hooks/use-reminder-watchdog'
+import { ReminderAlarmSplash } from '@/components/reminder-alarm-splash'
 
 /**
  * Authenticated layout component.
@@ -39,6 +42,8 @@ function AuthenticatedLayout() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showLogoReminder = Boolean(user?.organizationId) && !orgData?.logo?.url
+
+  const { current: ringingReminder, queueLength: ringingQueueLength, snoozeCurrent, completeCurrent } = useReminderWatchdog()
 
   useEffect(() => {
     if (orgData?.businessType) {
@@ -81,6 +86,7 @@ function AuthenticatedLayout() {
           <AppSidebar />
           <div className="min-w-0 flex-1 overflow-hidden flex flex-col">
             <AuthenticatedHeader showSearch={!isTeacher} />
+            <PushNotificationPrompt message="Enable browser notifications so reminder alarms reach you even when this tab is in the background." />
             {showLogoReminder && (
               <div className="mx-3 mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm flex items-center justify-between shrink-0">
                 <span className="text-blue-900">
@@ -104,6 +110,14 @@ function AuthenticatedLayout() {
         </SidebarProvider>
         </WhatsAppProvider>
       </PermissionWrapper>
+      {ringingReminder && (
+        <ReminderAlarmSplash
+          reminder={ringingReminder}
+          queueLength={ringingQueueLength}
+          onSnooze={snoozeCurrent}
+          onComplete={completeCurrent}
+        />
+      )}
     </TrialExpirationBoundary>
   )
 }

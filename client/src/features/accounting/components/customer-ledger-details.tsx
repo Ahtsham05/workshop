@@ -28,7 +28,7 @@ import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
-import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, FileText, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, FileText, CalendarIcon, List, LayoutGrid, ExternalLink, Target } from 'lucide-react';
 import { expiryBadge } from '@/features/reports/utils/expiry-badge';
 import { useNavigate } from '@tanstack/react-router';
 import * as XLSX from 'xlsx';
@@ -57,6 +57,9 @@ import { PrintFormatButton } from '@/components/print-format-button';
 import { balanceBeforeFromLedgerEntry, fetchSupplierBalanceBeforeInvoice } from '@/features/invoice/utils/invoice-print-balance';
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
+import { CommunicationLogPanel } from './communication-log-panel';
+import { useGetLeadByCustomerIdQuery } from '@/stores/lead.api';
+import { Can } from '@/context/permission-context';
 import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
 import {
   isManualLedgerEntry,
@@ -778,6 +781,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const user = useSelector((state: RootState) => state.auth.data?.user);
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
+  const { data: originLead } = useGetLeadByCustomerIdQuery(customer._id, { skip: !customer?._id });
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80';
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard';
   const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait';
@@ -1906,6 +1910,30 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               </p>
             </div>
           </div>
+
+          {originLead && (
+            <Can permission="viewLeads">
+              <button
+                type="button"
+                onClick={() => navigate({ to: '/leads', search: { leadId: originLead._id || originLead.id } })}
+                className="mb-6 flex w-full items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-left text-sm text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+              >
+                <Target className="h-4 w-4 shrink-0" />
+                {t('Converted from a lead')} — {t('view its full communication and quotation history')}
+                <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0" />
+              </button>
+            </Can>
+          )}
+
+          <Can permission="viewCommunicationLog">
+            <div className="mb-6">
+              <CommunicationLogPanel
+                relatedType="Customer"
+                relatedId={customer._id}
+                relatedName={customer.name}
+              />
+            </div>
+          </Can>
 
           {loading ? (
             <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>

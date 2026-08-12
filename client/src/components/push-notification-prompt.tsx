@@ -3,7 +3,11 @@ import { Button } from '@/components/ui/button';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { toast } from 'sonner';
 
-export function PushNotificationPrompt() {
+interface PushNotificationPromptProps {
+  message?: string;
+}
+
+export function PushNotificationPrompt({ message }: PushNotificationPromptProps = {}) {
   const { supported, subscribed, loading, dismissed, subscribe, dismiss } = usePushNotifications();
 
   if (!supported || subscribed || dismissed) return null;
@@ -23,7 +27,7 @@ export function PushNotificationPrompt() {
         <div className="flex items-center gap-2 min-w-0 text-sm text-blue-900 dark:text-blue-100">
           <Bell className="h-4 w-4 shrink-0" />
           <span className="truncate">
-            Enable notifications to receive school announcements and attendance alerts on your device.
+            {message || 'Enable notifications to receive school announcements and attendance alerts on your device.'}
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">

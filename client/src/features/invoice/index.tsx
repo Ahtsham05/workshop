@@ -2,7 +2,7 @@ import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { permissionMessage } from '@/lib/permission-messages'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
-import { useSearch } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
@@ -10,6 +10,7 @@ import { fetchCustomers } from '@/stores/customer.slice'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import type { ImeiEntryInput } from '@/stores/imei.api'
 import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
+import { leadApi } from '@/stores/lead.api'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading, which would retrigger any effect keyed
@@ -141,6 +142,8 @@ export interface Invoice {
   customerId?: string
   customerName?: string
   walkInCustomerName?: string
+  /** Set when this invoice was created from the CRM Leads module, so it shows up on the lead's activity timeline. */
+  leadId?: string
   /** Salesman credited with this sale for commission purposes — a User id. */
   salesmanId?: string
   language?: 'en' | 'ur'
@@ -243,6 +246,7 @@ export default function InvoicePage() {
   const { hasExplicitPermission } = usePermissions()
   const { state: sidebarState, isMobile: sidebarIsMobile } = useSidebar()
   const dispatch = useDispatch<AppDispatch>()
+  const navigate = useNavigate()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const search = useSearch({ from: '/_authenticated/invoice/' })
 
@@ -259,7 +263,9 @@ export default function InvoicePage() {
     language: preferredLanguage,
     isUrduOnly: getInitialUrduOnlyPreference(),
     customerId: search.customerId?.trim() || 'walk-in',
-    type: search.customerId?.trim() ? 'credit' : 'cash',
+    type: search.type === 'quotation' ? 'quotation' : search.customerId?.trim() ? 'credit' : 'cash',
+    walkInCustomerName: search.leadName?.trim() || undefined,
+    leadId: search.leadId?.trim() || undefined,
     subtotal: 0,
     tax: 0,
     discountType: 'fixed',
@@ -1465,9 +1471,18 @@ export default function InvoicePage() {
     clearSaleWorkspace()
     // Mark invoice as saved to prevent stock restoration
     setInvoiceSaved(true)
-    
-    console.log('Invoice saved - stock changes committed')
-    
+
+    // Arrived here from a CRM Lead's "Create Quotation" action — force-refetch the
+    // lead's detail/timeline (invoiceApi and leadApi are separate RTK Query slices, so
+    // creating the invoice never invalidates leadApi's cache on its own — without this
+    // the reopened lead panel would still show "No quotations yet" until something else
+    // happened to trigger a refetch) and head back to that lead once the form below has
+    // finished resetting to blank — intentionally NOT returning early here: the reset is
+    // what clears `invoice` out of `salePersistRef`, and this component's unmount effect
+    // persists whatever's still in that ref as a recoverable draft, so skipping the reset
+    // would leave the just-submitted quotation sitting there to be "recovered" later.
+    const returnToLeadId = search.leadId
+
     // Reset to create new invoice instead of going to list
     setCurrentView('create')
     setEditingInvoice(null)
@@ -1505,10 +1520,18 @@ export default function InvoicePage() {
     
     // Reset the saved flag for next invoice
     setInvoiceSaved(false)
-    
+
     // Refresh products to ensure we have the latest stock data from server
     refreshProducts()
-  }, [preferredLanguage, refreshProducts, showProductCatalog])
+
+    if (returnToLeadId) {
+      dispatch(leadApi.util.invalidateTags([
+        { type: 'Lead', id: returnToLeadId },
+        { type: 'LeadTimeline', id: returnToLeadId },
+      ]))
+      navigate({ to: '/leads', search: { leadId: returnToLeadId } })
+    }
+  }, [preferredLanguage, refreshProducts, showProductCatalog, search.leadId, dispatch, navigate])
 
   const handleConvertPending = () => {
     clearSaleWorkspace()

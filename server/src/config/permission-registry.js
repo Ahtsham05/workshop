@@ -91,6 +91,21 @@ const PERMISSION_GROUPS = [
     permissions: ['viewAccountsSystem', 'manageAccountsSystem'],
   },
   {
+    id: 'communication_log',
+    label: 'Communication Log',
+    permissions: ['viewCommunicationLog', 'createCommunicationLog', 'editCommunicationLog', 'deleteCommunicationLog'],
+  },
+  {
+    id: 'reminders',
+    label: 'Tasks & Reminders',
+    permissions: ['viewReminders', 'createReminders', 'editReminders', 'deleteReminders'],
+  },
+  {
+    id: 'leads',
+    label: 'CRM Leads',
+    permissions: ['viewLeads', 'viewAllLeads', 'createLeads', 'editLeads', 'deleteLeads', 'convertLeads'],
+  },
+  {
     id: 'wallet',
     label: 'Mobile Shop — Wallet',
     permissions: ['viewWallet', 'manageWallet'],
@@ -294,6 +309,7 @@ const PERMISSION_TAB_GROUPS = {
     'payment_vouchers',
     'bank_reconciliation',
     'accounts_system',
+    'leads',
   ],
   mobile_shop: [
     'wallet',

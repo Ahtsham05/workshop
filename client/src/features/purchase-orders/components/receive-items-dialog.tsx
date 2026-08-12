@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
-import { Minus, Package, PackageCheck, Plus } from 'lucide-react'
+import { CalendarClock, Layers, Minus, Package, PackageCheck, Plus, Sparkles, X } from 'lucide-react'
 
 import {
   Dialog,
@@ -37,11 +37,17 @@ import type { RootState } from '@/stores/store'
 import { useLanguage } from '@/context/language-context'
 import { getBusinessToday } from '@/lib/business-timezone'
 import { focusField, onEnterAdvance } from '@/lib/invoice-form-keyboard'
-import { isMobileShopBusiness } from '@/lib/business-types'
 import { cn } from '@/lib/utils'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
 import { openPurchasePrintWindow } from '@/utils/purchasePrintUtils'
 import { computeDiscountAmount, type DiscountType } from '@/features/purchase-invoice/utils/discount'
+import {
+  buildMergedPaymentOptions,
+  isWalletOptionValue,
+  getWalletTypeFromOptionValue,
+  toWalletOptionValue,
+} from '@/lib/wallet-payment-options'
+import { SplitPaymentFields, type SplitPaymentValue } from '@/components/split-payment-fields'
 
 type Row = {
   productId: string
@@ -74,8 +80,6 @@ interface Props {
   onClose: () => void
   onReceived: () => void
 }
-
-const BASE_PAYMENT_TYPES = ['Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit'] as const
 
 const formatMoney = (value: number) =>
   Number(value || 0).toLocaleString('en-PK', {
@@ -134,83 +138,195 @@ function buildRowsFromOrder(order: PurchaseOrder): Row[] {
 }
 
 /**
- * Batch number/expiry entry for a receiving row whose variant tracks batch/expiry.
- * Picking an existing batch chip re-stocks it (matched by batch number, same as
- * Purchase's createPurchase); "+ New batch" starts a fresh one. Pulled into its own
- * component because it needs its own useGetBatchesForVariantQuery call per row, which
- * the Rules of Hooks don't allow inside the rows.map() loop body directly.
+ * Batch number/expiry entry for a receiving row whose variant tracks batch/expiry —
+ * mirrors Purchase Invoice's PurchaseItemVariantBatchFields (pills for known batches +
+ * a dialog for entering a new one), minus the variant picker since a PO receipt line's
+ * variant is already fixed. Picking an existing batch chip re-stocks it (matched by
+ * batch number, same as Purchase's createPurchase); "New Batch" starts a fresh one via
+ * the dialog. Pulled into its own component because it needs its own
+ * useGetBatchesForVariantQuery call per row, which the Rules of Hooks don't allow
+ * inside the rows.map() loop body directly.
  */
 function ReceiveRowBatchFields({ row, onChange }: { row: Row; onChange: (patch: Partial<Row>) => void }) {
-  if (!row.trackBatch && !row.trackExpiry) return null
   const { data: batches = [] } = useGetBatchesForVariantQuery(row.variantId || '', {
-    skip: !row.variantId,
+    skip: !row.variantId || (!row.trackBatch && !row.trackExpiry),
   })
   const activeBatches = batches.filter((b) => (b.status || 'active') === 'active')
+  // Expiry is only meaningful for products that actually expire — a batch-only item
+  // (batch tracked for cost/traceability but not perishable) never shows a date field,
+  // same as Purchase Invoice.
+  const isExpirable = !!row.trackExpiry
 
   // Default to the earliest-expiring batch (already sorted that way by the backend)
-  // once it loads, instead of leaving the row unselected — same rule as Purchase
-  // Invoice/Sale Invoice's default-batch selection. The receiver can still switch to
-  // a different batch chip afterward.
+  // once it loads, instead of leaving the row unselected — speeds up bulk-restocking
+  // already-known batches. The receiver can still switch to a different batch chip, or
+  // start a new one, afterward. Purchase Invoice's manual-entry flow doesn't default
+  // this (its items usually aren't restocks of a specific known batch), so this is a
+  // deliberate receive-flow-only speed feature, kept from the previous implementation.
   useEffect(() => {
     if (row.batchNumber || activeBatches.length === 0) return
     const defaultBatch = activeBatches[0]
-    onChange({
-      batchNumber: defaultBatch.batchNumber,
-      expiryDate: row.expiryDate,
-      priceAtPurchase: defaultBatch.costPerUnit,
-    })
+    onChange({ batchNumber: defaultBatch.batchNumber, priceAtPurchase: defaultBatch.costPerUnit })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBatches.length])
 
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [draftBatchNumber, setDraftBatchNumber] = useState('')
+  const [draftExpiryDate, setDraftExpiryDate] = useState('')
+  const batchInputRef = useRef<HTMLInputElement | null>(null)
+  const expiryInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (!dialogOpen) return
+    focusField(batchInputRef.current, true)
+  }, [dialogOpen])
+
+  if (!row.trackBatch && !row.trackExpiry) return null
+
+  // The row's current pick, once it's not one of the server's known active batches, is
+  // a batch being created by this receipt — shown as its own pill alongside the real
+  // ones instead of raw always-visible inputs.
+  const isNewBatch = !!row.batchNumber && !activeBatches.some((b) => b.batchNumber === row.batchNumber)
+
+  const openCreateDialog = () => {
+    setDraftBatchNumber(generateBatchNumber())
+    setDraftExpiryDate('')
+    setDialogOpen(true)
+  }
+
+  const openEditDialog = () => {
+    setDraftBatchNumber(row.batchNumber || generateBatchNumber())
+    setDraftExpiryDate(row.expiryDate || '')
+    setDialogOpen(true)
+  }
+
+  const clearBatch = () => onChange({ batchNumber: '', expiryDate: '' })
+
+  const commitBatch = () => {
+    const trimmed = draftBatchNumber.trim()
+    if (!trimmed) return
+    onChange({ batchNumber: trimmed, expiryDate: isExpirable ? draftExpiryDate : '' })
+    setDialogOpen(false)
+  }
+
+  const pillClass = (isSelected: boolean) =>
+    cn(
+      'inline-flex items-center gap-1 rounded-full border text-[11px] font-medium shadow-sm transition-colors',
+      isSelected
+        ? 'border-blue-600 bg-blue-600 text-white'
+        : 'border-border bg-background text-muted-foreground hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30',
+    )
+  const removeButtonClass = (isSelected: boolean) =>
+    cn(
+      'shrink-0 rounded-full p-0.5 mr-1',
+      isSelected ? 'hover:bg-white/20' : 'hover:bg-black/10 dark:hover:bg-white/10',
+    )
+
   return (
     <div className='ml-10 flex flex-wrap items-center gap-1.5 px-2.5 pb-2'>
-      {activeBatches.length > 0 && (
-        <div className='flex flex-wrap gap-1'>
-          {activeBatches.map((b) => {
-            const id = b._id || b.id
-            const isSelected = row.batchNumber === b.batchNumber
-            return (
-              <button
-                key={id}
-                type='button'
-                onClick={() =>
-                  onChange({ batchNumber: b.batchNumber, expiryDate: row.expiryDate, priceAtPurchase: b.costPerUnit })
-                }
-                title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
-                className={cn(
-                  'rounded-full border px-2 py-0.5 text-[11px] transition-colors',
-                  isSelected
-                    ? 'border-blue-600 bg-blue-100 text-blue-800'
-                    : 'border-border bg-background text-muted-foreground hover:bg-muted',
-                )}
-              >
-                {b.batchNumber} · {b.quantity} left
+      <span className='inline-flex items-center gap-1 text-[11px] font-medium text-blue-700'>
+        <Layers className='h-3 w-3' /> Batches
+      </span>
+      {activeBatches.map((b) => {
+        const id = b._id || b.id
+        const isSelected = row.batchNumber === b.batchNumber
+        return (
+          <span key={id} className={pillClass(isSelected)}>
+            <button
+              type='button'
+              onClick={() => onChange({ batchNumber: b.batchNumber, priceAtPurchase: b.costPerUnit })}
+              title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+              className={cn('py-1', isSelected ? 'pl-2.5' : 'px-2.5')}
+            >
+              {b.batchNumber} · {b.quantity} left
+            </button>
+            {isSelected && (
+              <button type='button' onClick={clearBatch} title='Remove batch' className={removeButtonClass(isSelected)}>
+                <X className='h-3 w-3' />
               </button>
-            )
-          })}
-          <button
-            type='button'
-            onClick={() => onChange({ batchNumber: generateBatchNumber(), expiryDate: '' })}
-            className='rounded-full border border-dashed px-2 py-0.5 text-[11px] text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'
-          >
-            + New batch
+            )}
+          </span>
+        )
+      })}
+      {isNewBatch && (
+        <span
+          className={pillClass(true)}
+          title={isExpirable ? (row.expiryDate ? `Expires ${new Date(row.expiryDate).toLocaleDateString()}` : 'No expiry set') : undefined}
+        >
+          <button type='button' onClick={openEditDialog} className='py-1 pl-2.5'>
+            <Sparkles className='mr-1 inline h-3 w-3' />
+            {row.batchNumber}
+            {isExpirable && !row.expiryDate && <CalendarClock className='ml-1 inline h-3 w-3 text-amber-300' />}
           </button>
-        </div>
+          <button type='button' onClick={clearBatch} title='Remove batch' className={removeButtonClass(true)}>
+            <X className='h-3 w-3' />
+          </button>
+        </span>
       )}
-      <Input
-        placeholder='Batch number'
-        value={row.batchNumber || ''}
-        showVoiceInput={false}
-        onChange={(e) => onChange({ batchNumber: e.target.value })}
-        className='h-7 w-[200px] text-xs'
-      />
-      <Input
-        type='date'
-        value={row.expiryDate || ''}
-        showVoiceInput={false}
-        onChange={(e) => onChange({ expiryDate: e.target.value })}
-        className='h-7 w-[160px] text-xs'
-      />
+      <button
+        type='button'
+        onClick={openCreateDialog}
+        className='inline-flex items-center gap-1 rounded-full border border-dashed border-blue-300 px-2.5 py-1 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/30'
+      >
+        <Plus className='h-3 w-3' /> New Batch
+      </button>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className='sm:max-w-sm'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2 text-base'>
+              <Layers className='h-4 w-4 text-blue-600' />
+              {isNewBatch ? 'Edit Batch' : 'New Batch'}
+            </DialogTitle>
+            <DialogDescription className='truncate'>{row.productName}</DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-3'>
+            <div className='space-y-1.5'>
+              <Label htmlFor={`receive-batch-number-${row.productId}-${row.variantId || ''}`}>Batch Number</Label>
+              <Input
+                id={`receive-batch-number-${row.productId}-${row.variantId || ''}`}
+                ref={batchInputRef}
+                placeholder='Batch number'
+                value={draftBatchNumber}
+                showVoiceInput={false}
+                onChange={(e) => setDraftBatchNumber(e.target.value)}
+                onKeyDown={(e) =>
+                  onEnterAdvance(e, () => {
+                    if (isExpirable) focusField(expiryInputRef.current)
+                    else commitBatch()
+                  })
+                }
+                className='h-9'
+              />
+            </div>
+            {isExpirable && (
+              <div className='space-y-1.5'>
+                <Label htmlFor={`receive-batch-expiry-${row.productId}-${row.variantId || ''}`}>Expiry Date</Label>
+                <Input
+                  id={`receive-batch-expiry-${row.productId}-${row.variantId || ''}`}
+                  ref={expiryInputRef}
+                  type='date'
+                  value={draftExpiryDate}
+                  showVoiceInput={false}
+                  onChange={(e) => setDraftExpiryDate(e.target.value)}
+                  onKeyDown={(e) => onEnterAdvance(e, commitBatch)}
+                  className='h-9'
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type='button' variant='outline' size='sm' onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type='button' size='sm' disabled={!draftBatchNumber.trim()} onClick={commitBatch}>
+              {isNewBatch ? 'Save Batch' : 'Create Batch'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -226,19 +342,27 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     skip: !open || !user?.organizationId,
   })
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !open || !activeBranchId })
-  const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
-  const { data: walletsData } = useGetWalletsQuery(undefined, {
-    skip: !open || !isMobileShop,
-  })
+  // Real bank accounts / mobile wallets are selectable for every business type here (not
+  // just mobile shops), same as Purchase Invoice's payment method dropdown.
+  const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !open })
   const wallets = walletsData?.results?.filter((wallet) => wallet.isActive) ?? []
 
   const [rows, setRows] = useState<Row[]>([])
   const [receivedAt, setReceivedAt] = useState<string>(() => getBusinessToday())
-  const [paymentType, setPaymentType] = useState<string>('Cash')
-  const [paymentTypeSelectOpen, setPaymentTypeSelectOpen] = useState(false)
+  // Settlement status (does the unpaid remainder become a supplier debt) — separate from
+  // paymentMethod (which real account absorbs paidAmount right now), same split as Purchase
+  // Invoice's "Purchase Type" vs "Payment Method" fields.
+  const [purchaseType, setPurchaseType] = useState<'cash' | 'credit'>('cash')
+  const [purchaseTypeSelectOpen, setPurchaseTypeSelectOpen] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet'>('cash')
+  const [paymentMethodSelectOpen, setPaymentMethodSelectOpen] = useState(false)
   const [walletType, setWalletType] = useState<string>('')
-  const [walletSelectOpen, setWalletSelectOpen] = useState(false)
   const [paidAmount, setPaidAmount] = useState<number>(0)
+  // Optional second payment leg (e.g. paid partly cash, partly from a wallet/bank account) —
+  // always the opposite bucket from paymentMethod, see split-payment-fields.tsx.
+  const [splitPaymentMethod, setSplitPaymentMethod] = useState<'cash' | 'wallet' | undefined>(undefined)
+  const [splitWalletType, setSplitWalletType] = useState<string>('')
+  const [splitPaidAmount, setSplitPaidAmount] = useState<number>(0)
   const [notes, setNotes] = useState<string>('')
   // Overall receipt-level discount — defaults to the order's own overall discount
   // *rate* prorated against however much of the order this receipt actually covers,
@@ -271,14 +395,20 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     return 'Unknown'
   }, [])
 
-  const paymentTypes = useMemo(
-    () => (isMobileShop ? [...BASE_PAYMENT_TYPES, 'Wallet'] : [...BASE_PAYMENT_TYPES]),
-    [isMobileShop],
+  // Paying a supplier is a money-out action — show wallet balances so the user can avoid
+  // overdrawing. No generic "Bank Transfer"/"Card"/"Cheque" placeholders — every real
+  // account (bank or mobile wallet) is selectable here by its own name, same as Purchase
+  // Invoice's payment method dropdown.
+  const paymentMethodOptions = useMemo(
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, true),
+    [wallets],
   )
+  const selectedPaymentMethodValue =
+    paymentMethod === 'wallet' && walletType ? toWalletOptionValue(walletType) : 'cash'
 
   const receivedAtRef = useRef<HTMLInputElement>(null)
-  const paymentTypeRef = useRef<HTMLButtonElement>(null)
-  const walletSelectRef = useRef<HTMLButtonElement>(null)
+  const purchaseTypeRef = useRef<HTMLButtonElement>(null)
+  const paymentMethodRef = useRef<HTMLButtonElement>(null)
   const paidAmountRef = useRef<HTMLInputElement>(null)
   const notesRef = useRef<HTMLTextAreaElement>(null)
   const confirmBtnRef = useRef<HTMLButtonElement>(null)
@@ -295,8 +425,12 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     }
     setRows(buildRowsFromOrder(order))
     setReceivedAt(getBusinessToday())
-    setPaymentType('Cash')
+    setPurchaseType('cash')
+    setPaymentMethod('cash')
     setWalletType('')
+    setSplitPaymentMethod(undefined)
+    setSplitWalletType('')
+    setSplitPaidAmount(0)
     setPaidAmount(0)
     setNotes('')
     const orderSubtotal = Number(order.subtotal || 0)
@@ -336,28 +470,29 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
 
   const total = Math.max(0, subtotal - discountAmount)
 
-  const selectedWallet = useMemo(
-    () => wallets.find((wallet) => wallet.type === walletType),
-    [wallets, walletType],
+  const resolvedSplitPaidAmount = splitPaymentMethod ? Math.max(0, Number(splitPaidAmount || 0)) : 0
+  const totalPaidAmount = Number(paidAmount || 0) + resolvedSplitPaidAmount
+
+  // The split leg is always the OPPOSITE bucket from paymentMethod (enforced by
+  // SplitPaymentFields), so at most one wallet leg — either the primary or the split — is
+  // ever active at a time. Resolve that single leg for the balance warning/validation below.
+  const effectiveWalletType = paymentMethod === 'wallet' ? walletType : splitPaymentMethod === 'wallet' ? splitWalletType : ''
+  const effectiveWalletAmount = paymentMethod === 'wallet' ? Number(paidAmount || 0) : splitPaymentMethod === 'wallet' ? resolvedSplitPaidAmount : 0
+  const effectiveWallet = useMemo(
+    () => wallets.find((wallet) => wallet.type === effectiveWalletType),
+    [wallets, effectiveWalletType],
   )
+  const effectiveWalletBalance = Number(effectiveWallet?.balance || 0)
 
-  const selectedWalletBalance = Number(selectedWallet?.balance || 0)
-
-  const detectPaidFromWallet = useCallback(
-    (walletBalance: number, receiptTotal: number) =>
-      Math.min(Math.max(0, receiptTotal), Math.max(0, walletBalance)),
-    [],
-  )
-
+  // Purchase Type "Cash" always means fully paid right now — whichever account(s) it went
+  // through. A Credit receipt (or a Cash receipt with split payment on) leaves Paid amount
+  // editable instead. Guarded against an active split so this never clobbers a split leg's
+  // amount — mirrors purchase-panel.tsx's identical guard.
   useEffect(() => {
-    if (paymentType === 'Cash') {
+    if (purchaseType === 'cash' && !splitPaymentMethod && (paidAmount || 0) !== total) {
       setPaidAmount(total)
-      return
     }
-    if (paymentType === 'Wallet' && selectedWallet) {
-      setPaidAmount(detectPaidFromWallet(selectedWalletBalance, total))
-    }
-  }, [paymentType, total, selectedWallet, selectedWalletBalance, detectPaidFromWallet])
+  }, [purchaseType, splitPaymentMethod, total, paidAmount])
 
   useEffect(() => {
     if (!open || !order || receivableIndexes.length === 0) return
@@ -386,46 +521,43 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     [receivableIndexes],
   )
 
-  const focusAfterPaymentType = useCallback(() => {
-    if (paymentType === 'Wallet') {
-      focusField(walletSelectRef.current)
-      return
-    }
-    if (paymentType === 'Cash') {
+  const focusAfterPaymentMethod = useCallback(() => {
+    if (purchaseType === 'cash' && !splitPaymentMethod) {
       focusFirstReceivableQty()
       return
     }
     focusField(paidAmountRef.current)
-  }, [paymentType, focusFirstReceivableQty])
+  }, [purchaseType, splitPaymentMethod, focusFirstReceivableQty])
 
-  const handleWalletChange = useCallback(
-    (value: string) => {
-      setWalletType(value)
-      const wallet = wallets.find((item) => item.type === value)
-      if (wallet) {
-        setPaidAmount(detectPaidFromWallet(Number(wallet.balance || 0), total))
-      }
-    },
-    [wallets, total, detectPaidFromWallet],
-  )
-
-  const handlePaymentTypeChange = useCallback(
-    (value: string) => {
-      setPaymentType(value)
-      if (value === 'Cash') {
-        setWalletType('')
+  const handlePurchaseTypeChange = useCallback(
+    (value: 'cash' | 'credit') => {
+      const switchingCashToCredit = purchaseType === 'cash' && value === 'credit'
+      setPurchaseType(value)
+      if (value === 'cash') {
         setPaidAmount(total)
-        return
-      }
-      if (value === 'Credit' || value === 'Wallet') {
+      } else if (switchingCashToCredit) {
         setPaidAmount(0)
       }
-      if (value !== 'Wallet') {
-        setWalletType('')
-      }
+      // credit -> credit: keep whatever paidAmount was already entered.
     },
-    [total],
+    [purchaseType, total],
   )
+
+  const handlePaymentMethodChange = useCallback((value: string) => {
+    const isWallet = isWalletOptionValue(value)
+    setPaymentMethod(isWallet ? 'wallet' : 'cash')
+    setWalletType(isWallet ? getWalletTypeFromOptionValue(value) : '')
+    // The split leg's bucket is derived from this field — stale once it changes.
+    setSplitPaymentMethod(undefined)
+    setSplitWalletType('')
+    setSplitPaidAmount(0)
+  }, [])
+
+  const handleSplitPaymentChange = useCallback((patch: SplitPaymentValue) => {
+    setSplitPaymentMethod(patch.splitPaymentMethod)
+    setSplitWalletType(patch.splitWalletType || '')
+    setSplitPaidAmount(patch.splitPaidAmount || 0)
+  }, [])
 
   const fillAllRemaining = useCallback(() => {
     setRows((prev) =>
@@ -463,14 +595,21 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
         return
       }
     }
-    if (paymentType === 'Wallet' && !walletType.trim()) {
-      toast.error('Please select a wallet for wallet payment')
-      focusField(walletSelectRef.current)
+    if (paymentMethod === 'wallet' && !walletType.trim()) {
+      toast.error('Please select an account for the payment method')
+      focusField(paymentMethodRef.current)
       return
     }
-    if (paymentType === 'Wallet' && Number(paidAmount || 0) > selectedWalletBalance + 0.000001) {
+    if (splitPaymentMethod === 'wallet' && !splitWalletType.trim()) {
+      toast.error('Please select an account for the split payment')
+      return
+    }
+    // The split leg is always the OPPOSITE bucket from paymentMethod, so at most one wallet
+    // leg — either the primary or the split — is ever active; check that one leg's own
+    // amount against that one wallet's own balance, not the combined receipt total.
+    if (effectiveWalletType && effectiveWalletAmount > effectiveWalletBalance + 0.000001) {
       toast.error(
-        `Paid amount exceeds ${walletType} balance (Rs ${formatMoney(selectedWalletBalance)})`,
+        `Paid amount exceeds ${effectiveWalletType} balance (Rs ${formatMoney(effectiveWalletBalance)})`,
       )
       focusField(paidAmountRef.current)
       return
@@ -496,9 +635,13 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
           expiryDate: r.expiryDate || undefined,
         })),
         receivedAt: new Date(receivedAt).toISOString(),
-        paymentType,
-        walletType: paymentType === 'Wallet' ? walletType.trim() : undefined,
-        paidAmount: Number(paidAmount || 0),
+        paidAmount: totalPaidAmount,
+        type: purchaseType,
+        paymentMethod,
+        walletType: paymentMethod === 'wallet' ? walletType.trim() : undefined,
+        splitPaymentMethod,
+        splitWalletType: splitPaymentMethod === 'wallet' ? splitWalletType.trim() : undefined,
+        splitPaidAmount: resolvedSplitPaidAmount,
         discountType,
         discountValue: Number(discountValue || 0),
         notes,
@@ -534,10 +677,17 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
   }, [
     order,
     rows,
-    paymentType,
+    purchaseType,
+    paymentMethod,
     walletType,
+    splitPaymentMethod,
+    splitWalletType,
+    resolvedSplitPaidAmount,
+    totalPaidAmount,
+    effectiveWalletType,
+    effectiveWalletAmount,
+    effectiveWalletBalance,
     receivedAt,
-    paidAmount,
     discountType,
     discountValue,
     notes,
@@ -545,7 +695,6 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     onReceived,
     onClose,
     focusFirstReceivableQty,
-    selectedWalletBalance,
     resolveSupplierName,
     branchPrintDetails,
     t,
@@ -565,7 +714,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [open, isLoading, handleReceive])
 
-  const balance = Math.max(0, total - Number(paidAmount || 0))
+  const balance = Math.max(0, total - totalPaidAmount)
   const receivingCount = rows.filter((r) => Number(r.receivedQuantity) > 0).length
   const receivingUnits = rows.reduce((s, r) => s + Number(r.receivedQuantity || 0), 0)
 
@@ -585,7 +734,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
 
         <div className='min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 sm:px-5'>
           <div className='flex flex-wrap items-end gap-3'>
-            <div className='w-[148px] shrink-0'>
+            <div className='w-[140px] shrink-0'>
               <Label htmlFor='received-at' className='text-xs'>
                 Received on
               </Label>
@@ -595,36 +744,63 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                 type='date'
                 value={receivedAt}
                 onChange={(e) => setReceivedAt(e.target.value)}
-                onKeyDown={(e) => onEnterAdvance(e, () => focusField(paymentTypeRef.current))}
+                onKeyDown={(e) => onEnterAdvance(e, () => focusField(purchaseTypeRef.current))}
                 className='mt-1.5 h-9'
               />
             </div>
-            <div className='w-[140px] shrink-0'>
-              <Label className='text-xs'>Payment type</Label>
+            <div className='w-[110px] shrink-0'>
+              <Label className='text-xs'>Purchase Type</Label>
               <Select
-                value={paymentType}
-                onOpenChange={setPaymentTypeSelectOpen}
-                onValueChange={handlePaymentTypeChange}
+                value={purchaseType}
+                onOpenChange={setPurchaseTypeSelectOpen}
+                onValueChange={handlePurchaseTypeChange}
               >
                 <SelectTrigger
-                  ref={paymentTypeRef}
+                  ref={purchaseTypeRef}
                   className='mt-1.5 h-9'
                   onKeyDown={(e) => {
-                    if (!paymentTypeSelectOpen) {
-                      onEnterAdvance(e, focusAfterPaymentType)
+                    if (!purchaseTypeSelectOpen) {
+                      onEnterAdvance(e, () => focusField(paymentMethodRef.current))
                     }
                   }}
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {paymentTypes.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p}
+                  <SelectItem value='cash'>Cash</SelectItem>
+                  <SelectItem value='credit'>Credit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='min-w-[200px] flex-1'>
+              <Label className='text-xs'>Payment Method</Label>
+              <Select
+                value={selectedPaymentMethodValue}
+                onOpenChange={setPaymentMethodSelectOpen}
+                onValueChange={handlePaymentMethodChange}
+              >
+                <SelectTrigger
+                  ref={paymentMethodRef}
+                  className='mt-1.5 h-9'
+                  onKeyDown={(e) => {
+                    if (!paymentMethodSelectOpen) {
+                      onEnterAdvance(e, focusAfterPaymentMethod)
+                    }
+                  }}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {paymentMethodOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {wallets.length === 0 && (
+                <p className='mt-1 text-[11px] text-muted-foreground'>No wallets configured.</p>
+              )}
             </div>
             <div className='w-[120px] shrink-0'>
               <Label htmlFor='paid-amount' className='text-xs'>
@@ -635,8 +811,8 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                 id='paid-amount'
                 type='text'
                 inputMode='decimal'
-                value={paymentType === 'Cash' ? total : paidAmount || ''}
-                disabled={paymentType === 'Cash'}
+                value={purchaseType === 'cash' && !splitPaymentMethod ? total : paidAmount || ''}
+                disabled={purchaseType === 'cash' && !splitPaymentMethod}
                 onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
                 onKeyDown={(e) => onEnterAdvance(e, focusFirstReceivableQty)}
                 onFocus={(e) => e.target.select()}
@@ -644,52 +820,16 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                 placeholder='0'
               />
             </div>
-            {paymentType === 'Wallet' ? (
-              <div className='min-w-[180px] flex-1'>
-                <Label className='text-xs'>Select wallet *</Label>
-                {wallets.length > 0 ? (
-                  <>
-                    <Select
-                      value={walletType}
-                      onOpenChange={setWalletSelectOpen}
-                      onValueChange={handleWalletChange}
-                    >
-                      <SelectTrigger
-                        ref={walletSelectRef}
-                        className='mt-1.5 h-9'
-                        onKeyDown={(e) => {
-                          if (!walletSelectOpen) {
-                            onEnterAdvance(e, () => focusField(paidAmountRef.current))
-                          }
-                        }}
-                      >
-                        <SelectValue placeholder='Select wallet...' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {wallets.map((wallet) => (
-                          <SelectItem key={wallet.id} value={wallet.type}>
-                            {wallet.type} (Rs {formatMoney(wallet.balance)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedWallet ? (
-                      <p className='mt-1 text-[11px] text-muted-foreground'>
-                        Balance Rs {formatMoney(selectedWalletBalance)}
-                        {selectedWalletBalance < total ? (
-                          <span className='text-amber-600'> · less than receipt total</span>
-                        ) : null}
-                      </p>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className='mt-1.5 text-xs text-muted-foreground'>
-                    No wallets configured.
-                  </p>
-                )}
-              </div>
-            ) : null}
           </div>
+
+          <SplitPaymentFields
+            primaryMethod={paymentMethod === 'wallet' ? 'wallet' : 'cash'}
+            wallets={wallets}
+            paidAmount={paidAmount || 0}
+            value={{ splitPaymentMethod, splitWalletType, splitPaidAmount }}
+            onChange={handleSplitPaymentChange}
+            showBalance
+          />
 
           <div className='flex flex-wrap items-center justify-between gap-2'>
             <p className='text-xs text-muted-foreground'>
@@ -962,19 +1102,19 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
               <div className='flex justify-between text-sm'>
                 <span className='text-muted-foreground'>Paid now</span>
                 <span className='font-medium tabular-nums'>
-                  Rs {formatMoney(Number(paidAmount || 0))}
+                  Rs {formatMoney(totalPaidAmount)}
                 </span>
               </div>
-              {paymentType === 'Wallet' && selectedWallet ? (
+              {effectiveWalletType ? (
                 <div className='flex justify-between text-sm'>
-                  <span className='text-muted-foreground'>{walletType} balance</span>
+                  <span className='text-muted-foreground'>{effectiveWalletType} balance</span>
                   <span
                     className={cn(
                       'font-medium tabular-nums',
-                      selectedWalletBalance < Number(paidAmount || 0) && 'text-red-600',
+                      effectiveWalletBalance < effectiveWalletAmount && 'text-red-600',
                     )}
                   >
-                    Rs {formatMoney(selectedWalletBalance)}
+                    Rs {formatMoney(effectiveWalletBalance)}
                   </span>
                 </div>
               ) : null}

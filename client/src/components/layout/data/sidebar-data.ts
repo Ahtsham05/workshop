@@ -36,7 +36,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -216,6 +216,20 @@ export const sidebarData: SidebarData = {
           url: '/purchase-returns',
           icon: IconRefresh,
           permission: 'viewPurchaseReturns',
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
+          title: 'Tasks & Reminders',
+          url: '/reminders',
+          icon: AlarmClock,
+          permission: 'viewReminders',
+          excludeBusinessTypes: ['school', 'restaurant'],
+        },
+        {
+          title: 'Leads',
+          url: '/leads',
+          icon: Target,
+          permission: 'viewLeads',
           excludeBusinessTypes: ['school', 'restaurant'],
         },
         {

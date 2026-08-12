@@ -45,6 +45,16 @@ const POS_ERP_TEMPLATES = [
       bodyText: 'Hi {{1}}, your invoice #{{2}} is attached. Thank you for your business!',
     },
     {
+      // Same shape as invoice_pdf, for the CRM Leads module sending a quotation to a
+      // lead that isn't a registered customer yet — kept as its own internalCategory
+      // (not 'invoice') so the wording stays accurate for a non-committal quote.
+      name: 'quotation_pdf',
+      internalCategory: 'quotation',
+      category: 'UTILITY',
+      hasDocumentHeader: true,
+      bodyText: 'Hi {{1}}, your quotation #{{2}} is attached. Let us know if you have any questions!',
+    },
+    {
       name: 'order_update',
       internalCategory: 'order_update',
       category: 'UTILITY',

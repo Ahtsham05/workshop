@@ -25,14 +25,18 @@ function tone(ctx: AudioContext, freq: number, startAt: number, duration: number
   osc.stop(startAt + duration + 0.02)
 }
 
-export function playBeep(kind: 'success' | 'error') {
+export function playBeep(kind: 'success' | 'error' | 'alarm') {
   const ctx = getContext()
   if (!ctx) return
   const now = ctx.currentTime
   if (kind === 'success') {
     tone(ctx, 1046.5, now, 0.09, 0.18)
-  } else {
+  } else if (kind === 'error') {
     tone(ctx, 220, now, 0.14, 0.2)
     tone(ctx, 180, now + 0.15, 0.16, 0.2)
+  } else {
+    tone(ctx, 880, now, 0.16, 0.16)
+    tone(ctx, 880, now + 0.24, 0.16, 0.16)
+    tone(ctx, 1174.7, now + 0.48, 0.22, 0.18)
   }
 }

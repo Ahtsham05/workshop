@@ -78,7 +78,18 @@ export const whatsappApi = createApi({
     }),
     sendWhatsAppDocument: builder.mutation<
       { success: boolean; message: string },
-      { phone: string; pdfBase64: string; filename?: string; caption?: string; mimetype?: string }
+      {
+        phone: string
+        pdfBase64: string
+        filename?: string
+        caption?: string
+        mimetype?: string
+        /** Falls back to whatever approved document-header template matches this
+         * category outside Meta's 24h customer-service window (see WhatsAppTemplate's
+         * internalCategory). Omit for the generic 'general' fallback. */
+        templateCategory?: string
+        templateParams?: string[]
+      }
     >({
       query: (body) => ({ url: '/send-document', method: 'POST', body }),
     }),

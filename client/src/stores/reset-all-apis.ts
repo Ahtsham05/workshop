@@ -41,6 +41,9 @@ import { auditLogApi } from './auditLog.api'
 import { aiAssistantApi } from './aiAssistant.api'
 import { recurringExpenseApi } from './recurringExpense.api'
 import { expenseApi } from './expense.api'
+import { communicationLogApi } from './communicationLog.api'
+import { reminderApi } from './reminder.api'
+import { leadApi } from './lead.api'
 
 // Every RTK Query slice registered in store.ts — kept as a flat list so this stays a
 // plain, dependency-free array of `.util.resetApiState` action creators, safely
@@ -55,7 +58,7 @@ const ALL_APIS = [
   insightApi, purchaseSuggestionsApi, productAttributeApi, productVariantApi,
   productApi, inventoryApi, batchApi, brandApi, purchaseCatalogApi,
   inventoryTransferApi, stockAdjustmentApi, auditLogApi, aiAssistantApi,
-  recurringExpenseApi, expenseApi,
+  recurringExpenseApi, expenseApi, communicationLogApi, reminderApi, leadApi,
 ]
 
 /**

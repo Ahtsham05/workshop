@@ -31,6 +31,9 @@ const expenseRoute = require('./expense.route');
 const expenseCategoryRoute = require('./expenseCategory.route');
 const customerAccountTypeRoute = require('./customerAccountType.route');
 const customerLedgerRoute = require('./customerLedger.route');
+const communicationLogRoute = require('./communicationLog.route');
+const reminderRoute = require('./reminder.route');
+const leadRoute = require('./lead.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
 const personalLedgerRoute = require('./personalLedger.route');
 const dashboardRoute = require('./dashboard.route');
@@ -268,6 +271,18 @@ const defaultRoutes = [
   {
     path: '/personal-ledger',
     route: personalLedgerRoute
+  },
+  {
+    path: '/communication-logs',
+    route: communicationLogRoute
+  },
+  {
+    path: '/reminders',
+    route: reminderRoute
+  },
+  {
+    path: '/leads',
+    route: leadRoute
   },
   {
     path: '/dashboard',

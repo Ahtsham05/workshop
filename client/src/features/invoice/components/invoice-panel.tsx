@@ -528,10 +528,13 @@ export function InvoicePanel({
   // Handle walk-in customer business rules
   useEffect(() => {
     if (invoice.customerId === 'walk-in') {
-      // Force cash type for walk-in customers
-      if (invoice.type !== 'cash') {
-        setInvoice(prev => ({ 
-          ...prev, 
+      // Force cash type for walk-in customers — except quotations, which have no
+      // accounting effect until converted (see invoice.service.js's
+      // convertQuotationToInvoice) and are exactly how the CRM Leads module attaches
+      // a quote to a lead before it's ever a registered customer.
+      if (invoice.type !== 'cash' && invoice.type !== 'quotation') {
+        setInvoice(prev => ({
+          ...prev,
           type: 'cash'
         }))
       }
@@ -1383,6 +1386,7 @@ export function InvoicePanel({
         customerId: invoice.customerId,
         customerName: invoice.customerName,
         walkInCustomerName: invoice.walkInCustomerName,
+        leadId: invoice.leadId || undefined,
         type: invoice.type,
         subtotal: invoice.subtotal,
         tax: invoice.tax,
@@ -2106,10 +2110,10 @@ export function InvoicePanel({
                   >
                     {t('pending')}
                   </SelectItem>
-                  <SelectItem 
-                    value="quotation" 
-                    disabled={invoice.customerId === 'walk-in'}
-                  >
+                  {/* Quotations are non-committal drafts (no stock/accounting effect
+                      until converted), so — unlike credit/pending — they're allowed
+                      for walk-in customers too (e.g. a CRM lead not yet a customer). */}
+                  <SelectItem value="quotation">
                     {t('quotation') || 'Quotation'}
                   </SelectItem>
                 </SelectContent>

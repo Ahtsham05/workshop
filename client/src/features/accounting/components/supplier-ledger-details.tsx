@@ -56,6 +56,8 @@ import {
 } from '@/features/invoice/utils/invoice-print-contact-bridge';
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
+import { CommunicationLogPanel } from './communication-log-panel';
+import { Can } from '@/context/permission-context';
 import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
 import {
   isManualLedgerEntry,
@@ -1580,6 +1582,16 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               </p>
             </div>
           </div>
+
+          <Can permission="viewCommunicationLog">
+            <div className="mb-6">
+              <CommunicationLogPanel
+                relatedType="Supplier"
+                relatedId={supplier._id}
+                relatedName={supplier.name}
+              />
+            </div>
+          </Can>
 
           {loading ? (
             <div className="text-center py-8 text-gray-500">{t('Loading...')}</div>

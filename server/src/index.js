@@ -230,6 +230,12 @@ async function startApplication() {
         } catch (schedulerError) {
           logger.warn('Recurring expense scheduler skipped:', schedulerError.message);
         }
+        try {
+          const { startReminderScheduler } = require('./jobs/reminderScheduler');
+          startReminderScheduler();
+        } catch (schedulerError) {
+          logger.warn('Reminder scheduler skipped:', schedulerError.message);
+        }
         resolve(server);
       });
       server.on('error', reject);

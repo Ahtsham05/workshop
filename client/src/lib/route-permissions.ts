@@ -129,6 +129,8 @@ export const ROUTE_RULES: RouteRule[] = [
   // tabs (Dashboard, Expenses, Recurring, My Account) for such a role.
   { prefix: '/accounting', anyPermission: ['viewAccounting', 'viewCustomers', 'viewSuppliers'] },
   { prefix: '/cash-register', anyPermission: ['viewCashRegister'], excludeBusinessTypes: ['school', 'restaurant'] },
+  { prefix: '/reminders', anyPermission: ['viewReminders'] },
+  { prefix: '/leads', anyPermission: ['viewLeads'] },
   { prefix: '/reports', anyPermission: ['viewReports'] },
 
   // Dashboard — exact match only (see matchesPrefix)

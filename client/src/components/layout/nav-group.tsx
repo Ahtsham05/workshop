@@ -29,6 +29,7 @@ import {
 import { NavCollapsible, NavItem, NavLink, type NavGroup } from './types'
 import { useLanguage } from '@/context/language-context'
 import { NoTranslate } from '@/components/no-translate'
+import { RemindersNavBadge } from './reminders-nav-badge'
 
 export function NavGroup({ title, items, collapsible }: NavGroup) {
   const { state } = useSidebar()
@@ -118,7 +119,11 @@ const SidebarMenuLink = ({ item, href }: { item: NavLink; href: string }) => {
           <NoTranslate>
             <span className='h-10 flex items-center'>{t(item.title)}</span>
           </NoTranslate>
-          {item.badge && <NavBadge>{item.badge}</NavBadge>}
+          {item.url === '/reminders' ? (
+            <RemindersNavBadge />
+          ) : (
+            item.badge && <NavBadge>{item.badge}</NavBadge>
+          )}
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>

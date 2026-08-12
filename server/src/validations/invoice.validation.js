@@ -67,6 +67,7 @@ const createInvoice = {
     ).optional(),
     customerName: Joi.string().allow('').optional(),
     walkInCustomerName: Joi.string().allow('').optional(),
+    leadId: Joi.string().custom(objectId).optional(),
     type: Joi.string().valid('cash', 'credit', 'pending', 'quotation').default('cash'),
     subtotal: Joi.number().min(0).required(),
     tax: Joi.number().min(0).default(0),
