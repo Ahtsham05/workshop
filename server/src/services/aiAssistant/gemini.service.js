@@ -1,14 +1,20 @@
 const config = require('../../config/config');
 const logger = require('../../config/logger');
 const { createGeminiApiError } = require('../../utils/geminiVisionHelpers');
-const { TOOL_DECLARATIONS, TOOL_HANDLERS } = require('./tools');
+const { buildToolset } = require('./tools');
 
-const MAX_TOOL_ROUNDS = 4;
+// Bumped from 4: entity lookups (search_customer etc.) often need one round to find the
+// record and a second to act on it, so multi-step questions ("what does Ali owe, and is
+// he in the low-stock list too?") need more headroom than a single-tool question.
+const MAX_TOOL_ROUNDS = 6;
 
 // Each Gemini model has its own separate free-tier daily quota, so falling
 // back to a different model (not just retrying the same one) is what
 // actually recovers from a `RESOURCE_EXHAUSTED` / 429 on the configured model.
-const PREFERRED_CHAT_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash'];
+// gemini-2.0-flash(-lite) were retired by Google ("no longer available") — dropped in
+// favor of gemini-3.1-flash-lite, matching the fallback list the vision services
+// (purchaseVision/customerVision/productVision/supplierVision) already settled on.
+const PREFERRED_CHAT_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.1-flash-lite'];
 
 function resolveModelsToTry() {
   const fromEnv = [
@@ -20,14 +26,17 @@ function resolveModelsToTry() {
 }
 
 const SYSTEM_INSTRUCTION = `You are the AI Business Assistant inside an ERP system. You answer the business owner's
-questions about their own data (sales, profit, customers, suppliers, inventory, expenses) by calling the
-provided tools — never guess numbers, always call a tool to fetch real data before answering.
+questions about their own data (sales, profit, customers, suppliers, inventory, purchases, expenses, cash & bank,
+installments, repairs, salesman commissions — whatever tools are available to you below) by calling the provided
+tools — never guess numbers, always call a tool to fetch real data before answering.
 
 Rules:
 - Always reply in the same language and script the user wrote in (English, Urdu, Roman Urdu, etc.).
 - Keep replies short, conversational and to the point — like a knowledgeable accountant, not a report generator.
 - All money amounts from the tools are in the business's own currency (see "currency" in the business context below) — always prefix amounts with that currency (e.g. "Rs 5,000"), never $ or USD or any other currency.
 - If a tool returns no data, say so plainly instead of making something up.
+- When a question names a SPECIFIC person or product ("what does Ali owe", "how many iPhone 13 left"), use the matching search_* tool instead of a list tool. If it returns more than one match, list the names briefly and ask which one they mean — never guess which one.
+- Some tools may not be available to you for this user or this business — if none of your tools can answer a question, say you're not able to help with that rather than trying to improvise an answer.
 - If the question is unrelated to this business's data, politely say you can only help with business data questions.`;
 
 function toGeminiHistory(messages) {
@@ -37,7 +46,7 @@ function toGeminiHistory(messages) {
   }));
 }
 
-async function callGeminiModel(model, contents, businessContext) {
+async function callGeminiModel(model, contents, businessContext, toolDeclarations) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.gemini.apiKey}`;
 
   const res = await fetch(url, {
@@ -48,7 +57,7 @@ async function callGeminiModel(model, contents, businessContext) {
         parts: [{ text: `${SYSTEM_INSTRUCTION}\n\nBusiness context: ${JSON.stringify(businessContext)}` }],
       },
       contents,
-      tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
+      tools: [{ functionDeclarations: toolDeclarations }],
     }),
   });
 
@@ -66,13 +75,13 @@ async function callGeminiModel(model, contents, businessContext) {
 }
 
 /** Tries each model in `resolveModelsToTry()` order, moving on immediately on quota/availability errors. */
-async function callGenerateContent(contents, businessContext) {
+async function callGenerateContent(contents, businessContext, toolDeclarations) {
   const models = resolveModelsToTry();
   let lastError;
   for (const model of models) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      return await callGeminiModel(model, contents, businessContext);
+      return await callGeminiModel(model, contents, businessContext, toolDeclarations);
     } catch (err) {
       lastError = err;
       if (!err.isRetryable) throw err;
@@ -92,7 +101,7 @@ function extractParts(body) {
  * and repeats until Gemini returns plain text (or MAX_TOOL_ROUNDS is hit).
  *
  * @param {Array<{role: 'user'|'assistant', content: string}>} history
- * @param {{organizationId: string, branchId?: string}} ctx
+ * @param {{organizationId: string, branchId?: string, permissions?: Record<string, boolean>, isSystemAdmin?: boolean}} ctx
  * @param {{businessName?: string, businessType?: string, currency?: string}} businessContext
  * @returns {Promise<{ text: string, toolCalls: Array<{name, args, result}> }>}
  */
@@ -104,6 +113,14 @@ async function runConversation(history, ctx, businessContext = {}) {
     };
   }
 
+  const { TOOL_DECLARATIONS, TOOL_HANDLERS } = buildToolset(ctx, businessContext);
+  if (TOOL_DECLARATIONS.length === 0) {
+    return {
+      text: "You don't have permission to view any business data through the assistant yet — ask an admin to grant you access to the relevant sections.",
+      toolCalls: [],
+    };
+  }
+
   const contents = toGeminiHistory(history);
   const toolCalls = [];
 
@@ -111,7 +128,7 @@ async function runConversation(history, ctx, businessContext = {}) {
     let body;
     try {
       // eslint-disable-next-line no-await-in-loop
-      body = await callGenerateContent(contents, businessContext);
+      body = await callGenerateContent(contents, businessContext, TOOL_DECLARATIONS);
     } catch (err) {
       logger.error('AI assistant Gemini call failed:', err.message);
       const text = err.isQuotaError

@@ -22,7 +22,7 @@ const SUGGESTIONS = [
   'How much profit did I make this month?',
   'Show unpaid customers',
   "Which products haven't sold in 30 days?",
-  'Who are my top customers this month?',
+  "What's my cash and bank balance?",
 ]
 
 function dateSeparatorLabel(date: Date) {

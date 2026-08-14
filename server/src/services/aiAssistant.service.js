@@ -36,7 +36,7 @@ const deleteConversation = async ({ conversationId, organizationId, userId }) =>
 
 const deriveTitle = (text) => String(text).trim().slice(0, 60) || 'New chat';
 
-const sendMessage = async ({ conversationId, organizationId, branchId, userId, text }) => {
+const sendMessage = async ({ conversationId, organizationId, branchId, userId, text, permissions, isSystemAdmin }) => {
   const conversation = await getConversationOrThrow({ conversationId, organizationId, userId });
 
   await AiMessage.create({ conversationId, organizationId, branchId, userId, role: 'user', content: text });
@@ -62,7 +62,7 @@ const sendMessage = async ({ conversationId, organizationId, branchId, userId, t
 
   const { text: replyText, toolCalls } = await geminiService.runConversation(
     history,
-    { organizationId, branchId },
+    { organizationId, branchId, permissions, isSystemAdmin },
     businessContext,
   );
 

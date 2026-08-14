@@ -32,12 +32,21 @@ const getMessages = catchAsync(async (req, res) => {
 
 const sendMessage = catchAsync(async (req, res) => {
   const { organizationId, branchId, createdBy } = getBranchContext(req);
+  // auth('viewDashboard') on this router already populated req.user.role for non-admins
+  // (see middlewares/permission.js#checkPermission) — reuse it so the assistant's tool
+  // catalog respects the same RBAC as the rest of the app instead of exposing every
+  // domain (profit margins, salaries, ledgers) to whoever can merely see the dashboard.
+  const isSystemAdmin = req.user?.systemRole === 'superAdmin' || req.user?.systemRole === 'system_admin';
+  const permissions = isSystemAdmin ? undefined : req.user?.role?.permissions || {};
+
   const message = await aiAssistantService.sendMessage({
     conversationId: req.params.conversationId,
     organizationId,
     branchId,
     userId: createdBy,
     text: req.body.text,
+    permissions,
+    isSystemAdmin,
   });
   res.send(message);
 });

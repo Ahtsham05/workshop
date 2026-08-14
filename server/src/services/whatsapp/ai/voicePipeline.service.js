@@ -12,7 +12,7 @@ async function transcribeAudio(mediaUrl, buffer) {
 
     const base64 = audioBuffer.toString('base64');
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.gemini.apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${config.gemini.apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
