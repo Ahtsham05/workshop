@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Package, Building2, ScanLine } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/context/language-context'
+import { onEnterAdvance, focusField } from '@/lib/invoice-form-keyboard'
 import { generateBatchNumber } from './variants/generate-variant-combinations'
 import { ImportSerialEntryDialog } from './import-serial-entry-dialog'
 import {
@@ -88,7 +89,23 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
   }
 
   const selectedCount = selectedIds.size
-  const serialDialogRow = importable.find((r) => r.masterProductId === serialDialogRowId)
+  const serialDialogRowIndex = importable.findIndex((r) => r.masterProductId === serialDialogRowId)
+  const serialDialogRow = importable[serialDialogRowIndex]
+
+  // Enter advances field-to-field (qty → batch or serial trigger, if visible → price →
+  // cost → next row's qty) instead of submitting the dialog — same parent-owned
+  // ref-map pattern as the Invoice/Purchase item rows (see lib/invoice-form-keyboard.ts).
+  const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const importButtonRef = useRef<HTMLButtonElement | null>(null)
+  const fieldKey = (masterProductId: string, field: 'qty' | 'batch' | 'price' | 'cost') => `${masterProductId}:${field}`
+  const focusRowField = (rowIndex: number, field: 'qty' | 'batch' | 'price' | 'cost') => {
+    const row = importable[rowIndex]
+    if (!row) {
+      focusField(importButtonRef.current, false)
+      return
+    }
+    focusField(fieldRefs.current[fieldKey(row.masterProductId, field)])
+  }
 
   const handleImport = async () => {
     const rows = importable.filter((row) => selectedIds.has(row.masterProductId))
@@ -179,7 +196,7 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {importable.map((row) => {
+                {importable.map((row, index) => {
                   const checked = selectedIds.has(row.masterProductId)
                   const v = valueFor(row)
                   const needsBatch = (row.trackBatch || row.trackExpiry) && v.stockQuantity > 0
@@ -211,19 +228,30 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
                       <TableCell className='text-xs text-muted-foreground'>{row.carriedAtBranches.join(', ')}</TableCell>
                       <TableCell>
                         <Input
+                          ref={(el) => { fieldRefs.current[fieldKey(row.masterProductId, 'qty')] = el }}
                           type='number'
                           min={0}
                           value={v.stockQuantity}
                           onChange={(e) => setStockQuantity(row, Number(e.target.value))}
+                          onKeyDown={(e) =>
+                            onEnterAdvance(e, () => {
+                              if (needsBatch) focusRowField(index, 'batch')
+                              else if (needsSerial) setSerialDialogRowId(row.masterProductId)
+                              else focusRowField(index, 'price')
+                            })
+                          }
                           className='h-8 text-sm'
                         />
                       </TableCell>
                       <TableCell>
                         {needsBatch ? (
                           <Input
+                            ref={(el) => { fieldRefs.current[fieldKey(row.masterProductId, 'batch')] = el }}
                             placeholder='Batch number'
+                            showVoiceInput={false}
                             value={v.batchNumber}
                             onChange={(e) => setRow(row.masterProductId, { ...v, batchNumber: e.target.value })}
+                            onKeyDown={(e) => onEnterAdvance(e, () => focusRowField(index, 'price'))}
                             className='h-8 text-sm'
                           />
                         ) : needsSerial ? (
@@ -243,19 +271,23 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
                       </TableCell>
                       <TableCell>
                         <Input
+                          ref={(el) => { fieldRefs.current[fieldKey(row.masterProductId, 'price')] = el }}
                           type='number'
                           min={0}
                           value={v.price}
                           onChange={(e) => setRow(row.masterProductId, { ...v, price: Number(e.target.value) })}
+                          onKeyDown={(e) => onEnterAdvance(e, () => focusRowField(index, 'cost'))}
                           className='h-8 text-sm'
                         />
                       </TableCell>
                       <TableCell>
                         <Input
+                          ref={(el) => { fieldRefs.current[fieldKey(row.masterProductId, 'cost')] = el }}
                           type='number'
                           min={0}
                           value={v.cost}
                           onChange={(e) => setRow(row.masterProductId, { ...v, cost: Number(e.target.value) })}
+                          onKeyDown={(e) => onEnterAdvance(e, () => focusRowField(index + 1, 'qty'))}
                           className='h-8 text-sm'
                         />
                       </TableCell>
@@ -268,10 +300,10 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
         )}
 
         <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
+          <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>
             {t('cancel')}
           </Button>
-          <Button onClick={handleImport} disabled={selectedCount === 0 || importing}>
+          <Button ref={importButtonRef} type='button' onClick={handleImport} disabled={selectedCount === 0 || importing}>
             {importing ? <Loader2 className='h-4 w-4 animate-spin' /> : null}
             {t('import_n_products', { count: String(selectedCount) })}
           </Button>
@@ -281,7 +313,12 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
       {serialDialogRow && (
         <ImportSerialEntryDialog
           open={!!serialDialogRowId}
-          onOpenChange={(next) => setSerialDialogRowId(next ? serialDialogRowId : null)}
+          onOpenChange={(next) => {
+            setSerialDialogRowId(next ? serialDialogRowId : null)
+            // Continue the same field-to-field Enter chain into Price once serial entry
+            // is done (Done button, or auto-close on hitting the target count).
+            if (!next) focusRowField(serialDialogRowIndex, 'price')
+          }}
           productName={serialDialogRow.name}
           isSerial={!!serialDialogRow.trackSerial}
           targetCount={valueFor(serialDialogRow).stockQuantity}

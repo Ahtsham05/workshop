@@ -50,7 +50,10 @@ export function ImportSerialEntryDialog({
 
   const sanitize = (raw: string) => (isSerial ? raw : raw.replace(/\D/g, '').slice(0, 15))
 
+  const isFull = value.length >= targetCount
+
   const add = () => {
+    if (isFull) return
     const cleaned = draft.trim()
     const cleaned2 = draft2.trim()
     if (!cleaned) return
@@ -63,10 +66,17 @@ export function ImportSerialEntryDialog({
       toast.error(`This ${label} is already entered`)
       return
     }
-    onChange([...value, cleaned2 ? { imei: cleaned, imei2: cleaned2 } : cleaned])
+    const next = [...value, cleaned2 ? { imei: cleaned, imei2: cleaned2 } : cleaned]
+    onChange(next)
     setDraft('')
     setDraft2('')
-    input1Ref.current?.focus()
+    // The instant the target count is reached, the pick that completes it *is* the
+    // confirmation — no extra click needed, same as the Invoice serial picker.
+    if (next.length >= targetCount) {
+      onOpenChange(false)
+    } else {
+      input1Ref.current?.focus()
+    }
   }
 
   const remove = (num: string) => onChange(value.filter((e) => entryImei(e) !== num))
@@ -85,56 +95,62 @@ export function ImportSerialEntryDialog({
         <div className='space-y-2'>
           <span className='text-xs font-medium text-amber-700'>{`${value.length}/${targetCount} entered`}</span>
 
-          <div className='space-y-1.5'>
-            <div className='flex items-center gap-2'>
-              <Input
-                ref={input1Ref}
-                autoFocus
-                placeholder={isSerial ? 'Scan or type serial number' : 'Scan or type IMEI'}
-                value={draft}
-                inputMode={isSerial ? undefined : 'numeric'}
-                onChange={(e) => setDraft(sanitize(e.target.value))}
-                onKeyDown={(e) => {
-                  if (e.key === ',') {
-                    e.preventDefault()
-                    add()
-                  } else if (e.key === 'Enter') {
-                    e.preventDefault()
-                    if (isSerial) add()
-                    else if (draft.trim()) input2Ref.current?.focus()
-                  }
-                }}
-              />
-              {isSerial && (
-                <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={add}>
-                  <Plus className='h-3.5 w-3.5' />
-                </Button>
-              )}
-            </div>
-            {!isSerial && (
+          {isFull ? (
+            <p className='text-xs text-muted-foreground'>
+              All {targetCount} entered — remove one below to enter a different number.
+            </p>
+          ) : (
+            <div className='space-y-1.5'>
               <div className='flex items-center gap-2'>
                 <Input
-                  ref={input2Ref}
-                  placeholder='IMEI 2 (optional)'
-                  value={draft2}
-                  inputMode='numeric'
-                  className='min-w-0 flex-1'
-                  onChange={(e) => setDraft2(sanitize(e.target.value))}
+                  ref={input1Ref}
+                  autoFocus
+                  placeholder={isSerial ? 'Scan or type serial number' : 'Scan or type IMEI'}
+                  value={draft}
+                  inputMode={isSerial ? undefined : 'numeric'}
+                  onChange={(e) => setDraft(sanitize(e.target.value))}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ',') {
+                    if (e.key === ',') {
                       e.preventDefault()
                       add()
-                    } else if (e.key === 'Backspace' && !draft2) {
-                      input1Ref.current?.focus()
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (isSerial) add()
+                      else if (draft.trim()) input2Ref.current?.focus()
                     }
                   }}
                 />
-                <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={add}>
-                  <Plus className='h-3.5 w-3.5' />
-                </Button>
+                {isSerial && (
+                  <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={add}>
+                    <Plus className='h-3.5 w-3.5' />
+                  </Button>
+                )}
               </div>
-            )}
-          </div>
+              {!isSerial && (
+                <div className='flex items-center gap-2'>
+                  <Input
+                    ref={input2Ref}
+                    placeholder='IMEI 2 (optional)'
+                    value={draft2}
+                    inputMode='numeric'
+                    className='min-w-0 flex-1'
+                    onChange={(e) => setDraft2(sanitize(e.target.value))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') {
+                        e.preventDefault()
+                        add()
+                      } else if (e.key === 'Backspace' && !draft2) {
+                        input1Ref.current?.focus()
+                      }
+                    }}
+                  />
+                  <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={add}>
+                    <Plus className='h-3.5 w-3.5' />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {value.length > 0 && (
             <div className='flex max-h-40 flex-wrap gap-1.5 overflow-y-auto'>
@@ -155,7 +171,7 @@ export function ImportSerialEntryDialog({
         </div>
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)}>Done</Button>
+          <Button type='button' onClick={() => onOpenChange(false)}>Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
