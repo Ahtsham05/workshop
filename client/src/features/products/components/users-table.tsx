@@ -17,6 +17,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -27,6 +28,7 @@ import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
+import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
 import type { ReactNode } from 'react'
 
 declare module '@tanstack/react-table' {
@@ -46,21 +48,25 @@ interface DataTableProps {
   editValues?: Record<string, { price?: number; cost?: number; stockQuantity?: number }>
   onEditValueChange?: (productId: string, field: string, value: number) => void
   toolbarLeading?: ReactNode
+  /** Cumulative qty/value from every page before the current one — null/undefined
+   *  hides the row (e.g. on page 1, or while it can't be reliably computed). */
+  broughtForward?: { qty: number; value: number } | null
 }
 
-export function ProductTable({ 
-  columns, 
-  data, 
+export function ProductTable({
+  columns,
+  data,
   paggination,
   loading,
-  onSelectedRowsChange, 
+  onSelectedRowsChange,
   inlineEditMode = false,
   editValues = {},
   onEditValueChange,
   toolbarLeading,
+  broughtForward,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({ description: false })
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
@@ -208,6 +214,41 @@ export function ProductTable({
               </TableRow>
             )}
           </TableBody>
+          {data.length > 0 && (() => {
+            const runningQty = data.reduce((sum, product) => sum + getDisplayStock(product), 0) + (broughtForward?.qty ?? 0)
+            const runningValue = data.reduce((sum, product) => sum + getDisplayStockValue(product), 0) + (broughtForward?.value ?? 0)
+
+            return (
+              <TableFooter>
+                <TableRow className='hover:bg-transparent'>
+                  {table.getVisibleLeafColumns().map((column) => {
+                    if (column.id === 'stockQuantity') {
+                      return (
+                        <TableCell key={column.id} className='font-semibold tabular-nums'>
+                          {runningQty.toLocaleString()}
+                        </TableCell>
+                      )
+                    }
+                    if (column.id === 'stockValue') {
+                      return (
+                        <TableCell key={column.id} className='font-semibold tabular-nums'>
+                          {runningValue.toLocaleString()}
+                        </TableCell>
+                      )
+                    }
+                    if (column.id === 'name') {
+                      return (
+                        <TableCell key={column.id} className='font-semibold'>
+                          {t('running_total')}
+                        </TableCell>
+                      )
+                    }
+                    return <TableCell key={column.id} />
+                  })}
+                </TableRow>
+              </TableFooter>
+            )
+          })()}
         </Table>
         </div>
       </TableLoadingOverlay>

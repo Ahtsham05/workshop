@@ -445,7 +445,11 @@ export default function Dashboard() {
             value={stats?.netSales || 0}
             icon={<ShoppingCart className='h-4 w-4' />}
             valuePrefix='Rs '
-            description={t('Revenue after sales returns')}
+            description={
+              showMobileCards
+                ? t('Sales + Sim Sale + Services + Repair, after returns')
+                : t('Revenue after sales returns')
+            }
             isLoading={statsLoading}
             tone='emerald'
             link={reportLink('sales')}

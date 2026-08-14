@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { fetchCategories } from '@/stores/category.slice'
@@ -11,6 +11,8 @@ import { useLanguage } from '@/context/language-context'
 import { Input } from '@/components/ui/input'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
+import Axios from '@/utils/Axios'
+import summery from '@/utils/summery'
 
 const SEARCH_DEBOUNCE_MS = 400
 
@@ -26,10 +28,38 @@ export default function CategoriesIndex() {
   const [loading, setLoading] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
+  const [allSubCategories, setAllSubCategories] = useState<Array<{ id: string; name: string; category: { id?: string } | string }>>([])
 
   useEffect(() => {
     setCurrentPage(1)
   }, [debouncedSearch])
+
+  // Fetched directly (not via the redux thunk) so it doesn't overwrite the global
+  // sub-category list that the Sub Categories page and product form pickers rely on.
+  useEffect(() => {
+    let cancelled = false
+    Axios(summery.fetchAllSubCategories)
+      .then((response) => {
+        if (!cancelled) setAllSubCategories(response.data?.results || response.data || [])
+      })
+      .catch(() => {
+        if (!cancelled) setAllSubCategories([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [fetch])
+
+  const subCategoriesByCategory = useMemo(() => {
+    const map: Record<string, Array<{ id: string; name: string }>> = {}
+    for (const sub of allSubCategories) {
+      const categoryId = typeof sub.category === 'object' ? sub.category?.id : sub.category
+      if (!categoryId) continue
+      if (!map[categoryId]) map[categoryId] = []
+      map[categoryId].push({ id: sub.id, name: sub.name })
+    }
+    return map
+  }, [allSubCategories])
 
   useEffect(() => {
     setLoading(true)
@@ -65,6 +95,7 @@ export default function CategoriesIndex() {
             <CategoriesTable
               categories={categories}
               loading={loading}
+              subCategoriesByCategory={subCategoriesByCategory}
               toolbarLeading={
                 <Input
                   autoFocus

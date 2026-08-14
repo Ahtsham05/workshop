@@ -7,16 +7,18 @@ import { LowStockAlert } from './components/low-stock-alert'
 import { LowStockDetails } from './components/low-stock-details'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { fetchProducts, bulkUpdateProducts } from '@/stores/product.slice'
 import { fetchCategories } from '@/stores/category.slice'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
-import { Edit } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Edit, Package, Boxes, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
+import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
 
 const SEARCH_DEBOUNCE_MS = 400
 
@@ -182,6 +184,31 @@ export default function Products() {
     setEditValues({})
   }, [])
 
+  // Totals across all products (allProducts is fetched unfiltered, independent of
+  // the current search/page) — not from `products`, which is just the current page.
+  const totalStockQuantity = useMemo(
+    () => allProducts.reduce((sum, product) => sum + getDisplayStock(product), 0),
+    [allProducts]
+  )
+  const totalStockValue = useMemo(
+    () => allProducts.reduce((sum, product) => sum + getDisplayStockValue(product), 0),
+    [allProducts]
+  )
+
+  // Cumulative qty/value from every page before the current one, for the table's
+  // "Brought Forward" footer row. allProducts is fetched with the same sort as the
+  // paginated `products` fetch, so its first (currentPage-1)*limit entries line up
+  // with the pages already paged through — but only while unfiltered: a search
+  // changes which rows land on which page, so the two datasets no longer align.
+  const broughtForward = useMemo(() => {
+    if (loadingAllProducts || debouncedSearch.trim() || currentPage <= 1) return null
+    const priorProducts = allProducts.slice(0, (currentPage - 1) * limit)
+    return {
+      qty: priorProducts.reduce((sum, product) => sum + getDisplayStock(product), 0),
+      value: priorProducts.reduce((sum, product) => sum + getDisplayStockValue(product), 0),
+    }
+  }, [allProducts, currentPage, limit, debouncedSearch, loadingAllProducts])
+
   // Load threshold from localStorage
   useEffect(() => {
     const savedThreshold = localStorage.getItem('lowStockThreshold');
@@ -216,10 +243,24 @@ export default function Products() {
 
           <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
             <div>
-              <h2 className='text-2xl font-bold mb-5 tracking-tight'>{t('products_list')}</h2>
-              <p className='text-muted-foreground'>
+              <h2 className='text-2xl font-bold tracking-tight'>{t('products_list')}</h2>
+              <p className='text-muted-foreground mb-2'>
                 {t('manage_products')}
               </p>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
+                  <Package className='h-3.5 w-3.5' />
+                  {t('total_products')}: {loadingAllProducts ? '…' : allProducts.length}
+                </Badge>
+                <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
+                  <Boxes className='h-3.5 w-3.5' />
+                  {t('total_stock_quantity')}: {loadingAllProducts ? '…' : totalStockQuantity}
+                </Badge>
+                <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
+                  <Wallet className='h-3.5 w-3.5' />
+                  {t('total_value_of_stock')}: {loadingAllProducts ? '…' : totalStockValue.toLocaleString()}
+                </Badge>
+              </div>
             </div>
             <div className='flex gap-2'>
               {selectedProducts.length > 0 && !inlineEditMode && (
@@ -281,6 +322,7 @@ export default function Products() {
               inlineEditMode={inlineEditMode}
               editValues={editValues}
               onEditValueChange={handleEditValueChange}
+              broughtForward={broughtForward}
             />
           </div>
 

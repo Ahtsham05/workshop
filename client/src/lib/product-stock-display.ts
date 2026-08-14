@@ -40,3 +40,12 @@ export function getDisplayPriceValue(product: DisplayableProduct, field: 'price'
   if (range) return field === 'price' ? range.minPrice : range.minCost
   return product[field] ?? 0
 }
+
+/** Stock valued at cost (qty on hand × cost/unit) — the standard "inventory value"
+ *  figure, matching the Inventory Report's `stock_value` stat. For a variant product
+ *  this multiplies total stock by the *lowest* variant cost (see getDisplayPriceValue),
+ *  so it under-values products whose variants have mixed costs — an accepted
+ *  approximation for a list column, not a substitute for a real per-variant valuation. */
+export function getDisplayStockValue(product: DisplayableProduct): number {
+  return getDisplayStock(product) * getDisplayPriceValue(product, 'cost')
+}

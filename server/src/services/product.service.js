@@ -95,40 +95,64 @@ const syncDefaultVariantTracking = async (product, updateFields, session) => {
  * Inventory.quantity across real variants) and `variantPriceRange` (min/max
  * price+cost across real variants) to each variant product in a list page, with a
  * single aggregation query per field (not one query per product).
+ *
+ * Also attaches `trackBatch`/`trackExpiry` to *every* product (variant or not) — these
+ * flags never live on Product itself, only on ProductVariant (a simple product's hidden
+ * default variant included, see syncDefaultVariantTracking), so list pages otherwise
+ * have no way to show batch/expiry status without a per-product lookup. A product is
+ * considered tracked if any of its variants is (`$max` on a boolean field picks up any
+ * `true`).
  */
 const attachVariantAggregates = async (products) => {
+  const allProductIds = products.map((p) => p._id);
   const variantProductIds = products.filter((p) => p.hasVariants).map((p) => p._id);
-  if (variantProductIds.length === 0) return products;
 
-  const [stockTotals, priceRanges] = await Promise.all([
-    Inventory.aggregate([
-      { $match: { productId: { $in: variantProductIds } } },
-      { $group: { _id: '$productId', totalStock: { $sum: '$quantity' } } },
-    ]),
-    ProductVariant.aggregate([
-      { $match: { productId: { $in: variantProductIds }, isDefault: false } },
-      {
-        $group: {
-          _id: '$productId',
-          minPrice: { $min: '$price' },
-          maxPrice: { $max: '$price' },
-          minCost: { $min: '$cost' },
-          maxCost: { $max: '$cost' },
-        },
-      },
-    ]),
+  const [stockTotals, priceRanges, trackingFlags] = await Promise.all([
+    variantProductIds.length
+      ? Inventory.aggregate([
+          { $match: { productId: { $in: variantProductIds } } },
+          { $group: { _id: '$productId', totalStock: { $sum: '$quantity' } } },
+        ])
+      : [],
+    variantProductIds.length
+      ? ProductVariant.aggregate([
+          { $match: { productId: { $in: variantProductIds }, isDefault: false } },
+          {
+            $group: {
+              _id: '$productId',
+              minPrice: { $min: '$price' },
+              maxPrice: { $max: '$price' },
+              minCost: { $min: '$cost' },
+              maxCost: { $max: '$cost' },
+            },
+          },
+        ])
+      : [],
+    allProductIds.length
+      ? ProductVariant.aggregate([
+          { $match: { productId: { $in: allProductIds } } },
+          { $group: { _id: '$productId', trackBatch: { $max: '$trackBatch' }, trackExpiry: { $max: '$trackExpiry' } } },
+        ])
+      : [],
   ]);
 
   const stockById = new Map(stockTotals.map((s) => [s._id.toString(), s.totalStock]));
   const priceById = new Map(priceRanges.map((p) => [p._id.toString(), p]));
+  const trackingById = new Map(trackingFlags.map((t) => [t._id.toString(), t]));
 
   return products.map((product) => {
-    if (!product.hasVariants) return product;
     const json = product.toJSON ? product.toJSON() : product;
     const id = product._id.toString();
+    const tracking = trackingById.get(id);
+    const withTracking = {
+      ...json,
+      trackBatch: !!(tracking && tracking.trackBatch),
+      trackExpiry: !!(tracking && tracking.trackExpiry),
+    };
+    if (!product.hasVariants) return withTracking;
     const priceRange = priceById.get(id);
     return {
-      ...json,
+      ...withTracking,
       variantStockTotal: stockById.get(id) ?? 0,
       variantPriceRange: priceRange
         ? {

@@ -1,5 +1,5 @@
 import { ColumnDef, Table } from '@tanstack/react-table'
-import { MoreHorizontal, Edit, Trash2, ArrowUpDown } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, ArrowUpDown, FolderTree } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Category } from '@/stores/category.slice'
 import { useCategories } from '../context/categories-context'
 import { useLanguage } from '@/context/language-context'
@@ -17,7 +18,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 
-export function useCategoryColumns(): ColumnDef<Category>[] {
+export function useCategoryColumns(
+  subCategoriesByCategory: Record<string, Array<{ id: string; name: string }>> = {}
+): ColumnDef<Category>[] {
   const { dispatch } = useCategories()
   const { t, language } = useLanguage()
   const { showUrdu } = useUrduDisplay()
@@ -62,11 +65,12 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
     cell: ({ row }) => {
       const category = row.original
       const urdu = showUrdu ? category.nameUrdu?.trim() : undefined
+      const subCategories = subCategoriesByCategory[category.id] || []
       return (
         <div className={`flex items-start gap-3 ${language === 'ur' ? 'flex-row-reverse' : ''}`}>
           <Avatar className="h-8 w-8 shrink-0">
-            <AvatarImage 
-              src={category.image?.url || ''} 
+            <AvatarImage
+              src={category.image?.url || ''}
               alt={category.name}
               className="object-cover"
             />
@@ -74,13 +78,47 @@ export function useCategoryColumns(): ColumnDef<Category>[] {
               {(category.name?.charAt(0) || '?').toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <div className="flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className={getTextClasses(category.name || 'Unnamed category', 'shrink-0 font-medium')}>{category.name || 'Unnamed category'}</span>
-            {urdu ? (
-              <span dir='rtl' className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(urdu))}>
-                {urdu}
-              </span>
-            ) : null}
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className={getTextClasses(category.name || 'Unnamed category', 'shrink-0 font-medium')}>{category.name || 'Unnamed category'}</span>
+              {urdu ? (
+                <span dir='rtl' className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(urdu))}>
+                  {urdu}
+                </span>
+              ) : null}
+            </div>
+            {subCategories.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex w-fit items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                  >
+                    <FolderTree className="h-2.5 w-2.5" />
+                    {t('subcategories_count_badge', { count: subCategories.length })}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3" align="start" onClick={(e) => e.stopPropagation()}>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t('subcategories')}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {subCategories.map((sub) => (
+                      <span
+                        key={sub.id}
+                        className={getTextClasses(
+                          sub.name,
+                          'rounded-full bg-muted px-2 py-0.5 text-xs font-medium'
+                        )}
+                      >
+                        {sub.name}
+                      </span>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
         </div>
       )

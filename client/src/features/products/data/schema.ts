@@ -42,6 +42,12 @@ export const productSchema = z.object({
     }).optional(),
   })).optional(), // product sub-categories is optional
   hasVariants: z.boolean().optional(),
+  trackImei: z.boolean().optional(),
+  trackSerial: z.boolean().optional(),
+  // Never Product fields directly — proxied from the product's variant(s), see
+  // product.service.js#attachVariantAggregates. True if ANY variant tracks it.
+  trackBatch: z.boolean().optional(),
+  trackExpiry: z.boolean().optional(),
   brandId: z.union([
     z.string(),
     z.object({

@@ -2,6 +2,8 @@ import { Fragment, forwardRef, useImperativeHandle, useMemo, useState } from 're
 import { format } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
+import { Link } from '@tanstack/react-router'
+import { useSelector } from 'react-redux'
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -13,6 +15,8 @@ import {
   ChevronsUpDown,
   ChevronsDownUp,
   LayoutList,
+  DollarSign,
+  CreditCard,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -32,11 +36,15 @@ import {
   useGetActivitySummaryReportQuery,
   useGetSalesInvoiceDetailsQuery,
   useGetPurchaseInvoiceDetailsQuery,
+  useGetSalesPurchaseSummaryReportQuery,
   type ActivitySummaryEntry,
   type SalesInvoiceDetail,
   type PurchaseInvoiceDetail,
   type ReportBatchAllocation,
 } from '@/stores/reports.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import type { RootState } from '@/stores/store'
+import { isCashBookBusiness } from '@/lib/business-types'
 import { useLanguage } from '@/context/language-context'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
@@ -211,12 +219,21 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
     const { t, language } = useLanguage()
     const [showAllActivities, setShowAllActivities] = useState(false)
     const [showProductsOnly, setShowProductsOnly] = useState(false)
+    const [hideCredit, setHideCredit] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+
+    const user = useSelector((state: RootState) => state.auth.data?.user)
+    const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+    const showCashBookFeatures = isCashBookBusiness(org?.businessType || user?.businessType)
 
     const { data: salesDetailData, isFetching: salesLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
     const { data: purchaseDetailData, isFetching: purchaseLoading } = useGetPurchaseInvoiceDetailsQuery({ startDate, endDate })
     const { data: activityData, isFetching: activityLoading } = useGetActivitySummaryReportQuery({ startDate, endDate })
+    const { data: summaryReportData } = useGetSalesPurchaseSummaryReportQuery(
+      { startDate, endDate },
+      { skip: !showCashBookFeatures }
+    )
 
     const isLoading = salesLoading || purchaseLoading || activityLoading
 
@@ -234,8 +251,12 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
         .filter((e) => e.module !== 'Sales' && e.module !== 'Purchases' && e.module !== 'Expenses')
         .filter((e) => showAllActivities || e.module === 'Load')
         .map(activityEntryToLedgerEntry)
-      return [...salesEntries, ...purchaseEntries, ...activityEntries]
-    }, [salesDetailData, purchaseDetailData, activityData, showAllActivities])
+      const all = [...salesEntries, ...purchaseEntries, ...activityEntries]
+      // "On credit" here means the invoice/purchase itself is typed as credit — not
+      // just an outstanding balance — so excluding it drops it (and whatever portion
+      // of it has been paid so far) out of the list and the running balance below.
+      return hideCredit ? all.filter((e) => e.paymentType?.trim().toLowerCase() !== 'credit') : all
+    }, [salesDetailData, purchaseDetailData, activityData, showAllActivities, hideCredit])
 
     const ledgerRows = useMemo(() => buildLedgerRows(mergedEntries), [mergedEntries])
 
@@ -270,6 +291,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
         batchAllocations?: ReportBatchAllocation[]
         expiryDate?: string | null
         note?: string
+        runningBalance: number
       }>>()
       filteredRows.forEach((row) => {
         const dateStr = format(new Date(row.date), 'dd MMM yyyy')
@@ -291,6 +313,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
             batchAllocations: item.batchAllocations,
             expiryDate: item.expiryDate,
             note: item.note,
+            runningBalance: row.runningBalance,
           })
         })
       })
@@ -338,6 +361,8 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
             { Metric: 'Total Purchases (-)', Value: summary.totalPurchases },
             { Metric: 'Total Remaining Amount', Value: summary.netRemaining },
             { Metric: 'Transactions', Value: summary.count },
+            { Metric: 'Credit Excluded', Value: hideCredit ? 'Yes' : 'No' },
+            ...(showCashBookFeatures ? [{ Metric: 'Cash in Hand (today)', Value: summaryReportData?.summary.cashInHand ?? 0 }] : []),
           ])
           XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary')
 
@@ -372,6 +397,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
                 Qty: item.quantity,
                 'Unit Price': item.unitPrice,
                 Subtotal: item.direction === 'in' ? item.subtotal : -item.subtotal,
+                Balance: item.runningBalance,
               })
             })
           })
@@ -402,7 +428,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
     return (
       <div className='space-y-6 min-w-0 max-w-full'>
         {/* KPI Cards */}
-        <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+        <div className={cn('grid gap-4 md:grid-cols-2', showCashBookFeatures ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
           <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>Total Sales</CardTitle>
@@ -456,6 +482,23 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
               <p className='text-xs text-muted-foreground'>{summary.totalItems} items across all entries</p>
             </CardContent>
           </Card>
+
+          {showCashBookFeatures && (
+            <Link to='/cash-book' className='block'>
+              <Card className={cn(kpiCardClass('emerald'), 'h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md')}>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+                  <CardTitle className='text-sm font-medium'>Cash in Hand</CardTitle>
+                  <div className={toneIconWrapClass('emerald')}>
+                    <DollarSign className='h-4 w-4' />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className='text-2xl font-bold text-emerald-600'>{fmt(summaryReportData?.summary.cashInHand ?? 0)}</div>
+                  <p className='text-xs text-muted-foreground'>Available cash after expenses, as of today</p>
+                </CardContent>
+              </Card>
+            </Link>
+          )}
         </div>
 
         {/* Ledger Table */}
@@ -466,6 +509,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
                 <CardTitle>Sale &amp; Purchase Report</CardTitle>
                 <CardDescription>
                   Every sale and purchase (including load) in the selected period, sales shown as +, purchases as −, with a running balance — click a row to see individual items
+                  {hideCredit && ' (credit sales/purchases are hidden)'}
                 </CardDescription>
               </div>
               <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
@@ -484,6 +528,15 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
                   onClick={() => setShowAllActivities((v) => !v)}
                 >
                   {showAllActivities ? 'Sales & Purchases Only' : 'Include All Cash Activities'}
+                </Button>
+                <Button
+                  variant={hideCredit ? 'default' : 'outline'}
+                  size='sm'
+                  onClick={() => setHideCredit((v) => !v)}
+                  title='Credit sales/purchases (and their running balance) are excluded while this is on'
+                >
+                  <CreditCard className='h-4 w-4 mr-1.5' />
+                  {hideCredit ? 'Credit Hidden' : 'Show Credit'}
                 </Button>
                 {filteredRows.length > 0 && (
                   <Button
@@ -532,13 +585,14 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
                       <TableHead className='text-right'>Qty</TableHead>
                       <TableHead className='text-right'>Unit Price</TableHead>
                       <TableHead className='text-right'>Subtotal</TableHead>
+                      <TableHead className='text-right'>Balance</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {productsByDate.map(({ date, items }) => (
                       <Fragment key={`date-group-${date}`}>
                         <TableRow className='bg-muted/40 border-t'>
-                          <TableCell colSpan={10} className='py-2 px-4 font-semibold text-sm text-foreground'>
+                          <TableCell colSpan={11} className='py-2 px-4 font-semibold text-sm text-foreground'>
                             {date}
                           </TableCell>
                         </TableRow>
@@ -579,6 +633,11 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
                                 {row.direction === 'in' ? '+' : '−'}{fmt(row.subtotal)}
                               </span>
                             </TableCell>
+                            <TableCell className='text-right font-medium whitespace-nowrap'>
+                              <span className={row.runningBalance >= 0 ? 'text-foreground' : 'text-red-600'}>
+                                {row.runningBalance >= 0 ? '+' : '−'}{fmt(Math.abs(row.runningBalance))}
+                              </span>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </Fragment>
@@ -594,6 +653,11 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
                       <TableCell className='text-right text-lg whitespace-nowrap'>
                         <span className={summary.netRemaining >= 0 ? 'text-primary' : 'text-red-600'}>
                           {summary.netRemaining >= 0 ? '+' : '−'}{fmt(Math.abs(summary.netRemaining))}
+                        </span>
+                      </TableCell>
+                      <TableCell className='text-right whitespace-nowrap'>
+                        <span className={(ledgerRows[0]?.runningBalance ?? 0) >= 0 ? 'text-foreground' : 'text-red-600'}>
+                          {(ledgerRows[0]?.runningBalance ?? 0) >= 0 ? '+' : '−'}{fmt(Math.abs(ledgerRows[0]?.runningBalance ?? 0))}
                         </span>
                       </TableCell>
                     </TableRow>

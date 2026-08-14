@@ -1,8 +1,9 @@
 import { ColumnDef } from '@tanstack/react-table'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Package } from 'lucide-react'
+import { Package, ShieldCheck, Fingerprint, Layers, Clock } from 'lucide-react'
 import LongText from '@/components/long-text'
 import { Product } from '../data/schema'
 import { DataTableColumnHeader } from './data-table-column-header'
@@ -11,10 +12,13 @@ import { useLanguage } from '@/context/language-context'
 import { useUrduDisplay } from '@/context/urdu-display-context'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
+import { getDisplayStockValue } from '@/lib/product-stock-display'
+import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product'
 
 export const useProductColumns = (): ColumnDef<Product>[] => {
   const { t } = useLanguage()
   const { showUrdu } = useUrduDisplay()
+  const expiringByProduct = useExpiringBatchesByProduct()
 
   return [
   {
@@ -229,6 +233,67 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     },
     filterFn: (row, id, value) => value.includes(row.getValue(id)),
     enableSorting: true,
+  },
+  {
+    id: 'stockValue',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='stock_value' />,
+    cell: ({ row }) => <div className='tabular-nums'>{getDisplayStockValue(row.original).toLocaleString()}</div>,
+    enableHiding: true,
+  },
+  {
+    id: 'tracking',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='tracking' />,
+    cell: ({ row }) => {
+      const product = row.original
+      const productId = (product._id || product.id || '').toString()
+      const expiry = expiringByProduct.get(productId)
+      const badges: ReactNode[] = []
+
+      if (product.trackImei) {
+        badges.push(
+          <Badge key='imei' variant='outline' className='gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400'>
+            <ShieldCheck className='h-3 w-3' /> {t('imei_tracked')}
+          </Badge>
+        )
+      } else if (product.trackSerial) {
+        badges.push(
+          <Badge key='serial' variant='outline' className='gap-1 border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-400'>
+            <Fingerprint className='h-3 w-3' /> {t('serial_tracked')}
+          </Badge>
+        )
+      }
+
+      if (product.trackBatch || product.trackExpiry) {
+        if (expiry) {
+          const days = daysUntil(expiry)
+          const expired = days < 0
+          badges.push(
+            <Badge
+              key='expiry'
+              variant='outline'
+              className={cn(
+                'gap-1',
+                expired
+                  ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400'
+                  : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'
+              )}
+            >
+              <Clock className='h-3 w-3' /> {expired ? t('expired') : t('expires_in', { days })}
+            </Badge>
+          )
+        } else {
+          badges.push(
+            <Badge key='batch' variant='outline' className='gap-1 border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-400'>
+              <Layers className='h-3 w-3' /> {t('batch_tracked')}
+            </Badge>
+          )
+        }
+      }
+
+      if (badges.length === 0) return <span className='text-muted-foreground'>-</span>
+      return <div className='flex flex-wrap gap-1'>{badges}</div>
+    },
+    enableHiding: true,
   },
 {
   id: 'actions',

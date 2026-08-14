@@ -273,7 +273,16 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const totalPurchaseReturns = purchaseReturnsAgg[0]?.totalPurchaseReturns || 0;
   const purchaseReturnCount = purchaseReturnsAgg[0]?.purchaseReturnCount || 0;
 
-  const netSales = totalRevenue - totalSalesReturns;
+  // Mobile shop orgs earn revenue outside the product Invoice collection too (SIM sales,
+  // service invoices, repair jobs) — fold those in so Net Sales reflects all revenue
+  // streams, not just product sales.
+  const mobileSalesAddOn =
+    businessType === 'mobile_shop'
+      ? (mobileSummary.totalSimSale || 0) +
+        (mobileSummary.totalServiceIncome || 0) +
+        (mobileSummary.totalRepairIncome || 0)
+      : 0;
+  const netSales = totalRevenue + mobileSalesAddOn - totalSalesReturns;
   const netPurchase = totalPurchases - totalPurchaseReturns;
 
   const aggScopeBalances = buildAggregateScope(req);

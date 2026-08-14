@@ -42,15 +42,16 @@ interface CategoriesTableProps {
   paggination: any
   loading?: boolean
   toolbarLeading?: ReactNode
+  subCategoriesByCategory?: Record<string, Array<{ id: string; name: string }>>
 }
 
-export function CategoriesTable({ categories, paggination, loading, toolbarLeading }: CategoriesTableProps) {
+export function CategoriesTable({ categories, paggination, loading, toolbarLeading, subCategoriesByCategory }: CategoriesTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState({})
   const { t, language } = useLanguage()
-  const columns = useCategoryColumns()
+  const columns = useCategoryColumns(subCategoriesByCategory)
 
   const table = useReactTable({
     data: categories,

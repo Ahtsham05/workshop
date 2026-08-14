@@ -298,6 +298,15 @@ const en: Record<string, string> = {
     "price": "Sale Price",
     "stock_quantity": "Stock Quantity",
     "qty": "Qty",
+    "total_stock_quantity": "Total Stock Quantity",
+    "total_value_of_stock": "Total Value of Stock",
+    "running_total": "Running Total",
+    "tracking": "Tracking",
+    "imei_tracked": "IMEI",
+    "serial_tracked": "Serial",
+    "batch_tracked": "Batch",
+    "expires_in": "Expires in {{days}}d",
+    "expired": "Expired",
     
     // Product CRUD operations
     "product_created_successfully": "Product created successfully",
@@ -1395,6 +1404,16 @@ const en: Record<string, string> = {
     "all_categories": "All Categories",
     "subcategories_count_badge": "{{count}} sub-categories",
     "categories_count_badge": "{{count}} categories",
+
+    // Category dialog — inline sub-category creation
+    "category_subcategories_section_title": "Sub-Categories",
+    "existing_subcategories": "Existing sub-categories",
+    "save": "Save",
+    "remove": "Remove",
+    "subcategory_tags_placeholder": "Type a name and press Enter…",
+    "subcategory_tags_hint": "Press Enter or comma to add. English names only.",
+    "create_category_with_subcategories_count": "Create Category + {{count}} Sub-Categories",
+    "save_and_add_subcategories_count": "Save + Add {{count}} Sub-Categories",
 
     // Voice Input functionality
     "no_speech_detected": "No speech detected",
