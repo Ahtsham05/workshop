@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { createFileRoute, redirect, Outlet, Link, useLocation } from '@tanstack/react-router'
+import { createFileRoute, redirect, Outlet, useLocation } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { AuthenticatedHeader } from '@/components/layout/authenticated-header'
@@ -12,7 +12,6 @@ import { TrialExpirationBoundary } from '@/components/trial-expiration-boundary'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
-import { Button } from '@/components/ui/button'
 import { resolveRouteAccess } from '@/lib/route-permissions'
 import { deriveSchoolRole } from '@/lib/school-permissions'
 import { restoreSessionFromCache } from '@/lib/auth-cache'
@@ -41,7 +40,6 @@ function AuthenticatedLayout() {
   const isWhatsAppInbox = pathname.replace(/\/+$/, '') === '/whatsapp'
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
-  const showLogoReminder = Boolean(user?.organizationId) && !orgData?.logo?.url
 
   const { current: ringingReminder, queueLength: ringingQueueLength, snoozeCurrent, completeCurrent } = useReminderWatchdog()
 
@@ -87,16 +85,6 @@ function AuthenticatedLayout() {
           <div className="min-w-0 flex-1 overflow-hidden flex flex-col">
             <AuthenticatedHeader showSearch={!isTeacher} />
             <PushNotificationPrompt message="Enable browser notifications so reminder alarms reach you even when this tab is in the background." />
-            {showLogoReminder && (
-              <div className="mx-3 mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm flex items-center justify-between shrink-0">
-                <span className="text-blue-900">
-                  Add your company logo to show it on receipts for all branches.
-                </span>
-                <Button asChild size="sm" variant="outline">
-                  <Link to="/branches">Set Logo</Link>
-                </Button>
-              </div>
-            )}
             <LocalDatabaseSetupBanner />
             <Main
               className={cn(
