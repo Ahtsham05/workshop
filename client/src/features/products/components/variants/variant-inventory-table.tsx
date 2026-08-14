@@ -86,7 +86,7 @@ export function VariantInventoryTable({ productId }: { productId: string }) {
           const id = variant._id || variant.id || ''
           const label =
             Object.entries(variant.attributes || {}).map(([, value]) => value).join(' / ') || variant.sku || id
-          return <VariantBatchPanel key={id} variantId={id} variantLabel={label} />
+          return <VariantBatchPanel key={id} variantId={id} variantLabel={label} trackExpiry={variant.trackExpiry} />
         })}
     </div>
   )

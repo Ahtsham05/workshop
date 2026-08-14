@@ -1241,6 +1241,17 @@ const ur: Record<string, string> = {
     "Failed to change password": "پاس ورڈ تبدیل کرنے میں ناکامی",
     "Company profile created successfully": "کمپنی کا پروفائل کامیابی سے بنایا گیا",
     "Failed to create company profile": "کمپنی کا پروفائل بنانے میں ناکامی",
+
+    // Master Product Catalog — cross-branch product import (Products page)
+    "import_from_other_branches": "دوسری برانچوں سے درآمد کریں",
+    "import_from_other_branches_desc": "وہ پروڈکٹس جو آپ کی دوسری برانچوں میں پہلے سے موجود ہیں۔ درآمد کرنے سے یہاں بن جائیں گی — قیمت، لاگت اور ابتدائی مقدار ہر برانچ کے لیے الگ سے قابلِ ترمیم رہتی ہے۔",
+    "no_importable_products": "آپ کی دوسری برانچوں کی ہر پروڈکٹ پہلے سے یہاں موجود ہے۔",
+    "carried_at": "دستیاب ہے",
+    "products_imported_success": "{{count}} پروڈکٹس درآمد ہو گئیں",
+    "products_import_failed": "پروڈکٹس درآمد کرنے میں ناکامی",
+    "import_n_products": "{{count}} پروڈکٹس درآمد کریں",
+    "products_found_at_other_branches": "آپ کی دوسری برانچوں میں {{count}} پروڈکٹس موجود ہیں",
+    "opening_qty": "ابتدائی مقدار",
 }
 
 export default ur

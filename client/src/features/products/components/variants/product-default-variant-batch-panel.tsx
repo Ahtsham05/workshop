@@ -11,9 +11,14 @@ import { VariantBatchPanel } from './variant-batch-panel'
 export function ProductDefaultVariantBatchPanel({
   productId,
   productName,
+  trackExpiry,
 }: {
   productId: string
   productName: string
+  // Current (possibly unsaved) trackExpiry checkbox state from the edit form — passed
+  // through so the panel stops surfacing expiry status the moment the user turns
+  // tracking off, without waiting for a save/refetch.
+  trackExpiry?: boolean
 }) {
   const { data: product, isLoading } = useGetProductQuery(productId, { skip: !productId })
 
@@ -27,5 +32,5 @@ export function ProductDefaultVariantBatchPanel({
     )
   }
 
-  return <VariantBatchPanel variantId={product.defaultVariantId} variantLabel={productName} />
+  return <VariantBatchPanel variantId={product.defaultVariantId} variantLabel={productName} trackExpiry={trackExpiry} />
 }

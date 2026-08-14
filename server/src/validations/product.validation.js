@@ -103,6 +103,15 @@ const getProduct = {
   }),
 };
 
+const getProductBranchAvailability = {
+  params: Joi.object().keys({
+    productId: Joi.string().required(),
+  }),
+  query: Joi.object().keys({
+    variantId: Joi.string(),
+  }),
+};
+
 const updateProduct = {
   params: Joi.object().keys({
     productId: Joi.string().required(),
@@ -224,6 +233,7 @@ module.exports = {
   fetchImageFromSearch,
   getProducts,
   getProduct,
+  getProductBranchAvailability,
   updateProduct,
   deleteProduct,
   getAllProducts,

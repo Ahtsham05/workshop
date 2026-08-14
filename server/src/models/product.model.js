@@ -109,6 +109,11 @@ const ProductSchema = new mongoose.Schema({
     // product into the variant UI; both default to fully backward-compatible values.
     schemaVersion: { type: Number, default: 1 },
     hasVariants: { type: Boolean, default: false },
+    // Master Product Catalog migration (see docs/architecture/master-product-migration.md):
+    // nullable link to the org-level shared identity this branch's product represents.
+    // Unset for any product not yet backfilled/created before the migration — every
+    // existing read path ignores this field until explicitly opted in.
+    masterProductId: { type: mongoose.Schema.Types.ObjectId, ref: 'MasterProduct', index: true, default: null },
 },{
     timestamps: true
 });

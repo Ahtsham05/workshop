@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
-import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Ban, Plus } from 'lucide-react'
+import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Ban, Plus, Eye } from 'lucide-react'
+import { formatDateSafe } from '@/lib/utils'
 
 import type { RootState } from '@/stores/store'
 import {
@@ -24,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TransferStatusBadge } from './components/transfer-status-badge'
 import { CreateTransferDialog, type TransferPrefill } from './components/create-transfer-dialog'
 import { SuggestedTransfersPanel } from './components/suggested-transfers-panel'
+import { TransferDetailsDialog } from './components/transfer-details-dialog'
 
 const LIMIT = 15
 
@@ -44,6 +46,7 @@ export default function StockTransfer() {
   const [page, setPage] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [prefill, setPrefill] = useState<TransferPrefill | null>(null)
+  const [detailsId, setDetailsId] = useState<string | null>(null)
 
   const { data, isFetching } = useGetTransfersQuery({
     page,
@@ -142,6 +145,7 @@ export default function StockTransfer() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>{t('Date')}</TableHead>
                   <TableHead>{t('Product')}</TableHead>
                   <TableHead>{t('From')}</TableHead>
                   <TableHead>{t('To')}</TableHead>
@@ -156,6 +160,9 @@ export default function StockTransfer() {
                   const isDest = branchId(tr.toBranchId) === activeBranchId
                   return (
                     <TableRow key={tr.id}>
+                      <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
+                        {formatDateSafe(tr.suggestedAt, 'MMM dd, yyyy hh:mm a')}
+                      </TableCell>
                       <TableCell className='font-medium max-w-[200px]' title={tr.productName}>
                         <div className='truncate'>{tr.productName}</div>
                         {tr.imeis && tr.imeis.length > 0 && (
@@ -170,6 +177,14 @@ export default function StockTransfer() {
                       <TableCell><TransferStatusBadge status={tr.status} /></TableCell>
                       <TableCell className='text-right'>
                         <div className='flex justify-end gap-1.5'>
+                          <Button
+                            size='sm'
+                            variant='ghost'
+                            onClick={() => setDetailsId(tr.id)}
+                          >
+                            <Eye className='mr-1 h-3.5 w-3.5' />
+                            {t('View')}
+                          </Button>
                           {tr.status === 'suggested' && isSource && (
                             <Button
                               size='sm'
@@ -210,7 +225,7 @@ export default function StockTransfer() {
                 })}
                 {transfers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className='text-center text-muted-foreground'>
+                    <TableCell colSpan={7} className='text-center text-muted-foreground'>
                       {t('No transfers found')}
                     </TableCell>
                   </TableRow>
@@ -230,6 +245,7 @@ export default function StockTransfer() {
       </Card>
 
       <CreateTransferDialog open={dialogOpen} onOpenChange={setDialogOpen} prefill={prefill} />
+      <TransferDetailsDialog transferId={detailsId} onClose={() => setDetailsId(null)} />
     </div>
   )
 }

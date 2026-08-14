@@ -8,7 +8,7 @@ import { ArrowLeftRight, Package, Truck } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+import { cn, formatDateSafe } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { TransferStatusBadge } from '@/features/stock-transfer/components/transfer-status-badge'
 
@@ -55,7 +55,7 @@ export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, Sto
 
           if (data.lineItems.length > 0) {
             const liData = data.lineItems.map((row) => ({
-              [t('date')]: format(new Date(row.date), 'yyyy-MM-dd'),
+              [t('date')]: formatDateSafe(row.date, 'yyyy-MM-dd', ''),
               [t('product')]: row.productName,
               [t('From')]: row.fromBranchName,
               [t('To')]: row.toBranchName,
@@ -64,6 +64,7 @@ export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, Sto
               [t('Batch')]: row.batchNumber || '',
               [t('Status')]: row.status,
               [t('Reason')]: row.reason || '',
+              [t('Completed At')]: formatDateSafe(row.completedAt, 'yyyy-MM-dd', ''),
               [t('By')]: row.decidedByName || '',
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(liData), 'Transfers')
@@ -172,6 +173,8 @@ export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, Sto
                     <TableHead>{t('To')}</TableHead>
                     <TableHead className='text-right'>Qty</TableHead>
                     <TableHead>{t('Status')}</TableHead>
+                    <TableHead>{t('Reason')}</TableHead>
+                    <TableHead>{t('Completed At')}</TableHead>
                     <TableHead>{t('By')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -179,7 +182,7 @@ export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, Sto
                   {data!.lineItems.map((row) => (
                     <TableRow key={row.id}>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                        {format(new Date(row.date), 'MMM dd, yyyy')}
+                        {formatDateSafe(row.date, 'MMM dd, yyyy')}
                       </TableCell>
                       <TableCell className='font-medium max-w-[200px]' title={row.productName}>
                         <div className='truncate'>{row.productName}</div>
@@ -197,6 +200,12 @@ export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, Sto
                       <TableCell className='text-right font-medium'>{row.quantity}</TableCell>
                       <TableCell>
                         <TransferStatusBadge status={row.status} />
+                      </TableCell>
+                      <TableCell className='max-w-[160px] truncate text-sm text-muted-foreground' title={row.reason || ''}>
+                        {row.reason || '—'}
+                      </TableCell>
+                      <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
+                        {formatDateSafe(row.completedAt, 'MMM dd, yyyy')}
                       </TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{row.decidedByName || '—'}</TableCell>
                     </TableRow>

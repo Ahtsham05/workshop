@@ -66,6 +66,20 @@ export interface PurchaseCatalogItem {
   batches?: PurchaseCatalogBatch[]
 }
 
+/** One branch's stock for a single product/variant — see branchAvailability.service.js. */
+export interface BranchStockRow {
+  branchId: string
+  branchName: string
+  isCurrentBranch: boolean
+  // False when no matching product (by barcode/name — products have no shared id
+  // across branches) or matching variant exists at this branch at all.
+  found: boolean
+  stockQuantity: number
+  reservedQuantity: number
+  availableQuantity: number
+  batches: { batchNumber: string; quantity: number; expiryDate?: string }[]
+}
+
 export const purchaseCatalogApi = createApi({
   reducerPath: 'purchaseCatalogApi',
   baseQuery: baseQueryWithAuth,
@@ -75,7 +89,13 @@ export const purchaseCatalogApi = createApi({
       query: () => '/purchasable',
       providesTags: [{ type: 'PurchaseCatalog', id: 'LIST' }],
     }),
+    getProductBranchAvailability: builder.query<BranchStockRow[], { productId: string; variantId?: string }>({
+      query: ({ productId, variantId }) => ({
+        url: `/${productId}/branch-availability`,
+        params: variantId ? { variantId } : undefined,
+      }),
+    }),
   }),
 })
 
-export const { useGetPurchasableCatalogQuery } = purchaseCatalogApi
+export const { useGetPurchasableCatalogQuery, useLazyGetProductBranchAvailabilityQuery } = purchaseCatalogApi

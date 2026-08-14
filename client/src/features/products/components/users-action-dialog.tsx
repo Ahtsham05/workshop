@@ -376,13 +376,21 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
 
 
   const onSubmit = async (values: productForm) => {
-    if (!isEdit && (values.trackImei || values.trackSerial)) {
+    if (values.trackImei || values.trackSerial) {
       const label = values.trackSerial ? 'serial' : 'IMEI'
       const imeiCount = (values.imeis || []).length
       if (imeiCount !== values.stockQuantity) {
         toast.error(`Enter ${values.stockQuantity} ${label} number(s) — ${imeiCount} entered`)
         return
       }
+    }
+    // Opening-batch identity is only asked for the first time tracking turns on for a
+    // product that already has stock (same gate the batch number field itself uses —
+    // see freshProduct?.defaultVariantId above) — once a default variant exists, further
+    // batches are received through ProductDefaultVariantBatchPanel instead, not this field.
+    if ((values.trackBatch || values.trackExpiry) && values.stockQuantity > 0 && !freshProduct?.defaultVariantId && !values.batchNumber) {
+      toast.error('Enter a batch number for the existing stock before turning on batch tracking')
+      return
     }
     setIsSubmitting(true)
     try {
@@ -1183,7 +1191,11 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 </div>
               )}
               {isEdit && editingProductId && (form.watch('trackBatch') || form.watch('trackExpiry')) && (
-                <ProductDefaultVariantBatchPanel productId={editingProductId} productName={form.watch('name')} />
+                <ProductDefaultVariantBatchPanel
+                  productId={editingProductId}
+                  productName={form.watch('name')}
+                  trackExpiry={form.watch('trackExpiry')}
+                />
               )}
               {showConversionRules && (
                 <FormField
@@ -1491,9 +1503,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         <FormControl>
                           <div className='space-y-2'>
                             <span className='text-xs font-medium text-amber-700'>
-                              {isEdit
-                                ? `${imeis.length} entered`
-                                : `${imeis.length}/${stockQuantity} entered`}
+                              {`${imeis.length}/${stockQuantity} entered`}
                             </span>
                             {isSerial ? (
                               <div className='flex items-center gap-2'>

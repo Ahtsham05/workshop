@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { Product, Branch, Invoice, PurchaseOrder, SeasonalFactor, InventoryTransfer, Insight } = require('../models');
 const supplierScoringService = require('./supplierScoring.service');
 const productService = require('./product.service');
+const { matchKeyFor } = require('../utils/productMatchKey');
 
 /* ────────────────────────────────────────────────────────────────────────
  * CONFIG — every tunable number the engine uses. Nothing below is a fixed
@@ -422,8 +423,6 @@ const invalidateBranchMetricsCache = ({ organizationId, branchId = null }) => {
  * physical item is matched across branches by barcode, falling back to an
  * exact case-insensitive name match within the organization.
  * ──────────────────────────────────────────────────────────────────────── */
-
-const matchKeyFor = (p) => (p.barcode ? `barcode:${p.barcode}` : `name:${p.name.trim().toLowerCase()}`);
 
 /**
  * Computes transfer suggestions across every active branch in the org, and returns

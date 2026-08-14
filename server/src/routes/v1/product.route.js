@@ -42,6 +42,14 @@ router.route('/purchasable').get(
   productController.getPurchasableCatalog
 );
 
+// Per-branch stock breakdown for one product/variant — powers the "Branches" pill on
+// the Invoice item picker. Same read access as the catalog endpoints above.
+router.route('/:productId/branch-availability').get(
+  auth(...CATALOG_READ_PERMISSIONS),
+  validate(productValidation.getProductBranchAvailability),
+  productController.getProductBranchAvailability
+);
+
 // Bulk update route
 router
   .route('/bulk-update')

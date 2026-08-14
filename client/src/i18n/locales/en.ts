@@ -1508,6 +1508,17 @@ const en: Record<string, string> = {
     "action_stock_adjust": "Stock Adjusted",
     "action_permission_change": "Permissions Changed",
     "action_status_change": "Status Changed",
+
+    // Master Product Catalog — cross-branch product import (Products page)
+    "import_from_other_branches": "Import from other branches",
+    "import_from_other_branches_desc": "Products already set up at your other branches. Importing creates them here — price, cost, and opening quantity stay editable per branch.",
+    "no_importable_products": "Every product from your other branches is already here.",
+    "carried_at": "Carried at",
+    "products_imported_success": "{{count}} product(s) imported",
+    "products_import_failed": "Failed to import products",
+    "import_n_products": "Import {{count}} product(s)",
+    "products_found_at_other_branches": "{{count}} product(s) found at your other branches",
+    "opening_qty": "Opening Qty",
 }
 
 export default en

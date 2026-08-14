@@ -5,6 +5,7 @@ import { ProductTable } from './components/users-table' // Adjusted for products
 import ProductsProvider from './context/users-context' // Adjusted for products
 import { LowStockAlert } from './components/low-stock-alert'
 import { LowStockDetails } from './components/low-stock-details'
+import { ImportBranchProductsBanner } from './components/import-branch-products-banner'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState, useCallback, useMemo } from 'react'
@@ -234,6 +235,9 @@ export default function Products() {
   return (
     <ProductsProvider>
       <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
+{/* "N products found at your other branches" banner — only when this branch's catalog is empty */}
+          <ImportBranchProductsBanner productCount={allProducts.length} loading={loadingAllProducts} />
+
 {/* Low Stock Alert Banner */}
           <div className='mb-4'>
             <div onClick={() => !loadingAllProducts && setShowLowStockDetails(true)} className={loadingAllProducts ? '' : 'cursor-pointer'}>

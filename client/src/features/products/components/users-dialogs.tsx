@@ -4,6 +4,7 @@ import { UsersDeleteDialog } from './users-delete-dialog'
 import { UsersInviteDialog } from './users-invite-dialog'
 import { ProductImportDialog } from './product-import-dialog'
 import { ProductAiScanDialog } from './product-ai-scan-dialog'
+import { ImportProductsDialog } from './import-products-dialog'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { bulkAddProducts } from '@/stores/product.slice'
@@ -49,6 +50,13 @@ export default function UsersDialogs({setFetch}:any) {
         open={open === 'ai-scan'}
         onOpenChange={() => setOpen('ai-scan')}
         onImport={handleImport}
+      />
+
+      <ImportProductsDialog
+        key='import-master-products'
+        open={open === 'import-master-products'}
+        onOpenChange={() => setOpen('import-master-products')}
+        onImported={() => setFetch((prev: boolean) => !prev)}
       />
 
       <UsersInviteDialog

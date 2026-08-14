@@ -3,38 +3,48 @@ const ApiError = require('../utils/ApiError');
 const { Product, Branch, ProductVariant, Inventory, Batch, InventoryTransaction, InventoryTransfer, Imei } = require('../models');
 const inventorySyncService = require('./inventorySync.service');
 const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
-
-const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const masterProductService = require('./masterProduct.service');
+const { buildMatchQuery } = require('../utils/productMatchKey');
 
 /**
  * Products are branch-scoped documents (no shared catalog id across branches), so
- * the destination branch may not yet carry the item being transferred. Find a match
- * by barcode, falling back to a case-insensitive exact name match; if neither exists,
- * spin up a new Product doc for the destination branch with zero stock so the transfer
- * has somewhere to land. The barcode is intentionally NOT copied — it has a global
- * unique index, so duplicating it across branches would collide.
+ * the destination branch may not yet carry the item being transferred. Find a match by
+ * barcode OR a case-insensitive exact name (productMatchKey.js#buildMatchQuery — not
+ * barcode-instead-of-name: since barcode is globally unique, the destination's copy of
+ * a barcoded item can never share that barcode, so name must always be tried too or a
+ * genuine match gets missed); if neither exists, spin up a new Product doc for the
+ * destination branch with zero stock so the transfer has somewhere to land. The barcode
+ * is intentionally NOT copied onto that new doc — same global-uniqueness reason.
  */
 const findOrCreateDestinationProduct = async ({ sourceProduct, organizationId, toBranchId }) => {
-  const query = sourceProduct.barcode
-    ? { organizationId, branchId: toBranchId, barcode: sourceProduct.barcode }
-    : { organizationId, branchId: toBranchId, name: { $regex: `^${escapeRegex(sourceProduct.name.trim())}$`, $options: 'i' } };
+  // Master Product Catalog migration (see docs/architecture/master-product-migration.md):
+  // an exact masterProductId match is strictly more reliable than the barcode/name
+  // heuristic below, but stays gated per-org during rollout like every other
+  // behavior-changing use of masterProductId.
+  if (sourceProduct.masterProductId && masterProductService.isMasterProductRolloutEnabledForOrg(organizationId)) {
+    const existingByMaster = await Product.findOne({ organizationId, branchId: toBranchId, masterProductId: sourceProduct.masterProductId });
+    if (existingByMaster) return existingByMaster;
+  }
 
-  const existing = await Product.findOne(query);
+  const existing = await Product.findOne(buildMatchQuery({ organizationId, branchId: toBranchId }, sourceProduct));
   if (existing) {
     // Heals a destination product created by an earlier transfer before trackImei/
     // trackSerial were copied below — without them, units landing here show up as plain
     // untracked stock (no Serial #/IMEI badge anywhere) even though the source product,
     // and the actual Imei records now pointing at this product, are tracked. Only ever
     // turns tracking *on* to match the source, never off, so this can't silently undo a
-    // deliberate per-branch choice to stop tracking.
+    // deliberate per-branch choice to stop tracking. Also backfills masterProductId for a
+    // destination product created before the master-catalog migration ran.
     const needsHeal =
       (sourceProduct.trackImei && !existing.trackImei) ||
       (sourceProduct.trackSerial && !existing.trackSerial) ||
-      (sourceProduct.warrantyMonths && !existing.warrantyMonths);
+      (sourceProduct.warrantyMonths && !existing.warrantyMonths) ||
+      (sourceProduct.masterProductId && !existing.masterProductId);
     if (needsHeal) {
       existing.trackImei = existing.trackImei || sourceProduct.trackImei;
       existing.trackSerial = existing.trackSerial || sourceProduct.trackSerial;
       existing.warrantyMonths = existing.warrantyMonths || sourceProduct.warrantyMonths;
+      existing.masterProductId = existing.masterProductId || sourceProduct.masterProductId;
       await existing.save();
     }
     return existing;
@@ -62,6 +72,7 @@ const findOrCreateDestinationProduct = async ({ sourceProduct, organizationId, t
     trackImei: sourceProduct.trackImei,
     trackSerial: sourceProduct.trackSerial,
     warrantyMonths: sourceProduct.warrantyMonths,
+    masterProductId: sourceProduct.masterProductId || undefined,
   });
 };
 
@@ -91,12 +102,23 @@ const findOrCreateDestinationVariant = async ({ sourceVariant, toProduct, organi
     });
   }
 
+  if (sourceVariant.masterVariantId && masterProductService.isMasterProductRolloutEnabledForOrg(organizationId)) {
+    const existingByMaster = await ProductVariant.findOne({ productId: toProduct._id, masterVariantId: sourceVariant.masterVariantId });
+    if (existingByMaster) return existingByMaster;
+  }
+
   const candidates = await ProductVariant.find({ productId: toProduct._id, isDefault: false });
   const sourceAttrs = JSON.stringify(Object.fromEntries(sourceVariant.attributes || []));
   const match =
     (sourceVariant.sku && candidates.find((v) => v.sku === sourceVariant.sku)) ||
     candidates.find((v) => JSON.stringify(Object.fromEntries(v.attributes || [])) === sourceAttrs);
-  if (match) return match;
+  if (match) {
+    if (sourceVariant.masterVariantId && !match.masterVariantId) {
+      match.masterVariantId = sourceVariant.masterVariantId;
+      await match.save();
+    }
+    return match;
+  }
 
   return ProductVariant.create({
     organizationId,
@@ -113,6 +135,7 @@ const findOrCreateDestinationVariant = async ({ sourceVariant, toProduct, organi
     trackSerial: sourceVariant.trackSerial,
     image: sourceVariant.image,
     isActive: true,
+    masterVariantId: sourceVariant.masterVariantId || undefined,
   });
 };
 

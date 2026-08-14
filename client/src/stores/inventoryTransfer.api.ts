@@ -55,12 +55,13 @@ export interface InventoryTransfer {
   reason?: string
   notes?: string
   status: TransferStatus
+  // Set at creation time for every transfer (default Date.now) — the effective "transfer
+  // date". createdAt/updatedAt are NOT usable here: the model's toJSON plugin strips them
+  // from every API response, so they'd always be undefined despite existing in the DB.
   suggestedAt?: string
   decidedBy?: { id: string; name: string } | string
   decidedAt?: string
   completedAt?: string
-  createdAt: string
-  updatedAt: string
 }
 
 export interface TransfersResponse {

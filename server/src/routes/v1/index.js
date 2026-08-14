@@ -3,6 +3,7 @@ const authRoute = require('./auth.route');
 const userRoute = require('./user.route');
 const roleRoute = require('./role.route');
 const productRoute = require('./product.route');
+const masterProductRoute = require('./masterProduct.route');
 const categoryRoute = require('./category.route');
 const subCategoryRoute = require('./subCategory.route');
 const brandRoute = require('./brand.route');
@@ -151,6 +152,10 @@ const defaultRoutes = [
   {
     path: '/products',
     route: productRoute,
+  },
+  {
+    path: '/master-products',
+    route: masterProductRoute,
   },
   {
     path: '/categories',

@@ -31,7 +31,20 @@ function expiryBadge(expiryDate?: string) {
 const emptyDraft = { batchNumber: '', quantity: '', costPerUnit: '', sellingPrice: '', expiryDate: '' }
 
 /** Receive and track batches/lots for one batch- or expiry-tracked variant. */
-export function VariantBatchPanel({ variantId, variantLabel }: { variantId: string; variantLabel: string }) {
+export function VariantBatchPanel({
+  variantId,
+  variantLabel,
+  trackExpiry = true,
+}: {
+  variantId: string
+  variantLabel: string
+  // Whether to surface expiry at all — a batch created while expiry tracking was on
+  // (or received with a date entered anyway) keeps its stored expiryDate even after
+  // the product's trackExpiry is turned off, since that's real historical data worth
+  // keeping; this just stops surfacing it as a live "Expired"/"Expires in Nd" signal
+  // for a product the user has said they don't want expiry tracked for.
+  trackExpiry?: boolean
+}) {
   const { data: batches = [], isLoading } = useGetBatchesForVariantQuery(variantId)
   const [createBatch, { isLoading: isCreating }] = useCreateBatchMutation()
   const [writeOffBatch] = useWriteOffBatchMutation()
@@ -86,7 +99,7 @@ export function VariantBatchPanel({ variantId, variantLabel }: { variantId: stri
       </div>
 
       {showForm && (
-        <div className='mb-3 grid grid-cols-2 gap-2 rounded-md bg-muted/30 p-2 sm:grid-cols-5'>
+        <div className={`mb-3 grid grid-cols-2 gap-2 rounded-md bg-muted/30 p-2 ${trackExpiry ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
           <Input
             placeholder='Batch number'
             showVoiceInput={false}
@@ -121,14 +134,16 @@ export function VariantBatchPanel({ variantId, variantLabel }: { variantId: stri
             value={draft.sellingPrice}
             onChange={(e) => setDraft((d) => ({ ...d, sellingPrice: e.target.value }))}
           />
-          <Input
-            type='date'
-            showVoiceInput={false}
-            className='h-8'
-            value={draft.expiryDate}
-            onChange={(e) => setDraft((d) => ({ ...d, expiryDate: e.target.value }))}
-          />
-          <div className='col-span-2 sm:col-span-5'>
+          {trackExpiry && (
+            <Input
+              type='date'
+              showVoiceInput={false}
+              className='h-8'
+              value={draft.expiryDate}
+              onChange={(e) => setDraft((d) => ({ ...d, expiryDate: e.target.value }))}
+            />
+          )}
+          <div className={trackExpiry ? 'col-span-2 sm:col-span-5' : 'col-span-2 sm:col-span-4'}>
             <Button type='button' size='sm' disabled={isCreating} onClick={handleCreate}>
               Save batch
             </Button>
@@ -148,7 +163,7 @@ export function VariantBatchPanel({ variantId, variantLabel }: { variantId: stri
               <TableHead>Quantity</TableHead>
               <TableHead>Cost/unit</TableHead>
               <TableHead>Selling price</TableHead>
-              <TableHead>Expiry</TableHead>
+              {trackExpiry && <TableHead>Expiry</TableHead>}
               <TableHead className='w-20' />
             </TableRow>
           </TableHeader>
@@ -159,7 +174,7 @@ export function VariantBatchPanel({ variantId, variantLabel }: { variantId: stri
                 <TableCell>{batch.quantity}</TableCell>
                 <TableCell>{batch.costPerUnit}</TableCell>
                 <TableCell>{batch.sellingPrice ?? '-'}</TableCell>
-                <TableCell>{expiryBadge(batch.expiryDate)}</TableCell>
+                {trackExpiry && <TableCell>{expiryBadge(batch.expiryDate)}</TableCell>}
                 <TableCell>
                   <Button
                     type='button'

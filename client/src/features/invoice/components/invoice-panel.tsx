@@ -50,6 +50,7 @@ import summery from '@/utils/summery'
 import { cn } from '@/lib/utils'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { purchaseCatalogApi, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { BranchStockTrigger } from '@/components/branch-stock-trigger'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading.
@@ -2476,6 +2477,11 @@ export function InvoicePanel({
                                                 >
                                                   Stock: {catalogItem.stockQuantity}
                                                 </span>
+                                                <BranchStockTrigger
+                                                  productId={catalogItem.productId}
+                                                  variantId={catalogItem.variantId}
+                                                  itemName={catalogItem.name}
+                                                />
                                                 {catalogItem.cost != null && (
                                                   <span
                                                     className={cn(
@@ -2559,6 +2565,11 @@ export function InvoicePanel({
                                     : `${remainingStock} left`}
                                 </span>
                               )}
+                              <BranchStockTrigger
+                                productId={item.productId}
+                                variantId={item.variantId}
+                                itemName={item.name}
+                              />
                               {/* Which batch(es) this sale depletes — defaults to the
                                   earliest-expiry batch, switchable by clicking another. If
                                   the quantity outgrows a single batch, updateQuantity

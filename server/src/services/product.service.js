@@ -6,6 +6,7 @@ const imeiService = require('./imei.service');
 const batchService = require('./batch.service');
 const { getOrCreateDefaultVariant, getOrCreateInventory } = require('./inventorySync.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
+const masterProductService = require('./masterProduct.service');
 
 /**
  * IMEI tracking only makes sense for mobile phones, so it's restricted to mobile_shop
@@ -212,6 +213,12 @@ const createProduct = async (productBody) => {
     await session.endSession();
   }
 
+  // Master Product Catalog migration (see docs/architecture/master-product-migration.md):
+  // auto-link every new product to the shared org-level catalog. Runs after the
+  // transaction commits (never inside it) and never throws — a failure here must not
+  // affect the product creation every existing flow depends on.
+  await masterProductService.linkProductToMasterProduct(product);
+
   return product;
 };
 
@@ -284,27 +291,44 @@ const updateProductById = async (productId, updateBody) => {
   }
   const nameChanged = Object.prototype.hasOwnProperty.call(updateFields, 'name') && updateFields.name !== product.name;
   Object.assign(product, updateFields);
-  await product.save();
 
-  await syncDefaultVariantTracking(product, updateBody);
+  // Everything that follows must succeed together — same reasoning as createProduct's
+  // transaction: a failure partway through opening-batch/IMEI setup must roll back the
+  // product edit itself, not leave a variant permanently marked trackBatch/trackImei
+  // with no batch/serials behind it (that half-tracked state can never self-heal, since
+  // the "first time tracking turned on" guard in syncDefaultVariantTracking only fires
+  // once per variant).
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await product.save({ session });
 
-  // Keep the IMEI tracking page's denormalized product name in sync on rename.
-  if (nameChanged) {
-    await imeiService.renameProductOnImeis({ productId: product._id, productName: product.name });
+      await syncDefaultVariantTracking(product, updateBody, session);
+
+      if ((product.trackImei || product.trackSerial) && imeis) {
+        await imeiService.syncImeisForPurchaseItem({
+          purchaseId: null,
+          productId: product._id,
+          productName: product.name,
+          imeis,
+          type: product.trackSerial ? 'serial' : 'imei',
+          purchasePrice: product.cost,
+          organizationId: product.organizationId,
+          branchId: product.branchId,
+          createdBy: product.createdBy,
+          session,
+        });
+      }
+    });
+  } finally {
+    await session.endSession();
   }
 
-  if ((product.trackImei || product.trackSerial) && imeis) {
-    await imeiService.syncImeisForPurchaseItem({
-      purchaseId: null,
-      productId: product._id,
-      productName: product.name,
-      imeis,
-      type: product.trackSerial ? 'serial' : 'imei',
-      purchasePrice: product.cost,
-      organizationId: product.organizationId,
-      branchId: product.branchId,
-      createdBy: product.createdBy,
-    });
+  // Keep the IMEI tracking page's denormalized product name in sync on rename. Runs
+  // after the transaction commits (not inside it) — same "never block the core save"
+  // reasoning as the master-product auto-link below.
+  if (nameChanged) {
+    await imeiService.renameProductOnImeis({ productId: product._id, productName: product.name });
   }
 
   return product;
@@ -524,9 +548,15 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
     }));
 
     // Insert products
-    const insertedProducts = await Product.insertMany(processedProducts, { 
+    const insertedProducts = await Product.insertMany(processedProducts, {
       ordered: false // Continue inserting even if some fail (e.g., duplicates)
     });
+
+    // Master Product Catalog migration: auto-link every newly imported product (Excel
+    // or AI-vision scan, both funnel through here) to the shared org-level catalog.
+    for (const product of insertedProducts) {
+      await masterProductService.linkProductToMasterProduct(product);
+    }
 
     return {
       success: true,
@@ -541,6 +571,10 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
         index: err.index,
         error: err.errmsg
       }));
+
+      for (const product of successfulInserts) {
+        await masterProductService.linkProductToMasterProduct(product);
+      }
 
       return {
         success: successfulInserts.length > 0,

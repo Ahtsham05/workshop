@@ -55,6 +55,7 @@ import { inventoryApi } from './inventory.api';
 import { batchApi } from './batch.api';
 import { brandApi } from './brand.api';
 import { purchaseCatalogApi } from './purchaseCatalog.api';
+import { masterProductApi } from './masterProduct.api';
 import { inventoryTransferApi } from './inventoryTransfer.api';
 import { stockAdjustmentApi } from './stockAdjustment.api';
 import { auditLogApi } from './auditLog.api';
@@ -123,6 +124,7 @@ export const store = configureStore({
     [batchApi.reducerPath]: batchApi.reducer,
     [brandApi.reducerPath]: brandApi.reducer,
     [purchaseCatalogApi.reducerPath]: purchaseCatalogApi.reducer,
+    [masterProductApi.reducerPath]: masterProductApi.reducer,
     [inventoryTransferApi.reducerPath]: inventoryTransferApi.reducer,
     [stockAdjustmentApi.reducerPath]: stockAdjustmentApi.reducer,
     [auditLogApi.reducerPath]: auditLogApi.reducer,
@@ -184,6 +186,7 @@ export const store = configureStore({
       batchApi.middleware,
       brandApi.middleware,
       purchaseCatalogApi.middleware,
+      masterProductApi.middleware,
       inventoryTransferApi.middleware,
       stockAdjustmentApi.middleware,
       auditLogApi.middleware,

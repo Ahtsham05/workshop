@@ -7,6 +7,7 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upl
 const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 const { searchPexelsAndUpload } = require('../services/imageSearch.service');
 const productVisionService = require('../services/productVision.service');
+const branchAvailabilityService = require('../services/branchAvailability.service');
 const { auditLogService } = require('../services');
 const { userHasAnyPermission } = require('../middlewares/permission');
 
@@ -257,6 +258,16 @@ const getPurchasableCatalog = catchAsync(async (req, res) => {
   res.send(canViewCost ? items : items.map(stripCostFields));
 });
 
+const getProductBranchAvailability = catchAsync(async (req, res) => {
+  const rows = await branchAvailabilityService.getProductBranchAvailability({
+    organizationId: req.organizationId,
+    branchId: req.branchId,
+    productId: req.params.productId,
+    variantId: req.query.variantId,
+  });
+  res.send(rows);
+});
+
 const bulkUpdateProducts = catchAsync(async (req, res) => {
   const { products } = req.body;
   
@@ -330,6 +341,7 @@ module.exports = {
   deleteProduct,
   getAllProducts,
   getPurchasableCatalog,
+  getProductBranchAvailability,
   uploadProductImage,
   deleteProductImage,
   fetchImageFromSearch,

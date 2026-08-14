@@ -50,6 +50,10 @@ const ProductVariantSchema = new mongoose.Schema({
         publicId: { type: String }
     },
     isActive: { type: Boolean, default: true },
+    // Master Product Catalog migration (see docs/architecture/master-product-migration.md):
+    // nullable link to the org-level shared MasterProductVariant this branch's real
+    // variant represents. Unset for any variant not yet backfilled.
+    masterVariantId: { type: mongoose.Schema.Types.ObjectId, ref: 'MasterProductVariant', index: true, default: null },
 }, {
     timestamps: true
 });
