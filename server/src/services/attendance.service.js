@@ -398,6 +398,7 @@ const getDailyAttendanceSummary = async (date, scope = {}) => {
     onLeave: 0,
     halfDay: 0,
     holiday: 0,
+    pendingLeave: 0,
   };
 
   employeeIds.forEach((employeeId) => {
@@ -421,6 +422,9 @@ const getDailyAttendanceSummary = async (date, scope = {}) => {
         break;
       case 'Holiday':
         summary.holiday += 1;
+        break;
+      case 'Leave Pending':
+        summary.pendingLeave += 1;
         break;
       default:
         summary.present += 1;
@@ -458,6 +462,7 @@ const computeEmployeeAttendanceStats = async (employeeId, periodStart, periodEnd
     periodStart: startDate,
     periodEnd: endDate,
     joiningDate: employee.joiningDate,
+    lastWorkingDate: employee.lastWorkingDate,
     attendances,
     leaves,
   });
@@ -476,6 +481,14 @@ const getEmployeeDailyBreakdown = async (employeeId, month, year, scope = {}) =>
   if (normalizeDateOnly(monthEnd) > today) {
     effectiveEnd = new Date(today);
     effectiveEnd.setHours(23, 59, 59, 999);
+  }
+  // Nothing to show past a terminated/resigned employee's last working day.
+  if (employee.lastWorkingDate) {
+    const exitDate = normalizeDateOnly(employee.lastWorkingDate);
+    if (exitDate < normalizeDateOnly(effectiveEnd)) {
+      effectiveEnd = new Date(exitDate);
+      effectiveEnd.setHours(23, 59, 59, 999);
+    }
   }
 
   let effectiveStart = normalizeDateOnly(monthStart);
@@ -500,6 +513,7 @@ const getEmployeeDailyBreakdown = async (employeeId, month, year, scope = {}) =>
     periodStart: monthStart,
     periodEnd: effectiveEnd,
     joiningDate: employee.joiningDate,
+    lastWorkingDate: employee.lastWorkingDate,
     attendances,
     leaves,
   });

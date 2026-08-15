@@ -23,7 +23,15 @@ export type AttendanceLike = {
   checkIn?: string | Date | null;
 } | null | undefined;
 
-/** Match server resolveDayStatus — default unmarked days are Present. */
+/**
+ * Match server resolveDayStatus — default unmarked days are Present.
+ *
+ * Approved leave is a finished decision and overrides everything else. A Pending leave is
+ * not a decision yet, so it must never read as Absent — any real attendance signal (a
+ * check-in, or an explicit status someone actually chose) always wins over an undecided
+ * request. Only when there's no real attendance signal at all do we fall back to the
+ * leave's own state.
+ */
 export function resolveDayStatus(attendance: AttendanceLike, leave: LeaveLike): string {
   const attendanceStatus = attendance?.status;
 
@@ -33,19 +41,21 @@ export function resolveDayStatus(attendance: AttendanceLike, leave: LeaveLike): 
     return leave.isHalfDay ? 'Half-Day' : 'On Leave';
   }
 
-  if (attendanceStatus === 'Absent') {
-    if ((attendance as { checkIn?: string | Date | null })?.checkIn) return 'Present';
-    return 'Absent';
+  if ((attendance as { checkIn?: string | Date | null })?.checkIn) {
+    return attendanceStatus === 'Late' ? 'Late' : 'Present';
   }
-  if (attendanceStatus === 'On Leave') return 'On Leave';
 
-  if (leave?.status === 'Pending') {
+  if (attendanceStatus === 'Present') return 'Present';
+  if (attendanceStatus === 'Late') return 'Late';
+  if (attendanceStatus === 'Half-Day') return 'Half-Day';
+  if (attendanceStatus === 'On Leave') return 'On Leave';
+  if (attendanceStatus === 'Absent') return 'Absent';
+
+  if (leave?.status === 'Pending') return 'Leave Pending';
+
+  if (leave?.status === 'Rejected') {
     return leave.isHalfDay ? 'Half-Day' : 'Absent';
   }
-
-  if (attendanceStatus === 'Half-Day') return 'Half-Day';
-  if (attendanceStatus === 'Late') return 'Late';
-  if (attendanceStatus === 'Present') return 'Present';
 
   return 'Present';
 }

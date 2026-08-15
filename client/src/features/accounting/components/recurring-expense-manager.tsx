@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useDispatch } from 'react-redux'
 import {
   Plus, Trash2, Pencil, RefreshCw, Loader2, CalendarClock,
-  ChevronDown, ChevronUp, Check, ChevronsUpDown, Wallet, CheckCircle2,
+  ChevronDown, ChevronUp, Wallet, CheckCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -24,10 +24,8 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { TransactionCategoryPicker } from './transaction-category-picker'
 import {
   recurringExpenseApi,
   useGetRecurringExpensesQuery,
@@ -40,7 +38,6 @@ import {
   type RecurringExpenseRecord,
   type RecurringFrequency,
 } from '@/stores/recurringExpense.api'
-import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api'
 import { useGetPendingExpensesQuery, usePayExpenseMutation } from '@/stores/expense.api'
 import { getBusinessToday, formatBusinessDate } from '@/lib/business-timezone'
 
@@ -137,25 +134,18 @@ export function RecurringExpenseManager() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm())
   const [showAll, setShowAll] = useState(false)
-  const [catOpen, setCatOpen] = useState(false)
 
   const [payAllDialogOpen, setPayAllDialogOpen] = useState(false)
   const [payRuleDialogOpen, setPayRuleDialogOpen] = useState(false)
   const [ruleToPay, setRuleToPay] = useState<RecurringExpenseRecord | null>(null)
 
   const { data, isLoading } = useGetRecurringExpensesQuery()
-  const { data: categoriesData } = useGetExpenseCategoriesQuery({ transactionType: 'business_expense' })
   const [createRule, { isLoading: isCreating }] = useCreateRecurringExpenseMutation()
   const [updateRule, { isLoading: isUpdating }] = useUpdateRecurringExpenseMutation()
   const [deleteRule] = useDeleteRecurringExpenseMutation()
   const [runNow, { isLoading: isRunning }] = useRunRecurringExpensesNowMutation()
   const [payRule, { isLoading: isPayingRule }] = usePayRecurringExpenseRuleMutation()
   const [payAll, { isLoading: isPayingAll }] = usePayAllRecurringExpensesMutation()
-
-  const categories: string[] = useMemo(() => {
-    const raw = Array.isArray(categoriesData) ? categoriesData : (categoriesData as any)?.results ?? []
-    return raw.map((c: any) => c.name as string)
-  }, [categoriesData])
 
   const rules = data?.results ?? []
   const monthSummary = data?.monthSummary
@@ -494,41 +484,13 @@ export function RecurringExpenseManager() {
               />
             </div>
 
-            {/* Searchable Category */}
-            <div>
-              <Label>Category *</Label>
-              <Popover open={catOpen} onOpenChange={setCatOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant='outline' role='combobox' className='w-full justify-between font-normal'>
-                    {form.category || 'Search category...'}
-                    <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className='w-full p-0' align='start'>
-                  <Command>
-                    <CommandInput placeholder='Search categories...' />
-                    <CommandList>
-                      <CommandEmpty>No category found.</CommandEmpty>
-                      <CommandGroup>
-                        {categories.map((cat) => (
-                          <CommandItem
-                            key={cat}
-                            value={cat}
-                            onSelect={(v) => {
-                              set('category', v)
-                              setCatOpen(false)
-                            }}
-                          >
-                            <Check className={cn('mr-2 h-4 w-4', form.category === cat ? 'opacity-100' : 'opacity-0')} />
-                            {cat}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
+            {/* Category — create/edit/delete inline, same as the Expense form */}
+            <TransactionCategoryPicker
+              transactionType='business_expense'
+              value={form.category}
+              onChange={(v) => set('category', v)}
+              required
+            />
 
             {/* Amount + hint */}
             <div>

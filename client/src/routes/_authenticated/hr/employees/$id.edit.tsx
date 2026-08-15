@@ -111,6 +111,10 @@ function EmployeeEditPage() {
       : '',
     employmentType: employee.employmentType,
     employmentStatus: employee.employmentStatus || 'Active',
+    lastWorkingDate: employee.lastWorkingDate
+      ? new Date(employee.lastWorkingDate).toISOString().split('T')[0]
+      : '',
+    exitReason: employee.exitReason || '',
     shift: getEntityId(employee.shift) || '',
     skills: employee.skills || [],
 

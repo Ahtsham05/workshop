@@ -318,6 +318,9 @@ export default function LeaveManagement() {
     if (impact.type === 'paid') {
       return `${formatCurrency(impact.amount)} (${t('Paid leave amount')})`;
     }
+    if (impact.type === 'pending') {
+      return `${formatCurrency(impact.amount)} (${t('Awaiting decision — no deduction yet')})`;
+    }
     if (impact.type === 'deduction') {
       const label =
         leave.status === 'Rejected'
@@ -718,7 +721,7 @@ export default function LeaveManagement() {
                 <div className="p-3 rounded bg-yellow-50"><p className="text-xs text-muted-foreground">{t('Late')}</p><p className="font-semibold">{monthlyProgress.lateDays}</p></div>
                 <div className="p-3 rounded bg-red-50"><p className="text-xs text-muted-foreground">{t('Absent')}</p><p className="font-semibold">{monthlyProgress.absentDays}</p></div>
                 <div className="p-3 rounded bg-gray-100"><p className="text-xs text-muted-foreground">{t('Leave Days')}</p><p className="font-semibold">{monthlyProgress.leaveDays}</p></div>
-                <div className="p-3 rounded bg-amber-50"><p className="text-xs text-muted-foreground">{t('Pending Leave (Absent)')}</p><p className="font-semibold">{monthlyProgress.pendingLeaveDays}</p></div>
+                <div className="p-3 rounded bg-amber-50"><p className="text-xs text-muted-foreground">{t('Leave Pending (Awaiting Decision)')}</p><p className="font-semibold">{monthlyProgress.pendingLeaveDays}</p></div>
                 <div className="p-3 rounded bg-purple-50"><p className="text-xs text-muted-foreground">{t('Half Day')}</p><p className="font-semibold">{monthlyProgress.halfDays}</p></div>
                 <div className="p-3 rounded bg-rose-50"><p className="text-xs text-muted-foreground">{t('Unpaid Leave Days')}</p><p className="font-semibold">{monthlyProgress.unpaidLeaveDays}</p></div>
                 <div className="p-3 rounded bg-green-50"><p className="text-xs text-muted-foreground">{t('Working Hours')}</p><p className="font-semibold">{monthlyProgress.workingHours.toFixed(2)}</p></div>

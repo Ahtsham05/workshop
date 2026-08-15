@@ -49,6 +49,7 @@ const calculatePayrollSnapshot = async (employee, month, year, scope = {}, optio
     periodStart: startDate,
     periodEnd: endDate,
     joiningDate: employee.joiningDate,
+    lastWorkingDate: employee.lastWorkingDate,
     attendances,
     leaves,
   });
@@ -76,7 +77,7 @@ const calculatePayrollSnapshot = async (employee, month, year, scope = {}, optio
     allowances,
     grossSalary,
     totalAllowances,
-    notes: `Present: ${stats.presentDays}, Absent: ${stats.absentDays}, Leave: ${stats.leaveDays}, Pending leave (absent): ${stats.pendingLeaveDays}, Unpaid leave deduction days: ${stats.unpaidLeaveDays}`,
+    notes: `Present: ${stats.presentDays}, Absent: ${stats.absentDays}, Leave: ${stats.leaveDays}, Pending leave (awaiting decision, no deduction): ${stats.pendingLeaveDays}, Unpaid leave deduction days: ${stats.unpaidLeaveDays}`,
   };
 };
 
@@ -120,8 +121,8 @@ const computeLeaveSalaryImpact = async (leave, employee) => {
   if (leave.status === 'Pending') {
     return {
       amount: totalAmount,
-      type: 'deduction',
-      label: 'Absent until approved',
+      type: 'pending',
+      label: 'Awaiting approval — no salary impact yet',
     };
   }
   if (leave.status === 'Approved' && leave.leaveType === 'Unpaid') {
@@ -543,6 +544,210 @@ const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) =>
   };
 };
 
+/** Create or refresh the Payroll record for a given month so its numbers reflect the
+ * latest attendance/leave data before it feeds into a settlement or ledger read. */
+const ensureMonthPayroll = async (employee, month, year, userId, scope = {}) => {
+  const tenantFilter = {};
+  if (scope.organizationId) tenantFilter.organizationId = scope.organizationId;
+  if (scope.branchId) tenantFilter.branchId = scope.branchId;
+
+  const existing = await Payroll.findOne({ employee: employee._id, month, year, ...tenantFilter });
+  if (existing) {
+    return syncPayrollForMonth(employee._id, month, year, userId, scope);
+  }
+  return generatePayroll(employee._id, month, year, userId, scope);
+};
+
+/**
+ * Final settlement due to (or owed by) a Terminated/Resigned employee as of their last
+ * working day. Reuses the same attendance/leave-driven payroll math as a normal month
+ * (proration naturally stops at lastWorkingDate via computeAttendanceStatsFromData) plus
+ * the employee ledger balance, which already nets out everything paid/advanced to date —
+ * this is the same "what does the company still owe" figure used everywhere else in HR,
+ * just evaluated as of the exit month rather than the current one.
+ */
+const getEmployeeFinalSettlement = async (employeeId, scope = {}, userId = null) => {
+  const employee = await Employee.findById(employeeId);
+  if (!employee) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  }
+
+  const asOfDate = employee.lastWorkingDate ? new Date(employee.lastWorkingDate) : new Date();
+  await ensureMonthPayroll(employee, asOfDate.getMonth() + 1, asOfDate.getFullYear(), userId, scope);
+
+  const ledgerSummary = await employeeLedgerService.getEmployeeLedgerSummary(employeeId, scope);
+
+  return {
+    employee: {
+      id: employee._id?.toString() || employee.id,
+      employeeId: employee.employeeId,
+      name: `${employee.firstName} ${employee.lastName}`.trim(),
+      employmentStatus: employee.employmentStatus,
+      lastWorkingDate: employee.lastWorkingDate || null,
+      exitReason: employee.exitReason || '',
+    },
+    asOfDate,
+    ...ledgerSummary,
+  };
+};
+
+const PAYROLL_STATUSES = ['Pending', 'Processed', 'Paid', 'On Hold'];
+const MONTH_LABELS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+const getPayrollSummary = async (scope = {}, { month, year } = {}) => {
+  const tenantFilter = {};
+  if (scope.organizationId) tenantFilter.organizationId = scope.organizationId;
+  if (scope.branchId) tenantFilter.branchId = scope.branchId;
+
+  const now = new Date();
+  const targetMonth = Number(month) || now.getMonth() + 1;
+  const targetYear = Number(year) || now.getFullYear();
+
+  const totalActiveEmployees = await Employee.countDocuments({
+    ...tenantFilter,
+    employmentStatus: 'Active',
+  });
+
+  const statusAggRaw = await Payroll.aggregate([
+    { $match: { ...tenantFilter, month: targetMonth, year: targetYear } },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        netSalary: { $sum: '$netSalary' },
+        grossSalary: { $sum: '$grossSalary' },
+        totalDeductions: { $sum: '$totalDeductions' },
+      },
+    },
+  ]);
+  const statusMap = new Map(statusAggRaw.map((row) => [row._id, row]));
+  const statusBreakdown = PAYROLL_STATUSES.map((status) => {
+    const row = statusMap.get(status);
+    return {
+      status,
+      count: row?.count || 0,
+      netSalary: row?.netSalary || 0,
+      grossSalary: row?.grossSalary || 0,
+      totalDeductions: row?.totalDeductions || 0,
+    };
+  });
+
+  const payrollRecordsCount = statusBreakdown.reduce((sum, row) => sum + row.count, 0);
+  const totalPayable = statusBreakdown.reduce((sum, row) => sum + row.netSalary, 0);
+  const totalGross = statusBreakdown.reduce((sum, row) => sum + row.grossSalary, 0);
+  const totalDeductions = statusBreakdown.reduce((sum, row) => sum + row.totalDeductions, 0);
+
+  const monthStart = new Date(targetYear, targetMonth - 1, 1);
+  const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+  const ledgerAggRaw = await EmployeeLedger.aggregate([
+    {
+      $match: {
+        ...tenantFilter,
+        transactionDate: { $gte: monthStart, $lte: monthEnd },
+        transactionType: { $in: ['salary_payment', 'advance_payment'] },
+      },
+    },
+    {
+      $group: {
+        _id: '$transactionType',
+        total: { $sum: '$credit' },
+      },
+    },
+  ]);
+  const ledgerMap = new Map(ledgerAggRaw.map((row) => [row._id, row.total]));
+  const totalPaid = ledgerMap.get('salary_payment') || 0;
+  const totalAdvance = ledgerMap.get('advance_payment') || 0;
+  const remainingPayable = Math.max(0, totalPayable - totalPaid - totalAdvance);
+
+  const currentPeriod = new Date(targetYear, targetMonth - 1, 1);
+  const trendStart = new Date(targetYear, targetMonth - 1 - 5, 1);
+  const trendMonths = getMonthsInRange(trendStart, currentPeriod);
+  const trendAggRaw = await Payroll.aggregate([
+    {
+      $match: {
+        ...tenantFilter,
+        $or: trendMonths.map(({ month: m, year: y }) => ({ month: m, year: y })),
+      },
+    },
+    {
+      $group: {
+        _id: { month: '$month', year: '$year' },
+        netSalary: { $sum: '$netSalary' },
+        grossSalary: { $sum: '$grossSalary' },
+        employeeCount: { $sum: 1 },
+      },
+    },
+  ]);
+  const trendMap = new Map(trendAggRaw.map((row) => [`${row._id.year}-${row._id.month}`, row]));
+  const trend = trendMonths.map(({ month: m, year: y }) => {
+    const row = trendMap.get(`${y}-${m}`);
+    return {
+      month: m,
+      year: y,
+      label: `${MONTH_LABELS[m - 1]} ${y}`,
+      netSalary: row?.netSalary || 0,
+      grossSalary: row?.grossSalary || 0,
+      employeeCount: row?.employeeCount || 0,
+    };
+  });
+
+  const departmentAggRaw = await Payroll.aggregate([
+    { $match: { ...tenantFilter, month: targetMonth, year: targetYear } },
+    {
+      $lookup: {
+        from: 'employees',
+        localField: 'employee',
+        foreignField: '_id',
+        as: 'employeeInfo',
+      },
+    },
+    { $unwind: { path: '$employeeInfo', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'departments',
+        localField: 'employeeInfo.department',
+        foreignField: '_id',
+        as: 'departmentInfo',
+      },
+    },
+    { $unwind: { path: '$departmentInfo', preserveNullAndEmptyArrays: true } },
+    {
+      $group: {
+        _id: { $ifNull: ['$departmentInfo.name', 'Unassigned'] },
+        netSalary: { $sum: '$netSalary' },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { netSalary: -1 } },
+  ]);
+  const departmentBreakdown = departmentAggRaw.map((row) => ({
+    department: row._id,
+    netSalary: row.netSalary,
+    count: row.count,
+  }));
+
+  return {
+    month: targetMonth,
+    year: targetYear,
+    totalActiveEmployees,
+    payrollRecordsCount,
+    totals: {
+      payable: totalPayable,
+      paid: totalPaid,
+      advance: totalAdvance,
+      remaining: remainingPayable,
+      gross: totalGross,
+      deductions: totalDeductions,
+    },
+    statusBreakdown,
+    trend,
+    departmentBreakdown,
+  };
+};
+
 const generateMonthlyPayrollForAll = async (month, year, processedBy = null) => {
   const employees = await Employee.find({ employmentStatus: 'Active' });
   const results = { created: 0, skipped: 0, errors: [] };
@@ -579,6 +784,8 @@ module.exports = {
   processPayroll,
   markPayrollPaid,
   getEmployeeMonthlyPayrollSummary,
+  getPayrollSummary,
+  getEmployeeFinalSettlement,
   calculatePayrollSnapshot,
   computeLeaveSalaryImpact,
   syncPayrollForMonth,

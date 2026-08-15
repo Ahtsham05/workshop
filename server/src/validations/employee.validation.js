@@ -24,6 +24,8 @@ const createEmployee = {
     joiningDate: Joi.date().required(),
     employmentType: Joi.string().valid('Full-Time', 'Part-Time', 'Contract', 'Intern'),
     employmentStatus: Joi.string().valid('Active', 'On Leave', 'Terminated', 'Resigned'),
+    lastWorkingDate: Joi.date().allow(null, ''),
+    exitReason: Joi.string().allow(''),
     salary: Joi.object().keys({
       basicSalary: Joi.number().required().min(0),
       allowances: Joi.number().min(0),
@@ -96,6 +98,8 @@ const updateEmployee = {
       joiningDate: Joi.date(),
       employmentType: Joi.string().valid('Full-Time', 'Part-Time', 'Contract', 'Intern'),
       employmentStatus: Joi.string().valid('Active', 'On Leave', 'Terminated', 'Resigned'),
+      lastWorkingDate: Joi.date().allow(null, ''),
+      exitReason: Joi.string().allow(''),
       salary: Joi.object().keys({
         basicSalary: Joi.number().min(0),
         allowances: Joi.number().min(0),

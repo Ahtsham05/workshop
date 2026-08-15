@@ -99,6 +99,16 @@ const employeeSchema = mongoose.Schema(
       enum: ['Active', 'On Leave', 'Terminated', 'Resigned'],
       default: 'Active',
     },
+    // Exit tracking — set when employmentStatus becomes Terminated/Resigned. Attendance
+    // and payroll stop accruing past this date, and it's the "as of" date for the
+    // employee's final settlement (see payroll.service.js#getEmployeeFinalSettlement).
+    lastWorkingDate: {
+      type: Date,
+    },
+    exitReason: {
+      type: String,
+      trim: true,
+    },
     salary: {
       basicSalary: {
         type: Number,

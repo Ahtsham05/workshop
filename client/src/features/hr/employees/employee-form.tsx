@@ -6,6 +6,7 @@ import { useLanguage } from '@/context/language-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Select,
@@ -28,6 +29,7 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  CalendarOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getEntityId } from '@/lib/entity-id';
@@ -58,6 +60,8 @@ const employeeSchema = z.object({
   joiningDate: z.string().min(1, 'Joining date is required'),
   employmentType: z.enum(['Full-Time', 'Part-Time', 'Contract', 'Intern']),
   employmentStatus: z.enum(['Active', 'On Leave', 'Terminated', 'Resigned']),
+  lastWorkingDate: z.string().optional(),
+  exitReason: z.string().optional(),
   reportingManager: z.string().optional(),
 
   // Salary Information
@@ -83,6 +87,14 @@ const employeeSchema = z.object({
   }).optional(),
 
   skills: z.array(z.string()).optional(),
+}).superRefine((data, ctx) => {
+  if (['Terminated', 'Resigned'].includes(data.employmentStatus) && !data.lastWorkingDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Last working date is required when ending employment',
+      path: ['lastWorkingDate'],
+    });
+  }
 });
 
 type EmployeeFormData = z.infer<typeof employeeSchema>;
@@ -119,6 +131,7 @@ const STEPS = [
 const STEP_BY_FIELD: Record<string, number> = {
   firstName: 0, lastName: 0, email: 0, phone: 0, cnic: 0, dateOfBirth: 0, gender: 0, address: 0,
   department: 1, shift: 1, joiningDate: 1, employmentType: 1, employmentStatus: 1, reportingManager: 1,
+  lastWorkingDate: 1, exitReason: 1,
   salary: 2, bankDetails: 2,
   emergencyContact: 3, skills: 3,
 };
@@ -269,6 +282,13 @@ export default function EmployeeForm({
         }
         if (payload.employmentStatus === 'OnLeave') {
           payload.employmentStatus = 'On Leave';
+        }
+
+        if (!['Terminated', 'Resigned'].includes(payload.employmentStatus)) {
+          delete payload.lastWorkingDate;
+          delete payload.exitReason;
+        } else if (!payload.lastWorkingDate) {
+          delete payload.lastWorkingDate;
         }
 
         if (!payload.shift) {
@@ -506,6 +526,28 @@ export default function EmployeeForm({
               </Select>
             </div>
           </div>
+
+          {['Terminated', 'Resigned'].includes(employmentStatus) && (
+            <FieldGroup icon={CalendarOff} title={t('Exit Details')}>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="lastWorkingDate">{t('Last Working Date')} *</Label>
+                  <Input id="lastWorkingDate" type="date" {...register('lastWorkingDate')} />
+                  {errors.lastWorkingDate && (
+                    <p className="text-sm text-red-600">{t(errors.lastWorkingDate.message || '')}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exitReason">{t('Exit Reason')}</Label>
+                  <Textarea
+                    id="exitReason"
+                    placeholder={t('Reason for termination/resignation...')}
+                    {...register('exitReason')}
+                  />
+                </div>
+              </div>
+            </FieldGroup>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="reportingManager">{t('Reporting Manager')}</Label>

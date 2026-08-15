@@ -90,6 +90,23 @@ const getEmployeeMonthlySummary = catchAsync(async (req, res) => {
   res.send(summary);
 });
 
+const getPayrollSummary = catchAsync(async (req, res) => {
+  const summary = await payrollService.getPayrollSummary(getBranchContext(req), {
+    month: req.query.month,
+    year: req.query.year,
+  });
+  res.send(summary);
+});
+
+const getEmployeeFinalSettlement = catchAsync(async (req, res) => {
+  const settlement = await payrollService.getEmployeeFinalSettlement(
+    req.params.employeeId,
+    getBranchContext(req),
+    req.user?.id,
+  );
+  res.send(settlement);
+});
+
 module.exports = {
   createPayroll,
   getPayrolls,
@@ -100,4 +117,6 @@ module.exports = {
   processPayroll,
   markPayrollPaid,
   getEmployeeMonthlySummary,
+  getPayrollSummary,
+  getEmployeeFinalSettlement,
 };

@@ -38,12 +38,14 @@ import {
   Save,
   CheckCircle,
   XCircle,
+  Hourglass,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { getEntityId } from '@/lib/entity-id';
 import { resolveDayStatus } from '@/lib/hr-attendance-utils';
 
+// Selectable attendance actions — what an admin can actually record for a day.
 const STATUS_OPTIONS = [
   { value: 'Present', label: 'Present', className: 'bg-green-100 text-green-700' },
   { value: 'Absent', label: 'Absent', className: 'bg-red-100 text-red-700' },
@@ -52,6 +54,11 @@ const STATUS_OPTIONS = [
   { value: 'On Leave', label: 'On Leave', className: 'bg-blue-100 text-blue-700' },
   { value: 'Holiday', label: 'Holiday', className: 'bg-purple-100 text-purple-700' },
 ];
+
+// 'Leave Pending' is never a persisted attendance status — it's what a day shows when a
+// leave request exists but hasn't been decided yet. Kept out of STATUS_OPTIONS (there's
+// nothing to "select"), used only to badge/label the resolved status correctly.
+const PENDING_LEAVE_BADGE = { value: 'Leave Pending', label: 'Leave Pending', className: 'bg-amber-100 text-amber-700' };
 
 const getLocalDateString = () => {
   const now = new Date();
@@ -167,8 +174,14 @@ export default function AttendanceTracking() {
         const existing = employeeId ? attendanceByEmployeeId.get(employeeId) : undefined;
         if (!employeeId) return null;
 
-        // Default present days need no database record
-        if (effectiveStatus === 'Present' && !existing && !statusOverrides[employeeId]) {
+        // Default-present days, and pending-leave days with no explicit action taken,
+        // are fully derived — nothing to persist, and 'Leave Pending' isn't a real
+        // attendance status the backend accepts anyway.
+        if (
+          (effectiveStatus === 'Present' || effectiveStatus === 'Leave Pending')
+          && !existing
+          && !statusOverrides[employeeId]
+        ) {
           return null;
         }
 
@@ -243,6 +256,7 @@ export default function AttendanceTracking() {
   };
 
   const getStatusBadge = (status: string) => {
+    if (status === PENDING_LEAVE_BADGE.value) return PENDING_LEAVE_BADGE;
     const option = STATUS_OPTIONS.find((item) => item.value === status) || STATUS_OPTIONS[0];
     return option;
   };
@@ -261,7 +275,7 @@ export default function AttendanceTracking() {
         <div>
           <h1 className="text-2xl font-bold">{t('Attendance Records')}</h1>
           <p className="text-sm text-muted-foreground">
-            {t('Employees are marked Present by default. Mark Absent or On Leave only when needed.')}
+            {t('Employees are marked Present by default. A pending leave request never counts as absent until it is approved or rejected.')}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -284,7 +298,7 @@ export default function AttendanceTracking() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -336,6 +350,20 @@ export default function AttendanceTracking() {
               </div>
               <div className="p-3 rounded-full bg-blue-50">
                 <Calendar className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{t('Leave Pending')}</p>
+                <p className="text-3xl font-bold text-amber-600">{dailySummary?.pendingLeave ?? 0}</p>
+              </div>
+              <div className="p-3 rounded-full bg-amber-50">
+                <Hourglass className="h-6 w-6 text-amber-600" />
               </div>
             </div>
           </CardContent>
@@ -426,11 +454,14 @@ export default function AttendanceTracking() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Select
-                              value={effectiveStatus}
+                              // 'Leave Pending' isn't a selectable action (see STATUS_OPTIONS
+                              // comment) — fall back to the placeholder rather than showing a
+                              // value the dropdown doesn't contain.
+                              value={STATUS_OPTIONS.some((o) => o.value === effectiveStatus) ? effectiveStatus : undefined}
                               onValueChange={(value) => handleStatusChange(employeeId, value)}
                             >
                               <SelectTrigger className="w-[150px]">
-                                <SelectValue />
+                                <SelectValue placeholder={t('Mark status')} />
                               </SelectTrigger>
                               <SelectContent>
                                 {STATUS_OPTIONS.map((option) => (
@@ -444,10 +475,15 @@ export default function AttendanceTracking() {
                               {hasPendingChange ? t('Unsaved') : t(statusBadge.label)}
                             </Badge>
                           </div>
+                          {effectiveStatus === 'Leave Pending' && !hasPendingChange && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {t('Awaiting approval in Leave Management')}
+                            </p>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            {!attendance?.checkIn && effectiveStatus === 'Present' && (
+                            {!attendance?.checkIn && (effectiveStatus === 'Present' || effectiveStatus === 'Leave Pending') && (
                               <Button
                                 size="sm"
                                 variant="outline"

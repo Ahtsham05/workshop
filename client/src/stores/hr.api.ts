@@ -198,6 +198,14 @@ export const hrApi = createApi({
       }),
       providesTags: ['Payroll', 'EmployeeLedger'],
     }),
+    getPayrollSummary: builder.query({
+      query: (params) => ({ url: '/payroll/summary', params }),
+      providesTags: ['Payroll', 'EmployeeLedger'],
+    }),
+    getEmployeeFinalSettlement: builder.query({
+      query: (employeeId: string) => `/payroll/employee/${employeeId}/final-settlement`,
+      providesTags: ['Payroll', 'EmployeeLedger'],
+    }),
     createPayroll: builder.mutation({
       query: (data) => ({ url: '/payroll', method: 'POST', body: data }),
       invalidatesTags: ['Payroll'],
@@ -293,6 +301,8 @@ export const {
   useGetPayrollsQuery,
   useGetPayrollQuery,
   useGetEmployeeMonthlyPayrollSummaryQuery,
+  useGetPayrollSummaryQuery,
+  useGetEmployeeFinalSettlementQuery,
   useCreatePayrollMutation,
   useUpdatePayrollMutation,
   useDeletePayrollMutation,

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLanguage } from '@/context/language-context';
 import {
   useGetPayrollsQuery,
+  useGetPayrollSummaryQuery,
   useGeneratePayrollMutation,
   useUpdatePayrollMutation,
   useUpdateEmployeeLedgerEntryMutation,
@@ -51,8 +52,26 @@ import {
   Pencil,
   Trash2,
   ShoppingBag,
+  CheckCircle2,
+  Wallet,
+  Clock,
+  Users,
+  Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Legend,
+  Tooltip as RechartsTooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from 'recharts';
 import { EmployeePayrollMonthlySummary } from './employee-payroll-monthly';
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api';
 import {
@@ -61,6 +80,13 @@ import {
   isWalletOptionValue,
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options';
+
+const STATUS_COLORS: Record<string, string> = {
+  Pending: '#f59e0b',
+  Processed: '#3b82f6',
+  Paid: '#16a34a',
+  'On Hold': '#dc2626',
+};
 
 const toLocalDateInputValue = (value = new Date()) => {
   const d = value instanceof Date ? value : new Date(value);
@@ -150,6 +176,11 @@ export default function PayrollManagement() {
     page,
     limit: 10,
     search: search || undefined,
+    month: monthFilter,
+    year: yearFilter,
+  });
+
+  const { data: payrollSummary, isFetching: isSummaryLoading } = useGetPayrollSummaryQuery({
     month: monthFilter,
     year: yearFilter,
   });
@@ -438,19 +469,48 @@ export default function PayrollManagement() {
     return { paid, advance };
   };
 
-  const dashboardTotals = useMemo(() => {
-    const rows = data?.results || [];
-    return rows.reduce(
-      (acc: any, payroll: any) => {
-        const monthTotals = getPayrollMonthTotals(payroll);
-        acc.payable += Number(payroll.netSalary || 0);
-        acc.paid += Number(monthTotals.paid || 0);
-        acc.advance += Number(monthTotals.advance || 0);
-        return acc;
-      },
-      { payable: 0, paid: 0, advance: 0 }
-    );
-  }, [data?.results, payrollLinkedLedgerData?.results]);
+  const summaryTotals = payrollSummary?.totals || {
+    payable: 0,
+    paid: 0,
+    advance: 0,
+    remaining: 0,
+    gross: 0,
+    deductions: 0,
+  };
+
+  const payrollRecordsCount = payrollSummary?.payrollRecordsCount || 0;
+  const totalActiveEmployees = payrollSummary?.totalActiveEmployees || 0;
+  const coveragePercent = totalActiveEmployees > 0
+    ? Math.round((payrollRecordsCount / totalActiveEmployees) * 100)
+    : 0;
+
+  const statusChartData = useMemo(() => {
+    return (payrollSummary?.statusBreakdown || [])
+      .filter((row: any) => row.netSalary > 0)
+      .map((row: any) => ({
+        name: t(row.status),
+        status: row.status,
+        value: row.netSalary,
+        count: row.count,
+      }));
+  }, [payrollSummary?.statusBreakdown, t]);
+
+  const trendChartData = useMemo(() => {
+    return (payrollSummary?.trend || []).map((row: any) => ({
+      label: row.label,
+      payable: Math.round(row.netSalary),
+    }));
+  }, [payrollSummary?.trend]);
+
+  const departmentChartData = useMemo(() => {
+    return (payrollSummary?.departmentBreakdown || [])
+      .filter((row: any) => row.netSalary > 0)
+      .map((row: any) => ({
+        department: row.department,
+        payable: Math.round(row.netSalary),
+        count: row.count,
+      }));
+  }, [payrollSummary?.departmentBreakdown]);
 
   const sortedLedgerEntries = useMemo(() => {
     const entries = [...(employeeLedgerData?.results || [])];
@@ -494,68 +554,186 @@ export default function PayrollManagement() {
     }).format(amount);
   };
 
+  const periodLabel = `${t(months[monthFilter - 1])} ${yearFilter}`;
+
   return (
     <div className="h-full w-full p-4 space-y-4">
+      {/* Payroll Overview */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t('Payroll Dashboard')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {t('Overview for')} {periodLabel}
+          </p>
+        </div>
+      </div>
+
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">{t('Total Payable')}</p>
-                <p className="text-2xl font-bold text-blue-700">{formatCurrency(dashboardTotals.payable)}</p>
-              </div>
-              <div className="p-3 rounded-full bg-blue-50">
-                <DollarSign className="h-6 w-6 text-blue-600" />
-              </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('Total Payable')}</CardTitle>
+            <div className="p-2 rounded-full bg-blue-50">
+              <DollarSign className="h-4 w-4 text-blue-600" />
             </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-700">{formatCurrency(summaryTotals.payable)}</div>
+            <p className="text-xs text-muted-foreground mt-1">{periodLabel}</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">{t('Total Paid')}</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(dashboardTotals.paid)}</p>
-              </div>
-              <div className="p-3 rounded-full bg-green-50">
-                <DollarSign className="h-6 w-6 text-green-600" />
-              </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('Total Paid')}</CardTitle>
+            <div className="p-2 rounded-full bg-green-50">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
             </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(summaryTotals.paid)}</div>
+            <p className="text-xs text-muted-foreground mt-1">{t('Settled this month')}</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">{t('Total Advance')}</p>
-                <p className="text-2xl font-bold text-orange-600">{formatCurrency(dashboardTotals.advance)}</p>
-              </div>
-              <div className="p-3 rounded-full bg-orange-50">
-                <DollarSign className="h-6 w-6 text-orange-600" />
-              </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('Total Advance')}</CardTitle>
+            <div className="p-2 rounded-full bg-orange-50">
+              <Wallet className="h-4 w-4 text-orange-600" />
             </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{formatCurrency(summaryTotals.advance)}</div>
+            <p className="text-xs text-muted-foreground mt-1">{t('Given this month')}</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">{t('Remaining Payable')}</p>
-                <p className="text-2xl font-bold">
-                  {formatCurrency(Math.max(0, dashboardTotals.payable - dashboardTotals.paid - dashboardTotals.advance))}
-                </p>
-              </div>
-              <div className="p-3 rounded-full bg-purple-50">
-                <DollarSign className="h-6 w-6 text-purple-600" />
-              </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('Remaining Payable')}</CardTitle>
+            <div className="p-2 rounded-full bg-purple-50">
+              <Clock className="h-4 w-4 text-purple-600" />
             </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-700">{formatCurrency(summaryTotals.remaining)}</div>
+            <p className="text-xs text-muted-foreground mt-1">{t('Still owed to employees')}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">{t('Payroll Coverage')}</CardTitle>
+            <div className="p-2 rounded-full bg-teal-50">
+              <Users className="h-4 w-4 text-teal-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {payrollRecordsCount}
+              <span className="text-base font-normal text-muted-foreground">/{totalActiveEmployees}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+              <div
+                className="bg-teal-600 h-1.5 rounded-full transition-all"
+                style={{ width: `${Math.min(100, coveragePercent)}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">{coveragePercent}% {t('employees processed')}</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('Payroll Status Breakdown')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isSummaryLoading ? (
+              <div className="flex items-center justify-center h-[260px] text-muted-foreground">
+                {t('Loading...')}
+              </div>
+            ) : statusChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={statusChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {statusChartData.map((entry: any) => (
+                      <Cell key={entry.status} fill={STATUS_COLORS[entry.status] || '#94a3b8'} stroke="var(--card)" strokeWidth={2} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value: number, _name: string, item: any) => [formatCurrency(value), `${item?.payload?.name} (${item?.payload?.count})`]} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[260px] text-muted-foreground">
+                {t('No payroll generated for this period yet')}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('6-Month Payable Trend')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isSummaryLoading ? (
+              <div className="flex items-center justify-center h-[260px] text-muted-foreground">
+                {t('Loading...')}
+              </div>
+            ) : trendChartData.some((row: any) => row.payable > 0) ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={trendChartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} width={70} tickFormatter={(v) => new Intl.NumberFormat('en-PK', { notation: 'compact' }).format(v)} />
+                  <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Bar dataKey="payable" name={t('Payable')} fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[260px] text-muted-foreground">
+                {t('No trend data available')}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Department Breakdown */}
+      {departmentChartData.length > 1 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle>{t('Payable by Department')}</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={Math.max(200, departmentChartData.length * 50)}>
+              <BarChart data={departmentChartData} layout="vertical" margin={{ left: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => new Intl.NumberFormat('en-PK', { notation: 'compact' }).format(v)} />
+                <YAxis type="category" dataKey="department" tick={{ fontSize: 12 }} width={120} />
+                <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
+                <Bar dataKey="payable" name={t('Payable')} fill="#2563eb" radius={[0, 4, 4, 0]} maxBarSize={24} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payroll List */}
       <Card>

@@ -229,6 +229,24 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
   delete cleanedBody.employeeId;
   delete cleanedBody.designation;
 
+  // Exiting an employee always needs an end date so attendance/payroll/final settlement
+  // have somewhere to stop — default to today if the form didn't supply one. Coming back
+  // to Active clears the exit fields so a rehire doesn't carry over a stale exit date.
+  const nextStatus = cleanedBody.employmentStatus || employee.employmentStatus;
+  if (['Terminated', 'Resigned'].includes(nextStatus)) {
+    if (!cleanedBody.lastWorkingDate && !employee.lastWorkingDate) {
+      cleanedBody.lastWorkingDate = new Date();
+    }
+  } else if (cleanedBody.employmentStatus === 'Active') {
+    cleanedBody.lastWorkingDate = undefined;
+    cleanedBody.exitReason = undefined;
+    employee.lastWorkingDate = undefined;
+    employee.exitReason = undefined;
+  }
+  if (cleanedBody.lastWorkingDate === '') {
+    cleanedBody.lastWorkingDate = undefined;
+  }
+
   const oldName = `${employee.firstName} ${employee.lastName}`.trim();
 
   Object.assign(employee, cleanedBody);

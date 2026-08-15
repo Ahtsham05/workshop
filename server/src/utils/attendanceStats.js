@@ -19,7 +19,12 @@ const UNPAID_LEAVE_TYPES = ['Unpaid'];
 
 /**
  * Resolve the effective status for a day.
- * Approved leave overrides Present/Late (e.g. bulk save or check-in on a leave day).
+ *
+ * Approved leave is a finished decision, so it overrides everything else (including a
+ * stray check-in). A leave that's still Pending is *not* a decision yet — it must never
+ * read as Absent, and any real attendance signal for the day (a check-in, or an explicit
+ * status an admin actually chose) always takes priority over an undecided request. Only
+ * when there's no real attendance signal at all do we fall back to the leave's state.
  */
 const resolveDayStatus = (attendance, leave) => {
   const attendanceStatus = attendance?.status;
@@ -31,27 +36,24 @@ const resolveDayStatus = (attendance, leave) => {
     return leave.isHalfDay ? 'Half-Day' : 'On Leave';
   }
 
-  if (attendanceStatus === 'Absent') {
-    // Checked-in without approved leave should not count as absent.
-    if (attendance?.checkIn) return 'Present';
-    return 'Absent';
-  }
+  // A real check-in means the employee actually showed up — that fact beats any
+  // leave application (pending or otherwise) and any stale "Absent" marking.
+  if (attendance?.checkIn) return attendanceStatus === 'Late' ? 'Late' : 'Present';
+
+  if (attendanceStatus === 'Present') return 'Present';
+  if (attendanceStatus === 'Late') return 'Late';
+  if (attendanceStatus === 'Half-Day') return 'Half-Day';
   if (attendanceStatus === 'On Leave') return 'On Leave';
+  // Explicit Absent (no check-in, no leave override above) is a deliberate admin call.
+  if (attendanceStatus === 'Absent') return 'Absent';
 
-  // Unapproved leave is treated as absent for attendance and payroll.
-  if (leave?.status === 'Pending') {
-    return leave.isHalfDay ? 'Half-Day' : 'Absent';
-  }
+  // No explicit attendance action was taken for the day — fall back to the leave request.
+  if (leave?.status === 'Pending') return 'Leave Pending';
 
-  // Rejected leave — days are not paid; count as absent for payroll.
+  // Rejected leave — the employee didn't show up and the request was denied; count as absent for payroll.
   if (leave?.status === 'Rejected') {
     return leave.isHalfDay ? 'Half-Day' : 'Absent';
   }
-
-  if (attendanceStatus === 'Half-Day') return 'Half-Day';
-  if (attendanceStatus === 'On Leave') return 'On Leave';
-  if (attendanceStatus === 'Late') return 'Late';
-  if (attendanceStatus === 'Present') return 'Present';
 
   return 'Present';
 };
@@ -64,6 +66,7 @@ const computeAttendanceStatsFromData = ({
   periodStart,
   periodEnd,
   joiningDate = null,
+  lastWorkingDate = null,
   attendances = [],
   leaves = [],
 }) => {
@@ -77,6 +80,13 @@ const computeAttendanceStatsFromData = ({
   if (joiningDate) {
     const joining = normalizeDateOnly(joiningDate);
     if (joining > effectiveStart) effectiveStart = joining;
+  }
+
+  // Attendance/payroll stop counting after an employee's last working day —
+  // a terminated/resigned employee should never accrue absences past exit.
+  if (lastWorkingDate) {
+    const exitDate = normalizeDateOnly(lastWorkingDate);
+    if (exitDate < effectiveEnd) effectiveEnd = exitDate;
   }
 
   if (effectiveStart > effectiveEnd) {
@@ -133,7 +143,7 @@ const computeAttendanceStatsFromData = ({
     const record = attendanceMap.get(timestamp);
     const leave = leaveOnDate.get(timestamp);
     const status = resolveDayStatus(record, leave);
-    const dayValue = leave?.isHalfDay && status === 'Half-Day' ? 0.5 : 1;
+    const dayValue = leave?.isHalfDay ? 0.5 : 1;
 
     switch (status) {
       case 'Holiday':
@@ -141,14 +151,14 @@ const computeAttendanceStatsFromData = ({
         break;
       case 'Absent':
         absentDays += 1;
-        if (leave?.status === 'Pending') pendingLeaveDays += 1;
+        break;
+      case 'Leave Pending':
+        // Not decided yet — tracked separately, never counted as absent or deducted from pay.
+        pendingLeaveDays += dayValue;
         break;
       case 'Half-Day':
         halfDays += 1;
-        if (leave?.status === 'Pending') {
-          absentDays += leave.isHalfDay ? 0.5 : 1;
-          pendingLeaveDays += leave.isHalfDay ? 0.5 : 1;
-        } else if (leave) {
+        if (leave?.status === 'Approved') {
           leaveDays += 0.5;
           if (leave.leaveType && UNPAID_LEAVE_TYPES.includes(leave.leaveType)) {
             unpaidLeaveDays += 0.5;
@@ -156,6 +166,7 @@ const computeAttendanceStatsFromData = ({
             paidLeaveDays += 0.5;
           }
         } else {
+          // Explicit manual half-day with no approved leave behind it.
           absentDays += 0.5;
         }
         break;
@@ -175,7 +186,10 @@ const computeAttendanceStatsFromData = ({
     }
   });
 
-  const presentDays = Math.max(0, workingDays - absentDays - leaveDays - holidayDays);
+  const presentDays = Math.max(
+    0,
+    workingDays - absentDays - leaveDays - holidayDays - pendingLeaveDays,
+  );
 
   return {
     workingDays,

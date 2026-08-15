@@ -65,9 +65,9 @@ export default function EmployeeList() {
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {
       Active: { variant: 'default', className: 'bg-green-100 text-green-700' },
-      Inactive: { variant: 'secondary', className: 'bg-gray-100 text-gray-700' },
-      OnLeave: { variant: 'default', className: 'bg-yellow-100 text-yellow-700' },
+      'On Leave': { variant: 'default', className: 'bg-amber-100 text-amber-700' },
       Terminated: { variant: 'destructive', className: 'bg-red-100 text-red-700' },
+      Resigned: { variant: 'secondary', className: 'bg-gray-100 text-gray-700' },
     };
     return variants[status] || variants.Active;
   };

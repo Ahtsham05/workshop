@@ -121,16 +121,20 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
           if (e.key === 'ArrowDown') {
             e.preventDefault()
             if (suggestions.length) {
+              // First press just reveals the already-selected index 0 — only
+              // subsequent presses should advance past it.
+              setHighlighted((i) => (hasNavigated ? (i + 1) % suggestions.length : 0))
               setHasNavigated(true)
-              setHighlighted((i) => (i + 1) % suggestions.length)
             }
             return
           }
           if (e.key === 'ArrowUp') {
             e.preventDefault()
             if (suggestions.length) {
+              setHighlighted((i) =>
+                hasNavigated ? (i - 1 + suggestions.length) % suggestions.length : suggestions.length - 1,
+              )
               setHasNavigated(true)
-              setHighlighted((i) => (i - 1 + suggestions.length) % suggestions.length)
             }
             return
           }

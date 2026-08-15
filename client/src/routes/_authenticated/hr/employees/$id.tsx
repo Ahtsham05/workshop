@@ -1,12 +1,15 @@
 import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
 import { useLanguage } from '@/context/language-context';
-import { useGetEmployeeQuery } from '@/stores/hr.api';
+import { useGetEmployeeQuery, useGetEmployeeFinalSettlementQuery } from '@/stores/hr.api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Briefcase, DollarSign, User } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Briefcase, DollarSign, User, ReceiptText } from 'lucide-react';
 import { format } from 'date-fns';
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(amount || 0);
 
 export const Route = createFileRoute('/_authenticated/hr/employees/$id')({
   component: EmployeeDetails,
@@ -25,6 +28,8 @@ function EmployeeDetails() {
   }
 
   const { data: employee, isLoading } = useGetEmployeeQuery(id);
+  const isExited = employee?.employmentStatus === 'Terminated' || employee?.employmentStatus === 'Resigned';
+  const { data: settlement } = useGetEmployeeFinalSettlementQuery(id, { skip: !isExited });
 
   if (isLoading) {
     return (
@@ -45,9 +50,9 @@ function EmployeeDetails() {
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
       Active: 'bg-green-100 text-green-700',
-      Inactive: 'bg-gray-100 text-gray-700',
-      OnLeave: 'bg-yellow-100 text-yellow-700',
+      'On Leave': 'bg-amber-100 text-amber-700',
       Terminated: 'bg-red-100 text-red-700',
+      Resigned: 'bg-gray-100 text-gray-700',
     };
     return variants[status] || variants.Active;
   };
@@ -133,6 +138,45 @@ function EmployeeDetails() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Final Settlement — only relevant once the employee has actually left */}
+      {isExited && (
+        <Card className="border-amber-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-700">
+              <ReceiptText className="h-5 w-5" />
+              {t('Final Settlement')}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t('Amount owed as of')} {settlement?.asOfDate ? format(new Date(settlement.asOfDate), 'MMM dd, yyyy') : '-'}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-xs text-muted-foreground">{t('Total Payable')}</p>
+                <p className="text-xl font-bold">{formatCurrency(settlement?.totalPayable || 0)}</p>
+              </div>
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-xs text-muted-foreground">{t('Already Paid')}</p>
+                <p className="text-xl font-bold">{formatCurrency(settlement?.totalSalaryPaid || 0)}</p>
+              </div>
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-xs text-muted-foreground">{t('Outstanding Advance')}</p>
+                <p className="text-xl font-bold">{formatCurrency(settlement?.outstandingAdvance || 0)}</p>
+              </div>
+              <div className={`p-4 rounded-lg ${Number(settlement?.currentBalance || 0) >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                <p className="text-xs text-muted-foreground">
+                  {Number(settlement?.currentBalance || 0) >= 0 ? t('Amount Payable to Employee') : t('Amount Employee Owes')}
+                </p>
+                <p className={`text-xl font-bold ${Number(settlement?.currentBalance || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {formatCurrency(Math.abs(Number(settlement?.currentBalance || 0)))}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Detailed Information Tabs */}
       <Tabs defaultValue="personal" className="w-full">
@@ -252,6 +296,20 @@ function EmployeeDetails() {
                   {employee.reportingManager ? `${employee.reportingManager.firstName} ${employee.reportingManager.lastName}` : '-'}
                 </p>
               </div>
+              {isExited && (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">{t('Last Working Date')}</p>
+                    <p className="font-medium">
+                      {employee.lastWorkingDate ? format(new Date(employee.lastWorkingDate), 'MMM dd, yyyy') : '-'}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-sm text-muted-foreground">{t('Exit Reason')}</p>
+                    <p className="font-medium">{employee.exitReason || '-'}</p>
+                  </div>
+                </>
+              )}
               {employee.skills && employee.skills.length > 0 && (
                 <div className="col-span-2">
                   <p className="text-sm text-muted-foreground mb-2">{t('Skills')}</p>

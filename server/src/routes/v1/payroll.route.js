@@ -19,11 +19,23 @@ router
   .post(auth('createPayroll'), validate(payrollValidation.generatePayroll), payrollController.generatePayroll);
 
 router
+  .route('/summary')
+  .get(auth('getPayroll'), validate(payrollValidation.getPayrollSummary), payrollController.getPayrollSummary);
+
+router
   .route('/employee/:employeeId/monthly-summary')
   .get(
     auth('getPayroll'),
     validate(payrollValidation.getEmployeeMonthlySummary),
     payrollController.getEmployeeMonthlySummary,
+  );
+
+router
+  .route('/employee/:employeeId/final-settlement')
+  .get(
+    auth('getPayroll'),
+    validate(payrollValidation.getEmployeeFinalSettlement),
+    payrollController.getEmployeeFinalSettlement,
   );
 
 router
