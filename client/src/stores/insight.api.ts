@@ -1,7 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 
-export type InsightCategory = 'sales' | 'inventory' | 'profit' | 'customer' | 'alert' | 'branch_comparison'
+export type InsightCategory = 'sales' | 'inventory' | 'profit' | 'customer' | 'alert' | 'branch_comparison' | 'supply_chain'
 export type InsightPriority = 'high' | 'medium' | 'low'
 export type InsightConfidence = 'high' | 'medium' | 'low'
 

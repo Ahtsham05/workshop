@@ -18,6 +18,8 @@ import {
   Link2,
   UserMinus,
   CalendarClock,
+  Activity,
+  Truck,
   type LucideIcon,
 } from 'lucide-react'
 import type { Insight, InsightPriority } from '@/stores/insight.api'
@@ -44,6 +46,8 @@ export const TYPE_ICON: Record<string, LucideIcon> = {
   branch_underperformer: Building2,
   frequently_bought_together: Link2,
   at_risk_customer: UserMinus,
+  demand_trend: Activity,
+  supplier_recommendation: Truck,
 }
 
 export const getTypeIcon = (type: string): LucideIcon => TYPE_ICON[type] || Sparkles
@@ -75,7 +79,15 @@ export const formatMoney = (n: unknown) => `Rs${Math.round(Number(n) || 0).toLoc
 export const formatNumber = (n: unknown) => (Number.isFinite(Number(n)) ? Math.round(Number(n) * 100) / 100 : n)
 
 /** "Positive" alert types where a high number is good news (growth) — affects tone (green, not red). */
-const POSITIVE_TYPES = new Set(['high_growth_product', 'top_selling_product', 'high_margin_product'])
+const POSITIVE_TYPES = new Set([
+  'high_growth_product',
+  'top_selling_product',
+  'high_margin_product',
+  'vip_customer',
+  'branch_top_performer',
+  'best_performing_category',
+  'frequently_bought_together',
+])
 export const isPositiveType = (type: string) => POSITIVE_TYPES.has(type)
 
 /**
@@ -98,8 +110,37 @@ export const getRowStat = (insight: Insight): { label: string; tone: InsightPrio
       return { label: `+${formatNumber(m.growthPercent)}%`, tone: 'good' }
     case 'sales_drop':
       return { label: `${formatNumber(m.growthPercent)}%`, tone: Number(m.growthPercent) <= -30 ? 'high' : 'medium' }
+    case 'demand_trend':
+      return {
+        label: `${Number(m.growthPercent) > 0 ? '+' : ''}${formatNumber(m.growthPercent)}%`,
+        tone: m.label === 'rising' ? 'good' : 'high',
+      }
+    case 'supplier_recommendation':
+      return { label: (m.supplier as { supplierName?: string } | undefined)?.supplierName || '—', tone: 'low' }
     default:
       return { label: insight.priority, tone: insight.priority }
+  }
+}
+
+/**
+ * Raw number driving a row's bar width in a grouped card's chart (peer-relative — callers scale
+ * this against the max magnitude in the group, not against any fixed axis).
+ */
+export const getRowMagnitude = (insight: Insight): number => {
+  const m = insight.meta
+  switch (insight.type) {
+    case 'low_stock':
+      return Number(m.reorderPoint) > 0 ? Number(m.stock) / Number(m.reorderPoint) : 0
+    case 'stock_out_risk':
+      return Number(m.daysRemaining ?? 0)
+    case 'reorder_suggestion':
+      return Number(m.suggestedReorderQty ?? 0)
+    case 'high_growth_product':
+    case 'sales_drop':
+    case 'demand_trend':
+      return Math.abs(Number(m.growthPercent ?? 0))
+    default:
+      return 0
   }
 }
 
@@ -110,6 +151,20 @@ const ROW_TONE_CLASSES: Record<string, string> = {
   good: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400',
 }
 export const getRowToneClass = (tone: string) => ROW_TONE_CLASSES[tone] || ROW_TONE_CLASSES.low
+
+/** Solid fill color for bars/gauges/donuts — same tone vocabulary as getRowStat/ROW_TONE_CLASSES. */
+export const TONE_BAR_CLASS: Record<string, string> = {
+  high: 'bg-red-500',
+  medium: 'bg-amber-500',
+  low: 'bg-blue-500',
+  good: 'bg-emerald-500',
+}
+export const TONE_TEXT_CLASS: Record<string, string> = {
+  high: 'text-red-600 dark:text-red-400',
+  medium: 'text-amber-600 dark:text-amber-400',
+  low: 'text-blue-600 dark:text-blue-400',
+  good: 'text-emerald-600 dark:text-emerald-400',
+}
 
 /** Sort key so the most urgent / most extreme item in a group always surfaces first. */
 const getSortValue = (insight: Insight): number => {
@@ -125,6 +180,8 @@ const getSortValue = (insight: Insight): number => {
       return -Number(m.growthPercent ?? 0)
     case 'sales_drop':
       return Number(m.growthPercent ?? 0)
+    case 'demand_trend':
+      return -Math.abs(Number(m.growthPercent ?? 0))
     default:
       return PRIORITY_RANK[insight.priority] ?? 1
   }
@@ -132,7 +189,15 @@ const getSortValue = (insight: Insight): number => {
 export const sortByUrgency = (items: Insight[]) => [...items].sort((a, b) => getSortValue(a) - getSortValue(b))
 
 /** Types that commonly fire once per affected product — these get grouped into one card instead of N cards. */
-const GROUPABLE_TYPES = new Set(['low_stock', 'stock_out_risk', 'reorder_suggestion', 'high_growth_product', 'sales_drop'])
+const GROUPABLE_TYPES = new Set([
+  'low_stock',
+  'stock_out_risk',
+  'reorder_suggestion',
+  'high_growth_product',
+  'sales_drop',
+  'demand_trend',
+  'supplier_recommendation',
+])
 
 const GROUP_TITLE: Record<string, (count: number) => string> = {
   low_stock: (n) => `${n} product${n > 1 ? 's are' : ' is'} running low on stock`,
@@ -140,6 +205,8 @@ const GROUP_TITLE: Record<string, (count: number) => string> = {
   reorder_suggestion: (n) => `${n} product${n > 1 ? 's' : ''} need${n > 1 ? '' : 's'} reordering`,
   high_growth_product: (n) => `${n} product${n > 1 ? 's are' : ' is'} trending up`,
   sales_drop: (n) => `${n} product${n > 1 ? 's have' : ' has'} declining sales`,
+  demand_trend: (n) => `${n} product${n > 1 ? 's have' : ' has'} shifting demand this week`,
+  supplier_recommendation: (n) => `${n} supplier recommendation${n > 1 ? 's' : ''} for restocking`,
 }
 
 export type DisplayItem =

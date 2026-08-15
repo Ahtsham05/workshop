@@ -694,7 +694,12 @@ const buildInsightDocs = async ({ organizationId, branchId }) => {
         type: 'supplier_recommendation',
         category: 'supply_chain',
         priority: 'low',
-        confidence: s.recommendedSupplier.ordersCount >= 3 ? 'high' : 'medium',
+        confidence:
+          s.recommendedSupplier.historyScope === 'none'
+            ? 'low'
+            : s.recommendedSupplier.ordersCount >= 3
+              ? 'high'
+              : 'medium',
         title: `${s.recommendedSupplier.supplierName} recommended for ${s.name}`,
         description: supplierScoringService.buildSupplierRecommendationReason(s.recommendedSupplier),
         meta: { productId: s.productId, supplier: s.recommendedSupplier },

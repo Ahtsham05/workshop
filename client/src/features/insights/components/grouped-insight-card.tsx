@@ -11,9 +11,13 @@ import {
   getTypeIcon,
   getRowStat,
   getRowToneClass,
+  getRowMagnitude,
   PRIORITY_THEME,
+  TONE_BAR_CLASS,
+  TONE_TEXT_CLASS,
   type DisplayItem,
 } from '../utils/insight-display'
+import { RankBarList, DivergingBarList } from './insight-visuals'
 
 const VISIBLE_ROWS_COLLAPSED = 4
 
@@ -62,6 +66,9 @@ export function GroupedInsightCard({ group }: { group: Extract<DisplayItem, { ki
   const visibleItems = open ? group.items : group.items.slice(0, VISIBLE_ROWS_COLLAPSED)
   const remaining = group.items.length - VISIBLE_ROWS_COLLAPSED
 
+  const isDiverging = group.type === 'demand_trend'
+  const hasMagnitude = !isReorderable && !isDiverging && group.items.some((i) => getRowMagnitude(i) > 0)
+
   return (
     <div
       className={cn(
@@ -103,49 +110,81 @@ export function GroupedInsightCard({ group }: { group: Extract<DisplayItem, { ki
         </label>
       )}
 
-      <div className='flex-1 space-y-1.5 p-3'>
-        {visibleItems.map((insight) => {
-          const name = (insight.meta.name as string) || insight.title
-          const productId = insight.meta.productId as string
-
-          if (isReorderable) {
-            const isSelected = selected.has(productId)
-            return (
-              <label
-                key={insight.id}
-                className={cn(
-                  'flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-xs transition-colors',
-                  isSelected ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-muted/40 hover:bg-muted/60',
-                )}
-              >
-                <Checkbox checked={isSelected} onCheckedChange={() => toggleOne(productId)} className='shrink-0' />
-                <span className='min-w-0 flex-1 truncate font-medium'>{name}</span>
-                <span className='shrink-0 rounded-md border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground'>
-                  Stock: <span className='font-semibold text-foreground'>{String(insight.meta.stock)}</span>
-                </span>
-                <Badge className='shrink-0 text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' variant='secondary'>
-                  +{String(insight.meta.suggestedReorderQty)} needed
-                </Badge>
-              </label>
-            )
-          }
-
-          const stat = getRowStat(insight)
-          return (
-            <div
-              key={insight.id}
-              className={cn(
-                'flex items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-xs',
-                insight.isRead ? 'bg-muted/20 opacity-60' : 'bg-muted/40',
-              )}
-            >
-              <span className='min-w-0 flex-1 truncate font-medium'>{name}</span>
-              <Badge className={cn('shrink-0 text-[10px] font-semibold', getRowToneClass(stat.tone))} variant='secondary'>
-                {stat.label}
-              </Badge>
-            </div>
-          )
-        })}
+      <div className='flex-1 p-3'>
+        {isReorderable ? (
+          <div className='space-y-1.5'>
+            {visibleItems.map((insight) => {
+              const name = (insight.meta.name as string) || insight.title
+              const productId = insight.meta.productId as string
+              const isSelected = selected.has(productId)
+              return (
+                <label
+                  key={insight.id}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-xs transition-colors',
+                    isSelected ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-muted/40 hover:bg-muted/60',
+                  )}
+                >
+                  <Checkbox checked={isSelected} onCheckedChange={() => toggleOne(productId)} className='shrink-0' />
+                  <span className='min-w-0 flex-1 truncate font-medium'>{name}</span>
+                  <span className='shrink-0 rounded-md border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+                    Stock: <span className='font-semibold text-foreground'>{String(insight.meta.stock)}</span>
+                  </span>
+                  <Badge className='shrink-0 text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' variant='secondary'>
+                    +{String(insight.meta.suggestedReorderQty)} needed
+                  </Badge>
+                </label>
+              )
+            })}
+          </div>
+        ) : isDiverging ? (
+          <DivergingBarList
+            rows={visibleItems.map((insight) => {
+              const stat = getRowStat(insight)
+              return {
+                key: insight.id,
+                label: (insight.meta.name as string) || insight.title,
+                value: Number(insight.meta.growthPercent) || 0,
+                display: stat.label,
+              }
+            })}
+          />
+        ) : hasMagnitude ? (
+          <RankBarList
+            rows={visibleItems.map((insight) => {
+              const stat = getRowStat(insight)
+              return {
+                key: insight.id,
+                label: (insight.meta.name as string) || insight.title,
+                value: getRowMagnitude(insight),
+                display: stat.label,
+                toneText: TONE_TEXT_CLASS[stat.tone],
+                barClassName: TONE_BAR_CLASS[stat.tone],
+              }
+            })}
+          />
+        ) : (
+          <div className='space-y-1.5'>
+            {visibleItems.map((insight) => {
+              const name = (insight.meta.name as string) || insight.title
+              const stat = getRowStat(insight)
+              return (
+                <div
+                  key={insight.id}
+                  className={cn(
+                    'flex items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-xs',
+                    insight.isRead ? 'bg-muted/20 opacity-60' : 'bg-muted/40',
+                  )}
+                >
+                  <span className='min-w-0 flex-1 truncate font-medium'>{name}</span>
+                  <Badge className={cn('shrink-0 text-[10px] font-semibold', getRowToneClass(stat.tone))} variant='secondary'>
+                    {stat.label}
+                  </Badge>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {hasMore && (

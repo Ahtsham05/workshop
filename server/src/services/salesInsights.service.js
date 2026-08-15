@@ -482,7 +482,7 @@ const buildSalesDropAlert = ({ scope, name, productId, growthPercent, current, p
   confidence: 'medium',
   title: scope === 'store' ? 'Overall sales are dropping' : `${name} sales are dropping`,
   description: `${scope === 'store' ? 'Store-wide revenue' : `${name} revenue`} fell ${Math.abs(round2(growthPercent))}% (Rs${round2(previous)} → Rs${round2(current)}).`,
-  meta: { scope, productId, name, growthPercent: round2(growthPercent) },
+  meta: { scope, productId, name, growthPercent: round2(growthPercent), current: round2(current), previous: round2(previous) },
 });
 
 const buildFrequentlyBoughtTogetherInsight = (pairs) => {

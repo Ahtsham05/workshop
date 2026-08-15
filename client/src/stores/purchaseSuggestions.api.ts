@@ -28,6 +28,10 @@ export interface SupplierRecommendation {
   deliveryScore: number
   reliabilityScore: number
   overallScore: number
+  // 'product': supplier has actually sold this exact product before.
+  // 'organization': no history for this product, but we've bought other products from them.
+  // 'none': org has no purchase history with anyone yet — best-effort guess.
+  historyScope: 'product' | 'organization' | 'none'
 }
 
 export interface ExpiryWarning {

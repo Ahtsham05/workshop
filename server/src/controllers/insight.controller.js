@@ -34,7 +34,13 @@ const getSalesInsights = catchAsync(async (req, res) => {
 
 const getInventoryInsights = catchAsync(async (req, res) => {
   const { organizationId, branchId } = getBranchContext(req);
-  const result = await salesInsightsService.getInsightsByCategory({ organizationId, branchId, category: 'inventory' });
+  // Supply-chain insights (demand_trend, supplier_recommendation, ...) have no tab of their
+  // own — fold them into Inventory, the closest fit, so they aren't stranded on "Today" only.
+  const result = await salesInsightsService.getInsightsByCategory({
+    organizationId,
+    branchId,
+    category: { $in: ['inventory', 'supply_chain'] },
+  });
   res.send(result);
 });
 

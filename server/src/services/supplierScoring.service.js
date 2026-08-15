@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { Supplier, PurchaseOrder, Purchase, PurchaseReturn } = require('../models');
+const { Supplier, PurchaseOrder, Purchase, PurchaseReturn, Product } = require('../models');
 
 /**
  * Weights for the composite supplier score. Must sum to 1. Tunable without touching
@@ -139,6 +139,22 @@ const computeSupplierPricesForProduct = async ({ organizationId, productId, sinc
   return new Map(rows.map((r) => [String(r._id), { avgPrice: r.avgPrice, samples: r.samples }]));
 };
 
+/**
+ * Distinct suppliers the org has actually transacted with before (any product, via a
+ * purchase order or a direct purchase invoice) within the lookback window. This is the
+ * fallback candidate pool for products with no purchase history of their own — it keeps
+ * cold-start recommendations pointed at real trading partners instead of every supplier
+ * contact ever entered into the system, most of whom may have never been bought from.
+ */
+const getSuppliersWithPurchaseHistory = async ({ organizationId, since = daysAgo(PERFORMANCE_LOOKBACK_DAYS) }) => {
+  const orgId = toObjectId(organizationId);
+  const [fromOrders, fromPurchases] = await Promise.all([
+    PurchaseOrder.distinct('supplier', { organizationId: orgId, orderDate: { $gte: since } }),
+    Purchase.distinct('supplier', { organizationId: orgId, purchaseDate: { $gte: since } }),
+  ]);
+  return [...new Set([...fromOrders, ...fromPurchases].map(String))];
+};
+
 /** Min-max normalize a value within [min, max] to a 0-100 score. Inverted when lower-is-better. */
 const normalizeScore = (value, min, max, { invert = false } = {}) => {
   if (value === null || value === undefined) return 50; // no data — neutral score rather than punishing/rewarding
@@ -151,19 +167,40 @@ const normalizeScore = (value, min, max, { invert = false } = {}) => {
 const round = (n) => Math.round(n * 100) / 100;
 
 /**
- * Scores every supplier who has ever supplied `productId` (falling back to every
- * supplier in the org if none have purchase history for it yet — e.g. a brand-new
- * product) and returns them ranked best-first with a human-readable reason.
+ * Scores candidate suppliers for `productId` and returns them ranked best-first with a
+ * human-readable reason. Candidates are chosen in tiers so a recommendation never points
+ * at a supplier we've simply never bought anything from:
+ *
+ *  1. Suppliers who have actually sold *this* product before (real price + performance data).
+ *  2. If none have (new SKU): suppliers the org has bought *something* from before — still a
+ *     real trading relationship, scored on their org-wide delivery/reliability record.
+ *  3. If the org has never purchased from anyone yet: the product's own assigned supplier,
+ *     or — only as a last resort — every supplier on file. `historyScope` on each result
+ *     tells the caller which tier produced it, so the UI/reason text can be honest about it.
  */
 const scoreSuppliersForProduct = async ({ organizationId, productId }) => {
   const orgId = toObjectId(organizationId);
   const priceMap = await computeSupplierPricesForProduct({ organizationId, productId });
 
   let candidateSupplierIds = [...priceMap.keys()];
+  let historyScope = 'product';
+
   if (candidateSupplierIds.length === 0) {
-    const allSuppliers = await Supplier.find({ organizationId: orgId }).select('_id').lean();
-    candidateSupplierIds = allSuppliers.map((s) => String(s._id));
+    candidateSupplierIds = await getSuppliersWithPurchaseHistory({ organizationId });
+    historyScope = 'organization';
   }
+
+  if (candidateSupplierIds.length === 0) {
+    const product = await Product.findOne({ _id: toObjectId(productId), organizationId: orgId }).select('supplier').lean();
+    if (product?.supplier) {
+      candidateSupplierIds = [String(product.supplier)];
+    } else {
+      const allSuppliers = await Supplier.find({ organizationId: orgId }).select('_id').lean();
+      candidateSupplierIds = allSuppliers.map((s) => String(s._id));
+    }
+    historyScope = 'none';
+  }
+
   if (candidateSupplierIds.length === 0) return [];
 
   const suppliers = await Supplier.find({ _id: { $in: candidateSupplierIds } })
@@ -218,6 +255,7 @@ const scoreSuppliersForProduct = async ({ organizationId, productId }) => {
       deliveryScore: round(deliveryScore),
       reliabilityScore: round(reliabilityScore),
       overallScore: round(overallScore),
+      historyScope,
     };
   });
 
@@ -228,13 +266,24 @@ const scoreSuppliersForProduct = async ({ organizationId, productId }) => {
 /** Builds the human-readable "why this supplier" sentence for the top-ranked candidate. */
 const buildSupplierRecommendationReason = (best) => {
   if (!best) return null;
+
+  if (best.historyScope === 'none') {
+    return `${best.supplierName} has no purchase history yet — this is a starting suggestion. Place an order and future suggestions will be based on real performance.`;
+  }
+
   const parts = [];
   if (best.onTimeDeliveryRate !== null) parts.push(`a ${round2(best.onTimeDeliveryRate)}% on-time delivery rate`);
   if (best.avgLeadTimeDays !== null) parts.push(`an average lead time of ${round2(best.avgLeadTimeDays)} day(s)`);
   if (best.avgPrice !== null) parts.push(`competitive pricing (avg Rs${round2(best.avgPrice)}/unit)`);
   if (best.returnRate !== null && best.returnRate > 0) parts.push(`a ${round2(best.returnRate)}% return rate`);
-  if (parts.length === 0) return `${best.supplierName} is recommended based on limited available history.`;
-  return `${best.supplierName} is recommended due to ${parts.join(' and ')}.`;
+
+  const scopeNote =
+    best.historyScope === 'organization'
+      ? " (you haven't bought this product from them before — based on your overall order history with them)"
+      : '';
+
+  if (parts.length === 0) return `${best.supplierName} is recommended based on limited available history.${scopeNote}`;
+  return `${best.supplierName} is recommended due to ${parts.join(' and ')}.${scopeNote}`;
 };
 
 /**

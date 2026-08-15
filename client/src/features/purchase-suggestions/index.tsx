@@ -134,16 +134,25 @@ function ResultCount({ shown, total }: { shown: number; total: number }) {
   )
 }
 
-/** Groups suggestions by their recommended supplier so a buyer can place one order per supplier. */
+/**
+ * Groups suggestions by their recommended supplier so a buyer can place one order per
+ * supplier — but only headlines a named supplier group when there's real purchase
+ * history for *that exact product* with them (`historyScope === 'product'`). A product
+ * with sales but no purchase history anywhere still needs reordering, so it isn't
+ * dropped — it's just routed into a shared "Other" bucket instead of being pinned under
+ * a specific supplier's name as if that were a proven track record. Each card in that
+ * bucket still shows its own best-guess supplier and why (see SupplierScoreBlock).
+ */
 function groupBySupplier(suggestions: PurchaseSuggestion[]): SupplierGroup[] {
   const groups = new Map<string, SupplierGroup>()
   for (const s of suggestions) {
-    const key = s.recommendedSupplier?.supplierId || 'unassigned'
+    const hasProductHistory = s.recommendedSupplier?.historyScope === 'product'
+    const key = hasProductHistory ? s.recommendedSupplier!.supplierId : 'unassigned'
     if (!groups.has(key)) {
       groups.set(key, {
         supplierId: key,
-        supplierName: s.recommendedSupplier?.supplierName || 'No supplier recommendation yet',
-        overallScore: s.recommendedSupplier?.overallScore ?? null,
+        supplierName: hasProductHistory ? s.recommendedSupplier!.supplierName : 'Other — no confirmed supplier match',
+        overallScore: hasProductHistory ? s.recommendedSupplier!.overallScore : null,
         items: [],
       })
     }
