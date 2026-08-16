@@ -17,6 +17,8 @@ import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { normalizeBusinessType } from '@/lib/business-types'
+import { usePermissions } from '@/context/permission-context'
+import type { PermissionKey } from '@/lib/permission-registry'
 import { SalesReport } from './components/sales-report'
 import { PurchaseReport } from './components/purchase-report'
 import { LedgerReport } from './components/ledger-report'
@@ -53,14 +55,70 @@ import { SalesmanCommissionReport } from './components/salesman-commission-repor
 import { PartnerProfitShareReport } from './components/partner-profit-share-report'
 import { BankPositionReport } from './components/bank-position-report'
 
+// Maps a report tab to the granular RBAC permission that unlocks it. Tabs not
+// listed here (broad summaries that mix several report domains, e.g. Activities,
+// Final Report, Sale & Purchase) stay gated behind the general 'viewReports' key.
+const REPORT_TAB_PERMISSIONS: Partial<Record<string, PermissionKey>> = {
+  sales: 'viewSalesReports',
+  'sales-returns': 'viewSalesReports',
+  purchases: 'viewPurchaseReports',
+  'purchase-returns': 'viewPurchaseReports',
+  products: 'viewProductReports',
+  customers: 'viewCustomerReports',
+  aging: 'viewCustomerReports',
+  suppliers: 'viewSupplierReports',
+  'supplier-aging': 'viewSupplierReports',
+  expenses: 'viewExpenseReports',
+  stock: 'viewInventoryReports',
+  'batch-expiry': 'viewInventoryReports',
+  'stock-adjustments': 'viewInventoryReports',
+  'stock-transfers': 'viewInventoryReports',
+  load: 'viewLoadReports',
+  'my-wallet': 'viewWalletReports',
+  'bank-position': 'viewWalletReports',
+  repair: 'viewRepairReports',
+  services: 'viewServiceReports',
+  'profit-loss': 'viewProfitLossReports',
+  roi: 'viewProfitLossReports',
+  'sim-sale': 'viewSimSaleReports',
+  installments: 'viewInstallmentReports',
+}
+
+// Tabs shown only for mobile_shop organizations, mirrored from the `isMobileShop &&`
+// guards on each TabsTrigger/TabsContent below.
+const MOBILE_SHOP_ONLY_TABS = new Set([
+  'daily-summary', 'complete', 'load', 'repair', 'services',
+  'bill-payments', 'agent-bills', 'sim-sale', 'installments', 'mobile-phones',
+])
+
+// Display order, matching the TabsList below — used to pick a sensible default tab.
+const TAB_ORDER = [
+  'activities', 'summary', 'daily-summary', 'complete', 'sales', 'purchases', 'ledger',
+  'salesman-commission', 'partner-profit-share', 'products', 'customers', 'aging',
+  'suppliers', 'supplier-aging', 'expenses', 'stock', 'batch-expiry', 'stock-adjustments',
+  'stock-transfers', 'tax', 'sales-returns', 'purchase-returns', 'load', 'my-wallet',
+  'bank-position', 'repair', 'services', 'bill-payments', 'agent-bills', 'profit-loss',
+  'roi', 'sim-sale', 'installments', 'mobile-phones',
+]
+
 export default function ReportsPage() {
   const { t } = useLanguage()
   const search = useSearch({ from: '/_authenticated/reports' })
   const { canAccess, planType } = useFeatureAccess()
+  const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const isMobileShop = normalizeBusinessType(org?.businessType || user?.businessType) === 'mobile_shop'
   const now = new Date()
+
+  // RBAC gate — independent of the subscription-plan gate (`canAccess`) applied per-tab below.
+  const isTabVisible = (tab: string): boolean => {
+    if (MOBILE_SHOP_ONLY_TABS.has(tab) && !isMobileShop) return false
+    if (tab === 'agent-bills' && user?.email !== AGENT_BILL_EMAIL) return false
+    return hasPermission(REPORT_TAB_PERMISSIONS[tab] ?? 'viewReports')
+  }
+
+  const defaultTab = TAB_ORDER.find(isTabVisible) ?? 'sales'
 
   const parseSearchDate = (value: string | undefined, endOfDay: boolean) => {
     if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
@@ -82,17 +140,23 @@ export default function ReportsPage() {
       new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
     )
   })
-  const [activeTab, setActiveTab] = useState(search.tab || 'sales')
+  const [activeTab, setActiveTab] = useState(
+    search.tab && isTabVisible(search.tab) ? search.tab : defaultTab
+  )
   const exportRef = useRef<{ exportToExcel: () => void }>(null)
   const queryStartDate = format(startDate, 'yyyy-MM-dd')
   const queryEndDate = format(endDate, 'yyyy-MM-dd')
 
   useEffect(() => {
-    if (search.tab) setActiveTab(search.tab)
+    if (search.tab) setActiveTab(isTabVisible(search.tab) ? search.tab : defaultTab)
     const nextStart = parseSearchDate(search.startDate, false)
     const nextEnd = parseSearchDate(search.endDate, true)
     if (nextStart) setStartDate(nextStart)
     if (nextEnd) setEndDate(nextEnd)
+    // isTabVisible/defaultTab intentionally excluded — they're recomputed fresh every
+    // render (not memoized), so including them would re-fire this effect on every
+    // render and re-create the startDate/endDate objects, causing a render loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search.tab, search.startDate, search.endDate])
 
   const handleRefresh = () => {
@@ -247,190 +311,274 @@ export default function ReportsPage() {
               this tab bar, a CSS transform on the shared TabsList inherits to every
               TabsTrigger below it and normalizes them here only. */}
           <TabsList className='inline-flex h-auto flex-wrap gap-1 rounded-lg bg-muted p-1 min-w-full capitalize sm:min-w-0'>
-            <TabsTrigger value='activities' className='text-xs sm:text-sm px-2 sm:px-3'>Activities</TabsTrigger>
-            <TabsTrigger value='summary' className='text-xs sm:text-sm px-2 sm:px-3'>Summary</TabsTrigger>
-            {isMobileShop && (
+            {isTabVisible('activities') && (
+              <TabsTrigger value='activities' className='text-xs sm:text-sm px-2 sm:px-3'>Activities</TabsTrigger>
+            )}
+            {isTabVisible('summary') && (
+              <TabsTrigger value='summary' className='text-xs sm:text-sm px-2 sm:px-3'>Summary</TabsTrigger>
+            )}
+            {isMobileShop && isTabVisible('daily-summary') && (
               <TabsTrigger value='daily-summary' className='text-xs sm:text-sm px-2 sm:px-3'>Daily Summary</TabsTrigger>
             )}
-            {isMobileShop && (
+            {isMobileShop && isTabVisible('complete') && (
               <TabsTrigger value='complete' className='text-xs sm:text-sm px-2 sm:px-3'>Final Report</TabsTrigger>
             )}
-            <TabsTrigger value='sales' className='text-xs sm:text-sm px-2 sm:px-3'>{t('sales')}</TabsTrigger>
-            <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
-            <TabsTrigger value='ledger' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sale & Purchase')}</TabsTrigger>
-            <TabsTrigger value='salesman-commission' className='text-xs sm:text-sm px-2 sm:px-3'>Salesman Commission</TabsTrigger>
-            <TabsTrigger value='partner-profit-share' className='text-xs sm:text-sm px-2 sm:px-3'>Partners</TabsTrigger>
-            <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Products')}</TabsTrigger>
-            <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customers')}</TabsTrigger>
-            <TabsTrigger value='aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Aging')}</TabsTrigger>
-            <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Suppliers')}</TabsTrigger>
-            <TabsTrigger value='supplier-aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Supplier Aging')}</TabsTrigger>
-            <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Expenses')}</TabsTrigger>
-            <TabsTrigger value='stock' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock')}</TabsTrigger>
-            <TabsTrigger value='batch-expiry' className='text-xs sm:text-sm px-2 sm:px-3'>Batch &amp; Expiry</TabsTrigger>
-            <TabsTrigger value='stock-adjustments' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock Adjustments')}</TabsTrigger>
-            <TabsTrigger value='stock-transfers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock Transfers')}</TabsTrigger>
-            <TabsTrigger value='tax' className='text-xs sm:text-sm px-2 sm:px-3'>{t('tax')}</TabsTrigger>
-            <TabsTrigger value='sales-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sales Returns')}</TabsTrigger>
-            <TabsTrigger value='purchase-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Purchase Returns')}</TabsTrigger>
-            {isMobileShop && canAccess('load') && (
+            {isTabVisible('sales') && (
+              <TabsTrigger value='sales' className='text-xs sm:text-sm px-2 sm:px-3'>{t('sales')}</TabsTrigger>
+            )}
+            {isTabVisible('purchases') && (
+              <TabsTrigger value='purchases' className='text-xs sm:text-sm px-2 sm:px-3'>{t('purchases')}</TabsTrigger>
+            )}
+            {isTabVisible('ledger') && (
+              <TabsTrigger value='ledger' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sale & Purchase')}</TabsTrigger>
+            )}
+            {isTabVisible('salesman-commission') && (
+              <TabsTrigger value='salesman-commission' className='text-xs sm:text-sm px-2 sm:px-3'>Salesman Commission</TabsTrigger>
+            )}
+            {isTabVisible('partner-profit-share') && (
+              <TabsTrigger value='partner-profit-share' className='text-xs sm:text-sm px-2 sm:px-3'>Partners</TabsTrigger>
+            )}
+            {isTabVisible('products') && (
+              <TabsTrigger value='products' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Products')}</TabsTrigger>
+            )}
+            {isTabVisible('customers') && (
+              <TabsTrigger value='customers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customers')}</TabsTrigger>
+            )}
+            {isTabVisible('aging') && (
+              <TabsTrigger value='aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Customer Aging')}</TabsTrigger>
+            )}
+            {isTabVisible('suppliers') && (
+              <TabsTrigger value='suppliers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Suppliers')}</TabsTrigger>
+            )}
+            {isTabVisible('supplier-aging') && (
+              <TabsTrigger value='supplier-aging' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Supplier Aging')}</TabsTrigger>
+            )}
+            {isTabVisible('expenses') && (
+              <TabsTrigger value='expenses' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Expenses')}</TabsTrigger>
+            )}
+            {isTabVisible('stock') && (
+              <TabsTrigger value='stock' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock')}</TabsTrigger>
+            )}
+            {isTabVisible('batch-expiry') && (
+              <TabsTrigger value='batch-expiry' className='text-xs sm:text-sm px-2 sm:px-3'>Batch &amp; Expiry</TabsTrigger>
+            )}
+            {isTabVisible('stock-adjustments') && (
+              <TabsTrigger value='stock-adjustments' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock Adjustments')}</TabsTrigger>
+            )}
+            {isTabVisible('stock-transfers') && (
+              <TabsTrigger value='stock-transfers' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Stock Transfers')}</TabsTrigger>
+            )}
+            {isTabVisible('tax') && (
+              <TabsTrigger value='tax' className='text-xs sm:text-sm px-2 sm:px-3'>{t('tax')}</TabsTrigger>
+            )}
+            {isTabVisible('sales-returns') && (
+              <TabsTrigger value='sales-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Sales Returns')}</TabsTrigger>
+            )}
+            {isTabVisible('purchase-returns') && (
+              <TabsTrigger value='purchase-returns' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Purchase Returns')}</TabsTrigger>
+            )}
+            {isMobileShop && canAccess('load') && isTabVisible('load') && (
               <TabsTrigger value='load' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Load')}</TabsTrigger>
             )}
-            {canAccess('wallet') && (
+            {canAccess('wallet') && isTabVisible('my-wallet') && (
               <TabsTrigger value='my-wallet' className='text-xs sm:text-sm px-2 sm:px-3'>Bank Accounts</TabsTrigger>
             )}
-            {canAccess('wallet') && (
+            {canAccess('wallet') && isTabVisible('bank-position') && (
               <TabsTrigger value='bank-position' className='text-xs sm:text-sm px-2 sm:px-3'>Bank &amp; Cash Position</TabsTrigger>
             )}
-            {isMobileShop && canAccess('repair') && (
+            {isMobileShop && canAccess('repair') && isTabVisible('repair') && (
               <TabsTrigger value='repair' className='text-xs sm:text-sm px-2 sm:px-3'>{t('Repairing')}</TabsTrigger>
             )}
-            {isMobileShop && (
+            {isMobileShop && isTabVisible('services') && (
               <TabsTrigger value='services' className='text-xs sm:text-sm px-2 sm:px-3'>Services</TabsTrigger>
             )}
-            {isMobileShop && canAccess('bill_payment') && (
+            {isMobileShop && canAccess('bill_payment') && isTabVisible('bill-payments') && (
               <TabsTrigger value='bill-payments' className='text-xs sm:text-sm px-2 sm:px-3'>Bill Payments</TabsTrigger>
             )}
-            {isMobileShop && user?.email === AGENT_BILL_EMAIL && (
+            {isMobileShop && user?.email === AGENT_BILL_EMAIL && isTabVisible('agent-bills') && (
               <TabsTrigger value='agent-bills' className='text-xs sm:text-sm px-2 sm:px-3'>Agent Bills</TabsTrigger>
             )}
-            {canAccess('profit_loss') && (
+            {canAccess('profit_loss') && isTabVisible('profit-loss') && (
               <TabsTrigger value='profit-loss' className='text-xs sm:text-sm px-2 sm:px-3'>{t('profit_loss')}</TabsTrigger>
             )}
-            {canAccess('roi') && (
+            {canAccess('roi') && isTabVisible('roi') && (
               <TabsTrigger value='roi' className='text-xs sm:text-sm px-2 sm:px-3'>ROI</TabsTrigger>
             )}
-            {isMobileShop && (
+            {isMobileShop && isTabVisible('sim-sale') && (
               <TabsTrigger value='sim-sale' className='text-xs sm:text-sm px-2 sm:px-3'>Sim Sale</TabsTrigger>
             )}
-            {isMobileShop && (
+            {isMobileShop && isTabVisible('installments') && (
               <TabsTrigger value='installments' className='text-xs sm:text-sm px-2 sm:px-3'>Installments</TabsTrigger>
             )}
-            {isMobileShop && (
+            {isMobileShop && isTabVisible('mobile-phones') && (
               <TabsTrigger value='mobile-phones' className='text-xs sm:text-sm px-2 sm:px-3'>Mobile Phone</TabsTrigger>
             )}
           </TabsList>
         </div>
 
-        <TabsContent value='activities' className='mt-6'>
-          <SalesPurchaseSummaryReport ref={activeTab === 'activities' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
+        {isTabVisible('activities') && (
+          <TabsContent value='activities' className='mt-6'>
+            <SalesPurchaseSummaryReport ref={activeTab === 'activities' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
 
-        <TabsContent value='summary' className='mt-6'>
-          <ActivitySummaryReport ref={activeTab === 'summary' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
+        {isTabVisible('summary') && (
+          <TabsContent value='summary' className='mt-6'>
+            <ActivitySummaryReport ref={activeTab === 'summary' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
 
-        {isMobileShop && (
+        {isMobileShop && isTabVisible('daily-summary') && (
           <TabsContent value='daily-summary' className='mt-6'>
             <DailySalesSummaryReport ref={activeTab === 'daily-summary' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
-        {isMobileShop && (
+        {isMobileShop && isTabVisible('complete') && (
           <TabsContent value='complete' className='mt-6'>
             <CompleteReport ref={activeTab === 'complete' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
-        <TabsContent value='sales' className='mt-6'>
-          <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} isMobileShop={isMobileShop} />
-        </TabsContent>
-
-        <TabsContent value='purchases' className='mt-6'>
-          <PurchaseReport ref={activeTab === 'purchases' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='ledger' className='mt-6'>
-          <LedgerReport ref={activeTab === 'ledger' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='salesman-commission' className='mt-6'>
-          <SalesmanCommissionReport ref={activeTab === 'salesman-commission' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='partner-profit-share' className='mt-6'>
-          <PartnerProfitShareReport ref={activeTab === 'partner-profit-share' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='products' className='mt-6'>
-          <ProductReport ref={activeTab === 'products' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='customers' className='mt-6'>
-          <CustomerReport ref={activeTab === 'customers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='aging' className='mt-6'>
-          <AgingReport ref={activeTab === 'aging' ? exportRef : null} />
-        </TabsContent>
-
-        <TabsContent value='suppliers' className='mt-6'>
-          <SupplierReport ref={activeTab === 'suppliers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='supplier-aging' className='mt-6'>
-          <SupplierAgingReport ref={activeTab === 'supplier-aging' ? exportRef : null} />
-        </TabsContent>
-
-        <TabsContent value='expenses' className='mt-6'>
-          <ExpenseReport ref={activeTab === 'expenses' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='profit-loss' className='mt-6'>
-          {canAccess('profit_loss')
-            ? <ProfitLossReport ref={activeTab === 'profit-loss' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-            : <LockedFeatureCard featureName='Profit & Loss Report' currentPlan={getPlanLabel(planType)} />}
-        </TabsContent>
-
-        <TabsContent value='stock' className='mt-6'>
-          <InventoryReport ref={activeTab === 'stock' ? exportRef : null} />
-        </TabsContent>
-
-        <TabsContent value='batch-expiry' className='mt-6'>
-          <BatchExpiryReport ref={activeTab === 'batch-expiry' ? exportRef : null} />
-        </TabsContent>
-
-        <TabsContent value='stock-adjustments' className='mt-6'>
-          <StockAdjustmentReport ref={activeTab === 'stock-adjustments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='stock-transfers' className='mt-6'>
-          <StockTransferReport ref={activeTab === 'stock-transfers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='tax' className='mt-6'>
-          <TaxReport ref={activeTab === 'tax' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='sales-returns' className='mt-6'>
-          <SalesReturnsReport ref={activeTab === 'sales-returns' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        <TabsContent value='purchase-returns' className='mt-6'>
-          <PurchaseReturnsReport ref={activeTab === 'purchase-returns' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-        </TabsContent>
-
-        {isMobileShop && (
-          <TabsContent value='load' className='mt-6'>
-            {canAccess('load')
-              ? <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-              : <LockedFeatureCard featureName='Load Report' currentPlan={getPlanLabel(planType)} />}
+        {isTabVisible('sales') && (
+          <TabsContent value='sales' className='mt-6'>
+            <SalesReport ref={activeTab === 'sales' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} isMobileShop={isMobileShop} />
           </TabsContent>
         )}
 
-        <TabsContent value='my-wallet' className='mt-6'>
-          {canAccess('wallet')
-            ? <MyWalletReport ref={activeTab === 'my-wallet' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-            : <LockedFeatureCard featureName='My Wallet Report' currentPlan={getPlanLabel(planType)} />}
-        </TabsContent>
+        {isTabVisible('purchases') && (
+          <TabsContent value='purchases' className='mt-6'>
+            <PurchaseReport ref={activeTab === 'purchases' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
 
-        <TabsContent value='bank-position' className='mt-6'>
-          {canAccess('wallet')
-            ? <BankPositionReport ref={activeTab === 'bank-position' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-            : <LockedFeatureCard featureName='Bank & Cash Position Report' currentPlan={getPlanLabel(planType)} />}
-        </TabsContent>
+        {isTabVisible('ledger') && (
+          <TabsContent value='ledger' className='mt-6'>
+            <LedgerReport ref={activeTab === 'ledger' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
 
-        {isMobileShop && (
+        {isTabVisible('salesman-commission') && (
+          <TabsContent value='salesman-commission' className='mt-6'>
+            <SalesmanCommissionReport ref={activeTab === 'salesman-commission' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('partner-profit-share') && (
+          <TabsContent value='partner-profit-share' className='mt-6'>
+            <PartnerProfitShareReport ref={activeTab === 'partner-profit-share' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('products') && (
+          <TabsContent value='products' className='mt-6'>
+            <ProductReport ref={activeTab === 'products' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('customers') && (
+          <TabsContent value='customers' className='mt-6'>
+            <CustomerReport ref={activeTab === 'customers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('aging') && (
+          <TabsContent value='aging' className='mt-6'>
+            <AgingReport ref={activeTab === 'aging' ? exportRef : null} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('suppliers') && (
+          <TabsContent value='suppliers' className='mt-6'>
+            <SupplierReport ref={activeTab === 'suppliers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('supplier-aging') && (
+          <TabsContent value='supplier-aging' className='mt-6'>
+            <SupplierAgingReport ref={activeTab === 'supplier-aging' ? exportRef : null} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('expenses') && (
+          <TabsContent value='expenses' className='mt-6'>
+            <ExpenseReport ref={activeTab === 'expenses' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('profit-loss') && (
+          <TabsContent value='profit-loss' className='mt-6'>
+            {canAccess('profit_loss')
+              ? <ProfitLossReport ref={activeTab === 'profit-loss' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+              : <LockedFeatureCard featureName='Profit & Loss Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
+
+        {isTabVisible('stock') && (
+          <TabsContent value='stock' className='mt-6'>
+            <InventoryReport ref={activeTab === 'stock' ? exportRef : null} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('batch-expiry') && (
+          <TabsContent value='batch-expiry' className='mt-6'>
+            <BatchExpiryReport ref={activeTab === 'batch-expiry' ? exportRef : null} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('stock-adjustments') && (
+          <TabsContent value='stock-adjustments' className='mt-6'>
+            <StockAdjustmentReport ref={activeTab === 'stock-adjustments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('stock-transfers') && (
+          <TabsContent value='stock-transfers' className='mt-6'>
+            <StockTransferReport ref={activeTab === 'stock-transfers' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('tax') && (
+          <TabsContent value='tax' className='mt-6'>
+            <TaxReport ref={activeTab === 'tax' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('sales-returns') && (
+          <TabsContent value='sales-returns' className='mt-6'>
+            <SalesReturnsReport ref={activeTab === 'sales-returns' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('purchase-returns') && (
+          <TabsContent value='purchase-returns' className='mt-6'>
+            <PurchaseReturnsReport ref={activeTab === 'purchase-returns' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isMobileShop && canAccess('load') && isTabVisible('load') && (
+          <TabsContent value='load' className='mt-6'>
+            <LoadReport ref={activeTab === 'load' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+          </TabsContent>
+        )}
+
+        {isTabVisible('my-wallet') && (
+          <TabsContent value='my-wallet' className='mt-6'>
+            {canAccess('wallet')
+              ? <MyWalletReport ref={activeTab === 'my-wallet' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+              : <LockedFeatureCard featureName='My Wallet Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
+
+        {isTabVisible('bank-position') && (
+          <TabsContent value='bank-position' className='mt-6'>
+            {canAccess('wallet')
+              ? <BankPositionReport ref={activeTab === 'bank-position' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+              : <LockedFeatureCard featureName='Bank & Cash Position Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
+
+        {isMobileShop && isTabVisible('repair') && (
           <TabsContent value='repair' className='mt-6'>
             {canAccess('repair')
               ? <RepairReport ref={activeTab === 'repair' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
@@ -438,45 +586,45 @@ export default function ReportsPage() {
           </TabsContent>
         )}
 
-        {isMobileShop && (
+        {isMobileShop && isTabVisible('services') && (
           <TabsContent value='services' className='mt-6'>
             <ServiceReport ref={activeTab === 'services' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
-        {isMobileShop && (
+        {isMobileShop && canAccess('bill_payment') && isTabVisible('bill-payments') && (
           <TabsContent value='bill-payments' className='mt-6'>
-            {canAccess('bill_payment')
-              ? <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-              : <LockedFeatureCard featureName='Bill Payments Report' currentPlan={getPlanLabel(planType)} />}
+            <BillPaymentReport ref={activeTab === 'bill-payments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
-        {isMobileShop && user?.email === AGENT_BILL_EMAIL && (
+        {isMobileShop && user?.email === AGENT_BILL_EMAIL && isTabVisible('agent-bills') && (
           <TabsContent value='agent-bills' className='mt-6'>
             <AgentBillReport ref={activeTab === 'agent-bills' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
-        <TabsContent value='roi' className='mt-6'>
-          {canAccess('roi')
-            ? <RoiReport ref={activeTab === 'roi' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
-            : <LockedFeatureCard featureName='ROI Report' currentPlan={getPlanLabel(planType)} />}
-        </TabsContent>
+        {isTabVisible('roi') && (
+          <TabsContent value='roi' className='mt-6'>
+            {canAccess('roi')
+              ? <RoiReport ref={activeTab === 'roi' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
+              : <LockedFeatureCard featureName='ROI Report' currentPlan={getPlanLabel(planType)} />}
+          </TabsContent>
+        )}
 
-        {isMobileShop && (
+        {isMobileShop && isTabVisible('sim-sale') && (
           <TabsContent value='sim-sale' className='mt-6'>
             <SimSaleReport ref={activeTab === 'sim-sale' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
-        {isMobileShop && (
+        {isMobileShop && isTabVisible('installments') && (
           <TabsContent value='installments' className='mt-6'>
             <InstallmentReport ref={activeTab === 'installments' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>
         )}
 
-        {isMobileShop && (
+        {isMobileShop && isTabVisible('mobile-phones') && (
           <TabsContent value='mobile-phones' className='mt-6'>
             <MobilePhoneReport ref={activeTab === 'mobile-phones' ? exportRef : null} startDate={queryStartDate} endDate={queryEndDate} />
           </TabsContent>

@@ -131,7 +131,26 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/cash-register', anyPermission: ['viewCashRegister'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/reminders', anyPermission: ['viewReminders'] },
   { prefix: '/leads', anyPermission: ['viewLeads'] },
-  { prefix: '/reports', anyPermission: ['viewReports'] },
+  {
+    prefix: '/reports',
+    anyPermission: [
+      'viewReports',
+      'viewSalesReports',
+      'viewPurchaseReports',
+      'viewInventoryReports',
+      'viewCustomerReports',
+      'viewSupplierReports',
+      'viewProductReports',
+      'viewExpenseReports',
+      'viewSimSaleReports',
+      'viewProfitLossReports',
+      'viewLoadReports',
+      'viewRepairReports',
+      'viewServiceReports',
+      'viewWalletReports',
+      'viewInstallmentReports',
+    ],
+  },
 
   // Dashboard — exact match only (see matchesPrefix)
   { prefix: '/', anyPermission: ['viewDashboard'] },

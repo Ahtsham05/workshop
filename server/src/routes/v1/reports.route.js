@@ -8,66 +8,66 @@ const mobileReportsController = require('../../controllers/mobileReports.control
 const router = express.Router();
 router.use(auth(), branchScope());
 
-router.route('/sales').get(auth('viewReports'), reportsController.getSalesReport);
-router.route('/sales/invoices').get(auth('viewReports'), reportsController.getSalesInvoiceDetails);
+router.route('/sales').get(auth('viewReports', 'viewSalesReports'), reportsController.getSalesReport);
+router.route('/sales/invoices').get(auth('viewReports', 'viewSalesReports'), reportsController.getSalesInvoiceDetails);
 
-router.route('/purchases').get(auth('viewReports'), reportsController.getPurchaseReport);
-router.route('/purchases/invoices').get(auth('viewReports'), reportsController.getPurchaseInvoiceDetails);
+router.route('/purchases').get(auth('viewReports', 'viewPurchaseReports'), reportsController.getPurchaseReport);
+router.route('/purchases/invoices').get(auth('viewReports', 'viewPurchaseReports'), reportsController.getPurchaseInvoiceDetails);
 
-router.route('/products').get(auth('viewReports'), reportsController.getProductReport);
+router.route('/products').get(auth('viewReports', 'viewProductReports'), reportsController.getProductReport);
 
-router.route('/products/:productId').get(auth('viewReports'), reportsController.getProductDetailReport);
+router.route('/products/:productId').get(auth('viewReports', 'viewProductReports'), reportsController.getProductDetailReport);
 
-router.route('/customers').get(auth('viewReports'), reportsController.getCustomerReport);
+router.route('/customers').get(auth('viewReports', 'viewCustomerReports'), reportsController.getCustomerReport);
 
-router.route('/aging').get(auth('viewReports'), reportsController.getCustomerAgingReport);
+router.route('/aging').get(auth('viewReports', 'viewCustomerReports'), reportsController.getCustomerAgingReport);
 
-router.route('/suppliers').get(auth('viewReports'), reportsController.getSupplierReport);
+router.route('/suppliers').get(auth('viewReports', 'viewSupplierReports'), reportsController.getSupplierReport);
 
-router.route('/suppliers/aging').get(auth('viewReports'), reportsController.getSupplierAgingReport);
+router.route('/suppliers/aging').get(auth('viewReports', 'viewSupplierReports'), reportsController.getSupplierAgingReport);
 
-router.route('/expenses').get(auth('viewReports'), reportsController.getExpenseReport);
+router.route('/expenses').get(auth('viewReports', 'viewExpenseReports'), reportsController.getExpenseReport);
 
-router.route('/profit-loss').get(auth('viewReports'), reportsController.getProfitLossReport);
+router.route('/profit-loss').get(auth('viewReports', 'viewProfitLossReports'), reportsController.getProfitLossReport);
 
 router
   .route('/profit-loss-full')
-  .get(auth('viewReports'), checkFeatureAccess('profit_loss'), reportsController.getProfitLossFullReport);
+  .get(auth('viewReports', 'viewProfitLossReports'), checkFeatureAccess('profit_loss'), reportsController.getProfitLossFullReport);
 
-router.route('/inventory').get(auth('viewReports'), reportsController.getInventoryReport);
+router.route('/inventory').get(auth('viewReports', 'viewInventoryReports'), reportsController.getInventoryReport);
 
-router.route('/batches').get(auth('viewReports'), reportsController.getBatchExpiryReport);
+router.route('/batches').get(auth('viewReports', 'viewInventoryReports'), reportsController.getBatchExpiryReport);
 
-router.route('/stock-adjustments').get(auth('viewReports'), reportsController.getStockAdjustmentReport);
-router.route('/stock-transfers').get(auth('viewReports'), reportsController.getStockTransferReport);
+router.route('/stock-adjustments').get(auth('viewReports', 'viewInventoryReports'), reportsController.getStockAdjustmentReport);
+router.route('/stock-transfers').get(auth('viewReports', 'viewInventoryReports'), reportsController.getStockTransferReport);
 
 router.route('/tax').get(auth('viewReports'), reportsController.getTaxReport);
 
-router.route('/sales-returns').get(auth('viewReports'), reportsController.getSalesReturnsReport);
+router.route('/sales-returns').get(auth('viewReports', 'viewSalesReports'), reportsController.getSalesReturnsReport);
 
-router.route('/purchase-returns').get(auth('viewReports'), reportsController.getPurchaseReturnsReport);
+router.route('/purchase-returns').get(auth('viewReports', 'viewPurchaseReports'), reportsController.getPurchaseReturnsReport);
 
-router.route('/load').get(auth('viewReports'), checkFeatureAccess('load'), reportsController.getLoadReport);
+router.route('/load').get(auth('viewReports', 'viewLoadReports'), checkFeatureAccess('load'), reportsController.getLoadReport);
 
-router.route('/wallet-wise').get(auth('viewReports'), reportsController.getWalletWiseReport);
+router.route('/wallet-wise').get(auth('viewReports', 'viewWalletReports'), reportsController.getWalletWiseReport);
 
 router
   .route('/load/wallet-balance-statement')
-  .get(auth('viewReports'), checkFeatureAccess('wallet'), mobileReportsController.getWalletBalanceStatement);
+  .get(auth('viewReports', 'viewWalletReports'), checkFeatureAccess('wallet'), mobileReportsController.getWalletBalanceStatement);
 
-router.route('/repair').get(auth('viewReports'), checkFeatureAccess('repair'), reportsController.getRepairReport);
+router.route('/repair').get(auth('viewReports', 'viewRepairReports'), checkFeatureAccess('repair'), reportsController.getRepairReport);
 
-router.route('/services').get(auth('viewReports'), reportsController.getServiceReport);
+router.route('/services').get(auth('viewReports', 'viewServiceReports'), reportsController.getServiceReport);
 
-router.route('/roi').get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getRoiReport);
+router.route('/roi').get(auth('viewReports', 'viewProfitLossReports'), checkFeatureAccess('roi'), reportsController.getRoiReport);
 
-router.route('/roi/monthly').get(auth('viewReports'), checkFeatureAccess('roi'), reportsController.getMonthlyRoi);
+router.route('/roi/monthly').get(auth('viewReports', 'viewProfitLossReports'), checkFeatureAccess('roi'), reportsController.getMonthlyRoi);
 
-router.route('/sim-sales').get(auth('viewReports'), reportsController.getSimSaleReport);
+router.route('/sim-sales').get(auth('viewReports', 'viewSimSaleReports'), reportsController.getSimSaleReport);
 
 router
   .route('/installments')
-  .get(auth('viewReports'), reportsController.getInstallmentReport);
+  .get(auth('viewReports', 'viewInstallmentReports'), reportsController.getInstallmentReport);
 
 router
   .route('/activity-summary')
@@ -91,15 +91,15 @@ router
 
 router
   .route('/bank-position')
-  .get(auth('viewReports'), reportsController.getBankPositionReport);
+  .get(auth('viewReports', 'viewWalletReports'), reportsController.getBankPositionReport);
 
 router
   .route('/bank-reconciliation-sessions')
-  .get(auth('viewReports'), reportsController.getBankReconciliationSessionsReport);
+  .get(auth('viewReports', 'viewWalletReports'), reportsController.getBankReconciliationSessionsReport);
 
 router
   .route('/bank-reconciliation-sessions/:sessionId')
-  .get(auth('viewReports'), reportsController.getBankReconciliationSessionDetail);
+  .get(auth('viewReports', 'viewWalletReports'), reportsController.getBankReconciliationSessionDetail);
 
 module.exports = router;
 
