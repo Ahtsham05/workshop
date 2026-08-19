@@ -18,6 +18,10 @@ router
   .get(auth('viewInvoices'), invoiceController.generateBillNumber);
 
 router
+  .route('/next-number')
+  .get(auth('viewInvoices'), invoiceController.getNextInvoiceNumber);
+
+router
   .route('/statistics')
   .get(auth('viewInvoices'), validate(invoiceValidation.getInvoiceStatistics), invoiceController.getInvoiceStatistics);
 

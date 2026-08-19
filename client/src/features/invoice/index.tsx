@@ -151,6 +151,11 @@ export interface Invoice {
   customerId?: string
   customerName?: string
   walkInCustomerName?: string
+  /** Manual override for the auto-generated number — omitted (undefined/empty), the server
+   * assigns the next sequential number itself (see generateNextDocumentNumber). Only
+   * meaningful before the first save; once persisted the real invoiceNumber comes back
+   * from the server on the saved record instead. */
+  invoiceNumber?: string
   /** Set when this invoice was created from the CRM Leads module, so it shows up on the lead's activity timeline. */
   leadId?: string
   /** Salesman credited with this sale for commission purposes — a User id. */

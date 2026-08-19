@@ -56,6 +56,7 @@ const employeeSchema = z.object({
 
   // Professional Information
   department: z.string().min(1, 'Department is required'),
+  designation: z.string().optional(),
   shift: z.string().optional(),
   joiningDate: z.string().min(1, 'Joining date is required'),
   employmentType: z.enum(['Full-Time', 'Part-Time', 'Contract', 'Intern']),
@@ -105,6 +106,7 @@ interface EmployeeFormProps {
   onCancel: () => void;
   isLoading?: boolean;
   departments: any[];
+  designations: any[];
   shifts: any[];
   employees: any[];
 }
@@ -130,7 +132,7 @@ const STEPS = [
  * currently open) jumps the wizard back to where the user can actually see it. */
 const STEP_BY_FIELD: Record<string, number> = {
   firstName: 0, lastName: 0, email: 0, phone: 0, cnic: 0, dateOfBirth: 0, gender: 0, address: 0,
-  department: 1, shift: 1, joiningDate: 1, employmentType: 1, employmentStatus: 1, reportingManager: 1,
+  department: 1, designation: 1, shift: 1, joiningDate: 1, employmentType: 1, employmentStatus: 1, reportingManager: 1,
   lastWorkingDate: 1, exitReason: 1,
   salary: 2, bankDetails: 2,
   emergencyContact: 3, skills: 3,
@@ -166,6 +168,7 @@ export default function EmployeeForm({
   onCancel,
   isLoading,
   departments,
+  designations,
   shifts,
   employees,
 }: EmployeeFormProps) {
@@ -224,6 +227,7 @@ export default function EmployeeForm({
           deductions: Number(initialData.salary?.deductions || 0),
         },
         department: getEntityId(initialData.department) || initialData.department,
+        designation: getEntityId(initialData.designation) || '',
         reportingManager: getEntityId(initialData.reportingManager) || '',
         shift: getEntityId(initialData.shift) || '',
       });
@@ -273,6 +277,7 @@ export default function EmployeeForm({
         const payload: any = {
           ...values,
           department: getEntityId(values.department) || values.department,
+          designation: sanitizeObjectId(values.designation),
           shift: sanitizeObjectId(values.shift),
           reportingManager: sanitizeObjectId(values.reportingManager),
         };
@@ -293,6 +298,9 @@ export default function EmployeeForm({
 
         if (!payload.shift) {
           delete payload.shift;
+        }
+        if (!payload.designation) {
+          delete payload.designation;
         }
         if (!payload.reportingManager) {
           delete payload.reportingManager;
@@ -437,7 +445,7 @@ export default function EmployeeForm({
 
         {/* Professional Information */}
         <TabsContent value="professional" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="joiningDate">{t('Joining Date')} *</Label>
               <Input id="joiningDate" type="date" {...register('joiningDate')} />
@@ -465,6 +473,24 @@ export default function EmployeeForm({
               {errors.department && (
                 <p className="text-sm text-red-600">{errors.department.message}</p>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="designation">{t('Designation')}</Label>
+              <Select
+                value={watch('designation')}
+                onValueChange={(value) => setValue('designation', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('Select designation')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {designations.map((designation) => (
+                    <SelectItem key={getEntityId(designation)} value={getEntityId(designation)}>
+                      {designation.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

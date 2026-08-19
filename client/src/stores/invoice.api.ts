@@ -264,6 +264,18 @@ export const invoiceApi = createApi({
       query: () => '/generate-bill-number',
     }),
 
+    // Preview the invoice number the next save would receive (see next-number route) —
+    // not reserved, just what the New Invoice form shows before an invoice exists to save.
+    // Tagged 'Invoice' so it refetches after createInvoice — otherwise the preview would
+    // keep showing the number that was just used until something else invalidates it.
+    getNextInvoiceNumber: builder.query({
+      query: (type) => ({
+        url: '/next-number',
+        params: type ? { type } : {},
+      }),
+      providesTags: ['Invoice'],
+    }),
+
     // Get customer product history
     getCustomerProductHistory: builder.query({
       query: ({ customerId, productId }) => ({
@@ -297,6 +309,8 @@ export const {
   useGetOutstandingInvoicesQuery,
   useGetInvoicesByCustomerQuery,
   useGenerateBillNumberQuery,
+  useGetNextInvoiceNumberQuery,
+  useLazyGetNextInvoiceNumberQuery,
   useGetCustomerProductHistoryQuery,
   useGetPendingInvoiceSummaryByCustomerQuery,
 } = invoiceApi

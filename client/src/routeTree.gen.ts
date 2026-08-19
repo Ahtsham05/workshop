@@ -142,6 +142,7 @@ import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authentic
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
 import { Route as AuthenticatedHrLeavesIndexImport } from './routes/_authenticated/hr/leaves/index'
 import { Route as AuthenticatedHrEmployeesIndexImport } from './routes/_authenticated/hr/employees/index'
+import { Route as AuthenticatedHrDesignationsIndexImport } from './routes/_authenticated/hr/designations/index'
 import { Route as AuthenticatedHrDepartmentsIndexImport } from './routes/_authenticated/hr/departments/index'
 import { Route as AuthenticatedHrAttendanceIndexImport } from './routes/_authenticated/hr/attendance/index'
 import { Route as AuthenticatedSchoolStudentsPromotionImport } from './routes/_authenticated/school/students/promotion'
@@ -1056,6 +1057,13 @@ const AuthenticatedHrEmployeesIndexRoute =
   AuthenticatedHrEmployeesIndexImport.update({
     id: '/hr/employees/',
     path: '/hr/employees/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedHrDesignationsIndexRoute =
+  AuthenticatedHrDesignationsIndexImport.update({
+    id: '/hr/designations/',
+    path: '/hr/designations/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -2051,6 +2059,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrDepartmentsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/hr/designations/': {
+      id: '/_authenticated/hr/designations/'
+      path: '/hr/designations'
+      fullPath: '/hr/designations'
+      preLoaderRoute: typeof AuthenticatedHrDesignationsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/hr/employees/': {
       id: '/_authenticated/hr/employees/'
       path: '/hr/employees'
@@ -2624,6 +2639,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedHrEmployeesCreateRoute: typeof AuthenticatedHrEmployeesCreateRoute
   AuthenticatedHrAttendanceIndexRoute: typeof AuthenticatedHrAttendanceIndexRoute
   AuthenticatedHrDepartmentsIndexRoute: typeof AuthenticatedHrDepartmentsIndexRoute
+  AuthenticatedHrDesignationsIndexRoute: typeof AuthenticatedHrDesignationsIndexRoute
   AuthenticatedHrEmployeesIndexRoute: typeof AuthenticatedHrEmployeesIndexRoute
   AuthenticatedHrLeavesIndexRoute: typeof AuthenticatedHrLeavesIndexRoute
   AuthenticatedHrPayrollIndexRoute: typeof AuthenticatedHrPayrollIndexRoute
@@ -2720,6 +2736,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHrEmployeesCreateRoute: AuthenticatedHrEmployeesCreateRoute,
   AuthenticatedHrAttendanceIndexRoute: AuthenticatedHrAttendanceIndexRoute,
   AuthenticatedHrDepartmentsIndexRoute: AuthenticatedHrDepartmentsIndexRoute,
+  AuthenticatedHrDesignationsIndexRoute: AuthenticatedHrDesignationsIndexRoute,
   AuthenticatedHrEmployeesIndexRoute: AuthenticatedHrEmployeesIndexRoute,
   AuthenticatedHrLeavesIndexRoute: AuthenticatedHrLeavesIndexRoute,
   AuthenticatedHrPayrollIndexRoute: AuthenticatedHrPayrollIndexRoute,
@@ -2849,6 +2866,7 @@ export interface FileRoutesByFullPath {
   '/school/students/promotion': typeof AuthenticatedSchoolStudentsPromotionRoute
   '/hr/attendance': typeof AuthenticatedHrAttendanceIndexRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsIndexRoute
+  '/hr/designations': typeof AuthenticatedHrDesignationsIndexRoute
   '/hr/employees': typeof AuthenticatedHrEmployeesIndexRoute
   '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
@@ -3003,6 +3021,7 @@ export interface FileRoutesByTo {
   '/school/students/promotion': typeof AuthenticatedSchoolStudentsPromotionRoute
   '/hr/attendance': typeof AuthenticatedHrAttendanceIndexRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsIndexRoute
+  '/hr/designations': typeof AuthenticatedHrDesignationsIndexRoute
   '/hr/employees': typeof AuthenticatedHrEmployeesIndexRoute
   '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
@@ -3163,6 +3182,7 @@ export interface FileRoutesById {
   '/_authenticated/school/students/promotion': typeof AuthenticatedSchoolStudentsPromotionRoute
   '/_authenticated/hr/attendance/': typeof AuthenticatedHrAttendanceIndexRoute
   '/_authenticated/hr/departments/': typeof AuthenticatedHrDepartmentsIndexRoute
+  '/_authenticated/hr/designations/': typeof AuthenticatedHrDesignationsIndexRoute
   '/_authenticated/hr/employees/': typeof AuthenticatedHrEmployeesIndexRoute
   '/_authenticated/hr/leaves/': typeof AuthenticatedHrLeavesIndexRoute
   '/_authenticated/hr/payroll/': typeof AuthenticatedHrPayrollIndexRoute
@@ -3324,6 +3344,7 @@ export interface FileRouteTypes {
     | '/school/students/promotion'
     | '/hr/attendance'
     | '/hr/departments'
+    | '/hr/designations'
     | '/hr/employees'
     | '/hr/leaves'
     | '/hr/payroll'
@@ -3477,6 +3498,7 @@ export interface FileRouteTypes {
     | '/school/students/promotion'
     | '/hr/attendance'
     | '/hr/departments'
+    | '/hr/designations'
     | '/hr/employees'
     | '/hr/leaves'
     | '/hr/payroll'
@@ -3635,6 +3657,7 @@ export interface FileRouteTypes {
     | '/_authenticated/school/students/promotion'
     | '/_authenticated/hr/attendance/'
     | '/_authenticated/hr/departments/'
+    | '/_authenticated/hr/designations/'
     | '/_authenticated/hr/employees/'
     | '/_authenticated/hr/leaves/'
     | '/_authenticated/hr/payroll/'
@@ -3816,6 +3839,7 @@ export const routeTree = rootRoute
         "/_authenticated/hr/employees/create",
         "/_authenticated/hr/attendance/",
         "/_authenticated/hr/departments/",
+        "/_authenticated/hr/designations/",
         "/_authenticated/hr/employees/",
         "/_authenticated/hr/leaves/",
         "/_authenticated/hr/payroll/",
@@ -4339,6 +4363,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/hr/departments/": {
       "filePath": "_authenticated/hr/departments/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/hr/designations/": {
+      "filePath": "_authenticated/hr/designations/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/hr/employees/": {

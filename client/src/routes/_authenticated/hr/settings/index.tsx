@@ -1,7 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useLanguage } from '@/context/language-context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Settings, Users, Calendar, FileText, DollarSign, Shield } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export const Route = createFileRoute('/_authenticated/hr/settings/')({
   component: HRSettings,
@@ -10,12 +12,19 @@ export const Route = createFileRoute('/_authenticated/hr/settings/')({
 function HRSettings() {
   const { t } = useLanguage();
 
-  const settingsSections = [
+  const settingsSections: {
+    title: string;
+    description: string;
+    icon: ReactNode;
+    color: string;
+    path?: string;
+  }[] = [
     {
       title: t('Designation Management'),
       description: t('Manage job titles and positions'),
       icon: <Users className="h-6 w-6 text-blue-600" />,
       color: 'bg-blue-50',
+      path: '/hr/designations',
     },
     {
       title: t('Shift Management'),
@@ -57,17 +66,26 @@ function HRSettings() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {settingsSections.map((section, index) => (
-          <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardHeader>
-              <div className={`p-3 rounded-full ${section.color} w-fit mb-2`}>
-                {section.icon}
-              </div>
-              <CardTitle className="text-lg">{section.title}</CardTitle>
-              <CardDescription>{section.description}</CardDescription>
-            </CardHeader>
-          </Card>
-        ))}
+        {settingsSections.map((section, index) => {
+          const card = (
+            <Card className={cn('transition-shadow', section.path && 'cursor-pointer hover:shadow-md')}>
+              <CardHeader>
+                <div className={`p-3 rounded-full ${section.color} w-fit mb-2`}>
+                  {section.icon}
+                </div>
+                <CardTitle className="text-lg">{section.title}</CardTitle>
+                <CardDescription>{section.description}</CardDescription>
+              </CardHeader>
+            </Card>
+          );
+          return section.path ? (
+            <Link key={index} to={section.path as any}>
+              {card}
+            </Link>
+          ) : (
+            <div key={index}>{card}</div>
+          );
+        })}
       </div>
 
       <Card className="border-dashed">

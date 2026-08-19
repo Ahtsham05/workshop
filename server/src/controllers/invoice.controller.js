@@ -302,6 +302,15 @@ const generateBillNumber = catchAsync(async (req, res) => {
   res.send({ billNumber });
 });
 
+const getNextInvoiceNumber = catchAsync(async (req, res) => {
+  const invoiceNumber = await invoiceService.previewNextInvoiceNumber(req.query.type);
+  // Not reserved — same caching concern as generateBillNumber above.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.send({ invoiceNumber });
+});
+
 const convertQuotation = catchAsync(async (req, res) => {
   const invoice = await invoiceService.convertQuotationToInvoice(
     req.params.invoiceId,
@@ -450,6 +459,7 @@ module.exports = {
   duplicateInvoice,
   convertQuotation,
   generateBillNumber,
+  getNextInvoiceNumber,
   getCustomerProductHistory,
   getPendingInvoiceSummaryByCustomer,
 };

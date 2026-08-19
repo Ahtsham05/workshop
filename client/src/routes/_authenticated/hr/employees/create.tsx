@@ -3,6 +3,7 @@ import { useLanguage } from '@/context/language-context';
 import {
   useCreateEmployeeMutation,
   useGetDepartmentsQuery,
+  useGetDesignationsQuery,
   useGetEmployeesQuery,
 } from '@/stores/hr.api';
 import EmployeeForm from '@/features/hr/employees/employee-form';
@@ -21,6 +22,7 @@ function CreateEmployee() {
 
   const [createEmployee, { isLoading }] = useCreateEmployeeMutation();
   const { data: departmentsData } = useGetDepartmentsQuery({});
+  const { data: designationsData } = useGetDesignationsQuery({ limit: 100 });
   const { data: employeesData } = useGetEmployeesQuery({ limit: 100 });
 
   const shifts = [
@@ -65,6 +67,7 @@ function CreateEmployee() {
             onCancel={handleCancel}
             isLoading={isLoading}
             departments={departmentsData?.results || []}
+            designations={designationsData?.results || []}
             shifts={shifts}
             employees={employeesData?.results || []}
           />

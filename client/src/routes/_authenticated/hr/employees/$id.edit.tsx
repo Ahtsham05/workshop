@@ -6,6 +6,7 @@ import {
   useGetEmployeeQuery,
   useUpdateEmployeeMutation,
   useGetDepartmentsQuery,
+  useGetDesignationsQuery,
   useGetEmployeesQuery,
 } from '@/stores/hr.api';
 import { getEntityId } from '@/lib/entity-id';
@@ -30,6 +31,7 @@ function EmployeeEditPage() {
 
   // Fetch supporting data
   const { data: departmentsData } = useGetDepartmentsQuery({ page: 1, limit: 100 });
+  const { data: designationsData } = useGetDesignationsQuery({ page: 1, limit: 100 });
   const { data: employeesData } = useGetEmployeesQuery({ page: 1, limit: 1000 });
 
   const shifts = [
@@ -140,6 +142,7 @@ function EmployeeEditPage() {
   };
 
   const departments = departmentsData?.results || [];
+  const designations = designationsData?.results || [];
   // Filter out current employee from managers list
   const employees =
     employeesData?.results?.filter((e: any) => getEntityId(e) !== id) || [];
@@ -173,6 +176,7 @@ function EmployeeEditPage() {
             onCancel={handleCancel}
             isLoading={isUpdating}
             departments={departments}
+            designations={designations}
             shifts={shifts}
             employees={employees}
           />

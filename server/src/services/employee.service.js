@@ -77,9 +77,13 @@ const createEmployee = async (employeeBody) => {
   if (cleanedBody.reportingManager && !cleanedBody.reportingManager.match(/^[0-9a-fA-F]{24}$/)) {
     delete cleanedBody.reportingManager;
   }
-  
+
+  // If designation is not a valid ObjectId, remove it
+  if (cleanedBody.designation && !cleanedBody.designation.match(/^[0-9a-fA-F]{24}$/)) {
+    delete cleanedBody.designation;
+  }
+
   cleanedBody.employeeId = employeeId;
-  delete cleanedBody.designation;
 
   const employee = await Employee.create(cleanedBody);
 
@@ -224,10 +228,17 @@ const updateEmployeeById = async (employeeId, updateBody, scope = {}) => {
     cleanedBody.reportingManager = undefined;
     employee.reportingManager = undefined;
   }
-  
-  // Keep employeeId system-managed and designation hidden in HR form workflow.
+
+  // If designation is not a valid ObjectId, remove it
+  if (cleanedBody.designation && !cleanedBody.designation.match(/^[0-9a-fA-F]{24}$/)) {
+    delete cleanedBody.designation;
+  } else if (cleanedBody.designation === '' || cleanedBody.designation === null) {
+    cleanedBody.designation = undefined;
+    employee.designation = undefined;
+  }
+
+  // Keep employeeId system-managed.
   delete cleanedBody.employeeId;
-  delete cleanedBody.designation;
 
   // Exiting an employee always needs an end date so attendance/payroll/final settlement
   // have somewhere to stop — default to today if the form didn't supply one. Coming back

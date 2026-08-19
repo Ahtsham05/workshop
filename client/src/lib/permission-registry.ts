@@ -32,6 +32,7 @@ export type PermissionKey =
   | 'viewWalletReports' | 'viewInstallmentReports' | 'exportReports'
   | 'getEmployees' | 'createEmployees' | 'manageEmployees' | 'deleteEmployees'
   | 'getDepartments' | 'createDepartments' | 'manageDepartments' | 'deleteDepartments'
+  | 'getDesignations' | 'createDesignations' | 'manageDesignations' | 'deleteDesignations'
   | 'getAttendance' | 'createAttendance' | 'manageAttendance' | 'deleteAttendance'
   | 'getLeaves' | 'createLeaves' | 'manageLeaves' | 'approveLeaves' | 'rejectLeaves' | 'deleteLeaves'
   | 'getPayroll' | 'createPayroll' | 'managePayroll' | 'processPayroll' | 'deletePayroll'
@@ -106,6 +107,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   },
   { id: 'hr_employees', label: 'HR — Employees', permissions: ['getEmployees', 'createEmployees', 'manageEmployees', 'deleteEmployees'] },
   { id: 'hr_departments', label: 'HR — Departments', permissions: ['getDepartments', 'createDepartments', 'manageDepartments', 'deleteDepartments'] },
+  { id: 'hr_designations', label: 'HR — Designations', permissions: ['getDesignations', 'createDesignations', 'manageDesignations', 'deleteDesignations'] },
   { id: 'hr_attendance', label: 'HR — Attendance', permissions: ['getAttendance', 'createAttendance', 'manageAttendance', 'deleteAttendance'] },
   { id: 'hr_leaves', label: 'HR — Leave Management', permissions: ['getLeaves', 'createLeaves', 'manageLeaves', 'approveLeaves', 'rejectLeaves', 'deleteLeaves'] },
   { id: 'hr_payroll', label: 'HR — Payroll', permissions: ['getPayroll', 'createPayroll', 'managePayroll', 'processPayroll', 'deletePayroll'] },

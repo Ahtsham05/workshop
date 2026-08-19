@@ -478,14 +478,22 @@ const createInvoice = async (invoiceBody, userId) => {
     invoice.finalize();
   }
 
-  // Save with retry for duplicate invoice number race condition (E11000)
+  // Save with retry for duplicate invoice number race condition (E11000) — but only when
+  // the number was auto-generated. A manually-typed override (see invoiceNumber input in
+  // the New Invoice form) that collides gets a clear error instead of being silently
+  // swapped out for a different auto-generated number the user never asked for.
+  const hasManualInvoiceNumber = Boolean(invoiceBody.invoiceNumber && String(invoiceBody.invoiceNumber).trim());
   const MAX_RETRIES = 3;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       await invoice.save();
       break;
     } catch (err) {
-      if (err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNumber && attempt < MAX_RETRIES - 1) {
+      const isDuplicateInvoiceNumber = err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNumber;
+      if (isDuplicateInvoiceNumber && hasManualInvoiceNumber) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Invoice number "${invoiceBody.invoiceNumber}" is already in use`);
+      }
+      if (isDuplicateInvoiceNumber && attempt < MAX_RETRIES - 1) {
         // Duplicate invoice number - regenerate and retry
         invoice.invoiceNumber = undefined;
         invoice.isNew = true;
@@ -1683,6 +1691,20 @@ const generateBillNumber = async () => {
 };
 
 /**
+ * Preview the invoice number the next save would receive — same sequence
+ * `generateNextDocumentNumber` assigns in the pre-save hook, just surfaced ahead of time
+ * so the New Invoice form can show it before the invoice actually exists. Not reserved:
+ * two concurrent previews can return the same value, same as generateBillNumber above —
+ * the invoiceNumber unique index is still the real guard at save time.
+ * @param {string} type - invoice type ('quotation' gets the QUO- prefix, everything else INV-)
+ * @returns {Promise<string>}
+ */
+const previewNextInvoiceNumber = async (type) => {
+  const prefix = type === 'quotation' ? 'QUO' : 'INV';
+  return await Invoice.generateNextDocumentNumber(prefix);
+};
+
+/**
  * Get customer's product purchase history
  * @param {string} customerId
  * @param {string} productId
@@ -1743,6 +1765,7 @@ module.exports = {
   getInvoiceStatistics,
   getDailySalesReport,
   generateBillNumber,
+  previewNextInvoiceNumber,
   getCustomerProductHistory,
   convertQuotationToInvoice,
 };

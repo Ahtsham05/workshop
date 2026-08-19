@@ -188,6 +188,11 @@ const PERMISSION_GROUPS = [
     permissions: ['getDepartments', 'createDepartments', 'manageDepartments', 'deleteDepartments'],
   },
   {
+    id: 'hr_designations',
+    label: 'HR — Designations',
+    permissions: ['getDesignations', 'createDesignations', 'manageDesignations', 'deleteDesignations'],
+  },
+  {
     id: 'hr_attendance',
     label: 'HR — Attendance',
     permissions: ['getAttendance', 'createAttendance', 'manageAttendance', 'deleteAttendance'],

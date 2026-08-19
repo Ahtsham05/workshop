@@ -80,6 +80,7 @@ const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard
 // HR Routes
 const employeeRoute = require('./employee.route');
 const departmentRoute = require('./department.route');
+const designationRoute = require('./designation.route');
 const attendanceRoute = require('./attendance.route');
 const leaveRoute = require('./leave.route');
 const payrollRoute = require('./payroll.route');
@@ -440,6 +441,10 @@ const defaultRoutes = [
     route: departmentRoute
   },
   {
+    path: '/designations',
+    route: designationRoute
+  },
+  {
     path: '/attendance',
     route: attendanceRoute
   },
@@ -705,6 +710,7 @@ const protectedPaths = [
   '/bill-payments',
   '/employees',
   '/departments',
+  '/designations',
   '/attendance',
   '/leaves',
   '/payroll',

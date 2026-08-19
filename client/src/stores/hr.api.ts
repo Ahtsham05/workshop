@@ -39,7 +39,7 @@ const baseQueryWithAuth: BaseQueryFn<
 export const hrApi = createApi({
   reducerPath: 'hrApi',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['Employee', 'Department', 'Attendance', 'Leave', 'Payroll', 'EmployeeLedger'],
+  tagTypes: ['Employee', 'Department', 'Designation', 'Attendance', 'Leave', 'Payroll', 'EmployeeLedger'],
   endpoints: (builder) => ({
     // Employees
     getEmployees: builder.query({
@@ -84,7 +84,29 @@ export const hrApi = createApi({
       query: (id) => ({ url: `/departments/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Department'],
     }),
-    
+
+    // Designations
+    getDesignations: builder.query({
+      query: (params) => ({ url: '/designations', params }),
+      providesTags: ['Designation'],
+    }),
+    getDesignation: builder.query({
+      query: (id) => `/designations/${id}`,
+      providesTags: ['Designation'],
+    }),
+    createDesignation: builder.mutation({
+      query: (data) => ({ url: '/designations', method: 'POST', body: data }),
+      invalidatesTags: ['Designation'],
+    }),
+    updateDesignation: builder.mutation({
+      query: ({ id, ...data }) => ({ url: `/designations/${id}`, method: 'PATCH', body: data }),
+      invalidatesTags: ['Designation'],
+    }),
+    deleteDesignation: builder.mutation({
+      query: (id) => ({ url: `/designations/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Designation'],
+    }),
+
     // Attendance
     getAttendances: builder.query({
       query: (params) => ({ url: '/attendance', params }),
@@ -278,6 +300,11 @@ export const {
   useCreateDepartmentMutation,
   useUpdateDepartmentMutation,
   useDeleteDepartmentMutation,
+  useGetDesignationsQuery,
+  useGetDesignationQuery,
+  useCreateDesignationMutation,
+  useUpdateDesignationMutation,
+  useDeleteDesignationMutation,
   useGetAttendancesQuery,
   useGetAttendanceQuery,
   useCreateAttendanceMutation,

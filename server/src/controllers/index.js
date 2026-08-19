@@ -42,6 +42,7 @@ module.exports.whatsappController = require('./whatsapp.controller');
 // HR Controllers
 module.exports.employeeController = require('./employee.controller');
 module.exports.departmentController = require('./department.controller');
+module.exports.designationController = require('./designation.controller');
 module.exports.attendanceController = require('./attendance.controller');
 module.exports.leaveController = require('./leave.controller');
 module.exports.payrollController = require('./payroll.controller');

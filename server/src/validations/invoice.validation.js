@@ -60,6 +60,9 @@ const splitPayment = Joi.object({
 
 const createInvoice = {
   body: Joi.object({
+    // Optional manual override — omitted, the pre-save hook in invoice.model.js
+    // auto-generates the next sequential number instead (see generateNextDocumentNumber).
+    invoiceNumber: Joi.string().trim().allow('').optional(),
     items: Joi.array().items(invoiceItem).min(1).required(),
     customerId: Joi.alternatives().try(
       Joi.string().custom(objectId),

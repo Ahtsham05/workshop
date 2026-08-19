@@ -8,7 +8,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 // import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History, CreditCard, Eye, Percent, Receipt, ScanBarcode, Layers, Ban } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History, CreditCard, Eye, Percent, Receipt, ScanBarcode, Layers, Ban, Pencil, RotateCcw } from 'lucide-react'
 import type { ImeiRecord, ImeiEntryInput } from '@/stores/imei.api'
 import {
   entryImei,
@@ -25,7 +25,7 @@ import { useLanguage } from '@/context/language-context'
 import { useIsPhone } from '@/hooks/use-mobile'
 import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
-import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
+import { useCreateInvoiceMutation, useUpdateInvoiceMutation, useGetNextInvoiceNumberQuery, invoiceApi } from '@/stores/invoice.api'
 import { useGetAllSalesmanProfilesQuery } from '@/stores/salesmanProfile.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
@@ -206,6 +206,20 @@ export function InvoicePanel({
   // copies of the same row would double up every interactive control (Popover triggers,
   // input refs) under one shared item-id key, breaking things like the product picker.
   const isPhone = useIsPhone()
+  // Preview of the number the next save would actually receive (see next-number route +
+  // Invoice.generateNextDocumentNumber) — shown read-only until the user clicks the pencil
+  // to type their own. Only relevant before the invoice is first saved; a saved invoice
+  // already has its real invoiceNumber from the server, and that number can't be changed
+  // after the fact (updateInvoice's validation doesn't accept the field at all). Grouping
+  // cash/credit/pending together as one query arg (only 'quotation' gets its own) avoids
+  // three separate network round trips as the user flips between those three — they all
+  // resolve to the same INV- prefix server-side anyway.
+  const { data: nextInvoiceNumberData } = useGetNextInvoiceNumberQuery(
+    invoice.type === 'quotation' ? 'quotation' : 'invoice',
+    { skip: isEditing },
+  )
+  const previewedInvoiceNumber = nextInvoiceNumberData?.invoiceNumber as string | undefined
+  const [isEditingInvoiceNumber, setIsEditingInvoiceNumber] = useState(false)
   const dispatch = useDispatch<AppDispatch>()
   const { hasPermission } = usePermissions()
   const canCreateCustomer = hasPermission('createCustomers' as never)
@@ -1477,6 +1491,11 @@ export function InvoicePanel({
           isManualEntry: item.isManualEntry || false,
           imeis: item.imeis || [],
         })),
+        // Manual invoice-number override — only meaningful on create. updateInvoice's
+        // validation schema doesn't allow this field at all (an existing invoice's number
+        // isn't editable after the fact), so it's left out of the payload entirely when
+        // editing rather than sent and silently rejected.
+        ...(!isEditing && invoice.invoiceNumber?.trim() ? { invoiceNumber: invoice.invoiceNumber.trim() } : {}),
         customerId: invoice.customerId,
         customerName: invoice.customerName,
         walkInCustomerName: invoice.walkInCustomerName,
@@ -2791,6 +2810,67 @@ export function InvoicePanel({
               />
             </div>
           </div>
+
+          {/* Invoice number — real (read-only) once saved; before that, a live preview of
+              what the next save would auto-assign, editable via the pencil. Saved invoices
+              can't have their number changed after the fact (updateInvoice's validation
+              doesn't accept the field), so editing only applies pre-save. */}
+          {isEditing ? (
+            editingInvoice?.invoiceNumber && (
+              <div className='mt-3 flex items-center gap-2'>
+                <span className='text-xs text-muted-foreground'>{t('invoice_number') || 'Invoice Number'}</span>
+                <span className='rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs'>
+                  {editingInvoice.invoiceNumber}
+                </span>
+              </div>
+            )
+          ) : (
+            <div className='mt-3 flex items-center gap-2'>
+              <span className='text-xs text-muted-foreground'>{t('invoice_number') || 'Invoice Number'}</span>
+              {isEditingInvoiceNumber ? (
+                <div className='flex items-center gap-1'>
+                  <Input
+                    autoFocus
+                    showVoiceInput={false}
+                    value={invoice.invoiceNumber ?? previewedInvoiceNumber ?? ''}
+                    onChange={(e) => setInvoice(prev => ({ ...prev, invoiceNumber: e.target.value }))}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => setIsEditingInvoiceNumber(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); setIsEditingInvoiceNumber(false) }
+                    }}
+                    className='h-7 w-44 font-mono text-xs'
+                  />
+                  {invoice.invoiceNumber && (
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      className='h-7 w-7 p-0 text-muted-foreground'
+                      title={t('reset_to_auto_generated') || 'Reset to auto-generated'}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setInvoice(prev => ({ ...prev, invoiceNumber: undefined }))
+                        setIsEditingInvoiceNumber(false)
+                      }}
+                    >
+                      <RotateCcw className='h-3.5 w-3.5' />
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type='button'
+                  onClick={() => setIsEditingInvoiceNumber(true)}
+                  className='inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-foreground transition-colors hover:bg-muted'
+                  title={t('edit_invoice_number') || 'Edit invoice number'}
+                >
+                  {invoice.invoiceNumber || previewedInvoiceNumber || '…'}
+                  <Pencil className='h-3 w-3 text-muted-foreground' />
+                </button>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent className='space-y-4'>
           {/* Customer + Invoice Date share a row only when the catalog is showing —
