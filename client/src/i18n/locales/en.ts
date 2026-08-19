@@ -3,6 +3,7 @@ const en: Record<string, string> = {
     // General Search and Command Menu
     "search": "Search",
     "search_placeholder": "Type a command or search...",
+    "search_menu_placeholder": "Search menu...",
     "no_results_found": "No results found.",
     "theme": "Theme",
     "light": "Light",

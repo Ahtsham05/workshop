@@ -222,6 +222,43 @@ async function streamGenerateContent(contents, businessContext, toolDeclarations
 }
 
 /**
+ * Runs one tool call with timing + one structured-ish log line per call (name/durationMs/ok),
+ * shared by both the buffered and streaming loops below so this observability can't drift out
+ * of sync between them. Deliberately logs `args`/`result` shapes, not their values — an invoice
+ * total or a customer's phone number has no business sitting in application logs (spec: "NEVER
+ * log ... unnecessary personal data ... full financial information"), but knowing which tool
+ * ran, how long it took, and whether it succeeded is exactly what you need to debug "the
+ * assistant feels slow" or "did permission scoping actually get exercised" without opening the
+ * database. NOTE: the configured winston format (config/logger.js) only prints `message`, not
+ * extra metadata fields passed as a second arg to logger.info/warn/error — so the fields are
+ * baked directly into the message string, matching every other log call in this file.
+ */
+async function executeToolCall(name, args, ctx, TOOL_HANDLERS) {
+  const handler = TOOL_HANDLERS[name];
+  const startedAt = Date.now();
+  let result;
+  let ok = true;
+  try {
+    if (!handler) {
+      ok = false;
+      result = { error: `Unknown tool: ${name}` };
+    } else {
+      result = await handler(args, ctx);
+      ok = !(result && typeof result === 'object' && 'error' in result);
+    }
+  } catch (err) {
+    ok = false;
+    logger.error(`AI assistant tool "${name}" failed:`, err.message);
+    result = { error: 'Failed to fetch this data.' };
+  }
+  const durationMs = Date.now() - startedAt;
+  logger.info(
+    `AI assistant tool call: name=${name} conversationId=${ctx.conversationId} org=${ctx.organizationId} durationMs=${durationMs} ok=${ok} argKeys=[${Object.keys(args || {}).join(',')}]`
+  );
+  return result;
+}
+
+/**
  * Streaming counterpart to runConversation. Same tool-calling loop and same rules (never
  * invent data, always call a tool), but text parts are pushed to `onEvent` as they arrive
  * from Gemini instead of being returned only once the whole turn is done, and a human-friendly
@@ -286,14 +323,8 @@ async function runConversationStream(history, ctx, businessContext = {}, onEvent
     for (const part of functionCalls) {
       const { name, args = {} } = part.functionCall;
       onEvent({ type: 'status', text: friendlyToolStatus(name) });
-      let result;
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        result = TOOL_HANDLERS[name] ? await TOOL_HANDLERS[name](args, ctx) : { error: `Unknown tool: ${name}` };
-      } catch (err) {
-        logger.error(`AI assistant tool "${name}" failed:`, err.message);
-        result = { error: 'Failed to fetch this data.' };
-      }
+      // eslint-disable-next-line no-await-in-loop
+      const result = await executeToolCall(name, args, ctx, TOOL_HANDLERS);
       toolCalls.push({ name, args, result });
       functionResponseParts.push({ functionResponse: { name, response: result } });
     }
@@ -361,15 +392,8 @@ async function runConversation(history, ctx, businessContext = {}) {
     const functionResponseParts = [];
     for (const part of functionCalls) {
       const { name, args = {} } = part.functionCall;
-      const handler = TOOL_HANDLERS[name];
-      let result;
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        result = handler ? await handler(args, ctx) : { error: `Unknown tool: ${name}` };
-      } catch (err) {
-        logger.error(`AI assistant tool "${name}" failed:`, err.message);
-        result = { error: 'Failed to fetch this data.' };
-      }
+      // eslint-disable-next-line no-await-in-loop
+      const result = await executeToolCall(name, args, ctx, TOOL_HANDLERS);
       toolCalls.push({ name, args, result });
       functionResponseParts.push({ functionResponse: { name, response: result } });
     }

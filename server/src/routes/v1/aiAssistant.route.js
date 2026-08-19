@@ -2,6 +2,7 @@ const express = require('express');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
+const { aiMessageLimiter } = require('../../middlewares/aiAssistantRateLimit');
 const aiAssistantValidation = require('../../validations/aiAssistant.validation');
 const aiAssistantController = require('../../controllers/aiAssistant.controller');
 
@@ -20,11 +21,11 @@ router
 router
   .route('/conversations/:conversationId/messages')
   .get(validate(aiAssistantValidation.conversationParams), aiAssistantController.getMessages)
-  .post(validate(aiAssistantValidation.sendMessage), aiAssistantController.sendMessage);
+  .post(aiMessageLimiter, validate(aiAssistantValidation.sendMessage), aiAssistantController.sendMessage);
 
 router
   .route('/conversations/:conversationId/messages/stream')
-  .post(validate(aiAssistantValidation.sendMessage), aiAssistantController.sendMessageStream);
+  .post(aiMessageLimiter, validate(aiAssistantValidation.sendMessage), aiAssistantController.sendMessageStream);
 
 router
   .route('/conversations/:conversationId/messages/:messageId/confirm-action')

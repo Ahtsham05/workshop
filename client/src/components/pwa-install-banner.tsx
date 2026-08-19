@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouterState } from '@tanstack/react-router';
 import { Download, Share, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -77,7 +78,10 @@ export function PWAInstallBanner() {
     });
   };
 
-  return (
+  // Portal straight to <body> so this always paints above the sidebar/header —
+  // as a regular in-tree sibling it was landing behind the sidebar's own
+  // fixed, stacked layer despite the higher z-index.
+  return createPortal(
     <>
       <div
         className="fixed bottom-0 left-0 right-0 z-[100] border-t border-blue-200 bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2.5 text-white shadow-[0_-4px_20px_rgba(0,0,0,0.15)] pb-[max(0.625rem,env(safe-area-inset-bottom))]"
@@ -127,6 +131,7 @@ export function PWAInstallBanner() {
           </DialogHeader>
         </DialogContent>
       </Dialog>
-    </>
+    </>,
+    document.body,
   );
 }

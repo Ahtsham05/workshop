@@ -3,6 +3,7 @@ const ur: Record<string, string> = {
     // General Search and Command Menu
     "search": "تلاش کریں",
     "search_placeholder": "کمانڈ ٹائپ کریں یا تلاش کریں...",
+    "search_menu_placeholder": "مینو تلاش کریں...",
     "no_results_found": "کوئی نتائج نہیں ملے۔",
     "theme": "تھیم",
     "light": "ہلکا",

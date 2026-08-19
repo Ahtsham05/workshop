@@ -3,6 +3,7 @@ const hi: Record<string, string> = {
   // General
   "search": "खोजें",
   "search_placeholder": "कमांड टाइप करें या खोजें...",
+  "search_menu_placeholder": "मेनू खोजें...",
   "no_results_found": "कोई परिणाम नहीं मिला।",
   "theme": "थीम",
   "light": "हल्का",

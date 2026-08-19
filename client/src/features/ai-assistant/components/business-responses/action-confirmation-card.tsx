@@ -92,7 +92,7 @@ export function ActionConfirmationCard({
   }
 
   return (
-    <div className='mt-2 w-full max-w-sm rounded-2xl border bg-card p-4 shadow-sm'>
+    <div data-testid='action-confirmation-card' className='mt-2 w-full max-w-sm rounded-2xl border bg-card p-4 shadow-sm'>
       <p className='text-xs font-medium text-muted-foreground'>Create Invoice</p>
       <dl className='mt-2 space-y-1.5 text-sm'>
         <div className='flex justify-between gap-3'>

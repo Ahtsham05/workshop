@@ -1,5 +1,4 @@
 const { Invoice, Product, StockAdjustment, InventoryTransfer } = require('../../../models');
-const mongoose = require('mongoose');
 const productService = require('../../product.service');
 const { buildFilter, buildAggScope, resolveRange, validProductOrCustomerIdExpr, PERIOD_PARAM } = require('./shared');
 
@@ -56,17 +55,18 @@ async function getStockMovements(args, ctx) {
     endDate: args.endDate,
   });
 
-  const orgScope = {};
-  if (ctx.organizationId && mongoose.Types.ObjectId.isValid(ctx.organizationId)) {
-    orgScope.organizationId = new mongoose.Types.ObjectId(String(ctx.organizationId));
-  }
-  const branchObjId =
-    ctx.branchId && mongoose.Types.ObjectId.isValid(ctx.branchId) ? new mongoose.Types.ObjectId(String(ctx.branchId)) : null;
+  // Reuses the same org/branch scope every other tool builds via buildAggScope — was previously
+  // hand-rolled here with its own mongoose.Types.ObjectId.isValid checks, functionally identical
+  // but duplicated logic that could silently drift out of sync if buildAggScope ever changes.
+  const aggScope = buildAggScope(ctx);
+  const branchObjId = aggScope.branchId || null;
 
-  const adjustmentMatch = { ...orgScope, createdAt: { $gte: startDate, $lte: endDate } };
-  if (branchObjId) adjustmentMatch.branchId = branchObjId;
+  const adjustmentMatch = { ...aggScope, createdAt: { $gte: startDate, $lte: endDate } };
 
-  const transferMatch = { ...orgScope, status: 'completed', completedAt: { $gte: startDate, $lte: endDate } };
+  // InventoryTransfer has no single `branchId` field — a transfer touches this branch if it's
+  // either end, hence the $or (buildAggScope alone can't express that, so this part stays custom).
+  const transferMatch = { status: 'completed', completedAt: { $gte: startDate, $lte: endDate } };
+  if (aggScope.organizationId) transferMatch.organizationId = aggScope.organizationId;
   if (branchObjId) transferMatch.$or = [{ fromBranchId: branchObjId }, { toBranchId: branchObjId }];
 
   const [adjustmentRows, completedTransfersCount] = await Promise.all([

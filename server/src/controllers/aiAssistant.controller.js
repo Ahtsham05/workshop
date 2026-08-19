@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const { getBranchContext } = require('../utils/branchFilter');
+const { getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 const { aiAssistantService } = require('../services');
 
 const createConversation = catchAsync(async (req, res) => {
@@ -108,6 +108,11 @@ const sendMessageStream = catchAsync(async (req, res) => {
 });
 
 const confirmAction = catchAsync(async (req, res) => {
+  // create_invoice writes an Invoice, whose schema requires branchId — unlike sendMessage's
+  // read-only tools (branchScope() only sets req.branchId when the client sends x-branch-id,
+  // and getBranchContext() alone leaves it unset otherwise), a write needs a real fallback.
+  // Same pattern product/customer/supplier "create" controllers already use.
+  await resolveWriteBranchId(req);
   const { organizationId, branchId, createdBy } = getBranchContext(req);
   const isSystemAdmin = req.user?.systemRole === 'superAdmin' || req.user?.systemRole === 'system_admin';
   const permissions = isSystemAdmin ? undefined : req.user?.role?.permissions || {};

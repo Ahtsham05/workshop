@@ -110,7 +110,7 @@ const sendMessage = async ({
     currency: 'Rs',
   };
 
-  const ctx = { organizationId, branchId, permissions, isSystemAdmin, userId };
+  const ctx = { organizationId, branchId, permissions, isSystemAdmin, userId, conversationId };
   const { text: replyText, toolCalls, interrupted } = onEvent
     ? await geminiService.runConversationStream(history, ctx, businessContext, onEvent, signal)
     : await geminiService.runConversation(history, ctx, businessContext);
@@ -155,13 +155,14 @@ const confirmAction = async ({ conversationId, messageId, organizationId, branch
   }
 
   const { params } = action;
+  const isWalkIn = params.customerId === 'walk-in';
   const [customer, product] = await Promise.all([
-    Customer.findOne({ _id: params.customerId, organizationId }),
+    isWalkIn ? Promise.resolve(null) : Customer.findOne({ _id: params.customerId, organizationId }),
     Product.findOne({ _id: params.productId, organizationId }),
   ]);
-  if (!customer || !product) {
+  if ((!isWalkIn && !customer) || !product) {
     action.status = 'failed';
-    action.error = !customer ? 'That customer no longer exists.' : 'That product no longer exists.';
+    action.error = !isWalkIn && !customer ? 'That customer no longer exists.' : 'That product no longer exists.';
     await message.save();
     throw new ApiError(httpStatus.BAD_REQUEST, action.error);
   }

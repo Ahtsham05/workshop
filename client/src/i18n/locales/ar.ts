@@ -3,6 +3,7 @@ const ar: Record<string, string> = {
   // General
   "search": "بحث",
   "search_placeholder": "اكتب أمرًا أو ابحث...",
+  "search_menu_placeholder": "ابحث في القائمة...",
   "no_results_found": "لم يتم العثور على نتائج.",
   "theme": "السمة",
   "light": "فاتح",

@@ -17,22 +17,28 @@ async function prepareCreateInvoice(args, ctx) {
   const productQuery = String(args.productName || '').trim();
   const quantity = Number(args.quantity);
 
-  if (!customerQuery || !productQuery) {
-    return { status: 'error', message: 'I need both a customer name and a product name to prepare an invoice.' };
+  if (!productQuery) {
+    return { status: 'error', message: 'I need a product name to prepare an invoice.' };
   }
   if (!Number.isFinite(quantity) || quantity <= 0) {
     return { status: 'error', message: 'Quantity must be a positive number.' };
   }
 
+  // customerName is optional — no customer mentioned means a walk-in/cash sale, not something
+  // to guess a name for. `invoiceService.createInvoice` already treats the literal string
+  // 'walk-in' as its no-customer sentinel (same as the regular Invoices page's walk-in flow),
+  // so this never searches for, matches, or creates any customer record in that case.
   const [customerResult, productResult] = await Promise.all([
-    Customer.paginate(buildFilter(ctx), { search: customerQuery, fieldName: 'name,phone', limit: MATCH_LIMIT }),
+    customerQuery
+      ? Customer.paginate(buildFilter(ctx), { search: customerQuery, fieldName: 'name,phone', limit: MATCH_LIMIT })
+      : Promise.resolve(null),
     Product.paginate(buildFilter(ctx), { search: productQuery, fieldName: 'name,barcode', limit: MATCH_LIMIT }),
   ]);
 
-  if (customerResult.totalResults === 0) {
+  if (customerResult && customerResult.totalResults === 0) {
     return { status: 'needs_clarification', reason: 'customer_not_found', query: customerQuery };
   }
-  if (customerResult.totalResults > 1) {
+  if (customerResult && customerResult.totalResults > 1) {
     return {
       status: 'needs_clarification',
       reason: 'multiple_customers',
@@ -50,7 +56,7 @@ async function prepareCreateInvoice(args, ctx) {
     };
   }
 
-  const customer = customerResult.results[0];
+  const customer = customerResult ? customerResult.results[0] : null;
   const product = productResult.results[0];
 
   if (product.hasVariants) {
@@ -66,9 +72,9 @@ async function prepareCreateInvoice(args, ctx) {
   return {
     status: 'preview',
     preview: {
-      customerId: customer.id,
-      customerName: customer.name,
-      customerBalance: customer.balance || 0,
+      customerId: customer ? customer.id : 'walk-in',
+      customerName: customer ? customer.name : 'Walk-in Customer',
+      customerBalance: customer ? customer.balance || 0 : 0,
       productId: product.id,
       productName: product.name,
       quantity,
@@ -83,17 +89,21 @@ const declarations = [
   {
     name: 'create_invoice',
     description:
-      'Prepare a new cash-sale invoice for ONE product to ONE customer, for the user to review and confirm — this does NOT save anything by itself, it only resolves the customer/product and computes the total. The app shows the user a Confirm/Cancel card after this call; only the user clicking Confirm actually creates the invoice, so just present what you found and let the UI handle confirmation (do not ask the user to type "yes"). Use when the user asks to create/make/bill an invoice for a specific customer and product (e.g. "create an invoice for Ali Traders for 5 Samsung A15"). Only call this once you have a customer name, a product name, and a quantity — ask for whichever is missing first. Only supports one product line and immediate cash payment — if the user wants multiple products, a specific variant, or credit/on-account terms, tell them to use the Invoices page instead.',
+      'Prepare a new cash-sale invoice for ONE product, for the user to review and confirm — this does NOT save anything by itself, it only resolves the customer/product and computes the total. The app shows the user a Confirm/Cancel card after this call; only the user clicking Confirm actually creates the invoice, so just present what you found and let the UI handle confirmation (do not ask the user to type "yes"). Use when the user asks to create/make/bill/sell an invoice (e.g. "create an invoice for Ali Traders for 5 Samsung A15", "sale 10 qty of 5v"). Only call this once you have a product name and a quantity — ask for whichever is missing first. customerName is OPTIONAL: only pass it if the user actually named a specific customer. If they did not name one, omit customerName entirely (do not invent, guess, or reuse a name from earlier in the conversation) — it automatically becomes a walk-in/cash sale, which is the normal case for a plain "sale X qty of Y" request. Only supports one product line and immediate cash payment — if the user wants multiple products, a specific variant, or credit/on-account terms, tell them to use the Invoices page instead.',
     permission: 'createInvoices',
     write: true,
     parameters: {
       type: 'object',
       properties: {
-        customerName: { type: 'string', description: 'Customer name to bill, as the user said it' },
+        customerName: {
+          type: 'string',
+          description:
+            'Customer name to bill, ONLY if the user actually named one. Omit this property entirely for a walk-in/cash sale — never guess or invent a name.',
+        },
         productName: { type: 'string', description: 'Product name to sell, as the user said it' },
         quantity: { type: 'number', description: 'How many units to sell' },
       },
-      required: ['customerName', 'productName', 'quantity'],
+      required: ['productName', 'quantity'],
     },
     handler: prepareCreateInvoice,
   },

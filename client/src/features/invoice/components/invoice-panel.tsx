@@ -2721,8 +2721,11 @@ export function InvoicePanel({
       {/* Keyboard Language Override
       <KeyboardLanguageOverride />*/}
 
-      {/* Column 1 (compact mode): Invoice Details */}
-      <div className={cn('space-y-4', !showProductCatalog && 'lg:col-start-1')}>
+      {/* Column 1 (compact mode): Invoice Details.
+          min-w-0 matters here even though the track is a fixed 320px — a grid item's
+          default min-width is content-based ("auto"), so a long customer/product name
+          can still force this item wider than its fixed-length track and spill out. */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'lg:col-start-1')}>
       {/* Invoice Details */}
       <Card>
         <CardHeader className='pb-4'>
@@ -2759,7 +2762,7 @@ export function InvoicePanel({
               (part of a 3-column page), so pairing them there just crams both — Date
               drops back to its own full-width row below Customer instead. */}
           <div className={cn('grid gap-4', showProductCatalog && 'sm:grid-cols-2')}>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="customer" className='mb-2'>
               {t('customer')} <span className="text-red-500">*</span>
             </Label>
@@ -2775,7 +2778,7 @@ export function InvoicePanel({
                         onEnterAdvance(e, focusInvoiceType)
                       }
                     }}
-                    className={`flex-1 justify-between min-h-[2.5rem] h-auto py-0 ${
+                    className={`flex-1 shrink min-w-0 justify-between min-h-[2.5rem] h-auto py-0 ${
                       !invoice.customerId ? 'border-red-500 bg-red-50' : ''
                     }`}
                   >
@@ -2811,7 +2814,7 @@ export function InvoicePanel({
                                       className="h-5 w-5 shrink-0 rounded-full"
                                     />
                                     <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0">
-                                      <span className={getTextClasses(selectedCustomer.name, 'text-xs truncate shrink-0')} title={selectedCustomer.name}>
+                                      <span className={getTextClasses(selectedCustomer.name, 'text-xs truncate min-w-0')} title={selectedCustomer.name}>
                                         {selectedCustomer.name}
                                       </span>
                                       {selectedCustomer.isEmployeeAccount ? (
@@ -2831,7 +2834,7 @@ export function InvoicePanel({
                               } else if (invoice.customerName) {
                                 // Fallback to showing the stored customer name if customer not found in list
                                 return (
-                                  <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full pl-1">
+                                  <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full min-w-0 pl-1">
                                     <ContactPhotoCell
                                       picture={undefined}
                                       name={invoice.customerName}
@@ -2845,7 +2848,7 @@ export function InvoicePanel({
                               } else if (invoice.walkInCustomerName) {
                                 // Show walk-in customer name
                                 return (
-                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full">
+                                  <Badge variant="secondary" className="flex items-center gap-1 max-w-full min-w-0">
                                     <User className="w-3 h-3 flex-shrink-0" />
                                     <span className={getTextClasses(invoice.walkInCustomerName, "text-xs truncate")} title={invoice.walkInCustomerName}>
                                       {invoice.walkInCustomerName}

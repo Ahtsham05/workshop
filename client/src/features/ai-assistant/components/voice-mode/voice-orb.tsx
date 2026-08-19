@@ -32,6 +32,8 @@ export function VoiceOrb({
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       title={onClick ? 'Tap to stop and send' : undefined}
+      aria-label={onClick ? 'Tap to stop and send' : undefined}
+      aria-hidden={onClick ? undefined : true}
       className={cn('relative flex h-32 w-32 items-center justify-center rounded-full', onClick && 'cursor-pointer')}
     >
       {state === 'listening' && (

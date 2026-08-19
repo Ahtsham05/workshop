@@ -10,17 +10,24 @@ import type { useSpeechSynthesis } from '../../hooks/use-speech-synthesis'
 export function VoiceSpeaking({
   reply,
   synthesis,
+  canBargeIn,
   onAskAnother,
   onClose,
 }: {
   reply: VoiceReply
   synthesis: ReturnType<typeof useSpeechSynthesis>
+  canBargeIn?: boolean
   onAskAnother: () => void
   onClose: () => void
 }) {
   return (
     <div className='flex h-full flex-col items-center justify-center gap-6 px-6 py-8 text-center'>
-      <h2 className='text-xl font-semibold'>{synthesis.isSpeaking ? 'Speaking…' : 'Here’s what I found'}</h2>
+      <div>
+        <h2 className='text-xl font-semibold'>{synthesis.isSpeaking ? 'Speaking…' : 'Here’s what I found'}</h2>
+        {synthesis.isSpeaking && canBargeIn && (
+          <p className='text-sm text-muted-foreground'>Just start talking to interrupt</p>
+        )}
+      </div>
 
       <VoiceOrb state='speaking' />
       {synthesis.isSpeaking && <SpeakingWaveform />}
