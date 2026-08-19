@@ -1091,9 +1091,9 @@ export interface SalesmanCommissionInvoiceRow {
 }
 
 export interface SalesmanCommissionReportRow {
-  salesmanUserId: string
+  salesmanId: string
   name: string
-  email: string
+  salesmanCode: string
   salesCount: number
   salesAmount: number
   earned: number

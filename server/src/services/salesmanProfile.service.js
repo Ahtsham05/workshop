@@ -38,23 +38,30 @@ const generateSalesmanCode = async (tenantFilter) => {
 };
 
 /**
- * Create a salesman profile for an existing staff User.
+ * Create a salesman profile — either linked to an existing staff User, or fully
+ * standalone (no login) with a directly-entered name.
  * @param {Object} profileBody
  * @returns {Promise<SalesmanProfile>}
  */
 const createSalesmanProfile = async (profileBody) => {
   const tenantFilter = getTenantFilter(profileBody);
+  let name = (profileBody.name || '').trim();
 
-  const user = await User.findOne({ _id: profileBody.userId, organizationId: profileBody.organizationId });
-  if (!user) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Selected user was not found in this organization');
-  }
-  if (await SalesmanProfile.findOne({ ...tenantFilter, userId: profileBody.userId })) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'This user is already a salesman');
+  if (profileBody.userId) {
+    const user = await User.findOne({ _id: profileBody.userId, organizationId: profileBody.organizationId });
+    if (!user) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Selected user was not found in this organization');
+    }
+    if (await SalesmanProfile.findOne({ ...tenantFilter, userId: profileBody.userId })) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'This user is already a salesman');
+    }
+    name = name || user.name;
+  } else if (!name) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Either userId or name is required');
   }
 
   const salesmanCode = await generateSalesmanCode(tenantFilter);
-  return SalesmanProfile.create({ ...profileBody, salesmanCode });
+  return SalesmanProfile.create({ ...profileBody, name, salesmanCode });
 };
 
 /**

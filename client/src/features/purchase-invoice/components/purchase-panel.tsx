@@ -29,15 +29,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X, ArrowLeftRight, ScanLine, ListChecks, Smartphone } from 'lucide-react'
+import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X, ArrowLeftRight, ScanLine, ListChecks, Smartphone, Eye, Percent, Receipt, Banknote, CreditCard, Pencil, RotateCcw } from 'lucide-react'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { BilingualName } from '@/components/bilingual-name'
 import { getDisplayStock } from '@/lib/product-stock-display'
+import { useIsPhone } from '@/hooks/use-mobile'
+import { useIsNarrower } from '@/hooks/use-element-width'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
 import { PurchaseItemVariantBatchFields } from './purchase-item-variant-batch-fields'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import type { ImeiEntryInput } from '@/stores/imei.api'
 import { resolvePurchaseInvoiceBalance } from '@/features/purchase-invoice/utils/purchase-balance'
+
+// Per-type accent for the Purchase Type buttons — mirrors Invoice's INVOICE_TYPE_STYLES
+// (see invoice-panel.tsx): a light tint + thin border, not a filled/shadowed badge.
+const PURCHASE_TYPE_STYLES: Record<'cash' | 'credit', { active: string; icon: string }> = {
+  cash: {
+    active: 'border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400',
+    icon: 'text-green-600 dark:text-green-400',
+  },
+  credit: {
+    active: 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400',
+    icon: 'text-blue-600 dark:text-blue-400',
+  },
+}
+
+// Solid badge color for the Summary card's Purchase Type tag — mirrors InvoicePanel's
+// own getTypeColor (see invoice-panel.tsx).
+const getPurchaseTypeColor = (type: string) => (type === 'credit' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800')
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading.
@@ -49,7 +69,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState, AppDispatch } from '@/stores/store'
-import { useCreatePurchaseMutation, useUpdatePurchaseMutation, purchaseApi } from '@/stores/purchase.api'
+import { useCreatePurchaseMutation, useUpdatePurchaseMutation, useGetNextPurchaseNumberQuery, purchaseApi } from '@/stores/purchase.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
@@ -379,6 +399,9 @@ export default function PurchasePanel({
   stickyActionsContainer = null,
 }: PurchasePanelProps) {
   const { t } = useLanguage()
+  // Below sm (640px): items render as cards instead of the table (see the items list
+  // below) — same isPhone gating InvoicePanel uses (see invoice-panel.tsx).
+  const isPhone = useIsPhone()
   const dispatch = useDispatch<AppDispatch>()
   const { hasPermission } = usePermissions()
   const { isElectron, online } = useSync()
@@ -393,6 +416,8 @@ export default function PurchasePanel({
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [suppliersLoading, setSuppliersLoading] = useState(false)
   const [aiScanOpen, setAiScanOpen] = useState(false)
+  const [isEditingPurchaseNumber, setIsEditingPurchaseNumber] = useState(false)
+  const [applyDiscountOpen, setApplyDiscountOpen] = useState(false)
   const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null)
   const [quickCreateProductIndex, setQuickCreateProductIndex] = useState<number | null>(null)
   // Which line's serial/IMEI entry dialog is open — null means none.
@@ -540,7 +565,16 @@ export default function PurchasePanel({
   const paymentMethodTriggerRef = useRef<HTMLButtonElement>(null)
   const purchaseDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
-  const [paymentTypeSelectOpen, setPaymentTypeSelectOpen] = useState(false)
+  // The items table (colgroup: 8 + auto + 110 + 100 + 100 + 85 + 90 + 10px) needs ~700px+ to
+  // render its fixed-width columns without table-fixed proportionally squeezing all of them
+  // below their intended width (that's what causes headers/values to visually run together —
+  // not overflow, since the table is forced to 100% of a too-narrow container). Below that,
+  // fall back to the same stacked-card row layout used for catalog-visible/phone (see
+  // renderPurchaseItemCard) — same "product on its own line, controls wrap below" behavior,
+  // just triggered by the item area's actual rendered width instead of viewport width alone,
+  // so a docked devtools panel or a collapsed sidebar can trigger it too.
+  const itemsAreaRef = useRef<HTMLDivElement>(null)
+  const isItemsAreaNarrow = useIsNarrower(itemsAreaRef, 700)
   const [, setPaymentMethodSelectOpen] = useState(false)
 
   // Auto-scroll items list when items change
@@ -569,13 +603,7 @@ export default function PurchasePanel({
   // Purchase Type (Cash = settled now vs Credit = may owe a balance) is a separate concern
   // from Payment Method (which real account absorbs whatever's paid right now) — a Credit
   // purchase can still be partially paid from a real account, so both fields are shown.
-  const PURCHASE_TYPE_OPTIONS = useMemo(
-    () => [
-      { value: 'cash', label: t('cash') || 'Cash' },
-      { value: 'credit', label: t('credit') || 'Credit' },
-    ],
-    [t],
-  )
+  // (Segmented buttons in the Details card below render these two options directly.)
   // Paying a supplier is a money-out action — show wallet balances so the user can avoid
   // overdrawing. No generic 'Bank Transfer'/'Card' placeholders — every real account (bank or
   // mobile wallet) is already selectable here by its own name.
@@ -616,6 +644,13 @@ export default function PurchasePanel({
   // RTK Query mutations
   const [createPurchase] = useCreatePurchaseMutation()
   const [updatePurchase] = useUpdatePurchaseMutation()
+  // Preview of the number the next save would actually receive (see next-number route +
+  // generateNextPurchaseInvoiceNumber) — shown read-only until the user clicks the pencil
+  // to type their own. Only relevant before the purchase is first saved; a saved purchase
+  // already has its real invoiceNumber and that number can't be changed here. Mirrors
+  // Invoice's identical preview query (see invoice-panel.tsx).
+  const { data: nextPurchaseNumberData } = useGetNextPurchaseNumberQuery(undefined, { skip: isEditing })
+  const previewedPurchaseNumber = nextPurchaseNumberData?.invoiceNumber as string | undefined
 
   // Track suppliers loading state
   useEffect(() => {
@@ -701,6 +736,25 @@ export default function PurchasePanel({
     }
   }, [purchase.type, purchase.splitPaymentMethod, purchase.paidAmount, purchase.balance, calculateTotals, setPurchase])
 
+  // Shared branch/org details for every print path (thermal, A4, and the unsaved
+  // Preview) — factored out so previewPurchase doesn't duplicate printPurchase's
+  // assembly of the same fields.
+  const purchaseBranchDetails = useMemo(
+    () => ({
+      name: orgData?.name || branchData?.name,
+      nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
+      address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
+        .filter(Boolean)
+        .join(', '),
+      phone: branchData?.phone,
+      email: branchData?.email,
+      logo: orgData?.logo?.url,
+      isTrial: orgData?.subscription?.isTrial,
+      invoiceNote: branchData?.invoiceNote,
+    }),
+    [orgData, branchData]
+  )
+
   // Print functionality
   const printPurchase = useCallback(
     (purchaseData: any, paperSize: PaperSize = defaultPaperSize) => {
@@ -722,8 +776,8 @@ export default function PurchasePanel({
           const format = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)]
           const html =
             format.family === 'thermal'
-              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(paperSize))
-              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), withPrintOrientation(resolveSheetSize(paperSize), printOrientation), invoiceTemplate)
+              ? module.generatePurchaseInvoiceHTML(purchaseData, supplierName, t, purchaseBranchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(paperSize))
+              : module.generatePurchaseInvoiceA4HTML(purchaseData, supplierName, t, purchaseBranchDetails, preferredLanguage, getInvoicePrintInUrdu(), withPrintOrientation(resolveSheetSize(paperSize), printOrientation), invoiceTemplate)
 
           const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
           if (printWindow) {
@@ -737,8 +791,53 @@ export default function PurchasePanel({
         toast.error(t('Failed to print'))
       }
     },
-    [branchData, purchase.supplier, t, preferredLanguage, orgData, invoiceTemplate]
+    [purchase.supplier, t, preferredLanguage, invoiceTemplate, purchaseBranchDetails]
   )
+
+  // "Preview" header action (dense mode only) — opens the same A4 print HTML used by
+  // Save & Print, but built straight from the live, not-yet-saved `purchase` state (no
+  // create/update API call, no invoiceNumber yet). Mirrors InvoicePanel's
+  // previewInvoice/buildA4PrintData (see invoice-panel.tsx).
+  const previewPurchase = useCallback(async () => {
+    const itemsWithProducts = purchase.items.filter((item) => {
+      const pid = item.product.id || (item.product as any)?._id
+      return pid && item.product.name
+    })
+    if (itemsWithProducts.length === 0) {
+      toast.error(t('Add at least one item to preview'))
+      return
+    }
+    const draftTotals = calculateTotals()
+    const splitPaidAmountForPreview = purchase.splitPaymentMethod ? Math.max(0, Number(purchase.splitPaidAmount || 0)) : 0
+    const totalPaidAmountForPreview = (purchase.paidAmount || 0) + splitPaidAmountForPreview
+    const draftPurchaseData = {
+      invoiceNumber: (isEditing && editingPurchase?.invoiceNumber) || t('Draft Preview'),
+      items: itemsWithProducts,
+      total: draftTotals.total,
+      totalAmount: draftTotals.total,
+      discount: draftTotals.discount,
+      paidAmount: totalPaidAmountForPreview,
+      balance: resolvePurchaseInvoiceBalance(draftTotals.total, totalPaidAmountForPreview),
+      purchaseDate: purchase.date,
+      notes: purchase.notes,
+    }
+    try {
+      const module = await import('@/utils/purchasePrintUtils')
+      const supplierName = purchase.supplier?.name || 'Unknown'
+      const sheetFormat = withPrintOrientation(resolveSheetSize(defaultPaperSize), printOrientation)
+      const html = module.generatePurchaseInvoiceA4HTML(draftPurchaseData, supplierName, t, purchaseBranchDetails, preferredLanguage, getInvoicePrintInUrdu(), sheetFormat, invoiceTemplate)
+      const format = PAPER_FORMATS[sheetFormat]
+      const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
+      if (printWindow) {
+        printWindow.document.write(html)
+        printWindow.document.close()
+        printWindow.print()
+      }
+    } catch (error) {
+      console.error('Preview error:', error)
+      toast.error('Failed to open preview')
+    }
+  }, [purchase, calculateTotals, isEditing, editingPurchase, t, preferredLanguage, invoiceTemplate, purchaseBranchDetails, defaultPaperSize, printOrientation])
 
   // Handle product selection for manual entries
   const handleProductSelect = useCallback(
@@ -1064,6 +1163,8 @@ export default function PurchasePanel({
         splitPaidAmount: splitPaidAmount,
         purchaseDate: purchase.date || new Date().toISOString(),
         notes: purchase.notes?.trim() || undefined,
+        // Manual override only applies on create — saved purchases keep their number.
+        ...(!isEditing && purchase.invoiceNumber?.trim() ? { invoiceNumber: purchase.invoiceNumber.trim() } : {}),
       }
 
       console.log('Purchase data being sent to backend:', purchaseData)
@@ -1194,353 +1295,12 @@ export default function PurchasePanel({
     [setPurchase],
   )
 
-  return (
-    <div
-      className={cn(
-        !showProductCatalog
-          ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] items-start'
-          : 'space-y-4',
-      )}
-    >
-      {/* Supplier Selection Card — left column (compact mode) */}
-      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-1')}>
-        <CardHeader>
-          <div className="flex flex-col gap-2">
-            <CardTitle className="flex items-center gap-2">
-              {onBackToList && (
-                <Button variant="ghost" size="sm" onClick={onBackToList}>
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              )}
-              <Package className="h-5 w-5" />
-              {t('Purchase Details')}
-            </CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              {!isEditing && isMobileShop && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setBuyUsedPhoneOpen(true)}
-                >
-                  <Smartphone className="h-4 w-4 text-primary" />
-                  Buy Old Phone
-                </Button>
-              )}
-              {!isEditing && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setAiScanOpen(true)}
-                >
-                  <Sparkles className="h-4 w-4 text-violet-600" />
-                  {t('ai_scan_invoice')}
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Show invoice number in edit mode */}
-          {isEditing && editingPurchase?.invoiceNumber && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2 min-w-0">
-                <Label className="font-medium text-blue-800 flex-shrink-0">Purchase Number:</Label>
-                <span 
-                  className="font-bold text-blue-900 truncate" 
-                  title={editingPurchase.invoiceNumber}
-                >
-                  {editingPurchase.invoiceNumber}
-                </span>
-              </div>
-            </div>
-          )}
-          
-           <Label className="mb-2">
-              {t('Supplier')} <span className="text-red-500">*</span>
-            </Label>
-            <div className="flex gap-2">
-            <Popover open={supplierSelectOpen} onOpenChange={setSupplierSelectOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={supplierSelectOpen}
-                  onKeyDown={(e) => {
-                    const supplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
-                    if (!supplierSelectOpen && supplierId) {
-                      onEnterAdvance(e, focusPaymentType)
-                    }
-                  }}
-                  className={`flex-1 justify-between min-h-[2.5rem] h-auto py-0 ${
-                    !(purchase.supplier?._id || (purchase.supplier as any)?.id) ? 'border-red-500 bg-red-50' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Search className="w-4 h-4 flex-shrink-0" />
-                    {(purchase.supplier?._id || (purchase.supplier as any)?.id) ? (
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full pl-1">
-                          <ContactPhotoCell
-                            picture={purchase.supplier.picture}
-                            name={purchase.supplier.name || ''}
-                            className="h-5 w-5 shrink-0 rounded-full"
-                          />
-                          <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0">
-                            <span className="text-xs truncate shrink-0" title={purchase.supplier.name}>
-                              {purchase.supplier.name}
-                            </span>
-                            {purchase.supplier.nameUrdu?.trim() ? (
-                              <span
-                                dir="rtl"
-                                className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(purchase.supplier.nameUrdu))}
-                              >
-                                {purchase.supplier.nameUrdu.trim()}
-                              </span>
-                            ) : null}
-                          </span>
-                        </Badge>
-                      </div>
-                    ) : (
-                      <span className={`truncate ${
-                        !(purchase.supplier?._id || (purchase.supplier as any)?.id) ? 'text-red-500' : 'text-muted-foreground'
-                      }`} title={t('Select supplier')}>
-                        {t('Select supplier')} {!(purchase.supplier?._id || (purchase.supplier as any)?.id) && '*'}
-                      </span>
-                    )}
-                  </div>
-                  <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[calc(100vw-2rem)] max-w-[400px] p-0" align="start">
-                <Command shouldFilter={false}>
-                  <div className="relative">
-                    <CommandInput
-                      placeholder={t('Search suppliers...')}
-                      value={supplierSearchQuery}
-                      onValueChange={setSupplierSearchQuery}
-                    />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                      <VoiceInputButton
-                        onTranscript={(text) => setSupplierSearchQuery(text)}
-                        size="sm"
-                      />
-                    </div>
-                  </div>
-                  {suppliersLoading ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">
-                      <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-                      {t('Loading suppliers...')}
-                    </div>
-                  ) : filteredSuppliers.length === 0 ? (
-                    canCreateSupplier ? (
-                      <EntityCreateEmptyPrompt
-                        message={t('No suppliers found')}
-                        actionLabel={t('add_supplier')}
-                        onCreate={() => openQuickCreate('supplier', supplierSearchQuery)}
-                      />
-                    ) : (
-                      <CommandEmpty>{t('No suppliers found')}</CommandEmpty>
-                    )
-                  ) : null}
-                  {!suppliersLoading && filteredSuppliers.length > 0 ? (
-                  <CommandList className="max-h-[300px] overflow-y-auto">
-                    <CommandGroup>
-                      {filteredSuppliers.map((supplier, index) => {
-                        const supplierId = supplier._id || (supplier as { id?: string }).id || `supplier-${index}`
-                        const currentSupplierId = purchase.supplier?._id || (purchase.supplier as { id?: string }).id
-                        const isSelected = currentSupplierId === supplierId
-                        return (
-                          <CommandItem
-                            key={supplierId}
-                            value={`${supplier.name} ${supplier.phone || ''} ${supplier.nameUrdu || ''}`}
-                            onSelect={() => selectSupplier(supplier)}
-                            className="flex items-center gap-3 cursor-pointer p-3"
-                          >
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <ContactPhotoCell
-                                picture={supplier.picture}
-                                name={supplier.name || ''}
-                                className="h-8 w-8 shrink-0"
-                              />
-                              <div className="flex flex-col flex-1 min-w-0 gap-0.5">
-                                <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-                                  <span className="truncate font-medium shrink-0" title={supplier.name}>
-                                    {supplier.name}
-                                  </span>
-                                  {supplier.nameUrdu?.trim() ? (
-                                    <span
-                                      dir="rtl"
-                                      className={cn('min-w-0 truncate text-sm', getUrduSecondaryNameClasses(supplier.nameUrdu))}
-                                      title={supplier.nameUrdu.trim()}
-                                    >
-                                      {supplier.nameUrdu.trim()}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                {supplier.phone && (
-                                  <span className="text-xs text-muted-foreground truncate" title={supplier.phone}>
-                                    {supplier.phone}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {isSelected ? (
-                              <div className="w-4 h-4 rounded-sm flex items-center justify-center flex-shrink-0">
-                                <Check className="w-3 h-3 text-primary" />
-                              </div>
-                            ) : null}
-                          </CommandItem>
-                        )
-                      })}
-                      {canCreateSupplier ? (
-                        <CommandItem
-                          onSelect={() => openQuickCreate('supplier', supplierSearchQuery)}
-                          className="flex cursor-pointer items-center gap-2 border-t p-3 text-primary"
-                        >
-                          <Plus className="h-4 w-4" />
-                          <span>{t('add_supplier')}</span>
-                        </CommandItem>
-                      ) : null}
-                    </CommandGroup>
-                  </CommandList>
-                  ) : null}
-                </Command>
-              </PopoverContent>
-            </Popover>
-            {canCreateSupplier ? (
-              <EntityCreateShortcutButton
-                label={t('add_supplier')}
-                onClick={() => openQuickCreate('supplier', supplierSearchQuery)}
-              />
-            ) : null}
-            </div>
-
-            <div>
-              <Label htmlFor="purchase-type" className="mb-2">{t('Purchase Type') || 'Purchase Type'}</Label>
-              <Select
-                value={purchase.type || 'cash'}
-                onOpenChange={setPaymentTypeSelectOpen}
-                onValueChange={(value: 'cash' | 'credit') => {
-                  const currentTotal = calculateTotals().total
-                  setPurchase((prev) => {
-                    const switchingCashToCredit = (prev.type || 'cash') === 'cash' && value === 'credit'
-                    // Cash type always means "fully paid right now" — Credit starts unpaid
-                    // (unless switching back from Credit, which keeps whatever was entered).
-                    const nextPaid = value === 'cash' ? currentTotal : (switchingCashToCredit ? 0 : (prev.paidAmount || 0))
-                    return {
-                      ...prev,
-                      type: value,
-                      paidAmount: nextPaid,
-                      balance: resolvePurchaseInvoiceBalance(currentTotal, nextPaid),
-                    }
-                  })
-                }}
-              >
-                <SelectTrigger
-                  ref={paymentTypeTriggerRef}
-                  className='w-full'
-                  onKeyDown={(e) => {
-                    if (!paymentTypeSelectOpen) {
-                      onEnterAdvance(e, focusPurchaseDate)
-                    }
-                  }}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PURCHASE_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="purchase-date">
-                {t('Purchase Date')} <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                ref={purchaseDateRef}
-                id="purchase-date"
-                type="date"
-                value={purchase.date ? new Date(purchase.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
-                onChange={(e) =>
-                  setPurchase((prev) => ({
-                    ...prev,
-                    date: new Date(e.target.value).toISOString(),
-                  }))
-                }
-                onKeyDown={(e) => onEnterAdvance(e, openPurchaseProductSelector)}
-                className="w-full"
-              />
-            </div>
-        </CardContent>
-      </Card>
-
-      {/* Items List Card — right column (compact mode): spans both left rows so it runs
-          the full height alongside the details+totals stack. */}
-      <Card className={cn(!showProductCatalog && 'min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-stretch')}>
-        <CardHeader className={cn(!showProductCatalog && 'py-3')}>
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <CardTitle className={cn(!showProductCatalog && 'text-base')}>{t('Purchase Items')} ({purchase.items.length})</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              {purchase.items.length > 0 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={toggleAllDiscountTypes}
-                  className="flex items-center gap-1"
-                  title="Switch every discount (all items + overall) to this unit at once"
-                >
-                  <ArrowLeftRight className="h-4 w-4" />
-                  <span className="hidden sm:inline">{t('Switch All Discounts to')}</span>
-                  <span className="sm:hidden">{t('Switch to')}</span>
-                  {' '}{purchase.discountType === 'percentage' ? 'Rs' : '%'}
-                </Button>
-              )}
-              {canCreateProduct ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => openQuickCreate('product', productSearchQuery)}
-                  className="flex items-center gap-1"
-                >
-                  <Plus className="h-4 w-4" />
-                  {t('add_product')}
-                </Button>
-              ) : null}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setPurchase((prev) => ({
-                  ...prev,
-                  items: [...prev.items, createEmptyPurchaseManualItem()],
-                }))
-              }}
-              className='flex items-center gap-1'
-            >
-              <Plus className='h-4 w-4' />
-              {t('add_item')}
-            </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className={cn('p-4', !showProductCatalog && 'flex flex-1 flex-col p-2 lg:min-h-0')}>
-          <div ref={itemsScrollRef} className={cn('space-y-2', !showProductCatalog && 'space-y-1.5')}>
-            {purchase.items.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                {t('No items added yet')}
-              </div>
-            ) : (
-              purchase.items.map((item: PurchaseItem, index: number) => {
+  // Card rendering for one purchase line — used unconditionally in catalog-shown mode
+  // and on phone widths, and as the expanded fallback (spanning every column of the
+  // dense-mode table) for manual/unselected rows and rows needing batch/expiry/variant
+  // fields, which don't fit in table cells. Mirrors InvoicePanel's renderItemCard split
+  // (see invoice-panel.tsx).
+  const renderPurchaseItemCard = (item: PurchaseItem, index: number) => {
                 const productId = item.product.id || (item.product as any)._id;
                 const compact = !showProductCatalog
 
@@ -1984,239 +1744,972 @@ export default function PurchasePanel({
                     />
                   </div>
                 )
-              })
+  }
+
+  // Whether a line needs the batch/expiry/variant sub-fields (PurchaseItemVariantBatchFields
+  // renders something for it) — those fields are block-level and don't fit in table cells,
+  // so these rows always render as the expanded card (colSpan-ing the dense-mode table),
+  // same escape hatch InvoicePanel uses for isSplitAcrossBatches lines.
+  const purchaseItemNeedsExpandedRow = (item: PurchaseItem): boolean =>
+    !!(item.product.hasVariants || item.trackBatch || item.trackExpiry)
+
+  // Compact table-cell content for one purchase line (dense mode, non-phone, no
+  // batch/expiry/variant fields needed) — mirrors InvoicePanel's renderInvoiceItemParts.
+  const renderPurchaseItemParts = (item: PurchaseItem, index: number) => {
+    const productId = item.product.id || (item.product as any)._id
+    const itemGross = item.quantity * item.purchasePrice
+    const itemDiscountAmount = computeDiscountAmount(itemGross, item.discountType, item.discountValue)
+    const itemNet = itemGross - itemDiscountAmount
+    const stock = getDisplayStock(item.product)
+
+    const productCell = (
+      <div className='flex items-start gap-2'>
+        {item.product.image?.url ? (
+          <img src={item.product.image.url} alt={item.product.name} className='h-8 w-8 shrink-0 rounded-lg object-cover' />
+        ) : (
+          <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
+            <Package className='h-4 w-4 text-muted-foreground/50' />
+          </div>
+        )}
+        <div className='min-w-0 flex-1'>
+          <BilingualName primary={item.product.name} secondary={item.product.nameUrdu} primaryClassName='font-medium text-sm' truncate />
+          <div className='mt-1 flex flex-wrap items-center gap-1.5'>
+            <span className={`inline-flex shrink-0 items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
+              stock <= 0 ? 'bg-red-100 text-red-700' :
+              stock <= 5 ? 'bg-red-50 text-red-500' :
+              stock <= 20 ? 'bg-amber-50 text-amber-600' :
+              'bg-green-50 text-green-700'
+            }`}>
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                stock <= 0 ? 'bg-red-500' :
+                stock <= 5 ? 'bg-red-400' :
+                stock <= 20 ? 'bg-amber-400' :
+                'bg-green-500'
+              }`} />
+              {stock <= 0 ? 'Out of stock' : `${stock} in stock`}
+            </span>
+            {(item.product.trackImei || item.product.trackSerial) && (
+              <PurchaseSerialSummaryTrigger
+                selectedCount={(item.imeis || []).length}
+                quantity={item.quantity}
+                isSerial={!!item.product.trackSerial}
+                onClick={() => setSerialDialogIndex(index)}
+              />
             )}
+          </div>
+        </div>
+      </div>
+    )
+
+    const qtyControl = (
+      <div className='flex items-center rounded-lg border bg-background overflow-hidden w-fit'>
+        <Button
+          size='sm'
+          variant='ghost'
+          className='h-7 w-6 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+          onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1), item.variantId)}
+        >
+          <Minus className='h-3 w-3' />
+        </Button>
+        <Input
+          ref={setItemFieldRef(index, 'quantity')}
+          type='number'
+          min='1'
+          value={item.quantity}
+          onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1, item.variantId)}
+          onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, index)}
+          onFocus={(e) => e.target.select()}
+          className='h-7 w-12 border-0 rounded-none text-center text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+        />
+        <Button
+          size='sm'
+          variant='ghost'
+          className='h-7 w-6 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+          onClick={() => updateQuantity(productId, item.quantity + 1, item.variantId)}
+        >
+          <Plus className='h-3 w-3' />
+        </Button>
+      </div>
+    )
+
+    const purchasePriceControl = (
+      <div className='flex items-center rounded-lg border bg-background overflow-hidden w-fit'>
+        <span className='px-1.5 h-7 flex items-center text-[11px] text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
+        <Input
+          ref={setItemFieldRef(index, 'purchasePrice')}
+          type='text'
+          inputMode='decimal'
+          showVoiceInput={false}
+          value={getNumericDraftValue(`${index}:purchasePrice`, item.purchasePrice)}
+          onChange={(e) =>
+            handleNumericDraftChange(`${index}:purchasePrice`, e.target.value, (parsed) =>
+              updatePurchasePrice(productId, parsed, item.variantId),
+            )
+          }
+          onKeyDown={(e) => handlePurchasePriceKeyDown(e, index)}
+          onFocus={(e) => e.target.select()}
+          onBlur={() => clearNumericDraft(`${index}:purchasePrice`)}
+          className='h-7 w-16 border-0 rounded-none text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+        />
+      </div>
+    )
+
+    const sellingPriceControl = (
+      <div className='flex items-center rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 overflow-hidden w-fit'>
+        <span className='px-1.5 h-7 flex items-center text-[11px] text-blue-500 bg-blue-100/60 dark:bg-blue-900/30 border-r border-blue-200 dark:border-blue-800 font-medium select-none'>Rs</span>
+        <Input
+          ref={setItemFieldRef(index, 'sellingPrice')}
+          type='text'
+          inputMode='decimal'
+          showVoiceInput={false}
+          value={getNumericDraftValue(`${index}:sellingPrice`, item.sellingPrice ?? 0)}
+          onChange={(e) =>
+            handleNumericDraftChange(`${index}:sellingPrice`, e.target.value, (parsed) =>
+              updateSellingPrice(productId, parsed, item.variantId),
+            )
+          }
+          onKeyDown={(e) => handleSellingPriceKeyDown(e, index)}
+          onFocus={(e) => e.target.select()}
+          onBlur={() => clearNumericDraft(`${index}:sellingPrice`)}
+          className='h-7 w-16 border-0 rounded-none bg-transparent text-sm font-semibold text-blue-700 dark:text-blue-300 focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+        />
+      </div>
+    )
+
+    const discountControl = (
+      <div className='flex items-center rounded-lg border bg-background overflow-hidden w-fit'>
+        <Input
+          type='text'
+          inputMode='decimal'
+          showVoiceInput={false}
+          value={getNumericDraftValue(`${index}:discountValue`, item.discountValue || 0)}
+          onChange={(e) =>
+            handleNumericDraftChange(`${index}:discountValue`, e.target.value, (parsed) =>
+              updateItemDiscount(productId, { value: Math.max(0, parsed) }, item.variantId),
+            )
+          }
+          onFocus={(e) => e.target.select()}
+          onBlur={() => clearNumericDraft(`${index}:discountValue`)}
+          placeholder='0'
+          className='h-7 w-12 border-0 rounded-none text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+        />
+        <button
+          type='button'
+          onClick={() =>
+            updateItemDiscount(productId, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' }, item.variantId)
+          }
+          title='Click to switch between Rs and % discount'
+          className='px-1.5 h-7 flex items-center text-[11px] text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+        >
+          {item.discountType === 'percentage' ? '%' : 'Rs'}
+        </button>
+      </div>
+    )
+
+    const totalDisplay = (
+      <div className='flex flex-col items-end gap-0'>
+        {itemDiscountAmount > 0 && (
+          <span className='text-[10px] text-muted-foreground line-through leading-none'>Rs{itemGross.toFixed(2)}</span>
+        )}
+        <p className='font-bold text-sm tabular-nums'>Rs{itemNet.toFixed(2)}</p>
+      </div>
+    )
+
+    const deleteButton = (
+      <Button
+        size='sm'
+        variant='ghost'
+        className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+        onClick={() => removeFromPurchase(productId, item.variantId)}
+      >
+        <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
+      </Button>
+    )
+
+    return { productCell, qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay, deleteButton }
+  }
+
+  return (
+    <div
+      className={cn(
+        !showProductCatalog
+          ? // Three columns — details / items / summary+payment+actions — mirrors
+            // InvoicePanel's compact-mode grid exactly (see invoice-panel.tsx). Each
+            // column is its own independent top-to-bottom stack (the wrapper divs
+            // below), so a column's height is just its own content.
+            'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
+          : 'space-y-4',
+      )}
+    >
+      {/* Column 1 (compact mode): Purchase Details. */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-1 xl:row-start-1 xl:col-start-1')}>
+      {/* Purchase Details */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-2">
+            <CardTitle className="flex items-center gap-2">
+              {onBackToList && (
+                <Button variant="ghost" size="sm" onClick={onBackToList}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
+              <Package className="h-5 w-5" />
+              {t('Purchase Details')}
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {!isEditing && isMobileShop && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setBuyUsedPhoneOpen(true)}
+                >
+                  <Smartphone className="h-4 w-4 text-primary" />
+                  Buy Old Phone
+                </Button>
+              )}
+              {!isEditing && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setAiScanOpen(true)}
+                >
+                  <Sparkles className="h-4 w-4 text-violet-600" />
+                  {t('ai_scan_invoice')}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Purchase number — real (read-only) once saved; before that, a live preview of
+              what the next save would auto-assign, editable via the pencil. Saved purchases
+              can't have their number changed after the fact from here. Mirrors Invoice's
+              identical invoice-number header block (see invoice-panel.tsx). */}
+          {isEditing ? (
+            editingPurchase?.invoiceNumber && (
+              <div className='mt-3 flex items-center gap-2'>
+                <span className='text-xs text-muted-foreground'>{t('Purchase Number') || 'Purchase Number'}</span>
+                <span className='rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs'>
+                  {editingPurchase.invoiceNumber}
+                </span>
+              </div>
+            )
+          ) : (
+            <div className='mt-3 flex items-center gap-2'>
+              <span className='text-xs text-muted-foreground'>{t('Purchase Number') || 'Purchase Number'}</span>
+              {isEditingPurchaseNumber ? (
+                <div className='flex items-center gap-1'>
+                  <Input
+                    autoFocus
+                    showVoiceInput={false}
+                    value={purchase.invoiceNumber ?? previewedPurchaseNumber ?? ''}
+                    onChange={(e) => setPurchase(prev => ({ ...prev, invoiceNumber: e.target.value }))}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => setIsEditingPurchaseNumber(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); setIsEditingPurchaseNumber(false) }
+                    }}
+                    className='h-7 w-44 font-mono text-xs'
+                  />
+                  {purchase.invoiceNumber && (
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      className='h-7 w-7 p-0 text-muted-foreground'
+                      title={t('reset_to_auto_generated') || 'Reset to auto-generated'}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setPurchase(prev => ({ ...prev, invoiceNumber: '' }))
+                        setIsEditingPurchaseNumber(false)
+                      }}
+                    >
+                      <RotateCcw className='h-3.5 w-3.5' />
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type='button'
+                  onClick={() => setIsEditingPurchaseNumber(true)}
+                  className='inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-foreground transition-colors hover:bg-muted'
+                  title={t('edit_invoice_number') || 'Edit purchase number'}
+                >
+                  {purchase.invoiceNumber || previewedPurchaseNumber || '…'}
+                  <Pencil className='h-3 w-3 text-muted-foreground' />
+                </button>
+              )}
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+           <Label className="mb-2">
+              {t('Supplier')} <span className="text-red-500">*</span>
+            </Label>
+            <div className="flex gap-2">
+            <Popover open={supplierSelectOpen} onOpenChange={setSupplierSelectOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={supplierSelectOpen}
+                  onKeyDown={(e) => {
+                    const supplierId = purchase.supplier?._id || (purchase.supplier as any)?.id
+                    if (!supplierSelectOpen && supplierId) {
+                      onEnterAdvance(e, focusPaymentType)
+                    }
+                  }}
+                  className={`flex-1 justify-between min-h-[2.5rem] h-auto py-0 ${
+                    !(purchase.supplier?._id || (purchase.supplier as any)?.id) ? 'border-red-500 bg-red-50' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Search className="w-4 h-4 flex-shrink-0" />
+                    {(purchase.supplier?._id || (purchase.supplier as any)?.id) ? (
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Badge variant="secondary" className="flex items-center gap-1.5 max-w-full pl-1">
+                          <ContactPhotoCell
+                            picture={purchase.supplier.picture}
+                            name={purchase.supplier.name || ''}
+                            className="h-5 w-5 shrink-0 rounded-full"
+                          />
+                          <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0">
+                            <span className="text-xs truncate shrink-0" title={purchase.supplier.name}>
+                              {purchase.supplier.name}
+                            </span>
+                            {purchase.supplier.nameUrdu?.trim() ? (
+                              <span
+                                dir="rtl"
+                                className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(purchase.supplier.nameUrdu))}
+                              >
+                                {purchase.supplier.nameUrdu.trim()}
+                              </span>
+                            ) : null}
+                          </span>
+                        </Badge>
+                      </div>
+                    ) : (
+                      <span className={`truncate ${
+                        !(purchase.supplier?._id || (purchase.supplier as any)?.id) ? 'text-red-500' : 'text-muted-foreground'
+                      }`} title={t('Select supplier')}>
+                        {t('Select supplier')} {!(purchase.supplier?._id || (purchase.supplier as any)?.id) && '*'}
+                      </span>
+                    )}
+                  </div>
+                  <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[calc(100vw-2rem)] max-w-[400px] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <div className="relative">
+                    <CommandInput
+                      placeholder={t('Search suppliers...')}
+                      value={supplierSearchQuery}
+                      onValueChange={setSupplierSearchQuery}
+                    />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <VoiceInputButton
+                        onTranscript={(text) => setSupplierSearchQuery(text)}
+                        size="sm"
+                      />
+                    </div>
+                  </div>
+                  {suppliersLoading ? (
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                      {t('Loading suppliers...')}
+                    </div>
+                  ) : filteredSuppliers.length === 0 ? (
+                    canCreateSupplier ? (
+                      <EntityCreateEmptyPrompt
+                        message={t('No suppliers found')}
+                        actionLabel={t('add_supplier')}
+                        onCreate={() => openQuickCreate('supplier', supplierSearchQuery)}
+                      />
+                    ) : (
+                      <CommandEmpty>{t('No suppliers found')}</CommandEmpty>
+                    )
+                  ) : null}
+                  {!suppliersLoading && filteredSuppliers.length > 0 ? (
+                  <CommandList className="max-h-[300px] overflow-y-auto">
+                    <CommandGroup>
+                      {filteredSuppliers.map((supplier, index) => {
+                        const supplierId = supplier._id || (supplier as { id?: string }).id || `supplier-${index}`
+                        const currentSupplierId = purchase.supplier?._id || (purchase.supplier as { id?: string }).id
+                        const isSelected = currentSupplierId === supplierId
+                        return (
+                          <CommandItem
+                            key={supplierId}
+                            value={`${supplier.name} ${supplier.phone || ''} ${supplier.nameUrdu || ''}`}
+                            onSelect={() => selectSupplier(supplier)}
+                            className="flex items-center gap-3 cursor-pointer p-3"
+                          >
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <ContactPhotoCell
+                                picture={supplier.picture}
+                                name={supplier.name || ''}
+                                className="h-8 w-8 shrink-0"
+                              />
+                              <div className="flex flex-col flex-1 min-w-0 gap-0.5">
+                                <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                  <span className="truncate font-medium shrink-0" title={supplier.name}>
+                                    {supplier.name}
+                                  </span>
+                                  {supplier.nameUrdu?.trim() ? (
+                                    <span
+                                      dir="rtl"
+                                      className={cn('min-w-0 truncate text-sm', getUrduSecondaryNameClasses(supplier.nameUrdu))}
+                                      title={supplier.nameUrdu.trim()}
+                                    >
+                                      {supplier.nameUrdu.trim()}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {supplier.phone && (
+                                  <span className="text-xs text-muted-foreground truncate" title={supplier.phone}>
+                                    {supplier.phone}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {isSelected ? (
+                              <div className="w-4 h-4 rounded-sm flex items-center justify-center flex-shrink-0">
+                                <Check className="w-3 h-3 text-primary" />
+                              </div>
+                            ) : null}
+                          </CommandItem>
+                        )
+                      })}
+                      {canCreateSupplier ? (
+                        <CommandItem
+                          onSelect={() => openQuickCreate('supplier', supplierSearchQuery)}
+                          className="flex cursor-pointer items-center gap-2 border-t p-3 text-primary"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>{t('add_supplier')}</span>
+                        </CommandItem>
+                      ) : null}
+                    </CommandGroup>
+                  </CommandList>
+                  ) : null}
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {canCreateSupplier ? (
+              <EntityCreateShortcutButton
+                label={t('add_supplier')}
+                onClick={() => openQuickCreate('supplier', supplierSearchQuery)}
+              />
+            ) : null}
+            </div>
+
+            {/* Purchase Type — segmented buttons instead of a dropdown, matching
+                Invoice's Invoice Type control exactly (see invoice-panel.tsx). */}
+            <div>
+              <Label className='mb-2 block'>{t('Purchase Type') || 'Purchase Type'}</Label>
+              <div className='grid grid-cols-2 gap-1.5 sm:gap-2'>
+                {(
+                  [
+                    { value: 'cash', label: t('cash') || 'Cash', icon: Banknote },
+                    { value: 'credit', label: t('credit') || 'Credit', icon: CreditCard },
+                  ] as const
+                ).map(({ value, label, icon: Icon }) => {
+                  const active = (purchase.type || 'cash') === value
+                  const styles = PURCHASE_TYPE_STYLES[value]
+                  return (
+                    <button
+                      key={value}
+                      type='button'
+                      ref={value === 'cash' ? paymentTypeTriggerRef : undefined}
+                      onClick={() => {
+                        const currentTotal = calculateTotals().total
+                        setPurchase((prev) => {
+                          const switchingCashToCredit = (prev.type || 'cash') === 'cash' && value === 'credit'
+                          // Cash type always means "fully paid right now" — Credit starts
+                          // unpaid (unless switching back from Credit, which keeps whatever
+                          // was entered).
+                          const nextPaid = value === 'cash' ? currentTotal : (switchingCashToCredit ? 0 : (prev.paidAmount || 0))
+                          return {
+                            ...prev,
+                            type: value,
+                            paidAmount: nextPaid,
+                            balance: resolvePurchaseInvoiceBalance(currentTotal, nextPaid),
+                          }
+                        })
+                      }}
+                      onKeyDown={(e) => onEnterAdvance(e, focusPurchaseDate)}
+                      className={cn(
+                        'flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[11px] font-medium transition-colors sm:px-2 sm:py-2.5 sm:text-xs',
+                        active
+                          ? styles.active
+                          : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                    >
+                      <Icon className={cn('h-4 w-4', active && styles.icon)} />
+                      <span className='truncate'>{label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="purchase-date">
+                {t('Purchase Date')} <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                ref={purchaseDateRef}
+                id="purchase-date"
+                type="date"
+                value={purchase.date ? new Date(purchase.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+                onChange={(e) =>
+                  setPurchase((prev) => ({
+                    ...prev,
+                    date: new Date(e.target.value).toISOString(),
+                  }))
+                }
+                onKeyDown={(e) => onEnterAdvance(e, openPurchaseProductSelector)}
+                className="w-full"
+              />
+            </div>
+
+            {/* Notes — Invoice has no equivalent field to mirror here, so this stays as
+                the one purchase-specific addition to the Details card (moved up from the
+                old combined Totals card). */}
+            <div>
+              <Label htmlFor="notes">{t('Notes')}</Label>
+              <Textarea
+                id="notes"
+                value={purchase.notes || ''}
+                onChange={(e) =>
+                  setPurchase((prev) => ({
+                    ...prev,
+                    notes: e.target.value,
+                  }))
+                }
+                placeholder={t('Add any notes about this purchase...')}
+                rows={2}
+              />
+            </div>
+        </CardContent>
+      </Card>
+
+      </div>
+
+      {/* Column 2 (compact mode): at-a-glance stats + Purchase Items. Spans both tracks of
+          the md-tier 2-col grid (Details | Summary+Payment sit above it in row 1) so it
+          always runs full width; reverts to its own single track at xl once Details and
+          Summary+Payment split back out into separate side columns. Mirrors InvoicePanel's
+          Column 2 exactly (see invoice-panel.tsx). */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-2 md:col-span-2 xl:row-start-1 xl:col-span-1 xl:col-start-2')}>
+      {/* At-a-glance totals strip — same numbers as the Summary card below. Hidden once the
+          catalog is showing (Column 2 and Column 3 both stack into the same left-hand
+          column there) and below sm (phone widths). */}
+      {!showProductCatalog && (
+        <div className='hidden grid-cols-4 gap-2 sm:grid'>
+          {[
+            { label: t('items') || 'Items', value: String(purchase.items.filter((i) => (i.product.id || (i.product as any)?._id) && i.product.name).length) },
+            { label: t('Subtotal'), value: `Rs${totals.subtotal.toFixed(2)}` },
+            { label: t('Discount'), value: `Rs${(totals.discount + totals.itemDiscountTotal).toFixed(2)}` },
+            { label: t('Total'), value: `Rs${totals.total.toFixed(2)}`, highlight: true },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className={cn(
+                'min-w-0 rounded-lg border px-2 py-1.5',
+                stat.highlight ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20' : 'bg-card',
+              )}
+            >
+              <p className='truncate text-[10px] text-muted-foreground'>{stat.label}</p>
+              <p className={cn('truncate text-sm font-bold tabular-nums', stat.highlight && 'text-emerald-700 dark:text-emerald-400')}>
+                {stat.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Purchase Items — middle column (compact mode): sits beside the details+payment
+          stack, spanning both its rows so it runs the full height. */}
+      <Card className='min-w-0'>
+        <CardHeader className='py-3'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <CardTitle className='text-base'>{t('Purchase Items')} ({purchase.items.length})</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {purchase.items.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={toggleAllDiscountTypes}
+                  className="flex items-center gap-1"
+                  title="Switch every discount (all items + overall) to this unit at once"
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t('Switch All Discounts to')}</span>
+                  <span className="sm:hidden">{t('Switch to')}</span>
+                  {' '}{purchase.discountType === 'percentage' ? 'Rs' : '%'}
+                </Button>
+              )}
+              {canCreateProduct ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openQuickCreate('product', productSearchQuery)}
+                  className="flex items-center gap-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('add_product')}
+                </Button>
+              ) : null}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setPurchase((prev) => ({
+                  ...prev,
+                  items: [...prev.items, createEmptyPurchaseManualItem()],
+                }))
+              }}
+              className='flex items-center gap-1'
+            >
+              <Plus className='h-4 w-4' />
+              {t('add_item')}
+            </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent ref={itemsAreaRef} className='flex flex-1 flex-col p-0 lg:min-h-0'>
+          {/* Capped + internally scrollable regardless of table vs. stacked-card layout —
+              without max-h here, the card layout (catalog-visible/phone/narrow) grew with
+              the item count and pushed Payment & Amount off screen, forcing a full-page
+              scroll through every item just to reach Save. Mirrors Invoice's identical fix
+              (see invoice-panel.tsx). */}
+          <div
+            ref={itemsScrollRef}
+            className={cn(
+              'overflow-y-auto max-h-[460px]',
+              (showProductCatalog || isPhone || isItemsAreaNarrow) ? 'space-y-2 p-3' : 'overflow-x-auto',
+            )}
+          >
+            {purchase.items.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                {t('No items added yet')}
+              </div>
+            ) : showProductCatalog || isPhone || isItemsAreaNarrow ? (
+              // Catalog-visible mode, catalog-hidden on a phone (<sm/640px), or the item
+              // area's rendered width is too narrow for the table's fixed columns (see
+              // isItemsAreaNarrow above): items render as stacked cards instead of a table —
+              // same gating InvoicePanel uses (see invoice-panel.tsx), plus the width check.
+              purchase.items.map((item: PurchaseItem, index: number) => renderPurchaseItemCard(item, index))
+            ) : (
+              <Table className='table-fixed'>
+                <colgroup>
+                  <col className='w-8' />
+                  <col />
+                  <col className='w-[110px]' />
+                  <col className='w-[100px]' />
+                  <col className='w-[100px]' />
+                  <col className='w-[85px]' />
+                  <col className='w-[90px]' />
+                  <col className='w-10' />
+                </colgroup>
+                <TableHeader className='sticky top-0 z-10 bg-muted'>
+                  <TableRow className='hover:bg-transparent'>
+                    <TableHead className='w-8 pl-3'>#</TableHead>
+                    <TableHead className='min-w-[140px]'>{t('product') || 'Product'}</TableHead>
+                    <TableHead className='min-w-[100px]'>{t('Qty')}</TableHead>
+                    <TableHead className='min-w-[100px]'>{t('Purchase Price')}</TableHead>
+                    <TableHead className='min-w-[100px]'>{t('Sale Price')}</TableHead>
+                    <TableHead className='min-w-[85px]'>{t('discount') || 'Discount'}</TableHead>
+                    <TableHead className='min-w-[90px] text-right'>{t('total') || 'Total'}</TableHead>
+                    <TableHead className='w-10 pr-2' />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {purchase.items.map((item: PurchaseItem, index: number) => {
+                    const productId = item.product.id || (item.product as any)?._id
+                    // Manual/unselected rows, and rows needing batch/expiry/variant fields,
+                    // don't fit in table cells — expand to the full-width card instead,
+                    // same escape hatch InvoicePanel uses for isSplitAcrossBatches lines.
+                    if ((item.isManualEntry && !productId) || purchaseItemNeedsExpandedRow(item)) {
+                      return (
+                        <TableRow key={`${productId || 'manual'}-${index}`} className='hover:bg-transparent'>
+                          <TableCell colSpan={8} className='p-2'>
+                            {renderPurchaseItemCard(item, index)}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    }
+                    const { productCell, qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay, deleteButton } = renderPurchaseItemParts(item, index)
+                    return (
+                      <TableRow key={`${productId}-${index}`}>
+                        <TableCell className='py-3 pl-3 align-top text-xs text-muted-foreground'>{index + 1}</TableCell>
+                        <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
+                        <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
+                        <TableCell className='align-middle py-3'>{purchasePriceControl}</TableCell>
+                        <TableCell className='align-middle py-3'>{sellingPriceControl}</TableCell>
+                        <TableCell className='align-middle py-3'>{discountControl}</TableCell>
+                        <TableCell className='align-middle py-3 text-right'>{totalDisplay}</TableCell>
+                        <TableCell className='py-3 pr-2 align-middle'>{deleteButton}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          {/* Apply Discount — the one place the overall (whole-purchase) discount is
+              edited; feeds the Summary card's totals directly. Mirrors Invoice's items-
+              table footer popover exactly, minus "Add Tax" (purchases have no tax). */}
+          <div className='flex flex-wrap items-center gap-2 border-t p-3'>
+            <Popover open={applyDiscountOpen} onOpenChange={setApplyDiscountOpen}>
+              <PopoverTrigger asChild>
+                <Button type='button' variant='outline' size='sm' className='gap-1.5'>
+                  <Percent className='h-4 w-4' />
+                  {t('Apply Discount')}
+                  {totals.discount > 0 && (
+                    <Badge variant='secondary' className='ml-1 tabular-nums'>-Rs{totals.discount.toFixed(2)}</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className='w-64 p-3' align='start'>
+                <Label className='mb-2 block text-xs'>{t('Discount')}</Label>
+                <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                  <Input
+                    id='purchase-discount'
+                    type='text'
+                    inputMode='decimal'
+                    showVoiceInput={false}
+                    value={getNumericDraftValue('overallDiscount', purchase.discountValue || 0)}
+                    onChange={(e) =>
+                      handleNumericDraftChange('overallDiscount', e.target.value, (parsed) =>
+                        setPurchase((prev) => ({ ...prev, discountValue: Math.max(0, parsed) })),
+                      )
+                    }
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => clearNumericDraft('overallDiscount')}
+                    placeholder='0'
+                    className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setPurchase((prev) => ({ ...prev, discountType: prev.discountType === 'percentage' ? 'fixed' : 'percentage' }))}
+                    title='Click to switch between Rs and % discount'
+                    className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+                  >
+                    {purchase.discountType === 'percentage' ? '%' : 'Rs'}
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </CardContent>
+      </Card>
+      </div>
+
+      {/* Column 3 (compact mode): Summary, Payment & Amount. Sits beside Purchase Details
+          in row 1 of the md-tier 2-col grid (md:col-start-2); at xl it moves out to its
+          own third track via xl:col-start-3. Mirrors InvoicePanel's Column 3 exactly (see
+          invoice-panel.tsx) — split out of the old combined Totals+Payment card. */}
+      <div className={cn('space-y-4', !showProductCatalog && 'md:col-start-2 md:row-start-1 xl:row-start-1 xl:col-start-3')}>
+      {/* Summary — the same totals shown in the stats strip above the items table, laid
+          out as a running receipt-style breakdown. Discount is now edited from the items
+          table's footer ("Apply Discount" popover) rather than here, so this card is
+          read-only. */}
+      <Card>
+        <CardHeader className='pb-3'>
+          <CardTitle className='flex items-center gap-2 text-base'>
+            <Receipt className='h-4 w-4 text-muted-foreground' />
+            {t('Summary')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-2 pt-0'>
+          <div className='flex justify-between gap-6'>
+            <span className='text-muted-foreground'>{t('Subtotal')}:</span>
+            <span className='tabular-nums font-medium'>Rs{totals.subtotal.toFixed(2)}</span>
+          </div>
+          {totals.itemDiscountTotal > 0 && (
+            <div className='flex justify-between gap-6 text-sm text-green-600'>
+              <span>{t('Item Discounts')}:</span>
+              <span className='tabular-nums'>-Rs{totals.itemDiscountTotal.toFixed(2)}</span>
+            </div>
+          )}
+          {totals.discount > 0 && (
+            <div className='flex justify-between gap-6 text-red-600'>
+              <span>{t('Discount')}:</span>
+              <span className='tabular-nums'>-Rs{totals.discount.toFixed(2)}</span>
+            </div>
+          )}
+          <Separator />
+          <div className='flex justify-between gap-6 font-bold text-lg'>
+            <span>{t('Total')}:</span>
+            <span className='tabular-nums'>Rs{totals.total.toFixed(2)}</span>
+          </div>
+          {(totals.itemDiscountTotal + totals.discount) > 0 && (
+            <div className='flex justify-between gap-6 text-xs font-medium text-green-600'>
+              <span>{t('You Saved')}:</span>
+              <span className='tabular-nums'>Rs{(totals.itemDiscountTotal + totals.discount).toFixed(2)}</span>
+            </div>
+          )}
+
+          <Separator />
+          {/* Type + Total Items + Total Quantity as one row of tags instead of a badge
+              plus two separate label/value rows underneath — same info, less height. */}
+          <div className='flex flex-wrap items-center gap-1.5'>
+            <Badge className={getPurchaseTypeColor(purchase.type || 'cash')}>
+              {t(purchase.type || 'cash')}
+            </Badge>
+            <Badge variant='secondary' className='gap-1 tabular-nums'>
+              {t('Total Items')}: {purchase.items.length}
+            </Badge>
+            <Badge variant='secondary' className='gap-1 tabular-nums'>
+              {t('Total Quantity')}: {purchase.items.reduce((sum, item) => sum + item.quantity, 0)}
+            </Badge>
           </div>
         </CardContent>
       </Card>
 
-      {/* Totals and Actions Card — left column (compact mode), below the details card */}
-      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-2')}>
-        <CardContent className="p-4 space-y-4">
-          {/* Notes */}
+      {/* Payment & Amount — right column (compact mode), below the Summary card */}
+      <Card>
+        <CardHeader className='pb-3'>
+          <CardTitle className='flex items-center gap-2 text-base'>
+            <Banknote className='h-4 w-4 text-muted-foreground' />
+            {t('Payment & Amount')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className='p-4 pt-0 space-y-4'>
           <div>
-            <Label htmlFor="notes">{t('Notes')}</Label>
-            <Textarea
-              id="notes"
-              value={purchase.notes || ''}
-              onChange={(e) =>
+            <Label htmlFor="payment-method" className="mb-2">{t('Payment Method') || 'Payment Method'}</Label>
+            <Select
+              value={
+                purchase.paymentMethod === 'wallet' && purchase.walletType
+                  ? toWalletOptionValue(purchase.walletType)
+                  : 'cash'
+              }
+              onOpenChange={setPaymentMethodSelectOpen}
+              onValueChange={(value: string) => {
+                const isWallet = isWalletOptionValue(value)
                 setPurchase((prev) => ({
                   ...prev,
-                  notes: e.target.value,
+                  paymentMethod: isWallet ? 'wallet' : 'cash',
+                  walletType: isWallet ? getWalletTypeFromOptionValue(value) : undefined,
+                  // The split leg's bucket is derived from this field — stale once it changes.
+                  splitPaymentMethod: undefined,
+                  splitWalletType: undefined,
+                  splitPaidAmount: 0,
                 }))
-              }
-              placeholder={t('Add any notes about this purchase...')}
-              rows={2}
+              }}
+            >
+              <SelectTrigger ref={paymentMethodTriggerRef} className='w-full'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {purchasePaymentMethodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {wallets.length === 0 && (
+              <p className='mt-1 text-xs text-muted-foreground'>
+                {t('No wallets configured. Add one from the Wallet page.') || 'No wallets configured. Add one from the Wallet page.'}
+              </p>
+            )}
+          </div>
+
+          {/* Paid Amount Input */}
+          <div className="space-y-2">
+            <div>
+              <Label htmlFor="paid-amount" className="mb-2 block">
+                {t('Paid Amount')}:
+              </Label>
+              <Input
+                id="paid-amount"
+                type="text"
+                inputMode="decimal"
+                value={getNumericDraftValue('paidAmount', purchase.paidAmount || 0)}
+                disabled={purchase.type === 'cash' && !purchase.splitPaymentMethod}
+                onChange={(e) =>
+                  handleNumericDraftChange('paidAmount', e.target.value, (value) => {
+                    const currentTotal = calculateTotals().total
+                    setPurchase((prev) => ({
+                      ...prev,
+                      paidAmount: value,
+                      balance: resolvePurchaseInvoiceBalance(currentTotal, value),
+                    }))
+                  })
+                }
+                onBlur={() => clearNumericDraft('paidAmount')}
+                placeholder="0.00"
+                className="w-full"
+              />
+            </div>
+            <SplitPaymentFields
+              primaryMethod={purchase.paymentMethod === 'wallet' ? 'wallet' : 'cash'}
+              wallets={wallets}
+              paidAmount={purchase.paidAmount || 0}
+              value={{
+                splitPaymentMethod: purchase.splitPaymentMethod,
+                splitWalletType: purchase.splitWalletType,
+                splitPaidAmount: purchase.splitPaidAmount,
+              }}
+              onChange={(patch) => setPurchase((prev) => ({ ...prev, ...patch }))}
             />
           </div>
 
-          {/* Totals Display */}
-          <div className="space-y-2">
-            <div className="flex justify-between gap-6">
-              <span className="text-muted-foreground">{t('Subtotal')}:</span>
-              <span className="tabular-nums font-medium">Rs{totals.subtotal.toFixed(2)}</span>
-            </div>
-
-            {totals.itemDiscountTotal > 0 && (
-              <div className="flex justify-between gap-6 text-sm text-green-600">
-                <span>{t('Item Discounts')}:</span>
-                <span className="tabular-nums">-Rs{totals.itemDiscountTotal.toFixed(2)}</span>
+          {/* Supplier Balance After Payment - Only show in create mode */}
+          {!isEditing && (purchase.supplier?._id || (purchase.supplier as any)?.id) && (
+            <div className="border-t pt-3 space-y-2 bg-orange-50 dark:bg-orange-950 rounded-lg p-3">
+              <div className='flex justify-between items-center text-sm'>
+                <span className="font-medium">{t('Previous Balance')}:</span>
+                <span className={`font-bold ${supplierBalance > 0 ? 'text-red-600' : supplierBalance < 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                  {loadingBalance ? (
+                    <span className="text-xs">Loading...</span>
+                  ) : (
+                    `Rs${Math.abs(supplierBalance).toFixed(2)} ${supplierBalance > 0 ? '(Cr)' : supplierBalance < 0 ? '(Dr)' : ''}`
+                  )}
+                </span>
               </div>
-            )}
-
-            {/* Overall Discount */}
-            <div className="flex items-center justify-between gap-6">
-              <Label htmlFor="purchase-discount" className="text-muted-foreground whitespace-nowrap">
-                {t('Discount')}:
-              </Label>
-              <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-                <Input
-                  id="purchase-discount"
-                  type="text"
-                  inputMode="decimal"
-                  showVoiceInput={false}
-                  value={getNumericDraftValue('overallDiscount', purchase.discountValue || 0)}
-                  onChange={(e) =>
-                    handleNumericDraftChange('overallDiscount', e.target.value, (parsed) =>
-                      setPurchase((prev) => ({
-                        ...prev,
-                        discountValue: Math.max(0, parsed),
-                      })),
-                    )
-                  }
-                  onFocus={(e) => e.target.select()}
-                  onBlur={() => clearNumericDraft('overallDiscount')}
-                  placeholder='0'
-                  className='h-8 w-20 text-sm font-semibold border-0 rounded-none text-right focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPurchase((prev) => ({
-                      ...prev,
-                      discountType: prev.discountType === 'percentage' ? 'fixed' : 'percentage',
-                    }))
-                  }
-                  title='Click to switch between Rs and % discount'
-                  className='px-2 h-8 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
-                >
-                  {purchase.discountType === 'percentage' ? '%' : 'Rs'}
-                </button>
+              <div className='flex justify-between items-center text-sm'>
+                <span className="font-medium">{t('Current Purchase')}:</span>
+                <span className="font-bold text-red-600">Rs{totals.total.toFixed(2)} (Cr)</span>
               </div>
-            </div>
-
-            {totals.discount > 0 && (
-              <div className="flex justify-between gap-6 text-sm text-green-600">
-                <span>{t('Discount Applied')}:</span>
-                <span className="tabular-nums">-Rs{totals.discount.toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="flex justify-between gap-6 border-t pt-2 font-bold text-lg">
-              <span>{t('Total')}:</span>
-              <span className="tabular-nums">Rs{totals.total.toFixed(2)}</span>
-            </div>
-
-            {(totals.itemDiscountTotal + totals.discount) > 0 && (
-              <div className="flex justify-between gap-6 text-xs font-medium text-green-600">
-                <span>{t('You Saved')}:</span>
-                <span className="tabular-nums">Rs{(totals.itemDiscountTotal + totals.discount).toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="border-t pt-3">
-              <Label htmlFor="payment-method" className="mb-2">{t('Payment Method') || 'Payment Method'}</Label>
-              <Select
-                value={
-                  purchase.paymentMethod === 'wallet' && purchase.walletType
-                    ? toWalletOptionValue(purchase.walletType)
-                    : 'cash'
-                }
-                onOpenChange={setPaymentMethodSelectOpen}
-                onValueChange={(value: string) => {
-                  const isWallet = isWalletOptionValue(value)
-                  setPurchase((prev) => ({
-                    ...prev,
-                    paymentMethod: isWallet ? 'wallet' : 'cash',
-                    walletType: isWallet ? getWalletTypeFromOptionValue(value) : undefined,
-                    // The split leg's bucket is derived from this field — stale once it changes.
-                    splitPaymentMethod: undefined,
-                    splitWalletType: undefined,
-                    splitPaidAmount: 0,
-                  }))
-                }}
-              >
-                <SelectTrigger ref={paymentMethodTriggerRef} className='w-full'>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {purchasePaymentMethodOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {wallets.length === 0 && (
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  {t('No wallets configured. Add one from the Wallet page.') || 'No wallets configured. Add one from the Wallet page.'}
-                </p>
+              {totalPaidNow > 0 && (
+                <div className='flex justify-between items-center text-sm'>
+                  <span className="font-medium">{t('Paid Now')}:</span>
+                  <span className="font-bold text-green-600">-Rs{totalPaidNow.toFixed(2)} (Dr)</span>
+                </div>
               )}
-            </div>
-
-            {/* Paid Amount Input */}
-            <div className="pt-3 space-y-2">
-              <div>
-                <Label htmlFor="paid-amount" className="mb-2 block">
-                  {t('Paid Amount')}:
-                </Label>
-                <Input
-                  id="paid-amount"
-                  type="text"
-                  inputMode="decimal"
-                  value={getNumericDraftValue('paidAmount', purchase.paidAmount || 0)}
-                  disabled={purchase.type === 'cash' && !purchase.splitPaymentMethod}
-                  onChange={(e) =>
-                    handleNumericDraftChange('paidAmount', e.target.value, (value) => {
-                      const currentTotal = calculateTotals().total
-                      setPurchase((prev) => ({
-                        ...prev,
-                        paidAmount: value,
-                        balance: resolvePurchaseInvoiceBalance(currentTotal, value),
-                      }))
-                    })
-                  }
-                  onBlur={() => clearNumericDraft('paidAmount')}
-                  placeholder="0.00"
-                  className="w-full"
-                />
+              <Separator />
+              <div className='flex justify-between items-center'>
+                <span className="font-bold">{t('Net Balance')}:</span>
+                <span className={`font-bold text-lg ${(supplierBalance + totals.total - totalPaidNow) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  Rs{Math.abs(supplierBalance + totals.total - totalPaidNow).toFixed(2)} {(supplierBalance + totals.total - totalPaidNow) > 0 ? '(Payable)' : '(Receivable)'}
+                </span>
               </div>
-              {/* {purchase.paidAmount !== undefined && purchase.paidAmount < totals.total && (
-                <div className="flex justify-between text-sm font-medium text-orange-600">
-                  <span>{t('Balance Due')}:</span>
-                  <span>Rs{(totals.total - (purchase.paidAmount || 0)).toFixed(2)}</span>
-                </div>
-              )} */}
-              <SplitPaymentFields
-                primaryMethod={purchase.paymentMethod === 'wallet' ? 'wallet' : 'cash'}
-                wallets={wallets}
-                paidAmount={purchase.paidAmount || 0}
-                value={{
-                  splitPaymentMethod: purchase.splitPaymentMethod,
-                  splitWalletType: purchase.splitWalletType,
-                  splitPaidAmount: purchase.splitPaidAmount,
-                }}
-                onChange={(patch) => setPurchase((prev) => ({ ...prev, ...patch }))}
-              />
             </div>
+          )}
 
-            {/* Supplier Balance After Payment - Only show in create mode */}
-            {!isEditing && (purchase.supplier?._id || (purchase.supplier as any)?.id) && (
-              <div className="border-t pt-3 space-y-2 bg-orange-50 dark:bg-orange-950 rounded-lg p-3 mt-2">
-                <div className='flex justify-between items-center text-sm'>
-                  <span className="font-medium">{t('Previous Balance')}:</span>
-                  <span className={`font-bold ${supplierBalance > 0 ? 'text-red-600' : supplierBalance < 0 ? 'text-green-600' : 'text-gray-600'}`}>
-                    {loadingBalance ? (
-                      <span className="text-xs">Loading...</span>
-                    ) : (
-                      `Rs${Math.abs(supplierBalance).toFixed(2)} ${supplierBalance > 0 ? '(Cr)' : supplierBalance < 0 ? '(Dr)' : ''}`
-                    )}
-                  </span>
-                </div>
-                <div className='flex justify-between items-center text-sm'>
-                  <span className="font-medium">{t('Current Purchase')}:</span>
-                  <span className="font-bold text-red-600">Rs{totals.total.toFixed(2)} (Cr)</span>
-                </div>
-                {totalPaidNow > 0 && (
-                  <div className='flex justify-between items-center text-sm'>
-                    <span className="font-medium">{t('Paid Now')}:</span>
-                    <span className="font-bold text-green-600">-Rs{totalPaidNow.toFixed(2)} (Dr)</span>
-                  </div>
-                )}
-                <Separator />
-                <div className='flex justify-between items-center'>
-                  <span className="font-bold">{t('Net Balance')}:</span>
-                  <span className={`font-bold text-lg ${(supplierBalance + totals.total - totalPaidNow) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    Rs{Math.abs(supplierBalance + totals.total - totalPaidNow).toFixed(2)} {(supplierBalance + totals.total - totalPaidNow) > 0 ? '(Payable)' : '(Receivable)'}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t('Total Items')}:</span>
-              <span>{purchase.items.length}</span>
-            </div>
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t('Total Quantity')}:</span>
-              <span>{purchase.items.reduce((sum, item) => sum + item.quantity, 0)}</span>
-            </div>
-          </div>
-
-          {/* Save Buttons — compact mode (catalog hidden): the sticky bar below is the
-              buttons row, these full-size duplicates would just repeat it right above. */}
+          {/* Save Buttons — compact mode (catalog hidden): the header-portaled bar below
+              is the buttons row, these full-size duplicates would just repeat it. */}
           {showProductCatalog && (
           <div className="grid grid-cols-1 gap-3">
+            <Button
+              type='button'
+              onClick={previewPurchase}
+              variant='ghost'
+              disabled={purchase.items.length === 0}
+              className='gap-1.5'
+            >
+              <Eye className='h-4 w-4' />
+              {t('Preview')}
+            </Button>
             <Button
               onClick={() => handleSavePurchase('none')}
               className="w-full"
@@ -2262,59 +2755,70 @@ export default function PurchasePanel({
           )}
         </CardContent>
       </Card>
+      </div>
 
-      {/* Fast-purchasing buttons bar — catalog hidden means the panel is a two-column
-          layout (details+totals on the left, items on the right); the primary actions are
-          always reachable without scrolling. Portaled into a footer slot the page keeps
-          outside the cards' scroll region — see InvoicePanel's identical bar for why. */}
+      {/* Fast-purchasing header actions — catalog hidden means the panel is a 3-column
+          layout; the primary actions are always reachable without scrolling. Portaled into
+          a slot the page places in its header (see purchase-invoice/index.tsx). Falls back
+          to a floating bottom bar (with item count/total for context) until that slot
+          exists. Mirrors InvoicePanel's identical bar (see invoice-panel.tsx). */}
       {!showProductCatalog && (() => {
+        const disabled = !(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading
         const bar = (
-          <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Button type='button' onClick={previewPurchase} size='sm' variant='ghost' disabled={purchase.items.length === 0} className='gap-1.5'>
+              <Eye className='h-4 w-4' />
+              {t('Preview')}
+            </Button>
+            <Button
+              type='button'
+              onClick={() => handleSavePurchase('none')}
+              size='sm'
+              variant='outline'
+              disabled={disabled}
+              className='gap-1.5'
+            >
+              {isLoading && savingType === 'none' ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <Save className='h-4 w-4' />
+              )}
+              {isEditing ? t('Update Purchase') : t('Save Purchase')}
+            </Button>
+            <PrintFormatButton
+              onPrint={(paperSize) => handleSavePurchase(paperSize)}
+              defaultPaperSize={defaultPaperSize}
+              size='sm'
+              variant='default'
+              disabled={!getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading}
+              mainButtonClassName='bg-emerald-600 hover:bg-emerald-700'
+              mainButtonContent={
+                isLoading && savingType !== 'none' ? (
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                ) : (
+                  <>
+                    <Printer className='h-4 w-4' />
+                    <span className='ml-1.5'>{t('Save & Print Receipt')}</span>
+                  </>
+                )
+              }
+            />
+          </div>
+        )
+        if (stickyActionsContainer) return createPortal(bar, stickyActionsContainer)
+        // No header slot yet — fall back to a floating bottom bar (with item count/total
+        // for context, since it's not sitting next to the page title in this fallback).
+        return (
+          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
             <div className='flex items-baseline gap-2 pl-1'>
               <span className='text-xs text-muted-foreground'>
-                {purchase.items.filter((i) => (i.product.id || (i.product as any)._id) && i.product.name).length} {t('Purchase Items')}
+                {purchase.items.filter((i) => (i.product.id || (i.product as any)?._id) && i.product.name).length} {t('Purchase Items')}
               </span>
               <span className='text-lg font-bold tabular-nums'>Rs{totals.total.toFixed(2)}</span>
             </div>
-            <div className='flex flex-wrap items-center gap-2'>
-              <Button
-                type='button'
-                onClick={() => handleSavePurchase('none')}
-                size='sm'
-                variant='outline'
-                disabled={!(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading}
-                className='gap-1.5'
-              >
-                {isLoading && savingType === 'none' ? (
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                ) : (
-                  <Save className='h-4 w-4' />
-                )}
-                {isEditing ? t('Update Purchase') : t('Save Purchase')}
-              </Button>
-              <PrintFormatButton
-                onPrint={(paperSize) => handleSavePurchase(paperSize)}
-                defaultPaperSize={defaultPaperSize}
-                size='sm'
-                variant='default'
-                disabled={!getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading}
-                mainButtonContent={
-                  isLoading && savingType !== 'none' ? (
-                    <Loader2 className='h-4 w-4 animate-spin' />
-                  ) : (
-                    <>
-                      <Printer className='h-4 w-4' />
-                      <span className='ml-1.5'>{t('Save & Print Receipt')}</span>
-                    </>
-                  )
-                }
-              />
-            </div>
+            {bar}
           </div>
         )
-        return stickyActionsContainer
-          ? createPortal(bar, stickyActionsContainer)
-          : <div className='sticky bottom-3 z-20 lg:col-span-2'>{bar}</div>
       })()}
 
       <PurchaseAiScanDialog

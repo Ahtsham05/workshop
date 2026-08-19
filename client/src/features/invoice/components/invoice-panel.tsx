@@ -23,6 +23,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
 import { useIsPhone } from '@/hooks/use-mobile'
+import { useIsNarrower } from '@/hooks/use-element-width'
 import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, useGetNextInvoiceNumberQuery, invoiceApi } from '@/stores/invoice.api'
@@ -244,12 +245,7 @@ export function InvoicePanel({
   const totalPaidNow = (invoice.paidAmount || 0) + (invoice.splitPaymentMethod ? (invoice.splitPaidAmount || 0) : 0)
   const { data: salesmen } = useGetAllSalesmanProfilesQuery({ status: 'active' })
   const salesmanOptions = useMemo(
-    () =>
-      (salesmen || []).map((s) => ({
-        value: typeof s.userId === 'string' ? s.userId : s.userId.id,
-        label: typeof s.userId === 'string' ? s.salesmanCode : s.userId.name,
-        sublabel: s.salesmanCode,
-      })),
+    () => (salesmen || []).map((s) => ({ value: s.id, label: s.name, sublabel: s.salesmanCode })),
     [salesmen],
   )
   const [paidAmountInput, setPaidAmountInput] = useState('')
@@ -300,6 +296,15 @@ export function InvoicePanel({
   const invoiceTypeTriggerRef = useRef<HTMLButtonElement>(null)
   const invoiceDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
+  // The items table's fixed-width columns (colgroup below) need ~760px+ before table-fixed
+  // stops proportionally squeezing every column below its intended width (that's what makes
+  // headers/values visually run together — the table is forced to 100% of a too-narrow
+  // container instead of overflowing). Below that, fall back to the same stacked-card row
+  // layout used for catalog-visible/phone (see renderItemCard) — triggered by the item area's
+  // actual rendered width, so a docked devtools panel or a collapsed sidebar can trigger it
+  // too, not just a narrow viewport. Mirrors Purchase's identical guard (see purchase-panel.tsx).
+  const itemsAreaRef = useRef<HTMLDivElement>(null)
+  const isItemsAreaNarrow = useIsNarrower(itemsAreaRef, 760)
   const autoOpenedInvoiceItemIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -355,10 +360,11 @@ export function InvoicePanel({
     if (isEditing || invoice.salesmanId || !user?.id || !salesmen) return
     // String(...) both sides: populated userId can arrive as an ObjectId-shaped value
     // before the API layer's JSON round-trip normalizes it to a plain string, and a
-    // strict === would silently never match in that window.
+    // strict === would silently never match in that window. Standalone salesmen (no
+    // userId) never match here — there's no login to compare against, as intended.
     const ownProfile = salesmen.find((s) => {
-      const salesmanUserId = typeof s.userId === 'string' ? s.userId : s.userId?.id
-      return String(salesmanUserId) === String(user.id)
+      const linkedUserId = typeof s.userId === 'string' ? s.userId : s.userId?.id
+      return linkedUserId != null && String(linkedUserId) === String(user.id)
     })
     if (import.meta.env.DEV && !ownProfile && salesmen.length > 0) {
       // eslint-disable-next-line no-console
@@ -368,7 +374,7 @@ export function InvoicePanel({
       })
     }
     if (ownProfile) {
-      setInvoice(prev => (prev.salesmanId ? prev : { ...prev, salesmanId: user.id }))
+      setInvoice(prev => (prev.salesmanId ? prev : { ...prev, salesmanId: ownProfile.id }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing, user?.id, salesmen])
@@ -3469,25 +3475,36 @@ export function InvoicePanel({
             </div>
           </div>
         </CardHeader>
-        <CardContent className='flex flex-1 flex-col p-0 lg:min-h-0'>
-          <div ref={itemsScrollRef} className={(showProductCatalog || isPhone) ? 'space-y-2 p-3' : 'overflow-x-auto overflow-y-auto max-h-[460px]'}>
+        <CardContent ref={itemsAreaRef} className='flex flex-1 flex-col p-0 lg:min-h-0'>
+          {/* Capped + internally scrollable regardless of table vs. stacked-card layout —
+              without max-h here, the card layout (catalog-visible/phone/narrow) grew with
+              the item count and pushed Payment & Amount off screen, forcing a full-page
+              scroll through every item just to reach Save. */}
+          <div
+            ref={itemsScrollRef}
+            className={cn(
+              'overflow-y-auto max-h-[460px]',
+              (showProductCatalog || isPhone || isItemsAreaNarrow) ? 'space-y-2 p-3' : 'overflow-x-auto',
+            )}
+          >
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
                 {t('no_items_added')}
               </div>
-            ) : showProductCatalog || isPhone ? (
-              // Catalog-visible mode, or catalog-hidden on a phone (<sm/640px): items
-              // render as stacked cards instead of a table. Catalog mode: this column runs
-              // narrower (the Product Catalog panel takes the other half of the screen), so
-              // a 7-column table doesn't have room to breathe. Phone: the fixed-width table
-              // below has no room to breathe under ~640px either, so name and
-              // qty/price/discount/total move onto their own line instead of fighting for
-              // space in one row. Gated on the isPhone *value*, not a CSS breakpoint class —
-              // this and the table branch below are mutually exclusive, so only one copy of
-              // each row's interactive controls (Popover triggers, input refs) ever mounts.
-              // Rendering both and hiding one with `sm:hidden`/`hidden sm:block` doubled up
-              // every row under the same item-id key and broke things like the product
-              // picker popover.
+            ) : showProductCatalog || isPhone || isItemsAreaNarrow ? (
+              // Catalog-visible mode, catalog-hidden on a phone (<sm/640px), or the item
+              // area's rendered width is too narrow for the table's fixed columns (see
+              // isItemsAreaNarrow above): items render as stacked cards instead of a table.
+              // Catalog mode: this column runs narrower (the Product Catalog panel takes the
+              // other half of the screen), so a 7-column table doesn't have room to breathe.
+              // Phone/narrow: the fixed-width table below has no room to breathe either, so
+              // name and qty/price/discount/total move onto their own line instead of
+              // fighting for space in one row. Gated on JS boolean values, not a CSS
+              // breakpoint class — this and the table branch below are mutually exclusive, so
+              // only one copy of each row's interactive controls (Popover triggers, input
+              // refs) ever mounts. Rendering both and hiding one with `sm:hidden`/`hidden
+              // sm:block` doubled up every row under the same item-id key and broke things
+              // like the product picker popover.
               invoice.items.map((item) => renderItemCard(item))
             ) : (
               <Table className='table-fixed'>

@@ -4,7 +4,7 @@ const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const getLedgerEntries = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['salesmanUserId', 'transactionType']);
+  const filter = pick(req.query, ['salesmanId', 'transactionType']);
   applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await salesmanCommissionLedgerService.queryLedgerEntries(filter, options);
@@ -13,8 +13,8 @@ const getLedgerEntries = catchAsync(async (req, res) => {
 
 const getBalance = catchAsync(async (req, res) => {
   const { organizationId } = getBranchContext(req);
-  const balance = await salesmanCommissionLedgerService.getCurrentBalance(req.query.salesmanUserId, organizationId);
-  res.send({ salesmanUserId: req.query.salesmanUserId, balance });
+  const balance = await salesmanCommissionLedgerService.getCurrentBalance(req.query.salesmanId, organizationId);
+  res.send({ salesmanId: req.query.salesmanId, balance });
 });
 
 module.exports = {

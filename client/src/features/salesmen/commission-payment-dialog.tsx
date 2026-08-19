@@ -51,7 +51,7 @@ type PaymentFormValues = z.infer<typeof paymentSchema>;
 interface CommissionPaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  salesmanUserId: string;
+  salesmanId: string;
   salesmanName: string;
   balance: number;
   onSuccess: () => void;
@@ -60,7 +60,7 @@ interface CommissionPaymentDialogProps {
 export function CommissionPaymentDialog({
   open,
   onOpenChange,
-  salesmanUserId,
+  salesmanId,
   salesmanName,
   balance,
   onSuccess,
@@ -109,7 +109,7 @@ export function CommissionPaymentDialog({
     }
     try {
       await createPayment({
-        salesmanUserId,
+        salesmanId,
         amount: data.amount,
         paymentMethod: data.paymentMethod,
         walletType: data.paymentMethod === 'wallet' ? data.walletType : undefined,

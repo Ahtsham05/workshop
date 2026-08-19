@@ -38,7 +38,7 @@ function moduleLabel(module: CommissionRule['module']): string {
 
 function scopeLabel(rule: CommissionRule): string {
   if (rule.scope === 'salesman') {
-    const s = rule.salesmanUserId;
+    const s = rule.salesmanId;
     return typeof s === 'string' ? 'Salesman' : s?.name || 'Salesman';
   }
   if (rule.scope === 'branch') {
@@ -65,12 +65,7 @@ export function CommissionRulesTab() {
   const rules = data?.results || [];
 
   const salesmanOptions = useMemo(
-    () =>
-      (salesmen || []).map((s) => ({
-        value: typeof s.userId === 'string' ? s.userId : s.userId.id,
-        label: typeof s.userId === 'string' ? s.salesmanCode : s.userId.name,
-        sublabel: s.salesmanCode,
-      })),
+    () => (salesmen || []).map((s) => ({ value: s.id, label: s.name, sublabel: s.salesmanCode })),
     [salesmen]
   );
 
@@ -154,7 +149,7 @@ export function CommissionRulesTab() {
               disabled={!previewSalesmanId || isPreviewing}
               onClick={() =>
                 resolveRate({
-                  salesmanUserId: previewSalesmanId,
+                  salesmanId: previewSalesmanId,
                   module: previewModule === '__all__' ? undefined : previewModule,
                 })
               }

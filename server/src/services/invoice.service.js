@@ -647,7 +647,7 @@ const createInvoice = async (invoiceBody, userId) => {
     { path: 'items.productId', select: 'name nameUrdu barcode category' },
     { path: 'items.variantId' },
     { path: 'createdBy', select: 'name email' },
-    { path: 'salesmanId', select: 'name email' }
+    { path: 'salesmanId', select: 'name salesmanCode' }
   ];
 
   // Only populate customer if it's not a walk-in customer
@@ -701,7 +701,7 @@ const queryInvoices = async (filter, options) => {
     ...options,
     populate: [
       { path: 'createdBy', select: 'name email' },
-      { path: 'salesmanId', select: 'name email' },
+      { path: 'salesmanId', select: 'name salesmanCode' },
     ],
   };
   const invoices = await Invoice.paginate(filter, opts);
@@ -770,7 +770,7 @@ const getInvoiceById = async (id) => {
     { path: 'items.variantId' },
     { path: 'items.batchId', select: 'batchNumber expiryDate' },
     { path: 'createdBy updatedBy', select: 'name email' },
-    { path: 'salesmanId', select: 'name email' }
+    { path: 'salesmanId', select: 'name salesmanCode' }
   ];
 
   // Only populate customer if it's not a walk-in customer
@@ -1337,7 +1337,7 @@ const deleteInvoiceById = async (invoiceId) => {
       referenceModel: 'Invoice',
       organizationId: invoice.organizationId,
       branchId: invoice.branchId,
-      salesmanUserId: invoice.salesmanId,
+      salesmanId: invoice.salesmanId,
       reason: 'Invoice deleted',
       userId: invoice.updatedBy || invoice.createdBy,
     });

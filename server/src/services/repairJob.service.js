@@ -88,12 +88,12 @@ const queryRepairJobs = async (filter, options) => {
   return RepairJob.paginate(queryFilter, {
     ...queryOptions,
     sortBy: queryOptions.sortBy || 'date:desc',
-    populate: [{ path: 'salesmanId', select: 'name email' }],
+    populate: [{ path: 'salesmanId', select: 'name salesmanCode' }],
   });
 };
 
 const getRepairJobById = async (repairJobId) => {
-  const repairJob = await RepairJob.findById(repairJobId).populate('salesmanId', 'name email');
+  const repairJob = await RepairJob.findById(repairJobId).populate('salesmanId', 'name salesmanCode');
   if (!repairJob) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Repair job not found');
   }

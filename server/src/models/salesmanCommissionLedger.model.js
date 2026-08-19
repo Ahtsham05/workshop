@@ -22,9 +22,9 @@ const salesmanCommissionLedgerSchema = mongoose.Schema(
       required: true,
       index: true,
     },
-    salesmanUserId: {
+    salesmanId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'SalesmanProfile',
       required: true,
       index: true,
     },
@@ -52,7 +52,7 @@ const salesmanCommissionLedgerSchema = mongoose.Schema(
   { timestamps: true }
 );
 
-salesmanCommissionLedgerSchema.index({ organizationId: 1, branchId: 1, salesmanUserId: 1, transactionDate: -1 });
+salesmanCommissionLedgerSchema.index({ organizationId: 1, branchId: 1, salesmanId: 1, transactionDate: -1 });
 salesmanCommissionLedgerSchema.index({ referenceId: 1, referenceModel: 1, transactionType: 1 });
 
 salesmanCommissionLedgerSchema.plugin(toJSON);

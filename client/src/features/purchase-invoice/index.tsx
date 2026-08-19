@@ -27,9 +27,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import { Columns2, LayoutGrid, PauseCircle, Trash2, ClipboardList, History } from 'lucide-react';
+import { ArrowLeft, Check, Columns2, LayoutGrid, PauseCircle, Trash2, ClipboardList, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useSidebar } from '@/components/ui/sidebar';
 import { normalizeSuppliersList } from './utils/catalog-helpers';
 import { computeDiscountAmount, type DiscountType } from './utils/discount';
 import {
@@ -154,6 +153,14 @@ export interface Purchase {
 
 type ViewType = 'create' | 'list' | 'details';
 
+// Mirrors InvoicePanel's own getTypeColor / the invoice page's INVOICE_TYPE_BADGE_COLOR —
+// duplicated locally (it's 2 lines) rather than exported/prop-drilled, since the header
+// title bar needs it independently of PurchasePanel actually being mounted below.
+const PURCHASE_TYPE_BADGE_COLOR: Record<string, string> = {
+  cash: 'bg-green-100 text-green-800',
+  credit: 'bg-blue-100 text-blue-800',
+}
+
 const PURCHASE_SHOW_CATALOG_KEY = 'purchaseShowProductCatalog';
 
 const getInitialShowProductCatalog = (): boolean => {
@@ -205,8 +212,6 @@ const PurchaseInvoicePage = () => {
   // products show as separate tiles instead of one rolled-up tile with a price range.
   // See docs/architecture/universal-product-migration.md.
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery();
-  
-  const { state: sidebarState, isMobile: sidebarIsMobile } = useSidebar();
 
   // UI state
   const [showImages, setShowImages] = useState(true);
@@ -214,7 +219,7 @@ const PurchaseInvoicePage = () => {
   const [showProductCatalog, setShowProductCatalog] = useState(getInitialShowProductCatalog);
   // Fast-purchasing mode's save/print bar is portaled here — a footer slot the page keeps
   // outside the cards' scroll region, see PurchasePanel's sticky bar for why.
-  const [stickyFooterSlot, setStickyFooterSlot] = useState<HTMLDivElement | null>(null);
+  const [headerActionsSlot, setHeaderActionsSlot] = useState<HTMLDivElement | null>(null);
 
   const toggleProductCatalog = useCallback(() => {
     setShowProductCatalog((prev) => {
@@ -1007,15 +1012,39 @@ const PurchaseInvoicePage = () => {
       ) : currentView === 'create' ? (
         <div
           className={cn(
-            'flex h-full min-h-0 flex-col p-4',
-            showProductCatalog ? 'gap-4' : 'gap-3 pt-3',
+            'p-4 pb-6',
+            showProductCatalog ? 'pt-3 md:pt-4' : 'pt-2 md:pt-2.5',
           )}
         >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <p className="order-2 max-w-xl text-xs leading-snug text-muted-foreground sm:order-1">
-              {t('autosave_hint')}
-            </p>
-            <div className="flex flex-wrap justify-end gap-2 order-1 sm:order-2">
+        <div className={cn('space-y-3', !showProductCatalog && 'space-y-2')}>
+          {/* Title + type badge, its own row now — the toolbar below carries the action
+              buttons (including the primary Preview/Save Purchase/Save & Print actions,
+              compact mode only) instead of sharing this row with them. Mirrors Invoice's
+              header exactly — see features/invoice/index.tsx. */}
+          <div className="flex items-center gap-2">
+            {isEditing && (
+              <Button type="button" variant="ghost" size="sm" className="-ml-2 h-8 w-8 p-0" onClick={handleBackToList}>
+                <ArrowLeft className="h-4 w-4" aria-hidden />
+              </Button>
+            )}
+            <h1 className="text-lg font-semibold sm:text-xl">
+              {isEditing ? t('Edit Purchase') : t('New Purchase')}
+            </h1>
+            <Badge className={PURCHASE_TYPE_BADGE_COLOR[purchase.type || 'cash'] ?? 'bg-gray-100 text-gray-800'}>
+              {t(purchase.type || 'cash')}
+            </Badge>
+          </div>
+
+          {/* Toolbar — catalog-hidden mode: utility actions (history/orders/hold/
+              held-drafts/catalog toggle) on the left, the primary Preview/Save Purchase/
+              Save & Print actions portaled in on the right via `headerActionsSlot` (so
+              PurchasePanel's own save/print state and handlers stay right where they're
+              defined). Catalog-shown mode has no second group to balance against — those
+              primary actions live inline in the Payment & Amount card instead — so the
+              utility actions move to the right on their own instead of sitting flush left
+              with empty space beside them. */}
+          <div className={cn('flex flex-wrap items-center gap-2', showProductCatalog ? 'justify-end' : 'justify-between')}>
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -1125,12 +1154,15 @@ const PurchaseInvoicePage = () => {
                 )}
               </Button>
             </div>
+            {!showProductCatalog && (
+              <div ref={setHeaderActionsSlot} className="flex flex-wrap items-center gap-2" />
+            )}
           </div>
 
           <div
             className={cn(
-              'grid min-h-0 w-full flex-1 items-start content-start',
-              showProductCatalog ? 'grid-cols-1 gap-6 lg:grid-cols-2' : 'grid-cols-1 gap-4',
+              'grid w-full items-start content-start',
+              showProductCatalog ? 'gap-6 lg:grid-cols-2' : 'grid-cols-1 gap-4',
             )}
           >
           {/* Left Column - Purchase Panel — full width when catalog hidden: PurchasePanel
@@ -1154,7 +1186,7 @@ const PurchaseInvoicePage = () => {
               productsLoading={loading}
               setProducts={setProducts}
               showProductCatalog={showProductCatalog}
-              stickyActionsContainer={stickyFooterSlot}
+              stickyActionsContainer={headerActionsSlot}
             />
           </div>
 
@@ -1175,24 +1207,21 @@ const PurchaseInvoicePage = () => {
           )}
           </div>
 
-          {/* Footer slot for PurchasePanel's save/print bar (portaled in) — `position:
-              fixed` to the viewport, not `sticky`: this page scrolls as a whole rather
-              than containing scroll within `Main`, so a sticky bar only becomes visible
-              once you've scrolled far enough for it. Fixed makes it behave like a bottom
-              toolbar, visible immediately. Inset from the left by the sidebar's actual
-              current width so it never overlaps it, and follows collapse/expand. */}
-          {!showProductCatalog && (
-            <div
-              ref={setStickyFooterSlot}
-              className={cn(
-                'fixed inset-x-4 bottom-4 z-30 transition-[left] duration-200 ease-linear',
-                !sidebarIsMobile &&
-                  (sidebarState === 'collapsed'
-                    ? 'md:left-[calc(var(--sidebar-width-icon)+2rem)]'
-                    : 'md:left-[calc(var(--sidebar-width)+1rem)]'),
-              )}
-            />
-          )}
+          {/* Autosave banner — same info the old muted hint line carried (this device
+              drafts to local storage as you type; see pos-hold-storage). Mirrors Invoice's
+              banner exactly. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {t('autosave_hint')}
+            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-emerald-700 dark:text-emerald-400">
+              <kbd className="rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950">Ctrl+D</kbd>
+              {t('Save Purchase')}
+              <span className="opacity-50">·</span>
+              <kbd className="rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950">Ctrl+Enter</kbd>
+              {t('Save & Print Receipt')}
+            </span>
+          </div>
+        </div>
         </div>
       ) : null}
     </div>

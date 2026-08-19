@@ -116,7 +116,7 @@ const simSaleSchema = new mongoose.Schema(
     // identical field for why this is separate from createdBy.
     salesmanId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'SalesmanProfile',
       default: null,
       index: true,
     },

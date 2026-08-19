@@ -2,7 +2,7 @@ const Joi = require('joi');
 
 const createPayment = {
   body: Joi.object().keys({
-    salesmanUserId: Joi.string().required(),
+    salesmanId: Joi.string().required(),
     amount: Joi.number().positive().required(),
     paymentMethod: Joi.string().valid('cash', 'bank', 'wallet').optional(),
     walletType: Joi.string().trim().when('paymentMethod', {
@@ -18,7 +18,7 @@ const createPayment = {
 
 const getPayments = {
   query: Joi.object().keys({
-    salesmanUserId: Joi.string(),
+    salesmanId: Joi.string(),
     limit: Joi.number(),
     page: Joi.number(),
     sortBy: Joi.string(),

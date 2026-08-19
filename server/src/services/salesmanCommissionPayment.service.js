@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { SalesmanCommissionPayment, Expense, User } = require('../models');
+const { SalesmanCommissionPayment, Expense, SalesmanProfile } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
@@ -106,12 +106,12 @@ const createPayment = async (paymentBody, userId) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Payment amount must be greater than zero');
   }
 
-  const balance = await salesmanCommissionLedgerService.getCurrentBalance(paymentBody.salesmanUserId, paymentBody.organizationId);
+  const balance = await salesmanCommissionLedgerService.getCurrentBalance(paymentBody.salesmanId, paymentBody.organizationId);
   if (amount > balance) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Cannot pay more than the outstanding balance of Rs ${balance.toFixed(2)}`);
   }
 
-  const salesman = await User.findById(paymentBody.salesmanUserId).select('name');
+  const salesman = await SalesmanProfile.findById(paymentBody.salesmanId).select('name');
 
   const payment = await SalesmanCommissionPayment.create({
     ...paymentBody,
@@ -157,7 +157,7 @@ const deletePaymentById = async (paymentId) => {
   await salesmanCommissionLedgerService.deleteEntriesByReference(
     payment._id,
     'SalesmanCommissionPayment',
-    payment.salesmanUserId,
+    payment.salesmanId,
     payment.organizationId
   );
 

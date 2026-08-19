@@ -8,8 +8,8 @@ async function getSalesmanCommissionsSummary(args, ctx) {
 
   const balances = await Promise.all(
     profiles.map(async (p) => ({
-      name: p.userId?.name || 'Unknown',
-      balance: await salesmanCommissionLedgerService.getCurrentBalance(p.userId?._id || p.userId, ctx.organizationId),
+      name: p.name || 'Unknown',
+      balance: await salesmanCommissionLedgerService.getCurrentBalance(p.id, ctx.organizationId),
     })),
   );
 

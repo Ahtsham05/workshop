@@ -17,13 +17,13 @@ const createPayment = catchAsync(async (req, res) => {
     entityId: payment._id,
     entityName: `${payment.salesmanName || ''} — Rs ${payment.amount}`,
     after: payment.toObject ? payment.toObject() : payment,
-    fields: ['salesmanUserId', 'amount', 'paymentMethod', 'walletType'],
+    fields: ['salesmanId', 'amount', 'paymentMethod', 'walletType'],
   });
   res.status(httpStatus.CREATED).send(payment);
 });
 
 const getPayments = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['salesmanUserId']);
+  const filter = pick(req.query, ['salesmanId']);
   applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await salesmanCommissionPaymentService.queryPayments(filter, options);

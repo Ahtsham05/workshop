@@ -4531,10 +4531,10 @@ const getSalesmanCommissionReport = catchAsync(async (req, res) => {
     // Per-salesman breakdown within the period, one row per (salesman, type).
     SalesmanCommissionLedger.aggregate([
       { $match: { ...scope, transactionDate: inRange } },
-      { $group: { _id: { salesmanUserId: '$salesmanUserId', type: '$transactionType' }, credit: { $sum: '$credit' }, debit: { $sum: '$debit' }, count: { $sum: 1 }, saleAmount: { $sum: '$saleAmount' } } },
-      { $lookup: { from: 'users', localField: '_id.salesmanUserId', foreignField: '_id', as: 'salesman' } },
+      { $group: { _id: { salesmanId: '$salesmanId', type: '$transactionType' }, credit: { $sum: '$credit' }, debit: { $sum: '$debit' }, count: { $sum: 1 }, saleAmount: { $sum: '$saleAmount' } } },
+      { $lookup: { from: 'salesmanprofiles', localField: '_id.salesmanId', foreignField: '_id', as: 'salesman' } },
       { $unwind: { path: '$salesman', preserveNullAndEmptyArrays: true } },
-      { $project: { salesmanUserId: '$_id.salesmanUserId', type: '$_id.type', credit: 1, debit: 1, count: 1, saleAmount: 1, name: '$salesman.name', email: '$salesman.email' } },
+      { $project: { salesmanId: '$_id.salesmanId', type: '$_id.type', credit: 1, debit: 1, count: 1, saleAmount: 1, name: '$salesman.name', salesmanCode: '$salesman.salesmanCode' } },
     ]),
     // Daily trend of commission earned within the period, for the chart.
     SalesmanCommissionLedger.aggregate([
@@ -4546,11 +4546,11 @@ const getSalesmanCommissionReport = catchAsync(async (req, res) => {
     // salesman can owe money earned before this report's date range.
     SalesmanCommissionLedger.aggregate([
       { $match: scope },
-      { $sort: { salesmanUserId: 1, transactionDate: 1, createdAt: 1 } },
-      { $group: { _id: '$salesmanUserId', balance: { $last: '$balance' } } },
-      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'salesman' } },
+      { $sort: { salesmanId: 1, transactionDate: 1, createdAt: 1 } },
+      { $group: { _id: '$salesmanId', balance: { $last: '$balance' } } },
+      { $lookup: { from: 'salesmanprofiles', localField: '_id', foreignField: '_id', as: 'salesman' } },
       { $unwind: { path: '$salesman', preserveNullAndEmptyArrays: true } },
-      { $project: { salesmanUserId: '$_id', balance: 1, name: '$salesman.name', email: '$salesman.email' } },
+      { $project: { salesmanId: '$_id', balance: 1, name: '$salesman.name', salesmanCode: '$salesman.salesmanCode' } },
     ]),
     // Invoice-level rows behind each salesman's totals, for the report's expandable
     // detail — `reference`/`saleAmount`/`rate` are already denormalized onto the ledger
@@ -4560,7 +4560,7 @@ const getSalesmanCommissionReport = catchAsync(async (req, res) => {
       transactionDate: inRange,
       transactionType: { $in: ['commission_earned', 'commission_reversed'] },
     })
-      .select('salesmanUserId transactionType transactionDate reference referenceId saleAmount rate credit debit notes')
+      .select('salesmanId transactionType transactionDate reference referenceId saleAmount rate credit debit notes')
       .sort({ transactionDate: -1 })
       .lean(),
   ]);
@@ -4572,12 +4572,12 @@ const getSalesmanCommissionReport = catchAsync(async (req, res) => {
 
   const salesmenMap = new Map();
   for (const row of bySalesmanType) {
-    const key = String(row.salesmanUserId);
+    const key = String(row.salesmanId);
     if (!salesmenMap.has(key)) {
       salesmenMap.set(key, {
-        salesmanUserId: key,
+        salesmanId: key,
         name: row.name || 'Unknown',
-        email: row.email || '',
+        salesmanCode: row.salesmanCode || '',
         salesCount: 0,
         salesAmount: 0,
         earned: 0,
@@ -4603,14 +4603,14 @@ const getSalesmanCommissionReport = catchAsync(async (req, res) => {
   // they had no activity within it — otherwise a "This Month" view could silently hide
   // real outstanding money.
   for (const b of currentBalances) {
-    const key = String(b.salesmanUserId);
+    const key = String(b.salesmanId);
     const rounded = roundReportAmount(b.balance);
     if (!salesmenMap.has(key)) {
       if (rounded === 0) continue;
       salesmenMap.set(key, {
-        salesmanUserId: key,
+        salesmanId: key,
         name: b.name || 'Unknown',
-        email: b.email || '',
+        salesmanCode: b.salesmanCode || '',
         salesCount: 0,
         salesAmount: 0,
         earned: 0,
@@ -4625,7 +4625,7 @@ const getSalesmanCommissionReport = catchAsync(async (req, res) => {
   }
 
   for (const row of invoiceDetail) {
-    const entry = salesmenMap.get(String(row.salesmanUserId));
+    const entry = salesmenMap.get(String(row.salesmanId));
     if (!entry) continue;
     entry.invoices.push({
       transactionType: row.transactionType,

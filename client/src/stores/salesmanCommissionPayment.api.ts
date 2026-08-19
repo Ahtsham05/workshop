@@ -19,7 +19,7 @@ const invalidateWalletsOnSettled = async (
 
 export interface SalesmanCommissionPayment {
   id: string;
-  salesmanUserId: string;
+  salesmanId: string;
   salesmanName?: string;
   amount: number;
   paymentMethod: 'cash' | 'bank' | 'wallet';
@@ -31,7 +31,7 @@ export interface SalesmanCommissionPayment {
 }
 
 export interface CreateCommissionPaymentRequest {
-  salesmanUserId: string;
+  salesmanId: string;
   amount: number;
   paymentMethod?: 'cash' | 'bank' | 'wallet';
   walletType?: string;

@@ -9,7 +9,7 @@ const scopedBody = {
     then: Joi.string().required(),
     otherwise: Joi.string().optional().allow(null, ''),
   }),
-  salesmanUserId: Joi.when('scope', {
+  salesmanId: Joi.when('scope', {
     is: 'salesman',
     then: Joi.string().required(),
     otherwise: Joi.string().optional().allow(null, ''),
@@ -31,7 +31,7 @@ const getCommissionRules = {
   query: Joi.object().keys({
     scope: Joi.string().valid('organization', 'branch', 'salesman'),
     branchId: Joi.string(),
-    salesmanUserId: Joi.string(),
+    salesmanId: Joi.string(),
     module: Joi.string().valid(...MODULES),
     isActive: Joi.boolean(),
     limit: Joi.number(),
@@ -67,7 +67,7 @@ const deleteCommissionRule = {
 
 const resolveCommissionRate = {
   query: Joi.object().keys({
-    salesmanUserId: Joi.string().required(),
+    salesmanId: Joi.string().required(),
     module: Joi.string().valid(...MODULES).optional(),
     date: Joi.date().optional(),
   }),
@@ -75,7 +75,7 @@ const resolveCommissionRate = {
 
 const getSalesmanModuleRates = {
   query: Joi.object().keys({
-    salesmanUserId: Joi.string().required(),
+    salesmanId: Joi.string().required(),
     date: Joi.date().optional(),
   }),
 };

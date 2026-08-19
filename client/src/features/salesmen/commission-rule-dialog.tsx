@@ -42,7 +42,7 @@ const ruleSchema = z
   .object({
     scope: z.enum(['organization', 'branch', 'salesman']),
     branchId: z.string(),
-    salesmanUserId: z.string(),
+    salesmanId: z.string(),
     module: z.string(),
     rate: z.coerce.number().min(0).max(100),
     effectiveFrom: z.string().min(1, 'Effective from date is required'),
@@ -54,9 +54,9 @@ const ruleSchema = z
     message: 'Select a branch',
     path: ['branchId'],
   })
-  .refine((data) => data.scope !== 'salesman' || !!data.salesmanUserId, {
+  .refine((data) => data.scope !== 'salesman' || !!data.salesmanId, {
     message: 'Select a salesman',
-    path: ['salesmanUserId'],
+    path: ['salesmanId'],
   });
 
 type RuleFormValues = z.infer<typeof ruleSchema>;
@@ -80,12 +80,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
   const [updateRule, { isLoading: isUpdating }] = useUpdateCommissionRuleMutation();
 
   const salesmanOptions = useMemo(
-    () =>
-      (salesmen || []).map((s) => ({
-        value: typeof s.userId === 'string' ? s.userId : s.userId.id,
-        label: typeof s.userId === 'string' ? s.salesmanCode : s.userId.name,
-        sublabel: s.salesmanCode,
-      })),
+    () => (salesmen || []).map((s) => ({ value: s.id, label: s.name, sublabel: s.salesmanCode })),
     [salesmen]
   );
 
@@ -99,7 +94,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
     defaultValues: {
       scope: 'organization',
       branchId: '',
-      salesmanUserId: '',
+      salesmanId: '',
       module: '__all__',
       rate: 0,
       effectiveFrom: toDateInput(new Date().toISOString()),
@@ -117,7 +112,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
       form.reset({
         scope: rule.scope,
         branchId: typeof rule.branchId === 'string' ? rule.branchId : rule.branchId?.id || '',
-        salesmanUserId: typeof rule.salesmanUserId === 'string' ? rule.salesmanUserId : rule.salesmanUserId?.id || '',
+        salesmanId: typeof rule.salesmanId === 'string' ? rule.salesmanId : rule.salesmanId?.id || '',
         module: rule.module || '__all__',
         rate: rule.rate,
         effectiveFrom: toDateInput(rule.effectiveFrom),
@@ -129,7 +124,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
       form.reset({
         scope: 'organization',
         branchId: '',
-        salesmanUserId: '',
+        salesmanId: '',
         module: '__all__',
         rate: 0,
         effectiveFrom: toDateInput(new Date().toISOString()),
@@ -158,7 +153,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
         await createRule({
           scope: data.scope,
           branchId: data.scope === 'branch' ? data.branchId : undefined,
-          salesmanUserId: data.scope === 'salesman' ? data.salesmanUserId : undefined,
+          salesmanId: data.scope === 'salesman' ? data.salesmanId : undefined,
           module: data.module === '__all__' ? null : (data.module as CommissionModule),
           rate: data.rate,
           effectiveFrom: data.effectiveFrom,
@@ -239,7 +234,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
             {scope === 'salesman' && (
               <FormField
                 control={form.control}
-                name="salesmanUserId"
+                name="salesmanId"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t('salesman') || 'Salesman'} *</FormLabel>

@@ -3,7 +3,8 @@ import { baseQuery } from './base-query';
 
 export interface SalesmanProfile {
   id: string;
-  userId: { id: string; name: string; email: string } | string;
+  userId?: { id: string; name: string; email: string } | string | null;
+  name: string;
   salesmanCode: string;
   phone?: string;
   cnic?: string;
@@ -16,7 +17,8 @@ export interface SalesmanProfile {
 }
 
 export interface CreateSalesmanProfileRequest {
-  userId: string;
+  userId?: string;
+  name?: string;
   phone?: string;
   cnic?: string;
   defaultCommissionRate?: number;
@@ -26,6 +28,7 @@ export interface CreateSalesmanProfileRequest {
 }
 
 export interface UpdateSalesmanProfileRequest {
+  name?: string;
   phone?: string;
   cnic?: string;
   defaultCommissionRate?: number;

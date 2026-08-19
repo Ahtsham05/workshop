@@ -24,12 +24,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-function userName(ref: SalesmanProfile['userId']): string {
-  return typeof ref === 'string' ? ref : ref.name;
-}
-
-function userEmail(ref: SalesmanProfile['userId']): string {
-  return typeof ref === 'string' ? '' : ref.email;
+function linkedUserEmail(ref: SalesmanProfile['userId']): string {
+  return ref && typeof ref !== 'string' ? ref.email : '';
 }
 
 export function SalesmenTab() {
@@ -43,7 +39,9 @@ export function SalesmenTab() {
   const [deleteProfile, { isLoading: isDeleting }] = useDeleteSalesmanProfileMutation();
 
   const profiles = data?.results || [];
-  const existingUserIds = profiles.map((p) => (typeof p.userId === 'string' ? p.userId : p.userId.id));
+  const existingUserIds = profiles
+    .filter((p) => p.userId)
+    .map((p) => (typeof p.userId === 'string' ? p.userId : p.userId!.id));
 
   const handleCreate = () => {
     setSelectedProfile(null);
@@ -120,9 +118,20 @@ export function SalesmenTab() {
                         <div className="flex items-center gap-2">
                           <UserCheck className="w-4 h-4 text-primary" />
                           <div>
-                            <div>{userName(profile.userId)}</div>
-                            {userEmail(profile.userId) && (
-                              <div className="text-xs text-muted-foreground">{userEmail(profile.userId)}</div>
+                            <div className="flex items-center gap-2">
+                              {profile.name}
+                              {profile.userId ? (
+                                <Badge variant="outline" className="text-xs font-normal">
+                                  {t('linked') || 'Linked'}
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs font-normal">
+                                  {t('standalone') || 'Standalone'}
+                                </Badge>
+                              )}
+                            </div>
+                            {linkedUserEmail(profile.userId) && (
+                              <div className="text-xs text-muted-foreground">{linkedUserEmail(profile.userId)}</div>
                             )}
                           </div>
                         </div>
@@ -186,7 +195,7 @@ export function SalesmenTab() {
             <AlertDialogTitle>{t('delete_salesman') || 'Delete Salesman'}</AlertDialogTitle>
             <AlertDialogDescription>
               {t('delete_salesman_confirmation') ||
-                `Are you sure you want to remove "${userName(profileToDelete?.userId ?? '')}" as a salesman? This action cannot be undone.`}
+                `Are you sure you want to remove "${profileToDelete?.name ?? ''}" as a salesman? This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

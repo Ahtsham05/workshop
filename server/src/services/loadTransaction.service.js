@@ -276,12 +276,12 @@ const queryLoadTransactions = async (filter, options) => {
   return LoadTransaction.paginate(queryFilter, {
     ...queryOptions,
     sortBy: queryOptions.sortBy || 'date:desc,createdAt:desc',
-    populate: ['customerId', { path: 'salesmanId', select: 'name email' }],
+    populate: ['customerId', { path: 'salesmanId', select: 'name salesmanCode' }],
   });
 };
 
 const getLoadTransactionById = async (transactionId) => {
-  const transaction = await LoadTransaction.findById(transactionId).populate('salesmanId', 'name email');
+  const transaction = await LoadTransaction.findById(transactionId).populate('salesmanId', 'name salesmanCode');
   if (!transaction) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Load transaction not found');
   }

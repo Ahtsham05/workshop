@@ -40,11 +40,11 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
     const { data, isFetching: isLoading } = useGetSalesmanCommissionReportQuery({ startDate, endDate })
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
-    const toggleExpanded = (salesmanUserId: string) => {
+    const toggleExpanded = (salesmanId: string) => {
       setExpandedIds((prev) => {
         const next = new Set(prev)
-        if (next.has(salesmanUserId)) next.delete(salesmanUserId)
-        else next.add(salesmanUserId)
+        if (next.has(salesmanId)) next.delete(salesmanId)
+        else next.add(salesmanId)
         return next
       })
     }
@@ -73,7 +73,7 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
           if (data.salesmen.length) {
             const salesmenRows = data.salesmen.map((s) => ({
               Salesman: s.name,
-              Email: s.email,
+              Code: s.salesmanCode,
               'Sales Count': s.salesCount,
               'Sales Amount (Rs.)': s.salesAmount,
               'Commission Earned (Rs.)': s.earned,
@@ -259,13 +259,13 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
                 </TableHeader>
                 <TableBody>
                   {(data?.salesmen ?? []).map((row) => {
-                    const isExpanded = expandedIds.has(row.salesmanUserId)
+                    const isExpanded = expandedIds.has(row.salesmanId)
                     const hasInvoices = row.invoices.length > 0
                     return (
-                      <Fragment key={row.salesmanUserId}>
+                      <Fragment key={row.salesmanId}>
                         <TableRow
                           className={hasInvoices ? 'cursor-pointer hover:bg-muted/50' : undefined}
-                          onClick={() => hasInvoices && toggleExpanded(row.salesmanUserId)}
+                          onClick={() => hasInvoices && toggleExpanded(row.salesmanId)}
                         >
                           <TableCell className='text-muted-foreground'>
                             {hasInvoices ? (
@@ -274,7 +274,7 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
                           </TableCell>
                           <TableCell>
                             <div className='font-medium'>{row.name}</div>
-                            {row.email && <div className='text-xs text-muted-foreground'>{row.email}</div>}
+                            {row.salesmanCode && <div className='text-xs text-muted-foreground'>{row.salesmanCode}</div>}
                           </TableCell>
                           <TableCell className='text-right'>
                             <Badge variant='secondary'>{row.salesCount}</Badge>
@@ -288,7 +288,7 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
                           <TableCell className='text-right font-semibold'>{fmt(row.currentBalance)}</TableCell>
                         </TableRow>
                         {isExpanded && hasInvoices && (
-                          <TableRow key={`${row.salesmanUserId}-detail`} className='bg-muted/30 hover:bg-muted/30'>
+                          <TableRow key={`${row.salesmanId}-detail`} className='bg-muted/30 hover:bg-muted/30'>
                             <TableCell colSpan={8} className='p-0'>
                               <div className='px-4 py-3'>
                                 <Table>

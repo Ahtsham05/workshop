@@ -23,6 +23,10 @@ router
   .get(auth('viewPurchases'), validate(purchaseValidation.getPurchaseByDate), purchaseController.getPurchaseByDate);
 
 router
+  .route('/next-number')
+  .get(auth('viewPurchases'), purchaseController.getNextPurchaseInvoiceNumber);
+
+router
   .route('/:purchaseId')
   .get(auth('viewPurchases'), validate(purchaseValidation.getPurchase), purchaseController.getPurchase)
   .patch(auth('editPurchases'), validate(purchaseValidation.updatePurchase), purchaseController.updatePurchase)

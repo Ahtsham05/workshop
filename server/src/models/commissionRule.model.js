@@ -29,12 +29,12 @@ const commissionRuleSchema = mongoose.Schema(
       ref: 'Branch',
       default: null,
     },
-    // Required when scope === 'salesman'. References the User backing the salesman's
-    // profile (see salesmanProfile.model.js) rather than the profile id, since the sale
-    // attribution this feeds into (Invoice.salesmanId, added in a later module) is a User ref.
-    salesmanUserId: {
+    // Required when scope === 'salesman'. References the SalesmanProfile itself (see
+    // salesmanProfile.model.js) — the same identity every sale-module's salesmanId field
+    // (Invoice, SimSale, LoadTransaction, RepairJob, ServiceInvoice) points at.
+    salesmanId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'SalesmanProfile',
       default: null,
     },
     // Which sale type this rate applies to — the same values used as `referenceModel` on
@@ -58,7 +58,7 @@ const commissionRuleSchema = mongoose.Schema(
   { timestamps: true }
 );
 
-commissionRuleSchema.index({ organizationId: 1, scope: 1, branchId: 1, salesmanUserId: 1, module: 1, effectiveFrom: -1 });
+commissionRuleSchema.index({ organizationId: 1, scope: 1, branchId: 1, salesmanId: 1, module: 1, effectiveFrom: -1 });
 
 commissionRuleSchema.plugin(toJSON);
 commissionRuleSchema.plugin(paginate);

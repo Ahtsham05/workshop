@@ -38,18 +38,30 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
 
-const salesmanSchema = z.object({
-  userId: z.string().min(1, 'Select a staff user'),
-  phone: z.string(),
-  cnic: z.string(),
-  defaultCommissionRate: z.coerce.number().min(0).max(100),
-  moduleRates: z.record(z.string()),
-  isActive: z.boolean(),
-  notes: z.string(),
-});
+const salesmanSchema = z
+  .object({
+    mode: z.enum(['link', 'standalone']),
+    userId: z.string(),
+    name: z.string(),
+    phone: z.string(),
+    cnic: z.string(),
+    defaultCommissionRate: z.coerce.number().min(0).max(100),
+    moduleRates: z.record(z.string()),
+    isActive: z.boolean(),
+    notes: z.string(),
+  })
+  .refine((data) => data.mode !== 'link' || !!data.userId, {
+    message: 'Select a staff user',
+    path: ['userId'],
+  })
+  .refine((data) => data.mode !== 'standalone' || data.name.trim().length > 0, {
+    message: 'Enter a name',
+    path: ['name'],
+  });
 
 type SalesmanFormValues = z.infer<typeof salesmanSchema>;
 
@@ -93,7 +105,9 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
   const form = useForm<SalesmanFormValues>({
     resolver: zodResolver(salesmanSchema),
     defaultValues: {
+      mode: 'link',
       userId: '',
+      name: '',
       phone: '',
       cnic: '',
       defaultCommissionRate: 0,
@@ -104,13 +118,18 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
     mode: 'onChange',
   });
 
+  const mode = form.watch('mode');
+
   useEffect(() => {
     if (!open) return;
 
     if (profile) {
-      const userId = typeof profile.userId === 'string' ? profile.userId : profile.userId.id;
+      const hasUserId = !!profile.userId;
+      const userId = hasUserId ? (typeof profile.userId === 'string' ? profile.userId : profile.userId!.id) : '';
       form.reset({
+        mode: hasUserId ? 'link' : 'standalone',
         userId,
+        name: profile.name || '',
         phone: profile.phone || '',
         cnic: profile.cnic || '',
         defaultCommissionRate: profile.defaultCommissionRate ?? 0,
@@ -123,7 +142,7 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
       // Only prefill a module field when this salesman has an EXPLICIT rule for that
       // module (source === 'salesman') — otherwise the field should stay blank, since it
       // just means "inherits the general/branch/org rate", not "this salesman's rate is X".
-      fetchModuleRates({ salesmanUserId: userId })
+      fetchModuleRates({ salesmanId: profile.id })
         .unwrap()
         .then((rates: SalesmanModuleRates) => {
           const nextOverrides: ModuleOverrides = {};
@@ -141,7 +160,9 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
         .catch(() => {});
     } else {
       form.reset({
+        mode: 'link',
         userId: '',
+        name: '',
         phone: '',
         cnic: '',
         defaultCommissionRate: 0,
@@ -156,7 +177,7 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
   /** After the profile is saved, reconcile the 5 module-rate fields against whatever
    * salesman-specific rules already exist — create/replace when a field has a new value,
    * deactivate the existing rule when a field that had one is cleared back to blank. */
-  const syncModuleRates = async (salesmanUserId: string, moduleRates: Record<string, string>) => {
+  const syncModuleRates = async (salesmanId: string, moduleRates: Record<string, string>) => {
     await Promise.all(
       COMMISSION_MODULES.map(async (m) => {
         const raw = moduleRates[m.value];
@@ -167,7 +188,7 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
           if (existing && existing.rate === value) return; // unchanged
           await createRule({
             scope: 'salesman',
-            salesmanUserId,
+            salesmanId,
             module: m.value,
             rate: value,
           }).unwrap();
@@ -180,7 +201,7 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
 
   const onSubmit: SubmitHandler<SalesmanFormValues> = async (data) => {
     try {
-      const body = {
+      const commonFields = {
         phone: data.phone,
         cnic: data.cnic,
         defaultCommissionRate: data.defaultCommissionRate,
@@ -188,12 +209,21 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
         notes: data.notes,
       };
       if (isEdit && profile) {
-        await updateProfile({ id: profile.id, data: body }).unwrap();
-        await syncModuleRates(data.userId, data.moduleRates);
+        // userId is immutable after creation — never sent on update. name is only
+        // caller-editable for a standalone salesman (a linked salesman's name stays a
+        // snapshot of their User's name).
+        await updateProfile({
+          id: profile.id,
+          data: { ...commonFields, ...(data.mode === 'standalone' ? { name: data.name.trim() } : {}) },
+        }).unwrap();
+        await syncModuleRates(profile.id, data.moduleRates);
         toast.success(t('salesman_updated_successfully') || 'Salesman updated successfully');
       } else {
-        await createProfile({ userId: data.userId, ...body }).unwrap();
-        await syncModuleRates(data.userId, data.moduleRates);
+        const created = await createProfile({
+          ...commonFields,
+          ...(data.mode === 'link' ? { userId: data.userId } : { name: data.name.trim() }),
+        }).unwrap();
+        await syncModuleRates(created.id, data.moduleRates);
         toast.success(t('salesman_created_successfully') || 'Salesman created successfully');
       }
       onSuccess();
@@ -214,37 +244,74 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
           <DialogDescription>
             {isEdit
               ? t('edit_salesman_description') || 'Update this salesman’s commission profile.'
-              : t('add_salesman_description') || 'Turn an existing staff login into a salesman with a commission profile.'}
+              : t('add_salesman_description') ||
+                'Link an existing staff login, or add a salesman with no login of their own.'}
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="userId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('staff_user') || 'Staff User'} *</FormLabel>
-                  <FormControl>
-                    <SearchableSelect
-                      options={userOptions}
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      placeholder={t('select_staff_user') || 'Select a staff user...'}
-                      searchPlaceholder={t('search_users') || 'Search users...'}
-                      emptyText={t('no_eligible_users') || 'No eligible users (already salesmen, or none exist)'}
-                      disabled={isEdit}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t('staff_user_hint') ||
-                      'Their existing login is reused — this just adds a commission profile on top.'}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <Tabs
+              value={mode}
+              onValueChange={(v) => form.setValue('mode', v as 'link' | 'standalone', { shouldValidate: true })}
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="link" disabled={isEdit}>
+                  {t('link_existing_user') || 'Link Existing User'}
+                </TabsTrigger>
+                <TabsTrigger value="standalone" disabled={isEdit}>
+                  {t('new_salesman') || 'New Salesman'}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="link" className="pt-4">
+                <FormField
+                  control={form.control}
+                  name="userId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('staff_user') || 'Staff User'} *</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          options={userOptions}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder={t('select_staff_user') || 'Select a staff user...'}
+                          searchPlaceholder={t('search_users') || 'Search users...'}
+                          emptyText={t('no_eligible_users') || 'No eligible users (already salesmen, or none exist)'}
+                          disabled={isEdit}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t('staff_user_hint') ||
+                          'Their existing login is reused — this just adds a commission profile on top.'}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </TabsContent>
+
+              <TabsContent value="standalone" className="pt-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('name') || 'Name'} *</FormLabel>
+                      <FormControl>
+                        <Input placeholder={t('enter_salesman_name') || 'Enter salesman name'} {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        {t('standalone_salesman_hint') ||
+                          'No login of their own — a cashier will attribute sales to them by name.'}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </TabsContent>
+            </Tabs>
 
             <div className="grid grid-cols-2 gap-4">
               <FormField

@@ -8,8 +8,8 @@ const ApiError = require('../utils/ApiError');
 const entityName = (rule) => {
   if (!rule) return undefined;
   if (rule.scope === 'salesman') {
-    const salesman = rule.salesmanUserId;
-    return `Salesman rule — ${typeof salesman === 'string' ? salesman : salesman?.name || salesman?.email || ''}`;
+    const salesman = rule.salesmanId;
+    return `Salesman rule — ${typeof salesman === 'string' ? salesman : salesman?.name || ''}`;
   }
   if (rule.scope === 'branch') {
     const branch = rule.branchId;
@@ -32,13 +32,13 @@ const createCommissionRule = catchAsync(async (req, res) => {
     entityId: rule._id,
     entityName: entityName(rule),
     after: rule.toObject ? rule.toObject() : rule,
-    fields: ['scope', 'branchId', 'salesmanUserId', 'module', 'rate', 'effectiveFrom', 'effectiveTo', 'isActive'],
+    fields: ['scope', 'branchId', 'salesmanId', 'module', 'rate', 'effectiveFrom', 'effectiveTo', 'isActive'],
   });
   res.status(httpStatus.CREATED).send(rule);
 });
 
 const getCommissionRules = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['scope', 'branchId', 'salesmanUserId', 'module', 'isActive']);
+  const filter = pick(req.query, ['scope', 'branchId', 'salesmanId', 'module', 'isActive']);
   const { organizationId } = getBranchContext(req);
   filter.organizationId = organizationId;
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
@@ -92,7 +92,7 @@ const resolveCommissionRate = catchAsync(async (req, res) => {
   const result = await commissionRuleService.resolveCommissionRate({
     organizationId,
     branchId,
-    salesmanUserId: req.query.salesmanUserId,
+    salesmanId: req.query.salesmanId,
     module: req.query.module,
     date: req.query.date,
   });
@@ -104,7 +104,7 @@ const getSalesmanModuleRates = catchAsync(async (req, res) => {
   const result = await commissionRuleService.getSalesmanModuleRates({
     organizationId,
     branchId,
-    salesmanUserId: req.query.salesmanUserId,
+    salesmanId: req.query.salesmanId,
     date: req.query.date,
   });
   res.send(result);

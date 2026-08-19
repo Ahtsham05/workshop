@@ -20,14 +20,14 @@ const salesmanCommissionPaymentSchema = mongoose.Schema(
       required: true,
       index: true,
     },
-    salesmanUserId: {
+    salesmanId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'SalesmanProfile',
       required: true,
       index: true,
     },
-    // Denormalized so the payment stays readable even if the salesman's profile/user is
-    // later deleted — same reasoning as agentBill.model.js's customerName.
+    // Denormalized so the payment stays readable even if the salesman's profile is later
+    // deleted — same reasoning as agentBill.model.js's customerName.
     salesmanName: { type: String, trim: true },
     amount: { type: Number, required: true, min: 0.01 },
     paymentMethod: {
@@ -44,7 +44,7 @@ const salesmanCommissionPaymentSchema = mongoose.Schema(
   { timestamps: true }
 );
 
-salesmanCommissionPaymentSchema.index({ organizationId: 1, branchId: 1, salesmanUserId: 1, paymentDate: -1 });
+salesmanCommissionPaymentSchema.index({ organizationId: 1, branchId: 1, salesmanId: 1, paymentDate: -1 });
 
 salesmanCommissionPaymentSchema.plugin(toJSON);
 salesmanCommissionPaymentSchema.plugin(paginate);

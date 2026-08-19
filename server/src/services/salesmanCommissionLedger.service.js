@@ -4,8 +4,8 @@ const commissionRuleService = require('./commissionRule.service');
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-const getLastBalance = async (salesmanUserId, organizationId, session) => {
-  const query = SalesmanCommissionLedger.findOne({ salesmanUserId, organizationId })
+const getLastBalance = async (salesmanId, organizationId, session) => {
+  const query = SalesmanCommissionLedger.findOne({ salesmanId, organizationId })
     .sort({ transactionDate: -1, createdAt: -1 })
     .select('balance');
   if (session) query.session(session);
@@ -18,7 +18,7 @@ const getLastBalance = async (salesmanUserId, organizationId, session) => {
  * see the model comment for why this is an incremental update, not a full recompute.
  */
 const writeEntry = async (entryBody, session) => {
-  const currentBalance = await getLastBalance(entryBody.salesmanUserId, entryBody.organizationId, session);
+  const currentBalance = await getLastBalance(entryBody.salesmanId, entryBody.organizationId, session);
   const balance = round2(currentBalance + (entryBody.credit || 0) - (entryBody.debit || 0));
   const [entry] = await SalesmanCommissionLedger.create(
     [{ ...entryBody, transactionDate: entryBody.transactionDate || new Date(), balance }],
@@ -67,7 +67,7 @@ const getOriginalCommissionEntry = async (referenceId, referenceModel, session) 
  * @param {Object} params
  * @param {ObjectId} params.organizationId
  * @param {ObjectId} params.branchId
- * @param {ObjectId} params.salesmanUserId
+ * @param {ObjectId} params.salesmanId
  * @param {ObjectId} params.referenceId - the sale document's _id
  * @param {string} params.referenceModel - 'Invoice' | 'SimSale' | 'LoadTransaction' | 'RepairJob' | 'ServiceInvoice'
  * @param {string} [params.reference] - human-readable number (invoice #, job #, etc.) for display
@@ -77,10 +77,10 @@ const getOriginalCommissionEntry = async (referenceId, referenceModel, session) 
  * @param {import('mongoose').ClientSession} [session]
  */
 const creditCommissionEarned = async (
-  { organizationId, branchId, salesmanUserId, referenceId, referenceModel, reference, saleAmount, date, userId },
+  { organizationId, branchId, salesmanId, referenceId, referenceModel, reference, saleAmount, date, userId },
   session
 ) => {
-  if (!salesmanUserId || !referenceId || !referenceModel) return null;
+  if (!salesmanId || !referenceId || !referenceModel) return null;
 
   const existing = await getOriginalCommissionEntry(referenceId, referenceModel, session);
   if (existing) return existing;
@@ -88,7 +88,7 @@ const creditCommissionEarned = async (
   const { rate } = await commissionRuleService.resolveCommissionRate({
     organizationId,
     branchId,
-    salesmanUserId,
+    salesmanId,
     date: date || new Date(),
     module: referenceModel,
   });
@@ -101,7 +101,7 @@ const creditCommissionEarned = async (
     {
       organizationId,
       branchId,
-      salesmanUserId,
+      salesmanId,
       transactionType: 'commission_earned',
       transactionDate: date || new Date(),
       reference,
@@ -121,10 +121,10 @@ const creditCommissionEarned = async (
  * works across any sale type, see creditCommissionEarned.
  */
 const reverseCommissionForReference = async (
-  { referenceId, referenceModel, organizationId, branchId, salesmanUserId, reason, userId },
+  { referenceId, referenceModel, organizationId, branchId, salesmanId, reason, userId },
   session
 ) => {
-  if (!salesmanUserId) return null;
+  if (!salesmanId) return null;
   const net = await getNetCommissionForReference(referenceId, referenceModel, session);
   if (net <= 0) return null;
 
@@ -132,7 +132,7 @@ const reverseCommissionForReference = async (
     {
       organizationId,
       branchId,
-      salesmanUserId,
+      salesmanId,
       transactionType: 'commission_reversed',
       referenceId,
       referenceModel,
@@ -172,7 +172,7 @@ const reverseCommissionForSalesReturn = async (salesReturn, invoice, session) =>
     {
       organizationId: salesReturn.organizationId,
       branchId: salesReturn.branchId,
-      salesmanUserId: invoice.salesmanId,
+      salesmanId: invoice.salesmanId,
       transactionType: 'commission_reversed',
       transactionDate: salesReturn.date || new Date(),
       reference: salesReturn.returnNumber,
@@ -198,13 +198,13 @@ const queryLedgerEntries = async (filter, options) => {
   const opts = {
     ...options,
     sortBy: options.sortBy || 'transactionDate:desc',
-    populate: [{ path: 'salesmanUserId', select: 'name email' }],
+    populate: [{ path: 'salesmanId', select: 'name salesmanCode' }],
   };
   return SalesmanCommissionLedger.paginate(filter, opts);
 };
 
-const getCurrentBalance = async (salesmanUserId, organizationId) => {
-  return getLastBalance(salesmanUserId, organizationId);
+const getCurrentBalance = async (salesmanId, organizationId) => {
+  return getLastBalance(salesmanId, organizationId);
 };
 
 /**
@@ -218,7 +218,7 @@ const recordCommissionPayment = async ({ payment, userId }) => {
   return writeEntry({
     organizationId: payment.organizationId,
     branchId: payment.branchId,
-    salesmanUserId: payment.salesmanUserId,
+    salesmanId: payment.salesmanId,
     transactionType: 'commission_payment',
     transactionDate: payment.paymentDate || new Date(),
     reference: payment.reference,
@@ -235,8 +235,8 @@ const recordCommissionPayment = async ({ payment, userId }) => {
  * order. Only needed after a mid-ledger row is deleted (voiding a payment) — the
  * incremental writeEntry() path never needs this since it only ever appends.
  */
-const recalculateBalances = async (salesmanUserId, organizationId) => {
-  const entries = await SalesmanCommissionLedger.find({ salesmanUserId, organizationId }).sort({
+const recalculateBalances = async (salesmanId, organizationId) => {
+  const entries = await SalesmanCommissionLedger.find({ salesmanId, organizationId }).sort({
     transactionDate: 1,
     createdAt: 1,
   });
@@ -255,9 +255,9 @@ const recalculateBalances = async (salesmanUserId, organizationId) => {
  * Delete the ledger row(s) written for a given reference (e.g. a voided payment) and
  * repair every later entry's running balance for that salesman.
  */
-const deleteEntriesByReference = async (referenceId, referenceModel, salesmanUserId, organizationId) => {
+const deleteEntriesByReference = async (referenceId, referenceModel, salesmanId, organizationId) => {
   await SalesmanCommissionLedger.deleteMany({ referenceId, referenceModel });
-  await recalculateBalances(salesmanUserId, organizationId);
+  await recalculateBalances(salesmanId, organizationId);
 };
 
 module.exports = {

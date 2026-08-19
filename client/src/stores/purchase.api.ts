@@ -137,6 +137,15 @@ export const purchaseApi = createApi({
       }),
       providesTags: ['Purchase'],
     }),
+
+    // Preview the invoice number the next save would receive (see next-number route) —
+    // not reserved, just what the New Purchase form shows before a purchase exists to save.
+    // Tagged 'Purchase' so it refetches after createPurchase — otherwise the preview would
+    // keep showing the number that was just used until something else invalidates it.
+    getNextPurchaseNumber: builder.query({
+      query: () => '/next-number',
+      providesTags: ['Purchase'],
+    }),
   }),
 })
 
@@ -149,4 +158,5 @@ export const {
   useGetPurchaseStatisticsQuery,
   useGetPurchasesByDateQuery,
   useGetPurchasesBySupplierQuery,
+  useGetNextPurchaseNumberQuery,
 } = purchaseApi

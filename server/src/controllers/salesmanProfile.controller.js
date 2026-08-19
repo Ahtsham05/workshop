@@ -5,7 +5,7 @@ const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
 
-const entityName = (profile) => profile?.salesmanCode || profile?.userId?.name || profile?.userId?.email;
+const entityName = (profile) => profile?.salesmanCode || profile?.name || profile?.userId?.name || profile?.userId?.email;
 
 const createSalesmanProfile = catchAsync(async (req, res) => {
   await resolveWriteBranchId(req);

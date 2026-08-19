@@ -5,7 +5,7 @@ export type CommissionLedgerTransactionType = 'commission_earned' | 'commission_
 
 export interface CommissionLedgerEntry {
   id: string;
-  salesmanUserId: { id: string; name: string; email: string } | string;
+  salesmanId: { id: string; name: string; salesmanCode: string } | string;
   transactionType: CommissionLedgerTransactionType;
   transactionDate: string;
   reference?: string;
@@ -29,7 +29,7 @@ export interface CommissionLedgerResponse {
 }
 
 export interface CommissionBalance {
-  salesmanUserId: string;
+  salesmanId: string;
   balance: number;
 }
 
@@ -40,12 +40,12 @@ export const salesmanCommissionLedgerApi = createApi({
   endpoints: (builder) => ({
     getCommissionLedgerEntries: builder.query<
       CommissionLedgerResponse,
-      { page?: number; limit?: number; salesmanUserId?: string; transactionType?: CommissionLedgerTransactionType } | void
+      { page?: number; limit?: number; salesmanId?: string; transactionType?: CommissionLedgerTransactionType } | void
     >({
       query: (params) => ({ url: '/commission-ledger', params: params || undefined }),
       providesTags: ['CommissionLedger'],
     }),
-    getCommissionBalance: builder.query<CommissionBalance, { salesmanUserId: string }>({
+    getCommissionBalance: builder.query<CommissionBalance, { salesmanId: string }>({
       query: (params) => ({ url: '/commission-ledger/balance', params }),
       providesTags: ['CommissionLedger'],
     }),

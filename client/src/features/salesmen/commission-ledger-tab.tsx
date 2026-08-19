@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-function salesmanName(ref: CommissionLedgerEntry['salesmanUserId']): string {
+function salesmanName(ref: CommissionLedgerEntry['salesmanId']): string {
   return typeof ref === 'string' ? ref : ref.name;
 }
 
@@ -45,23 +45,17 @@ export function CommissionLedgerTab() {
   const { data, isLoading, refetch } = useGetCommissionLedgerEntriesQuery({
     page: 1,
     limit: 100,
-    salesmanUserId: selectedSalesmanId || undefined,
+    salesmanId: selectedSalesmanId || undefined,
   });
   const { data: balanceData, refetch: refetchBalance } = useGetCommissionBalanceQuery(
-    { salesmanUserId: selectedSalesmanId },
+    { salesmanId: selectedSalesmanId },
     { skip: !selectedSalesmanId }
   );
   const [deletePayment, { isLoading: isVoiding }] = useDeleteCommissionPaymentMutation();
 
   const entries = data?.results || [];
-  const selectedSalesmanLabel = salesmen?.find(
-    (s) => (typeof s.userId === 'string' ? s.userId : s.userId.id) === selectedSalesmanId
-  );
-  const selectedSalesmanName = selectedSalesmanLabel
-    ? typeof selectedSalesmanLabel.userId === 'string'
-      ? selectedSalesmanLabel.salesmanCode
-      : selectedSalesmanLabel.userId.name
-    : '';
+  const selectedSalesmanLabel = salesmen?.find((s) => s.id === selectedSalesmanId);
+  const selectedSalesmanName = selectedSalesmanLabel?.name || '';
 
   const refetchAll = () => {
     refetch();
@@ -69,12 +63,7 @@ export function CommissionLedgerTab() {
   };
 
   const salesmanOptions = useMemo(
-    () =>
-      (salesmen || []).map((s) => ({
-        value: typeof s.userId === 'string' ? s.userId : s.userId.id,
-        label: typeof s.userId === 'string' ? s.salesmanCode : s.userId.name,
-        sublabel: s.salesmanCode,
-      })),
+    () => (salesmen || []).map((s) => ({ value: s.id, label: s.name, sublabel: s.salesmanCode })),
     [salesmen]
   );
 
@@ -162,7 +151,7 @@ export function CommissionLedgerTab() {
                       <TableCell className="whitespace-nowrap">
                         {format(new Date(entry.transactionDate), 'MMM dd, yyyy')}
                       </TableCell>
-                      {!selectedSalesmanId && <TableCell>{salesmanName(entry.salesmanUserId)}</TableCell>}
+                      {!selectedSalesmanId && <TableCell>{salesmanName(entry.salesmanId)}</TableCell>}
                       <TableCell>
                         <Badge className={TRANSACTION_TYPE_STYLES[entry.transactionType]}>
                           {transactionTypeLabel[entry.transactionType]}
@@ -215,7 +204,7 @@ export function CommissionLedgerTab() {
         <CommissionPaymentDialog
           open={paymentDialogOpen}
           onOpenChange={setPaymentDialogOpen}
-          salesmanUserId={selectedSalesmanId}
+          salesmanId={selectedSalesmanId}
           salesmanName={selectedSalesmanName}
           balance={balanceData.balance}
           onSuccess={refetchAll}

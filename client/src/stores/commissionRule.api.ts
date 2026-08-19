@@ -18,7 +18,7 @@ export interface CommissionRule {
   id: string;
   scope: CommissionRuleScope;
   branchId?: { id: string; name: string } | string | null;
-  salesmanUserId?: { id: string; name: string; email: string } | string | null;
+  salesmanId?: { id: string; name: string; salesmanCode: string } | string | null;
   /** null = a general rate covering every module with no more specific module rule. */
   module?: CommissionModule | null;
   rate: number;
@@ -33,7 +33,7 @@ export interface CommissionRule {
 export interface CreateCommissionRuleRequest {
   scope: CommissionRuleScope;
   branchId?: string;
-  salesmanUserId?: string;
+  salesmanId?: string;
   module?: CommissionModule | null;
   rate: number;
   effectiveFrom?: string;
@@ -73,15 +73,15 @@ export const commissionRuleApi = createApi({
   endpoints: (builder) => ({
     getCommissionRules: builder.query<
       CommissionRulesResponse,
-      { page?: number; limit?: number; scope?: CommissionRuleScope; salesmanUserId?: string; module?: CommissionModule } | void
+      { page?: number; limit?: number; scope?: CommissionRuleScope; salesmanId?: string; module?: CommissionModule } | void
     >({
       query: (params) => ({ url: '/commission-rules', params: params || undefined }),
       providesTags: ['CommissionRule'],
     }),
-    resolveCommissionRate: builder.query<ResolvedCommissionRate, { salesmanUserId: string; module?: CommissionModule; date?: string }>({
+    resolveCommissionRate: builder.query<ResolvedCommissionRate, { salesmanId: string; module?: CommissionModule; date?: string }>({
       query: (params) => ({ url: '/commission-rules/resolve', params }),
     }),
-    getSalesmanModuleRates: builder.query<SalesmanModuleRates, { salesmanUserId: string; date?: string }>({
+    getSalesmanModuleRates: builder.query<SalesmanModuleRates, { salesmanId: string; date?: string }>({
       query: (params) => ({ url: '/commission-rules/salesman-module-rates', params }),
       providesTags: ['CommissionRule'],
     }),

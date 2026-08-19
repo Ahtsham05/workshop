@@ -21,12 +21,7 @@ export function SalesmanField({ value, onValueChange, id }: SalesmanFieldProps) 
   const { data: salesmen } = useGetAllSalesmanProfilesQuery({ status: 'active' })
 
   const options = useMemo(
-    () =>
-      (salesmen || []).map((s) => ({
-        value: typeof s.userId === 'string' ? s.userId : s.userId.id,
-        label: typeof s.userId === 'string' ? s.salesmanCode : s.userId.name,
-        sublabel: s.salesmanCode,
-      })),
+    () => (salesmen || []).map((s) => ({ value: s.id, label: s.name, sublabel: s.salesmanCode })),
     [salesmen]
   )
 

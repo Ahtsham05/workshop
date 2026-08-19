@@ -15,7 +15,7 @@ const syncCommissionForInvoice = async (invoice, userId) => {
     await salesmanCommissionLedgerService.creditCommissionEarned({
       organizationId: invoice.organizationId,
       branchId: invoice.branchId,
-      salesmanUserId: invoice.salesmanId,
+      salesmanId: invoice.salesmanId,
       referenceId: invoice._id,
       referenceModel: 'Invoice',
       reference: invoice.invoiceNumber,
@@ -29,7 +29,7 @@ const syncCommissionForInvoice = async (invoice, userId) => {
       referenceModel: 'Invoice',
       organizationId: invoice.organizationId,
       branchId: invoice.branchId,
-      salesmanUserId: invoice.salesmanId,
+      salesmanId: invoice.salesmanId,
       reason: 'Invoice cancelled',
       userId,
     });
@@ -47,7 +47,7 @@ const syncCommissionForSimSale = async (sale, userId) => {
   await salesmanCommissionLedgerService.creditCommissionEarned({
     organizationId: sale.organizationId,
     branchId: sale.branchId,
-    salesmanUserId: sale.salesmanId,
+    salesmanId: sale.salesmanId,
     referenceId: sale._id,
     referenceModel: 'SimSale',
     reference: sale.jobNumber != null ? `SIM-${sale.jobNumber}` : undefined,
@@ -63,7 +63,7 @@ const syncCommissionForLoadTransaction = async (transaction, userId) => {
   await salesmanCommissionLedgerService.creditCommissionEarned({
     organizationId: transaction.organizationId,
     branchId: transaction.branchId,
-    salesmanUserId: transaction.salesmanId,
+    salesmanId: transaction.salesmanId,
     referenceId: transaction._id,
     referenceModel: 'LoadTransaction',
     reference: transaction.walletType || undefined,
@@ -86,7 +86,7 @@ const syncCommissionForRepairJob = async (repairJob, userId) => {
   await salesmanCommissionLedgerService.creditCommissionEarned({
     organizationId: repairJob.organizationId,
     branchId: repairJob.branchId,
-    salesmanUserId: repairJob.salesmanId,
+    salesmanId: repairJob.salesmanId,
     referenceId: repairJob._id,
     referenceModel: 'RepairJob',
     reference: repairJob.deviceModel ? `Repair: ${repairJob.deviceModel}` : undefined,
@@ -102,7 +102,7 @@ const syncCommissionForServiceInvoice = async (invoice, userId) => {
   await salesmanCommissionLedgerService.creditCommissionEarned({
     organizationId: invoice.organizationId,
     branchId: invoice.branchId,
-    salesmanUserId: invoice.salesmanId,
+    salesmanId: invoice.salesmanId,
     referenceId: invoice._id,
     referenceModel: 'ServiceInvoice',
     reference: invoice.invoiceNumber,
@@ -121,7 +121,7 @@ const reverseCommissionOnDelete = async ({ sale, referenceModel, reason, userId 
     referenceModel,
     organizationId: sale.organizationId,
     branchId: sale.branchId,
-    salesmanUserId: sale.salesmanId,
+    salesmanId: sale.salesmanId,
     reason,
     userId,
   });

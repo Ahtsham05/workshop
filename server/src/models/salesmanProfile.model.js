@@ -2,9 +2,13 @@ const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
 
 /**
- * Extends an existing staff User with commission-tracking metadata. Deliberately does not
- * duplicate identity fields (name/email/phone) already on User — those are populated via
- * `userId` so the salesman's login and their sales-team profile never drift apart.
+ * A member of the sales team. Either linked to an existing staff User (`userId` set — the
+ * login is reused, no separate identity created) or fully standalone (`userId` null — a
+ * salesman with no login at all, e.g. floor staff a cashier attributes sales to). `name` is
+ * always the canonical display name either way: a snapshot of the User's name when linked,
+ * or entered directly when standalone. This is the one identity every commission-earning
+ * sale (Invoice/SimSale/LoadTransaction/RepairJob/ServiceInvoice), CommissionRule,
+ * SalesmanCommissionLedger, and SalesmanCommissionPayment ultimately references.
  */
 const salesmanProfileSchema = mongoose.Schema(
   {
@@ -20,11 +24,13 @@ const salesmanProfileSchema = mongoose.Schema(
       required: true,
       index: true,
     },
+    // Optional — set only when this salesman is also a staff login.
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
     },
+    name: { type: String, trim: true, required: true },
     salesmanCode: {
       type: String,
       required: true,
@@ -50,8 +56,12 @@ const salesmanProfileSchema = mongoose.Schema(
 );
 
 salesmanProfileSchema.index({ organizationId: 1, branchId: 1 });
-// One salesman profile per user per organization.
-salesmanProfileSchema.index({ organizationId: 1, userId: 1 }, { unique: true });
+// One salesman profile per user per organization — only enforced when userId is set, so
+// any number of standalone (userId: null) salesmen can coexist.
+salesmanProfileSchema.index(
+  { organizationId: 1, userId: 1 },
+  { unique: true, partialFilterExpression: { userId: { $type: 'objectId' } } }
+);
 salesmanProfileSchema.index({ organizationId: 1, salesmanCode: 1 }, { unique: true });
 
 salesmanProfileSchema.plugin(toJSON);

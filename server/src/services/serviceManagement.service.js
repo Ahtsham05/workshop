@@ -377,12 +377,12 @@ const queryServiceInvoices = async (filter, options) => {
   return ServiceInvoice.paginate(queryFilter, {
     ...queryOptions,
     sortBy: queryOptions.sortBy || 'date:desc',
-    populate: [{ path: 'salesmanId', select: 'name email' }],
+    populate: [{ path: 'salesmanId', select: 'name salesmanCode' }],
   });
 };
 
 const getServiceInvoiceById = async (invoiceId) => {
-  const invoice = await ServiceInvoice.findById(invoiceId).populate('salesmanId', 'name email');
+  const invoice = await ServiceInvoice.findById(invoiceId).populate('salesmanId', 'name salesmanCode');
   if (!invoice) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Service invoice not found');
   }

@@ -354,7 +354,7 @@ const querySimSales = async (filter, options) => {
     'productId',
     'customerId',
     { path: 'createdBy', select: 'name email' },
-    { path: 'salesmanId', select: 'name email' },
+    { path: 'salesmanId', select: 'name salesmanCode' },
   ];
 
   return SimSale.paginate(queryFilter, queryOptions);
@@ -364,7 +364,7 @@ const getSimSaleById = async (id) => {
   const sale = await SimSale.findById(id)
     .populate('productId customerId')
     .populate('createdBy', 'name email')
-    .populate('salesmanId', 'name email');
+    .populate('salesmanId', 'name salesmanCode');
   if (!sale) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sim sale not found');
   }
