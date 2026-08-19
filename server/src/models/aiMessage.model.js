@@ -64,7 +64,7 @@ const aiMessageSchema = mongoose.Schema(
     pendingAction: {
       type: new mongoose.Schema(
         {
-          kind: { type: String, enum: ['create_invoice'] },
+          kind: { type: String, enum: ['create_invoice', 'record_payment'] },
           status: {
             type: String,
             enum: ['pending', 'executed', 'cancelled', 'failed'],

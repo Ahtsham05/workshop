@@ -3,6 +3,7 @@ const { AiConversation, AiMessage, Organization, Customer, Product } = require('
 const ApiError = require('../utils/ApiError');
 const geminiService = require('./aiAssistant/gemini.service');
 const invoiceService = require('./invoice.service');
+const customerLedgerService = require('./customerLedger.service');
 
 const HISTORY_LIMIT = 20;
 
@@ -46,6 +47,20 @@ const getMessageOrThrow = async ({ conversationId, messageId, organizationId, us
   return message;
 };
 
+// Maps a write tool's name to how its preview's params get pulled out for the pendingAction —
+// add a new entry here (plus a matching executor in EXECUTORS_BY_KIND below) for any future
+// write tool, rather than hardcoding one tool name the way this used to.
+const PARAMS_BY_KIND = {
+  create_invoice: (preview) => ({
+    customerId: preview.customerId,
+    productId: preview.productId,
+    quantity: preview.quantity,
+    unitPrice: preview.unitPrice,
+    total: preview.total,
+  }),
+  record_payment: (preview) => ({ customerId: preview.customerId, amount: preview.amount }),
+};
+
 /**
  * Looks for a write-tool call that only produced a preview (never a DB write — see
  * tools/actions.js) and turns it into a `pendingAction` for the message to carry, so the
@@ -54,19 +69,13 @@ const getMessageOrThrow = async ({ conversationId, messageId, organizationId, us
  * shouldn't, given the system prompt, but never trust that alone), the first wins.
  */
 const buildPendingAction = (toolCalls) => {
-  const actionCall = toolCalls.find((tc) => tc.name === 'create_invoice' && tc.result && tc.result.status === 'preview');
+  const actionCall = toolCalls.find((tc) => PARAMS_BY_KIND[tc.name] && tc.result && tc.result.status === 'preview');
   if (!actionCall) return undefined;
   const { preview } = actionCall.result;
   return {
-    kind: 'create_invoice',
+    kind: actionCall.name,
     status: 'pending',
-    params: {
-      customerId: preview.customerId,
-      productId: preview.productId,
-      quantity: preview.quantity,
-      unitPrice: preview.unitPrice,
-      total: preview.total,
-    },
+    params: PARAMS_BY_KIND[actionCall.name](preview),
     preview,
   };
 };
@@ -133,14 +142,87 @@ const sendMessage = async ({
   return assistantMessage;
 };
 
+// Which permission(s) confirming each action kind requires — OR'd, matching the app's own
+// auth() middleware semantics, and matching the exact keys each tool declares in tools/actions.js
+// (checked again here rather than trusted from the preview, since permissions can change between
+// when a message was sent and when it's confirmed).
+const PERMISSIONS_BY_KIND = {
+  create_invoice: ['createInvoices'],
+  record_payment: ['createPayments', 'viewAccounting', 'manageLedgers'],
+};
+
+const hasRequiredPermission = (kind, permissions, isSystemAdmin) => {
+  if (isSystemAdmin === true) return true;
+  const required = PERMISSIONS_BY_KIND[kind];
+  return !!required && required.some((key) => permissions && permissions[key] === true);
+};
+
+/** Re-validates entities and calls invoiceService.createInvoice — see tools/actions.js#prepareCreateInvoice. */
+const executeCreateInvoiceAction = async (params, { organizationId, branchId, userId }) => {
+  const isWalkIn = params.customerId === 'walk-in';
+  const [customer, product] = await Promise.all([
+    isWalkIn ? Promise.resolve(null) : Customer.findOne({ _id: params.customerId, organizationId }),
+    Product.findOne({ _id: params.productId, organizationId }),
+  ]);
+  if (!isWalkIn && !customer) throw new ApiError(httpStatus.BAD_REQUEST, 'That customer no longer exists.');
+  if (!product) throw new ApiError(httpStatus.BAD_REQUEST, 'That product no longer exists.');
+
+  const invoice = await invoiceService.createInvoice(
+    {
+      organizationId,
+      branchId,
+      customerId: params.customerId,
+      type: 'cash',
+      paymentMethod: 'cash',
+      items: [
+        { productId: params.productId, name: product.name, quantity: params.quantity, unitPrice: params.unitPrice, subtotal: params.total },
+      ],
+      subtotal: params.total,
+      total: params.total,
+      totalProfit: 0,
+      totalCost: 0,
+    },
+    userId
+  );
+  return { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber };
+};
+
+/**
+ * Re-validates the customer and calls customerLedgerService.createLedgerEntry — see
+ * tools/actions.js#prepareRecordPayment. Reduces the customer's overall ledger balance (Cash
+ * Book + accounts posting all happen inside that one call); does not touch any specific
+ * invoice's own paidAmount/balance, since the preview never asked which invoice this was for.
+ */
+const executeRecordPaymentAction = async (params, { organizationId, branchId }) => {
+  const customer = await Customer.findOne({ _id: params.customerId, organizationId });
+  if (!customer) throw new ApiError(httpStatus.BAD_REQUEST, 'That customer no longer exists.');
+
+  const entry = await customerLedgerService.createLedgerEntry({
+    organizationId,
+    branchId,
+    customer: params.customerId,
+    transactionType: 'payment_received',
+    transactionDate: new Date(),
+    description: 'Payment received via AI Assistant',
+    debit: 0,
+    credit: params.amount,
+    paymentMethod: 'cash',
+  });
+  return { ledgerEntryId: entry.id, newBalance: entry.balance };
+};
+
+const EXECUTORS_BY_KIND = {
+  create_invoice: executeCreateInvoiceAction,
+  record_payment: executeRecordPaymentAction,
+};
+
 /**
  * Executes a `pendingAction` the user clicked Confirm on. Re-validates everything from
  * scratch server-side using the CURRENT request's auth context — never trusts that
  * permissions/entities are still as they were when the preview was built (spec: "The
  * backend must enforce authorization" / "Always validate the final action server-side").
- * `params` (customerId/productId/quantity/unitPrice/total) are reused exactly as the user
- * saw them in the confirmation card — not re-priced — so what was confirmed is what gets
- * created; only existence of the customer/product is re-checked, not their current price.
+ * `params` are reused exactly as the user saw them in the confirmation card — not re-priced —
+ * so what was confirmed is what gets created; only entity existence is re-checked, not price.
  */
 const confirmAction = async ({ conversationId, messageId, organizationId, branchId, userId, permissions, isSystemAdmin }) => {
   const message = await getMessageOrThrow({ conversationId, messageId, organizationId, userId });
@@ -149,56 +231,19 @@ const confirmAction = async ({ conversationId, messageId, organizationId, branch
     throw new ApiError(httpStatus.CONFLICT, 'This action is no longer pending.');
   }
 
-  const canCreateInvoices = isSystemAdmin === true || (permissions && permissions.createInvoices === true);
-  if (!canCreateInvoices) {
-    throw new ApiError(httpStatus.FORBIDDEN, 'You do not have permission to create invoices.');
-  }
-
-  const { params } = action;
-  const isWalkIn = params.customerId === 'walk-in';
-  const [customer, product] = await Promise.all([
-    isWalkIn ? Promise.resolve(null) : Customer.findOne({ _id: params.customerId, organizationId }),
-    Product.findOne({ _id: params.productId, organizationId }),
-  ]);
-  if ((!isWalkIn && !customer) || !product) {
-    action.status = 'failed';
-    action.error = !isWalkIn && !customer ? 'That customer no longer exists.' : 'That product no longer exists.';
-    await message.save();
-    throw new ApiError(httpStatus.BAD_REQUEST, action.error);
+  if (!hasRequiredPermission(action.kind, permissions, isSystemAdmin)) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You do not have permission to complete this action.');
   }
 
   try {
-    const invoice = await invoiceService.createInvoice(
-      {
-        organizationId,
-        branchId,
-        customerId: params.customerId,
-        type: 'cash',
-        paymentMethod: 'cash',
-        items: [
-          {
-            productId: params.productId,
-            name: product.name,
-            quantity: params.quantity,
-            unitPrice: params.unitPrice,
-            subtotal: params.total,
-          },
-        ],
-        subtotal: params.total,
-        total: params.total,
-        totalProfit: 0,
-        totalCost: 0,
-      },
-      userId
-    );
-
+    const executor = EXECUTORS_BY_KIND[action.kind];
+    action.result = await executor(action.params, { organizationId, branchId, userId });
     action.status = 'executed';
-    action.result = { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber };
     await message.save();
     return message;
   } catch (err) {
     action.status = 'failed';
-    action.error = err.message || 'Failed to create the invoice.';
+    action.error = err.message || 'Failed to complete this action.';
     await message.save();
     throw new ApiError(httpStatus.BAD_REQUEST, action.error);
   }

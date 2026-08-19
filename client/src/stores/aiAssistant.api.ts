@@ -1,6 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
 import { invoiceApi } from './invoice.api';
+import { customerApi } from './customer.api';
 import { invalidateWalletCaches } from './wallet-cache-invalidation';
 
 export interface AiConversation {
@@ -28,13 +29,29 @@ export interface AiInvoicePreview {
   currency: string;
 }
 
-export interface AiPendingAction {
-  kind: 'create_invoice';
-  status: 'pending' | 'executed' | 'cancelled' | 'failed';
-  preview: AiInvoicePreview;
-  result?: { invoiceId: string; invoiceNumber: string };
-  error?: string;
+export interface AiPaymentPreview {
+  customerId: string;
+  customerName: string;
+  customerBalance: number;
+  amount: number;
+  currency: string;
 }
+
+export type AiPendingAction =
+  | {
+      kind: 'create_invoice';
+      status: 'pending' | 'executed' | 'cancelled' | 'failed';
+      preview: AiInvoicePreview;
+      result?: { invoiceId: string; invoiceNumber: string };
+      error?: string;
+    }
+  | {
+      kind: 'record_payment';
+      status: 'pending' | 'executed' | 'cancelled' | 'failed';
+      preview: AiPaymentPreview;
+      result?: { ledgerEntryId: string; newBalance: number };
+      error?: string;
+    };
 
 export interface AiMessage {
   id: string;
@@ -45,7 +62,7 @@ export interface AiMessage {
   createdAt: string;
   /** Set when the user clicked Stop mid-stream — content holds whatever had streamed by then. */
   interrupted?: boolean;
-  /** A create_invoice preview awaiting the user clicking Confirm/Cancel — see ActionConfirmationCard. */
+  /** A create_invoice/record_payment preview awaiting the user clicking Confirm/Cancel — see ActionConfirmationCard. */
   pendingAction?: AiPendingAction;
 }
 
@@ -87,13 +104,19 @@ export const aiAssistantApi = createApi({
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, arg) => [{ type: 'AiMessage', id: arg.conversationId }],
-      // create_invoice posts to Cash Book and shows up on the Invoices page — both live in
+      // Both create_invoice and record_payment post to Cash Book, and each also touches one
+      // more slice of its own (Invoices page / Customers page respectively) — all three live in
       // separate RTK Query slices from this one, so they need their own explicit invalidation
       // (see wallet-cache-invalidation.ts's header comment for why this doesn't happen for free).
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         try {
-          await queryFulfilled;
-          dispatch(invoiceApi.util.invalidateTags(['Invoice']));
+          const { data: message } = await queryFulfilled;
+          if (message.pendingAction?.status !== 'executed') return;
+          if (message.pendingAction.kind === 'create_invoice') {
+            dispatch(invoiceApi.util.invalidateTags(['Invoice']));
+          } else if (message.pendingAction.kind === 'record_payment') {
+            dispatch(customerApi.util.invalidateTags(['Customer']));
+          }
           invalidateWalletCaches(dispatch);
         } catch {
           // confirm failed — nothing external was written, nothing to invalidate

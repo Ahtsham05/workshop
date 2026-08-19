@@ -1,19 +1,28 @@
 import * as React from 'react'
 
-const MOBILE_BREAKPOINT = 768
+const MOBILE_BREAKPOINT = 1024
+// Matches Tailwind's `sm` breakpoint — for call sites that need to tell phones apart
+// from tablets specifically (MOBILE_BREAKPOINT above covers phones+tablets together).
+const PHONE_BREAKPOINT = 640
 
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+function useMaxWidthQuery(breakpoint: number) {
+  const [matches, setMatches] = React.useState<boolean | undefined>(undefined)
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
+    const onChange = () => setMatches(window.innerWidth < breakpoint)
     mql.addEventListener('change', onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    setMatches(window.innerWidth < breakpoint)
     return () => mql.removeEventListener('change', onChange)
-  }, [])
+  }, [breakpoint])
 
-  return !!isMobile
+  return !!matches
+}
+
+export function useIsMobile() {
+  return useMaxWidthQuery(MOBILE_BREAKPOINT)
+}
+
+export function useIsPhone() {
+  return useMaxWidthQuery(PHONE_BREAKPOINT)
 }

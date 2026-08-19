@@ -510,7 +510,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-4">
           {onBack && (
             <Button variant="ghost" size="sm" onClick={onBack}>
@@ -522,7 +522,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
             <p className="text-muted-foreground mt-1">{t('manage_customer_invoices')}</p>
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:justify-end">
           <Button variant="outline" className="whitespace-nowrap" asChild>
             <Link to="/fast-billing">
               <Zap className="h-4 w-4 mr-2" />

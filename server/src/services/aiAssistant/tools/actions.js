@@ -85,6 +85,54 @@ async function prepareCreateInvoice(args, ctx) {
   };
 }
 
+/**
+ * Same preview-only shape as prepareCreateInvoice above — resolves the customer, computes
+ * nothing else (no product/pricing involved), and returns a preview for the confirm step to
+ * act on. Unlike create_invoice, customerName has no walk-in equivalent here: a payment must
+ * be attributed to a real customer, so it stays a required parameter.
+ */
+async function prepareRecordPayment(args, ctx) {
+  const customerQuery = String(args.customerName || '').trim();
+  const amount = Number(args.amount);
+
+  if (!customerQuery) {
+    return { status: 'error', message: 'I need to know which customer made this payment.' };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { status: 'error', message: 'Payment amount must be a positive number.' };
+  }
+
+  const customerResult = await Customer.paginate(buildFilter(ctx), {
+    search: customerQuery,
+    fieldName: 'name,phone',
+    limit: MATCH_LIMIT,
+  });
+
+  if (customerResult.totalResults === 0) {
+    return { status: 'needs_clarification', reason: 'customer_not_found', query: customerQuery };
+  }
+  if (customerResult.totalResults > 1) {
+    return {
+      status: 'needs_clarification',
+      reason: 'multiple_customers',
+      matches: customerResult.results.map((c) => ({ name: c.name, phone: c.phone })),
+    };
+  }
+
+  const customer = customerResult.results[0];
+
+  return {
+    status: 'preview',
+    preview: {
+      customerId: customer.id,
+      customerName: customer.name,
+      customerBalance: customer.balance || 0,
+      amount,
+      currency: 'Rs',
+    },
+  };
+}
+
 const declarations = [
   {
     name: 'create_invoice',
@@ -106,6 +154,22 @@ const declarations = [
       required: ['productName', 'quantity'],
     },
     handler: prepareCreateInvoice,
+  },
+  {
+    name: 'record_payment',
+    description:
+      'Prepare a payment-received record for a customer paying down what they owe (their overall ledger balance) — for the user to review and confirm. This does NOT save anything by itself. The app shows a Confirm/Cancel card after this call; only the user clicking Confirm actually records it, so just present what you found and let the UI handle confirmation (do not ask the user to type "yes"). The result\'s customerBalance is what the customer owed BEFORE this payment (nothing has been applied yet) — when describing it to the user, call it their "current" balance, not their "remaining" or "new" balance, since the payment has not been recorded yet. Use when the user says a customer paid them money (e.g. "Ali Traders paid me 5000", "record a payment of 2000 from Sana", "customer X gave me cash"). Only call this once you have a customer name and an amount — ask for whichever is missing first. This records cash received against the customer\'s overall balance, not against one specific invoice — if the user explicitly wants to pay off a particular invoice number, tell them to use the Invoices page for that instead.',
+    permission: ['createPayments', 'viewAccounting', 'manageLedgers'],
+    write: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        customerName: { type: 'string', description: 'Customer who made the payment, as the user said it' },
+        amount: { type: 'number', description: 'Payment amount received' },
+      },
+      required: ['customerName', 'amount'],
+    },
+    handler: prepareRecordPayment,
   },
 ];
 

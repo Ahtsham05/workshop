@@ -48,7 +48,7 @@ export function ConversationList({
               size='icon'
               variant='ghost'
               onClick={onClose}
-              className='h-7 w-7 shrink-0 rounded-lg sm:hidden'
+              className='h-7 w-7 shrink-0 rounded-lg lg:hidden'
               title='Back to chat'
             >
               <ArrowLeft className='h-4 w-4' />

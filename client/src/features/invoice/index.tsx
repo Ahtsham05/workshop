@@ -67,7 +67,7 @@ const getInitialUrduOnlyPreference = (): boolean => {
 
 const getInitialShowProductCatalog = (): boolean => {
   const stored = localStorage.getItem(INVOICE_SHOW_CATALOG_KEY)
-  if (stored === null) return true
+  if (stored === null) return false
   return stored === 'true'
 }
 

@@ -227,6 +227,7 @@ const ur: Record<string, string> = {
     "customer_dialog_section_photos_title": "تصاویر اور شناختی کارڈ",
     "customer_dialog_section_photos_desc": "اختیاری پروفائل تصویر اور شناختی کارڈ سامنے/پیچھے۔",
     "enter_customer_name": "کسٹمر کا نام درج کریں",
+    "enter_customer_name_for_print": "پرنٹ شدہ رسید پر دکھایا جانے والا نام",
     "received_by": "وصول کنندہ کا نام",
     "enter_received_by_name": "سامان لینے والے شخص کا نام درج کریں",
     "name_in_urdu": "نام (اردو)",

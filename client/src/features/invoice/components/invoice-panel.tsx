@@ -5,11 +5,10 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 // import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History, CreditCard, Eye, Percent, Receipt, ScanBarcode, Zap, Layers, Ban } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History, CreditCard, Eye, Percent, Receipt, ScanBarcode, Layers, Ban } from 'lucide-react'
 import type { ImeiRecord, ImeiEntryInput } from '@/stores/imei.api'
 import {
   entryImei,
@@ -23,6 +22,7 @@ import { isUsedPhonesBucketProduct } from '@/features/mobile-shop/old-phones/con
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
+import { useIsPhone } from '@/hooks/use-mobile'
 import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, invoiceApi } from '@/stores/invoice.api'
@@ -201,6 +201,11 @@ export function InvoicePanel({
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const { showUrdu } = useUrduDisplay()
+  // Below sm (640px): items render as cards instead of the table (see the items list
+  // below). Read via JS rather than CSS show/hide so only one variant ever mounts — two
+  // copies of the same row would double up every interactive control (Popover triggers,
+  // input refs) under one shared item-id key, breaking things like the product picker.
+  const isPhone = useIsPhone()
   const dispatch = useDispatch<AppDispatch>()
   const { hasPermission } = usePermissions()
   const canCreateCustomer = hasPermission('createCustomers' as never)
@@ -2403,7 +2408,7 @@ export function InvoicePanel({
                               size="sm"
                               variant="ghost"
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              className='h-9 w-9 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+                              className='h-8 w-8 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted xl:h-9 xl:w-9'
                             >
                               <Minus className='h-3.5 w-3.5' />
                             </Button>
@@ -2418,13 +2423,13 @@ export function InvoicePanel({
                               }}
                               onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
                               onFocus={(e) => e.target.select()}
-                              className='h-9 w-14 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                              className='h-8 w-10 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] xl:h-9 xl:w-14'
                             />
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              className='h-9 w-9 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+                              className='h-8 w-8 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted xl:h-9 xl:w-9'
                             >
                               <Plus className='h-3.5 w-3.5' />
                             </Button>
@@ -2527,7 +2532,7 @@ export function InvoicePanel({
                         <span className='text-xs text-muted-foreground'>—</span>
                       ) : (
                         <div className='flex w-full items-center rounded-lg border bg-background overflow-hidden'>
-                          <span className='px-2 h-9 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
+                          <span className='px-1.5 h-8 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none xl:px-2 xl:h-9'>Rs</span>
                           <Input
                             ref={(el) => { priceInputRefs.current[item.id] = el }}
                             type="text"
@@ -2537,7 +2542,7 @@ export function InvoicePanel({
                             onKeyDown={(e) => handlePriceKeyDown(e, item.id)}
                             onChange={(e) => updateUnitPrice(parseFloat(e.target.value) || 0)}
                             onFocus={(e) => e.target.select()}
-                            className='h-9 min-w-0 flex-1 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                            className='h-8 min-w-0 flex-1 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] xl:h-9'
                           />
                         </div>
                       )
@@ -2555,13 +2560,13 @@ export function InvoicePanel({
                             onChange={(e) => updateItemDiscount(item.id, { value: Math.max(0, parseFloat(e.target.value) || 0) })}
                             onFocus={(e) => e.target.select()}
                             placeholder='0'
-                            className='h-9 w-14 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                            className='h-8 w-10 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] xl:h-9 xl:w-14'
                           />
                           <button
                             type="button"
                             onClick={() => updateItemDiscount(item.id, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' })}
                             title='Click to switch between Rs and % discount'
-                            className='px-2 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+                            className='px-1.5 h-8 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors xl:px-2 xl:h-9'
                           >
                             {item.discountType === 'percentage' ? '%' : 'Rs'}
                           </button>
@@ -2702,6 +2707,38 @@ export function InvoicePanel({
     }
   }
 
+  // Shared by the catalog-shown items list and the catalog-hidden list's phone-width view
+  // (<sm) below — same stacked name-then-controls card, just reached from two call sites
+  // instead of the fixed-width table.
+  const renderItemCard = (item: InvoiceItem) => {
+    const { hasProduct, productCellCard, qtyControlCard, priceControlCard, discountControlCard, totalDisplayCard, deleteButton, historyButton } = renderInvoiceItemParts(item)
+    return (
+      <div key={item.id} className={cn('rounded-xl border bg-card shadow-sm overflow-hidden', !hasProduct && 'border-dashed')}>
+        <div className='flex items-start gap-3 p-3'>
+          {/* min-w-0 flex-1 here (not on productCellCard's own root, which is shared
+              markup) is what actually pushes history/delete to the card's right edge —
+              without it this row sizes to the name's content width and the icons just
+              trail right after it. */}
+          <div className='min-w-0 flex-1'>{productCellCard}</div>
+          <div className='flex items-center gap-0.5 shrink-0'>
+            {historyButton}
+            {deleteButton}
+          </div>
+        </div>
+        {hasProduct && (
+          <div className='flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5'>
+            {qtyControlCard}
+            <span className='text-muted-foreground/60 text-sm select-none'>×</span>
+            {priceControlCard}
+            <span className='text-muted-foreground/60 text-sm select-none'>−</span>
+            {discountControlCard}
+            {totalDisplayCard}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
       className={cn(
@@ -2714,7 +2751,7 @@ export function InvoicePanel({
             // size, so one long product name would force this whole column — and the
             // page — wider instead of letting the name column's flex-1/min-w-0/truncate
             // chain actually clip it.
-            'grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
+            'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
           : 'space-y-4',
       )}
     >
@@ -2725,7 +2762,7 @@ export function InvoicePanel({
           min-w-0 matters here even though the track is a fixed 320px — a grid item's
           default min-width is content-based ("auto"), so a long customer/product name
           can still force this item wider than its fixed-length track and spill out. */}
-      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'lg:col-start-1')}>
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-1 xl:row-start-1 xl:col-start-1')}>
       {/* Invoice Details */}
       <Card>
         <CardHeader className='pb-4'>
@@ -2814,7 +2851,7 @@ export function InvoicePanel({
                                       className="h-5 w-5 shrink-0 rounded-full"
                                     />
                                     <span className="flex min-w-0 flex-row flex-wrap items-center gap-x-1.5 gap-y-0">
-                                      <span className={getTextClasses(selectedCustomer.name, 'text-xs truncate min-w-0')} title={selectedCustomer.name}>
+                                      <span className={getTextClasses(selectedCustomer.name, 'text-xs min-w-0 break-words')} title={selectedCustomer.name}>
                                         {selectedCustomer.name}
                                       </span>
                                       {selectedCustomer.isEmployeeAccount ? (
@@ -2840,7 +2877,7 @@ export function InvoicePanel({
                                       name={invoice.customerName}
                                       className="h-5 w-5 shrink-0 rounded-full"
                                     />
-                                    <span className={getTextClasses(invoice.customerName, "text-xs truncate")} title={invoice.customerName}>
+                                    <span className={getTextClasses(invoice.customerName, "text-xs break-words")} title={invoice.customerName}>
                                       {invoice.customerName}
                                     </span>
                                   </Badge>
@@ -2850,7 +2887,7 @@ export function InvoicePanel({
                                 return (
                                   <Badge variant="secondary" className="flex items-center gap-1 max-w-full min-w-0">
                                     <User className="w-3 h-3 flex-shrink-0" />
-                                    <span className={getTextClasses(invoice.walkInCustomerName, "text-xs truncate")} title={invoice.walkInCustomerName}>
+                                    <span className={getTextClasses(invoice.walkInCustomerName, "text-xs break-words")} title={invoice.walkInCustomerName}>
                                       {invoice.walkInCustomerName}
                                     </span>
                                   </Badge>
@@ -3131,7 +3168,7 @@ export function InvoicePanel({
                   keyboard flow. */}
               <div>
                 <Label className='mb-2 block'>{t('invoice_type')}</Label>
-                <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+                <div className='grid grid-cols-4 gap-1.5 sm:gap-2'>
                   {(
                     [
                       { value: 'cash', label: t('cash'), icon: Banknote },
@@ -3153,14 +3190,14 @@ export function InvoicePanel({
                         onClick={() => updateInvoiceType(value)}
                         onKeyDown={(e) => onEnterAdvance(e, focusInvoiceDate)}
                         className={cn(
-                          'flex flex-col items-center gap-1 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                          'flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:px-2 sm:py-2.5 sm:text-xs',
                           active
                             ? styles.active
                             : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
                         )}
                       >
                         <Icon className={cn('h-4 w-4', active && styles.icon)} />
-                        {label}
+                        <span className='truncate'>{label}</span>
                       </button>
                     )
                   })}
@@ -3185,6 +3222,28 @@ export function InvoicePanel({
                   </div>
                 )}
 
+                {/* Free-text name for walk-in sales only — a linked customer already has a
+                    real name on their record (print pulls from there instead; see
+                    formatPrintCustomerCell in print-utils.ts), so editing it here would
+                    look like it does something without actually touching that record.
+                    walkInCustomerName already flows through save/load and every print
+                    path (thermal, A4, WhatsApp, SMS) — this is just the missing input for
+                    it. */}
+                {invoice.customerId === 'walk-in' && (
+                  <div>
+                    <Label htmlFor="walkInCustomerName">{t('customer_name') || 'Customer Name'}</Label>
+                    <SmartInput
+                      id="walkInCustomerName"
+                      placeholder={t('enter_customer_name_for_print') || 'Name to show on the printed receipt'}
+                      value={invoice.walkInCustomerName || ''}
+                      onChange={(e) => setInvoice(prev => ({ ...prev, walkInCustomerName: e.target.value }))}
+                      showVoiceInput={true}
+                      voiceInputSize="sm"
+                      className="w-full"
+                    />
+                  </div>
+                )}
+
                 {invoice.type === 'pending' && (
                   <div>
                     <Label htmlFor="receivedByName">{t('received_by') || 'Received By'}</Label>
@@ -3205,47 +3264,24 @@ export function InvoicePanel({
         </CardContent>
       </Card>
 
-      {/* Quick actions — the only copy now (the right column's was removed); lives here
-          so it's reachable without scrolling past the items table. Payment Method recap
-          and Scan Barcode were dropped from this card per request — Payment Method is
-          already visible in the Payment & Amount card, and Scan Barcode already has its
-          own button in the items table header. Total Items/Qty moved to the Summary
-          card instead of living here. Hidden entirely once the catalog is showing — the
-          Product Catalog panel already fills that screen real estate and Notes rarely
-          matters mid product-picking. */}
-      {!showProductCatalog && (
-        <Card>
-          <CardHeader className='pb-3'>
-            <CardTitle className='flex items-center gap-2 text-base'>
-              <Zap className='h-4 w-4 text-muted-foreground' />
-              {t('Quick Actions')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className='pt-0'>
-            <RichTextEditor
-              value={invoice.notes || ''}
-              onChange={(notes) => setInvoice((prev) => ({ ...prev, notes }))}
-              fieldLabel={t('terms_and_conditions')}
-              addButtonLabel={t('Add Note')}
-              placeholder={t('terms_and_conditions_placeholder')}
-              defaultExpanded={Boolean(invoice.notes?.trim())}
-            />
-          </CardContent>
-        </Card>
-      )}
       </div>
 
-      {/* Column 2 (compact mode): at-a-glance stats + Invoice Items */}
-      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'lg:col-start-2')}>
+      {/* Column 2 (compact mode): at-a-glance stats + Invoice Items. Spans both tracks of
+          the md-tier 2-col grid (Details | Summary+Payment sit above it in row 1) so it
+          always runs full width; reverts to its own single track at xl once Details and
+          Summary+Payment split back out into separate side columns. */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-2 md:col-span-2 xl:row-start-1 xl:col-span-1 xl:col-start-2')}>
       {/* At-a-glance totals strip — same numbers as the Summary card below, surfaced here
           too so they're visible while scanning the items table itself. Purely derived from
           invoice state already computed elsewhere; no new totals logic. Hidden once the
           catalog is showing: Column 2 and Column 3 both stack into the same left-hand
           column there (see index.tsx), so the Summary card ends up just a bit further down
           the same column and this strip would only be repeating those numbers a second
-          time above it. */}
+          time above it. Also hidden below sm (phone widths) — 5 cards in one line has no
+          room to breathe that narrow and the Summary card right above (in the md-tier
+          pairing) already covers the same numbers in full. */}
       {!showProductCatalog && (
-        <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5'>
+        <div className='hidden grid-cols-5 gap-2 sm:grid'>
           {[
             { label: t('items') || 'Items', value: String(invoice.items.filter((i) => i.productId && i.name).length) },
             { label: t('subtotal'), value: `Rs${invoice.subtotal.toFixed(2)}` },
@@ -3256,12 +3292,12 @@ export function InvoicePanel({
             <div
               key={stat.label}
               className={cn(
-                'rounded-lg border p-3',
+                'min-w-0 rounded-lg border px-2 py-1.5',
                 stat.highlight ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20' : 'bg-card',
               )}
             >
-              <p className='text-xs text-muted-foreground'>{stat.label}</p>
-              <p className={cn('mt-0.5 truncate text-lg font-bold tabular-nums', stat.highlight && 'text-emerald-700 dark:text-emerald-400')}>
+              <p className='truncate text-[10px] text-muted-foreground'>{stat.label}</p>
+              <p className={cn('truncate text-sm font-bold tabular-nums', stat.highlight && 'text-emerald-700 dark:text-emerald-400')}>
                 {stat.value}
               </p>
             </div>
@@ -3353,94 +3389,96 @@ export function InvoicePanel({
           </div>
         </CardHeader>
         <CardContent className='flex flex-1 flex-col p-0 lg:min-h-0'>
-          <div ref={itemsScrollRef} className={showProductCatalog ? 'space-y-2 p-3' : 'overflow-x-auto overflow-y-auto max-h-[460px]'}>
+          <div ref={itemsScrollRef} className={(showProductCatalog || isPhone) ? 'space-y-2 p-3' : 'overflow-x-auto overflow-y-auto max-h-[460px]'}>
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
                 {t('no_items_added')}
               </div>
-            ) : showProductCatalog ? (
-              // Catalog-visible mode: items render as stacked cards instead of a table —
-              // this column runs narrower here (the Product Catalog panel takes the other
-              // half of the screen), so a 7-column table doesn't have the room to breathe
-              // the way it does in the catalog-hidden 3-column layout. Styled to match
-              // Purchase's item card (purchase-panel.tsx) — labeled h-7 controls with
-              // ×/−/= separators — per request, rather than the table's boxed h-9 cells.
-              invoice.items.map((item) => {
-                const { hasProduct, productCellCard, qtyControlCard, priceControlCard, discountControlCard, totalDisplayCard, deleteButton, historyButton } = renderInvoiceItemParts(item)
-                return (
-                  <div key={item.id} className={cn('rounded-xl border bg-card shadow-sm overflow-hidden', !hasProduct && 'border-dashed')}>
-                    <div className='flex items-start gap-3 p-3'>
-                      {/* min-w-0 flex-1 here (not on productCellCard's own root, which
-                          is shared markup) is what actually pushes history/delete to the
-                          card's right edge — without it this row sizes to the name's
-                          content width and the icons just trail right after it. */}
-                      <div className='min-w-0 flex-1'>{productCellCard}</div>
-                      <div className='flex items-center gap-0.5 shrink-0'>
-                        {historyButton}
-                        {deleteButton}
-                      </div>
-                    </div>
-                    {hasProduct && (
-                      <div className='flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5'>
-                        {qtyControlCard}
-                        <span className='text-muted-foreground/60 text-sm select-none'>×</span>
-                        {priceControlCard}
-                        <span className='text-muted-foreground/60 text-sm select-none'>−</span>
-                        {discountControlCard}
-                        {totalDisplayCard}
-                      </div>
-                    )}
-                  </div>
-                )
-              })
+            ) : showProductCatalog || isPhone ? (
+              // Catalog-visible mode, or catalog-hidden on a phone (<sm/640px): items
+              // render as stacked cards instead of a table. Catalog mode: this column runs
+              // narrower (the Product Catalog panel takes the other half of the screen), so
+              // a 7-column table doesn't have room to breathe. Phone: the fixed-width table
+              // below has no room to breathe under ~640px either, so name and
+              // qty/price/discount/total move onto their own line instead of fighting for
+              // space in one row. Gated on the isPhone *value*, not a CSS breakpoint class —
+              // this and the table branch below are mutually exclusive, so only one copy of
+              // each row's interactive controls (Popover triggers, input refs) ever mounts.
+              // Rendering both and hiding one with `sm:hidden`/`hidden sm:block` doubled up
+              // every row under the same item-id key and broke things like the product
+              // picker popover.
+              invoice.items.map((item) => renderItemCard(item))
             ) : (
               <Table className='table-fixed'>
-                <colgroup>
-                  <col className='w-10' />
-                  <col />
-                  <col className='w-[184px]' />
-                  <col className='w-[150px]' />
-                  {/* Discount's input shrank to fit its actual content (small number + a
-                      Rs/% toggle) — its column no longer needs 150px, so the extra space
-                      reverts to Product (the unlabeled `<col />` above, which soaks up
-                      whatever's left in this table-fixed layout). */}
-                  <col className='w-[100px]' />
-                  <col className='w-[110px]' />
-                  <col className='w-16' />
-                </colgroup>
-                <TableHeader className='sticky top-0 z-10 bg-muted'>
-                  <TableRow className='hover:bg-transparent'>
-                    <TableHead className='w-10 pl-4'>#</TableHead>
-                    <TableHead className='min-w-[270px]'>{t('product') || 'Product'}</TableHead>
-                    <TableHead className='min-w-[150px]'>{t('Qty')}</TableHead>
-                    <TableHead className='min-w-[130px]'>{t('unit_price') || 'Unit Price'}</TableHead>
-                    <TableHead className='min-w-[100px]'>{t('discount') || 'Discount'}</TableHead>
-                    <TableHead className='min-w-[100px] text-right'>{t('total') || 'Total'}</TableHead>
-                    <TableHead className='w-16 pr-3' />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoice.items.map((item, itemIndex) => {
-                    const { hasProduct, productCell, qtyControl, priceControl, discountControl, totalDisplay, deleteButton, historyButton } = renderInvoiceItemParts(item)
-                    return (
-                      <TableRow key={item.id} className={cn(!hasProduct && 'bg-muted/10')}>
-                        <TableCell className='py-3 pl-4 align-top text-xs text-muted-foreground'>{itemIndex + 1}</TableCell>
-                        <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
-                        <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
-                        <TableCell className='align-middle py-3'>{priceControl}</TableCell>
-                        <TableCell className='align-middle py-3'>{discountControl}</TableCell>
-                        <TableCell className='align-middle py-3 text-right'>{totalDisplay}</TableCell>
-                        <TableCell className='py-3 pr-3 align-middle'>
-                          <div className='flex items-center justify-end gap-0.5'>
-                            {historyButton}
-                            {deleteButton}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+                  <colgroup>
+                    <col className='w-10' />
+                    <col />
+                    {/* Qty/Price/Discount/Total run narrower from sm up to (not including) xl —
+                        tablet's Items column is full-width (not squeezed into a fixed 3-col
+                        track like desktop's), but these four still leave Product almost no
+                        room at their desktop size. At xl the table also horizontally scrolls
+                        inside its narrower track anyway, so the original wider sizing there is
+                        unchanged. */}
+                    <col className='w-[140px] xl:w-[184px]' />
+                    <col className='w-[100px] xl:w-[150px]' />
+                    {/* Discount's input shrank to fit its actual content (small number + a
+                        Rs/% toggle) — its column no longer needs 150px, so the extra space
+                        reverts to Product (the unlabeled `<col />` above, which soaks up
+                        whatever's left in this table-fixed layout). */}
+                    <col className='w-[85px] xl:w-[100px]' />
+                    <col className='w-[85px] xl:w-[110px]' />
+                    <col className='w-16' />
+                  </colgroup>
+                  <TableHeader className='sticky top-0 z-10 bg-muted'>
+                    <TableRow className='hover:bg-transparent'>
+                      <TableHead className='w-10 pl-4'>#</TableHead>
+                      <TableHead className='min-w-[160px]'>{t('product') || 'Product'}</TableHead>
+                      <TableHead className='min-w-[140px] xl:min-w-[150px]'>{t('Qty')}</TableHead>
+                      <TableHead className='min-w-[100px] xl:min-w-[130px]'>{t('unit_price') || 'Unit Price'}</TableHead>
+                      <TableHead className='min-w-[85px] xl:min-w-[100px]'>{t('discount') || 'Discount'}</TableHead>
+                      <TableHead className='min-w-[85px] xl:min-w-[100px] text-right'>{t('total') || 'Total'}</TableHead>
+                      <TableHead className='w-16 pr-3' />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoice.items.map((item, itemIndex) => {
+                      // A line split across multiple batches needs the BatchAllocationEditor's
+                      // per-batch tag list, which runs taller than a single table row can hold
+                      // gracefully — cramming the qty/price/discount/total cells beside it
+                      // left them vertically stranded next to a much taller product cell. These
+                      // rows get the card layout instead (name+tags on top, controls wrapped
+                      // onto their own line below), spanning every column; regular single-batch
+                      // rows keep the compact table row.
+                      const isSplitAcrossBatches = !!(item.batchAllocations && item.batchAllocations.length > 1)
+                      if (isSplitAcrossBatches) {
+                        return (
+                          <TableRow key={item.id} className='hover:bg-transparent'>
+                            <TableCell colSpan={7} className='p-2'>
+                              {renderItemCard(item)}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      }
+                      const { hasProduct, productCell, qtyControl, priceControl, discountControl, totalDisplay, deleteButton, historyButton } = renderInvoiceItemParts(item)
+                      return (
+                        <TableRow key={item.id} className={cn(!hasProduct && 'bg-muted/10')}>
+                          <TableCell className='py-3 pl-4 align-top text-xs text-muted-foreground'>{itemIndex + 1}</TableCell>
+                          <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
+                          <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
+                          <TableCell className='align-middle py-3'>{priceControl}</TableCell>
+                          <TableCell className='align-middle py-3'>{discountControl}</TableCell>
+                          <TableCell className='align-middle py-3 text-right'>{totalDisplay}</TableCell>
+                          <TableCell className='py-3 pr-3 align-middle'>
+                            <div className='flex items-center justify-end gap-0.5'>
+                              {historyButton}
+                              {deleteButton}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
             )}
           </div>
 
@@ -3518,8 +3556,10 @@ export function InvoicePanel({
       </Card>
       </div>
 
-      {/* Column 3 (compact mode): Summary, Payment & Amount, Quick Actions */}
-      <div className={cn('space-y-4', !showProductCatalog && 'lg:col-start-3')}>
+      {/* Column 3 (compact mode): Summary, Payment & Amount. Sits beside Invoice Details
+          in row 1 of the md-tier 2-col grid (md:col-start-2); at xl it moves out to its
+          own third track via xl:col-start-3, same as before. */}
+      <div className={cn('space-y-4', !showProductCatalog && 'md:col-start-2 md:row-start-1 xl:row-start-1 xl:col-start-3')}>
       {/* Summary — the same totals shown in the stats strip above the items table, laid
           out as a running receipt-style breakdown. Discount and tax are now edited from
           the items table's footer ("Apply Discount"/"Add Tax" popovers) rather than here,
@@ -4011,7 +4051,7 @@ export function InvoicePanel({
         // No header slot yet — fall back to a floating bottom bar (with item count/total
         // for context, since it's not sitting next to the page title in this fallback).
         return (
-          <div className='sticky bottom-3 z-20 lg:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
             <div className='flex items-baseline gap-2 pl-1'>
               <span className='text-xs text-muted-foreground'>
                 {invoice.items.filter((i) => i.productId && i.name).length} {t('invoice_items')}

@@ -38,7 +38,7 @@ Rules:
 - When a question names a SPECIFIC person or product ("what does Ali owe", "how many iPhone 13 left"), use the matching search_* tool instead of a list tool. If it returns more than one match, list the names briefly and ask which one they mean — never guess which one.
 - Some tools may not be available to you for this user or this business — if none of your tools can answer a question, say you're not able to help with that rather than trying to improvise an answer.
 - If the question is unrelated to this business's data, politely say you can only help with business data questions.
-- create_invoice only PREPARES an invoice for review — it never saves anything. After calling it, briefly describe what you found (customer, product, quantity, total) so the user can double check it; the app itself shows Confirm/Cancel buttons for it, so never ask the user to reply "yes" or "confirm" in words. If it returns needs_clarification, ask the user for exactly what's missing (which customer/product they meant) before calling it again.`;
+- create_invoice and record_payment only PREPARE something for review — neither saves anything by itself. After calling either, briefly describe what you found (for create_invoice: customer, product, quantity, total; for record_payment: customer and amount) so the user can double check it; the app itself shows Confirm/Cancel buttons for it, so never ask the user to reply "yes" or "confirm" in words. If either returns needs_clarification, ask the user for exactly what's missing (which customer/product they meant) before calling it again.`;
 
 function toGeminiHistory(messages) {
   return messages.map((m) => ({

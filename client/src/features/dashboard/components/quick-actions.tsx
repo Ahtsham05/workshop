@@ -183,16 +183,16 @@ export function QuickActions() {
   ]
 
   const renderRow = (actions: (typeof defaultActions[number] & { badge?: number })[]) => (
-    <div className='grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4'>
+    <div className='flex flex-wrap gap-3 sm:gap-4'>
       {actions.map((action, index) => (
         <Button
           key={index}
           onClick={action.onClick}
-          className={`h-24 flex-col gap-2 text-white ${action.color}`}
+          className={`h-auto min-h-24 flex-[1_1_6.5rem] flex-col gap-2 py-3 text-white ${action.color}`}
           variant='default'
         >
           {action.icon}
-          <span className='flex items-center justify-center gap-1.5 text-sm font-medium text-wrap text-center'>
+          <span className='flex items-center justify-center gap-1.5 text-wrap text-center text-sm font-medium'>
             {action.label}
             {!!action.badge && (
               <Badge className='rounded-full border border-white/40 bg-red-500 px-1.5 py-0 text-[10px] font-semibold text-white hover:bg-red-500'>

@@ -270,6 +270,7 @@ const en: Record<string, string> = {
     "customer_dialog_section_photos_title": "Photos & ID",
     "customer_dialog_section_photos_desc": "Optional profile photo and CNIC front and back.",
     "enter_customer_name": "Enter customer name",
+    "enter_customer_name_for_print": "Name to show on the printed receipt",
     "received_by": "Received By",
     "enter_received_by_name": "Name of person collecting the products",
     "name_in_urdu": "Name (Urdu)",

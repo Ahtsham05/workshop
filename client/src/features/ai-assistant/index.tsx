@@ -67,11 +67,12 @@ export default function AiAssistantPage() {
   const dispatch = useDispatch<AppDispatch>()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  // Open by default on tablet/desktop, where the drawer sits alongside the chat — but not on
-  // mobile, where it's a full-screen overlay that would otherwise hide the chat on first load.
+  // Open by default only on desktop (lg+), where the drawer sits alongside the chat — closed on
+  // mobile AND tablet, where it's a full-screen overlay that would otherwise hide the chat on
+  // first load.
   const [showSidebar, setShowSidebar] = useState(() => {
     if (typeof window === 'undefined') return true
-    return !window.matchMedia('(max-width: 639px)').matches
+    return !window.matchMedia('(max-width: 1023px)').matches
   })
   const [pendingMessage, setPendingMessage] = useState<{ conversationId: string; content: string } | null>(null)
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null)
@@ -184,10 +185,10 @@ export default function AiAssistantPage() {
     setHasNewBelow(false)
   }
 
-  // On mobile the sidebar is a full-screen drawer, so picking something should return you to the
-  // chat. On larger screens it sits alongside the chat permanently until the user closes it.
+  // On mobile and tablet the sidebar is a full-screen drawer, so picking something should return
+  // you to the chat. On desktop (lg+) it sits alongside the chat permanently until the user closes it.
   const closeSidebarOnMobile = () => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
       setShowSidebar(false)
     }
   }
@@ -353,14 +354,14 @@ export default function AiAssistantPage() {
       style={pageHeight ? { height: pageHeight } : undefined}
       className='-mx-4 -my-6 w-[calc(100%+2rem)] sm:m-0 sm:w-full'
     >
-      <div className='relative flex h-full min-h-0 gap-0 p-0 sm:gap-4 sm:p-4 md:p-6'>
+      <div className='relative flex h-full min-h-0 gap-0 p-0 lg:gap-4 lg:p-6'>
         <div
           className={cn(
             'absolute inset-0 z-40 bg-background transition-transform duration-300 ease-in-out',
-            'sm:static sm:z-auto sm:translate-x-0 sm:shrink-0 sm:overflow-hidden sm:rounded-md sm:border sm:bg-transparent sm:shadow-xs sm:transition-[width,opacity] sm:duration-300 sm:ease-in-out sm:pointer-events-auto',
+            'lg:static lg:z-auto lg:translate-x-0 lg:shrink-0 lg:overflow-hidden lg:rounded-md lg:border lg:bg-transparent lg:shadow-xs lg:transition-[width,opacity] lg:duration-300 lg:ease-in-out lg:pointer-events-auto',
             showSidebar
-              ? 'translate-x-0 pointer-events-auto sm:w-56 sm:opacity-100 lg:w-72 2xl:w-80'
-              : '-translate-x-full pointer-events-none sm:w-0 sm:border-transparent sm:opacity-0'
+              ? 'translate-x-0 pointer-events-auto lg:w-72 lg:opacity-100 2xl:w-80'
+              : '-translate-x-full pointer-events-none lg:w-0 lg:border-transparent lg:opacity-0'
           )}
         >
           <div className='flex h-full min-h-0 flex-col'>
