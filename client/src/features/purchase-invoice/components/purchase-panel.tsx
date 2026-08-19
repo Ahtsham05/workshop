@@ -741,7 +741,7 @@ export default function PurchasePanel({
   // assembly of the same fields.
   const purchaseBranchDetails = useMemo(
     () => ({
-      name: orgData?.name || branchData?.name,
+      name: resolveBranchCompanyName(orgData?.name, branchData?.name),
       nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
       address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
         .filter(Boolean)
@@ -761,18 +761,6 @@ export default function PurchasePanel({
       try {
         import('@/utils/purchasePrintUtils').then((module) => {
           const supplierName = purchase.supplier?.name || 'Unknown'
-          const branchDetails = {
-            name: resolveBranchCompanyName(orgData?.name, branchData?.name),
-            nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
-            address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
-              .filter(Boolean)
-              .join(', '),
-            phone: branchData?.phone,
-            email: branchData?.email,
-            logo: orgData?.logo?.url,
-            isTrial: orgData?.subscription?.isTrial,
-            invoiceNote: branchData?.invoiceNote,
-          }
           const format = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)]
           const html =
             format.family === 'thermal'
