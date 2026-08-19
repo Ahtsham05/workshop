@@ -29,6 +29,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Building2, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { BUSINESS_TYPE_OPTIONS } from '@/lib/business-types'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 
 const formSchema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters'),
@@ -47,6 +48,7 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>
 
 export default function OnboardingPage() {
+  const { showUrduInput } = useUrduDisplay()
   const navigate = useNavigate()
   const dispatch = useDispatch<AppDispatch>()
   const [step, setStep] = useState(1)
@@ -190,19 +192,21 @@ export default function OnboardingPage() {
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="nameUrdu"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Company Name (Urdu)</FormLabel>
-                          <FormControl>
-                            <Input placeholder="اردو میں نام" dir="rtl" className="text-right" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {showUrduInput && (
+                      <FormField
+                        control={form.control}
+                        name="nameUrdu"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Company Name (Urdu)</FormLabel>
+                            <FormControl>
+                              <Input placeholder="اردو میں نام" dir="rtl" className="text-right" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
                     <FormField
                       control={form.control}
                       name="businessType"

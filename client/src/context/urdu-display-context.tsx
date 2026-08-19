@@ -8,11 +8,16 @@ type UrduDisplayProviderProps = {
 type UrduDisplayProviderState = {
   showUrdu: boolean
   setShowUrdu: (showUrdu: boolean) => void
+  /** Show the "Name (Urdu)" input fields on add/edit forms and auto-translate into them as you type. */
+  showUrduInput: boolean
+  setShowUrduInput: (showUrduInput: boolean) => void
 }
 
 const initialState: UrduDisplayProviderState = {
   showUrdu: true,
   setShowUrdu: () => null,
+  showUrduInput: true,
+  setShowUrduInput: () => null,
 }
 
 const UrduDisplayProviderContext = createContext<UrduDisplayProviderState>(initialState)
@@ -22,8 +27,13 @@ export function UrduDisplayProvider({
   storageKey = 'vite-ui-show-urdu',
   ...props
 }: UrduDisplayProviderProps) {
+  const inputStorageKey = `${storageKey}-input`
+
   const [showUrdu, _setShowUrdu] = useState<boolean>(
     () => localStorage.getItem(storageKey) !== 'false'
+  )
+  const [showUrduInput, _setShowUrduInput] = useState<boolean>(
+    () => localStorage.getItem(inputStorageKey) !== 'false'
   )
 
   const setShowUrdu = (value: boolean) => {
@@ -31,7 +41,12 @@ export function UrduDisplayProvider({
     _setShowUrdu(value)
   }
 
-  const value = { showUrdu, setShowUrdu }
+  const setShowUrduInput = (value: boolean) => {
+    localStorage.setItem(inputStorageKey, String(value))
+    _setShowUrduInput(value)
+  }
+
+  const value = { showUrdu, setShowUrdu, showUrduInput, setShowUrduInput }
 
   return (
     <UrduDisplayProviderContext.Provider {...props} value={value}>

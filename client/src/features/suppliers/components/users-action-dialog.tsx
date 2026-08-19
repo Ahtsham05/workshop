@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import SmartInput from '@/components/smart-input.tsx'
 import ImageUpload from '@/components/image-upload'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { addSupplier, updateSupplier } from '@/stores/supplier.slice' // Adjusted to supplier slice
@@ -66,6 +67,7 @@ interface Props {
 
 export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
   const { t, isRTL } = useLanguage()
+  const { showUrduInput } = useUrduDisplay()
   const isEdit = !!currentRow
   
   // Use the dynamic form schema with translations
@@ -200,26 +202,28 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name='nameUrdu'
-                render={({ field }) => (
-                  <FormItem className='gap-1.5'>
-                    <FormLabel className={isRTL ? 'text-right' : ''}>{t('name_in_urdu')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        dir='rtl'
-                        placeholder={t('name_in_urdu_placeholder')}
-                        autoComplete='off'
-                        className='text-right'
-                        {...field}
-                      />
-                    </FormControl>
-                    <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {showUrduInput && (
+                <FormField
+                  control={form.control}
+                  name='nameUrdu'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel className={isRTL ? 'text-right' : ''}>{t('name_in_urdu')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          dir='rtl'
+                          placeholder={t('name_in_urdu_placeholder')}
+                          autoComplete='off'
+                          className='text-right'
+                          {...field}
+                        />
+                      </FormControl>
+                      <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <div className='grid gap-4 sm:grid-cols-2'>
                 <FormField
                   control={form.control}

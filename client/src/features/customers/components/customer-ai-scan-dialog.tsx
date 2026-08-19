@@ -21,6 +21,7 @@ import {
   PenLine,
 } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import CameraCapture from '@/components/camera-capture'
 import {
@@ -141,6 +142,7 @@ export function CustomerAiScanDialog({
   onImport,
 }: CustomerAiScanDialogProps) {
   const { t } = useLanguage()
+  const { showUrduInput } = useUrduDisplay()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const translateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const pendingFocusRef = useRef<{ rowId: string; field: keyof ScannedCustomer } | null>(
@@ -245,6 +247,8 @@ export function CustomerAiScanDialog({
     if (translateTimersRef.current[id]) {
       clearTimeout(translateTimersRef.current[id])
     }
+
+    if (!showUrduInput) return
 
     translateTimersRef.current[id] = setTimeout(async () => {
       const trimmed = value.trim()

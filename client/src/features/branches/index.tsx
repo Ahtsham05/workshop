@@ -47,6 +47,7 @@ import {
 import { usePlanLimits } from '@/hooks/use-plan-limits'
 import { useGetMyOrganizationQuery, useUpdateOrganizationMutation } from '@/stores/organization.api'
 import { fetchUrduNameSuggestion, useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { cn } from '@/lib/utils'
 import { getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 
@@ -78,6 +79,7 @@ const branchDialogSchema = z.object({
 type BranchDialogValues = z.infer<typeof branchDialogSchema>
 
 export default function BranchesPage() {
+  const { showUrduInput } = useUrduDisplay()
   const [page] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null)
@@ -164,6 +166,8 @@ export default function BranchesPage() {
       })
     }
 
+    if (!showUrduInput) return
+
     let cancelled = false
     const timer = window.setTimeout(async () => {
       if (cancelled) return
@@ -180,7 +184,7 @@ export default function BranchesPage() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [dialogOpen, selectedBranch?.id])
+  }, [dialogOpen, selectedBranch?.id, showUrduInput])
 
   const handleCreate = () => {
     setSelectedBranch(null)
@@ -489,19 +493,21 @@ export default function BranchesPage() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={branchForm.control}
-                name="nameUrdu"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Branch Name (Urdu)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="اردو میں نام" dir="rtl" className="text-right" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {showUrduInput && (
+                <FormField
+                  control={branchForm.control}
+                  name="nameUrdu"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Branch Name (Urdu)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="اردو میں نام" dir="rtl" className="text-right" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={branchForm.control}
                 name="location.address"
@@ -516,32 +522,36 @@ export default function BranchesPage() {
                         {...field}
                       />
                     </FormControl>
-                    <p className="text-xs text-muted-foreground">
-                      Urdu is suggested automatically when you type English (you can edit it below).
-                    </p>
+                    {showUrduInput && (
+                      <p className="text-xs text-muted-foreground">
+                        Urdu is suggested automatically when you type English (you can edit it below).
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={branchForm.control}
-                name="location.addressUrdu"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Address (Urdu)</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="اردو میں پتہ"
-                        rows={2}
-                        dir="rtl"
-                        className="resize-y min-h-[72px] text-right"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {showUrduInput && (
+                <FormField
+                  control={branchForm.control}
+                  name="location.addressUrdu"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address (Urdu)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="اردو میں پتہ"
+                          rows={2}
+                          dir="rtl"
+                          className="resize-y min-h-[72px] text-right"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={branchForm.control}

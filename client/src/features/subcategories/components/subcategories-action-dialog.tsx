@@ -30,6 +30,7 @@ import { useLanguage } from '@/context/language-context'
 import ImageUpload from '@/components/image-upload'
 import { Input } from '@/components/ui/input'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { CategoryPickerField } from './category-picker-field'
 import { SubCategoryNameRow } from './subcategory-name-row'
 import { Plus, FolderTree, Sparkles } from 'lucide-react'
@@ -63,6 +64,7 @@ export function SubCategoriesActionDialog({ setFetch, categories }: SubCategorie
   const { state, dispatch: contextDispatch } = useSubCategories()
   const reduxDispatch = useDispatch<AppDispatch>()
   const { t } = useLanguage()
+  const { showUrduInput } = useUrduDisplay()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const rowRefs = useRef<Array<HTMLInputElement | null>>([])
 
@@ -304,27 +306,29 @@ export function SubCategoriesActionDialog({ setFetch, categories }: SubCategorie
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="nameUrdu"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-base">{t('name_in_urdu')}</FormLabel>
-                        <FormControl>
-                          <Input
-                            dir="rtl"
-                            placeholder={t('name_in_urdu_placeholder')}
-                            autoComplete="off"
-                            showVoiceInput={false}
-                            className="h-11 text-base text-right"
-                            {...field}
-                          />
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">{t('name_in_urdu_hint')}</p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {showUrduInput && (
+                    <FormField
+                      control={form.control}
+                      name="nameUrdu"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-base">{t('name_in_urdu')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              dir="rtl"
+                              placeholder={t('name_in_urdu_placeholder')}
+                              autoComplete="off"
+                              showVoiceInput={false}
+                              className="h-11 text-base text-right"
+                              {...field}
+                            />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">{t('name_in_urdu_hint')}</p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <FormField
                     control={form.control}

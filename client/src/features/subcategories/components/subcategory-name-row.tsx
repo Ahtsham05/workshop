@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import SmartInput from '@/components/smart-input.tsx'
 import { useLanguage } from '@/context/language-context'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { fetchUrduNameSuggestion } from '@/hooks/use-auto-urdu-name-from-english'
 import type { SubCategoryFormValues } from './subcategories-action-dialog'
 
@@ -29,6 +30,7 @@ export function SubCategoryNameRow({
   inputRef,
 }: SubCategoryNameRowProps) {
   const { t } = useLanguage()
+  const { showUrduInput } = useUrduDisplay()
   // Once the user types into Urdu directly, their edit is final — auto-suggest
   // stops overwriting it until they clear the field back to empty.
   const manuallyEditedUrduRef = useRef(false)
@@ -36,6 +38,7 @@ export function SubCategoryNameRow({
   const englishValue = form.watch(`items.${index}.name`)
 
   useEffect(() => {
+    if (!showUrduInput) return
     if (manuallyEditedUrduRef.current) return
     if (timerRef.current) clearTimeout(timerRef.current)
 
@@ -53,7 +56,7 @@ export function SubCategoryNameRow({
       if (timerRef.current) clearTimeout(timerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [englishValue, index])
+  }, [englishValue, index, showUrduInput])
 
   return (
     <div className="flex items-start gap-2">
@@ -81,30 +84,32 @@ export function SubCategoryNameRow({
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name={`items.${index}.nameUrdu`}
-          render={({ field }) => (
-            <FormItem className="flex-1">
-              <FormControl>
-                <Input
-                  {...field}
-                  dir="rtl"
-                  placeholder={t('name_in_urdu_placeholder')}
-                  autoComplete="off"
-                  showVoiceInput={false}
-                  className="h-11 text-base text-right"
-                  onChange={(event) => {
-                    manuallyEditedUrduRef.current = event.target.value.trim().length > 0
-                    field.onChange(event)
-                  }}
-                  onKeyDown={onKeyDown}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {showUrduInput && (
+          <FormField
+            control={form.control}
+            name={`items.${index}.nameUrdu`}
+            render={({ field }) => (
+              <FormItem className="flex-1">
+                <FormControl>
+                  <Input
+                    {...field}
+                    dir="rtl"
+                    placeholder={t('name_in_urdu_placeholder')}
+                    autoComplete="off"
+                    showVoiceInput={false}
+                    className="h-11 text-base text-right"
+                    onChange={(event) => {
+                      manuallyEditedUrduRef.current = event.target.value.trim().length > 0
+                      field.onChange(event)
+                    }}
+                    onKeyDown={onKeyDown}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
       </div>
       <Button
         type="button"

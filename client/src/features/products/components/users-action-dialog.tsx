@@ -64,6 +64,7 @@ import { getAllUnits, DEFAULT_UNIT } from '@/lib/units'
 import { isWholesaleRetailBusiness, isMobileShopBusiness } from '@/lib/business-types'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { EntityFormSection } from '@/components/entity-form-section'
 import { useGetOpeningStockImeisQuery, imeiApi } from '@/stores/imei.api'
 import { useGetProductQuery, productApi } from '@/stores/product.api'
@@ -156,6 +157,7 @@ interface Props {
 export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
   const isEdit = !!currentRow
   const { t, isRTL } = useLanguage()
+  const { showUrduInput } = useUrduDisplay()
   const [imageKey, setImageKey] = useState(0) // Force image component re-render
   const [imageRemoved, setImageRemoved] = useState(false) // Track if image was manually removed
   const [categoriesOpen, setCategoriesOpen] = useState(false)
@@ -589,26 +591,28 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name='nameUrdu'
-                render={({ field }) => (
-                  <FormItem className='gap-1.5'>
-                    <FormLabel className={isRTL ? 'text-right' : ''}>{t('name_in_urdu')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        dir='rtl'
-                        placeholder={t('name_in_urdu_placeholder')}
-                        autoComplete='off'
-                        className='text-right'
-                        {...field}
-                      />
-                    </FormControl>
-                    <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {showUrduInput && (
+                <FormField
+                  control={form.control}
+                  name='nameUrdu'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel className={isRTL ? 'text-right' : ''}>{t('name_in_urdu')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          dir='rtl'
+                          placeholder={t('name_in_urdu_placeholder')}
+                          autoComplete='off'
+                          className='text-right'
+                          {...field}
+                        />
+                      </FormControl>
+                      <p className='text-xs text-muted-foreground'>{t('name_in_urdu_hint')}</p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={form.control}
                 name='description'

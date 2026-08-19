@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { SubCategoryTagsField } from './subcategory-tags-field'
 import { SubCategoriesProvider } from '@/features/subcategories/context/subcategories-context'
 import { Check, FolderTree, Layers, Plus } from 'lucide-react'
@@ -62,6 +63,7 @@ export function CategoriesActionDialog({ setFetch, defaultName, onCreated }: Cat
   const { state, dispatch: contextDispatch } = useCategories()
   const reduxDispatch = useDispatch<AppDispatch>()
   const { t } = useLanguage()
+  const { showUrduInput } = useUrduDisplay()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [existingSubCategories, setExistingSubCategories] = useState<SubCategory[]>([])
@@ -275,39 +277,41 @@ export function CategoriesActionDialog({ setFetch, defaultName, onCreated }: Cat
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="nameUrdu"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base">{t('name_in_urdu')}</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input
-                            dir="rtl"
-                            placeholder={t('name_in_urdu_placeholder')}
-                            autoComplete="off"
-                            showVoiceInput={false}
-                            className="pl-9 text-right"
-                            {...field}
-                          />
-                          <div className="absolute left-2 top-1/2 -translate-y-1/2">
-                            <VoiceInputButton
-                              size="sm"
-                              onTranscript={(text) => {
-                                const trimmed = text.trim()
-                                const current = typeof field.value === 'string' ? field.value : ''
-                                field.onChange(current ? `${current.trimEnd()} ${trimmed}` : trimmed)
-                              }}
+                {showUrduInput && (
+                  <FormField
+                    control={form.control}
+                    name="nameUrdu"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-base">{t('name_in_urdu')}</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input
+                              dir="rtl"
+                              placeholder={t('name_in_urdu_placeholder')}
+                              autoComplete="off"
+                              showVoiceInput={false}
+                              className="pl-9 text-right"
+                              {...field}
                             />
+                            <div className="absolute left-2 top-1/2 -translate-y-1/2">
+                              <VoiceInputButton
+                                size="sm"
+                                onTranscript={(text) => {
+                                  const trimmed = text.trim()
+                                  const current = typeof field.value === 'string' ? field.value : ''
+                                  field.onChange(current ? `${current.trimEnd()} ${trimmed}` : trimmed)
+                                }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </FormControl>
-                      <p className="text-xs text-muted-foreground">{t('name_in_urdu_hint')}</p>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">{t('name_in_urdu_hint')}</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
 
               <div className="space-y-3 rounded-xl border border-border/70 bg-muted/10 p-4 sm:p-5">

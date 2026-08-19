@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { FieldValues, Path, PathValue, UseFormReturn } from 'react-hook-form'
 import Axios from '@/utils/Axios'
 import { translateNamePair } from '@/i18n/auto-translate'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 
 async function translateViaServer(
   path: '/translate/name-to-urdu' | '/translate/name-to-english',
@@ -46,6 +47,7 @@ export function useAutoUrduNameFromEnglish<T extends FieldValues>(
   urduField: Path<T>,
   sessionKey?: unknown,
 ) {
+  const { showUrduInput } = useUrduDisplay()
   const englishValue = form.watch(englishField)
   const urduValue = form.watch(urduField)
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -69,6 +71,7 @@ export function useAutoUrduNameFromEnglish<T extends FieldValues>(
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
+    if (!showUrduInput) return
     timerRef.current = setTimeout(async () => {
       const trimmed = String(englishValue ?? '').trim()
       const baseline = baselineEnglishRef.current
@@ -94,5 +97,5 @@ export function useAutoUrduNameFromEnglish<T extends FieldValues>(
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [englishValue, urduValue, form, englishField, urduField])
+  }, [englishValue, urduValue, form, englishField, urduField, showUrduInput])
 }
