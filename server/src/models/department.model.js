@@ -18,13 +18,11 @@ const departmentSchema = mongoose.Schema(
     name: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     code: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       uppercase: true,
     },
@@ -54,8 +52,8 @@ departmentSchema.plugin(toJSON);
 departmentSchema.plugin(paginate);
 
 departmentSchema.index({ organizationId: 1, branchId: 1 });
-departmentSchema.index({ organizationId: 1, branchId: 1, name: 1 }, { unique: false });
-departmentSchema.index({ organizationId: 1, branchId: 1, code: 1 }, { unique: false });
+departmentSchema.index({ organizationId: 1, branchId: 1, name: 1 }, { unique: true });
+departmentSchema.index({ organizationId: 1, branchId: 1, code: 1 }, { unique: true });
 
 const Department = mongoose.model('Department', departmentSchema);
 

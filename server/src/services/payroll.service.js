@@ -4,6 +4,17 @@ const ApiError = require('../utils/ApiError');
 const employeeLedgerService = require('./employeeLedger.service');
 const { computeAttendanceStatsFromData } = require('../utils/attendanceStats');
 
+const getTenantFilter = (data = {}) => {
+  const filter = {};
+  if (data.organizationId) {
+    filter.organizationId = data.organizationId;
+  }
+  if (data.branchId) {
+    filter.branchId = data.branchId;
+  }
+  return filter;
+};
+
 const getOverlappingLeaveDays = (leave, periodStart, periodEnd) => {
   const leaveStart = new Date(leave.startDate);
   const leaveEnd = new Date(leave.endDate);
@@ -216,11 +227,11 @@ const syncPayrollForLeave = async (leave, userId) => {
 };
 
 const createPayroll = async (payrollBody) => {
-  const employee = await Employee.findById(payrollBody.employee);
+  const employee = await Employee.findOne({ _id: payrollBody.employee, ...getTenantFilter(payrollBody) });
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
-  
+
   // Check if payroll already exists for this month
   const existingPayroll = await Payroll.findOne({
     employee: payrollBody.employee,
@@ -249,13 +260,14 @@ const queryPayrolls = async (filter, options) => {
   return payrolls;
 };
 
-const getPayrollById = async (id) => {
-  const payroll = await Payroll.findById(id).populate('employee').populate('processedBy');
+const getPayrollById = async (id, scope = {}) => {
+  const tenantFilter = getTenantFilter(scope);
+  const payroll = await Payroll.findOne({ _id: id, ...tenantFilter }).populate('employee').populate('processedBy');
   return payroll;
 };
 
-const updatePayrollById = async (payrollId, updateBody) => {
-  const payroll = await getPayrollById(payrollId);
+const updatePayrollById = async (payrollId, updateBody, scope = {}) => {
+  const payroll = await getPayrollById(payrollId, scope);
   if (!payroll) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payroll not found');
   }
@@ -284,8 +296,8 @@ const updatePayrollById = async (payrollId, updateBody) => {
   return payroll;
 };
 
-const deletePayrollById = async (payrollId) => {
-  const payroll = await getPayrollById(payrollId);
+const deletePayrollById = async (payrollId, scope = {}) => {
+  const payroll = await getPayrollById(payrollId, scope);
   if (!payroll) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payroll not found');
   }
@@ -294,7 +306,7 @@ const deletePayrollById = async (payrollId) => {
 };
 
 const generatePayroll = async (employeeId, month, year, processedBy, scope = {}) => {
-  const employee = await Employee.findById(employeeId);
+  const employee = await Employee.findOne({ _id: employeeId, ...getTenantFilter(scope) });
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
@@ -355,8 +367,8 @@ const generatePayroll = async (employeeId, month, year, processedBy, scope = {})
   return payroll;
 };
 
-const processPayroll = async (payrollId, processedBy) => {
-  const payroll = await getPayrollById(payrollId);
+const processPayroll = async (payrollId, processedBy, scope = {}) => {
+  const payroll = await getPayrollById(payrollId, scope);
   if (!payroll) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payroll not found');
   }
@@ -371,8 +383,8 @@ const processPayroll = async (payrollId, processedBy) => {
   return payroll;
 };
 
-const markPayrollPaid = async (payrollId, paymentDate, paymentMethod, amount) => {
-  const payroll = await getPayrollById(payrollId);
+const markPayrollPaid = async (payrollId, paymentDate, paymentMethod, amount, scope = {}) => {
+  const payroll = await getPayrollById(payrollId, scope);
   if (!payroll) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payroll not found');
   }
@@ -408,14 +420,14 @@ const markPayrollPaid = async (payrollId, paymentDate, paymentMethod, amount) =>
 };
 
 const getEmployeeMonthlyPayrollSummary = async (employeeId, year, scope = {}) => {
-  const employee = await Employee.findById(employeeId);
-  if (!employee) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
-  }
-
   const tenantFilter = {};
   if (scope.organizationId) tenantFilter.organizationId = scope.organizationId;
   if (scope.branchId) tenantFilter.branchId = scope.branchId;
+
+  const employee = await Employee.findOne({ _id: employeeId, ...tenantFilter });
+  if (!employee) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  }
 
   const entriesBeforeYear = await EmployeeLedger.find({
     employee: employeeId,
@@ -567,7 +579,7 @@ const ensureMonthPayroll = async (employee, month, year, userId, scope = {}) => 
  * just evaluated as of the exit month rather than the current one.
  */
 const getEmployeeFinalSettlement = async (employeeId, scope = {}, userId = null) => {
-  const employee = await Employee.findById(employeeId);
+  const employee = await Employee.findOne({ _id: employeeId, ...getTenantFilter(scope) });
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }

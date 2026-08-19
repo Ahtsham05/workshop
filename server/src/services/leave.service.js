@@ -5,6 +5,17 @@ const payrollService = require('./payroll.service');
 
 const AUTO_LEAVE_SYNC_NOTE = '[AUTO_LEAVE_SYNC]';
 
+const getTenantFilter = (data = {}) => {
+  const filter = {};
+  if (data.organizationId) {
+    filter.organizationId = data.organizationId;
+  }
+  if (data.branchId) {
+    filter.branchId = data.branchId;
+  }
+  return filter;
+};
+
 const normalizeDateOnly = (value) => {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
@@ -128,13 +139,14 @@ const queryLeaves = async (filter, options) => {
   return leaves;
 };
 
-const getLeaveById = async (id) => {
-  const leave = await Leave.findById(id).populate('employee').populate('approvedBy');
+const getLeaveById = async (id, scope = {}) => {
+  const tenantFilter = getTenantFilter(scope);
+  const leave = await Leave.findOne({ _id: id, ...tenantFilter }).populate('employee').populate('approvedBy');
   return leave;
 };
 
-const updateLeaveById = async (leaveId, updateBody) => {
-  const leave = await getLeaveById(leaveId);
+const updateLeaveById = async (leaveId, updateBody, scope = {}) => {
+  const leave = await getLeaveById(leaveId, scope);
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
@@ -172,8 +184,8 @@ const updateLeaveById = async (leaveId, updateBody) => {
   return leave;
 };
 
-const deleteLeaveById = async (leaveId) => {
-  const leave = await getLeaveById(leaveId);
+const deleteLeaveById = async (leaveId, scope = {}) => {
+  const leave = await getLeaveById(leaveId, scope);
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
@@ -185,16 +197,16 @@ const deleteLeaveById = async (leaveId) => {
   return leave;
 };
 
-const approveLeave = async (leaveId, approvedBy) => {
-  const leave = await getLeaveById(leaveId);
+const approveLeave = async (leaveId, approvedBy, scope = {}) => {
+  const leave = await getLeaveById(leaveId, scope);
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
-  
+
   if (leave.status !== 'Pending') {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Leave is not in pending status');
   }
-  
+
   leave.status = 'Approved';
   leave.approvedBy = approvedBy;
   leave.approvalDate = new Date();
@@ -204,8 +216,8 @@ const approveLeave = async (leaveId, approvedBy) => {
   return leave;
 };
 
-const rejectLeave = async (leaveId, rejectionReason, _approvedBy) => {
-  const leave = await getLeaveById(leaveId);
+const rejectLeave = async (leaveId, rejectionReason, _approvedBy, scope = {}) => {
+  const leave = await getLeaveById(leaveId, scope);
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
@@ -223,8 +235,8 @@ const rejectLeave = async (leaveId, rejectionReason, _approvedBy) => {
   return leave;
 };
 
-const cancelLeave = async (leaveId) => {
-  const leave = await getLeaveById(leaveId);
+const cancelLeave = async (leaveId, scope = {}) => {
+  const leave = await getLeaveById(leaveId, scope);
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
@@ -243,24 +255,25 @@ const cancelLeave = async (leaveId) => {
   return leave;
 };
 
-const getEmployeeLeaves = async (employeeId, status = null) => {
-  const filter = { employee: employeeId };
+const getEmployeeLeaves = async (employeeId, status = null, scope = {}) => {
+  const filter = { employee: employeeId, ...getTenantFilter(scope) };
   if (status) {
     filter.status = status;
   }
   return Leave.find(filter).sort({ createdAt: -1 });
 };
 
-const getLeaveBalance = async (employeeId, leaveType) => {
+const getLeaveBalance = async (employeeId, leaveType, scope = {}) => {
   const currentYear = new Date().getFullYear();
   const startDate = new Date(currentYear, 0, 1);
   const endDate = new Date(currentYear, 11, 31);
-  
+
   const leaves = await Leave.find({
     employee: employeeId,
     leaveType,
     status: 'Approved',
     startDate: { $gte: startDate, $lte: endDate },
+    ...getTenantFilter(scope),
   });
   
   const totalUsed = leaves.reduce((sum, leave) => sum + leave.totalDays, 0);

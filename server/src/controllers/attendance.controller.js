@@ -6,6 +6,17 @@ const { attendanceService } = require('../services');
 const { Employee } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
+const getAttendanceScope = (req) => {
+  const scope = {};
+  if (req.organizationId) {
+    scope.organizationId = req.organizationId;
+  }
+  if (req.branchId) {
+    scope.branchId = req.branchId;
+  }
+  return scope;
+};
+
 const parseDateOnlyAsLocal = (dateString, endOfDay = false) => {
   if (!dateString) return null;
 
@@ -77,7 +88,7 @@ const getAttendances = catchAsync(async (req, res) => {
 });
 
 const getAttendance = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.getAttendanceById(req.params.attendanceId);
+  const attendance = await attendanceService.getAttendanceById(req.params.attendanceId, getAttendanceScope(req));
   if (!attendance) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Attendance not found');
   }
@@ -85,15 +96,19 @@ const getAttendance = catchAsync(async (req, res) => {
 });
 
 const updateAttendance = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.updateAttendanceById(req.params.attendanceId, {
-    ...req.body,
-    updatedBy: req.user?.id,
-  });
+  const attendance = await attendanceService.updateAttendanceById(
+    req.params.attendanceId,
+    {
+      ...req.body,
+      updatedBy: req.user?.id,
+    },
+    getAttendanceScope(req)
+  );
   res.send(attendance);
 });
 
 const deleteAttendance = catchAsync(async (req, res) => {
-  await attendanceService.deleteAttendanceById(req.params.attendanceId, req.user?.id);
+  await attendanceService.deleteAttendanceById(req.params.attendanceId, req.user?.id, getAttendanceScope(req));
   res.status(httpStatus.NO_CONTENT).send();
 });
 
@@ -107,7 +122,7 @@ const markCheckIn = catchAsync(async (req, res) => {
 });
 
 const markCheckOut = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.markCheckOut(req.body.employee);
+  const attendance = await attendanceService.markCheckOut(req.body.employee, getAttendanceScope(req));
   res.send(attendance);
 });
 
@@ -117,7 +132,8 @@ const getEmployeeAttendance = catchAsync(async (req, res) => {
   const attendances = await attendanceService.getEmployeeAttendance(
     employeeId,
     new Date(startDate),
-    new Date(endDate)
+    new Date(endDate),
+    getAttendanceScope(req)
   );
   res.send(attendances);
 });

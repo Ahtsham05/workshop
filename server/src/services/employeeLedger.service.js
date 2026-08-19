@@ -26,6 +26,17 @@ const getCashBookAmount = (entry) => {
   return Number(entry.credit || 0);
 };
 
+const getTenantFilter = (data = {}) => {
+  const filter = {};
+  if (data.organizationId) {
+    filter.organizationId = data.organizationId;
+  }
+  if (data.branchId) {
+    filter.branchId = data.branchId;
+  }
+  return filter;
+};
+
 /** True when this entry's paymentMethod names a real Bank Account/mobile wallet
  * (not the "Cash in Hand" cash-type account, which is genuinely cash). */
 const isRealWalletPayment = async (entry) => {
@@ -176,7 +187,7 @@ const recalculateBalances = async (employeeId) => {
 };
 
 const createLedgerEntry = async (ledgerBody) => {
-  const employee = await Employee.findById(ledgerBody.employee);
+  const employee = await Employee.findOne({ _id: ledgerBody.employee, ...getTenantFilter(ledgerBody) });
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
 
   const entry = await EmployeeLedger.create({
@@ -190,8 +201,11 @@ const createLedgerEntry = async (ledgerBody) => {
   return updatedEntry;
 };
 
-const updateLedgerEntryById = async (ledgerId, updateBody) => {
-  const entry = await EmployeeLedger.findById(ledgerId).populate('employee', 'firstName lastName employeeId');
+const updateLedgerEntryById = async (ledgerId, updateBody, scope = {}) => {
+  const entry = await EmployeeLedger.findOne({ _id: ledgerId, ...getTenantFilter(scope) }).populate(
+    'employee',
+    'firstName lastName employeeId'
+  );
   if (!entry) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }
@@ -216,8 +230,11 @@ const updateLedgerEntryById = async (ledgerId, updateBody) => {
   return updatedEntry;
 };
 
-const deleteLedgerEntryById = async (ledgerId) => {
-  const entry = await EmployeeLedger.findById(ledgerId).populate('employee', 'firstName lastName employeeId');
+const deleteLedgerEntryById = async (ledgerId, scope = {}) => {
+  const entry = await EmployeeLedger.findOne({ _id: ledgerId, ...getTenantFilter(scope) }).populate(
+    'employee',
+    'firstName lastName employeeId'
+  );
   if (!entry) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
   }

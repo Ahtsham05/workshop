@@ -4,6 +4,17 @@ const ApiError = require('../utils/ApiError');
 const { normalizeDateOnly, computeAttendanceStatsFromData, resolveDayStatus, eachDateInRange } = require('../utils/attendanceStats');
 const payrollService = require('./payroll.service');
 
+const getTenantFilter = (data = {}) => {
+  const filter = {};
+  if (data.organizationId) {
+    filter.organizationId = data.organizationId;
+  }
+  if (data.branchId) {
+    filter.branchId = data.branchId;
+  }
+  return filter;
+};
+
 const syncPayrollAfterAttendanceChange = async (attendance, userId) => {
   if (!attendance?.date) return;
   const employeeId = attendance.employee?._id || attendance.employee;
@@ -66,13 +77,14 @@ const queryAttendances = async (filter, options) => {
   return attendances;
 };
 
-const getAttendanceById = async (id) => {
-  const attendance = await Attendance.findById(id).populate('employee').populate('shift');
+const getAttendanceById = async (id, scope = {}) => {
+  const tenantFilter = getTenantFilter(scope);
+  const attendance = await Attendance.findOne({ _id: id, ...tenantFilter }).populate('employee').populate('shift');
   return attendance;
 };
 
-const updateAttendanceById = async (attendanceId, updateBody) => {
-  const attendance = await getAttendanceById(attendanceId);
+const updateAttendanceById = async (attendanceId, updateBody, scope = {}) => {
+  const attendance = await getAttendanceById(attendanceId, scope);
   if (!attendance) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Attendance not found');
   }
@@ -91,8 +103,8 @@ const updateAttendanceById = async (attendanceId, updateBody) => {
   return attendance;
 };
 
-const deleteAttendanceById = async (attendanceId, userId) => {
-  const attendance = await getAttendanceById(attendanceId);
+const deleteAttendanceById = async (attendanceId, userId, scope = {}) => {
+  const attendance = await getAttendanceById(attendanceId, scope);
   if (!attendance) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Attendance not found');
   }
@@ -159,15 +171,16 @@ const markCheckIn = async (employeeId, locationData = {}) => {
   return newAttendance;
 };
 
-const markCheckOut = async (employeeId) => {
+const markCheckOut = async (employeeId, scope = {}) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const attendance = await Attendance.findOne({
     employee: employeeId,
     date: today,
+    ...getTenantFilter(scope),
   });
-  
+
   if (!attendance) {
     throw new ApiError(httpStatus.NOT_FOUND, 'No check-in found for today');
   }
@@ -190,10 +203,11 @@ const markCheckOut = async (employeeId) => {
   return attendance;
 };
 
-const getEmployeeAttendance = async (employeeId, startDate, endDate) => {
+const getEmployeeAttendance = async (employeeId, startDate, endDate, scope = {}) => {
   return Attendance.find({
     employee: employeeId,
     date: { $gte: startDate, $lte: endDate },
+    ...getTenantFilter(scope),
   }).sort({ date: -1 });
 };
 
@@ -436,7 +450,7 @@ const getDailyAttendanceSummary = async (date, scope = {}) => {
 };
 
 const computeEmployeeAttendanceStats = async (employeeId, periodStart, periodEnd, scope = {}) => {
-  const employee = await Employee.findById(employeeId);
+  const employee = await Employee.findOne({ _id: employeeId, ...getTenantFilter(scope) });
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
@@ -469,7 +483,7 @@ const computeEmployeeAttendanceStats = async (employeeId, periodStart, periodEnd
 };
 
 const getEmployeeDailyBreakdown = async (employeeId, month, year, scope = {}) => {
-  const employee = await Employee.findById(employeeId);
+  const employee = await Employee.findOne({ _id: employeeId, ...getTenantFilter(scope) });
   if (!employee) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }

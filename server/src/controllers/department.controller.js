@@ -5,6 +5,17 @@ const catchAsync = require('../utils/catchAsync');
 const { departmentService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
+const getDepartmentScope = (req) => {
+  const scope = {};
+  if (req.organizationId) {
+    scope.organizationId = req.organizationId;
+  }
+  if (req.branchId) {
+    scope.branchId = req.branchId;
+  }
+  return scope;
+};
+
 const createDepartment = catchAsync(async (req, res) => {
   const department = await departmentService.createDepartment({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(department);
@@ -20,7 +31,7 @@ const getDepartments = catchAsync(async (req, res) => {
 });
 
 const getDepartment = catchAsync(async (req, res) => {
-  const department = await departmentService.getDepartmentById(req.params.departmentId);
+  const department = await departmentService.getDepartmentById(req.params.departmentId, getDepartmentScope(req));
   if (!department) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Department not found');
   }
@@ -28,12 +39,16 @@ const getDepartment = catchAsync(async (req, res) => {
 });
 
 const updateDepartment = catchAsync(async (req, res) => {
-  const department = await departmentService.updateDepartmentById(req.params.departmentId, req.body);
+  const department = await departmentService.updateDepartmentById(
+    req.params.departmentId,
+    req.body,
+    getDepartmentScope(req)
+  );
   res.send(department);
 });
 
 const deleteDepartment = catchAsync(async (req, res) => {
-  await departmentService.deleteDepartmentById(req.params.departmentId);
+  await departmentService.deleteDepartmentById(req.params.departmentId, getDepartmentScope(req));
   res.status(httpStatus.NO_CONTENT).send();
 });
 

@@ -6,6 +6,17 @@ const { payrollService } = require('../services');
 const { Employee } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
+const getPayrollScope = (req) => {
+  const scope = {};
+  if (req.organizationId) {
+    scope.organizationId = req.organizationId;
+  }
+  if (req.branchId) {
+    scope.branchId = req.branchId;
+  }
+  return scope;
+};
+
 const createPayroll = catchAsync(async (req, res) => {
   const payroll = await payrollService.createPayroll({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(payroll);
@@ -40,7 +51,7 @@ const getPayrolls = catchAsync(async (req, res) => {
 });
 
 const getPayroll = catchAsync(async (req, res) => {
-  const payroll = await payrollService.getPayrollById(req.params.payrollId);
+  const payroll = await payrollService.getPayrollById(req.params.payrollId, getPayrollScope(req));
   if (!payroll) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payroll not found');
   }
@@ -48,12 +59,12 @@ const getPayroll = catchAsync(async (req, res) => {
 });
 
 const updatePayroll = catchAsync(async (req, res) => {
-  const payroll = await payrollService.updatePayrollById(req.params.payrollId, req.body);
+  const payroll = await payrollService.updatePayrollById(req.params.payrollId, req.body, getPayrollScope(req));
   res.send(payroll);
 });
 
 const deletePayroll = catchAsync(async (req, res) => {
-  await payrollService.deletePayrollById(req.params.payrollId);
+  await payrollService.deletePayrollById(req.params.payrollId, getPayrollScope(req));
   res.status(httpStatus.NO_CONTENT).send();
 });
 
@@ -70,13 +81,19 @@ const generatePayroll = catchAsync(async (req, res) => {
 });
 
 const processPayroll = catchAsync(async (req, res) => {
-  const payroll = await payrollService.processPayroll(req.params.payrollId, req.user.id);
+  const payroll = await payrollService.processPayroll(req.params.payrollId, req.user.id, getPayrollScope(req));
   res.send(payroll);
 });
 
 const markPayrollPaid = catchAsync(async (req, res) => {
   const { paymentDate, paymentMethod, amount } = req.body;
-  const payroll = await payrollService.markPayrollPaid(req.params.payrollId, paymentDate, paymentMethod, amount);
+  const payroll = await payrollService.markPayrollPaid(
+    req.params.payrollId,
+    paymentDate,
+    paymentMethod,
+    amount,
+    getPayrollScope(req)
+  );
   res.send(payroll);
 });
 

@@ -3,16 +3,26 @@ const { toJSON, paginate } = require('./plugins');
 
 const shiftSchema = mongoose.Schema(
   {
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      required: true,
+      index: true,
+    },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+      required: true,
+      index: true,
+    },
     name: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     code: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       uppercase: true,
     },
@@ -44,6 +54,10 @@ const shiftSchema = mongoose.Schema(
 
 shiftSchema.plugin(toJSON);
 shiftSchema.plugin(paginate);
+
+shiftSchema.index({ organizationId: 1, branchId: 1 });
+shiftSchema.index({ organizationId: 1, branchId: 1, name: 1 }, { unique: true });
+shiftSchema.index({ organizationId: 1, branchId: 1, code: 1 }, { unique: true });
 
 const Shift = mongoose.model('Shift', shiftSchema);
 

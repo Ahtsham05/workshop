@@ -6,6 +6,17 @@ const { leaveService, payrollService } = require('../services');
 const { Employee } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
+const getLeaveScope = (req) => {
+  const scope = {};
+  if (req.organizationId) {
+    scope.organizationId = req.organizationId;
+  }
+  if (req.branchId) {
+    scope.branchId = req.branchId;
+  }
+  return scope;
+};
+
 const createLeave = catchAsync(async (req, res) => {
   const leave = await leaveService.createLeave({ ...req.body, ...getBranchContext(req) });
   res.status(httpStatus.CREATED).send(leave);
@@ -75,7 +86,7 @@ const getLeaves = catchAsync(async (req, res) => {
 });
 
 const getLeave = catchAsync(async (req, res) => {
-  const leave = await leaveService.getLeaveById(req.params.leaveId);
+  const leave = await leaveService.getLeaveById(req.params.leaveId, getLeaveScope(req));
   if (!leave) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Leave not found');
   }
@@ -83,37 +94,46 @@ const getLeave = catchAsync(async (req, res) => {
 });
 
 const updateLeave = catchAsync(async (req, res) => {
-  const leave = await leaveService.updateLeaveById(req.params.leaveId, req.body);
+  const leave = await leaveService.updateLeaveById(req.params.leaveId, req.body, getLeaveScope(req));
   res.send(leave);
 });
 
 const deleteLeave = catchAsync(async (req, res) => {
-  await leaveService.deleteLeaveById(req.params.leaveId);
+  await leaveService.deleteLeaveById(req.params.leaveId, getLeaveScope(req));
   res.status(httpStatus.NO_CONTENT).send();
 });
 
 const approveLeave = catchAsync(async (req, res) => {
-  const leave = await leaveService.approveLeave(req.params.leaveId, req.user.id);
+  const leave = await leaveService.approveLeave(req.params.leaveId, req.user.id, getLeaveScope(req));
   res.send(leave);
 });
 
 const rejectLeave = catchAsync(async (req, res) => {
-  const leave = await leaveService.rejectLeave(req.params.leaveId, req.body.rejectionReason, req.user.id);
+  const leave = await leaveService.rejectLeave(
+    req.params.leaveId,
+    req.body.rejectionReason,
+    req.user.id,
+    getLeaveScope(req)
+  );
   res.send(leave);
 });
 
 const cancelLeave = catchAsync(async (req, res) => {
-  const leave = await leaveService.cancelLeave(req.params.leaveId);
+  const leave = await leaveService.cancelLeave(req.params.leaveId, getLeaveScope(req));
   res.send(leave);
 });
 
 const getEmployeeLeaves = catchAsync(async (req, res) => {
-  const leaves = await leaveService.getEmployeeLeaves(req.params.employeeId, req.query.status);
+  const leaves = await leaveService.getEmployeeLeaves(req.params.employeeId, req.query.status, getLeaveScope(req));
   res.send(leaves);
 });
 
 const getLeaveBalance = catchAsync(async (req, res) => {
-  const balance = await leaveService.getLeaveBalance(req.params.employeeId, req.params.leaveType);
+  const balance = await leaveService.getLeaveBalance(
+    req.params.employeeId,
+    req.params.leaveType,
+    getLeaveScope(req)
+  );
   res.send(balance);
 });
 

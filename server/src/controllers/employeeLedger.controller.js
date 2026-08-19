@@ -5,6 +5,17 @@ const { employeeLedgerService } = require('../services');
 const { Employee } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
+const getLedgerScope = (req) => {
+  const scope = {};
+  if (req.organizationId) {
+    scope.organizationId = req.organizationId;
+  }
+  if (req.branchId) {
+    scope.branchId = req.branchId;
+  }
+  return scope;
+};
+
 const createAdvancePayment = catchAsync(async (req, res) => {
   const entry = await employeeLedgerService.createAdvancePayment({
     ...req.body,
@@ -16,7 +27,7 @@ const createAdvancePayment = catchAsync(async (req, res) => {
 });
 
 const updateLedgerEntry = catchAsync(async (req, res) => {
-  const entry = await employeeLedgerService.updateLedgerEntryById(req.params.ledgerId, req.body);
+  const entry = await employeeLedgerService.updateLedgerEntryById(req.params.ledgerId, req.body, getLedgerScope(req));
   res.send(entry);
 });
 
@@ -58,7 +69,7 @@ const getEmployeesWithBalances = catchAsync(async (req, res) => {
 });
 
 const deleteLedgerEntry = catchAsync(async (req, res) => {
-  await employeeLedgerService.deleteLedgerEntryById(req.params.ledgerId);
+  await employeeLedgerService.deleteLedgerEntryById(req.params.ledgerId, getLedgerScope(req));
   res.status(httpStatus.NO_CONTENT).send();
 });
 
