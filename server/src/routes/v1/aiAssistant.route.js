@@ -22,4 +22,16 @@ router
   .get(validate(aiAssistantValidation.conversationParams), aiAssistantController.getMessages)
   .post(validate(aiAssistantValidation.sendMessage), aiAssistantController.sendMessage);
 
+router
+  .route('/conversations/:conversationId/messages/stream')
+  .post(validate(aiAssistantValidation.sendMessage), aiAssistantController.sendMessageStream);
+
+router
+  .route('/conversations/:conversationId/messages/:messageId/confirm-action')
+  .post(validate(aiAssistantValidation.messageActionParams), aiAssistantController.confirmAction);
+
+router
+  .route('/conversations/:conversationId/messages/:messageId/cancel-action')
+  .post(validate(aiAssistantValidation.messageActionParams), aiAssistantController.cancelAction);
+
 module.exports = router;

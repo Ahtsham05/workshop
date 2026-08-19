@@ -29,9 +29,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { Clock, Columns2, History, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Columns2, History, LayoutGrid, PauseCircle, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useSidebar } from '@/components/ui/sidebar'
 import {
   clearSaleWorkspace,
   saveSaleWorkspace,
@@ -50,6 +49,16 @@ import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/l
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
+
+// Mirrors InvoicePanel's own getTypeColor — duplicated locally (it's 4 lines) rather than
+// exported/prop-drilled, since the header title bar needs it independently of that
+// component actually being mounted below.
+const INVOICE_TYPE_BADGE_COLOR: Record<string, string> = {
+  cash: 'bg-green-100 text-green-800',
+  credit: 'bg-blue-100 text-blue-800',
+  pending: 'bg-yellow-100 text-yellow-800',
+  quotation: 'bg-violet-100 text-violet-800',
+}
 
 const getInitialUrduOnlyPreference = (): boolean => {
   const stored = localStorage.getItem(INVOICE_URDU_ONLY_PREF_KEY)
@@ -129,7 +138,7 @@ export function createEmptyManualInvoiceItem(): InvoiceItem {
  * addNewRowAndOpenProduct in invoice-panel.tsx). When the catalog is visible, clicking a
  * tile always appends its own new row (see addToInvoice below) and never reuses one of
  * these pre-seeded empty rows, so only one placeholder row is pre-added there. */
-const NEW_INVOICE_ROW_COUNT = 12
+const NEW_INVOICE_ROW_COUNT = 5
 const NEW_INVOICE_ROW_COUNT_WITH_CATALOG = 1
 
 function createInitialInvoiceItems(showProductCatalog: boolean): InvoiceItem[] {
@@ -244,7 +253,6 @@ export interface Category {
 export default function InvoicePage() {
   const { t } = useLanguage()
   const { hasExplicitPermission } = usePermissions()
-  const { state: sidebarState, isMobile: sidebarIsMobile } = useSidebar()
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
@@ -309,12 +317,10 @@ export default function InvoicePage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [taxRate, setTaxRate] = useState(0) // Configurable tax rate
   const [showProductCatalog, setShowProductCatalog] = useState(getInitialShowProductCatalog)
-  // Fast-invoicing mode (catalog hidden): DOM node for the always-visible footer bar,
-  // rendered by InvoicePanel via a portal so the buttons live outside the scrollable
-  // cards region below — a plain `position: sticky` bar only appears once you scroll
-  // far enough for it, which isn't "always visible" when the cards column alone is
-  // already taller than the viewport.
-  const [stickyFooterSlot, setStickyFooterSlot] = useState<HTMLDivElement | null>(null)
+  // Fast-invoicing mode (catalog hidden): DOM node in the page header for InvoicePanel's
+  // Preview/Save Draft/Save & Print actions, rendered there via a portal so those buttons'
+  // state/handlers stay defined in InvoicePanel itself. See the header JSX below.
+  const [headerActionsSlot, setHeaderActionsSlot] = useState<HTMLDivElement | null>(null)
 
   const toggleProductCatalog = useCallback(() => {
     setShowProductCatalog((prev) => {
@@ -742,6 +748,11 @@ export default function InvoicePage() {
     discountValue: number = 0,
     deliveryCharge: number = 0,
     serviceCharge: number = 0,
+    // Overrides the `taxRate` state for this one computation — needed by updateTaxRate
+    // below, which changes the rate and needs the resulting totals in the same tick
+    // (the closure here otherwise still sees the *previous* render's taxRate until React
+    // re-renders with the new one).
+    taxRateOverride?: number,
   ) => {
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
     const totalProfit = items.reduce((sum, item) => sum + item.profit, 0)
@@ -750,11 +761,33 @@ export default function InvoicePage() {
     const discount = computeDiscountAmount(subtotal, discountType, discountValue)
     const discountedSubtotal = subtotal - discount
     const taxableAmount = discountedSubtotal + deliveryCharge + serviceCharge
-    const tax = taxableAmount * (taxRate / 100)
+    const tax = taxableAmount * ((taxRateOverride ?? taxRate) / 100)
     const total = taxableAmount + tax
 
     return { subtotal, tax, total, totalProfit, totalCost, discount, itemDiscountTotal, discountedSubtotal, taxableAmount }
   }, [taxRate])
+
+  // Changing the tax rate (from InvoicePanel's "Add Tax" popover) both updates the rate
+  // itself and immediately re-derives invoice.tax/total from it — mirrors updateDiscount
+  // below. Passed to InvoicePanel as its `setTaxRate` prop, so from that component's
+  // perspective it's just "the tax rate setter" — the recompute is transparent.
+  const updateTaxRate = useCallback((newRate: number) => {
+    setTaxRate(newRate)
+    setInvoice(prev => {
+      const totals = calculateTotals(prev.items, prev.discountType, prev.discountValue, prev.deliveryCharge || 0, prev.serviceCharge || 0, newRate)
+      return {
+        ...prev,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        totalProfit: totals.totalProfit,
+        totalCost: totals.totalCost,
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
+      }
+    })
+  }, [calculateTotals])
 
   // Add product to invoice
   const addToInvoice = useCallback((product: Product, quantity: number = 1, variantId?: string) => {
@@ -1572,22 +1605,33 @@ export default function InvoicePage() {
         )}
       >
         <div className={cn('space-y-3', !showProductCatalog && 'space-y-2')}>
-          <div
-            className={cn(
-              'flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between',
+          {/* Title + type badge, its own row now — the toolbar below carries the action
+              buttons (including the primary Preview/Save Draft/Save & Print actions,
+              compact mode only) instead of sharing this row with them. */}
+          <div className='flex items-center gap-2'>
+            {currentView === 'edit' && (
+              <Button type='button' variant='ghost' size='sm' className='-ml-2 h-8 w-8 p-0' onClick={handleBackToList}>
+                <ArrowLeft className='h-4 w-4' aria-hidden />
+              </Button>
             )}
-          >
-            <p className='order-2 max-w-xl text-xs leading-snug text-muted-foreground sm:order-1'>
-              {t('autosave_hint')}
-              <span className='mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1'>
-                <kbd className='rounded border bg-background px-1 font-mono'>Ctrl+D</kbd>
-                {t('save_invoice')}
-                <span className='text-muted-foreground/50'>·</span>
-                <kbd className='rounded border bg-background px-1 font-mono'>Ctrl+Enter</kbd>
-                {t('save_and_print_receipt')}
-              </span>
-            </p>
-            <div className='flex flex-wrap justify-end gap-2 order-1 sm:order-2'>
+            <h1 className='text-lg font-semibold sm:text-xl'>
+              {currentView === 'edit' ? t('Edit Invoice') : t('New Invoice')}
+            </h1>
+            <Badge className={INVOICE_TYPE_BADGE_COLOR[invoice.type] ?? 'bg-gray-100 text-gray-800'}>
+              {t(invoice.type)}
+            </Badge>
+          </div>
+
+          {/* Toolbar — catalog-hidden mode: utility actions (history/convert/hold/
+              held-drafts/catalog toggle) on the left, the primary Preview/Save Draft/
+              Save & Print actions portaled in on the right via `headerActionsSlot` (so
+              InvoicePanel's own save/print state and handlers stay right where they're
+              defined). Catalog-shown mode has no second group to balance against —
+              those primary actions live inline in the Payment & Amount card instead —
+              so the utility actions move to the right on their own instead of sitting
+              flush left with empty space beside them. */}
+          <div className={cn('flex flex-wrap items-center gap-2', showProductCatalog ? 'justify-end' : 'justify-between')}>
+            <div className='flex flex-wrap items-center gap-2'>
               <Button
                 type='button'
                 variant='outline'
@@ -1697,6 +1741,9 @@ export default function InvoicePage() {
                 )}
               </Button>
             </div>
+            {!showProductCatalog && (
+              <div ref={setHeaderActionsSlot} className='flex flex-wrap items-center gap-2' />
+            )}
           </div>
 
         <div
@@ -1719,7 +1766,7 @@ export default function InvoicePage() {
               updateDiscount={updateDiscount}
               updateItemDiscount={updateItemDiscount}
               taxRate={taxRate}
-              setTaxRate={setTaxRate}
+              setTaxRate={updateTaxRate}
               customers={customers}
               customersLoading={loading}
               setCustomers={setCustomers}
@@ -1733,7 +1780,8 @@ export default function InvoicePage() {
               editingInvoice={editingInvoice}
               showProductCost={showProductCost}
               showProductCatalog={showProductCatalog}
-              stickyActionsContainer={stickyFooterSlot}
+              stickyActionsContainer={headerActionsSlot}
+              onBarcodeSearch={handleBarcodeSearch}
             />
           </div>
 
@@ -1761,25 +1809,20 @@ export default function InvoicePage() {
           )}
         </div>
 
-        {/* Footer slot for InvoicePanel's save/print bar (portaled in) — `position: fixed`
-            to the viewport, not `sticky`: this page (like every page here) scrolls as a
-            whole rather than containing scroll within `Main`, so a sticky bar only becomes
-            visible once you've scrolled far enough for it. Fixed makes it behave like a
-            bottom toolbar, visible immediately and never scrolling away. Inset from the
-            left by the sidebar's actual current width (it's a peer, not a sibling we can
-            just flex next to) so it never overlaps it, and follows collapse/expand. */}
-        {!showProductCatalog && (
-          <div
-            ref={setStickyFooterSlot}
-            className={cn(
-              'fixed inset-x-4 bottom-4 z-30 transition-[left] duration-200 ease-linear',
-              !sidebarIsMobile &&
-                (sidebarState === 'collapsed'
-                  ? 'md:left-[calc(var(--sidebar-width-icon)+2rem)]'
-                  : 'md:left-[calc(var(--sidebar-width)+1rem)]'),
-            )}
-          />
-        )}
+        {/* Autosave banner — same info the old muted hint line carried (this device
+            drafts to local storage as you type; see pos-hold-storage). Moved to the
+            bottom of the page per request, out of the way of the header/toolbar. */}
+        <div className='mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'>
+          <Check className='h-3.5 w-3.5 shrink-0' aria-hidden />
+          {t('autosave_hint')}
+          <span className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-emerald-700 dark:text-emerald-400'>
+            <kbd className='rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950'>Ctrl+D</kbd>
+            {t('save_invoice')}
+            <span className='opacity-50'>·</span>
+            <kbd className='rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950'>Ctrl+Enter</kbd>
+            {t('save_and_print_receipt')}
+          </span>
+        </div>
         </div>
       </div>
     </div>

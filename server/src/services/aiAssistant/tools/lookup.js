@@ -19,7 +19,7 @@ async function searchCustomer(args, ctx) {
   const result = await Customer.paginate(buildFilter(ctx), { search: query, fieldName: 'name,phone', limit: MATCH_LIMIT });
   return {
     matchCount: result.totalResults,
-    matches: result.results.map((c) => ({ name: c.name, phone: c.phone, balance: c.balance || 0 })),
+    matches: result.results.map((c) => ({ id: c.id, name: c.name, phone: c.phone, balance: c.balance || 0 })),
   };
 }
 

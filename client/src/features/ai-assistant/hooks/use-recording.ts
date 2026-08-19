@@ -1,29 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const SPEECH_LANGUAGE_CODES: Record<string, string> = {
-  en: 'en-US',
-  ur: 'ur-PK',
-  ar: 'ar-SA',
-  hi: 'hi-IN',
-}
-
 export type RecordingStartError = 'permission-denied' | 'start-failed'
 export type RecordingEndError = 'permission-denied' | 'no-speech' | 'mic-unavailable' | 'recognition-error'
 
+// Number of bars the waveform renders and the resting height (0..1) they sit at when there's
+// no signal yet, so the bar row reads as "live" rather than a flat line at zero.
+const WAVEFORM_BAR_COUNT = 32
+const WAVEFORM_BASELINE = 0.12
+
+function createBaselineLevels() {
+  return Array(WAVEFORM_BAR_COUNT).fill(WAVEFORM_BASELINE)
+}
+
 /**
- * Press-and-hold speech capture for a WhatsApp-style recording bar.
- * Unlike the shared single-shot `useVoiceInput`, this keeps listening for as
- * long as the button is held (continuous + interim results), tracks elapsed
- * time so the UI can show a live mm:ss timer, and actively requests
- * microphone permission up front so the browser's "Allow microphone" prompt
- * reliably appears instead of `SpeechRecognition` failing silently.
+ * Press-and-hold speech capture powering the full-screen voice mode. Keeps listening for as
+ * long as the mic is open (continuous + interim results), tracks elapsed time so the UI can
+ * show a live mm:ss timer, and actively requests microphone permission up front so the
+ * browser's "Allow microphone" prompt reliably appears instead of `SpeechRecognition` failing
+ * silently.
+ *
+ * @param bcp47Lang Raw BCP-47 tag (e.g. `'ur-PK'`) — the caller resolves this, independent of
+ *   the app's own i18n language, so voice mode can listen in a language the rest of the UI
+ *   isn't translated into.
  */
-export function useRecording(language?: string) {
+export function useRecording(bcp47Lang?: string) {
   const [isRecording, setIsRecording] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [isSupported, setIsSupported] = useState(false)
+  // Rolling window of recent mic amplitude samples (0..1), oldest first, driving a
+  // scrolling waveform like voice-note recorders show.
+  const [levels, setLevels] = useState<number[]>(createBaselineLevels)
+  // Mirrors transcriptRef/interimRef into state, updated on every `onresult`, so a live
+  // transcript can be displayed while the user is still talking (e.g. the full-screen voice
+  // mode) instead of only being available once they release/stop.
+  const [liveTranscript, setLiveTranscript] = useState('')
 
   const recognitionRef = useRef<any>(null)
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const levelsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const transcriptRef = useRef('')
   // Chrome only marks a result `isFinal` after it decides (via its own silence-based
   // endpointing) that you've stopped talking — often a couple of SECONDS after you
@@ -52,7 +67,12 @@ export function useRecording(language?: string) {
     const recognition = new SpeechRecognition()
     recognition.continuous = true
     recognition.interimResults = true
-    recognition.lang = SPEECH_LANGUAGE_CODES[language ?? ''] || 'en-US'
+    // Leave `.lang` unset in auto-detect mode (no `bcp47Lang`) rather than forcing 'en-US' —
+    // the engine then falls back to the browser/OS locale, which for a non-English speaker is
+    // often a better guess than hardcoding English. A specific `bcp47Lang` (manual override)
+    // still pins it exactly, since accurate transcription needs the right language hinted
+    // upfront — the Web Speech API has no true "detect what's being spoken" mode.
+    if (bcp47Lang) recognition.lang = bcp47Lang
 
     recognition.onresult = (event: any) => {
       let finalChunk = ''
@@ -69,6 +89,7 @@ export function useRecording(language?: string) {
         transcriptRef.current = `${transcriptRef.current} ${finalChunk}`.trim()
       }
       interimRef.current = interimChunk
+      setLiveTranscript(`${transcriptRef.current} ${interimRef.current}`.trim())
     }
 
     recognition.onerror = (event: any) => {
@@ -97,6 +118,7 @@ export function useRecording(language?: string) {
       if (!benign) {
         wantsListeningRef.current = false
         stopTimer()
+        stopAudioMeter()
         setIsRecording(false)
         return
       }
@@ -125,8 +147,9 @@ export function useRecording(language?: string) {
       } catch {
         // ignore
       }
+      stopAudioMeter()
     }
-  }, [language])
+  }, [bcp47Lang])
 
   const stopTimer = () => {
     if (timerRef.current) {
@@ -135,24 +158,65 @@ export function useRecording(language?: string) {
     }
   }
 
-  /** Actively triggers the browser's microphone permission prompt if it hasn't been decided yet. */
-  const ensureMicPermission = async (): Promise<boolean> => {
-    if (!navigator.mediaDevices?.getUserMedia) return true
+  /**
+   * Analyses the live mic stream to drive a reactive waveform, sampling amplitude on an
+   * interval (not every animation frame) so the bar row updates smoothly without re-rendering
+   * at 60fps. Purely cosmetic — SpeechRecognition captures audio independently, so if this
+   * fails to set up the transcript still works, just without the waveform.
+   */
+  const startAudioMeter = (stream: MediaStream) => {
+    micStreamRef.current = stream
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach((track) => track.stop())
-      return true
+      const AudioContextCtor =
+        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      const audioCtx = new AudioContextCtor()
+      const source = audioCtx.createMediaStreamSource(stream)
+      const analyser = audioCtx.createAnalyser()
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.5
+      source.connect(analyser)
+      audioCtxRef.current = audioCtx
+      const buffer = new Uint8Array(analyser.frequencyBinCount)
+      levelsTimerRef.current = setInterval(() => {
+        analyser.getByteTimeDomainData(buffer)
+        let sumSquares = 0
+        for (let i = 0; i < buffer.length; i += 1) {
+          const normalized = (buffer[i] - 128) / 128
+          sumSquares += normalized * normalized
+        }
+        const rms = Math.sqrt(sumSquares / buffer.length)
+        const amplitude = Math.max(WAVEFORM_BASELINE, Math.min(1, rms * 4))
+        setLevels((prev) => [...prev.slice(1), amplitude])
+      }, 60)
     } catch {
-      return false
+      // ignore — waveform is best-effort
     }
+  }
+
+  const stopAudioMeter = () => {
+    if (levelsTimerRef.current) {
+      clearInterval(levelsTimerRef.current)
+      levelsTimerRef.current = null
+    }
+    micStreamRef.current?.getTracks().forEach((track) => track.stop())
+    micStreamRef.current = null
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {})
+      audioCtxRef.current = null
+    }
+    setLevels(createBaselineLevels())
   }
 
   const pressStart = useCallback(async (): Promise<{ started: boolean; error: RecordingStartError | null }> => {
     if (!recognitionRef.current || isRecording) return { started: false, error: null }
 
-    const granted = await ensureMicPermission()
-    if (!granted) {
-      return { started: false, error: 'permission-denied' }
+    let stream: MediaStream | null = null
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      } catch {
+        return { started: false, error: 'permission-denied' }
+      }
     }
 
     transcriptRef.current = ''
@@ -161,6 +225,7 @@ export function useRecording(language?: string) {
     lastErrorRef.current = null
     startedAtRef.current = Date.now()
     setElapsedSeconds(0)
+    setLiveTranscript('')
     try {
       wantsListeningRef.current = true
       recognitionRef.current.start()
@@ -168,10 +233,12 @@ export function useRecording(language?: string) {
       timerRef.current = setInterval(() => {
         setElapsedSeconds(Math.floor((Date.now() - startedAtRef.current) / 1000))
       }, 250)
+      if (stream) startAudioMeter(stream)
       return { started: true, error: null }
     } catch {
       wantsListeningRef.current = false
       setIsRecording(false)
+      stream?.getTracks().forEach((track) => track.stop())
       return { started: false, error: 'start-failed' }
     }
   }, [isRecording])
@@ -182,6 +249,7 @@ export function useRecording(language?: string) {
     wantsListeningRef.current = false
     cancelledRef.current = !!opts.cancel
     stopTimer()
+    stopAudioMeter()
     try {
       recognitionRef.current.stop()
     } catch {
@@ -196,10 +264,11 @@ export function useRecording(language?: string) {
     transcriptRef.current = ''
     interimRef.current = ''
     lastErrorRef.current = null
+    setLiveTranscript('')
     if (cancelledRef.current) return { transcript: null, error: null }
     if (!transcript) return { transcript: null, error }
     return { transcript, error: null }
   }, [])
 
-  return { isRecording, elapsedSeconds, isSupported, pressStart, pressEnd }
+  return { isRecording, elapsedSeconds, isSupported, levels, liveTranscript, pressStart, pressEnd }
 }

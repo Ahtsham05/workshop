@@ -22,11 +22,16 @@ export function BranchStockTrigger({
   variantId,
   itemName,
   className,
+  iconOnly = false,
 }: {
   productId?: string
   variantId?: string
   itemName?: string
   className?: string
+  /** Icon-only, no "Branches" label — for tight spots (e.g. an invoice line's pill
+   * row) where every extra character of chrome competes with batch/serial pills for
+   * the same sliver of column width. Title attribute keeps it identifiable on hover. */
+  iconOnly?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [fetchAvailability, { data = EMPTY_ROWS, isFetching, isError }] = useLazyGetProductBranchAvailabilityQuery()
@@ -42,18 +47,20 @@ export function BranchStockTrigger({
     <Can permission='viewBranches'>
       <button
         type='button'
+        title={iconOnly ? 'Branch stock' : undefined}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
           handleOpenChange(true)
         }}
         className={cn(
-          'inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+          'inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+          iconOnly ? 'p-1' : 'px-1.5 py-0.5',
           className,
         )}
       >
         <Building2 className='h-2.5 w-2.5' />
-        Branches
+        {iconOnly ? null : 'Branches'}
       </button>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent

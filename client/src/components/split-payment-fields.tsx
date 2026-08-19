@@ -1,3 +1,4 @@
+import { ArrowLeftRight } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -66,9 +67,10 @@ export function SplitPaymentFields({ primaryMethod, wallets, paidAmount, value, 
   if (paidAmount <= 0 && !isSplitting) return null
 
   return (
-    <div className='space-y-3 rounded-lg border p-3'>
-      <div className='flex items-center justify-between'>
-        <Label htmlFor='split-payment-toggle' className='text-sm font-medium'>
+    <div className='space-y-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900 dark:bg-blue-950/15'>
+      <div className='flex items-center justify-between gap-2'>
+        <Label htmlFor='split-payment-toggle' className='flex items-center gap-2 text-sm font-semibold text-blue-800 dark:text-blue-200'>
+          <ArrowLeftRight className='h-4 w-4' />
           Split this payment across two methods
         </Label>
         <Switch
@@ -85,7 +87,7 @@ export function SplitPaymentFields({ primaryMethod, wallets, paidAmount, value, 
       </div>
 
       {isSplitting && (
-        <div className='space-y-3'>
+        <div className='space-y-3 border-t border-blue-200 pt-3 dark:border-blue-900'>
           <div className='grid grid-cols-2 gap-3'>
             {splitBucket === 'wallet' && (
               <div className='space-y-1.5'>
@@ -94,7 +96,7 @@ export function SplitPaymentFields({ primaryMethod, wallets, paidAmount, value, 
                   value={value.splitWalletType || ''}
                   onValueChange={(v) => onChange({ ...value, splitWalletType: v })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className='w-full bg-background'>
                     <SelectValue placeholder='Select account' />
                   </SelectTrigger>
                   <SelectContent>
@@ -109,18 +111,21 @@ export function SplitPaymentFields({ primaryMethod, wallets, paidAmount, value, 
             )}
             <div className={`space-y-1.5 ${splitBucket === 'cash' ? 'col-span-2' : ''}`}>
               <Label className='text-xs text-muted-foreground'>
-                {splitBucket === 'cash' ? 'Cash Amount' : 'Amount via this Account'}
+                {splitBucket === 'cash' ? 'Cash Amount' : 'Amount Via'}
               </Label>
               <Input
                 type='text'
                 inputMode='decimal'
+                showVoiceInput={false}
                 value={value.splitPaidAmount || ''}
                 onChange={(e) => {
                   const raw = e.target.value.replace(/[^0-9.]/g, '')
                   const num = Math.max(0, Number(raw) || 0)
                   onChange({ ...value, splitPaidAmount: num })
                 }}
+                onFocus={(e) => e.target.select()}
                 placeholder='0.00'
+                className='bg-background'
               />
             </div>
           </div>

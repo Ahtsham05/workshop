@@ -57,8 +57,18 @@ app.use(express.urlencoded({ extended: true }));
 app.use(xss());
 app.use(mongoSanitize());
 
-// gzip compression
-app.use(compression());
+// gzip compression — excluding SSE (text/event-stream falls through `compressible`'s default
+// `text/*` rule as compressible, but piping it through gzip buffers each res.write() inside
+// zlib until enough bytes accumulate, which defeats real-time delivery for both this and the
+// pre-existing WhatsApp inbox live-events stream).
+app.use(
+  compression({
+    filter: (req, res) => {
+      if (res.getHeader('Content-Type') === 'text/event-stream') return false;
+      return compression.filter(req, res);
+    },
+  })
+);
 
 // enable cors
 const normalizeOrigin = (value) => {

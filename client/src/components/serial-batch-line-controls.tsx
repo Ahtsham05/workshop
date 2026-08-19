@@ -290,7 +290,11 @@ export function BatchAllocationEditor({
   const total = allocations.reduce((sum, a) => sum + a.quantity, 0)
   const unused = batches.filter((b) => b.quantity > 0 && !allocations.some((a) => a.batchId === b.id))
   return (
-    <div className='inline-flex shrink-0 flex-wrap items-center gap-1'>
+    // `flex w-full` (not `inline-flex`) so this is bound to the product column's actual
+    // width and its pills wrap inside it — an unbounded inline-flex sizes to its content's
+    // full unwrapped width and just overflows past the column into Qty/Discount instead of
+    // wrapping, once there are more than 1-2 batches in the split.
+    <div className='flex w-full flex-wrap items-center gap-1'>
       <span className='inline-flex items-center gap-0.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'>
         <SplitSquareHorizontal className='h-2.5 w-2.5' />
         Split

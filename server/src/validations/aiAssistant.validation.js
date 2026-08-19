@@ -22,8 +22,16 @@ const sendMessage = {
   }),
 };
 
+const messageActionParams = {
+  params: Joi.object().keys({
+    conversationId: Joi.string().custom(objectId).required(),
+    messageId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 module.exports = {
   createConversation,
   conversationParams,
   sendMessage,
+  messageActionParams,
 };

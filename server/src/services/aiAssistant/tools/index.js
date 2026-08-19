@@ -9,6 +9,7 @@ const installments = require('./installments');
 const repairs = require('./repairs');
 const salesmen = require('./salesmen');
 const lookup = require('./lookup');
+const actions = require('./actions');
 
 const ALL_TOOLS = [
   ...sales.declarations,
@@ -21,6 +22,7 @@ const ALL_TOOLS = [
   ...repairs.declarations,
   ...salesmen.declarations,
   ...lookup.declarations,
+  ...actions.declarations,
 ];
 
 /**

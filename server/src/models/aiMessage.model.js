@@ -51,6 +51,34 @@ const aiMessageSchema = mongoose.Schema(
       ],
       default: undefined,
     },
+    // Set when the user clicked Stop mid-stream — content holds whatever had streamed by then.
+    interrupted: {
+      type: Boolean,
+      default: false,
+    },
+    // A write-tool call (e.g. create_invoice) that only produced a preview, awaiting the user
+    // clicking Confirm/Cancel in the UI — see aiAssistant.service.js#confirmAction/cancelAction.
+    // A real subdocument (not Mixed) for `kind`/`status`/`error` so reassigning those primitive
+    // fields is change-tracked by Mongoose without needing markModified(); `params`/`preview`/
+    // `result` stay Mixed since their shape depends on `kind`.
+    pendingAction: {
+      type: new mongoose.Schema(
+        {
+          kind: { type: String, enum: ['create_invoice'] },
+          status: {
+            type: String,
+            enum: ['pending', 'executed', 'cancelled', 'failed'],
+            default: 'pending',
+          },
+          params: mongoose.Schema.Types.Mixed,
+          preview: mongoose.Schema.Types.Mixed,
+          result: mongoose.Schema.Types.Mixed,
+          error: String,
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
   },
   { timestamps: true, keepTimestampsInJSON: true }
 );

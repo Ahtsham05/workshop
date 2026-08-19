@@ -9,7 +9,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 // import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History, CreditCard, Eye, Percent, Receipt, ScanBarcode, Zap, Layers, Ban } from 'lucide-react'
 import type { ImeiRecord, ImeiEntryInput } from '@/stores/imei.api'
 import {
   entryImei,
@@ -62,6 +62,28 @@ const EMPTY_SELLABLE_CATALOG: PurchaseCatalogItem[] = []
 // feel slow to open, far more than any timing delay. Capping to the first N matches
 // keeps the popover instant; typing to search still filters the full list.
 const MAX_VISIBLE_DROPDOWN_RESULTS = 50
+
+// Per-type accent for the Invoice Type buttons — same cash=green/credit=blue/
+// pending=amber/quotation=violet mapping as the "New Invoice" title badge (getTypeColor).
+// Kept subtle: a light tint + thin border, not a filled/shadowed badge.
+const INVOICE_TYPE_STYLES: Record<'cash' | 'credit' | 'pending' | 'quotation', { active: string; icon: string }> = {
+  cash: {
+    active: 'border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400',
+    icon: 'text-green-600 dark:text-green-400',
+  },
+  credit: {
+    active: 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400',
+    icon: 'text-blue-600 dark:text-blue-400',
+  },
+  pending: {
+    active: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400',
+    icon: 'text-amber-600 dark:text-amber-400',
+  },
+  quotation: {
+    active: 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-400',
+    icon: 'text-violet-600 dark:text-violet-400',
+  },
+}
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState, AppDispatch } from '@/stores/store'
@@ -80,6 +102,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
 import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { afterPaint, focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
@@ -144,6 +167,10 @@ interface InvoicePanelProps {
    * scroll region) to portal the save/print bar into, so it's always visible without
    * scrolling. Falls back to an inline sticky bar until this is available. */
   stickyActionsContainer?: HTMLElement | null
+  /** Looks up a product by exact barcode and appends it as a new line — same handler the
+   * Product Catalog panel's own barcode field already uses. Wired to the header's "Scan
+   * Barcode" quick action so it also works with the catalog hidden. */
+  onBarcodeSearch?: (barcode: string) => void
 }
 
 export function InvoicePanel({
@@ -155,7 +182,7 @@ export function InvoicePanel({
   updateDiscount,
   updateItemDiscount,
   taxRate,
-  // setTaxRate,
+  setTaxRate,
   customers,
   customersLoading = false,
   setCustomers,
@@ -170,6 +197,7 @@ export function InvoicePanel({
   showProductCost = false,
   showProductCatalog = true,
   stickyActionsContainer = null,
+  onBarcodeSearch,
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const { showUrdu } = useUrduDisplay()
@@ -232,9 +260,19 @@ export function InvoicePanel({
     return s === 'sms' || s === 'whatsapp' || s === 'both' ? s : 'none'
   })
   const [loadingBalance, setLoadingBalance] = useState(false)
+  // Cash Received & Change calculator — catalog-shown mode only (see the
+  // showProductCatalog check around the Payment & Amount card below); the compact
+  // catalog-hidden layout uses Paid Amount directly instead.
   const [cashReceivedInput, setCashReceivedInput] = useState('')
   const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null)
   const [quickCreateProductItemId, setQuickCreateProductItemId] = useState<string | null>(null)
+  // Draft tax-rate % shown in the items footer's "Add Tax" popover — kept as a string so
+  // the input can hold "" while typing, only committed to the real taxRate on change.
+  const [taxRateInput, setTaxRateInput] = useState(() => (taxRate ? String(taxRate) : ''))
+  const [applyDiscountOpen, setApplyDiscountOpen] = useState(false)
+  const [addTaxOpen, setAddTaxOpen] = useState(false)
+  const [scanBarcodeOpen, setScanBarcodeOpen] = useState(false)
+  const [scanBarcodeValue, setScanBarcodeValue] = useState('')
 
   // Refs for keyboard Enter navigation
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -243,7 +281,6 @@ export function InvoicePanel({
   const invoiceDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
   const autoOpenedInvoiceItemIdRef = useRef<string | null>(null)
-  const [invoiceTypeSelectOpen, setInvoiceTypeSelectOpen] = useState(false)
 
   useEffect(() => {
     if (isEditing) {
@@ -511,6 +548,47 @@ export function InvoicePanel({
     }
   }, [buildA4PrintData, invoiceTemplate])
 
+  // "Preview" header action — opens the same A4 print HTML used by Save & Print, but built
+  // straight from the live, not-yet-saved `invoice` state (no create/update API call, no
+  // invoiceNumber yet). Lets the cashier sanity-check layout/totals before committing.
+  const previewInvoice = useCallback(async () => {
+    const itemsWithProducts = invoice.items.filter((item) => item.productId && item.name)
+    if (itemsWithProducts.length === 0) {
+      toast.error(t('Add at least one item to preview'))
+      return
+    }
+    const splitPaidAmountForPreview = invoice.splitPaymentMethod ? Math.max(0, Number(invoice.splitPaidAmount || 0)) : 0
+    const totalPaidAmountForPreview = (invoice.paidAmount || 0) + splitPaidAmountForPreview
+    const draftInvoiceData = {
+      invoiceNumber: (isEditing && editingInvoice?.invoiceNumber) || t('Draft Preview'),
+      items: itemsWithProducts,
+      customerId: invoice.customerId,
+      customerName: invoice.customerName,
+      walkInCustomerName: invoice.walkInCustomerName,
+      type: invoice.type,
+      subtotal: invoice.subtotal,
+      tax: invoice.tax,
+      discount: invoice.discount,
+      total: invoice.total,
+      paidAmount: totalPaidAmountForPreview,
+      balance: invoice.total - totalPaidAmountForPreview,
+      notes: invoice.notes,
+      deliveryCharge: invoice.deliveryCharge,
+      serviceCharge: invoice.serviceCharge,
+      invoiceDate: invoice.invoiceDate,
+      language: invoice.language,
+      isUrduOnly: invoice.isUrduOnly,
+    }
+    try {
+      const { printData, printContact } = await buildA4PrintData(draftInvoiceData)
+      const htmlContent = generateA4InvoiceHTML(printData, 'a4', invoiceTemplate)
+      openPrintWindowForFormat(htmlContent, 'a4', printContact)
+    } catch (error: any) {
+      console.error('Preview error:', error)
+      toast.error('Failed to open preview')
+    }
+  }, [invoice, buildA4PrintData, invoiceTemplate, isEditing, editingInvoice, t])
+
   // Initialize form values when in edit mode
   useEffect(() => {
     if (isEditing && editingInvoice) {
@@ -754,7 +832,13 @@ export function InvoicePanel({
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
-        balance: totals.total - prev.paidAmount
+        // Cash (non-split) invoices always treat "Paid Amount" as the running total —
+        // mirrors updateQuantity/updateDiscount in index.tsx, without which a fresh cash
+        // invoice's Paid Amount stays stuck at 0 after picking the first product,
+        // hiding the "Split this payment" toggle (SplitPaymentFields only renders once
+        // paidAmount > 0).
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
       }))
     } else {
       // Fallback calculation
@@ -880,6 +964,8 @@ export function InvoicePanel({
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
       }
     })
   }, [invoice.items, setInvoice, calculateTotals, products])
@@ -935,6 +1021,8 @@ export function InvoicePanel({
         total: totals.total,
         totalProfit: totals.totalProfit,
         totalCost: totals.totalCost,
+        paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+        balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
       }
     })
   }, [setInvoice, calculateTotals, products])
@@ -1555,8 +1643,12 @@ export function InvoicePanel({
       }
 
       // Handle persistent send method (runs additionally after any save/print)
-      // Both SMS and WhatsApp fire immediately — no confirmation dialog.
-      if (sendMethod !== 'none') {
+      // Both SMS and WhatsApp fire immediately — no confirmation dialog. Pending-only —
+      // the "Also send after saving" selector is only shown for pending invoices, so this
+      // guard stops a sendMethod choice left over from an earlier pending invoice (it's
+      // persisted in localStorage) from silently firing on a cash/credit/quotation save
+      // where the toggle is no longer visible to turn off.
+      if (sendMethod !== 'none' && savedInvoicePayload.type === 'pending') {
         const customerId = resolveCustomerIdString(savedInvoicePayload.customerId)
         // SMS/WhatsApp only for registered customers — walk-in has no phone record
         if (!customerId || customerId === 'walk-in') {
@@ -1748,78 +1840,930 @@ export function InvoicePanel({
   //   }
   // }
 
+  // Shared per-line-item content — computed once, then assembled into either a
+  // <TableRow> (catalog hidden) or a stacked card (catalog shown, see the
+  // showProductCatalog branch below). Product info (name/batches/branch/stock) is
+  // shared as-is between both layouts. Qty/price/discount/total are computed as TWO
+  // sets instead — table cell styling (h-9, boxed) vs. card styling (h-7, labeled,
+  // matching Purchase's item card) — since forcing one set of classes to work in both
+  // contexts is what caused the card layout's controls to wrap onto separate lines
+  // earlier; each layout now gets markup actually built for it.
+  const renderInvoiceItemParts = (item: InvoiceItem) => {
+                const currentProduct = products.find(p => (p._id || p.id) === item.productId)
+                // For a real variant, `products` only ever holds the legacy/parent
+                // product (its stockQuantity is a stale fallback, not this variant's
+                // real number) — read the variant's live stock from the catalog instead.
+                const catalogEntry = item.variantId
+                  ? sellableCatalog.find(c => c.variantId === item.variantId)
+                  : undefined
+                // `products` is also a local running-balance cache for plain products:
+                // addToInvoice/updateQuantity already decrement it by this very line's
+                // quantity as it changes (see index.tsx), so `currentProduct.stockQuantity`
+                // is never the raw total either — it's already net of item.quantity, which
+                // would double-subtract it below. `sellableCatalog` is never locally
+                // mutated, so it's the one source that's always the true, un-netted total —
+                // prefer it here too, only falling back to the stale cache if this item
+                // isn't in the catalog at all (e.g. a deleted product).
+                const stockCatalogEntry = item.variantId
+                  ? catalogEntry
+                  : sellableCatalog.find(c => c.type === 'product' && c.productId === item.productId)
+                const totalCatalogStock = stockCatalogEntry?.stockQuantity ?? currentProduct?.stockQuantity
+                // The catalog number is a snapshot from when it was fetched — it has no idea
+                // this line has already claimed `item.quantity` of it. Subtract that out so
+                // the badge reads as "what's left after this invoice", not "what existed
+                // before you started adding it" — otherwise it never moves as you type a
+                // higher quantity, even while a batch chip below visibly runs out.
+                const remainingStock = totalCatalogStock !== undefined ? Math.max(0, totalCatalogStock - item.quantity) : undefined
+                const hasProduct = Boolean(item.productId && item.name)
+                const deleteButton = (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeFromInvoice(item.id)}
+                    className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
+                  >
+                    <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
+                  </Button>
+                )
+                // Past sales of this exact product to this exact customer — only
+                // meaningful once both a real product and a real (non walk-in) customer
+                // are on the invoice.
+                const canShowHistory = !!item.productId && !!invoice.customerId && invoice.customerId !== 'walk-in'
+                const historyButton = canShowHistory ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setHistoryDialog({
+                      open: true,
+                      productId: item.productId,
+                      productName: item.name,
+                      currentPrice: item.unitPrice,
+                    })}
+                    title={t('view_history')}
+                    className='h-7 w-7 p-0 flex-shrink-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                  >
+                    <History className='h-3.5 w-3.5' />
+                  </Button>
+                ) : null
+
+    // Hoisted out of productCell's assembly below so productCellCard (catalog-shown
+    // card layout) can reuse the exact same pieces in a different order — table mode
+    // wants name → batches → stock/branch, card mode wants name → stock/branch →
+    // batches (branches "upper", batches "below", per request) — without recomputing
+    // any of this twice.
+    const hasBatches = !!(catalogEntry?.trackBatch && catalogEntry.batches && catalogEntry.batches.length > 0)
+
+    const stockBadge = remainingStock !== undefined && (
+      <span className={`inline-flex shrink-0 items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
+        remainingStock <= 0 ? 'bg-red-100 text-red-700' :
+        remainingStock <= 5 ? 'bg-red-50 text-red-500' :
+        remainingStock <= 20 ? 'bg-amber-50 text-amber-600' :
+        'bg-green-50 text-green-700'
+      }`}>
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+          remainingStock <= 0 ? 'bg-red-500' :
+          remainingStock <= 5 ? 'bg-red-400' :
+          remainingStock <= 20 ? 'bg-amber-400' :
+          'bg-green-500'
+        }`} />
+        {/* remainingStock is "what's left after this line sells" — 0 doesn't mean
+            there's nothing to sell, it can just mean this line is taking the last
+            unit(s) (e.g. exactly 2 in stock, selling 2). Only call it "Out of stock"
+            when there was truly nothing here before this line was even added. */}
+        {remainingStock <= 0
+          ? ((totalCatalogStock ?? 0) > 0 ? '0 left' : 'Out of stock')
+          : `${remainingStock} left`}
+      </span>
+    )
+
+    const branchTrigger = (
+      <BranchStockTrigger
+        productId={item.productId}
+        variantId={item.variantId}
+        itemName={item.name}
+      />
+    )
+
+    const serialTrigger = (currentProduct?.trackImei || currentProduct?.trackSerial) && (
+      <SerialSummaryTrigger
+        selectedCount={(item.imeis || []).length}
+        quantity={item.quantity}
+        isSerial={!!currentProduct?.trackSerial}
+        onClick={() => setSerialDialogItemId(item.id)}
+      />
+    )
+
+    // Which batch(es) this sale depletes — defaults to the earliest-expiry batch,
+    // switchable by clicking another. If the quantity outgrows a single batch,
+    // updateQuantity auto-suggests a FEFO split (earliest expiry first) across several
+    // — rendered here as an editable breakdown instead of these plain single-select
+    // chips. See docs/architecture/universal-product-migration.md.
+    const batchTags = hasBatches && (
+      item.batchAllocations && item.batchAllocations.length > 1 ? (
+        <BatchAllocationEditor
+          allocations={item.batchAllocations}
+          batches={catalogEntry!.batches!}
+          onUpdateQuantity={(batchId, qty) => updateAllocationQuantity(item.id, batchId, qty)}
+          onAddBatch={(batch) => addBatchToSplit(item.id, batch)}
+        />
+      ) : (() => {
+        // Hide batches with nothing left to sell from — nothing to pick there. The
+        // exception is whichever batch this line already has selected: keep showing
+        // it (even at 0) so the selection and its "insufficient stock" warning below
+        // stay visible instead of the chip just vanishing with no explanation.
+        const visibleBatches = catalogEntry!.batches!.filter(
+          (b) => b.quantity > 0 || item.batchId === b.id,
+        )
+        if (visibleBatches.length === 0) return null
+        const selectedBatch = visibleBatches.find((b) => item.batchId === b.id) ?? visibleBatches[0]
+        // Only the batch this line is actually drawing from has its stock reduced by
+        // this line's quantity — other batches' numbers are untouched by a selection
+        // that doesn't draw from them.
+        const selectedLeft = Math.max(0, selectedBatch.quantity - item.quantity)
+        const pillClass = 'inline-flex shrink-0 items-center gap-1 rounded-full border border-blue-600 bg-blue-100 px-1.5 py-0.5 text-[11px] font-medium text-blue-800 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200'
+        // One known batch needs no picker — just show it. With a real choice,
+        // collapse every option behind a single compact trigger instead of one chip
+        // per batch: long batch numbers (e.g. "BATCH-260627-102") rendered inline
+        // used to wrap a line across 3-4 rows on their own once there were 2-3
+        // batches to pick from.
+        if (visibleBatches.length === 1) {
+          return (
+            <span
+              className={pillClass}
+              title={selectedBatch.expiryDate ? `Expires ${new Date(selectedBatch.expiryDate).toLocaleDateString()}` : undefined}
+            >
+              <Layers className='h-2.5 w-2.5 shrink-0' />
+              <span className='max-w-[100px] truncate'>{selectedBatch.batchNumber}</span>
+              · {selectedLeft} left
+            </span>
+          )
+        }
+        return (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type='button' className={cn(pillClass, 'hover:bg-blue-200 dark:hover:bg-blue-950/60')}>
+                <Layers className='h-2.5 w-2.5 shrink-0' />
+                <span className='max-w-[80px] truncate'>{selectedBatch.batchNumber}</span>
+                · {selectedLeft} left
+                <ChevronDown className='h-2.5 w-2.5 shrink-0' />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className='w-64 p-1.5' align='start'>
+              <div className='flex flex-col gap-0.5'>
+                {visibleBatches.map((b) => {
+                  const isSelected = item.batchId === b.id
+                  const batchLeft = isSelected ? selectedLeft : b.quantity
+                  return (
+                    <button
+                      key={b.id}
+                      type='button'
+                      onClick={() => updateItemBatch(item.id, b.id, b.batchNumber, b.quantity, b.costPerUnit, b.sellingPrice, catalogEntry?.price)}
+                      className={cn(
+                        'flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                        isSelected ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200' : 'hover:bg-muted',
+                      )}
+                    >
+                      <span className='truncate font-medium'>{b.batchNumber}</span>
+                      <span className='flex shrink-0 items-center gap-1.5'>
+                        {b.expiryDate && (
+                          <span className='text-muted-foreground'>exp {new Date(b.expiryDate).toLocaleDateString()}</span>
+                        )}
+                        <span className='font-semibold'>{batchLeft} left</span>
+                        {isSelected && <Check className='h-3 w-3' />}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )
+      })()
+    )
+
+    const insufficientStockWarning = !(item.batchAllocations && item.batchAllocations.length > 1) && (() => {
+      const selectedBatch = item.batchId
+        ? catalogEntry?.batches?.find((b) => b.id === item.batchId)
+        : undefined
+      if (!selectedBatch || item.quantity <= selectedBatch.quantity) return null
+      return (
+        <p className='text-xs text-destructive mt-1'>
+          Only {selectedBatch.quantity} available in batch {selectedBatch.batchNumber} — reduce the quantity or pick a different batch.
+        </p>
+      )
+    })()
+
+    // Manual (still unpicked) row's product-search combobox — identical in both
+    // layouts, so it's built once and reused by productCell/productCellCard below.
+    const manualEntryPicker = (
+                          <div className='space-y-1'>
+                            <Popover
+                              open={productSelectOpen === item.id}
+                              onOpenChange={(open) => {
+                                setProductSelectOpen(open ? item.id : '')
+                                setProductSearchQuery('')
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  onKeyDown={(e) => {
+                                    if (productSelectOpen !== item.id && item.productId) {
+                                      onEnterAdvance(e, () => focusField(qtyInputRefs.current[item.id]))
+                                    }
+                                  }}
+                                  className={cn(
+                                    'h-9 w-full min-w-[200px] justify-between text-sm font-normal',
+                                    !item.productId && 'border-dashed',
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                                    <span className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0 text-left'>
+                                      <span
+                                        className={getTextClasses(item.name || t('select_product'), 'truncate shrink-0 text-muted-foreground')}
+                                        title={item.name || t('select_product')}
+                                      >
+                                        {item.name || t('select_product')}
+                                        {!item.productId && ' *'}
+                                      </span>
+                                      {showUrdu && item.nameUrdu?.trim() ? (
+                                        <span
+                                          className={cn('min-w-0 truncate rtl text-xs shrink', getUrduSecondaryNameClasses(item.nameUrdu))}
+                                          dir='rtl'
+                                          title={item.nameUrdu.trim()}
+                                        >
+                                          {item.nameUrdu.trim()}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  </div>
+                                  <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[560px] p-0" align="start" side="bottom" sideOffset={4}>
+                                <Command shouldFilter={false}>
+                                  <div className="relative">
+                                    <CommandInput
+                                      placeholder={t('search_products')}
+                                      value={productSearchQuery}
+                                      onValueChange={setProductSearchQuery}
+                                    />
+                                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
+                                    <VoiceInputButton
+                                      onTranscript={setProductSearchQuery}
+                                      language={voiceLanguage}
+                                      size="sm"
+                                    />
+                                  </div>
+                                </div>
+                                <CommandList className="max-h-[300px] overflow-y-auto">
+                                  {productsLoading && filteredSellableProducts.length === 0 ? (
+                                    <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
+                                      <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
+                                      {t('loading_products')}
+                                    </div>
+                                  ) : filteredSellableProducts.length === 0 ? (
+                                    canCreateProduct ? (
+                                      <EntityCreateEmptyPrompt
+                                        message={t('no_products_found')}
+                                        actionLabel={t('add_product')}
+                                        onCreate={() => openQuickCreate('product', productSearchQuery, item.id)}
+                                      />
+                                    ) : (
+                                      <div className="py-6 text-center text-sm text-muted-foreground">
+                                        {t('no_products_found')}
+                                      </div>
+                                    )
+                                  ) : (
+                                    <CommandGroup>
+                                      {visibleSellableProducts.map((catalogItem) => (
+                                        <CommandItem
+                                          key={catalogItem.id}
+                                          value={`${catalogItem.id}-${catalogItem.name}`}
+                                          onSelect={() => handleCatalogItemSelect(item.id, catalogItem)}
+                                          className="flex items-center gap-2 cursor-pointer p-3"
+                                        >
+                                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            {catalogItem.image?.url ? (
+                                              <img
+                                                src={catalogItem.image.url}
+                                                alt={catalogItem.name}
+                                                className="w-8 h-8 object-cover rounded flex-shrink-0"
+                                              />
+                                            ) : (
+                                              <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                                                <Package className="w-4 h-4 text-muted-foreground" />
+                                              </div>
+                                            )}
+                                            <div className="flex flex-col flex-1 min-w-0">
+                                              <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                                <span className={getTextClasses(catalogItem.name, 'text-sm font-medium truncate shrink-0')} title={catalogItem.name}>
+                                                  {catalogItem.name}
+                                                </span>
+                                                {showUrdu && catalogItem.nameUrdu?.trim() ? (
+                                                  <span
+                                                    dir="rtl"
+                                                    className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
+                                                    title={catalogItem.nameUrdu.trim()}
+                                                  >
+                                                    {catalogItem.nameUrdu.trim()}
+                                                  </span>
+                                                ) : null}
+                                                {catalogItem.brand?.name && (
+                                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+                                                    {catalogItem.brand.name}
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <span>Rs{Number(catalogItem.price || 0).toFixed(2)}</span>
+                                                <span
+                                                  className={catalogItem.stockQuantity <= 0 ? 'text-red-600 font-medium' : catalogItem.stockQuantity <= 5 ? 'text-red-500 font-medium' : catalogItem.stockQuantity <= 20 ? 'text-amber-500' : 'text-green-600'}
+                                                >
+                                                  Stock: {catalogItem.stockQuantity}
+                                                </span>
+                                                <BranchStockTrigger
+                                                  productId={catalogItem.productId}
+                                                  variantId={catalogItem.variantId}
+                                                  itemName={catalogItem.name}
+                                                />
+                                                {catalogItem.cost != null && (
+                                                  <span
+                                                    className={cn(
+                                                      'text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 select-none',
+                                                      showProductCost
+                                                        ? 'cursor-default'
+                                                        : 'cursor-pointer blur-sm opacity-60 hover:blur-none hover:opacity-100',
+                                                    )}
+                                                    title="Purchase cost"
+                                                  >
+                                                    Cost: Rs{Number(catalogItem.cost || 0).toFixed(2)}
+                                                  </span>
+                                                )}
+                                                {catalogItem.trackBatch && catalogItem.batches && catalogItem.batches.length > 0 && (
+                                                  <span
+                                                    className="text-blue-600"
+                                                    title={catalogItem.batches.map(b => `${b.batchNumber}: ${b.quantity} left${b.expiryDate ? ` (exp ${new Date(b.expiryDate).toLocaleDateString()})` : ''}`).join(', ')}
+                                                  >
+                                                    {catalogItem.batches.length} batch{catalogItem.batches.length === 1 ? '' : 'es'}
+                                                    {catalogItem.batches[0]?.expiryDate && ` · exp ${new Date(catalogItem.batches[0].expiryDate).toLocaleDateString()}`}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  )}
+                                </CommandList>
+                                {filteredSellableProducts.length > visibleSellableProducts.length ? (
+                                  <div className="border-t px-3 py-2 text-center text-xs text-muted-foreground">
+                                    {t('Showing {{shown}} of {{total}} — keep typing to narrow', {
+                                      shown: visibleSellableProducts.length,
+                                      total: filteredSellableProducts.length,
+                                    })}
+                                  </div>
+                                ) : null}
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+    )
+    const productImage = item.image?.url ? (
+      <img
+        src={item.image.url}
+        alt={item.name}
+        className='h-10 w-10 flex-shrink-0 rounded-lg object-cover'
+      />
+    ) : (
+      <div className='flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted'>
+        <Package className='h-5 w-5 text-muted-foreground/50' />
+      </div>
+    )
+
+    // Table order (catalog hidden — unchanged): name → batches+serial → stock+branch.
+    const productCell = (
+      <div className='flex items-start gap-3'>
+        {productImage}
+        <div className='min-w-0 flex-1'>
+          {item.isManualEntry ? manualEntryPicker : (
+            <div className='min-w-0 flex-1'>
+              <BilingualName
+                primary={item.name}
+                secondary={item.nameUrdu}
+                primaryClassName='font-semibold text-sm'
+                truncate
+              />
+              {(hasBatches || serialTrigger) && (
+                <div className='flex flex-wrap items-center gap-1.5 mt-1'>
+                  {batchTags}
+                  {serialTrigger}
+                </div>
+              )}
+              <div className='flex flex-wrap items-center gap-1.5 mt-1'>
+                {stockBadge}
+                {branchTrigger}
+              </div>
+              {insufficientStockWarning}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+
+    // Card order (catalog shown, per request): name → stock+branch ("branches upper")
+    // → batches+serial ("batches below") — the reverse of the table's order above.
+    const productCellCard = (
+      <div className='flex items-start gap-3'>
+        {productImage}
+        <div className='min-w-0 flex-1'>
+          {item.isManualEntry ? manualEntryPicker : (
+            <div className='min-w-0 flex-1'>
+              <BilingualName
+                primary={item.name}
+                secondary={item.nameUrdu}
+                primaryClassName='font-semibold text-sm'
+                truncate
+              />
+              <div className='flex flex-wrap items-center gap-1.5 mt-1'>
+                {stockBadge}
+                {branchTrigger}
+              </div>
+              {(hasBatches || serialTrigger) && (
+                <div className='flex flex-wrap items-center gap-1.5 mt-1'>
+                  {batchTags}
+                  {serialTrigger}
+                </div>
+              )}
+              {insufficientStockWarning}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+    // Shared by qtyControl (table) and qtyControlCard (catalog-shown card) below — same
+    // reasoning as updateUnitPrice above.
+    const updateUnit = (value: string) => {
+      const selectedProduct = products.find((p) => (p._id || p.id) === item.productId)
+      if (!selectedProduct) {
+        toast.error('Product not found for this line')
+        return
+      }
+
+      const adjustedUnitPrice = getUnitAdjustedPrice({
+        product: selectedProduct,
+        unit: value,
+        basePrice: selectedProduct.price || item.unitPrice || 0,
+      })
+
+      if (adjustedUnitPrice === null) {
+        toast.error(`Missing conversion for ${item.name}`)
+        return
+      }
+
+      const lineValues = calculateInvoiceLineValues({
+        product: selectedProduct,
+        quantity: item.quantity,
+        unit: value,
+        unitPrice: adjustedUnitPrice,
+        cost: item.cost,
+      })
+
+      if (!lineValues) {
+        toast.error(`Missing conversion for ${item.name}`)
+        return
+      }
+
+      const previousStockQuantity = item.stockQuantity || item.quantity
+      const stockDifference = lineValues.stockQuantity - previousStockQuantity
+
+      // Simple products may sell into negative stock — variant/batch
+      // items still enforce the cap (though unit conversion doesn't
+      // apply to those today anyway).
+      if (item.variantId && stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
+        toast.error(`${item.name} - Only ${selectedProduct.stockQuantity} pcs available for this unit`)
+        return
+      }
+
+      if (stockDifference !== 0) {
+        setProducts((prevProducts) => prevProducts.map((productRow) =>
+          (productRow._id || productRow.id) === item.productId
+            ? { ...productRow, stockQuantity: productRow.stockQuantity - stockDifference }
+            : productRow
+        ))
+      }
+
+      const net = applyLineDiscount(lineValues, item.discountType, item.discountValue)
+      const newItems = invoice.items.map((invoiceItem) =>
+        invoiceItem.id === item.id
+          ? {
+              ...invoiceItem,
+              unit: lineValues.lineUnit,
+              conversionFactor: lineValues.conversionFactor,
+              stockQuantity: lineValues.stockQuantity,
+              unitPrice: adjustedUnitPrice,
+              subtotal: net.subtotal,
+              profit: net.profit,
+              discountAmount: net.discountAmount,
+            }
+          : invoiceItem
+      )
+
+      if (calculateTotals) {
+        const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+        setInvoice((prev) => ({
+          ...prev,
+          items: newItems,
+          subtotal: totals.subtotal,
+          tax: totals.tax,
+          discount: totals.discount,
+          total: totals.total,
+          totalProfit: totals.totalProfit,
+          totalCost: totals.totalCost,
+          paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+          balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
+        }))
+      }
+    }
+    const unitOptions = products.find((p) => (p._id || p.id) === item.productId)
+      ? getProductUnitOptions(products.find((p) => (p._id || p.id) === item.productId))
+      : [{ value: item.unit || 'pcs', label: item.unit || 'pcs' }]
+    const qtyControl = (
+                      !hasProduct ? (
+                        <span className='text-xs text-muted-foreground'>—</span>
+                      ) : (
+                        <div className='flex flex-wrap items-center gap-1.5'>
+                        {/* Quantity Stepper */}
+                        <div className='flex items-center gap-1.5 shrink-0'>
+                          <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                              className='h-9 w-9 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+                            >
+                              <Minus className='h-3.5 w-3.5' />
+                            </Button>
+                            <Input
+                              ref={(el) => { qtyInputRefs.current[item.id] = el }}
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const qty = parseInt(e.target.value) || 1
+                                updateQuantity(item.id, qty)
+                              }}
+                              onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
+                              onFocus={(e) => e.target.select()}
+                              className='h-9 w-14 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              className='h-9 w-9 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+                            >
+                              <Plus className='h-3.5 w-3.5' />
+                            </Button>
+                          </div>
+                          <span className='text-xs text-muted-foreground'>{item.unit || 'pcs'}</span>
+                        </div>
+
+                        {showUnitConversions && (
+                          <div className='flex flex-col gap-1 min-w-[80px] shrink-0'>
+                            <Label className='text-[10px] text-muted-foreground'>{t('unit')}</Label>
+                            <Select value={item.unit || 'pcs'} onValueChange={updateUnit}>
+                              <SelectTrigger className='h-6 text-xs px-2'>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {unitOptions.map((unitOption) => (
+                                  <SelectItem key={unitOption.value} value={unitOption.value}>
+                                    {unitOption.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        </div>
+                      )
+    )
+    // Shared by priceControl (table) and priceControlCard (catalog-shown card) below —
+    // extracted so this line's price-update math has one home instead of drifting apart
+    // as two separate onChange bodies.
+    const updateUnitPrice = (newPrice: number) => {
+      const newItems = invoice.items.map(i =>
+        i.id === item.id
+          ? (() => {
+              const selectedProduct = products.find((p) => (p._id || p.id) === i.productId) || { unit: i.unit }
+              const lineValues = calculateInvoiceLineValues({
+                product: selectedProduct,
+                quantity: i.quantity,
+                unit: i.unit,
+                unitPrice: newPrice,
+                cost: i.cost,
+                conversionFactor: i.conversionFactor,
+              })
+
+              if (!lineValues) {
+                return i
+              }
+
+              const net = applyLineDiscount(lineValues, i.discountType, i.discountValue)
+              return {
+                ...i,
+                unitPrice: newPrice,
+                subtotal: net.subtotal,
+                profit: net.profit,
+                discountAmount: net.discountAmount,
+                stockQuantity: lineValues.stockQuantity,
+                conversionFactor: lineValues.conversionFactor,
+              }
+            })()
+          : i
+      )
+
+      if (calculateTotals) {
+        const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
+        setInvoice(prev => ({
+          ...prev,
+          items: newItems,
+          subtotal: totals.subtotal,
+          tax: totals.tax,
+          discount: totals.discount,
+          total: totals.total,
+          totalProfit: totals.totalProfit,
+          totalCost: totals.totalCost,
+          paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? totals.total : prev.paidAmount,
+          balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : totals.total - prev.paidAmount,
+        }))
+      } else {
+        const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0)
+        const totalCost = newItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
+        const totalProfit = newItems.reduce((sum, item) => sum + item.profit, 0)
+        const discountAmount = invoice.discount || 0
+        const taxAmount = ((subtotal - discountAmount) * taxRate) / 100
+        const total = subtotal - discountAmount + taxAmount
+        const balance = total - invoice.paidAmount
+
+        setInvoice(prev => ({
+          ...prev,
+          items: newItems,
+          subtotal,
+          totalCost,
+          totalProfit,
+          tax: taxAmount,
+          total,
+          balance
+        }))
+      }
+    }
+    const priceControl = (
+                      !hasProduct ? (
+                        <span className='text-xs text-muted-foreground'>—</span>
+                      ) : (
+                        <div className='flex w-full items-center rounded-lg border bg-background overflow-hidden'>
+                          <span className='px-2 h-9 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
+                          <Input
+                            ref={(el) => { priceInputRefs.current[item.id] = el }}
+                            type="text"
+                            inputMode="decimal"
+                            showVoiceInput={false}
+                            value={item.unitPrice > 0 ? item.unitPrice : ''}
+                            onKeyDown={(e) => handlePriceKeyDown(e, item.id)}
+                            onChange={(e) => updateUnitPrice(parseFloat(e.target.value) || 0)}
+                            onFocus={(e) => e.target.select()}
+                            className='h-9 min-w-0 flex-1 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                          />
+                        </div>
+                      )
+    )
+    const discountControl = (
+                      !hasProduct ? (
+                        <span className='text-xs text-muted-foreground'>—</span>
+                      ) : (
+                        <div className='inline-flex items-center rounded-lg border bg-background overflow-hidden'>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            showVoiceInput={false}
+                            value={item.discountValue || ''}
+                            onChange={(e) => updateItemDiscount(item.id, { value: Math.max(0, parseFloat(e.target.value) || 0) })}
+                            onFocus={(e) => e.target.select()}
+                            placeholder='0'
+                            className='h-9 w-14 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateItemDiscount(item.id, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' })}
+                            title='Click to switch between Rs and % discount'
+                            className='px-2 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+                          >
+                            {item.discountType === 'percentage' ? '%' : 'Rs'}
+                          </button>
+                        </div>
+                      )
+    )
+    const totalDisplay = (
+                      !hasProduct ? (
+                        <span className='text-xs text-muted-foreground'>—</span>
+                      ) : (
+                        <div>
+                          {(item.discountAmount || 0) > 0 && (
+                            <p className='text-[10px] text-muted-foreground line-through leading-none'>Rs{(item.quantity * item.unitPrice).toFixed(2)}</p>
+                          )}
+                          <p className='font-bold text-sm'>Rs{item.subtotal.toFixed(2)}</p>
+                          {showProfitDetails && (
+                            <p className='text-xs text-green-600'>+Rs{item.profit.toFixed(2)}</p>
+                          )}
+                        </div>
+                      )
+    )
+
+    // Catalog-shown card equivalents of the four controls above — styled to match
+    // Purchase's item-card design (client/src/features/purchase-invoice/components/
+    // purchase-panel.tsx: h-7 controls, a small label above each field, ×/−/= separators)
+    // per request, instead of reusing the table's h-9 boxed-cell styling. The table
+    // versions above are untouched — catalog-hidden mode keeps its exact current look.
+    const qtyControlCard = !hasProduct ? null : (
+      <div className='flex items-center gap-1.5 shrink-0'>
+        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+            className='h-7 w-7 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+          >
+            <Minus className='h-3.5 w-3.5' />
+          </Button>
+          <Input
+            ref={(el) => { qtyInputRefs.current[item.id] = el }}
+            type="number"
+            min="1"
+            value={item.quantity}
+            onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+            onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
+            onFocus={(e) => e.target.select()}
+            className='h-7 w-14 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+            className='h-7 w-7 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
+          >
+            <Plus className='h-3.5 w-3.5' />
+          </Button>
+        </div>
+        <span className='text-xs text-muted-foreground'>{item.unit || 'pcs'}</span>
+        {showUnitConversions && (
+          <Select value={item.unit || 'pcs'} onValueChange={updateUnit}>
+            <SelectTrigger className='h-6 text-xs px-2'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {unitOptions.map((unitOption) => (
+                <SelectItem key={unitOption.value} value={unitOption.value}>
+                  {unitOption.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    )
+    const priceControlCard = !hasProduct ? null : (
+      <div className='flex flex-col gap-0.5'>
+        <span className='text-[10px] text-muted-foreground leading-none'>Unit Price</span>
+        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+          <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
+          <Input
+            ref={(el) => { priceInputRefs.current[item.id] = el }}
+            type="text"
+            inputMode="decimal"
+            showVoiceInput={false}
+            value={item.unitPrice > 0 ? item.unitPrice : ''}
+            onKeyDown={(e) => handlePriceKeyDown(e, item.id)}
+            onChange={(e) => updateUnitPrice(parseFloat(e.target.value) || 0)}
+            onFocus={(e) => e.target.select()}
+            placeholder='0'
+            className='h-7 w-20 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+          />
+        </div>
+      </div>
+    )
+    const discountControlCard = !hasProduct ? null : (
+      <div className='flex flex-col gap-0.5'>
+        <span className='text-[10px] text-muted-foreground leading-none'>Discount</span>
+        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+          <Input
+            type="text"
+            inputMode="decimal"
+            showVoiceInput={false}
+            value={item.discountValue || ''}
+            onChange={(e) => updateItemDiscount(item.id, { value: Math.max(0, parseFloat(e.target.value) || 0) })}
+            onFocus={(e) => e.target.select()}
+            placeholder='0'
+            className='h-7 w-14 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+          />
+          <button
+            type="button"
+            onClick={() => updateItemDiscount(item.id, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' })}
+            title='Click to switch between Rs and % discount'
+            className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+          >
+            {item.discountType === 'percentage' ? '%' : 'Rs'}
+          </button>
+        </div>
+      </div>
+    )
+    const totalDisplayCard = !hasProduct ? null : (
+      <div className='flex flex-col items-end gap-0 ml-auto shrink-0'>
+        {(item.discountAmount || 0) > 0 && (
+          <span className='text-[10px] text-muted-foreground line-through leading-none'>Rs{(item.quantity * item.unitPrice).toFixed(2)}</span>
+        )}
+        <div className='flex items-center gap-1.5'>
+          <span className='text-muted-foreground/60 text-sm select-none'>=</span>
+          <p className='font-bold text-sm'>Rs{item.subtotal.toFixed(2)}</p>
+        </div>
+        {showProfitDetails && (
+          <p className='text-xs text-green-600'>+Rs{item.profit.toFixed(2)}</p>
+        )}
+      </div>
+    )
+
+    return {
+      hasProduct, productCell, qtyControl, priceControl, discountControl, totalDisplay, deleteButton, historyButton,
+      productCellCard, qtyControlCard, priceControlCard, discountControlCard, totalDisplayCard,
+    }
+  }
+
   return (
     <div
       className={cn(
         !showProductCatalog
-          ? // `minmax(0,1fr)`, not a bare `1fr` — a bare `1fr` track's minimum is its
-            // content's natural (unwrapped) size, so one long product name would force
-            // this whole column — and the page — wider instead of letting the name
-            // column's flex-1/min-w-0/truncate chain actually clip it.
-            'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] items-start'
+          ? // Three columns — details / items / summary+payment+actions — each column is
+            // its own independent top-to-bottom stack (the wrapper divs below), so a
+            // column's height is just its own content, never stretched or clipped to
+            // match another column's. `minmax(0,1fr)` on the middle track, not a bare
+            // `1fr`: a bare `1fr` track's minimum is its content's natural (unwrapped)
+            // size, so one long product name would force this whole column — and the
+            // page — wider instead of letting the name column's flex-1/min-w-0/truncate
+            // chain actually clip it.
+            'grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
           : 'space-y-4',
       )}
     >
       {/* Keyboard Language Override
       <KeyboardLanguageOverride />*/}
 
-      {/* Customer and Type Selection — left column (compact mode) */}
-      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-1')}>
-        <CardHeader>
-          <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
-            <CardTitle className='flex items-center gap-2'>
+      {/* Column 1 (compact mode): Invoice Details */}
+      <div className={cn('space-y-4', !showProductCatalog && 'lg:col-start-1')}>
+      {/* Invoice Details */}
+      <Card>
+        <CardHeader className='pb-4'>
+          <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+            <CardTitle className='flex items-center gap-2 text-base'>
               {onBackToList && (
-                <Button variant="ghost" size="sm" onClick={onBackToList}>
+                <Button variant="ghost" size="sm" className='-ml-2 h-8 w-8 p-0' onClick={onBackToList}>
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               )}
-              <DollarSign className='h-5 w-5' />
+              <DollarSign className='h-4 w-4 text-muted-foreground' />
               {t('invoice_details')}
             </CardTitle>
 
-            <div className='flex w-full flex-wrap items-center gap-x-6 gap-y-2 lg:w-auto lg:justify-end'>
-              <div className='flex items-center gap-2'>
-                <Label htmlFor='invoice-print-urdu-header' className='text-sm font-normal whitespace-nowrap'>
-                  {t('urdu_print')}
-                </Label>
-                <Switch
-                  id='invoice-print-urdu-header'
-                  checked={printReceiptInUrdu}
-                  onCheckedChange={(v) => {
-                    setPrintReceiptInUrdu(v)
-                    setInvoicePrintInUrdu(v)
-                  }}
-                />
-              </div>
+            <div className='flex items-center gap-2'>
+              <Label htmlFor='invoice-print-urdu-header' className='text-xs font-normal text-muted-foreground whitespace-nowrap'>
+                {t('urdu_print')}
+              </Label>
+              <Switch
+                id='invoice-print-urdu-header'
+                checked={printReceiptInUrdu}
+                onCheckedChange={(v) => {
+                  setPrintReceiptInUrdu(v)
+                  setInvoicePrintInUrdu(v)
+                }}
+              />
             </div>
           </div>
         </CardHeader>
         <CardContent className='space-y-4'>
-          {/* Show invoice number in edit mode */}
-          {isEditing && editingInvoice?.invoiceNumber && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2 min-w-0">
-                <Label className="font-medium text-blue-800 flex-shrink-0">Invoice Number:</Label>
-                <span 
-                  className="font-bold text-blue-900 truncate" 
-                  title={editingInvoice.invoiceNumber}
-                >
-                  {editingInvoice.invoiceNumber}
-                </span>
-              </div>
-            </div>
-          )}
-          
-          {/* `sm:` is a viewport breakpoint, not a container one — in compact mode this
-              card sits in a narrow ~320-420px left column even on a wide screen, so
-              forcing 2 columns here (based on viewport width) crammed Customer and
-              Invoice Type into half that space. Stack them when the catalog is hidden. */}
-          <div className={cn('grid gap-4 grid-cols-1', showProductCatalog && 'sm:grid-cols-2')}>
-            <div>
-              <Label htmlFor="customer" className='mb-2'>
-                {t('customer')} <span className="text-red-500">*</span>
-              </Label>
-              <div className="flex gap-2">
+          {/* Customer + Invoice Date share a row only when the catalog is showing —
+              that layout has a wide enough Invoice Details column for the pair to sit
+              comfortably. In catalog-hidden (compact) mode the column is much narrower
+              (part of a 3-column page), so pairing them there just crams both — Date
+              drops back to its own full-width row below Customer instead. */}
+          <div className={cn('grid gap-4', showProductCatalog && 'sm:grid-cols-2')}>
+          <div>
+            <Label htmlFor="customer" className='mb-2'>
+              {t('customer')} <span className="text-red-500">*</span>
+            </Label>
+            <div className="flex gap-2">
               <Popover open={customerSelectOpen} onOpenChange={setCustomerSelectOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -2076,65 +3020,9 @@ export function InvoicePanel({
                 />
               ) : null}
               </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="type" className='mb-2'>{t('invoice_type')}</Label>
-              <Select
-                value={invoice.type}
-                onOpenChange={setInvoiceTypeSelectOpen}
-                onValueChange={(value: 'cash' | 'credit' | 'pending' | 'quotation') => updateInvoiceType(value)}
-              >
-                <SelectTrigger
-                  ref={invoiceTypeTriggerRef}
-                  className='w-full'
-                  onKeyDown={(e) => {
-                    if (!invoiceTypeSelectOpen) {
-                      onEnterAdvance(e, focusInvoiceDate)
-                    }
-                  }}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">{t('cash')}</SelectItem>
-                  {/* Disable credit and pending for walk-in customers */}
-                  <SelectItem 
-                    value="credit" 
-                    disabled={invoice.customerId === 'walk-in'}
-                  >
-                    {t('credit')}
-                  </SelectItem>
-                  <SelectItem 
-                    value="pending" 
-                    disabled={invoice.customerId === 'walk-in'}
-                  >
-                    {t('pending')}
-                  </SelectItem>
-                  {/* Quotations are non-committal drafts (no stock/accounting effect
-                      until converted), so — unlike credit/pending — they're allowed
-                      for walk-in customers too (e.g. a CRM lead not yet a customer). */}
-                  <SelectItem value="quotation">
-                    {t('quotation') || 'Quotation'}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* {isEditing && invoice.status && (
-              <div>
-                <Label className='mb-2'>{t('status') || 'Status'}</Label>
-                <div className="flex items-center h-10 w-full">
-                  <Badge className={getStatusColor(invoice.status)}>
-                    {(invoice.status || 'draft').toUpperCase()}
-                  </Badge>
-                </div>
-              </div>
-            )} */}
           </div>
-
           <div>
-            <Label htmlFor="invoiceDate">Invoice Date</Label>
+            <Label htmlFor="invoiceDate">{t('invoice_date') || 'Invoice Date'}</Label>
             <Input
               ref={invoiceDateRef}
               type="date"
@@ -2143,75 +3031,280 @@ export function InvoicePanel({
               onKeyDown={(e) => onEnterAdvance(e, openProductSelectorForEntry)}
             />
           </div>
+          </div>
 
-          {salesmanOptions.length > 0 && (
+          {isEditing && editingInvoice?.invoiceNumber && (
             <div>
-              <Label htmlFor="salesmanId">{t('salesman') || 'Salesman'}</Label>
-              <SearchableSelect
-                id="salesmanId"
-                options={salesmanOptions}
-                value={invoice.salesmanId || ''}
-                onValueChange={(value) => setInvoice(prev => ({ ...prev, salesmanId: value }))}
-                placeholder={t('select_salesman') || 'Select a salesman...'}
-                clearLabel={t('none') || 'None'}
-              />
+              <Label>{t('invoice_number') || 'Invoice No.'}</Label>
+              <div className='flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm'>
+                <span className='truncate font-medium' title={editingInvoice.invoiceNumber}>
+                  {editingInvoice.invoiceNumber}
+                </span>
+              </div>
             </div>
           )}
 
-          {invoice.type === 'pending' && (
-            <div>
-              <Label htmlFor="receivedByName">{t('received_by') || 'Received By'}</Label>
-              <SmartInput
-                id="receivedByName"
-                placeholder={t('enter_received_by_name') || 'Name of person collecting the products'}
-                value={invoice.receivedByName || ''}
-                onChange={(e) => setInvoice(prev => ({ ...prev, receivedByName: e.target.value }))}
-                showVoiceInput={true}
-                voiceInputSize="sm"
-                className="w-full"
-              />
-            </div>
-          )}
+          {showProductCatalog ? (
+            <>
+              {/* Catalog-shown layout only: Invoice Type takes the left half of the row
+                  (smaller icons/text, all 4 options in one row) paired with Salesman on
+                  the right half, instead of Invoice Type spanning the full row on its
+                  own. Customer Name is dropped entirely here per request — the Customer
+                  field above already carries that. Catalog-hidden mode keeps its own
+                  unchanged copy of both blocks below. */}
+              <div className='grid grid-cols-2 gap-4'>
+                <div>
+                  <Label className='mb-2 block'>{t('invoice_type')}</Label>
+                  <div className='grid grid-cols-4 gap-1'>
+                    {(
+                      [
+                        { value: 'cash', label: t('cash'), icon: Banknote },
+                        { value: 'credit', label: t('credit'), icon: CreditCard },
+                        { value: 'pending', label: t('pending'), icon: Truck },
+                        { value: 'quotation', label: t('quotation') || 'Quotation', icon: FileCheck },
+                      ] as const
+                    ).map(({ value, label, icon: Icon }) => {
+                      const disabled = (value === 'credit' || value === 'pending') && invoice.customerId === 'walk-in'
+                      const active = invoice.type === value
+                      const styles = INVOICE_TYPE_STYLES[value]
+                      return (
+                        <button
+                          key={value}
+                          type='button'
+                          ref={value === 'cash' ? invoiceTypeTriggerRef : undefined}
+                          disabled={disabled}
+                          onClick={() => updateInvoiceType(value)}
+                          onKeyDown={(e) => onEnterAdvance(e, focusInvoiceDate)}
+                          className={cn(
+                            'flex flex-col items-center gap-0.5 rounded-lg border px-0.5 py-1.5 text-[9px] font-medium leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                            active
+                              ? styles.active
+                              : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                          )}
+                        >
+                          <Icon className={cn('h-3 w-3', active && styles.icon)} />
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {salesmanOptions.length > 0 && (
+                  <div>
+                    <Label htmlFor="salesmanId">{t('salesman') || 'Salesman'}</Label>
+                    <SearchableSelect
+                      id="salesmanId"
+                      options={salesmanOptions}
+                      value={invoice.salesmanId || ''}
+                      onValueChange={(value) => setInvoice(prev => ({ ...prev, salesmanId: value }))}
+                      placeholder={t('select_salesman') || 'Select a salesman...'}
+                      clearLabel={t('none') || 'None'}
+                    />
+                  </div>
+                )}
+              </div>
+              {invoice.type === 'pending' && (
+                <div>
+                  <Label htmlFor="receivedByName">{t('received_by') || 'Received By'}</Label>
+                  <SmartInput
+                    id="receivedByName"
+                    placeholder={t('enter_received_by_name') || 'Name of person collecting the products'}
+                    value={invoice.receivedByName || ''}
+                    onChange={(e) => setInvoice(prev => ({ ...prev, receivedByName: e.target.value }))}
+                    showVoiceInput={true}
+                    voiceInputSize="sm"
+                    className="w-full"
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Invoice Type — segmented buttons instead of a dropdown so the current
+                  selection (and which types are off-limits for a walk-in customer) is
+                  visible at a glance. Same updateInvoiceType/disabled rules as the old
+                  Select; Enter on the first button still jumps to Invoice Date
+                  (focusInvoiceType/focusInvoiceDate below), matching the previous
+                  keyboard flow. */}
+              <div>
+                <Label className='mb-2 block'>{t('invoice_type')}</Label>
+                <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+                  {(
+                    [
+                      { value: 'cash', label: t('cash'), icon: Banknote },
+                      { value: 'credit', label: t('credit'), icon: CreditCard },
+                      { value: 'pending', label: t('pending'), icon: Truck },
+                      { value: 'quotation', label: t('quotation') || 'Quotation', icon: FileCheck },
+                    ] as const
+                  ).map(({ value, label, icon: Icon }) => {
+                    // Disable credit and pending for walk-in customers
+                    const disabled = (value === 'credit' || value === 'pending') && invoice.customerId === 'walk-in'
+                    const active = invoice.type === value
+                    const styles = INVOICE_TYPE_STYLES[value]
+                    return (
+                      <button
+                        key={value}
+                        type='button'
+                        ref={value === 'cash' ? invoiceTypeTriggerRef : undefined}
+                        disabled={disabled}
+                        onClick={() => updateInvoiceType(value)}
+                        onKeyDown={(e) => onEnterAdvance(e, focusInvoiceDate)}
+                        className={cn(
+                          'flex flex-col items-center gap-1 rounded-lg border px-2 py-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                          active
+                            ? styles.active
+                            : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                        )}
+                      >
+                        <Icon className={cn('h-4 w-4', active && styles.icon)} />
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
 
-          {invoice.customerId === 'walk-in' && (
-            <div>
-              <Label htmlFor="walkInCustomerName">{t('customer_name')}</Label>
-              <SmartInput
-                id="walkInCustomerName"
-                placeholder={t('enter_customer_name')}
-                value={invoice.walkInCustomerName || ''}
-                onChange={(e) => setInvoice(prev => ({ ...prev, walkInCustomerName: e.target.value }))}
-                showVoiceInput={true}
-                voiceInputSize="sm"
-                className="w-full"
-              />
-            </div>
-          )}
+              {/* Salesman (+ Received By, when pending) — each its own full-width row in
+                  catalog-hidden mode; the narrow 3-column page doesn't have room to pair
+                  them the way catalog-shown mode does above. */}
+              <div className='grid gap-4'>
+                {salesmanOptions.length > 0 && (
+                  <div>
+                    <Label htmlFor="salesmanId">{t('salesman') || 'Salesman'}</Label>
+                    <SearchableSelect
+                      id="salesmanId"
+                      options={salesmanOptions}
+                      value={invoice.salesmanId || ''}
+                      onValueChange={(value) => setInvoice(prev => ({ ...prev, salesmanId: value }))}
+                      placeholder={t('select_salesman') || 'Select a salesman...'}
+                      clearLabel={t('none') || 'None'}
+                    />
+                  </div>
+                )}
 
-          {((invoice.customerId && invoice.customerId !== 'walk-in') || invoice.type === 'pending' || invoice.type === 'quotation') && invoice.customerId !== 'walk-in' ? (
-            <div>
-              <Label htmlFor="customerDisplayName">{t('customer_name')}</Label>
-              <SmartInput
-                id="customerDisplayName"
-                placeholder={t('enter_customer_name') || 'Enter customer name'}
-                value={invoice.customerName || ''}
-                onChange={(e) => setInvoice(prev => ({ ...prev, customerName: e.target.value }))}
-                showVoiceInput={true}
-                voiceInputSize="sm"
-                className="w-full"
-              />
-            </div>
-          ) : null}
+                {invoice.type === 'pending' && (
+                  <div>
+                    <Label htmlFor="receivedByName">{t('received_by') || 'Received By'}</Label>
+                    <SmartInput
+                      id="receivedByName"
+                      placeholder={t('enter_received_by_name') || 'Name of person collecting the products'}
+                      value={invoice.receivedByName || ''}
+                      onChange={(e) => setInvoice(prev => ({ ...prev, receivedByName: e.target.value }))}
+                      showVoiceInput={true}
+                      voiceInputSize="sm"
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
-      {/* Invoice Items — right column (compact mode): spans both left rows so it runs
-          the full height alongside the details+totals stack, with room to breathe. */}
-      <Card className={cn(!showProductCatalog && 'min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-stretch')}>
-        <CardHeader className={cn(!showProductCatalog && 'py-3')}>
-          <div className='flex items-center justify-between'>
-            <CardTitle className={cn(!showProductCatalog && 'text-base')}>{t('invoice_items')} ({invoice.items.length})</CardTitle>
+      {/* Quick actions — the only copy now (the right column's was removed); lives here
+          so it's reachable without scrolling past the items table. Payment Method recap
+          and Scan Barcode were dropped from this card per request — Payment Method is
+          already visible in the Payment & Amount card, and Scan Barcode already has its
+          own button in the items table header. Total Items/Qty moved to the Summary
+          card instead of living here. Hidden entirely once the catalog is showing — the
+          Product Catalog panel already fills that screen real estate and Notes rarely
+          matters mid product-picking. */}
+      {!showProductCatalog && (
+        <Card>
+          <CardHeader className='pb-3'>
+            <CardTitle className='flex items-center gap-2 text-base'>
+              <Zap className='h-4 w-4 text-muted-foreground' />
+              {t('Quick Actions')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='pt-0'>
+            <RichTextEditor
+              value={invoice.notes || ''}
+              onChange={(notes) => setInvoice((prev) => ({ ...prev, notes }))}
+              fieldLabel={t('terms_and_conditions')}
+              addButtonLabel={t('Add Note')}
+              placeholder={t('terms_and_conditions_placeholder')}
+              defaultExpanded={Boolean(invoice.notes?.trim())}
+            />
+          </CardContent>
+        </Card>
+      )}
+      </div>
+
+      {/* Column 2 (compact mode): at-a-glance stats + Invoice Items */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'lg:col-start-2')}>
+      {/* At-a-glance totals strip — same numbers as the Summary card below, surfaced here
+          too so they're visible while scanning the items table itself. Purely derived from
+          invoice state already computed elsewhere; no new totals logic. Hidden once the
+          catalog is showing: Column 2 and Column 3 both stack into the same left-hand
+          column there (see index.tsx), so the Summary card ends up just a bit further down
+          the same column and this strip would only be repeating those numbers a second
+          time above it. */}
+      {!showProductCatalog && (
+        <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5'>
+          {[
+            { label: t('items') || 'Items', value: String(invoice.items.filter((i) => i.productId && i.name).length) },
+            { label: t('subtotal'), value: `Rs${invoice.subtotal.toFixed(2)}` },
+            { label: t('discount'), value: `Rs${(invoice.discount + invoice.items.reduce((sum, i) => sum + (i.discountAmount || 0), 0)).toFixed(2)}` },
+            { label: t('tax'), value: `Rs${invoice.tax.toFixed(2)}` },
+            { label: t('total_amount') || t('total'), value: `Rs${invoice.total.toFixed(2)}`, highlight: true },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className={cn(
+                'rounded-lg border p-3',
+                stat.highlight ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20' : 'bg-card',
+              )}
+            >
+              <p className='text-xs text-muted-foreground'>{stat.label}</p>
+              <p className={cn('mt-0.5 truncate text-lg font-bold tabular-nums', stat.highlight && 'text-emerald-700 dark:text-emerald-400')}>
+                {stat.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Invoice Items — middle column (compact mode): sits beside the details+payment
+          stack, spanning both its rows so it runs the full height. */}
+      <Card className='min-w-0'>
+        <CardHeader className='py-3'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <CardTitle className='text-base'>{t('invoice_items')} ({invoice.items.length})</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
+              {onBarcodeSearch ? (
+                <Popover
+                  open={scanBarcodeOpen}
+                  onOpenChange={(open) => {
+                    setScanBarcodeOpen(open)
+                    if (!open) setScanBarcodeValue('')
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button type='button' size='sm' variant='outline' className='flex items-center gap-1'>
+                      <ScanBarcode className='h-4 w-4' />
+                      <span className='hidden sm:inline'>{t('scan_barcode') || 'Scan Barcode'}</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className='w-64 p-3' align='end'>
+                    <Label className='mb-1.5 block text-xs'>{t('Scan or type a barcode, then press Enter')}</Label>
+                    <Input
+                      autoFocus
+                      value={scanBarcodeValue}
+                      onChange={(e) => setScanBarcodeValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && scanBarcodeValue.trim()) {
+                          onBarcodeSearch(scanBarcodeValue.trim())
+                          setScanBarcodeValue('')
+                          setScanBarcodeOpen(false)
+                        }
+                      }}
+                      placeholder='e.g. 8901030...'
+                    />
+                  </PopoverContent>
+                </Popover>
+              ) : null}
               {invoice.items.length > 0 && (
                 <Button
                   type="button"
@@ -2256,788 +3349,274 @@ export function InvoicePanel({
             </div>
           </div>
         </CardHeader>
-        <CardContent
-          className={cn('p-4', !showProductCatalog && 'flex flex-1 flex-col p-2 lg:min-h-0')}
-        >
-          <div
-            ref={itemsScrollRef}
-            className={cn('space-y-2', !showProductCatalog && 'space-y-1.5')}
-          >
+        <CardContent className='flex flex-1 flex-col p-0 lg:min-h-0'>
+          <div ref={itemsScrollRef} className={showProductCatalog ? 'space-y-2 p-3' : 'overflow-x-auto overflow-y-auto max-h-[460px]'}>
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
                 {t('no_items_added')}
               </div>
-            ) : (
+            ) : showProductCatalog ? (
+              // Catalog-visible mode: items render as stacked cards instead of a table —
+              // this column runs narrower here (the Product Catalog panel takes the other
+              // half of the screen), so a 7-column table doesn't have the room to breathe
+              // the way it does in the catalog-hidden 3-column layout. Styled to match
+              // Purchase's item card (purchase-panel.tsx) — labeled h-7 controls with
+              // ×/−/= separators — per request, rather than the table's boxed h-9 cells.
               invoice.items.map((item) => {
-                const currentProduct = products.find(p => (p._id || p.id) === item.productId)
-                // For a real variant, `products` only ever holds the legacy/parent
-                // product (its stockQuantity is a stale fallback, not this variant's
-                // real number) — read the variant's live stock from the catalog instead.
-                const catalogEntry = item.variantId
-                  ? sellableCatalog.find(c => c.variantId === item.variantId)
-                  : undefined
-                // `products` is also a local running-balance cache for plain products:
-                // addToInvoice/updateQuantity already decrement it by this very line's
-                // quantity as it changes (see index.tsx), so `currentProduct.stockQuantity`
-                // is never the raw total either — it's already net of item.quantity, which
-                // would double-subtract it below. `sellableCatalog` is never locally
-                // mutated, so it's the one source that's always the true, un-netted total —
-                // prefer it here too, only falling back to the stale cache if this item
-                // isn't in the catalog at all (e.g. a deleted product).
-                const stockCatalogEntry = item.variantId
-                  ? catalogEntry
-                  : sellableCatalog.find(c => c.type === 'product' && c.productId === item.productId)
-                const totalCatalogStock = stockCatalogEntry?.stockQuantity ?? currentProduct?.stockQuantity
-                // The catalog number is a snapshot from when it was fetched — it has no idea
-                // this line has already claimed `item.quantity` of it. Subtract that out so
-                // the badge reads as "what's left after this invoice", not "what existed
-                // before you started adding it" — otherwise it never moves as you type a
-                // higher quantity, even while a batch chip below visibly runs out.
-                const remainingStock = totalCatalogStock !== undefined ? Math.max(0, totalCatalogStock - item.quantity) : undefined
-                // Compact "fast invoicing" mode (catalog hidden): the whole item row
-                // folds onto one line — name flexes to fill the middle, qty/price/subtotal
-                // and delete sit fixed-width at the end — instead of stacking name above
-                // the qty/price controls, roughly halving each row's height so more items
-                // fit on screen without scrolling.
-                const compact = !showProductCatalog
-                const deleteButton = (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => removeFromInvoice(item.id)}
-                    className='h-7 w-7 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-950/30'
-                  >
-                    <Trash2 className='h-3.5 w-3.5 text-red-400 hover:text-red-600' />
-                  </Button>
-                )
-                // Past sales of this exact product to this exact customer — only
-                // meaningful once both a real product and a real (non walk-in) customer
-                // are on the invoice.
-                const canShowHistory = !!item.productId && !!invoice.customerId && invoice.customerId !== 'walk-in'
-                const historyButton = canShowHistory ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setHistoryDialog({
-                      open: true,
-                      productId: item.productId,
-                      productName: item.name,
-                      currentPrice: item.unitPrice,
-                    })}
-                    title={t('view_history')}
-                    className='h-7 w-7 p-0 flex-shrink-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'
-                  >
-                    <History className='h-3.5 w-3.5' />
-                  </Button>
-                ) : null
+                const { hasProduct, productCellCard, qtyControlCard, priceControlCard, discountControlCard, totalDisplayCard, deleteButton, historyButton } = renderInvoiceItemParts(item)
                 return (
-                  <div key={item.id} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
-                    {/* Compact (catalog hidden): row1 + row2 flatten via `contents` into one
-                        flex-wrap line — name flexes in the middle, qty/price/subtotal/delete
-                        pack to the end — instead of stacking, so each item takes ~half the height. */}
-                    <div className={cn(compact && 'flex flex-wrap items-center gap-2 p-2')}>
-                    {/* Row 1: Image + Name/Selector + Delete */}
-                    <div className={cn(compact ? 'contents' : 'flex items-start gap-3 p-3')}>
-                      {item.image?.url ? (
-                        <img
-                          src={item.image.url}
-                          alt={item.name}
-                          className={cn('object-cover rounded-lg flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10 mt-0.5')}
-                        />
-                      ) : (
-                        <div className={cn('rounded-lg bg-muted flex items-center justify-center flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10 mt-0.5')}>
-                          <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
-                        </div>
-                      )}
-
-                      <div className='min-w-0 flex-1'>
-                        {item.isManualEntry ? (
-                          <div className='space-y-1'>
-                            <Popover
-                              open={productSelectOpen === item.id}
-                              onOpenChange={(open) => {
-                                setProductSelectOpen(open ? item.id : '')
-                                setProductSearchQuery('')
-                              }}
-                            >
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  onKeyDown={(e) => {
-                                    if (productSelectOpen !== item.id && item.productId) {
-                                      onEnterAdvance(e, () => focusField(qtyInputRefs.current[item.id]))
-                                    }
-                                  }}
-                                  className="w-full justify-between min-h-8 h-auto py-1 text-xs"
-                                >
-                                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    <Search className="w-3 h-3 flex-shrink-0" />
-                                    <span className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0 text-left'>
-                                      <span
-                                        className={getTextClasses(item.name || t('select_product'), 'truncate shrink-0 text-muted-foreground')}
-                                        title={item.name || t('select_product')}
-                                      >
-                                        {item.name || t('select_product')}
-                                        {!item.productId && ' *'}
-                                      </span>
-                                      {showUrdu && item.nameUrdu?.trim() ? (
-                                        <span
-                                          className={cn('min-w-0 truncate rtl text-xs shrink', getUrduSecondaryNameClasses(item.nameUrdu))}
-                                          dir='rtl'
-                                          title={item.nameUrdu.trim()}
-                                        >
-                                          {item.nameUrdu.trim()}
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                  </div>
-                                  <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[560px] p-0" align="start" side="bottom" sideOffset={4}>
-                                <Command shouldFilter={false}>
-                                  <div className="relative">
-                                    <CommandInput
-                                      placeholder={t('search_products')}
-                                      value={productSearchQuery}
-                                      onValueChange={setProductSearchQuery}
-                                    />
-                                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-10">
-                                    <VoiceInputButton
-                                      onTranscript={setProductSearchQuery}
-                                      language={voiceLanguage}
-                                      size="sm"
-                                    />
-                                  </div>
-                                </div>
-                                <CommandList className="max-h-[300px] overflow-y-auto">
-                                  {productsLoading && filteredSellableProducts.length === 0 ? (
-                                    <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
-                                      <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
-                                      {t('loading_products')}
-                                    </div>
-                                  ) : filteredSellableProducts.length === 0 ? (
-                                    canCreateProduct ? (
-                                      <EntityCreateEmptyPrompt
-                                        message={t('no_products_found')}
-                                        actionLabel={t('add_product')}
-                                        onCreate={() => openQuickCreate('product', productSearchQuery, item.id)}
-                                      />
-                                    ) : (
-                                      <div className="py-6 text-center text-sm text-muted-foreground">
-                                        {t('no_products_found')}
-                                      </div>
-                                    )
-                                  ) : (
-                                    <CommandGroup>
-                                      {visibleSellableProducts.map((catalogItem) => (
-                                        <CommandItem
-                                          key={catalogItem.id}
-                                          value={`${catalogItem.id}-${catalogItem.name}`}
-                                          onSelect={() => handleCatalogItemSelect(item.id, catalogItem)}
-                                          className="flex items-center gap-2 cursor-pointer p-3"
-                                        >
-                                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                                            {catalogItem.image?.url ? (
-                                              <img
-                                                src={catalogItem.image.url}
-                                                alt={catalogItem.name}
-                                                className="w-8 h-8 object-cover rounded flex-shrink-0"
-                                              />
-                                            ) : (
-                                              <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                                                <Package className="w-4 h-4 text-muted-foreground" />
-                                              </div>
-                                            )}
-                                            <div className="flex flex-col flex-1 min-w-0">
-                                              <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
-                                                <span className={getTextClasses(catalogItem.name, 'text-sm font-medium truncate shrink-0')} title={catalogItem.name}>
-                                                  {catalogItem.name}
-                                                </span>
-                                                {showUrdu && catalogItem.nameUrdu?.trim() ? (
-                                                  <span
-                                                    dir="rtl"
-                                                    className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
-                                                    title={catalogItem.nameUrdu.trim()}
-                                                  >
-                                                    {catalogItem.nameUrdu.trim()}
-                                                  </span>
-                                                ) : null}
-                                                {catalogItem.brand?.name && (
-                                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-                                                    {catalogItem.brand.name}
-                                                  </Badge>
-                                                )}
-                                              </div>
-                                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <span>Rs{Number(catalogItem.price || 0).toFixed(2)}</span>
-                                                <span
-                                                  className={catalogItem.stockQuantity <= 0 ? 'text-red-600 font-medium' : catalogItem.stockQuantity <= 5 ? 'text-red-500 font-medium' : catalogItem.stockQuantity <= 20 ? 'text-amber-500' : 'text-green-600'}
-                                                >
-                                                  Stock: {catalogItem.stockQuantity}
-                                                </span>
-                                                <BranchStockTrigger
-                                                  productId={catalogItem.productId}
-                                                  variantId={catalogItem.variantId}
-                                                  itemName={catalogItem.name}
-                                                />
-                                                {catalogItem.cost != null && (
-                                                  <span
-                                                    className={cn(
-                                                      'text-amber-600 dark:text-amber-400 font-medium transition-all duration-200 select-none',
-                                                      showProductCost
-                                                        ? 'cursor-default'
-                                                        : 'cursor-pointer blur-sm opacity-60 hover:blur-none hover:opacity-100',
-                                                    )}
-                                                    title="Purchase cost"
-                                                  >
-                                                    Cost: Rs{Number(catalogItem.cost || 0).toFixed(2)}
-                                                  </span>
-                                                )}
-                                                {catalogItem.trackBatch && catalogItem.batches && catalogItem.batches.length > 0 && (
-                                                  <span
-                                                    className="text-blue-600"
-                                                    title={catalogItem.batches.map(b => `${b.batchNumber}: ${b.quantity} left${b.expiryDate ? ` (exp ${new Date(b.expiryDate).toLocaleDateString()})` : ''}`).join(', ')}
-                                                  >
-                                                    {catalogItem.batches.length} batch{catalogItem.batches.length === 1 ? '' : 'es'}
-                                                    {catalogItem.batches[0]?.expiryDate && ` · exp ${new Date(catalogItem.batches[0].expiryDate).toLocaleDateString()}`}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </CommandItem>
-                                      ))}
-                                    </CommandGroup>
-                                  )}
-                                </CommandList>
-                                {filteredSellableProducts.length > visibleSellableProducts.length ? (
-                                  <div className="border-t px-3 py-2 text-center text-xs text-muted-foreground">
-                                    {t('Showing {{shown}} of {{total}} — keep typing to narrow', {
-                                      shown: visibleSellableProducts.length,
-                                      total: filteredSellableProducts.length,
-                                    })}
-                                  </div>
-                                ) : null}
-                                </Command>
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                        ) : (
-                          <div className='min-w-0 flex-1'>
-                            <BilingualName
-                              primary={item.name}
-                              secondary={item.nameUrdu}
-                              primaryClassName='font-semibold text-sm'
-                              truncate={compact}
-                            />
-                            {/* Everything about "what stock backs this line" — remaining
-                                stock, the batch(es) it draws from, and (for serialized
-                                products) how many serials are picked — lives in one wrapping
-                                pill row right under the name, instead of stacking each as its
-                                own line. Keeps a line item to two rows tall so more items fit
-                                on screen at once. */}
-                            <div className='flex flex-wrap items-center gap-1.5 mt-1'>
-                              {!compact && (
-                                <span className='text-xs text-muted-foreground'>Rs{item.unitPrice} · {item.unit || 'pcs'}</span>
-                              )}
-                              {remainingStock !== undefined && (
-                                <span className={`inline-flex shrink-0 items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium ${
-                                  remainingStock <= 0 ? 'bg-red-100 text-red-700' :
-                                  remainingStock <= 5 ? 'bg-red-50 text-red-500' :
-                                  remainingStock <= 20 ? 'bg-amber-50 text-amber-600' :
-                                  'bg-green-50 text-green-700'
-                                }`}>
-                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                    remainingStock <= 0 ? 'bg-red-500' :
-                                    remainingStock <= 5 ? 'bg-red-400' :
-                                    remainingStock <= 20 ? 'bg-amber-400' :
-                                    'bg-green-500'
-                                  }`} />
-                                  {/* remainingStock is "what's left after this line sells" — 0
-                                      doesn't mean there's nothing to sell, it can just mean this
-                                      line is taking the last unit(s) (e.g. exactly 2 in stock,
-                                      selling 2). Only call it "Out of stock" when there was
-                                      truly nothing here before this line was even added. */}
-                                  {remainingStock <= 0
-                                    ? ((totalCatalogStock ?? 0) > 0 ? '0 left' : 'Out of stock')
-                                    : `${remainingStock} left`}
-                                </span>
-                              )}
-                              <BranchStockTrigger
-                                productId={item.productId}
-                                variantId={item.variantId}
-                                itemName={item.name}
-                              />
-                              {/* Which batch(es) this sale depletes — defaults to the
-                                  earliest-expiry batch, switchable by clicking another. If
-                                  the quantity outgrows a single batch, updateQuantity
-                                  auto-suggests a FEFO split (earliest expiry first) across
-                                  several — rendered here as an editable breakdown instead of
-                                  these plain single-select chips. See
-                                  docs/architecture/universal-product-migration.md. */}
-                              {catalogEntry?.trackBatch && catalogEntry.batches && catalogEntry.batches.length > 0 && (
-                                item.batchAllocations && item.batchAllocations.length > 1 ? (
-                                  <BatchAllocationEditor
-                                    allocations={item.batchAllocations}
-                                    batches={catalogEntry.batches}
-                                    onUpdateQuantity={(batchId, qty) => updateAllocationQuantity(item.id, batchId, qty)}
-                                    onAddBatch={(batch) => addBatchToSplit(item.id, batch)}
-                                  />
-                                ) : (() => {
-                                  // Hide batches with nothing left to sell from — nothing to pick
-                                  // there. The exception is whichever batch this line already has
-                                  // selected: keep showing it (even at 0) so the selection and its
-                                  // "insufficient stock" warning below stay visible instead of the
-                                  // chip just vanishing with no explanation.
-                                  const visibleBatches = catalogEntry.batches!.filter(
-                                    (b) => b.quantity > 0 || item.batchId === b.id,
-                                  )
-                                  if (visibleBatches.length === 0) return null
-                                  return (
-                                    <>
-                                      {visibleBatches.map(b => {
-                                        const isSelected = item.batchId === b.id
-                                        // Only the batch this line is actually drawing from has its
-                                        // stock reduced by this line's quantity — other batches'
-                                        // numbers are untouched by a selection that doesn't draw from them.
-                                        const batchLeft = isSelected ? Math.max(0, b.quantity - item.quantity) : b.quantity
-                                        return (
-                                          <button
-                                            key={b.id}
-                                            type='button'
-                                            onClick={() => updateItemBatch(item.id, b.id, b.batchNumber, b.quantity, b.costPerUnit, b.sellingPrice, catalogEntry?.price)}
-                                            title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
-                                            className={cn(
-                                              'shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] transition-colors',
-                                              isSelected
-                                                ? 'border-blue-600 bg-blue-100 text-blue-800'
-                                                : 'border-border bg-background text-muted-foreground hover:bg-muted',
-                                            )}
-                                          >
-                                            {b.batchNumber} · {batchLeft} left
-                                          </button>
-                                        )
-                                      })}
-                                    </>
-                                  )
-                                })()
-                              )}
-                              {(currentProduct?.trackImei || currentProduct?.trackSerial) && (
-                                <SerialSummaryTrigger
-                                  selectedCount={(item.imeis || []).length}
-                                  quantity={item.quantity}
-                                  isSerial={!!currentProduct?.trackSerial}
-                                  onClick={() => setSerialDialogItemId(item.id)}
-                                />
-                              )}
-                            </div>
-                            {!(item.batchAllocations && item.batchAllocations.length > 1) && (() => {
-                              const selectedBatch = item.batchId
-                                ? catalogEntry?.batches?.find((b) => b.id === item.batchId)
-                                : undefined
-                              if (!selectedBatch || item.quantity <= selectedBatch.quantity) return null
-                              return (
-                                <p className='text-xs text-destructive mt-1'>
-                                  Only {selectedBatch.quantity} available in batch {selectedBatch.batchNumber} — reduce the quantity or pick a different batch.
-                                </p>
-                              )
-                            })()}
-                          </div>
-                        )}
+                  <div key={item.id} className={cn('rounded-xl border bg-card shadow-sm overflow-hidden', !hasProduct && 'border-dashed')}>
+                    <div className='flex items-start gap-3 p-3'>
+                      {/* min-w-0 flex-1 here (not on productCellCard's own root, which
+                          is shared markup) is what actually pushes history/delete to the
+                          card's right edge — without it this row sizes to the name's
+                          content width and the icons just trail right after it. */}
+                      <div className='min-w-0 flex-1'>{productCellCard}</div>
+                      <div className='flex items-center gap-0.5 shrink-0'>
+                        {historyButton}
+                        {deleteButton}
                       </div>
-
-                      {!compact && historyButton}
-                      {!compact && deleteButton}
                     </div>
-
-                    {/* Row 2: Controls — only when a product is selected */}
-                    {(item.productId && item.name) && (
-                      <div className={cn(compact ? 'contents' : 'flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5')}>
-                        {/* Quantity Stepper */}
-                        <div className='flex items-center gap-1.5 shrink-0'>
-                          <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              className='h-7 w-7 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
-                            >
-                              <Minus className='h-3.5 w-3.5' />
-                            </Button>
-                            <Input
-                              ref={(el) => { qtyInputRefs.current[item.id] = el }}
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => {
-                                const qty = parseInt(e.target.value) || 1
-                                updateQuantity(item.id, qty)
-                              }}
-                              onKeyDown={(e) => handleQuantityKeyDown(e, item.id)}
-                              onFocus={(e) => e.target.select()}
-                              className='h-7 w-20 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                            />
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              className='h-7 w-7 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
-                            >
-                              <Plus className='h-3.5 w-3.5' />
-                            </Button>
-                          </div>
-                          <span className='text-xs text-muted-foreground'>{item.unit || 'pcs'}</span>
-                        </div>
-
-                        {showUnitConversions && (
-                          <div className='flex flex-col gap-1 min-w-[80px] shrink-0'>
-                            <Label className='text-[10px] text-muted-foreground'>{t('unit')}</Label>
-                            <Select
-                              value={item.unit || 'pcs'}
-                              onValueChange={(value) => {
-                                const selectedProduct = products.find((p) => (p._id || p.id) === item.productId)
-                                if (!selectedProduct) {
-                                  toast.error('Product not found for this line')
-                                  return
-                                }
-
-                                const adjustedUnitPrice = getUnitAdjustedPrice({
-                                  product: selectedProduct,
-                                  unit: value,
-                                  basePrice: selectedProduct.price || item.unitPrice || 0,
-                                })
-
-                                if (adjustedUnitPrice === null) {
-                                  toast.error(`Missing conversion for ${item.name}`)
-                                  return
-                                }
-
-                                const lineValues = calculateInvoiceLineValues({
-                                  product: selectedProduct,
-                                  quantity: item.quantity,
-                                  unit: value,
-                                  unitPrice: adjustedUnitPrice,
-                                  cost: item.cost,
-                                })
-
-                                if (!lineValues) {
-                                  toast.error(`Missing conversion for ${item.name}`)
-                                  return
-                                }
-
-                                const previousStockQuantity = item.stockQuantity || item.quantity
-                                const stockDifference = lineValues.stockQuantity - previousStockQuantity
-
-                                // Simple products may sell into negative stock — variant/batch
-                                // items still enforce the cap (though unit conversion doesn't
-                                // apply to those today anyway).
-                                if (item.variantId && stockDifference > 0 && stockDifference > selectedProduct.stockQuantity) {
-                                  toast.error(`${item.name} - Only ${selectedProduct.stockQuantity} pcs available for this unit`)
-                                  return
-                                }
-
-                                if (stockDifference !== 0) {
-                                  setProducts((prevProducts) => prevProducts.map((productRow) =>
-                                    (productRow._id || productRow.id) === item.productId
-                                      ? { ...productRow, stockQuantity: productRow.stockQuantity - stockDifference }
-                                      : productRow
-                                  ))
-                                }
-
-                                const net = applyLineDiscount(lineValues, item.discountType, item.discountValue)
-                                const newItems = invoice.items.map((invoiceItem) =>
-                                  invoiceItem.id === item.id
-                                    ? {
-                                        ...invoiceItem,
-                                        unit: lineValues.lineUnit,
-                                        conversionFactor: lineValues.conversionFactor,
-                                        stockQuantity: lineValues.stockQuantity,
-                                        unitPrice: adjustedUnitPrice,
-                                        subtotal: net.subtotal,
-                                        profit: net.profit,
-                                        discountAmount: net.discountAmount,
-                                      }
-                                    : invoiceItem
-                                )
-
-                                if (calculateTotals) {
-                                  const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
-                                  setInvoice((prev) => ({
-                                    ...prev,
-                                    items: newItems,
-                                    subtotal: totals.subtotal,
-                                    tax: totals.tax,
-                                    discount: totals.discount,
-                                    total: totals.total,
-                                    totalProfit: totals.totalProfit,
-                                    totalCost: totals.totalCost,
-                                    balance: totals.total - prev.paidAmount,
-                                  }))
-                                }
-                              }}
-                            >
-                              <SelectTrigger className='h-6 text-xs px-2'>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(products.find((p) => (p._id || p.id) === item.productId)
-                                  ? getProductUnitOptions(products.find((p) => (p._id || p.id) === item.productId))
-                                  : [{ value: item.unit || 'pcs', label: item.unit || 'pcs' }]
-                                ).map((unitOption) => (
-                                  <SelectItem key={unitOption.value} value={unitOption.value}>
-                                    {unitOption.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-
-                        {/* Price Input */}
-                        <span className='text-muted-foreground/60 text-sm select-none shrink-0'>×</span>
-                        <div className='flex items-center rounded-lg border bg-background overflow-hidden shrink-0'>
-                          <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
-                          <Input
-                            ref={(el) => { priceInputRefs.current[item.id] = el }}
-                            type="text"
-                            inputMode="decimal"
-                            showVoiceInput={false}
-                            value={item.unitPrice > 0 ? item.unitPrice : ''}
-                            onKeyDown={(e) => handlePriceKeyDown(e, item.id)}
-                            onChange={(e) => {
-                              const newPrice = parseFloat(e.target.value) || 0
-                              const newItems = invoice.items.map(i =>
-                                i.id === item.id
-                                  ? (() => {
-                                      const selectedProduct = products.find((p) => (p._id || p.id) === i.productId) || { unit: i.unit }
-                                      const lineValues = calculateInvoiceLineValues({
-                                        product: selectedProduct,
-                                        quantity: i.quantity,
-                                        unit: i.unit,
-                                        unitPrice: newPrice,
-                                        cost: i.cost,
-                                        conversionFactor: i.conversionFactor,
-                                      })
-
-                                      if (!lineValues) {
-                                        return i
-                                      }
-
-                                      const net = applyLineDiscount(lineValues, i.discountType, i.discountValue)
-                                      return {
-                                        ...i,
-                                        unitPrice: newPrice,
-                                        subtotal: net.subtotal,
-                                        profit: net.profit,
-                                        discountAmount: net.discountAmount,
-                                        stockQuantity: lineValues.stockQuantity,
-                                        conversionFactor: lineValues.conversionFactor,
-                                      }
-                                    })()
-                                  : i
-                              )
-
-                              if (calculateTotals) {
-                                const totals = calculateTotals(newItems, invoice.discountType, invoice.discountValue, invoice.deliveryCharge || 0, invoice.serviceCharge || 0)
-                                setInvoice(prev => ({
-                                  ...prev,
-                                  items: newItems,
-                                  subtotal: totals.subtotal,
-                                  tax: totals.tax,
-                                  discount: totals.discount,
-                                  total: totals.total,
-                                  totalProfit: totals.totalProfit,
-                                  totalCost: totals.totalCost,
-                                  balance: totals.total - prev.paidAmount
-                                }))
-                              } else {
-                                const subtotal = newItems.reduce((sum, item) => sum + item.subtotal, 0)
-                                const totalCost = newItems.reduce((sum, item) => sum + (item.cost * item.quantity), 0)
-                                const totalProfit = newItems.reduce((sum, item) => sum + item.profit, 0)
-                                const discountAmount = invoice.discount || 0
-                                const taxAmount = ((subtotal - discountAmount) * taxRate) / 100
-                                const total = subtotal - discountAmount + taxAmount
-                                const balance = total - invoice.paidAmount
-
-                                setInvoice(prev => ({
-                                  ...prev,
-                                  items: newItems,
-                                  subtotal,
-                                  totalCost,
-                                  totalProfit,
-                                  tax: taxAmount,
-                                  total,
-                                  balance
-                                }))
-                              }
-                            }}
-                            onFocus={(e) => e.target.select()}
-                            className={cn(
-                              'h-7 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]',
-                              compact ? 'w-24' : 'w-16',
-                            )}
-                          />
-                        </div>
-
-                        {/* Item Discount Input */}
-                        <span className='text-muted-foreground/60 text-sm select-none shrink-0'>−</span>
-                        <div className='flex flex-col gap-0.5 shrink-0'>
-                          <span className='text-[10px] text-muted-foreground leading-none'>{t('discount')}</span>
-                          <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-                            <Input
-                              type="text"
-                              inputMode="decimal"
-                              showVoiceInput={false}
-                              value={item.discountValue || ''}
-                              onChange={(e) => updateItemDiscount(item.id, { value: Math.max(0, parseFloat(e.target.value) || 0) })}
-                              onFocus={(e) => e.target.select()}
-                              placeholder='0'
-                              className='h-7 w-14 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                            />
-                            <button
-                              type="button"
-                              onClick={() => updateItemDiscount(item.id, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' })}
-                              title='Click to switch between Rs and % discount'
-                              className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
-                            >
-                              {item.discountType === 'percentage' ? '%' : 'Rs'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Subtotal */}
-                        <div className='flex items-center gap-1.5 ml-auto shrink-0'>
-                          <span className='text-muted-foreground/60 text-sm select-none'>=</span>
-                          <div className='text-right'>
-                            {(item.discountAmount || 0) > 0 && (
-                              <p className='text-[10px] text-muted-foreground line-through leading-none'>Rs{(item.quantity * item.unitPrice).toFixed(2)}</p>
-                            )}
-                            <p className='font-bold text-sm'>Rs{item.subtotal.toFixed(2)}</p>
-                            {showProfitDetails && (
-                              <p className='text-xs text-green-600'>+Rs{item.profit.toFixed(2)}</p>
-                            )}
-                          </div>
-                        </div>
+                    {hasProduct && (
+                      <div className='flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5'>
+                        {qtyControlCard}
+                        <span className='text-muted-foreground/60 text-sm select-none'>×</span>
+                        {priceControlCard}
+                        <span className='text-muted-foreground/60 text-sm select-none'>−</span>
+                        {discountControlCard}
+                        {totalDisplayCard}
                       </div>
                     )}
-                    {compact && historyButton}
-                    {compact && deleteButton}
-                    </div>
                   </div>
                 )
               })
+            ) : (
+              <Table className='table-fixed'>
+                <colgroup>
+                  <col className='w-10' />
+                  <col />
+                  <col className='w-[184px]' />
+                  <col className='w-[150px]' />
+                  {/* Discount's input shrank to fit its actual content (small number + a
+                      Rs/% toggle) — its column no longer needs 150px, so the extra space
+                      reverts to Product (the unlabeled `<col />` above, which soaks up
+                      whatever's left in this table-fixed layout). */}
+                  <col className='w-[100px]' />
+                  <col className='w-[110px]' />
+                  <col className='w-16' />
+                </colgroup>
+                <TableHeader className='sticky top-0 z-10 bg-muted'>
+                  <TableRow className='hover:bg-transparent'>
+                    <TableHead className='w-10 pl-4'>#</TableHead>
+                    <TableHead className='min-w-[270px]'>{t('product') || 'Product'}</TableHead>
+                    <TableHead className='min-w-[150px]'>{t('Qty')}</TableHead>
+                    <TableHead className='min-w-[130px]'>{t('unit_price') || 'Unit Price'}</TableHead>
+                    <TableHead className='min-w-[100px]'>{t('discount') || 'Discount'}</TableHead>
+                    <TableHead className='min-w-[100px] text-right'>{t('total') || 'Total'}</TableHead>
+                    <TableHead className='w-16 pr-3' />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoice.items.map((item, itemIndex) => {
+                    const { hasProduct, productCell, qtyControl, priceControl, discountControl, totalDisplay, deleteButton, historyButton } = renderInvoiceItemParts(item)
+                    return (
+                      <TableRow key={item.id} className={cn(!hasProduct && 'bg-muted/10')}>
+                        <TableCell className='py-3 pl-4 align-top text-xs text-muted-foreground'>{itemIndex + 1}</TableCell>
+                        <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
+                        <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
+                        <TableCell className='align-middle py-3'>{priceControl}</TableCell>
+                        <TableCell className='align-middle py-3'>{discountControl}</TableCell>
+                        <TableCell className='align-middle py-3 text-right'>{totalDisplay}</TableCell>
+                        <TableCell className='py-3 pr-3 align-middle'>
+                          <div className='flex items-center justify-end gap-0.5'>
+                            {historyButton}
+                            {deleteButton}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
             )}
+          </div>
+
+          {/* Apply Discount / Add Tax — the one place the overall (whole-invoice) discount
+              and tax rate are edited; both feed the Summary card's totals directly. */}
+          <div className='flex flex-wrap items-center gap-2 border-t p-3'>
+            <Popover open={applyDiscountOpen} onOpenChange={setApplyDiscountOpen}>
+              <PopoverTrigger asChild>
+                <Button type='button' variant='outline' size='sm' className='gap-1.5'>
+                  <Percent className='h-4 w-4' />
+                  {t('Apply Discount')}
+                  {invoice.discount > 0 && (
+                    <Badge variant='secondary' className='ml-1 tabular-nums'>-Rs{invoice.discount.toFixed(2)}</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className='w-64 p-3' align='start'>
+                <Label className='mb-2 block text-xs'>{t('discount') || 'Discount'}</Label>
+                <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                  <Input
+                    type='text'
+                    inputMode='decimal'
+                    showVoiceInput={false}
+                    value={invoice.discountValue || ''}
+                    onChange={(e) => handleDiscountChange(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    placeholder='0'
+                    className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                  />
+                  <button
+                    type='button'
+                    onClick={() => updateDiscount({ type: invoice.discountType === 'percentage' ? 'fixed' : 'percentage' })}
+                    title='Click to switch between Rs and % discount'
+                    className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+                  >
+                    {invoice.discountType === 'percentage' ? '%' : 'Rs'}
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Popover open={addTaxOpen} onOpenChange={setAddTaxOpen}>
+              <PopoverTrigger asChild>
+                <Button type='button' variant='outline' size='sm' className='gap-1.5'>
+                  <Receipt className='h-4 w-4' />
+                  {t('Add Tax')}
+                  {taxRate > 0 && (
+                    <Badge variant='secondary' className='ml-1 tabular-nums'>{taxRate}%</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className='w-56 p-3' align='start'>
+                <Label className='mb-2 block text-xs'>{t('tax_rate')} (%)</Label>
+                <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                  <Input
+                    type='text'
+                    inputMode='decimal'
+                    showVoiceInput={false}
+                    value={taxRateInput}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      setTaxRateInput(raw)
+                      setTaxRate(Math.max(0, Math.min(100, parseFloat(raw) || 0)))
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    placeholder='0'
+                    className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                  />
+                  <span className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none'>%</span>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </CardContent>
+      </Card>
+      </div>
+
+      {/* Column 3 (compact mode): Summary, Payment & Amount, Quick Actions */}
+      <div className={cn('space-y-4', !showProductCatalog && 'lg:col-start-3')}>
+      {/* Summary — the same totals shown in the stats strip above the items table, laid
+          out as a running receipt-style breakdown. Discount and tax are now edited from
+          the items table's footer ("Apply Discount"/"Add Tax" popovers) rather than here,
+          so this card is read-only. */}
+      <Card>
+        <CardHeader className='pb-3'>
+          <CardTitle className='flex items-center gap-2 text-base'>
+            <Receipt className='h-4 w-4 text-muted-foreground' />
+            {t('Summary')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-2 pt-0'>
+          <div className='flex justify-between gap-6'>
+            <span className='text-muted-foreground'>{t('subtotal')}:</span>
+            <span className='tabular-nums font-medium'>Rs{invoice.subtotal.toFixed(2)}</span>
+          </div>
+          {(() => {
+            const itemDiscountTotal = invoice.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
+            return itemDiscountTotal > 0 ? (
+              <div className='flex justify-between gap-6 text-sm text-green-600'>
+                <span>{t('Item Discounts')}:</span>
+                <span className='tabular-nums'>-Rs{itemDiscountTotal.toFixed(2)}</span>
+              </div>
+            ) : null
+          })()}
+          {invoice.discount > 0 && (
+            <div className='flex justify-between gap-6 text-red-600'>
+              <span>{t('discount')}:</span>
+              <span className='tabular-nums'>-Rs{invoice.discount.toFixed(2)}</span>
+            </div>
+          )}
+          {invoice.tax > 0 && (
+            <div className='flex justify-between gap-6'>
+              <span className='text-muted-foreground'>
+                {t('tax')} ({taxRate}%):
+              </span>
+              <span className='tabular-nums'>Rs{invoice.tax.toFixed(2)}</span>
+            </div>
+          )}
+          <Separator />
+          <div className='flex justify-between gap-6 font-bold text-lg'>
+            <span>{t('total')}:</span>
+            <span className='tabular-nums'>Rs{invoice.total.toFixed(2)}</span>
+          </div>
+          {(() => {
+            const itemDiscountTotal = invoice.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
+            const totalSaved = itemDiscountTotal + invoice.discount
+            return totalSaved > 0 ? (
+              <div className='flex justify-between gap-6 text-xs font-medium text-green-600'>
+                <span>{t('You Saved')}:</span>
+                <span className='tabular-nums'>Rs{totalSaved.toFixed(2)}</span>
+              </div>
+            ) : null
+          })()}
+
+          {/* Profit Display */}
+          <div className='justify-between items-center hidden'>
+            <span className='text-green-600'>{t('total_profit')}:</span>
+            <div className='flex items-center gap-2'>
+              <span className='text-green-600 font-medium'>
+                Rs{invoice.totalProfit.toFixed(2)}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowProfitDetails(!showProfitDetails)}
+              >
+                <Calculator className='h-4 w-4' />
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+          {/* Type + Total Items + Total Quantity as one row of tags instead of a badge
+              plus two separate label/value rows underneath — same info, less height. */}
+          <div className='flex flex-wrap items-center gap-1.5'>
+            <Badge className={getTypeColor(invoice.type)}>
+              {t(invoice.type)}
+            </Badge>
+            <Badge variant='secondary' className='gap-1 tabular-nums'>
+              {t('Total Items')}: {invoice.items.filter((i) => i.productId && i.name).length}
+            </Badge>
+            <Badge variant='secondary' className='gap-1 tabular-nums'>
+              {t('total_quantity') || 'Total Qty'}: {invoice.items.reduce((sum, i) => sum + (i.productId && i.name ? i.quantity : 0), 0)}
+            </Badge>
           </div>
         </CardContent>
       </Card>
 
-      {/* Totals and Payment — left column (compact mode), below the details card */}
-      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-2')}>
-        <CardContent className='p-4 space-y-4'>
-          {/* Discount Control */}
-          <div className='flex items-center justify-between gap-6'>
-            <Label htmlFor="discount" className='whitespace-nowrap text-muted-foreground'>{t('discount')}:</Label>
-            <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-              <Input
-                id="discount"
-                type="text"
-                inputMode="decimal"
-                showVoiceInput={false}
-                value={invoice.discountValue || ''}
-                onChange={(e) => handleDiscountChange(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                placeholder="0"
-                className='h-8 w-20 text-sm font-semibold border-0 rounded-none text-right focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-              />
-              <button
-                type="button"
-                onClick={() => updateDiscount({ type: invoice.discountType === 'percentage' ? 'fixed' : 'percentage' })}
-                title='Click to switch between Rs and % discount'
-                className='px-2 h-8 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
-              >
-                {invoice.discountType === 'percentage' ? '%' : 'Rs'}
-              </button>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Totals Display */}
-          <div className='space-y-2'>
-            <div className='flex justify-between gap-6'>
-              <span className='text-muted-foreground'>{t('subtotal')}:</span>
-              <span className='tabular-nums font-medium'>Rs{invoice.subtotal.toFixed(2)}</span>
-            </div>
-            {(() => {
-              const itemDiscountTotal = invoice.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
-              return itemDiscountTotal > 0 ? (
-                <div className='flex justify-between gap-6 text-sm text-green-600'>
-                  <span>{t('Item Discounts')}:</span>
-                  <span className='tabular-nums'>-Rs{itemDiscountTotal.toFixed(2)}</span>
-                </div>
-              ) : null
-            })()}
-            {invoice.discount > 0 && (
-              <div className='flex justify-between gap-6 text-red-600'>
-                <span>{t('discount')}:</span>
-                <span className='tabular-nums'>-Rs{invoice.discount.toFixed(2)}</span>
-              </div>
-            )}
-            {invoice.tax > 0 && (
-              <div className='flex justify-between gap-6'>
-                <span className='text-muted-foreground'>
-                  {t('tax')} ({taxRate}%):
-                </span>
-                <span className='tabular-nums'>Rs{invoice.tax.toFixed(2)}</span>
-              </div>
-            )}
-            <Separator />
-            <div className='flex justify-between gap-6 font-bold text-lg'>
-              <span>{t('total')}:</span>
-              <span className='tabular-nums'>Rs{invoice.total.toFixed(2)}</span>
-            </div>
-            {(() => {
-              const itemDiscountTotal = invoice.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
-              const totalSaved = itemDiscountTotal + invoice.discount
-              return totalSaved > 0 ? (
-                <div className='flex justify-between gap-6 text-xs font-medium text-green-600'>
-                  <span>{t('You Saved')}:</span>
-                  <span className='tabular-nums'>Rs{totalSaved.toFixed(2)}</span>
-                </div>
-              ) : null
-            })()}
-            
-            {/* Profit Display */}
-            {/* <div className='flex justify-between items-center'> */}
-            <div className='justify-between items-center hidden'>
-              <span className='text-green-600'>{t('total_profit')}:</span>
-              <div className='flex items-center gap-2'>
-                <span className='text-green-600 font-medium'>
-                  Rs{invoice.totalProfit.toFixed(2)}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowProfitDetails(!showProfitDetails)}
-                >
-                  <Calculator className='h-4 w-4' />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
+      {/* Payment & Amount — right column (compact mode), below the Summary card */}
+      <Card>
+        <CardHeader className='pb-3'>
+          <CardTitle className='flex items-center gap-2 text-base'>
+            <Banknote className='h-4 w-4 text-muted-foreground' />
+            {t('Payment & Amount')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className='p-4 pt-0 space-y-4'>
           {/* Payment Details */}
           <div className='space-y-4'>
-            <div className='flex items-center gap-2'>
-              <Badge className={getTypeColor(invoice.type)}>
-                {t(invoice.type)}
-              </Badge>
-            </div>
-
             {/* Payment Method selector — gated by SHOW_INVOICE_PAYMENT_METHOD_UI */}
             {SHOW_INVOICE_PAYMENT_METHOD_UI && invoice.type !== 'pending' && invoice.type !== 'quotation' && (
               <div className='space-y-3'>
@@ -3119,60 +3698,58 @@ export function InvoicePanel({
               />
             )}
 
-            {invoice.type !== 'pending' && invoice.type !== 'quotation' && (
-              <>
-                {/* Cash Received & Change Calculator — only for pure-cash payments. Hidden once
-                    splitting is on: "amount given by customer" no longer means the whole total
-                    was cash, so the change math would be wrong. */}
-                {invoice.type === 'cash' && (!invoice.paymentMethod || invoice.paymentMethod === 'cash') && !invoice.splitPaymentMethod && (
-                  <div className='space-y-3 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'>
-                    <h4 className='text-sm font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2'>
-                      <Banknote className='h-4 w-4' />
-                      Cash Received
-                    </h4>
-                    <div>
-                      <Label className='text-xs text-muted-foreground'>Amount Given by Customer (Rs)</Label>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        showVoiceInput={false}
-                        value={cashReceivedInput}
-                        onChange={(e) => setCashReceivedInput(e.target.value)}
-                        placeholder={invoice.total.toFixed(2)}
-                        className='mt-1 text-base font-semibold'
-                        onFocus={(e) => e.target.select()}
-                      />
+            {/* Cash Received & Change Calculator — brought back for catalog-shown mode
+                only, per request; the compact catalog-hidden layout dropped it earlier in
+                favor of editing Paid Amount directly. Only for pure-cash payments, and
+                hidden once splitting is on: "amount given by customer" no longer means the
+                whole total was cash, so the change math would be wrong. */}
+            {showProductCatalog && invoice.type !== 'pending' && invoice.type !== 'quotation' && invoice.type === 'cash' && (!invoice.paymentMethod || invoice.paymentMethod === 'cash') && !invoice.splitPaymentMethod && (
+              <div className='space-y-3 p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'>
+                <h4 className='text-sm font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2'>
+                  <Banknote className='h-4 w-4' />
+                  Cash Received
+                </h4>
+                <div>
+                  <Label className='text-xs text-muted-foreground'>Amount Given by Customer (Rs)</Label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    showVoiceInput={false}
+                    value={cashReceivedInput}
+                    onChange={(e) => setCashReceivedInput(e.target.value)}
+                    placeholder={invoice.total.toFixed(2)}
+                    className='mt-1 text-base font-semibold'
+                    onFocus={(e) => e.target.select()}
+                  />
+                </div>
+                {parseFloat(cashReceivedInput) > 0 && (
+                  <div className='space-y-2 pt-2 border-t border-emerald-200 dark:border-emerald-700'>
+                    <div className='flex justify-between text-sm'>
+                      <span className='text-muted-foreground'>Total Bill:</span>
+                      <span className='font-semibold'>Rs{invoice.total.toFixed(2)}</span>
                     </div>
-                    {parseFloat(cashReceivedInput) > 0 && (
-                      <div className='space-y-2 pt-2 border-t border-emerald-200 dark:border-emerald-700'>
-                        <div className='flex justify-between text-sm'>
-                          <span className='text-muted-foreground'>Total Bill:</span>
-                          <span className='font-semibold'>Rs{invoice.total.toFixed(2)}</span>
-                        </div>
-                        <div className='flex justify-between text-sm'>
-                          <span className='text-muted-foreground'>Amount Received:</span>
-                          <span className='font-semibold text-emerald-700'>Rs{parseFloat(cashReceivedInput).toFixed(2)}</span>
-                        </div>
-                        {parseFloat(cashReceivedInput) >= invoice.total ? (
-                          <div className='flex justify-between items-center p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700'>
-                            <span className='font-bold text-emerald-800 dark:text-emerald-200'>Change to Return:</span>
-                            <span className='font-bold text-xl text-emerald-700 dark:text-emerald-300'>
-                              Rs{(parseFloat(cashReceivedInput) - invoice.total).toFixed(2)}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className='flex justify-between items-center p-2.5 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'>
-                            <span className='font-bold text-red-800 dark:text-red-200'>Amount Short:</span>
-                            <span className='font-bold text-xl text-red-600 dark:text-red-400'>
-                              Rs{(invoice.total - parseFloat(cashReceivedInput)).toFixed(2)}
-                            </span>
-                          </div>
-                        )}
+                    <div className='flex justify-between text-sm'>
+                      <span className='text-muted-foreground'>Amount Received:</span>
+                      <span className='font-semibold text-emerald-700'>Rs{parseFloat(cashReceivedInput).toFixed(2)}</span>
+                    </div>
+                    {parseFloat(cashReceivedInput) >= invoice.total ? (
+                      <div className='flex justify-between items-center p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700'>
+                        <span className='font-bold text-emerald-800 dark:text-emerald-200'>Change to Return:</span>
+                        <span className='font-bold text-xl text-emerald-700 dark:text-emerald-300'>
+                          Rs{(parseFloat(cashReceivedInput) - invoice.total).toFixed(2)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className='flex justify-between items-center p-2.5 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'>
+                        <span className='font-bold text-red-800 dark:text-red-200'>Amount Short:</span>
+                        <span className='font-bold text-xl text-red-600 dark:text-red-400'>
+                          Rs{(invoice.total - parseFloat(cashReceivedInput)).toFixed(2)}
+                        </span>
                       </div>
                     )}
                   </div>
                 )}
-              </>
+              </div>
             )}
 
             {/* Customer Balance Display - After Payment Details */}
@@ -3216,16 +3793,6 @@ export function InvoicePanel({
               </>
             )}
           </div>
-
-          {/* Terms & Conditions */}
-          <RichTextEditor
-            value={invoice.notes || ''}
-            onChange={(notes) => setInvoice((prev) => ({ ...prev, notes }))}
-            fieldLabel={t('terms_and_conditions')}
-            addButtonLabel={t('add_terms_and_conditions')}
-            placeholder={t('terms_and_conditions_placeholder')}
-            defaultExpanded={Boolean(invoice.notes?.trim())}
-          />
 
           {/* Save Buttons */}
           {isEditing && editingInvoice?.type === 'quotation' && (
@@ -3293,150 +3860,164 @@ export function InvoicePanel({
               </>
             )}
 
-            {/* Send After Save selector */}
-            <div className='rounded-lg border bg-muted/40 p-3 space-y-2'>
-              <p className='text-xs font-medium text-muted-foreground'>
-                Also send after saving:
-                {isSendingSms && (
-                  <span className='ml-2 inline-flex items-center gap-1 text-blue-600'>
-                    <Loader2 className='h-3 w-3 animate-spin' /> Sending SMS…
-                  </span>
+            {/* Send After Save selector — pending-only: it's a goods-handoff receipt
+                (see isPendingHandoff in handleSaveInvoice), not a general notifier, so
+                it stays out of the way for cash/credit/quotation invoices entirely. */}
+            {invoice.type === 'pending' && (
+              <div className='rounded-lg border bg-muted/40 p-3 space-y-2'>
+                <p className='text-xs font-medium text-muted-foreground'>
+                  Also send after saving:
+                  {isSendingSms && (
+                    <span className='ml-2 inline-flex items-center gap-1 text-blue-600'>
+                      <Loader2 className='h-3 w-3 animate-spin' /> Sending SMS…
+                    </span>
+                  )}
+                  {isWhatsAppSending && (
+                    <span className='ml-2 inline-flex items-center gap-1 text-green-600'>
+                      <Loader2 className='h-3 w-3 animate-spin' /> Sending WhatsApp…
+                    </span>
+                  )}
+                </p>
+                {/* Icon-only — labels made this row overflow the 300px sidebar column (see
+                    git history), and four short-word buttons read fine as icons + a
+                    tooltip once each icon is visually distinct from the others. */}
+                <div className='flex gap-1'>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={sendMethod === 'none' ? 'default' : 'outline'}
+                    title="None — don't send anything"
+                    className='h-8 flex-1 px-0'
+                    onClick={() => {
+                      setSendMethod('none')
+                      localStorage.setItem('invoiceSendMethod', 'none')
+                    }}
+                  >
+                    <Ban className='h-3.5 w-3.5' />
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={sendMethod === 'sms' ? 'default' : 'outline'}
+                    title='SMS'
+                    className={cn('h-8 flex-1 px-0', sendMethod === 'sms' && 'bg-blue-600 hover:bg-blue-700 border-blue-600')}
+                    onClick={() => {
+                      setSendMethod('sms')
+                      localStorage.setItem('invoiceSendMethod', 'sms')
+                    }}
+                  >
+                    <MessageSquare className='h-3.5 w-3.5' />
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={sendMethod === 'whatsapp' ? 'default' : 'outline'}
+                    title='WhatsApp'
+                    className={cn('h-8 flex-1 px-0', sendMethod === 'whatsapp' && 'border-[#25d366]')}
+                    style={sendMethod === 'whatsapp' ? { backgroundColor: '#25d366', borderColor: '#25d366' } : {}}
+                    onClick={() => {
+                      setSendMethod('whatsapp')
+                      localStorage.setItem('invoiceSendMethod', 'whatsapp')
+                    }}
+                  >
+                    <Send className='h-3.5 w-3.5' />
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant={sendMethod === 'both' ? 'default' : 'outline'}
+                    title='Both — SMS and WhatsApp'
+                    className={cn('h-8 flex-1 gap-0.5 px-0', sendMethod === 'both' && 'bg-purple-600 hover:bg-purple-700 border-purple-600')}
+                    onClick={() => {
+                      setSendMethod('both')
+                      localStorage.setItem('invoiceSendMethod', 'both')
+                    }}
+                  >
+                    <MessageSquare className='h-3.5 w-3.5' />
+                    <Send className='h-3.5 w-3.5' />
+                  </Button>
+                </div>
+                {sendMethod !== 'none' && (
+                  <p className='text-xs text-muted-foreground'>
+                    {sendMethod === 'sms' && 'Every save button will also send an SMS to the customer.'}
+                    {sendMethod === 'whatsapp' && 'Every save button will also send the invoice PDF via WhatsApp.'}
+                    {sendMethod === 'both' && 'Every save button will also send both an SMS and the invoice PDF via WhatsApp.'}
+                  </p>
                 )}
-                {isWhatsAppSending && (
-                  <span className='ml-2 inline-flex items-center gap-1 text-green-600'>
-                    <Loader2 className='h-3 w-3 animate-spin' /> Sending WhatsApp…
-                  </span>
-                )}
-              </p>
-              <div className='flex gap-2'>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={sendMethod === 'none' ? 'default' : 'outline'}
-                  className='flex-1'
-                  onClick={() => {
-                    setSendMethod('none')
-                    localStorage.setItem('invoiceSendMethod', 'none')
-                  }}
-                >
-                  None
-                </Button>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={sendMethod === 'sms' ? 'default' : 'outline'}
-                  className={cn('flex-1 gap-1.5', sendMethod === 'sms' && 'bg-blue-600 hover:bg-blue-700 border-blue-600')}
-                  onClick={() => {
-                    setSendMethod('sms')
-                    localStorage.setItem('invoiceSendMethod', 'sms')
-                  }}
-                >
-                  <MessageSquare className='h-3.5 w-3.5' />
-                  SMS
-                </Button>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={sendMethod === 'whatsapp' ? 'default' : 'outline'}
-                  className={cn('flex-1 gap-1.5', sendMethod === 'whatsapp' && 'border-[#25d366]')}
-                  style={sendMethod === 'whatsapp' ? { backgroundColor: '#25d366', borderColor: '#25d366' } : {}}
-                  onClick={() => {
-                    setSendMethod('whatsapp')
-                    localStorage.setItem('invoiceSendMethod', 'whatsapp')
-                  }}
-                >
-                  <Send className='h-3.5 w-3.5' />
-                  WhatsApp
-                </Button>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={sendMethod === 'both' ? 'default' : 'outline'}
-                  className={cn('flex-1 gap-1.5', sendMethod === 'both' && 'bg-purple-600 hover:bg-purple-700 border-purple-600')}
-                  onClick={() => {
-                    setSendMethod('both')
-                    localStorage.setItem('invoiceSendMethod', 'both')
-                  }}
-                >
-                  <MessageSquare className='h-3.5 w-3.5' />
-                  Both
-                </Button>
               </div>
-              {sendMethod !== 'none' && (
-                <p className='text-xs text-muted-foreground'>
-                  {sendMethod === 'sms' && 'Every save button will also send an SMS to the customer.'}
-                  {sendMethod === 'whatsapp' && 'Every save button will also send the invoice PDF via WhatsApp.'}
-                  {sendMethod === 'both' && 'Every save button will also send both an SMS and the invoice PDF via WhatsApp.'}
-                </p>
-              )}
-              {(sendMethod === 'whatsapp' || sendMethod === 'both') && invoice.type !== 'pending' && (
-                <p className='text-xs text-amber-600 dark:text-amber-500'>
-                  This invoice is {t(invoice.type)}, not pending — WhatsApp won't be sent this time{sendMethod === 'both' ? ' (SMS still will be)' : ''}.
-                </p>
-              )}
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Fast-invoicing buttons bar — catalog hidden means the panel is a two-column
-          layout (details+totals on the left, items on the right); the primary actions are
-          always reachable without scrolling, same idea as the Fast Billing checkout panel.
-          The full Save/Print controls in the totals card above still work as usual.
-          Portaled into a footer slot the page keeps outside the cards' scroll region — a
-          plain `position: sticky` bar only shows once you've scrolled far enough for it,
-          which isn't "always visible" when the cards column alone is taller than the
-          viewport. Falls back to rendering inline (with its own sticky positioning) until
-          that slot exists. */}
+      </div>
+
+      {/* Fast-invoicing header actions — catalog hidden means the panel is a multi-column
+          layout; the primary actions are always reachable without scrolling, same idea as
+          the Fast Billing checkout panel. The full Save/Print controls in the Payment &
+          Amount card above still work as usual (catalog-visible mode only). Portaled into a
+          slot the page places in its header (see index.tsx) — a plain `position: sticky`
+          bar only shows once you've scrolled far enough for it, which isn't "always
+          visible" when the cards column alone is taller than the viewport. Falls back to
+          rendering inline (with its own sticky positioning) until that slot exists. */}
       {!showProductCatalog && (() => {
+        const disabled = !invoice.customerId || invoice.items.length === 0 || savingType !== null
         const bar = (
-          <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Button type='button' onClick={previewInvoice} size='sm' variant='ghost' disabled={invoice.items.length === 0} className='gap-1.5'>
+              <Eye className='h-4 w-4' />
+              {t('Preview')}
+            </Button>
+            <Button
+              type='button'
+              onClick={() => handleSaveInvoice('none')}
+              size='sm'
+              variant='outline'
+              disabled={disabled}
+              className='gap-1.5'
+            >
+              {savingType === 'none' ? (
+                <Loader2 className='h-4 w-4 animate-spin' />
+              ) : (
+                <Save className='h-4 w-4' />
+              )}
+              {isEditing ? t('update_invoice') : t('Save Draft')}
+            </Button>
+            <PrintFormatButton
+              onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+              defaultPaperSize={defaultPaperSize}
+              allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+              size='sm'
+              variant='default'
+              disabled={disabled}
+              mainButtonClassName='bg-emerald-600 hover:bg-emerald-700'
+              mainButtonContent={
+                savingType !== null && savingType !== 'none' ? (
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                ) : (
+                  <>
+                    <Printer className='h-4 w-4' />
+                    <span className='ml-1.5'>{isEditing ? t('update_and_print_receipt') : t('Save & Print Invoice')}</span>
+                  </>
+                )
+              }
+            />
+          </div>
+        )
+        if (stickyActionsContainer) return createPortal(bar, stickyActionsContainer)
+        // No header slot yet — fall back to a floating bottom bar (with item count/total
+        // for context, since it's not sitting next to the page title in this fallback).
+        return (
+          <div className='sticky bottom-3 z-20 lg:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
             <div className='flex items-baseline gap-2 pl-1'>
               <span className='text-xs text-muted-foreground'>
                 {invoice.items.filter((i) => i.productId && i.name).length} {t('invoice_items')}
               </span>
               <span className='text-lg font-bold tabular-nums'>Rs{invoice.total.toFixed(2)}</span>
             </div>
-            <div className='flex items-center gap-2'>
-              <Button
-                type='button'
-                onClick={() => handleSaveInvoice('none')}
-                size='sm'
-                variant='outline'
-                disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
-                className='gap-1.5'
-              >
-                {savingType === 'none' ? (
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                ) : (
-                  <Save className='h-4 w-4' />
-                )}
-                {isEditing ? t('update_invoice') : t('save_invoice')}
-              </Button>
-              <PrintFormatButton
-                onPrint={(paperSize) => handleSaveInvoice(paperSize)}
-                defaultPaperSize={defaultPaperSize}
-                allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
-                size='sm'
-                variant='default'
-                disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
-                mainButtonContent={
-                  savingType !== null && savingType !== 'none' ? (
-                    <Loader2 className='h-4 w-4 animate-spin' />
-                  ) : (
-                    <>
-                      <Printer className='h-4 w-4' />
-                      <span className='ml-1.5'>{isEditing ? t('update_and_print_receipt') : t('save_and_print_receipt')}</span>
-                    </>
-                  )
-                }
-              />
-            </div>
+            {bar}
           </div>
         )
-        return stickyActionsContainer
-          ? createPortal(bar, stickyActionsContainer)
-          : <div className='sticky bottom-3 z-20 lg:col-span-2'>{bar}</div>
       })()}
 
       <EntityQuickCreateDialogs
