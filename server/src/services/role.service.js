@@ -8,15 +8,64 @@ const {
 } = require('../config/permission-registry');
 
 /**
+ * Whether a role is visible/usable within a given org+branch scope.
+ * System roles are always accessible. Custom roles require a matching organizationId,
+ * and if the role has a branchId set, it must match the scope's branchId (unless the
+ * scope has no branchId — an org-level view can see every branch's roles).
+ * @param {Object} role
+ * @param {{organizationId?: string, branchId?: string}} scope
+ * @returns {boolean}
+ */
+const isRoleAccessible = (role, scope = {}) => {
+  if (role.isSystemRole) return true;
+  if (!scope.organizationId || String(role.organizationId) !== String(scope.organizationId)) return false;
+  if (role.branchId && scope.branchId && String(role.branchId) !== String(scope.branchId)) return false;
+  return true;
+};
+
+/**
+ * Mongo filter selecting every role visible within a scope: all system roles, plus the
+ * org's own org-wide roles, plus (if a branch is active) that org's roles for this branch.
+ * @param {{organizationId?: string, branchId?: string}} scope
+ */
+const buildTenantFilter = (scope = {}) => {
+  const clauses = [{ isSystemRole: true }];
+  if (scope.organizationId) {
+    clauses.push(
+      scope.branchId
+        ? { organizationId: scope.organizationId, $or: [{ branchId: null }, { branchId: scope.branchId }] }
+        : { organizationId: scope.organizationId }
+    );
+  }
+  return { $or: clauses };
+};
+
+/**
  * Create a role
  * @param {Object} roleBody
+ * @param {{organizationId: string, branchId?: string}} scope
  * @returns {Promise<Role>}
  */
-const createRole = async (roleBody) => {
-  if (await Role.isNameTaken(roleBody.name)) {
+const createRole = async (roleBody, scope = {}) => {
+  if (!scope.organizationId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Organization context is required to create a role');
+  }
+  const { visibility, ...rest } = roleBody;
+  if (visibility === 'branch' && !scope.branchId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Select a branch to create a branch-specific role');
+  }
+  const payload = {
+    ...rest,
+    isSystemRole: false,
+    organizationId: scope.organizationId,
+    branchId: visibility === 'branch' ? scope.branchId : null,
+  };
+  if (await Role.isNameTaken(payload.name, { isSystemRole: true })) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'A system role with this name already exists');
+  }
+  if (await Role.isNameTaken(payload.name, { organizationId: payload.organizationId, branchId: payload.branchId })) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Role name already taken');
   }
-  const payload = { ...roleBody };
   if (payload.permissions) {
     payload.permissions = sanitizePermissions(payload.permissions);
   }
@@ -30,52 +79,74 @@ const createRole = async (roleBody) => {
  * @param {string} [options.sortBy] - Sort option in the format: sortField:(desc|asc)
  * @param {number} [options.limit] - Maximum number of results per page (default = 10)
  * @param {number} [options.page] - Current page (default = 1)
+ * @param {{organizationId?: string, branchId?: string}} scope
  * @returns {Promise<QueryResult>}
  */
-const queryRoles = async (filter, options) => {
-  const roles = await Role.paginate(filter, options);
+const queryRoles = async (filter, options, scope = {}) => {
+  const roles = await Role.paginate({ $and: [buildTenantFilter(scope), filter] }, options);
   return roles;
 };
 
 /**
- * Get role by id
+ * Get role by id, scoped to the requester's org/branch (system roles always visible)
  * @param {ObjectId} id
+ * @param {{organizationId?: string, branchId?: string}} scope
  * @returns {Promise<Role>}
  */
-const getRoleById = async (id) => {
-  return Role.findById(id);
+const getRoleById = async (id, scope = {}) => {
+  const role = await Role.findById(id);
+  if (!role || !isRoleAccessible(role, scope)) {
+    return null;
+  }
+  return role;
 };
 
 /**
- * Get role by name
+ * Get a *system* role by name (used to look up built-in defaults like "Admin"/"Manager").
+ * Deliberately restricted to system roles so a tenant's identically-named custom role
+ * can never be mistaken for the platform default.
  * @param {string} name
  * @returns {Promise<Role>}
  */
 const getRoleByName = async (name) => {
-  return Role.findOne({ name });
+  return Role.findOne({ name, isSystemRole: true });
 };
 
 /**
  * Update role by id
  * @param {ObjectId} roleId
  * @param {Object} updateBody
+ * @param {{organizationId?: string, branchId?: string}} scope
  * @returns {Promise<Role>}
  */
-const updateRoleById = async (roleId, updateBody) => {
-  const role = await getRoleById(roleId);
+const updateRoleById = async (roleId, updateBody, scope = {}) => {
+  const role = await getRoleById(roleId, scope);
   if (!role) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Role not found');
   }
   if (role.isSystemRole) {
     throw new ApiError(httpStatus.FORBIDDEN, 'Cannot modify system roles');
   }
-  if (updateBody.name && (await Role.isNameTaken(updateBody.name, roleId))) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Role name already taken');
+  const { visibility, ...rest } = updateBody;
+  if (visibility) {
+    if (visibility === 'branch' && !scope.branchId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Select a branch to scope this role to');
+    }
+    rest.branchId = visibility === 'branch' ? scope.branchId : null;
   }
-  if (updateBody.permissions) {
-    updateBody.permissions = sanitizePermissions(updateBody.permissions);
+  if (rest.name) {
+    const nameScope = { organizationId: role.organizationId, branchId: rest.branchId ?? role.branchId };
+    if (await Role.isNameTaken(rest.name, { isSystemRole: true })) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'A system role with this name already exists');
+    }
+    if (await Role.isNameTaken(rest.name, nameScope, roleId)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Role name already taken');
+    }
   }
-  Object.assign(role, updateBody);
+  if (rest.permissions) {
+    rest.permissions = sanitizePermissions(rest.permissions);
+  }
+  Object.assign(role, rest);
   await role.save();
   return role;
 };
@@ -83,10 +154,11 @@ const updateRoleById = async (roleId, updateBody) => {
 /**
  * Delete role by id
  * @param {ObjectId} roleId
+ * @param {{organizationId?: string, branchId?: string}} scope
  * @returns {Promise<Role>}
  */
-const deleteRoleById = async (roleId) => {
-  const role = await getRoleById(roleId);
+const deleteRoleById = async (roleId, scope = {}) => {
+  const role = await getRoleById(roleId, scope);
   if (!role) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Role not found');
   }
@@ -107,10 +179,11 @@ const deleteRoleById = async (roleId) => {
  * Update role permissions
  * @param {ObjectId} roleId
  * @param {Object} permissions
+ * @param {{organizationId?: string, branchId?: string}} scope
  * @returns {Promise<Role>}
  */
-const updateRolePermissions = async (roleId, permissions) => {
-  const role = await getRoleById(roleId);
+const updateRolePermissions = async (roleId, permissions, scope = {}) => {
+  const role = await getRoleById(roleId, scope);
   if (!role) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Role not found');
   }
@@ -147,10 +220,10 @@ const createDefaultRoles = async () => {
         viewPurchaseOrders: true, createPurchaseOrders: true, editPurchaseOrders: true, receivePurchaseOrders: true,
         viewSalesReturns: true, createSalesReturns: true, editSalesReturns: true,
         viewPurchaseReturns: true, createPurchaseReturns: true, editPurchaseReturns: true,
-        viewCustomers: true, createCustomers: true, editCustomers: true,
-        viewSuppliers: true, createSuppliers: true, editSuppliers: true,
-        viewCategories: true, createCategories: true, editCategories: true,
-        viewBrands: true, createBrands: true, editBrands: true,
+        viewCustomers: true, createCustomers: true, editCustomers: true, deleteCustomers: true,
+        viewSuppliers: true, createSuppliers: true, editSuppliers: true, deleteSuppliers: true,
+        viewCategories: true, createCategories: true, editCategories: true, deleteCategories: true,
+        viewBrands: true, createBrands: true, editBrands: true, deleteBrands: true,
         viewAccounting: true, manageExpenses: true, manageLedgers: true, managePersonalWallet: true,
         viewCashBook: true, manageCashBook: true, viewCashRegister: true, manageCashRegister: true,
         viewAccountsSystem: true, manageAccountsSystem: true,
@@ -175,6 +248,14 @@ const createDefaultRoles = async () => {
         viewSalesmen: true, createSalesmen: true, editSalesmen: true,
         viewCommissionRules: true, manageCommissionRules: true,
         viewCommissionLedger: true, manageCommissionPayments: true,
+        viewCommunicationLog: true, createCommunicationLog: true, editCommunicationLog: true, deleteCommunicationLog: true,
+        viewReminders: true, createReminders: true, editReminders: true, deleteReminders: true,
+        viewWhatsapp: true, manageWhatsapp: true,
+        viewSmsLog: true,
+        viewAiAssistant: true,
+        viewInsights: true,
+        viewPurchaseSuggestions: true,
+        viewBarcodeGenerator: true,
         viewDashboard: true,
       },
       isSystemRole: true,
@@ -211,6 +292,11 @@ const createDefaultRoles = async () => {
         viewSalesmen: true,
         viewCommissionRules: true,
         viewCommissionLedger: true,
+        viewCommunicationLog: true,
+        viewReminders: true,
+        viewWhatsapp: true,
+        viewSmsLog: true,
+        viewBarcodeGenerator: true,
         viewDashboard: true,
       },
       isSystemRole: true,
@@ -220,10 +306,16 @@ const createDefaultRoles = async () => {
 
   for (const roleData of defaultRoles) {
     await Role.findOneAndUpdate(
-      { name: roleData.name },
+      { name: roleData.name, isSystemRole: true },
       {
         $set: { permissions: roleData.permissions, isActive: roleData.isActive },
-        $setOnInsert: { name: roleData.name, description: roleData.description, isSystemRole: roleData.isSystemRole },
+        $setOnInsert: {
+          name: roleData.name,
+          description: roleData.description,
+          isSystemRole: roleData.isSystemRole,
+          organizationId: null,
+          branchId: null,
+        },
       },
       { upsert: true, new: true }
     );

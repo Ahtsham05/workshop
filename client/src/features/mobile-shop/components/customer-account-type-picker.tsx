@@ -31,6 +31,7 @@ import {
 import { Check, ChevronsUpDown, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import { cn } from '@/lib/utils'
 import {
   useGetCustomerAccountTypesQuery,
@@ -62,6 +63,8 @@ export function CustomerAccountTypePicker({
   triggerClassName,
 }: Props) {
   const { t } = useLanguage()
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission('manageLoadManagement')
   const [open, setOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
@@ -190,81 +193,87 @@ export function CustomerAccountTypePicker({
                         {value === item.slug && (
                           <Check className="h-4 w-4 shrink-0 text-primary" />
                         )}
-                        <div
-                          className="flex shrink-0 items-center gap-0.5"
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }}
-                        >
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title={t('Edit account type')}
-                            onClick={(e) => {
+                        {canManage ? (
+                          <div
+                            className="flex shrink-0 items-center gap-0.5"
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => {
                               e.preventDefault()
                               e.stopPropagation()
-                              setOpen(false)
-                              openEdit(item)
                             }}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          {!item.isDefault && (
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              title={t('Delete account type')}
+                              className="h-7 w-7"
+                              title={t('Edit account type')}
                               onClick={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
                                 setOpen(false)
-                                setToDelete(item)
+                                openEdit(item)
                               }}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                          )}
-                        </div>
+                            {!item.isDefault && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                title={t('Delete account type')}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setOpen(false)
+                                  setToDelete(item)
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     </CommandItem>
                   ))}
                 </CommandGroup>
-                <CommandSeparator />
-                <CommandGroup heading={t('Create new')}>
-                  <div className="flex items-center gap-2 px-2 py-1.5">
-                    <Input
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      placeholder={t('New account type name')}
-                      className="h-7 text-sm"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleCreate()
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 shrink-0 px-2"
-                      onClick={handleCreate}
-                      disabled={creating || !newName.trim()}
-                    >
-                      {creating ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Plus className="h-3 w-3" />
-                      )}
-                    </Button>
-                  </div>
-                </CommandGroup>
+                {canManage ? (
+                  <>
+                    <CommandSeparator />
+                    <CommandGroup heading={t('Create new')}>
+                      <div className="flex items-center gap-2 px-2 py-1.5">
+                        <Input
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                          placeholder={t('New account type name')}
+                          className="h-7 text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleCreate()
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 shrink-0 px-2"
+                          onClick={handleCreate}
+                          disabled={creating || !newName.trim()}
+                        >
+                          {creating ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Plus className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </CommandGroup>
+                  </>
+                ) : null}
               </CommandList>
             </Command>
           </PopoverContent>

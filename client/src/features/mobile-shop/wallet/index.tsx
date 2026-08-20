@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { RootState } from '@/stores/store'
+import { usePermissions } from '@/context/permission-context'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { isMobileShopBusiness } from '@/lib/business-types'
 import { MobilePageShell } from '../components/mobile-page-shell'
@@ -96,6 +97,8 @@ const ACCOUNT_TYPE_BADGE_CLASS: Record<BankAccountType, string> = {
 }
 
 export default function WalletPage() {
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission('manageWallet')
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const isMobileShop = isMobileShopBusiness(org?.businessType ?? user?.businessType)
@@ -217,6 +220,7 @@ export default function WalletPage() {
       }
     >
       <div className='grid gap-6 lg:grid-cols-[1fr_2fr]'>
+        {canManage ? (
         <Card>
           <CardHeader>
             <CardTitle>{editingId ? 'Edit Bank Account' : 'Add Bank Account'}</CardTitle>
@@ -358,6 +362,7 @@ export default function WalletPage() {
             </form>
           </CardContent>
         </Card>
+        ) : null}
 
         <Card>
           <CardHeader>
@@ -453,7 +458,7 @@ export default function WalletPage() {
                                 <ScrollText className='h-4 w-4' />
                               </Link>
                             </Button>
-                            {wallet.accountType !== 'cash' && (
+                            {wallet.accountType !== 'cash' && canManage && (
                               <>
                                 <Button
                                   size='sm'

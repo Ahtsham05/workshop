@@ -264,7 +264,11 @@ export default function InvoicePage() {
   const search = useSearch({ from: '/_authenticated/invoice/' })
 
   const initialView =
-    search.view === 'list' || search.view === 'convert-pending' ? search.view : 'create'
+    search.view === 'list' || search.view === 'convert-pending'
+      ? search.view
+      : hasExplicitPermission('createInvoices')
+        ? 'create'
+        : 'list'
   
   // View state management
   const [currentView, setCurrentView] = useState<'list' | 'create' | 'edit' | 'convert-pending'>(initialView)

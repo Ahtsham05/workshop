@@ -10,6 +10,7 @@ const createRole = {
     description: Joi.string().allow(''),
     permissions: permissionBodySchema,
     isActive: Joi.boolean(),
+    visibility: Joi.string().valid('organization', 'branch'),
   }),
 };
 
@@ -39,6 +40,7 @@ const updateRole = {
       description: Joi.string().allow(''),
       permissions: permissionBodySchema,
       isActive: Joi.boolean(),
+      visibility: Joi.string().valid('organization', 'branch'),
     })
     .min(1),
 };

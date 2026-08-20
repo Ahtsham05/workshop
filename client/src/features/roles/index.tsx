@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGetRolesQuery, useDeleteRoleMutation, Role } from '@/stores/roles.api';
+import { useGetMyBranchesQuery } from '@/stores/branch.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -32,6 +33,9 @@ export default function RolesPage() {
 
   const { data, isLoading, refetch } = useGetRolesQuery({ page, limit: 10 });
   const [deleteRole, { isLoading: isDeleting }] = useDeleteRoleMutation();
+  const { data: branches } = useGetMyBranchesQuery();
+
+  const branchName = (branchId?: string | null) => branches?.find((b) => b.id === branchId)?.name;
 
   const handleCreateRole = () => {
     setSelectedRole(null);
@@ -112,6 +116,7 @@ export default function RolesPage() {
                     <TableHead>{t('permissions') || 'Permissions'}</TableHead>
                     <TableHead>{t('status') || 'Status'}</TableHead>
                     <TableHead>{t('type') || 'Type'}</TableHead>
+                    <TableHead>{t('role_scope') || 'Scope'}</TableHead>
                     <TableHead className="text-right">{t('actions') || 'Actions'}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -142,6 +147,15 @@ export default function RolesPage() {
                           <Badge variant="outline">{t('system') || 'System'}</Badge>
                         ) : (
                           <Badge variant="outline">{t('custom') || 'Custom'}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {role.branchId ? (
+                          <Badge variant="secondary">
+                            {branchName(role.branchId) || t('branch_specific') || 'Branch'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">{t('all_branches') || 'All Branches'}</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -187,7 +201,7 @@ export default function RolesPage() {
                   ))}
                   {data?.results?.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         {t('no_roles_found') || 'No roles found'}
                       </TableCell>
                     </TableRow>

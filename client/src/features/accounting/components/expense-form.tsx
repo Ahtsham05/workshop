@@ -14,6 +14,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { CalendarIcon, Loader2, Save, X, Plus, Check, ChevronsUpDown, Pencil, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
@@ -74,6 +75,8 @@ export function ExpenseForm({
   isEdit = false,
 }: ExpenseFormProps) {
   const { t } = useLanguage()
+  const { hasExplicitPermission } = usePermissions()
+  const canManageExpenses = hasExplicitPermission('manageExpenses')
   const dispatch = useDispatch<AppDispatch>()
   const [loading, setLoading] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
@@ -298,74 +301,80 @@ export function ExpenseForm({
                             {formData.category === cat.name && (
                               <Check className="h-4 w-4 shrink-0 text-primary" />
                             )}
-                            <div
-                              className="flex shrink-0 items-center gap-0.5"
-                              onClick={(e) => e.stopPropagation()}
-                              onPointerDown={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                              }}
-                            >
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                title={t('Edit category')}
-                                onClick={(e) => {
+                            {canManageExpenses && (
+                              <div
+                                className="flex shrink-0 items-center gap-0.5"
+                                onClick={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => {
                                   e.preventDefault()
                                   e.stopPropagation()
-                                  setCatOpen(false)
-                                  openEditCategory(cat)
                                 }}
                               >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              {!cat.isDefault && (
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="h-7 w-7 text-destructive hover:text-destructive"
-                                  title={t('Delete category')}
+                                  className="h-7 w-7"
+                                  title={t('Edit category')}
                                   onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
                                     setCatOpen(false)
-                                    setCategoryToDelete(cat)
+                                    openEditCategory(cat)
                                   }}
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                              )}
-                            </div>
+                                {!cat.isDefault && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                    title={t('Delete category')}
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      setCatOpen(false)
+                                      setCategoryToDelete(cat)
+                                    }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </CommandItem>
                       ))}
                     </CommandGroup>
-                    <CommandSeparator />
-                    <CommandGroup heading={t('Create new')}>
-                      <div className="flex items-center gap-2 px-2 py-1.5">
-                        <Input
-                          value={newCatName}
-                          onChange={(e) => setNewCatName(e.target.value)}
-                          placeholder={t('New category name')}
-                          className="h-7 text-sm"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') { e.preventDefault(); handleCreateCategory() }
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-7 px-2 shrink-0"
-                          onClick={handleCreateCategory}
-                          disabled={creatingCat || !newCatName.trim()}
-                        >
-                          {creatingCat ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                        </Button>
-                      </div>
-                    </CommandGroup>
+                    {canManageExpenses && (
+                      <>
+                        <CommandSeparator />
+                        <CommandGroup heading={t('Create new')}>
+                          <div className="flex items-center gap-2 px-2 py-1.5">
+                            <Input
+                              value={newCatName}
+                              onChange={(e) => setNewCatName(e.target.value)}
+                              placeholder={t('New category name')}
+                              className="h-7 text-sm"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); handleCreateCategory() }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 px-2 shrink-0"
+                              onClick={handleCreateCategory}
+                              disabled={creatingCat || !newCatName.trim()}
+                            >
+                              {creatingCat ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                            </Button>
+                          </div>
+                        </CommandGroup>
+                      </>
+                    )}
                     </CommandList>
                   </Command>
                 </PopoverContent>
@@ -498,13 +507,15 @@ export function ExpenseForm({
               <X className="h-4 w-4 mr-2" />
               {t('Cancel')}
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t('Saving...')}</>
-              ) : (
-                <><Save className="h-4 w-4 mr-2" />{isEdit ? t('Update') : t('Create')}</>
-              )}
-            </Button>
+            {canManageExpenses && (
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t('Saving...')}</>
+                ) : (
+                  <><Save className="h-4 w-4 mr-2" />{isEdit ? t('Update') : t('Create')}</>
+                )}
+              </Button>
+            )}
           </div>
         </form>
 

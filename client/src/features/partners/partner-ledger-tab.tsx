@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Wallet, Banknote, Trash2 } from 'lucide-react';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog';
 import { PartnerPaymentDialog } from './partner-payment-dialog';
 import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
@@ -58,6 +59,8 @@ export function PartnerLedgerTab() {
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [entryToVoid, setEntryToVoid] = useState<PartnerProfitShareLedgerEntry | null>(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<string | undefined>(undefined);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
 
   const { data: partners } = useGetAllPartnersQuery();
   const { data, isLoading, refetch } = useGetPartnerProfitShareLedgerEntriesQuery({
@@ -171,7 +174,20 @@ export function PartnerLedgerTab() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {entry.reference || '—'}
+                        {entry.referenceId && entry.referenceModel === 'Invoice' ? (
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 font-normal text-blue-600 hover:text-blue-800"
+                            onClick={() => {
+                              setViewingInvoiceId(String(entry.referenceId));
+                              setInvoiceDialogOpen(true);
+                            }}
+                          >
+                            {entry.reference || entry.referenceId}
+                          </Button>
+                        ) : (
+                          entry.reference || '—'
+                        )}
                         {entryContext(entry) && <div className="text-xs">{entryContext(entry)}</div>}
                       </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground">
@@ -230,6 +246,8 @@ export function PartnerLedgerTab() {
           onSuccess={refetchAll}
         />
       )}
+
+      <InvoiceDetailDialog invoiceId={viewingInvoiceId} open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen} />
 
       <AlertDialog open={!!entryToVoid} onOpenChange={(open) => !open && setEntryToVoid(null)}>
         <AlertDialogContent>

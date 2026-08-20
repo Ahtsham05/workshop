@@ -9,7 +9,7 @@ const assignRolesToUsers = async () => {
     logger.info('Connected to MongoDB');
 
     // Find the Admin role
-    const adminRole = await Role.findOne({ name: 'Admin' });
+    const adminRole = await Role.findOne({ name: 'Admin', isSystemRole: true });
     
     if (!adminRole) {
       logger.error('Admin role not found. Please run initRoles.js first.');

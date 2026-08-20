@@ -80,6 +80,7 @@ import {
   isWalletOptionValue,
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options';
+import { usePermissions } from '@/context/permission-context';
 
 const STATUS_COLORS: Record<string, string> = {
   Pending: '#f59e0b',
@@ -106,6 +107,11 @@ const loadPayAffectsBooksPreference = () => {
 
 export default function PayrollManagement() {
   const { t } = useLanguage();
+  const { hasExplicitPermission } = usePermissions();
+  const canCreate = hasExplicitPermission('createPayroll');
+  const canEdit = hasExplicitPermission('managePayroll');
+  const canProcess = hasExplicitPermission('processPayroll');
+  const canDelete = hasExplicitPermission('deletePayroll');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState(new Date().getMonth() + 1);
@@ -740,10 +746,12 @@ export default function PayrollManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{t('Payroll Records')}</CardTitle>
-            <Button onClick={() => setShowGenerateDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('Generate Payroll')}
-            </Button>
+            {canCreate && (
+              <Button onClick={() => setShowGenerateDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('Generate Payroll')}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -850,14 +858,16 @@ export default function PayrollManagement() {
                           <TableCell className="font-semibold text-orange-600">{formatCurrency(monthTotals.advance)}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openEditDialog(payroll)}
-                              >
-                                <Pencil className="h-4 w-4 mr-1" />
-                                {t('Edit')}
-                              </Button>
+                              {canEdit && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openEditDialog(payroll)}
+                                >
+                                  <Pencil className="h-4 w-4 mr-1" />
+                                  {t('Edit')}
+                                </Button>
+                              )}
                               <Button size="sm" variant="outline">
                                 <Download className="h-4 w-4" />
                               </Button>
@@ -909,14 +919,16 @@ export default function PayrollManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{t('Employee Ledger')}</CardTitle>
-            <Button
-              variant="outline"
-              onClick={() => setShowLedgerPayDialog(true)}
-              disabled={!selectedEmployeeLedger}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              {t('Pay')}
-            </Button>
+            {canProcess && (
+              <Button
+                variant="outline"
+                onClick={() => setShowLedgerPayDialog(true)}
+                disabled={!selectedEmployeeLedger}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {t('Pay')}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1004,19 +1016,23 @@ export default function PayrollManagement() {
                                 <TableCell className="font-medium">{formatCurrency(entry.balance || 0)}</TableCell>
                                 <TableCell className="text-right">
                                   <div className="flex justify-end gap-2">
-                                    <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
-                                      <Pencil className="h-4 w-4 mr-1" />
-                                      {t('Edit')}
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-red-600 hover:text-red-700"
-                                      onClick={() => openLedgerDeleteDialog(entry)}
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-1" />
-                                      {t('Delete')}
-                                    </Button>
+                                    {canEdit && (
+                                      <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
+                                        <Pencil className="h-4 w-4 mr-1" />
+                                        {t('Edit')}
+                                      </Button>
+                                    )}
+                                    {canDelete && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-red-600 hover:text-red-700"
+                                        onClick={() => openLedgerDeleteDialog(entry)}
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-1" />
+                                        {t('Delete')}
+                                      </Button>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -1034,18 +1050,22 @@ export default function PayrollManagement() {
                       {t('Advances given to this employee and how much has been recovered. These do not appear in the Expense report.')}
                     </p>
                     <div className="flex gap-2">
-                      <Button variant="outline" onClick={() => setShowLedgerAdvanceDialog(true)}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        {t('Give Advance')}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowLedgerRecoverDialog(true)}
-                        disabled={!(Number(employeeLedgerSummary?.outstandingAdvance || 0) > 0)}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        {t('Recover Advance')}
-                      </Button>
+                      {canProcess && (
+                        <Button variant="outline" onClick={() => setShowLedgerAdvanceDialog(true)}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          {t('Give Advance')}
+                        </Button>
+                      )}
+                      {canProcess && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowLedgerRecoverDialog(true)}
+                          disabled={!(Number(employeeLedgerSummary?.outstandingAdvance || 0) > 0)}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          {t('Recover Advance')}
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -1111,19 +1131,23 @@ export default function PayrollManagement() {
                               <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
-                                  <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
-                                    <Pencil className="h-4 w-4 mr-1" />
-                                    {t('Edit')}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-red-600 hover:text-red-700"
-                                    onClick={() => openLedgerDeleteDialog(entry)}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-1" />
-                                    {t('Delete')}
-                                  </Button>
+                                  {canEdit && (
+                                    <Button size="sm" variant="outline" onClick={() => openLedgerEditDialog(entry)}>
+                                      <Pencil className="h-4 w-4 mr-1" />
+                                      {t('Edit')}
+                                    </Button>
+                                  )}
+                                  {canDelete && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-red-600 hover:text-red-700"
+                                      onClick={() => openLedgerDeleteDialog(entry)}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-1" />
+                                      {t('Delete')}
+                                    </Button>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>

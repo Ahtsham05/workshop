@@ -31,6 +31,7 @@ import {
 import { Check, ChevronsUpDown, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import { cn } from '@/lib/utils'
 import {
   useGetExpenseCategoriesQuery,
@@ -101,6 +102,8 @@ export function TransactionCategoryPicker({
   allowManage = true,
 }: Props) {
   const { t } = useLanguage()
+  const { hasExplicitPermission } = usePermissions()
+  const canManageCategories = hasExplicitPermission('manageExpenses')
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [newCatName, setNewCatName] = useState('')
@@ -223,7 +226,7 @@ export function TransactionCategoryPicker({
         />
         <span className="flex-1 truncate">{cat.name}</span>
         {value === cat.name && <Check className="h-4 w-4 shrink-0 text-primary" />}
-        {allowManage && isPersistedCategory(cat) ? (
+        {allowManage && canManageCategories && isPersistedCategory(cat) ? (
           <div
             className="flex shrink-0 items-center gap-0.5"
             onClick={(e) => e.stopPropagation()}
@@ -454,36 +457,40 @@ export function TransactionCategoryPicker({
                     {filteredCategories.map((cat) => renderCategoryItem(cat))}
                   </CommandGroup>
                 ) : null}
-                <CommandSeparator />
-                <CommandGroup heading={t('Create new')}>
-                  <div className="flex items-center gap-2 px-2 py-1.5">
-                    <Input
-                      value={newCatName}
-                      onChange={(e) => setNewCatName(e.target.value)}
-                      placeholder={t('New category name')}
-                      className="h-7 text-sm"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          void handleCreateCategory()
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 shrink-0 px-2"
-                      onClick={() => void handleCreateCategory()}
-                      disabled={creatingCat || !newCatName.trim()}
-                    >
-                      {creatingCat ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Plus className="h-3 w-3" />
-                      )}
-                    </Button>
-                  </div>
-                </CommandGroup>
+                {canManageCategories ? (
+                  <>
+                    <CommandSeparator />
+                    <CommandGroup heading={t('Create new')}>
+                      <div className="flex items-center gap-2 px-2 py-1.5">
+                        <Input
+                          value={newCatName}
+                          onChange={(e) => setNewCatName(e.target.value)}
+                          placeholder={t('New category name')}
+                          className="h-7 text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              void handleCreateCategory()
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 shrink-0 px-2"
+                          onClick={() => void handleCreateCategory()}
+                          disabled={creatingCat || !newCatName.trim()}
+                        >
+                          {creatingCat ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Plus className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </CommandGroup>
+                  </>
+                ) : null}
               </CommandList>
             </Command>
           </PopoverContent>

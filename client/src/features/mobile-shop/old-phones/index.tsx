@@ -50,6 +50,7 @@ import {
 } from '@/stores/usedPhoneBuyback.api'
 import type { RootState } from '@/stores/store'
 import { BuyUsedPhoneDialog } from './components/buy-used-phone-dialog'
+import { usePermissions } from '@/context/permission-context'
 import {
   GRADE_OPTIONS, gradeBadgeClasses, ACCESSORY_OPTIONS, ptaBadgeConfig, statusBadgeConfig,
   CHECKLIST_FIELDS, fmtAmt, getImeiSummary, daysSince,
@@ -94,6 +95,12 @@ const makeInitialSellForm = (): SellFormState => ({
 })
 
 export default function OldPhonesPage() {
+  const { hasPermission } = usePermissions()
+  const canBuy = hasPermission('buyUsedPhones')
+  const canSell = hasPermission('sellUsedPhones')
+  const canEdit = hasPermission('editUsedPhones')
+  const canDelete = hasPermission('deleteUsedPhones')
+
   const [buyDialogOpen, setBuyDialogOpen] = useState(false)
 
   const [search, setSearch] = useState('')
@@ -274,9 +281,11 @@ export default function OldPhonesPage() {
             </Button>
           )}
         </div>
-        <Button onClick={() => setBuyDialogOpen(true)}>
-          <ShoppingBag className='h-4 w-4 mr-1.5' /> Buy Phone
-        </Button>
+        {canBuy ? (
+          <Button onClick={() => setBuyDialogOpen(true)}>
+            <ShoppingBag className='h-4 w-4 mr-1.5' /> Buy Phone
+          </Button>
+        ) : null}
       </div>
 
       {/* ── Stats ── */}
@@ -363,7 +372,7 @@ export default function OldPhonesPage() {
                           <div className='text-xs text-muted-foreground'>Ask {fmtAmt(summary?.askingPrice ?? b.askingPrice)}</div>
                         ) : null}
                       </div>
-                      {status === 'in_stock' && (
+                      {status === 'in_stock' && canSell && (
                         <Button size='sm' className='mt-2 w-full' onClick={(e) => { e.stopPropagation(); openSell(b) }}>
                           <ShoppingCart className='h-3.5 w-3.5 mr-1' /> Sell
                         </Button>
@@ -423,7 +432,7 @@ export default function OldPhonesPage() {
                         </TableCell>
                         <TableCell>
                           <div className='flex items-center gap-1.5'>
-                            {status === 'in_stock' && (
+                            {status === 'in_stock' && canSell && (
                               <Button size='sm' onClick={(e) => { e.stopPropagation(); openSell(b) }}>
                                 <ShoppingCart className='h-3.5 w-3.5 mr-1' /> Sell
                               </Button>
@@ -632,7 +641,7 @@ export default function OldPhonesPage() {
                 </div>
               )}
 
-              {!detailIsSold && (
+              {!detailIsSold && canEdit && (
                 <div className='flex items-end gap-2 rounded-md border p-3'>
                   <div className='flex-1 space-y-1'>
                     <Label>Asking / Resale Price (Rs)</Label>
@@ -645,7 +654,7 @@ export default function OldPhonesPage() {
               )}
 
               <DialogFooter className='sm:justify-between'>
-                {!detailIsSold ? (
+                {!detailIsSold && canDelete ? (
                   <Button variant='outline' className='text-destructive border-destructive/30 hover:bg-destructive/10' onClick={() => setDeleteConfirm(detailBuyback)}>
                     <Trash2 className='h-4 w-4 mr-1.5' /> Delete
                   </Button>

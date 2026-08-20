@@ -81,6 +81,15 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/hr/settings', anyPermission: ['getEmployees'] },
   { prefix: '/hr', anyPermission: ['getEmployees'] },
 
+  // AI Tools
+  { prefix: '/ai-assistant', anyPermission: ['viewAiAssistant'] },
+  { prefix: '/insights', anyPermission: ['viewInsights'] },
+  { prefix: '/purchase-suggestions', anyPermission: ['viewPurchaseSuggestions'] },
+
+  // Communications — covers /whatsapp, /whatsapp/analytics, /whatsapp/messages via prefix match
+  { prefix: '/whatsapp', anyPermission: ['viewWhatsapp'] },
+  { prefix: '/sms/log', anyPermission: ['viewSmsLog'] },
+
   // Administration
   { prefix: '/users-management', anyPermission: ['viewUsers'] },
   { prefix: '/roles', anyPermission: ['viewRoles'] },
@@ -92,6 +101,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/payment-vouchers', anyPermission: ['viewPaymentVouchers'] },
   { prefix: '/bank-account-statement', anyPermission: ['viewWallet'] },
   { prefix: '/bank-reconciliation', anyPermission: ['viewBankReconciliation'] },
+  { prefix: '/audit-logs', anyPermission: ['viewAuditLogs'] },
 
   // Subscription (platform admins)
   { prefix: '/subscription', systemRoles: ['superAdmin', 'system_admin'] },
@@ -114,6 +124,9 @@ export const ROUTE_RULES: RouteRule[] = [
   // Business modules
   { prefix: '/products/bulk-edit', anyPermission: ['editProducts'] },
   { prefix: '/products', anyPermission: ['viewProducts'] },
+  { prefix: '/stock-transfer', anyPermission: ['viewProducts'] },
+  { prefix: '/stock-adjustments', anyPermission: ['viewProducts'] },
+  { prefix: '/sub-categories', anyPermission: ['viewCategories'] },
   { prefix: '/categories', anyPermission: ['viewCategories'] },
   { prefix: '/brands', anyPermission: ['viewBrands'] },
   { prefix: '/customers', anyPermission: ['viewCustomers'] },
@@ -121,8 +134,10 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/purchase-orders', anyPermission: ['viewPurchaseOrders', 'viewPurchases'] },
   { prefix: '/purchase-invoice', anyPermission: ['viewPurchases'] },
   { prefix: '/purchase-returns', anyPermission: ['viewPurchaseReturns', 'viewPurchases'] },
+  { prefix: '/fast-billing', anyPermission: ['viewInvoices'] },
   { prefix: '/invoice', anyPermission: ['viewInvoices'] },
   { prefix: '/sales-returns', anyPermission: ['viewSalesReturns', 'viewInvoices'] },
+  { prefix: '/barcode-generator', anyPermission: ['viewBarcodeGenerator'] },
   // Customer/Supplier Ledger tabs live inside the Accounting page — a role granted
   // just Customers (or Suppliers) access can reach the page to use its own ledger tab
   // even without full viewAccounting; features/accounting/index.tsx hides the other

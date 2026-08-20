@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { useCategories } from '../context/categories-context'
 import { useLanguage } from '@/context/language-context'
+import { Can } from '@/context/permission-context'
 
 export default function CategoriesPrimaryButtons() {
   const { dispatch } = useCategories()
@@ -14,10 +15,12 @@ export default function CategoriesPrimaryButtons() {
 
   return (
     <div className="flex items-center space-x-2">
-      <Button onClick={handleAddCategory} size="sm" className="h-8">
-        <Plus className="mr-2 h-4 w-4" />
-        {t('add_category')}
-      </Button>
+      <Can permission="createCategories">
+        <Button onClick={handleAddCategory} size="sm" className="h-8">
+          <Plus className="mr-2 h-4 w-4" />
+          {t('add_category')}
+        </Button>
+      </Can>
     </div>
   )
 }

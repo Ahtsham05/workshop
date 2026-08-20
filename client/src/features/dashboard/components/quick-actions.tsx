@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { isPast, isToday } from 'date-fns'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -30,10 +31,14 @@ import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { isMobileShopBusiness } from '@/lib/business-types'
 import { useRemindersFeed } from '@/hooks/use-reminders-feed'
+import { usePermissions } from '@/context/permission-context'
+import type { PermissionKey } from '@/lib/permission-registry'
 
 export function QuickActions() {
   const { t } = useLanguage()
   const navigate = useNavigate()
+  const { hasExplicitPermission } = usePermissions()
+  const canAny = (keys: PermissionKey[]) => keys.some((k) => hasExplicitPermission(k))
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const isMobileShop = isMobileShopBusiness(org?.businessType || user?.businessType)
@@ -52,42 +57,49 @@ export function QuickActions() {
       label: t('Load Management'),
       onClick: () => navigate({ to: '/mobile-shop/load' }),
       color: 'bg-purple-500 hover:bg-purple-600',
+      permission: 'viewLoadManagement' as PermissionKey,
     },
     {
       icon: <Wallet className='h-5 w-5' />,
       label: t('Cash Management'),
       onClick: () => navigate({ to: '/mobile-shop/cash-management' }),
       color: 'bg-orange-500 hover:bg-orange-600',
+      permission: 'viewCashManagement' as PermissionKey,
     },
     {
       icon: <Signal className='h-5 w-5' />,
       label: t('Sim Sale'),
       onClick: () => navigate({ to: '/mobile-shop/sim-sale' }),
       color: 'bg-teal-500 hover:bg-teal-600',
+      permission: 'viewSimSales' as PermissionKey,
     },
     {
       icon: <Receipt className='h-5 w-5' />,
       label: t('Bill Payments'),
       onClick: () => navigate({ to: '/mobile-shop/bill-payments' }),
       color: 'bg-pink-500 hover:bg-pink-600',
+      permission: 'viewBillPayments' as PermissionKey,
     },
     {
       icon: <Wrench className='h-5 w-5' />,
       label: t('Services'),
       onClick: () => navigate({ to: '/mobile-shop/services' }),
       color: 'bg-cyan-500 hover:bg-cyan-600',
+      permission: 'viewServices' as PermissionKey,
     },
     {
       icon: <Smartphone className='h-5 w-5' />,
       label: t('Mobile Phones'),
       onClick: () => navigate({ to: '/mobile-shop/used-phones' }),
       color: 'bg-indigo-500 hover:bg-indigo-600',
+      anyPermission: ['viewUsedPhones', 'viewNewPhones'] as PermissionKey[],
     },
     {
       icon: <Banknote className='h-5 w-5' />,
       label: t('Track Cash'),
       onClick: () => navigate({ to: '/cash-register' }),
       color: 'bg-rose-500 hover:bg-rose-600',
+      permission: 'viewCashRegister' as PermissionKey,
     },
   ]
 
@@ -97,42 +109,49 @@ export function QuickActions() {
       label: t('Create Invoice'),
       onClick: () => navigate({ to: '/invoice' }),
       color: 'bg-blue-500 hover:bg-blue-600',
+      permission: 'createInvoices' as PermissionKey,
     },
     {
       icon: <ShoppingCart className='h-5 w-5' />,
       label: t('Add Purchase'),
       onClick: () => navigate({ to: '/purchase-invoice' }),
       color: 'bg-green-500 hover:bg-green-600',
+      permission: 'createPurchases' as PermissionKey,
     },
     {
       icon: <Package className='h-5 w-5' />,
       label: t('Add Product'),
       onClick: () => navigate({ to: '/products' }),
       color: 'bg-purple-500 hover:bg-purple-600',
+      permission: 'createProducts' as PermissionKey,
     },
     {
       icon: <BarChart3 className='h-5 w-5' />,
       label: t('View Reports'),
       onClick: () => navigate({ to: '/reports' }),
       color: 'bg-orange-500 hover:bg-orange-600',
+      permission: 'viewReports' as PermissionKey,
     },
     {
       icon: <Users className='h-5 w-5' />,
       label: t('Customer Ledgers'),
       onClick: () => navigate({ to: '/accounting', search: { tab: 'customers' } }),
       color: 'bg-cyan-500 hover:bg-cyan-600',
+      permission: 'viewCustomers' as PermissionKey,
     },
     {
       icon: <Truck className='h-5 w-5' />,
       label: t('Supplier Ledgers'),
       onClick: () => navigate({ to: '/accounting', search: { tab: 'suppliers' } }),
       color: 'bg-teal-500 hover:bg-teal-600',
+      permission: 'viewSuppliers' as PermissionKey,
     },
     {
       icon: <Receipt className='h-5 w-5' />,
       label: t('Expense Management'),
       onClick: () => navigate({ to: '/accounting', search: { tab: 'expenses' } }),
       color: 'bg-pink-500 hover:bg-pink-600',
+      permission: 'viewAccounting' as PermissionKey,
     },
   ]
 
@@ -142,6 +161,7 @@ export function QuickActions() {
       label: t('Leads'),
       onClick: () => navigate({ to: '/leads' }),
       color: 'bg-violet-500 hover:bg-violet-600',
+      permission: 'viewLeads' as PermissionKey,
     },
     {
       icon: <AlarmClock className='h-5 w-5' />,
@@ -149,42 +169,65 @@ export function QuickActions() {
       onClick: () => navigate({ to: '/reminders' }),
       color: 'bg-amber-500 hover:bg-amber-600',
       badge: dueTodayCount > 0 ? dueTodayCount : undefined,
+      permission: 'viewReminders' as PermissionKey,
     },
     {
       icon: <ClipboardList className='h-5 w-5' />,
       label: t('Purchase Orders'),
       onClick: () => navigate({ to: '/purchase-orders' }),
       color: 'bg-sky-500 hover:bg-sky-600',
+      anyPermission: ['viewPurchaseOrders', 'viewPurchases'] as PermissionKey[],
     },
     {
       icon: <HandCoins className='h-5 w-5' />,
       label: t('Payments & Receipts'),
       onClick: () => navigate({ to: '/payment-vouchers' }),
       color: 'bg-emerald-500 hover:bg-emerald-600',
+      permission: 'viewPaymentVouchers' as PermissionKey,
     },
     {
       icon: <Landmark className='h-5 w-5' />,
       label: t('Bank Accounts'),
       onClick: () => navigate({ to: '/mobile-shop/wallet' }),
       color: 'bg-fuchsia-500 hover:bg-fuchsia-600',
+      permission: 'viewWallet' as PermissionKey,
     },
     {
       icon: <ClipboardEdit className='h-5 w-5' />,
       label: t('Stock Adjustments'),
       onClick: () => navigate({ to: '/stock-adjustments' }),
       color: 'bg-slate-500 hover:bg-slate-600',
+      permission: 'viewProducts' as PermissionKey,
     },
     {
       icon: <Handshake className='h-5 w-5' />,
       label: t('Salesmen'),
       onClick: () => navigate({ to: '/salesmen' }),
       color: 'bg-lime-500 hover:bg-lime-600',
+      permission: 'viewSalesmen' as PermissionKey,
     },
   ]
 
-  const renderRow = (actions: (typeof defaultActions[number] & { badge?: number })[]) => (
+  type Action = {
+    icon: ReactNode
+    label: string
+    onClick: () => void
+    color: string
+    badge?: number
+    permission?: PermissionKey
+    anyPermission?: PermissionKey[]
+  }
+
+  const visibleActions = (actions: Action[]) =>
+    actions.filter((action) => {
+      if (action.anyPermission) return canAny(action.anyPermission)
+      if (action.permission) return hasExplicitPermission(action.permission)
+      return true
+    })
+
+  const renderRow = (actions: Action[]) => (
     <div className='flex flex-wrap gap-3 sm:gap-4'>
-      {actions.map((action, index) => (
+      {visibleActions(actions).map((action, index) => (
         <Button
           key={index}
           onClick={action.onClick}

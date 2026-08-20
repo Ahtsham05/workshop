@@ -11,15 +11,23 @@ export interface Role {
   permissions: Permission;
   isSystemRole: boolean;
   isActive: boolean;
+  /** null/undefined for system roles (global templates). Set for every custom role. */
+  organizationId?: string | null;
+  /** null = usable at every branch in the org. Set = only applies at that one branch. */
+  branchId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/** 'organization' (default) = usable everywhere in the org. 'branch' = scoped to the currently active branch. */
+export type RoleVisibility = 'organization' | 'branch';
 
 export interface CreateRoleRequest {
   name: string;
   description?: string;
   permissions?: Permission;
   isActive?: boolean;
+  visibility?: RoleVisibility;
 }
 
 export interface UpdateRoleRequest {
@@ -27,6 +35,7 @@ export interface UpdateRoleRequest {
   description?: string;
   permissions?: Permission;
   isActive?: boolean;
+  visibility?: RoleVisibility;
 }
 
 export interface RolesResponse {

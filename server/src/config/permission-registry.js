@@ -292,6 +292,36 @@ const PERMISSION_GROUPS = [
     label: 'Partner Ledger & Payouts',
     permissions: ['viewPartnerProfitShareLedger', 'managePartnerPayments'],
   },
+  {
+    id: 'whatsapp',
+    label: 'WhatsApp',
+    permissions: ['viewWhatsapp', 'manageWhatsapp'],
+  },
+  {
+    id: 'sms',
+    label: 'SMS',
+    permissions: ['viewSmsLog'],
+  },
+  {
+    id: 'ai_assistant',
+    label: 'AI Assistant',
+    permissions: ['viewAiAssistant'],
+  },
+  {
+    id: 'insights',
+    label: 'Insights',
+    permissions: ['viewInsights'],
+  },
+  {
+    id: 'purchase_suggestions',
+    label: 'Purchase Suggestions',
+    permissions: ['viewPurchaseSuggestions'],
+  },
+  {
+    id: 'barcode',
+    label: 'Barcode Generator',
+    permissions: ['viewBarcodeGenerator'],
+  },
 ];
 
 const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))];
@@ -315,6 +345,14 @@ const PERMISSION_TAB_GROUPS = {
     'bank_reconciliation',
     'accounts_system',
     'leads',
+    'communication_log',
+    'reminders',
+    'whatsapp',
+    'sms',
+    'ai_assistant',
+    'insights',
+    'purchase_suggestions',
+    'barcode',
   ],
   mobile_shop: [
     'wallet',
@@ -328,7 +366,7 @@ const PERMISSION_TAB_GROUPS = {
     'used_phones',
     'new_phones',
   ],
-  reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
+  reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
   administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
 };
 

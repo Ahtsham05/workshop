@@ -46,6 +46,7 @@ import {
 } from '@/stores/newPhones.api'
 import { isUsedPhonesBucketProduct } from '../old-phones/constants'
 import { BuyNewPhoneDialog } from './components/buy-new-phone-dialog'
+import { usePermissions } from '@/context/permission-context'
 import type { RootState } from '@/stores/store'
 
 const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
@@ -107,6 +108,11 @@ const makeInitialSellForm = (): SellFormState => ({
 })
 
 export default function NewPhonesPage() {
+  const { hasPermission } = usePermissions()
+  const canBuy = hasPermission('buyNewPhones')
+  const canSell = hasPermission('sellNewPhones')
+  const canDelete = hasPermission('deleteNewPhones')
+
   const [buyDialogOpen, setBuyDialogOpen] = useState(false)
 
   const productsRedux = useSelector((s: RootState) => (s as unknown as { product?: { products?: PhoneProductOption[] } }).product?.products ?? [])
@@ -285,9 +291,11 @@ export default function NewPhonesPage() {
             </Button>
           )}
         </div>
-        <Button onClick={() => setBuyDialogOpen(true)}>
-          <ShoppingBag className='h-4 w-4 mr-1.5' /> Buy New Phone
-        </Button>
+        {canBuy ? (
+          <Button onClick={() => setBuyDialogOpen(true)}>
+            <ShoppingBag className='h-4 w-4 mr-1.5' /> Buy New Phone
+          </Button>
+        ) : null}
       </div>
 
       <div className='grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 mb-6'>
@@ -365,10 +373,12 @@ export default function NewPhonesPage() {
                       </div>
                       {unit.status === 'in_stock' && (
                         <div className='flex items-center gap-1.5'>
-                          <Button size='sm' onClick={() => openSell(unit)}>
-                            <ShoppingCart className='h-3.5 w-3.5 mr-1' /> Sell
-                          </Button>
-                          {unit.purchaseId && (
+                          {canSell ? (
+                            <Button size='sm' onClick={() => openSell(unit)}>
+                              <ShoppingCart className='h-3.5 w-3.5 mr-1' /> Sell
+                            </Button>
+                          ) : null}
+                          {unit.purchaseId && canDelete && (
                             <Button
                               size='icon'
                               variant='outline'
@@ -419,10 +429,12 @@ export default function NewPhonesPage() {
                         <TableCell>
                           {unit.status === 'in_stock' && (
                             <div className='flex items-center gap-1.5'>
-                              <Button size='sm' onClick={() => openSell(unit)}>
-                                <ShoppingCart className='h-3.5 w-3.5 mr-1' /> Sell
-                              </Button>
-                              {unit.purchaseId && (
+                              {canSell ? (
+                                <Button size='sm' onClick={() => openSell(unit)}>
+                                  <ShoppingCart className='h-3.5 w-3.5 mr-1' /> Sell
+                                </Button>
+                              ) : null}
+                              {unit.purchaseId && canDelete && (
                                 <Button
                                   size='icon'
                                   variant='outline'

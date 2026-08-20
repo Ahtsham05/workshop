@@ -44,6 +44,7 @@ import {
 } from '@/lib/wallet-payment-options'
 import { openAgentBillsBatchPrint, openAgentBillPrintWindow } from './agent-bill-receipt-utils'
 import { getBusinessToday } from '@/lib/business-timezone'
+import { usePermissions } from '@/context/permission-context'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,8 @@ interface AgentBillDialogProps {
 }
 
 export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialogProps) {
+  const { hasPermission } = usePermissions()
+  const canManage = hasPermission('manageBillPayments')
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const { data: orgData } = useGetMyOrganizationQuery()
@@ -599,9 +602,11 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
           <Button variant='outline' onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {(saving || updating) ? 'Saving...' : isEditMode ? 'Update Bill & Print' : `Save ${validCount || 0} Bill(s) & Print`}
-          </Button>
+          {canManage && (
+            <Button onClick={handleSave} disabled={saving}>
+              {(saving || updating) ? 'Saving...' : isEditMode ? 'Update Bill & Print' : `Save ${validCount || 0} Bill(s) & Print`}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

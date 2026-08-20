@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { usePermissions } from '@/context/permission-context'
 import { PaymentVoucherDialog } from './components/payment-voucher-dialog'
 import { ReceiptVoucherDialog } from './components/receipt-voucher-dialog'
 import { PaymentVoucherList } from './components/payment-voucher-list'
@@ -10,6 +11,8 @@ import { ReceiptVoucherList } from './components/receipt-voucher-list'
 type VoucherTab = 'payments' | 'receipts'
 
 export default function PaymentsAndReceiptsPage() {
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission('managePaymentVouchers')
   const [activeTab, setActiveTab] = useState<VoucherTab>('payments')
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false)
@@ -21,10 +24,12 @@ export default function PaymentsAndReceiptsPage() {
           <h1 className='text-2xl font-bold tracking-tight'>Payments & Receipts</h1>
           <p className='text-muted-foreground'>Record and print standalone payment/receipt vouchers against a bank account.</p>
         </div>
-        <Button onClick={() => (activeTab === 'payments' ? setPaymentDialogOpen(true) : setReceiptDialogOpen(true))}>
-          <Plus className='mr-2 h-4 w-4' />
-          {activeTab === 'payments' ? 'New Payment Voucher' : 'New Receipt Voucher'}
-        </Button>
+        {canManage ? (
+          <Button onClick={() => (activeTab === 'payments' ? setPaymentDialogOpen(true) : setReceiptDialogOpen(true))}>
+            <Plus className='mr-2 h-4 w-4' />
+            {activeTab === 'payments' ? 'New Payment Voucher' : 'New Receipt Voucher'}
+          </Button>
+        ) : null}
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as VoucherTab)}>

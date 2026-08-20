@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { format, isValid } from 'date-fns'
 import { Printer, Trash2, Receipt } from 'lucide-react'
+import { usePermissions } from '@/context/permission-context'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
@@ -74,6 +75,8 @@ const ALL_ACCOUNTS = '__all__'
 const ALL_TYPES = '__all__'
 
 export function PaymentVoucherList() {
+  const { hasExplicitPermission } = usePermissions()
+  const canDelete = hasExplicitPermission('managePaymentVouchers')
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const { data: walletsData } = useGetWalletsQuery()
@@ -215,15 +218,17 @@ export function PaymentVoucherList() {
                           <Button size='sm' variant='outline' className='h-8' onClick={() => handlePrint(voucher)} title='Print voucher'>
                             <Printer className='h-4 w-4' />
                           </Button>
-                          <Button
-                            size='sm'
-                            variant='outline'
-                            className='h-8 text-red-600 hover:text-red-700'
-                            onClick={() => setVoucherToDelete(voucher)}
-                            title='Delete voucher'
-                          >
-                            <Trash2 className='h-4 w-4' />
-                          </Button>
+                          {canDelete ? (
+                            <Button
+                              size='sm'
+                              variant='outline'
+                              className='h-8 text-red-600 hover:text-red-700'
+                              onClick={() => setVoucherToDelete(voucher)}
+                              title='Delete voucher'
+                            >
+                              <Trash2 className='h-4 w-4' />
+                            </Button>
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>

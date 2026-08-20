@@ -34,6 +34,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePermissions } from '@/context/permission-context'
 import { StatTile } from '@/features/whatsapp/analytics/stat-tile'
 import {
   useGetAllMessagesQuery,
@@ -178,6 +179,11 @@ const STATUS_TABS: { value: MessageLogStatusFilter; label: string }[] = [
 ]
 
 export function MessageLogPage() {
+  const { hasExplicitPermission } = usePermissions()
+  // Resend and delete both mutate message/send state, so both fall under the `manageWhatsapp`
+  // key — viewWhatsapp alone (read-only) shouldn't unlock them.
+  const canManageWhatsapp = hasExplicitPermission('manageWhatsapp')
+
   const [status, setStatus] = useState<MessageLogStatusFilter>('all')
   const [direction, setDirection] = useState<MessageLogDirectionFilter>('outbound')
   const [source, setSource] = useState<WhatsAppMessageSource | 'all'>('all')
@@ -422,28 +428,32 @@ export function MessageLogPage() {
                 <Button variant='ghost' size='sm' disabled={!!bulkAction} onClick={() => setSelectedIds(new Set())}>
                   Clear
                 </Button>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  className='text-destructive hover:text-destructive'
-                  disabled={!!bulkAction}
-                  onClick={() => setDeleteConfirm({ mode: 'bulk' })}
-                >
-                  {bulkAction?.type === 'delete' ? (
-                    <Loader2 className='h-3.5 w-3.5 animate-spin' />
-                  ) : (
-                    <Trash2 className='h-3.5 w-3.5' />
-                  )}
-                  Delete Selected
-                </Button>
-                <Button size='sm' disabled={!!bulkAction} onClick={handleBulkResend}>
-                  {bulkAction?.type === 'resend' ? (
-                    <Loader2 className='h-3.5 w-3.5 animate-spin' />
-                  ) : (
-                    <RotateCw className='h-3.5 w-3.5' />
-                  )}
-                  Resend Selected
-                </Button>
+                {canManageWhatsapp && (
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    className='text-destructive hover:text-destructive'
+                    disabled={!!bulkAction}
+                    onClick={() => setDeleteConfirm({ mode: 'bulk' })}
+                  >
+                    {bulkAction?.type === 'delete' ? (
+                      <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                    ) : (
+                      <Trash2 className='h-3.5 w-3.5' />
+                    )}
+                    Delete Selected
+                  </Button>
+                )}
+                {canManageWhatsapp && (
+                  <Button size='sm' disabled={!!bulkAction} onClick={handleBulkResend}>
+                    {bulkAction?.type === 'resend' ? (
+                      <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                    ) : (
+                      <RotateCw className='h-3.5 w-3.5' />
+                    )}
+                    Resend Selected
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -529,7 +539,7 @@ export function MessageLogPage() {
                           {format(new Date(message.createdAt), 'd MMM yyyy, h:mm a')}
                         </TableCell>
                         <TableCell className='text-right'>
-                          {isResendable && (
+                          {isResendable && canManageWhatsapp && (
                             <div className='flex items-center justify-end gap-1.5'>
                               <ResendButton messageId={message.id} disabled={!!bulkAction} />
                               <DeleteButton

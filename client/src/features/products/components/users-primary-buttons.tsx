@@ -18,24 +18,24 @@ export default function UsersPrimaryButtons() {
         >
           <span>{t('import_from_other_branches')}</span> <Building2 size={18} />
         </Button>
+        <Button
+          variant='outline'
+          className='space-x-1'
+          onClick={() => setOpen('ai-scan')}
+        >
+          <span>{t('ai_scan')}</span> <Sparkles size={18} />
+        </Button>
+        <Button
+          variant='outline'
+          className='space-x-1'
+          onClick={() => setOpen('import')}
+        >
+          <span>{t('import_excel')}</span> <Upload size={18} />
+        </Button>
+        <Button className='space-x-1' onClick={() => setOpen('add')}>
+          <span>{t('add_product')}</span> <PlusCircle size={18} />
+        </Button>
       </Can>
-      <Button
-        variant='outline'
-        className='space-x-1'
-        onClick={() => setOpen('ai-scan')}
-      >
-        <span>{t('ai_scan')}</span> <Sparkles size={18} />
-      </Button>
-      <Button
-        variant='outline'
-        className='space-x-1'
-        onClick={() => setOpen('import')}
-      >
-        <span>{t('import_excel')}</span> <Upload size={18} />
-      </Button>
-      <Button className='space-x-1' onClick={() => setOpen('add')}>
-        <span>{t('add_product')}</span> <PlusCircle size={18} />
-      </Button>
     </div>
   )
 }

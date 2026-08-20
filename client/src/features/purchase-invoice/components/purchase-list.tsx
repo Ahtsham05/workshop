@@ -35,6 +35,7 @@ import { formatImeiEntries } from '@/stores/imei.api'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
+import { usePermissions } from '@/context/permission-context'
 
 interface PurchaseListProps {
   onBack?: () => void
@@ -45,6 +46,10 @@ interface PurchaseListProps {
 export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseListProps) {
   const { t } = useLanguage()
   const canViewCreatedBy = useCanViewCreatedBy()
+  const { hasExplicitPermission } = usePermissions()
+  const canCreate = hasExplicitPermission('createPurchases')
+  const canEdit = hasExplicitPermission('editPurchases')
+  const canDelete = hasExplicitPermission('deletePurchases')
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -186,10 +191,12 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={onCreateNew}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t('Create Purchase')}
-          </Button>
+          {canCreate ? (
+            <Button onClick={onCreateNew}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t('Create Purchase')}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -327,7 +334,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                           </DialogContent>
                         </Dialog>
 
-                        {onEdit && (
+                        {canEdit && onEdit && (
                           <Button variant="ghost" size="sm" onClick={() => onEdit(purchase)}>
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -338,14 +345,16 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                           onPrint={(paperSize) => printPurchase(purchase, paperSize)}
                           label=""
                         />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(purchase)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canDelete ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(purchase)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

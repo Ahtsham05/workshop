@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router'
 import type { RootState } from '@/stores/store'
 import { Button } from '@/components/ui/button'
 import { ArrowLeftRight, History, Layers, Package, Receipt, ShoppingCart, Trash2, Zap } from 'lucide-react'
+import { usePermissions } from '@/context/permission-context'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
@@ -48,6 +49,8 @@ const MAX_RECENT_ITEMS = 10
 const EMPTY_CATALOG: PurchaseCatalogItem[] = []
 
 export default function FastBillingPage() {
+  const { hasExplicitPermission } = usePermissions()
+  const canCreateInvoices = hasExplicitPermission('createInvoices')
   const { data: catalog = EMPTY_CATALOG } = useGetPurchasableCatalogQuery()
   const [createInvoice, { isLoading: charging }] = useCreateInvoiceMutation()
   const scanInputRef = useRef<BarcodeScanInputHandle>(null)
@@ -582,6 +585,10 @@ export default function FastBillingPage() {
 
   const handleCharge = useCallback(async () => {
     if (cart.length === 0) return
+    if (!canCreateInvoices) {
+      toast.error('You do not have permission to create invoices')
+      return
+    }
 
     if (paymentMethod === 'wallet' && !walletType) {
       toast.error('Please select a bank account for the payment')
@@ -678,6 +685,7 @@ export default function FastBillingPage() {
     resetSale,
     orgData,
     branchData,
+    canCreateInvoices,
   ])
 
   useEffect(() => {

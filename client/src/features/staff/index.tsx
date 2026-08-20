@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2, Shield, UserPlus, Link2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermissions } from '@/context/permission-context'
 import {
   Dialog,
   DialogContent,
@@ -63,6 +64,8 @@ export default function StaffPage() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const isSuperAdmin = user?.systemRole === 'superAdmin'
+  const { hasExplicitPermission } = usePermissions()
+  const canManageStaff = hasExplicitPermission('manageStaff')
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<DialogMode>('create')
@@ -197,10 +200,12 @@ export default function StaffPage() {
             <Link2 className="mr-2 h-4 w-4" />
             Assign Existing User
           </Button>
-          <Button onClick={openCreateDialog}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Staff
-          </Button>
+          {canManageStaff && (
+            <Button onClick={openCreateDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Staff
+            </Button>
+          )}
         </div>
       </div>
 
@@ -301,7 +306,7 @@ export default function StaffPage() {
                                 Assign Branch
                               </Button>
                             ) : (
-                              membership.role !== 'superAdmin' && (
+                              canManageStaff && membership.role !== 'superAdmin' && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -380,7 +385,7 @@ export default function StaffPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            {membership.role !== 'superAdmin' && (
+                            {canManageStaff && membership.role !== 'superAdmin' && (
                               <Button
                                 variant="ghost"
                                 size="sm"

@@ -46,6 +46,7 @@ import {
   type PurchaseReturn,
   type SalesReturn,
 } from '@/stores/returns.api'
+import { usePermissions } from '@/context/permission-context'
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -65,6 +66,9 @@ interface PurchaseReturnListProps {
 }
 
 export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }: PurchaseReturnListProps) {
+  const { hasExplicitPermission } = usePermissions()
+  const canCreate = hasExplicitPermission('createPurchaseReturns')
+  const canDelete = hasExplicitPermission('deletePurchaseReturns')
   const [activeTab, setActiveTab] = useState<'purchase-returns' | 'pending-customer-returns'>('purchase-returns')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -139,10 +143,12 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
     <div className='space-y-4'>
       <div className='flex items-center justify-between'>
         <h2 className='text-2xl font-bold'>Purchase Returns</h2>
-        <Button onClick={onCreateNew}>
-          <Plus className='mr-2 h-4 w-4' />
-          New Return
-        </Button>
+        {canCreate ? (
+          <Button onClick={onCreateNew}>
+            <Plus className='mr-2 h-4 w-4' />
+            New Return
+          </Button>
+        ) : null}
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
@@ -310,15 +316,17 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
                             </Button>
                           </>
                         )}
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          className='h-7 w-7 text-destructive'
-                          onClick={() => setDeleteTarget(ret)}
-                          title='Delete'
-                        >
-                          <Trash2 className='h-3 w-3' />
-                        </Button>
+                        {canDelete ? (
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            className='h-7 w-7 text-destructive'
+                            onClick={() => setDeleteTarget(ret)}
+                            title='Delete'
+                          >
+                            <Trash2 className='h-3 w-3' />
+                          </Button>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

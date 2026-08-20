@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLanguage } from '@/context/language-context';
+import { usePermissions } from '@/context/permission-context';
 import { toast } from 'sonner';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
@@ -56,6 +57,8 @@ interface ExpenseListProps {
 
 export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListProps) {
   const { t } = useLanguage();
+  const { hasExplicitPermission } = usePermissions();
+  const canManageExpenses = hasExplicitPermission('manageExpenses');
   const canViewCreatedBy = useCanViewCreatedBy();
   const { data: categoryData = [] } = useGetExpenseCategoriesQuery({
     transactionType: 'business_expense',
@@ -338,23 +341,27 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                       )}
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onEdit(expense)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setExpenseToDelete(expense);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
+                          {canManageExpenses && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onEdit(expense)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canManageExpenses && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setExpenseToDelete(expense);
+                                setDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

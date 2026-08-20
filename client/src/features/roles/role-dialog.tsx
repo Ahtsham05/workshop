@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Role, useCreateRoleMutation, useUpdateRoleMutation } from '@/stores/roles.api';
+import { Role, RoleVisibility, useCreateRoleMutation, useUpdateRoleMutation } from '@/stores/roles.api';
 import {
   Dialog,
   DialogContent,
@@ -24,19 +25,24 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useLanguage } from '@/context/language-context';
+import { cn } from '@/lib/utils';
+import { RootState } from '@/stores/store';
 import toast from 'react-hot-toast';
 
 const roleSchema = z.object({
   name: z.string().min(1, 'Role name is required'),
   description: z.string(),
   isActive: z.boolean(),
+  visibility: z.enum(['organization', 'branch']),
 });
 
 type RoleFormValues = {
   name: string;
   description: string;
   isActive: boolean;
+  visibility: RoleVisibility;
 };
 
 interface RoleDialogProps {
@@ -53,12 +59,16 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
   const [createRole, { isLoading: isCreating }] = useCreateRoleMutation();
   const [updateRole, { isLoading: isUpdating }] = useUpdateRoleMutation();
 
+  const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
+  const activeBranchName = useSelector((state: RootState) => state.auth.activeBranchName);
+
   const form = useForm<RoleFormValues>({
     resolver: zodResolver(roleSchema),
     defaultValues: {
       name: '',
       description: '',
       isActive: true,
+      visibility: 'organization',
     },
     mode: 'onChange',
   });
@@ -69,12 +79,14 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
         name: role.name,
         description: role.description || '',
         isActive: role.isActive,
+        visibility: role.branchId ? 'branch' : 'organization',
       });
     } else {
       form.reset({
         name: '',
         description: '',
         isActive: true,
+        visibility: 'organization',
       });
     }
   }, [role, form]);
@@ -141,6 +153,58 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
                   <FormDescription>
                     {t('Role Description Hint') || 'Brief description of the role and its purpose'}
                   </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="visibility"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel>{t('role_scope') || 'Scope'}</FormLabel>
+                  <FormControl>
+                    <RadioGroup
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      className="grid grid-cols-2 gap-2"
+                    >
+                      {(
+                        [
+                          {
+                            value: 'organization' as const,
+                            label: t('organization_wide') || 'Organization-wide',
+                            desc: t('organization_wide_hint') || 'Usable at every branch',
+                            disabled: false,
+                          },
+                          {
+                            value: 'branch' as const,
+                            label: t('this_branch_only') || 'This branch only',
+                            desc: activeBranchName
+                              ? `${t('visible_at') || 'Visible at'} ${activeBranchName}`
+                              : t('select_a_branch_first') || 'Select a branch first',
+                            disabled: !activeBranchId,
+                          },
+                        ]
+                      ).map((opt) => (
+                        <label
+                          key={opt.value}
+                          className={cn(
+                            'flex items-start gap-2.5 rounded-lg border-2 px-3 py-2.5 transition-colors',
+                            opt.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+                            field.value === opt.value ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                          )}
+                        >
+                          <RadioGroupItem value={opt.value} disabled={opt.disabled} className="mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium leading-none">{opt.label}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </RadioGroup>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

@@ -34,10 +34,15 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { usePermissions } from '@/context/permission-context';
 
 export default function EmployeeList() {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const { hasExplicitPermission } = usePermissions();
+  const canCreate = hasExplicitPermission('createEmployees');
+  const canEdit = hasExplicitPermission('manageEmployees');
+  const canDelete = hasExplicitPermission('deleteEmployees');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -78,10 +83,12 @@ export default function EmployeeList() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{t('Employees')}</CardTitle>
-            <Button onClick={() => navigate({ to: '/hr/employees/create' } as NavigateOptions)}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('Add Employee')}
-            </Button>
+            {canCreate && (
+              <Button onClick={() => navigate({ to: '/hr/employees/create' } as NavigateOptions)}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('Add Employee')}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -166,23 +173,27 @@ export default function EmployeeList() {
                               <Eye className="h-4 w-4 mr-2" />
                               {t('View Details')}
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                navigate(
-                                  { to: '/hr/employees/$id/edit', params: { id: String(employee.id) } } as unknown as NavigateOptions
-                                )
-                              }
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              {t('Edit')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeleteId(employee.id)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              {t('Delete')}
-                            </DropdownMenuItem>
+                            {canEdit && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  navigate(
+                                    { to: '/hr/employees/$id/edit', params: { id: String(employee.id) } } as unknown as NavigateOptions
+                                  )
+                                }
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                {t('Edit')}
+                              </DropdownMenuItem>
+                            )}
+                            {canDelete && (
+                              <DropdownMenuItem
+                                onClick={() => setDeleteId(employee.id)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                {t('Delete')}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

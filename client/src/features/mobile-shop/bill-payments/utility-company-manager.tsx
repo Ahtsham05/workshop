@@ -28,6 +28,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Pencil, Trash2, Plus } from 'lucide-react'
+import { usePermissions } from '@/context/permission-context'
 import {
   useGetUtilityCompaniesQuery,
   useCreateUtilityCompanyMutation,
@@ -60,6 +61,8 @@ const BILL_TYPE_LABELS: Record<string, string> = {
 }
 
 export function UtilityCompanyManager() {
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission('manageBillPayments')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<UtilityCompanyRecord | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<UtilityCompanyRecord | null>(null)
@@ -130,10 +133,12 @@ export function UtilityCompanyManager() {
     <Card>
       <CardHeader className='flex flex-row items-center justify-between'>
         <CardTitle>Utility Companies</CardTitle>
-        <Button size='sm' onClick={openCreate}>
-          <Plus className='mr-1 h-4 w-4' />
-          Add Company
-        </Button>
+        {canManage ? (
+          <Button size='sm' onClick={openCreate}>
+            <Plus className='mr-1 h-4 w-4' />
+            Add Company
+          </Button>
+        ) : null}
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -163,12 +168,16 @@ export function UtilityCompanyManager() {
                     </Badge>
                   </TableCell>
                   <TableCell className='text-right space-x-1'>
-                    <Button size='icon' variant='ghost' onClick={() => openEdit(company)}>
-                      <Pencil className='h-4 w-4' />
-                    </Button>
-                    <Button size='icon' variant='ghost' onClick={() => setDeleteTarget(company)}>
-                      <Trash2 className='h-4 w-4 text-destructive' />
-                    </Button>
+                    {canManage ? (
+                      <>
+                        <Button size='icon' variant='ghost' onClick={() => openEdit(company)}>
+                          <Pencil className='h-4 w-4' />
+                        </Button>
+                        <Button size='icon' variant='ghost' onClick={() => setDeleteTarget(company)}>
+                          <Trash2 className='h-4 w-4 text-destructive' />
+                        </Button>
+                      </>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))}

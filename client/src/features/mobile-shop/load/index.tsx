@@ -92,6 +92,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { ArrowLeft, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { usePermissions } from '@/context/permission-context'
 import { format } from 'date-fns'
 import { getBusinessToday, parseBusinessDateTimeLocal, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
@@ -356,6 +357,8 @@ function LoadManagementPage({
   initialSupplierId,
 }: LoadManagementPageProps) {
   const isCashManagementMode = mode === 'cash-management'
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission(isCashManagementMode ? 'manageCashManagement' : 'manageLoadManagement')
   const navigate = useNavigate()
   const dispatch = useDispatch<any>()
   const { data: customerAccountTypes = [] } = useGetCustomerAccountTypesQuery()
@@ -1829,7 +1832,7 @@ function LoadManagementPage({
                   </div>
 
                   <div className='flex gap-2'>
-                    <Button size='lg' type='submit' disabled={isSavingPurchase || !purchaseForm.walletId} className='w-full md:w-auto bg-blue-600 hover:bg-blue-700'>
+                    <Button size='lg' type='submit' disabled={isSavingPurchase || !purchaseForm.walletId || !canManage} className='w-full md:w-auto bg-blue-600 hover:bg-blue-700'>
                       {isSavingPurchase ? 'Processing...' : editingPurchase ? '✓ Update Purchase' : '✓ Save Load Purchase'}
                     </Button>
                     {editingPurchase && (
@@ -1894,7 +1897,7 @@ function LoadManagementPage({
                             <div className='flex gap-1'>
                               <ListPrintButton onClick={() => setPreviewReceipt(buildLoadPurchaseReceipt(p))} />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditPurchase(p)}><Pencil className='h-4 w-4' /></Button>
-                              <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeletePurchase(p.id)}><Trash2 className='h-4 w-4' /></Button>
+                              {canManage && (<Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeletePurchase(p.id)}><Trash2 className='h-4 w-4' /></Button>)}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -2106,7 +2109,7 @@ function LoadManagementPage({
                   </Card>
 
                   <div className='flex gap-2'>
-                    <Button size='lg' type='submit' disabled={isSavingSale || !saleForm.walletId || !saleForm.amount} className='w-full md:w-auto bg-green-600 hover:bg-green-700'>
+                    <Button size='lg' type='submit' disabled={isSavingSale || !saleForm.walletId || !saleForm.amount || !canManage} className='w-full md:w-auto bg-green-600 hover:bg-green-700'>
                       {isSavingSale ? 'Processing...' : editingTransaction ? '✓ Update Load Sale' : '✓ Confirm & Save Load Sale'}
                     </Button>
                     {editingTransaction && (
@@ -2202,7 +2205,7 @@ function LoadManagementPage({
                                 })}
                               />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditTransaction(t)}><Pencil className='h-4 w-4' /></Button>
-                              <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteTransaction(t.id)}><Trash2 className='h-4 w-4' /></Button>
+                              {canManage && (<Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteTransaction(t.id)}><Trash2 className='h-4 w-4' /></Button>)}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -2471,7 +2474,7 @@ function LoadManagementPage({
                     <Button
                       size='lg'
                       onClick={handleBulkWithdrawalSubmit}
-                      disabled={isSavingBulk || !bulkWithdrawalForm.walletId || bulkWithdrawalTotals.validCount === 0}
+                      disabled={isSavingBulk || !bulkWithdrawalForm.walletId || bulkWithdrawalTotals.validCount === 0 || !canManage}
                       className='w-full md:w-auto bg-orange-500 hover:bg-orange-600'
                     >
                       {isSavingBulk ? 'Saving...' : `✓ Save ${bulkWithdrawalTotals.validCount} ${cashTxLabel(bulkWithdrawalForm.transactionType)} Entries`}
@@ -2737,7 +2740,7 @@ function LoadManagementPage({
                   </Card>
 
                   <div className='flex gap-2'>
-                    <Button size='lg' type='submit' disabled={isSavingWithdrawal || !withdrawalForm.walletId || !withdrawalForm.amount} className='w-full md:w-auto bg-orange-500 hover:bg-orange-600'>
+                    <Button size='lg' type='submit' disabled={isSavingWithdrawal || !withdrawalForm.walletId || !withdrawalForm.amount || !canManage} className='w-full md:w-auto bg-orange-500 hover:bg-orange-600'>
                       {isSavingWithdrawal ? 'Processing...' : editingWithdrawal ? `✓ Update ${cashTxLabel(withdrawalForm.transactionType)}` : `✓ Confirm ${cashTxLabel(withdrawalForm.transactionType)}`}
                     </Button>
                     {editingWithdrawal && (
@@ -2766,7 +2769,7 @@ function LoadManagementPage({
                         showVoiceInput={false}
                       />
                     </div>
-                    {selectedWithdrawalIds.size > 0 && (
+                    {selectedWithdrawalIds.size > 0 && canManage && (
                       <Button
                         variant='destructive'
                         size='sm'
@@ -2835,7 +2838,7 @@ function LoadManagementPage({
                               <TableCell>—</TableCell>
                               <TableCell>
                                 <div className='flex gap-1'>
-                                  <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => setDeleteConfirm({ type: 'transfer', id: t.id })}><Trash2 className='h-4 w-4' /></Button>
+                                  {canManage && (<Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => setDeleteConfirm({ type: 'transfer', id: t.id })}><Trash2 className='h-4 w-4' /></Button>)}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -2911,7 +2914,7 @@ function LoadManagementPage({
                                 })}
                               />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditWithdrawal(w)}><Pencil className='h-4 w-4' /></Button>
-                              <Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteWithdrawal(w.id)}><Trash2 className='h-4 w-4' /></Button>
+                              {canManage && (<Button size='icon' variant='ghost' className='h-8 w-8 text-red-600 hover:text-red-700' onClick={() => handleDeleteWithdrawal(w.id)}><Trash2 className='h-4 w-4' /></Button>)}
                             </div>
                           </TableCell>
                         </TableRow>

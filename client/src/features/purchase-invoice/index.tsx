@@ -183,8 +183,13 @@ const PurchaseInvoicePage = () => {
   const prefillAppliedRef = useRef(false);
   const suppliersData = useSelector((state: RootState) => state.supplier.data);
   const { t } = useLanguage();
-  const { hasPermission } = usePermissions();
-  const [currentView, setCurrentView] = useState<ViewType>('create');
+  const { hasPermission, hasExplicitPermission } = usePermissions();
+  // Default landing view is the fast-entry create form — but only for users who can
+  // actually create a purchase; a view-only user should land on the list instead of a
+  // create form they can't submit (this was previously an unconditional 'create' default).
+  const [currentView, setCurrentView] = useState<ViewType>(() =>
+    hasExplicitPermission('createPurchases') ? 'create' : 'list'
+  );
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
     supplier: {} as Supplier,
@@ -1009,7 +1014,7 @@ const PurchaseInvoicePage = () => {
     <div className="h-full w-full">
       {currentView === 'list' ? (
         <PurchaseList
-          onBack={() => setCurrentView('create')}
+          onBack={() => setCurrentView(hasExplicitPermission('createPurchases') ? 'create' : 'list')}
           onCreateNew={handleCreateNew}
           onEdit={handleEdit}
         />

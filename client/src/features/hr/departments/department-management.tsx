@@ -45,9 +45,14 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { usePermissions } from '@/context/permission-context';
 
 export default function DepartmentManagement() {
   const { t } = useLanguage();
+  const { hasExplicitPermission } = usePermissions();
+  const canCreate = hasExplicitPermission('createDepartments');
+  const canEdit = hasExplicitPermission('manageDepartments');
+  const canDelete = hasExplicitPermission('deleteDepartments');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
@@ -168,14 +173,16 @@ export default function DepartmentManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{t('Departments')}</CardTitle>
-            <Button onClick={() => {
-              setEditingDept(null);
-              setFormData({ name: '', code: '', description: '', isActive: true });
-              setShowDialog(true);
-            }}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('Add Department')}
-            </Button>
+            {canCreate && (
+              <Button onClick={() => {
+                setEditingDept(null);
+                setFormData({ name: '', code: '', description: '', isActive: true });
+                setShowDialog(true);
+              }}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('Add Department')}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -251,17 +258,21 @@ export default function DepartmentManagement() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(dept)}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              {t('Edit')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeleteId(dept.id)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              {t('Delete')}
-                            </DropdownMenuItem>
+                            {canEdit && (
+                              <DropdownMenuItem onClick={() => handleEdit(dept)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                {t('Edit')}
+                              </DropdownMenuItem>
+                            )}
+                            {canDelete && (
+                              <DropdownMenuItem
+                                onClick={() => setDeleteId(dept.id)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                {t('Delete')}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

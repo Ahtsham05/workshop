@@ -60,6 +60,7 @@ import {
   type PurchaseOrderStatus,
 } from '@/stores/purchaseOrder.api'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
+import { usePermissions } from '@/context/permission-context'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildPurchaseOrderMessage, buildPurchaseOrderItemsSummary } from '@/utils/sms-messages'
@@ -95,6 +96,12 @@ export default function PurchaseOrderList({
   onReceive,
 }: Props) {
   const branchName = useBranchName()
+  const { hasExplicitPermission } = usePermissions()
+  const canCreate = hasExplicitPermission('createPurchaseOrders')
+  const canEditAny = hasExplicitPermission('editPurchaseOrders')
+  const canDeleteAny = hasExplicitPermission('deletePurchaseOrders')
+  const canReceiveAny = hasExplicitPermission('receivePurchaseOrders')
+
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState<string>('all')
@@ -204,10 +211,12 @@ export default function PurchaseOrderList({
             <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button onClick={onCreate}>
-            <Plus className='mr-2 h-4 w-4' />
-            New Purchase Order
-          </Button>
+          {canCreate ? (
+            <Button onClick={onCreate}>
+              <Plus className='mr-2 h-4 w-4' />
+              New Purchase Order
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -326,9 +335,11 @@ export default function PurchaseOrderList({
             <div className='py-12 text-center text-muted-foreground'>
               <ClipboardList className='mx-auto h-10 w-10 opacity-40' />
               <p className='mt-3'>No purchase orders found.</p>
-              <Button variant='outline' className='mt-4' onClick={onCreate}>
-                <Plus className='mr-2 h-4 w-4' /> Create your first order
-              </Button>
+              {canCreate ? (
+                <Button variant='outline' className='mt-4' onClick={onCreate}>
+                  <Plus className='mr-2 h-4 w-4' /> Create your first order
+                </Button>
+              ) : null}
             </div>
           ) : (
             <div className='overflow-x-auto'>
@@ -350,14 +361,16 @@ export default function PurchaseOrderList({
                   {orders.map((po) => {
                     const id = po._id || po.id!
                     const progress = computeProgress(po)
-                    const canEdit = po.status === 'draft' || po.status === 'sent'
-                    const canSend = po.status === 'draft'
+                    const canEdit = canEditAny && (po.status === 'draft' || po.status === 'sent')
+                    const canSend = canEditAny && po.status === 'draft'
                     const canCancel =
+                      canEditAny &&
                       po.status !== 'cancelled' && po.status !== 'completed' &&
                       (!po.receipts || po.receipts.length === 0)
-                    const canDelete = po.status === 'draft' || po.status === 'cancelled'
+                    const canDelete = canDeleteAny && (po.status === 'draft' || po.status === 'cancelled')
                     const canReceive =
-                      po.status === 'sent' || po.status === 'partial' || po.status === 'draft'
+                      canReceiveAny &&
+                      (po.status === 'sent' || po.status === 'partial' || po.status === 'draft')
                     return (
                       <TableRow key={id}>
                         <TableCell className='font-mono text-sm font-medium'>

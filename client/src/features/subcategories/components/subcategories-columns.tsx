@@ -17,11 +17,14 @@ import { useUrduDisplay } from '@/context/urdu-display-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
+import { usePermissions } from '@/context/permission-context'
 
 export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
   const { dispatch } = useSubCategories()
   const { t, language } = useLanguage()
   const { showUrdu } = useUrduDisplay()
+  const { hasExplicitPermission } = usePermissions()
+  const canDelete = hasExplicitPermission('deleteCategories')
 
   const selectColumn: ColumnDef<SubCategory> = {
     id: 'select',
@@ -134,16 +137,18 @@ export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
               <Edit className="mr-2 h-4 w-4" />
               {t('edit')}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({ type: 'SET_SUBCATEGORY', payload: subCategory })
-                dispatch({ type: 'SET_DELETE_OPEN', payload: true })
-              }}
-              className="text-red-600"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              {t('delete')}
-            </DropdownMenuItem>
+            {canDelete && (
+              <DropdownMenuItem
+                onClick={() => {
+                  dispatch({ type: 'SET_SUBCATEGORY', payload: subCategory })
+                  dispatch({ type: 'SET_DELETE_OPEN', payload: true })
+                }}
+                className="text-red-600"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {t('delete')}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )

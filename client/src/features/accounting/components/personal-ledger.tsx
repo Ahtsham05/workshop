@@ -49,6 +49,7 @@ import { mobileShopApi } from '@/stores/mobile-shop.api';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/context/language-context';
+import { usePermissions } from '@/context/permission-context';
 import { TransactionCategoryPicker } from './transaction-category-picker';
 import {
   useCreateExpenseCategoryMutation,
@@ -459,6 +460,8 @@ function EntryForm({
 
 export function PersonalLedger() {
   const { t } = useLanguage();
+  const { hasExplicitPermission } = usePermissions();
+  const canManage = hasExplicitPermission('managePersonalWallet');
   const dispatch = useDispatch();
   const {
     byType: categoryCatalogByType = EMPTY_WALLET_CATEGORY_CATALOG,
@@ -1200,10 +1203,12 @@ export function PersonalLedger() {
             <Download className="w-4 h-4 mr-2" />
             {t('Export')}
           </Button>
-          <Button onClick={() => { setEditingEntry(null); setFormDefaults(null); setShowForm(true); }}>
-            <Plus className="w-4 h-4 mr-2" />
-            {t('Add Entry')}
-          </Button>
+          {canManage ? (
+            <Button onClick={() => { setEditingEntry(null); setFormDefaults(null); setShowForm(true); }}>
+              <Plus className="w-4 h-4 mr-2" />
+              {t('Add Entry')}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -1299,24 +1304,28 @@ export function PersonalLedger() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => openEditEntry(entry)}
-                            title={t('Edit')}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleDelete(entry)}
-                            title={t('Delete')}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {canManage ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => openEditEntry(entry)}
+                                title={t('Edit')}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleDelete(entry)}
+                                title={t('Delete')}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>

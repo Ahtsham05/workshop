@@ -1,7 +1,6 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { Permission } from '@/stores/roles.api';
 import {
-  PERMISSION_FALLBACKS,
   resolvePermission,
   hasExplicitPermission as checkExplicit,
 } from '@/lib/permission-resolve';
@@ -29,8 +28,6 @@ interface PermissionProviderProps {
   children: ReactNode;
   permissions: Permission | null;
 }
-
-export { PERMISSION_FALLBACKS };
 
 export const PermissionProvider = ({ children, permissions }: PermissionProviderProps) => {
   const hasPermission = (permission: keyof Permission): boolean =>

@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Plus, X, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { usePermissions } from '@/context/permission-context'
 import {
   useGetAllProductAttributesQuery,
   useCreateProductAttributeMutation,
@@ -22,6 +23,8 @@ interface Props {
 
 /** Pick which attributes (Size, Color, ...) apply to this product, and which values of each to use. */
 export function VariantAttributeSelector({ selected, onChange }: Props) {
+  const { hasExplicitPermission } = usePermissions()
+  const canManageAttributes = hasExplicitPermission('editProducts')
   const { data: attributes = [], isLoading } = useGetAllProductAttributesQuery()
   const [createProductAttribute, { isLoading: isCreatingAttribute }] = useCreateProductAttributeMutation()
   const [updateProductAttribute] = useUpdateProductAttributeMutation()
@@ -118,7 +121,7 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
     return <p className='text-sm text-muted-foreground'>Loading attributes…</p>
   }
 
-  const newAttributeRow = (
+  const newAttributeRow = !canManageAttributes ? null : (
     <div className='flex items-center gap-2'>
       <Input
         placeholder='New attribute name, e.g. Size'
@@ -169,17 +172,19 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
             onClick={() => toggleAttribute(attr.name)}
           >
             {attr.name}
-            <button
-              type='button'
-              title={`Delete "${attr.name}"`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setAttributePendingDelete(attr)
-              }}
-              className='rounded-full p-0.5 hover:bg-black/10'
-            >
-              <Trash2 className='h-3 w-3' />
-            </button>
+            {canManageAttributes && (
+              <button
+                type='button'
+                title={`Delete "${attr.name}"`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setAttributePendingDelete(attr)
+                }}
+                className='rounded-full p-0.5 hover:bg-black/10'
+              >
+                <Trash2 className='h-3 w-3' />
+              </button>
+            )}
           </Badge>
         ))}
       </div>
@@ -201,35 +206,39 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
                     />
                     {value}
                   </label>
-                  <button
-                    type='button'
-                    title={`Remove "${value}" from ${attr.name}`}
-                    onClick={() => definition && removeMasterValue(definition, value)}
-                    className='rounded-full p-0.5 text-muted-foreground hover:bg-muted-foreground/20'
-                  >
-                    <X className='h-3 w-3' />
-                  </button>
+                  {canManageAttributes && (
+                    <button
+                      type='button'
+                      title={`Remove "${value}" from ${attr.name}`}
+                      onClick={() => definition && removeMasterValue(definition, value)}
+                      className='rounded-full p-0.5 text-muted-foreground hover:bg-muted-foreground/20'
+                    >
+                      <X className='h-3 w-3' />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
-            <div className='flex items-center gap-2'>
-              <Input
-                placeholder={`Add a custom ${attr.name.toLowerCase()} value`}
-                value={valueDraft[attr.name] || ''}
-                showVoiceInput={false}
-                onChange={(e) => setValueDraft((prev) => ({ ...prev, [attr.name]: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    addCustomValue(attr.name)
-                  }
-                }}
-                className='h-8 max-w-xs'
-              />
-              <Button type='button' size='sm' variant='outline' onClick={() => addCustomValue(attr.name)}>
-                <Plus className='h-3.5 w-3.5' />
-              </Button>
-            </div>
+            {canManageAttributes && (
+              <div className='flex items-center gap-2'>
+                <Input
+                  placeholder={`Add a custom ${attr.name.toLowerCase()} value`}
+                  value={valueDraft[attr.name] || ''}
+                  showVoiceInput={false}
+                  onChange={(e) => setValueDraft((prev) => ({ ...prev, [attr.name]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addCustomValue(attr.name)
+                    }
+                  }}
+                  className='h-8 max-w-xs'
+                />
+                <Button type='button' size='sm' variant='outline' onClick={() => addCustomValue(attr.name)}>
+                  <Plus className='h-3.5 w-3.5' />
+                </Button>
+              </div>
+            )}
             {attr.values.length > 0 && (
               <div className='mt-2 flex flex-wrap gap-1.5'>
                 {attr.values.map((value) => (

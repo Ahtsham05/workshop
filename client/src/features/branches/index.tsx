@@ -48,6 +48,7 @@ import { usePlanLimits } from '@/hooks/use-plan-limits'
 import { useGetMyOrganizationQuery, useUpdateOrganizationMutation } from '@/stores/organization.api'
 import { fetchUrduNameSuggestion, useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 import { useUrduDisplay } from '@/context/urdu-display-context'
+import { usePermissions } from '@/context/permission-context'
 import { cn } from '@/lib/utils'
 import { getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 
@@ -80,6 +81,8 @@ type BranchDialogValues = z.infer<typeof branchDialogSchema>
 
 export default function BranchesPage() {
   const { showUrduInput } = useUrduDisplay()
+  const { hasExplicitPermission } = usePermissions()
+  const canManageBranches = hasExplicitPermission('manageBranches')
   const [page] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null)
@@ -316,27 +319,29 @@ export default function BranchesPage() {
               <span> / {maxBranchesDisplay} branches</span>
             </div>
           )}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button onClick={handleCreate} disabled={branchLimitReached}>
-                    {branchLimitReached ? (
-                      <Lock className="mr-2 h-4 w-4" />
-                    ) : (
-                      <Plus className="mr-2 h-4 w-4" />
-                    )}
-                    Add Branch
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {branchLimitReached && (
-                <TooltipContent>
-                  <p>Branch limit reached. Upgrade your plan to add more branches.</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          {canManageBranches && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button onClick={handleCreate} disabled={branchLimitReached}>
+                      {branchLimitReached ? (
+                        <Lock className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Plus className="mr-2 h-4 w-4" />
+                      )}
+                      Add Branch
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {branchLimitReached && (
+                  <TooltipContent>
+                    <p>Branch limit reached. Upgrade your plan to add more branches.</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
       </div>
 
@@ -446,10 +451,12 @@ export default function BranchesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(branch)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {!branch.isDefault && (
+                        {canManageBranches && (
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(branch)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canManageBranches && !branch.isDefault && (
                           <Button
                             variant="ghost"
                             size="sm"

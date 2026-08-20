@@ -43,6 +43,7 @@ import {
   useDeleteSalesReturnMutation,
   type SalesReturn,
 } from '@/stores/returns.api'
+import { usePermissions } from '@/context/permission-context'
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -62,6 +63,9 @@ interface SalesReturnListProps {
 }
 
 export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
+  const { hasExplicitPermission } = usePermissions()
+  const canCreate = hasExplicitPermission('createSalesReturns')
+  const canDelete = hasExplicitPermission('deleteSalesReturns')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -121,10 +125,12 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
     <div className='space-y-4'>
       <div className='flex items-center justify-between'>
         <h2 className='text-2xl font-bold'>Sales Returns</h2>
-        <Button onClick={onCreateNew}>
-          <Plus className='mr-2 h-4 w-4' />
-          New Return
-        </Button>
+        {canCreate ? (
+          <Button onClick={onCreateNew}>
+            <Plus className='mr-2 h-4 w-4' />
+            New Return
+          </Button>
+        ) : null}
       </div>
 
       {/* Summary */}
@@ -275,15 +281,17 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
                             </Button>
                           </>
                         )}
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          className='h-7 w-7 text-destructive'
-                          onClick={() => setDeleteTarget(ret)}
-                          title='Delete'
-                        >
-                          <Trash2 className='h-3 w-3' />
-                        </Button>
+                        {canDelete ? (
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            className='h-7 w-7 text-destructive'
+                            onClick={() => setDeleteTarget(ret)}
+                            title='Delete'
+                          >
+                            <Trash2 className='h-3 w-3' />
+                          </Button>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

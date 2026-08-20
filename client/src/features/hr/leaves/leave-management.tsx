@@ -59,9 +59,16 @@ import {
 import { toast } from 'sonner';
 import { endOfMonth, format, startOfMonth } from 'date-fns';
 import { getEntityId } from '@/lib/entity-id';
+import { usePermissions } from '@/context/permission-context';
 
 export default function LeaveManagement() {
   const { t } = useLanguage();
+  const { hasExplicitPermission } = usePermissions();
+  const canCreate = hasExplicitPermission('createLeaves');
+  const canEdit = hasExplicitPermission('manageLeaves');
+  const canApprove = hasExplicitPermission('approveLeaves');
+  const canReject = hasExplicitPermission('rejectLeaves');
+  const canDelete = hasExplicitPermission('deleteLeaves');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -462,10 +469,12 @@ export default function LeaveManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{t('Leave Requests')}</CardTitle>
-            <Button onClick={() => setShowApplyDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('Apply Leave')}
-            </Button>
+            {canCreate && (
+              <Button onClick={() => setShowApplyDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('Apply Leave')}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -556,32 +565,36 @@ export default function LeaveManagement() {
                         <div className="flex justify-end gap-2">
                           {leave.status === 'Pending' && (
                             <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-green-600"
-                                onClick={() => handleApprove(leave)}
-                                disabled={isApproving}
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                {t('Approve')}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-red-600"
-                                onClick={() => {
-                                  setSelectedLeave(leave);
-                                  setRejectionReason('');
-                                }}
-                                disabled={isRejecting}
-                              >
-                                <X className="h-4 w-4 mr-1" />
-                                {t('Reject')}
-                              </Button>
+                              {canApprove && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-green-600"
+                                  onClick={() => handleApprove(leave)}
+                                  disabled={isApproving}
+                                >
+                                  <Check className="h-4 w-4 mr-1" />
+                                  {t('Approve')}
+                                </Button>
+                              )}
+                              {canReject && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600"
+                                  onClick={() => {
+                                    setSelectedLeave(leave);
+                                    setRejectionReason('');
+                                  }}
+                                  disabled={isRejecting}
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  {t('Reject')}
+                                </Button>
+                              )}
                             </>
                           )}
-                          {(leave.status === 'Pending' || leave.status === 'Rejected') && (
+                          {canEdit && (leave.status === 'Pending' || leave.status === 'Rejected') && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -602,18 +615,20 @@ export default function LeaveManagement() {
                               {t('Edit')}
                             </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600"
-                            onClick={() => {
-                              setLeaveToDelete(leave);
-                              setShowDeleteDialog(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            {t('Delete')}
-                          </Button>
+                          {canDelete && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600"
+                              onClick={() => {
+                                setLeaveToDelete(leave);
+                                setShowDeleteDialog(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              {t('Delete')}
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

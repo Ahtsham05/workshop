@@ -7,6 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Can } from '@/context/permission-context'
 
 interface SubCategoriesPrimaryButtonsProps {
   hasCategories: boolean
@@ -31,17 +32,23 @@ export default function SubCategoriesPrimaryButtons({ hasCategories, defaultCate
   )
 
   if (hasCategories) {
-    return <div className="flex items-center space-x-2">{button}</div>
+    return (
+      <Can permission="createCategories">
+        <div className="flex items-center space-x-2">{button}</div>
+      </Can>
+    )
   }
 
   return (
-    <div className="flex items-center space-x-2">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">{button}</span>
-        </TooltipTrigger>
-        <TooltipContent>{t('create_category_first_hint')}</TooltipContent>
-      </Tooltip>
-    </div>
+    <Can permission="createCategories">
+      <div className="flex items-center space-x-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">{button}</span>
+          </TooltipTrigger>
+          <TooltipContent>{t('create_category_first_hint')}</TooltipContent>
+        </Tooltip>
+      </div>
+    </Can>
   )
 }

@@ -1,11 +1,16 @@
 const express = require('express');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
+const branchScope = require('../../middlewares/branchScope');
 const roleValidation = require('../../validations/role.validation');
 const roleController = require('../../controllers/role.controller');
 const { checkPermission } = require('../../middlewares/permission');
 
 const router = express.Router();
+
+// Optional branch scope: an org-level view (no x-branch-id header) still sees every
+// branch's custom roles; a branch header narrows to that branch's roles + org-wide ones.
+router.use(auth(), branchScope());
 
 router
   .route('/')

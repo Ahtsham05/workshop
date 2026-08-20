@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePermissions } from '@/context/permission-context'
 import { StatTile } from '@/features/whatsapp/analytics/stat-tile'
 import {
   useGetMessagesQuery,
@@ -127,6 +128,11 @@ const STATUS_TABS: { value: SmsMessageStatusFilter; label: string }[] = [
 ]
 
 export function SmsLogPage() {
+  const { hasExplicitPermission } = usePermissions()
+  // No dedicated manage/delete key exists for the `sms` registry group — viewSmsLog is the
+  // best available gate for the real server-side delete action below.
+  const canDeleteSmsLog = hasExplicitPermission('viewSmsLog')
+
   const [status, setStatus] = useState<SmsMessageStatusFilter>('all')
   const [source, setSource] = useState<string>('all')
   const [search, setSearch] = useState('')
@@ -334,20 +340,22 @@ export function SmsLogPage() {
                 <Button variant='ghost' size='sm' disabled={!!bulkAction} onClick={() => setSelectedIds(new Set())}>
                   Clear
                 </Button>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  className='text-destructive hover:text-destructive'
-                  disabled={!!bulkAction}
-                  onClick={() => setDeleteConfirm({ mode: 'bulk' })}
-                >
-                  {bulkAction?.type === 'delete' ? (
-                    <Loader2 className='h-3.5 w-3.5 animate-spin' />
-                  ) : (
-                    <Trash2 className='h-3.5 w-3.5' />
-                  )}
-                  Delete Selected
-                </Button>
+                {canDeleteSmsLog && (
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    className='text-destructive hover:text-destructive'
+                    disabled={!!bulkAction}
+                    onClick={() => setDeleteConfirm({ mode: 'bulk' })}
+                  >
+                    {bulkAction?.type === 'delete' ? (
+                      <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                    ) : (
+                      <Trash2 className='h-3.5 w-3.5' />
+                    )}
+                    Delete Selected
+                  </Button>
+                )}
                 <Button size='sm' disabled={!!bulkAction} onClick={handleBulkResend}>
                   {bulkAction?.type === 'resend' ? (
                     <Loader2 className='h-3.5 w-3.5 animate-spin' />
@@ -435,10 +443,12 @@ export function SmsLogPage() {
                           {isResendable && (
                             <div className='flex items-center justify-end gap-1.5'>
                               <ResendButton messageId={message._id} disabled={!!bulkAction} />
-                              <DeleteButton
-                                disabled={!!bulkAction}
-                                onRequestDelete={() => setDeleteConfirm({ mode: 'single', id: message._id })}
-                              />
+                              {canDeleteSmsLog && (
+                                <DeleteButton
+                                  disabled={!!bulkAction}
+                                  onRequestDelete={() => setDeleteConfirm({ mode: 'single', id: message._id })}
+                                />
+                              )}
                             </div>
                           )}
                         </TableCell>

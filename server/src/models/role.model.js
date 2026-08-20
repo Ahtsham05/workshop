@@ -13,7 +13,6 @@ const roleSchema = mongoose.Schema(
     name: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     description: {
@@ -32,17 +31,53 @@ const roleSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    /** null for system roles (global templates). Required for every custom role. */
+    organizationId: {
+      type: mongoose.SchemaTypes.ObjectId,
+      ref: 'Organization',
+      default: null,
+    },
+    /** null = role is usable at every branch in the org. Set = role only applies at that one branch. */
+    branchId: {
+      type: mongoose.SchemaTypes.ObjectId,
+      ref: 'Branch',
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
 
+roleSchema.index(
+  { name: 1 },
+  { unique: true, partialFilterExpression: { isSystemRole: true }, name: 'system_role_name_unique' }
+);
+roleSchema.index(
+  { organizationId: 1, branchId: 1, name: 1 },
+  { unique: true, partialFilterExpression: { isSystemRole: false }, name: 'org_branch_role_name_unique' }
+);
+roleSchema.index({ organizationId: 1, branchId: 1 });
+
 roleSchema.plugin(toJSON);
 roleSchema.plugin(paginate);
 
-roleSchema.statics.isNameTaken = async function (name, excludeRoleId) {
-  const role = await this.findOne({ name, _id: { $ne: excludeRoleId } });
+/**
+ * @param {string} name
+ * @param {{isSystemRole?: boolean, organizationId?: string, branchId?: string|null}} [scope]
+ * @param {string} [excludeRoleId]
+ */
+roleSchema.statics.isNameTaken = async function (name, scope = {}, excludeRoleId) {
+  const query = scope.isSystemRole
+    ? { name, isSystemRole: true, _id: { $ne: excludeRoleId } }
+    : {
+        name,
+        isSystemRole: false,
+        organizationId: scope.organizationId,
+        branchId: scope.branchId ?? null,
+        _id: { $ne: excludeRoleId },
+      };
+  const role = await this.findOne(query);
   return !!role;
 };
 

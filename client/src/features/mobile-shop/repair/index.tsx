@@ -32,6 +32,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Printer, Trash2, CheckCircle, PackageCheck, Plus, Search, ShoppingCart, Package } from 'lucide-react'
+import { usePermissions } from '@/context/permission-context'
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import {
@@ -155,6 +156,8 @@ const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function RepairPage() {
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission('manageRepairs')
   const [form, setForm] = useState<RepairFormState>(makeInitialForm)
   const [activeTab, setActiveTab] = useState('all')
   const [repairSearch, setRepairSearch] = useState('')
@@ -501,6 +504,7 @@ export default function RepairPage() {
     >
       <div className='grid gap-6 xl:grid-cols-[440px_1fr]'>
         {/* ── Create Form ── */}
+        {canManage ? (
         <Card>
           <CardHeader>
             <CardTitle>New Repair Job</CardTitle>
@@ -683,6 +687,7 @@ export default function RepairPage() {
             </form>
           </CardContent>
         </Card>
+        ) : null}
 
         {/* ── Repair Queue ── */}
         <Card className='flex flex-col'>
@@ -832,14 +837,16 @@ export default function RepairPage() {
                               ],
                             })}
                           />
-                          <Button
-                            size='icon'
-                            variant='ghost'
-                            title='Delete'
-                            onClick={() => setDeleteConfirm(repair)}
-                          >
-                            <Trash2 className='h-4 w-4 text-destructive' />
-                          </Button>
+                          {canManage ? (
+                            <Button
+                              size='icon'
+                              variant='ghost'
+                              title='Delete'
+                              onClick={() => setDeleteConfirm(repair)}
+                            >
+                              <Trash2 className='h-4 w-4 text-destructive' />
+                            </Button>
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -865,6 +872,7 @@ export default function RepairPage() {
       {/* ── Repair Stock Section ── */}
       <div className='mt-6 grid gap-6 xl:grid-cols-[400px_1fr]'>
         {/* ── Purchase Stock Form ── */}
+        {canManage ? (
         <Card>
           <CardHeader>
             <CardTitle className='flex items-center gap-2'>
@@ -969,6 +977,7 @@ export default function RepairPage() {
             )}
           </CardContent>
         </Card>
+        ) : null}
 
         {/* ── Stock Ledger Table ── */}
         <Card className='flex flex-col'>
@@ -1031,7 +1040,7 @@ export default function RepairPage() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      {row.type === 'purchase' && (
+                      {row.type === 'purchase' && canManage && (
                         <Button size='icon' variant='ghost' title='Delete' onClick={() => setDeleteStockConfirm(row)}>
                           <Trash2 className='h-4 w-4 text-destructive' />
                         </Button>

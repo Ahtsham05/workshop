@@ -89,7 +89,7 @@ const setupOrganization = async (userId, orgData) => {
   });
 
   // Update user to superAdmin and mark onboarding complete, also assign Admin role for full permissions
-  const adminRole = await Role.findOne({ name: 'Admin' });
+  const adminRole = await Role.findOne({ name: 'Admin', isSystemRole: true });
   await User.findByIdAndUpdate(userId, {
     organizationId: organization._id,
     businessType: organization.businessType,

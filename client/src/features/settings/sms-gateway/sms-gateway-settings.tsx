@@ -20,8 +20,17 @@ import {
   useDeleteDeviceMutation,
   type SmsDevice,
 } from '@/stores/smsGateway.api'
+import { usePermissions } from '@/context/permission-context'
 
-function DeviceCard({ device, onDelete }: { device: SmsDevice; onDelete: () => void }) {
+function DeviceCard({
+  device,
+  onDelete,
+  canManage,
+}: {
+  device: SmsDevice
+  onDelete: () => void
+  canManage: boolean
+}) {
   const copyToken = () => {
     navigator.clipboard.writeText(device.token)
     toast.success('Token copied to clipboard')
@@ -60,14 +69,21 @@ function DeviceCard({ device, onDelete }: { device: SmsDevice; onDelete: () => v
           </div>
         </div>
       </div>
-      <Button size="icon" variant="ghost" className="shrink-0 text-destructive hover:text-destructive" onClick={onDelete}>
-        <Trash2 className="h-4 w-4" />
-      </Button>
+      {canManage && (
+        <Button size="icon" variant="ghost" className="shrink-0 text-destructive hover:text-destructive" onClick={onDelete}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
     </div>
   )
 }
 
 export default function SmsGatewaySettings() {
+  const { hasExplicitPermission } = usePermissions()
+  // This is an org-wide configuration page (registry group `settings`) — editSettings gates
+  // registering/removing gateway devices, not the read-only device list itself.
+  const canManageSettings = hasExplicitPermission('editSettings')
+
   const { data: devices = [], isLoading } = useGetDevicesQuery()
   const [registerDevice, { isLoading: registering }] = useRegisterDeviceMutation()
   const [deleteDevice] = useDeleteDeviceMutation()
@@ -125,10 +141,12 @@ export default function SmsGatewaySettings() {
                 Each device pairs with a SIM card and sends SMS when triggered from anywhere in the app.
               </CardDescription>
             </div>
-            <Button size="sm" className="gap-2 shrink-0" onClick={() => setShowAddDialog(true)}>
-              <Plus className="h-4 w-4" />
-              Add Device
-            </Button>
+            {canManageSettings && (
+              <Button size="sm" className="gap-2 shrink-0" onClick={() => setShowAddDialog(true)}>
+                <Plus className="h-4 w-4" />
+                Add Device
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -144,7 +162,12 @@ export default function SmsGatewaySettings() {
             </div>
           ) : (
             devices.map((device) => (
-              <DeviceCard key={device.deviceId} device={device} onDelete={() => handleDelete(device.deviceId)} />
+              <DeviceCard
+                key={device.deviceId}
+                device={device}
+                onDelete={() => handleDelete(device.deviceId)}
+                canManage={canManageSettings}
+              />
             ))
           )}
         </CardContent>

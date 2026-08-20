@@ -48,7 +48,7 @@ const createUser = async (userBody) => {
 
   // Auto-assign Admin role when no role is provided
   if (!newUserBody.role) {
-    const adminRole = await Role.findOne({ name: 'Admin' });
+    const adminRole = await Role.findOne({ name: 'Admin', isSystemRole: true });
     if (adminRole) {
       newUserBody.role = adminRole._id;
     }

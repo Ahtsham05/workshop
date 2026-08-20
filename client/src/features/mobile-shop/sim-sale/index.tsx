@@ -53,6 +53,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { usePermissions } from '@/context/permission-context'
 import { format } from 'date-fns'
 import { getBusinessToday, parseBusinessDateTimeLocal, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
@@ -118,6 +119,8 @@ const makeEmptyForm = (): SimSaleFormState => ({
 })
 
 export default function SimSalePage({ initialCustomerId }: { initialCustomerId?: string }) {
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission('manageSimSales')
   const dispatch = useDispatch()
   const canViewCreatedBy = useCanViewCreatedBy()
   const [page, setPage] = useState(1)
@@ -385,9 +388,11 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
 
         {/* Toolbar */}
         <div className='flex justify-end'>
-          <Button onClick={() => { resetForm(); setShowForm(true) }}>
-            <Plus className='mr-2 h-4 w-4' /> New Sim Sale
-          </Button>
+          {canManage ? (
+            <Button onClick={() => { resetForm(); setShowForm(true) }}>
+              <Plus className='mr-2 h-4 w-4' /> New Sim Sale
+            </Button>
+          ) : null}
         </div>
 
         {/* Form */}
@@ -774,12 +779,16 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                                   ],
                                 })}
                               />
-                              <Button size='icon' variant='ghost' onClick={() => handleEdit(sale)}>
-                                <Pencil className='h-4 w-4' />
-                              </Button>
-                              <Button size='icon' variant='ghost' onClick={() => setDeleteId(sale.id)}>
-                                <Trash2 className='h-4 w-4 text-red-500' />
-                              </Button>
+                              {canManage ? (
+                                <>
+                                  <Button size='icon' variant='ghost' onClick={() => handleEdit(sale)}>
+                                    <Pencil className='h-4 w-4' />
+                                  </Button>
+                                  <Button size='icon' variant='ghost' onClick={() => setDeleteId(sale.id)}>
+                                    <Trash2 className='h-4 w-4 text-red-500' />
+                                  </Button>
+                                </>
+                              ) : null}
                             </div>
                           </TableCell>
                         </TableRow>

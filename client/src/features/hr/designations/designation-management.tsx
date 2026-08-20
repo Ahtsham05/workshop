@@ -54,11 +54,16 @@ import {
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { getEntityId } from '@/lib/entity-id';
+import { usePermissions } from '@/context/permission-context';
 
 const NO_DEPARTMENT = '__none__';
 
 export default function DesignationManagement() {
   const { t } = useLanguage();
+  const { hasExplicitPermission } = usePermissions();
+  const canCreate = hasExplicitPermission('createDesignations');
+  const canEdit = hasExplicitPermission('manageDesignations');
+  const canDelete = hasExplicitPermission('deleteDesignations');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
@@ -190,14 +195,16 @@ export default function DesignationManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>{t('Designations')}</CardTitle>
-            <Button onClick={() => {
-              setEditingDesignation(null);
-              setFormData(emptyForm);
-              setShowDialog(true);
-            }}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('Add Designation')}
-            </Button>
+            {canCreate && (
+              <Button onClick={() => {
+                setEditingDesignation(null);
+                setFormData(emptyForm);
+                setShowDialog(true);
+              }}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('Add Designation')}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -265,17 +272,21 @@ export default function DesignationManagement() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(designation)}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              {t('Edit')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeleteId(getEntityId(designation))}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              {t('Delete')}
-                            </DropdownMenuItem>
+                            {canEdit && (
+                              <DropdownMenuItem onClick={() => handleEdit(designation)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                {t('Edit')}
+                              </DropdownMenuItem>
+                            )}
+                            {canDelete && (
+                              <DropdownMenuItem
+                                onClick={() => setDeleteId(getEntityId(designation))}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                {t('Delete')}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

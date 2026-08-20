@@ -410,6 +410,9 @@ const en: Record<string, string> = {
     "create_invoice": "Create Invoice",
     "create_new_invoice": "Create a new invoice",
     "invoice_details": "Invoice Details",
+    "failed_to_load_invoice": "Failed to load invoice details",
+    "expiry": "Expiry",
+    "quantity": "Qty",
     "invoice_items": "Invoice Items",
     "add_item": "Add Row",
     "select_product": "Select Product",
@@ -1068,6 +1071,13 @@ const en: Record<string, string> = {
     "other_permissions": "Other Permissions",
     // "select_all": "Select All",
     // "deselect_all": "Deselect All",
+    "role_scope": "Scope",
+    "all_branches": "All Branches",
+    "branch_specific": "Branch",
+    "organization_wide_hint": "Usable at every branch",
+    "this_branch_only": "This branch only",
+    "select_a_branch_first": "Select a branch first",
+    "visible_at": "Visible at",
 
     // Salesmen
     "salesmen_management": "Salesmen",

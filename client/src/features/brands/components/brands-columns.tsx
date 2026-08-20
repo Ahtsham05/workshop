@@ -13,9 +13,12 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import type { Brand } from '@/stores/brand.api'
 import { useBrands } from '../context/brands-context'
+import { usePermissions } from '@/context/permission-context'
 
 export function useBrandColumns(): ColumnDef<Brand>[] {
   const { dispatch } = useBrands()
+  const { hasExplicitPermission } = usePermissions()
+  const canDelete = hasExplicitPermission('deleteBrands')
 
   const selectColumn: ColumnDef<Brand> = {
     id: 'select',
@@ -113,16 +116,18 @@ export function useBrandColumns(): ColumnDef<Brand>[] {
               <Edit className="mr-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({ type: 'SET_BRAND', payload: brand })
-                dispatch({ type: 'SET_DELETE_OPEN', payload: true })
-              }}
-              className="text-red-600"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
+            {canDelete && (
+              <DropdownMenuItem
+                onClick={() => {
+                  dispatch({ type: 'SET_BRAND', payload: brand })
+                  dispatch({ type: 'SET_DELETE_OPEN', payload: true })
+                }}
+                className="text-red-600"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )

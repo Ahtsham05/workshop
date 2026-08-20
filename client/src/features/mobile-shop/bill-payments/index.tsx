@@ -95,6 +95,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { usePermissions } from '@/context/permission-context'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -680,6 +681,9 @@ export default function BillPaymentsPage() {
   const routeSearch = useSearch({ from: '/_authenticated/mobile-shop/bill-payments' })
   const initialFilters = getInitialBillListFilters(routeSearch.filter)
 
+  const { hasPermission } = usePermissions()
+  const canManage = hasPermission('manageBillPayments')
+
   const currentUser = useSelector((state: RootState) => state.auth.data?.user)
   const isAgentUser = currentUser?.email === AGENT_BILL_EMAIL
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
@@ -1042,16 +1046,18 @@ export default function BillPaymentsPage() {
             </TabsList>
             {activeTab === 'bills' && (
               <div className='flex items-center gap-2'>
-                {isAgentUser && (
+                {isAgentUser && canManage && (
                   <Button variant='outline' onClick={() => setAgentBillOpen(true)}>
                     <Plus className='mr-1 h-4 w-4' />
                     Agent Bill
                   </Button>
                 )}
-                <Button onClick={() => { setOutstandingByRow({}); setDialogOpen(true) }}>
-                  <Plus className='mr-1 h-4 w-4' />
-                  New Bill
-                </Button>
+                {canManage && (
+                  <Button onClick={() => { setOutstandingByRow({}); setDialogOpen(true) }}>
+                    <Plus className='mr-1 h-4 w-4' />
+                    New Bill
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -1188,7 +1194,7 @@ export default function BillPaymentsPage() {
                           </TableCell>
                           <TableCell className='text-right space-x-1'>
                             {/* Mark as Paid — only for pending/overdue */}
-                            {bill.status !== 'paid' && (
+                            {bill.status !== 'paid' && canManage && (
                               <Button
                                 size='icon'
                                 variant='ghost'
@@ -1239,14 +1245,16 @@ export default function BillPaymentsPage() {
                                 ],
                               })}
                             />
-                            <Button
-                              size='icon'
-                              variant='ghost'
-                              onClick={() => setDeleteTarget(bill)}
-                              title='Delete'
-                            >
-                              <Trash2 className='h-4 w-4 text-destructive' />
-                            </Button>
+                            {canManage && (
+                              <Button
+                                size='icon'
+                                variant='ghost'
+                                onClick={() => setDeleteTarget(bill)}
+                                title='Delete'
+                              >
+                                <Trash2 className='h-4 w-4 text-destructive' />
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1417,43 +1425,47 @@ export default function BillPaymentsPage() {
                             </TableCell>
                             <TableCell className='text-right'>
                               {/* Pay / Unpay toggle */}
-                              <Button
-                                size='icon'
-                                variant='ghost'
-                                title={bill.isPaid ? 'Mark as Unpaid' : 'Mark as Paid'}
-                                disabled={payingBillIds.has(bill.id)}
-                                onClick={async () => {
-                                  if (payingBillIds.has(bill.id)) return
-                                  setPayingBillIds(prev => new Set([...prev, bill.id]))
-                                  try {
-                                    await updateAgentBill({
-                                      id: bill.id,
-                                      isPaid: !bill.isPaid,
-                                      paidDate: !bill.isPaid ? new Date().toISOString() : null,
-                                    }).unwrap()
-                                  } finally {
-                                    setPayingBillIds(prev => {
-                                      const next = new Set(prev)
-                                      next.delete(bill.id)
-                                      return next
-                                    })
+                              {canManage && (
+                                <Button
+                                  size='icon'
+                                  variant='ghost'
+                                  title={bill.isPaid ? 'Mark as Unpaid' : 'Mark as Paid'}
+                                  disabled={payingBillIds.has(bill.id)}
+                                  onClick={async () => {
+                                    if (payingBillIds.has(bill.id)) return
+                                    setPayingBillIds(prev => new Set([...prev, bill.id]))
+                                    try {
+                                      await updateAgentBill({
+                                        id: bill.id,
+                                        isPaid: !bill.isPaid,
+                                        paidDate: !bill.isPaid ? new Date().toISOString() : null,
+                                      }).unwrap()
+                                    } finally {
+                                      setPayingBillIds(prev => {
+                                        const next = new Set(prev)
+                                        next.delete(bill.id)
+                                        return next
+                                      })
+                                    }
+                                  }}
+                                >
+                                  {payingBillIds.has(bill.id)
+                                    ? <Loader2 className='h-4 w-4 animate-spin' />
+                                    : <CheckCircle className={`h-4 w-4 ${bill.isPaid ? 'text-green-600' : 'text-muted-foreground'}`} />
                                   }
-                                }}
-                              >
-                                {payingBillIds.has(bill.id)
-                                  ? <Loader2 className='h-4 w-4 animate-spin' />
-                                  : <CheckCircle className={`h-4 w-4 ${bill.isPaid ? 'text-green-600' : 'text-muted-foreground'}`} />
-                                }
-                              </Button>
+                                </Button>
+                              )}
                               {/* Edit */}
-                              <Button
-                                size='icon'
-                                variant='ghost'
-                                title='Edit'
-                                onClick={() => setEditingAgentBill(bill)}
-                              >
-                                <Pencil className='h-4 w-4' />
-                              </Button>
+                              {canManage && (
+                                <Button
+                                  size='icon'
+                                  variant='ghost'
+                                  title='Edit'
+                                  onClick={() => setEditingAgentBill(bill)}
+                                >
+                                  <Pencil className='h-4 w-4' />
+                                </Button>
+                              )}
                               {/* Print */}
                               <Button
                                 size='icon'
@@ -1499,18 +1511,20 @@ export default function BillPaymentsPage() {
                                 })}
                               />
                               {/* Delete */}
-                              <Button
-                                size='icon'
-                                variant='ghost'
-                                title='Delete'
-                                disabled={isDeletingAgentBill}
-                                onClick={async () => {
-                                  if (!confirm(`Delete bill for ${bill.customerName}?`)) return
-                                  await deleteAgentBill(bill.id)
-                                }}
-                              >
-                                <Trash2 className='h-4 w-4 text-destructive' />
-                              </Button>
+                              {canManage && (
+                                <Button
+                                  size='icon'
+                                  variant='ghost'
+                                  title='Delete'
+                                  disabled={isDeletingAgentBill}
+                                  onClick={async () => {
+                                    if (!confirm(`Delete bill for ${bill.customerName}?`)) return
+                                    await deleteAgentBill(bill.id)
+                                  }}
+                                >
+                                  <Trash2 className='h-4 w-4 text-destructive' />
+                                </Button>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1772,7 +1786,7 @@ export default function BillPaymentsPage() {
                                         </>
                                       ) : null}
                                       <div className='flex flex-wrap items-center gap-1.5'>
-                                        {newBillAmount > 0 && (
+                                        {newBillAmount > 0 && canManage && (
                                           <Button
                                             type='button'
                                             size='sm'
@@ -1783,18 +1797,20 @@ export default function BillPaymentsPage() {
                                             Settle Now — Collect Rs. {(nowCollecting - oldOwed).toLocaleString()} Only
                                           </Button>
                                         )}
-                                        <Button
-                                          type='button'
-                                          size='sm'
-                                          variant='outline'
-                                          className='h-6 border-amber-300 bg-white px-2 text-[11px]'
-                                          onClick={() => {
-                                            setDialogOpen(false)
-                                            setMarkPaidTarget(b)
-                                          }}
-                                        >
-                                          Settle old bill separately
-                                        </Button>
+                                        {canManage && (
+                                          <Button
+                                            type='button'
+                                            size='sm'
+                                            variant='outline'
+                                            className='h-6 border-amber-300 bg-white px-2 text-[11px]'
+                                            onClick={() => {
+                                              setDialogOpen(false)
+                                              setMarkPaidTarget(b)
+                                            }}
+                                          >
+                                            Settle old bill separately
+                                          </Button>
+                                        )}
                                       </div>
                                       <p className='text-[11px] text-amber-700'>
                                         "Settle Now" books only the net amount in the Cash Book. Or skip both —

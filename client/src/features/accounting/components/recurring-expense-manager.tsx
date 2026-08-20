@@ -25,6 +25,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { usePermissions } from '@/context/permission-context'
 import { TransactionCategoryPicker } from './transaction-category-picker'
 import {
   recurringExpenseApi,
@@ -130,6 +131,9 @@ const emptyForm = (): FormState => ({
 })
 
 export function RecurringExpenseManager() {
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission('manageExpenses')
+
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm())
@@ -295,10 +299,12 @@ export function RecurringExpenseManager() {
               <span className='ml-1.5'>Pay All Pending ({totalUnpaidCount})</span>
             </Button>
           )}
-          <Button size='sm' onClick={openCreate}>
-            <Plus className='h-4 w-4 mr-1.5' />
-            Add Rule
-          </Button>
+          {canManage ? (
+            <Button size='sm' onClick={openCreate}>
+              <Plus className='h-4 w-4 mr-1.5' />
+              Add Rule
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -362,10 +368,12 @@ export function RecurringExpenseManager() {
                 <p className='font-medium'>No recurring rules yet</p>
                 <p className='text-sm text-muted-foreground'>Auto-generate salaries, rent, bills, etc.</p>
               </div>
-              <Button onClick={openCreate} size='sm'>
-                <Plus className='h-4 w-4 mr-1.5' />
-                Create First Rule
-              </Button>
+              {canManage ? (
+                <Button onClick={openCreate} size='sm'>
+                  <Plus className='h-4 w-4 mr-1.5' />
+                  Create First Rule
+                </Button>
+              ) : null}
             </div>
           ) : (
             <>
@@ -444,12 +452,16 @@ export function RecurringExpenseManager() {
                         <Switch checked={rule.isActive} onCheckedChange={() => toggleActive(rule)} />
                       </TableCell>
                       <TableCell className='text-right'>
-                        <Button size='icon' variant='ghost' onClick={() => openEdit(rule)} title='Edit'>
-                          <Pencil className='h-4 w-4' />
-                        </Button>
-                        <Button size='icon' variant='ghost' onClick={() => handleDelete(rule)} title='Delete'>
-                          <Trash2 className='h-4 w-4 text-destructive' />
-                        </Button>
+                        {canManage ? (
+                          <>
+                            <Button size='icon' variant='ghost' onClick={() => openEdit(rule)} title='Edit'>
+                              <Pencil className='h-4 w-4' />
+                            </Button>
+                            <Button size='icon' variant='ghost' onClick={() => handleDelete(rule)} title='Delete'>
+                              <Trash2 className='h-4 w-4 text-destructive' />
+                            </Button>
+                          </>
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   ))}

@@ -5,6 +5,7 @@ import PurchaseOrderList from './components/purchase-order-list'
 import PurchaseOrderForm from './components/purchase-order-form'
 import ReceiveItemsDialog from './components/receive-items-dialog'
 import PurchaseOrderDetailsDialog from './components/purchase-order-details-dialog'
+import { usePermissions } from '@/context/permission-context'
 
 import type { PurchaseOrder } from '@/stores/purchaseOrder.api'
 
@@ -12,11 +13,15 @@ type View = 'list' | 'form'
 
 export default function PurchaseOrdersPage() {
   const navigate = useNavigate()
+  const { hasExplicitPermission } = usePermissions()
   const search = useSearch({ strict: false }) as {
     prefillItems?: { productId: string; variantId?: string; quantity: number }[]
     supplierId?: string
   }
-  const hasPrefill = Boolean(search.prefillItems && search.prefillItems.length > 0)
+  // A deep link (e.g. from Purchase Suggestions) can request the form directly via
+  // ?prefillItems=... — only honor it if the user actually has createPurchaseOrders,
+  // otherwise a user without create access could skip the list's gated Create button.
+  const hasPrefill = Boolean(search.prefillItems && search.prefillItems.length > 0) && hasExplicitPermission('createPurchaseOrders')
 
   const [view, setView] = useState<View>(hasPrefill ? 'form' : 'list')
   const [editing, setEditing] = useState<PurchaseOrder | null>(null)

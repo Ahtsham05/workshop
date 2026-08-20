@@ -54,7 +54,13 @@ export type PermissionKey =
   | 'viewPartnerProfitShareLedger' | 'managePartnerPayments'
   | 'viewCommunicationLog' | 'createCommunicationLog' | 'editCommunicationLog' | 'deleteCommunicationLog'
   | 'viewReminders' | 'createReminders' | 'editReminders' | 'deleteReminders'
-  | 'viewLeads' | 'viewAllLeads' | 'createLeads' | 'editLeads' | 'deleteLeads' | 'convertLeads';
+  | 'viewLeads' | 'viewAllLeads' | 'createLeads' | 'editLeads' | 'deleteLeads' | 'convertLeads'
+  | 'viewWhatsapp' | 'manageWhatsapp'
+  | 'viewSmsLog'
+  | 'viewAiAssistant'
+  | 'viewInsights'
+  | 'viewPurchaseSuggestions'
+  | 'viewBarcodeGenerator';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -127,6 +133,12 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'partners', label: 'Partners & Investors', permissions: ['viewPartners', 'createPartners', 'editPartners', 'deletePartners'] },
   { id: 'partner_profit_share_rules', label: 'Partner Profit-Share Rules', permissions: ['viewPartnerProfitShareRules', 'managePartnerProfitShareRules'] },
   { id: 'partner_profit_share_ledger', label: 'Partner Ledger & Payouts', permissions: ['viewPartnerProfitShareLedger', 'managePartnerPayments'] },
+  { id: 'whatsapp', label: 'WhatsApp', permissions: ['viewWhatsapp', 'manageWhatsapp'] },
+  { id: 'sms', label: 'SMS', permissions: ['viewSmsLog'] },
+  { id: 'ai_assistant', label: 'AI Assistant', permissions: ['viewAiAssistant'] },
+  { id: 'insights', label: 'Insights', permissions: ['viewInsights'] },
+  { id: 'purchase_suggestions', label: 'Purchase Suggestions', permissions: ['viewPurchaseSuggestions'] },
+  { id: 'barcode', label: 'Barcode Generator', permissions: ['viewBarcodeGenerator'] },
 ];
 
 export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))] as PermissionKey[];
@@ -135,12 +147,13 @@ export const PERMISSION_TAB_GROUPS = {
   business: [
     'products', 'imei_tracking', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
     'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system', 'leads',
+    'communication_log', 'reminders', 'whatsapp', 'sms', 'ai_assistant', 'insights', 'purchase_suggestions', 'barcode',
   ],
   mobile_shop: [
     'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones',
   ],
   reports_hr: [
-    'reports', 'hr_employees', 'hr_departments', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',
+    'reports', 'hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',
   ],
   administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
 } as const;

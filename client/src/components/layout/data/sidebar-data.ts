@@ -74,9 +74,9 @@ export const sidebarData: SidebarData = {
           permission: 'viewDashboard',
           excludeBusinessTypes: ['school'],
           items: [
-            { title: 'AI Assistant', url: '/ai-assistant', icon: Bot, excludeBusinessTypes: ['school'] },
-            { title: 'AI Sales Insights', url: '/insights', icon: Sparkles, excludeBusinessTypes: ['school', 'restaurant'] },
-            { title: 'Purchase Suggestions', url: '/purchase-suggestions', icon: ShoppingCart, excludeBusinessTypes: ['school', 'restaurant'] },
+            { title: 'AI Assistant', url: '/ai-assistant', icon: Bot, permission: 'viewAiAssistant', excludeBusinessTypes: ['school'] },
+            { title: 'AI Sales Insights', url: '/insights', icon: Sparkles, permission: 'viewInsights', excludeBusinessTypes: ['school', 'restaurant'] },
+            { title: 'Purchase Suggestions', url: '/purchase-suggestions', icon: ShoppingCart, permission: 'viewPurchaseSuggestions', excludeBusinessTypes: ['school', 'restaurant'] },
           ],
         },
         {
@@ -133,10 +133,10 @@ export const sidebarData: SidebarData = {
           icon: MessageCircle,
           permission: 'editSettings',
           items: [
-            { title: 'WhatsApp Inbox', url: '/whatsapp', icon: MessageCircle },
-            { title: 'WhatsApp Analytics', url: '/whatsapp/analytics', icon: IconChartBar },
-            { title: 'WhatsApp Message Log', url: '/whatsapp/messages', icon: ClipboardList },
-            { title: 'SMS Log', url: '/sms/log', icon: Smartphone },
+            { title: 'WhatsApp Inbox', url: '/whatsapp', icon: MessageCircle, permission: 'viewWhatsapp' },
+            { title: 'WhatsApp Analytics', url: '/whatsapp/analytics', icon: IconChartBar, permission: 'viewWhatsapp' },
+            { title: 'WhatsApp Message Log', url: '/whatsapp/messages', icon: ClipboardList, permission: 'viewWhatsapp' },
+            { title: 'SMS Log', url: '/sms/log', icon: Smartphone, permission: 'viewSmsLog' },
           ],
         },
         {
@@ -868,7 +868,7 @@ export const sidebarData: SidebarData = {
           title: 'Mobile Phones',
           url: '/mobile-shop/used-phones',
           icon: IconRefresh,
-          permission: 'viewUsedPhones',
+          anyPermission: ['viewUsedPhones', 'viewNewPhones'],
           businessTypes: ['mobile_shop'],
           requiredFeature: 'used_phones',
         },
@@ -1007,7 +1007,7 @@ export const sidebarData: SidebarData = {
           title: 'Barcode Generator',
           url: '/barcode-generator',
           icon: IconBarcode,
-          permission: 'viewReports',
+          permission: 'viewBarcodeGenerator',
           excludeBusinessTypes: ['school', 'restaurant'],
         },
         // {
