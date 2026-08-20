@@ -579,6 +579,7 @@ export default function PurchasePanel({
   const paymentTypeTriggerRef = useRef<HTMLButtonElement>(null)
   const paymentMethodTriggerRef = useRef<HTMLButtonElement>(null)
   const purchaseDateRef = useRef<HTMLInputElement>(null)
+  const vendorBillNumberRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
   // The items table (colgroup: 8 + auto + 110 + 100 + 100 + 85 + 90 + 10px) needs ~700px+ to
   // render its fixed-width columns without table-fixed proportionally squeezing all of them
@@ -995,6 +996,7 @@ export default function PurchasePanel({
 
   const focusPaymentType = useCallback(() => focusField(paymentTypeTriggerRef.current), [])
   const focusPurchaseDate = useCallback(() => focusField(purchaseDateRef.current), [])
+  const focusVendorBillNumber = useCallback(() => focusField(vendorBillNumberRef.current), [])
 
   const selectSupplier = useCallback(
     (supplier: (typeof suppliers)[number]) => {
@@ -1169,6 +1171,7 @@ export default function PurchasePanel({
         splitWalletType: splitPaymentMethod === 'wallet' ? purchase.splitWalletType : undefined,
         splitPaidAmount: splitPaidAmount,
         purchaseDate: purchase.date || new Date().toISOString(),
+        vendorBillNumber: purchase.vendorBillNumber?.trim() || undefined,
         notes: purchase.notes?.trim() || undefined,
         // Manual override only applies on create — saved purchases keep their number.
         ...(!isEditing && purchase.invoiceNumber?.trim() ? { invoiceNumber: purchase.invoiceNumber.trim() } : {}),
@@ -1274,6 +1277,13 @@ export default function PurchasePanel({
   )
 
   const totals = calculateTotals()
+  // Auto-added empty rows (no product selected yet) pad purchase.items with quantity: 1
+  // each — exclude them so the Summary card's item/quantity counts match what's actually
+  // being purchased, same real-product check used by the save-time validItems filter above.
+  const filledPurchaseItems = purchase.items.filter((item) => {
+    const pid = item.product.id || (item.product as any)?._id
+    return pid && item.product.name
+  })
   // The split leg is an independent amount that adds to Paid Amount, not carved out of it —
   // see split-payment-fields.tsx. This is what's actually been paid so far.
   const totalPaidNow = (purchase.paidAmount || 0) + (purchase.splitPaymentMethod ? (purchase.splitPaidAmount || 0) : 0)
@@ -1542,8 +1552,15 @@ export default function PurchasePanel({
                       {!compact && deleteButton}
                     </div>
 
-                    {/* Row 2: Controls */}
-                    <div className={cn(compact ? 'contents' : 'flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5')}>
+                    {/* Row 2: Controls — the qty/price and discount/sale-price/total fields
+                        are each nested in their own flex-wrap group (below) so, once the row
+                        runs out of width, a whole group drops to the next line together
+                        instead of individual fields peeling off one at a time. Always a real
+                        flex container (never `contents`) so those groups stay grouped even in
+                        compact mode, rather than flattening into the outer image/name flow. */}
+                    <div className={cn('flex items-center gap-3 flex-wrap', !compact && 'border-t bg-muted/20 px-3 py-2.5')}>
+                      {/* Group 1: quantity × purchase price */}
+                      <div className='flex items-center gap-3 flex-wrap'>
                       {/* Quantity Stepper */}
                       <div className='flex items-center gap-1.5 shrink-0'>
                         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
@@ -1654,7 +1671,11 @@ export default function PurchasePanel({
                           />
                         </div>
                       </div>
+                      </div>
 
+                      {/* Group 2: discount → sale price = line total — wraps to its own
+                          line as a whole once Group 1 no longer leaves it room. */}
+                      <div className='flex items-center gap-3 flex-wrap'>
                       {/* − separator */}
                       <span className='text-muted-foreground/60 text-sm select-none'>−</span>
 
@@ -1723,7 +1744,7 @@ export default function PurchasePanel({
                       </div>
 
                       {/* = subtotal */}
-                      <div className='flex flex-col items-end gap-0 ml-auto shrink-0'>
+                      <div className='flex flex-col items-end gap-0 shrink-0'>
                         {itemDiscountAmount > 0 && (
                           <span className='text-[10px] text-muted-foreground line-through leading-none'>Rs{itemGross.toFixed(2)}</span>
                         )}
@@ -1731,6 +1752,7 @@ export default function PurchasePanel({
                           <span className='text-muted-foreground/60 text-sm select-none'>=</span>
                           <p className='font-bold text-sm'>Rs{itemNet.toFixed(2)}</p>
                         </div>
+                      </div>
                       </div>
                     </div>
                     {compact && deleteButton}
@@ -2279,7 +2301,29 @@ export default function PurchasePanel({
                     date: new Date(e.target.value).toISOString(),
                   }))
                 }
+                onKeyDown={(e) => onEnterAdvance(e, focusVendorBillNumber)}
+                className="w-full"
+              />
+            </div>
+
+            {/* Vendor Bill No — the supplier's own invoice/bill number as printed on their
+                paper bill, kept separate from our auto-generated Purchase Number above so
+                the same vendor bill can be searched for later and re-entering it by mistake
+                gets caught (see assertVendorBillNumberAvailable on the server). */}
+            <div>
+              <Label htmlFor="vendor-bill-number">{t('Vendor Bill No') || 'Vendor Bill No'}</Label>
+              <Input
+                ref={vendorBillNumberRef}
+                id="vendor-bill-number"
+                value={purchase.vendorBillNumber || ''}
+                onChange={(e) =>
+                  setPurchase((prev) => ({
+                    ...prev,
+                    vendorBillNumber: e.target.value,
+                  }))
+                }
                 onKeyDown={(e) => onEnterAdvance(e, openPurchaseProductSelector)}
+                placeholder={t('Bill number from supplier invoice') || 'Bill number from supplier invoice'}
                 className="w-full"
               />
             </div>
@@ -2573,10 +2617,10 @@ export default function PurchasePanel({
               {t(purchase.type || 'cash')}
             </Badge>
             <Badge variant='secondary' className='gap-1 tabular-nums'>
-              {t('Total Items')}: {purchase.items.length}
+              {t('Total Items')}: {filledPurchaseItems.length}
             </Badge>
             <Badge variant='secondary' className='gap-1 tabular-nums'>
-              {t('Total Quantity')}: {purchase.items.reduce((sum, item) => sum + item.quantity, 0)}
+              {t('Total Quantity')}: {filledPurchaseItems.reduce((sum, item) => sum + item.quantity, 0)}
             </Badge>
           </div>
         </CardContent>

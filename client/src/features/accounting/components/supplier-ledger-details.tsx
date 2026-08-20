@@ -166,6 +166,12 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
           <p className="text-sm text-gray-500">{t('Invoice Number')}</p>
           <p className="font-medium">{purchaseData.invoiceNumber || '-'}</p>
         </div>
+        {purchaseData.vendorBillNumber && (
+          <div>
+            <p className="text-sm text-gray-500">{t('Vendor Bill No')}</p>
+            <p className="font-medium">{purchaseData.vendorBillNumber}</p>
+          </div>
+        )}
         <div>
           <p className="text-sm text-gray-500">{t('Date')}</p>
           <p className="font-medium">{formatDate(purchaseData.date || purchaseData.purchaseDate)}</p>
@@ -398,6 +404,10 @@ function PurchaseReturnDialogContent({
       : typeof pr.purchaseId === 'string'
         ? pr.purchaseId
         : '';
+  const purchaseVendorBillNumber =
+    typeof pr.purchaseId === 'object' && pr.purchaseId != null
+      ? (pr.purchaseId as { vendorBillNumber?: string }).vendorBillNumber
+      : undefined;
 
   return (
     <div className="space-y-4">
@@ -422,6 +432,12 @@ function PurchaseReturnDialogContent({
           <div>
             <p className="text-sm text-gray-500">{t('Invoice Number')}</p>
             <p className="font-medium">{purchaseLabel}</p>
+          </div>
+        ) : null}
+        {purchaseVendorBillNumber ? (
+          <div>
+            <p className="text-sm text-gray-500">{t('Vendor Bill No')}</p>
+            <p className="font-medium">{purchaseVendorBillNumber}</p>
           </div>
         ) : null}
         <div>
@@ -867,6 +883,10 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             : typeof pr.purchaseId === 'string'
               ? pr.purchaseId
               : '';
+        const purchaseVendorBillNumber =
+          typeof pr.purchaseId === 'object' && pr.purchaseId != null
+            ? (pr.purchaseId as { vendorBillNumber?: string }).vendorBillNumber
+            : undefined;
         const itemLines =
           pr.items?.map((it) => ({
             label: `${it.name} × ${it.quantity}`,
@@ -880,6 +900,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             lines: [
               { label: 'Supplier', value: sup },
               ...(purchaseRef ? [{ label: 'Purchase', value: purchaseRef }] : []),
+              ...(purchaseVendorBillNumber ? [{ label: 'Vendor Bill No', value: purchaseVendorBillNumber }] : []),
               ...itemLines,
               { label: 'Total', value: fmtRs(pr.totalAmount) },
               ...(pr.reason?.trim() ? [{ label: 'Reason', value: pr.reason }] : []),

@@ -1887,7 +1887,7 @@ const postPurchase = async (scope, purchase) => {
 
     return {
       date: purchase.createdAt || new Date(),
-      narration: `Purchase ${purchase.invoiceNumber || purchase.referenceNumber || ''}`.trim(),
+      narration: `Purchase ${purchase.invoiceNumber || purchase.referenceNumber || ''}${purchase.vendorBillNumber ? ` (Bill #${purchase.vendorBillNumber})` : ''}`.trim(),
       lines,
     };
   });

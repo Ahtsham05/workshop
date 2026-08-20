@@ -191,6 +191,7 @@ export function generatePurchaseInvoiceHTML(
 
   <div class="invoice-info">
     <div class="info-row"><span class="info-label">${labels.invoice_number}:</span><span class="highlight">${purchase.invoiceNumber || ''}</span></div>
+    ${purchase.vendorBillNumber ? `<div class="info-row"><span class="info-label">${labels.vendor_bill_number}:</span><span>${purchase.vendorBillNumber}</span></div>` : ''}
     <div class="info-row"><span class="info-label">${labels.date}:</span><span>${purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)} ${new Date().toLocaleTimeString(locale)}</span></div>
     <div class="info-row"><span class="info-label">${labels.supplier}:</span><span>${supplierName}</span></div>
     <div class="info-row"><span class="info-label">${labels.payment_type}:</span><span>${paymentType}</span></div>
@@ -376,6 +377,7 @@ export function generatePurchaseInvoiceA4HTML(
       <div class="invoice-title">${labels.purchase_invoice}</div>
       <div class="invoice-meta">
         <div><strong>#${purchase.invoiceNumber || ''}</strong></div>
+        ${purchase.vendorBillNumber ? `<div>${labels.vendor_bill_number}: ${purchase.vendorBillNumber}</div>` : ''}
         <div>${labels.date}: ${purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)}</div>
         <div>${labels.time}: ${new Date().toLocaleTimeString(locale)}</div>
       </div>

@@ -135,6 +135,7 @@ export interface PurchaseInvoiceItem {
 export interface PurchaseInvoiceDetail {
   _id: string
   invoiceNumber: string
+  vendorBillNumber?: string
   purchaseDate: string
   paymentType: string
   status: string
@@ -233,6 +234,7 @@ export interface AgingReportSummary {
 export interface SupplierAgingPurchase {
   _id: string
   invoiceNumber: string
+  vendorBillNumber?: string
   purchaseDate: string
   dueDate: string
   totalAmount: number

@@ -258,10 +258,21 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
                   <TableRow key={ret._id || ret.id}>
                     <TableCell className='font-medium'>{ret.returnNumber}</TableCell>
                     <TableCell>
-                      {typeof ret.purchaseId === 'object'
-                        ? (ret.purchaseId as any)?.purchaseNumber ||
-                          (ret.purchaseId as any)?.invoiceNumber
-                        : ret.purchaseId}
+                      {typeof ret.purchaseId === 'object' ? (
+                        <>
+                          <div>
+                            {(ret.purchaseId as any)?.purchaseNumber ||
+                              (ret.purchaseId as any)?.invoiceNumber}
+                          </div>
+                          {(ret.purchaseId as any)?.vendorBillNumber && (
+                            <div className='text-xs text-muted-foreground'>
+                              Bill: {(ret.purchaseId as any).vendorBillNumber}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        ret.purchaseId
+                      )}
                     </TableCell>
                     <TableCell>
                       {typeof ret.supplierId === 'object'

@@ -270,7 +270,12 @@ export const SupplierAgingReport = forwardRef<{ exportToExcel: () => void }, {}>
                                       const meta = BUCKETS.find((b) => b.key === pur.bucket)
                                       return (
                                         <TableRow key={pur._id}>
-                                          <TableCell className='font-mono text-xs text-primary'>{pur.invoiceNumber}</TableCell>
+                                          <TableCell className='font-mono text-xs text-primary'>
+                                            <div>{pur.invoiceNumber}</div>
+                                            {pur.vendorBillNumber && (
+                                              <div className='text-muted-foreground'>Bill: {pur.vendorBillNumber}</div>
+                                            )}
+                                          </TableCell>
                                           <TableCell className='text-sm text-muted-foreground'>
                                             {format(new Date(pur.purchaseDate), 'dd MMM yyyy')}
                                           </TableCell>

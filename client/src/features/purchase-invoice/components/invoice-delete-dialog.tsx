@@ -63,7 +63,11 @@ export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
         <div className='space-y-4'>
           <p className='mb-2'>
             Are you sure you want to delete{' '}
-            <span className='font-bold'>{currentRow.invoiceNumber}</span>?
+            <span className='font-bold'>{currentRow.invoiceNumber}</span>
+            {currentRow.vendorBillNumber && (
+              <span className='text-muted-foreground'> (Vendor Bill No: {currentRow.vendorBillNumber})</span>
+            )}
+            ?
             <br />
             This will permanently remove the invoice{' '}
             <span className='font-bold'>

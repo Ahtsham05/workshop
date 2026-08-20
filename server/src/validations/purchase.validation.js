@@ -21,6 +21,7 @@ const createPurchase = {
   body: Joi.object().keys({
     supplier: Joi.string().required(),
     invoiceNumber: Joi.string(),
+    vendorBillNumber: Joi.string().trim().allow('').optional(),
     items: Joi.array().items(
       Joi.object().keys({
         product: Joi.string().required(),
@@ -98,6 +99,7 @@ const updatePurchase = {
   body: Joi.object().keys({
     supplier: Joi.string(),
     invoiceNumber: Joi.string(),
+    vendorBillNumber: Joi.string().trim().allow('').optional(),
     items: Joi.array().items(
       Joi.object().keys({
         product: Joi.string(),

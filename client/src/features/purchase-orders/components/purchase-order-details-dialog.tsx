@@ -388,6 +388,9 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                                 ? ` · ${(rcpt.receivedBy as any).name}`
                                 : ''}
                               {invoiceMeta.paymentType ? ` · ${invoiceMeta.paymentType}` : ''}
+                              {typeof rcpt.purchase === 'object' && rcpt.purchase?.vendorBillNumber
+                                ? ` · Bill #${rcpt.purchase.vendorBillNumber}`
+                                : ''}
                             </p>
                           </div>
                           <div className='flex flex-wrap items-center gap-2'>

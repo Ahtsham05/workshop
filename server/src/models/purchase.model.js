@@ -23,6 +23,13 @@ const PurchaseSchema = new mongoose.Schema({
   },
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
   invoiceNumber: { type: String, required: true, unique: true },
+  // The supplier's own invoice/bill number for this purchase (as printed on their paper
+  // bill) — distinct from `invoiceNumber`, which is our own internally-generated purchase
+  // number. Recorded so the same vendor bill can be found later (search) and so re-entering
+  // it twice for the same supplier is caught (see assertVendorBillNumberAvailable in
+  // purchase.service.js). Optional and not globally unique — different suppliers commonly
+  // reuse the same small bill numbers (e.g. "001").
+  vendorBillNumber: { type: String, trim: true },
   purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', index: true },
   items: [
     {
@@ -110,6 +117,8 @@ PurchaseSchema.plugin(toJSON);
 PurchaseSchema.plugin(paginate);
 
 PurchaseSchema.index({ organizationId: 1, branchId: 1 });
+// Supports the duplicate-vendor-bill check (per supplier) and direct lookups by vendor bill no.
+PurchaseSchema.index({ organizationId: 1, supplier: 1, vendorBillNumber: 1 });
 
 const Purchase = mongoose.model('Purchase', PurchaseSchema);
 

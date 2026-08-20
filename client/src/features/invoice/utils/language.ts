@@ -271,6 +271,7 @@ export const purchaseReceiptLabels = {
   en: {
     purchase_invoice: 'Purchase Invoice',
     invoice_number: 'Invoice Number',
+    vendor_bill_number: 'Vendor Bill No',
     date: 'Date',
     time: 'Time',
     supplier: 'Supplier',
@@ -297,6 +298,7 @@ export const purchaseReceiptLabels = {
   ur: {
     purchase_invoice: 'خریداری رسید',
     invoice_number: 'رسید نمبر',
+    vendor_bill_number: 'سپلائر بل نمبر',
     date: 'تاریخ',
     time: 'وقت',
     supplier: 'سپلائر',

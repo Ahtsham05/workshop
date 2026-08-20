@@ -41,6 +41,11 @@ const buildSupplierPurchaseLedgerEntries = ({
   supplierId,
   referenceId,
   invoiceNumber,
+  // The supplier's own bill number for this purchase (see purchase.model.js's
+  // vendorBillNumber) — appended to the ledger description, not `reference` (which stays
+  // our own invoiceNumber, since that's what handleViewLinkedSupplierEntry / the "Reference"
+  // column link back to), so the ledger reads e.g. "Purchase Invoice #INV-5001 · Bill #V-220".
+  vendorBillNumber,
   transactionDate,
   totalAmount,
   paidAmount,
@@ -56,6 +61,7 @@ const buildSupplierPurchaseLedgerEntries = ({
   const date = transactionDate || new Date();
   const ledgerInvoiceType =
     invoiceType || (String(paymentType || 'Cash') === 'Credit' ? 'credit' : 'cash');
+  const billSuffix = vendorBillNumber ? ` · Bill #${vendorBillNumber}` : '';
 
   const base = {
     organizationId,
@@ -73,7 +79,7 @@ const buildSupplierPurchaseLedgerEntries = ({
         ...base,
         transactionType: 'purchase',
         transactionDate: date,
-        description: `Purchase Invoice #${invoiceNumber}${suffix}`,
+        description: `Purchase Invoice #${invoiceNumber}${billSuffix}${suffix}`,
         debit: total,
         credit: total,
         notes: `Paid in full: Rs${total.toFixed(2)} · ${itemsCount} items${suffix ? ' (Updated)' : ''}`,
@@ -100,7 +106,7 @@ const buildSupplierPurchaseLedgerEntries = ({
       ...base,
       transactionType: 'payment_made',
       transactionDate: paymentDate,
-      description: `Payment made for Purchase #${invoiceNumber}${paid < total - AMOUNT_EPSILON ? ' (Partial)' : ''}${suffix}`,
+      description: `Payment made for Purchase #${invoiceNumber}${paid < total - AMOUNT_EPSILON ? ' (Partial)' : ''}${billSuffix}${suffix}`,
       debit: paid,
       credit: 0,
       notes: `Amount paid: Rs${paid.toFixed(2)}${balance > 0 ? `, Balance: Rs${Number(balance).toFixed(2)}` : ''}`,

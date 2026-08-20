@@ -446,6 +446,7 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
       $group: {
         _id: '$_id',
         invoiceNumber: { $first: '$invoiceNumber' },
+        vendorBillNumber: { $first: '$vendorBillNumber' },
         purchaseDate: { $first: '$purchaseDate' },
         paymentType: { $first: '$paymentType' },
         totalAmount: { $first: '$totalAmount' },
@@ -519,6 +520,7 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
     {
       $project: {
         invoiceNumber: 1,
+        vendorBillNumber: 1,
         purchaseDate: 1,
         paymentType: 1,
         totalAmount: 1,
@@ -1177,6 +1179,7 @@ const getSupplierAgingReport = catchAsync(async (req, res) => {
           $push: {
             _id: '$_id',
             invoiceNumber: '$invoiceNumber',
+            vendorBillNumber: '$vendorBillNumber',
             purchaseDate: '$purchaseDate',
             dueDate: '$effectiveDueDate',
             totalAmount: '$totalAmount',

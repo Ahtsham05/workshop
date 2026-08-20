@@ -611,6 +611,9 @@ export default function PurchaseReturnForm({
                         onClick={() => handleSelectPurchase(p)}
                       >
                         <span className='font-medium'>{p.purchaseNumber || p.invoiceNumber}</span>
+                        {p.vendorBillNumber && (
+                          <span className='text-muted-foreground'> (Bill #{p.vendorBillNumber})</span>
+                        )}
                         {' — '}
                         <span className='text-muted-foreground'>
                           {p.supplier?.name || p.supplierName || 'Unknown Supplier'}
@@ -627,6 +630,11 @@ export default function PurchaseReturnForm({
                 <div>
                   <p className='font-medium'>
                     {selectedPurchase.purchaseNumber || selectedPurchase.invoiceNumber}
+                    {selectedPurchase.vendorBillNumber && (
+                      <span className='text-sm font-normal text-muted-foreground'>
+                        {' '}(Bill #{selectedPurchase.vendorBillNumber})
+                      </span>
+                    )}
                   </p>
                   <p className='text-sm text-muted-foreground'>
                     {selectedPurchase.supplier?.name ||

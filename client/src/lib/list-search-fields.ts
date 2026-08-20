@@ -4,6 +4,6 @@ export const LIST_SEARCH_FIELDS = {
   supplier: 'name,nameUrdu',
   category: 'name,nameUrdu',
   product: 'name,nameUrdu,barcode',
-  purchase: 'invoiceNumber',
+  purchase: 'invoiceNumber,vendorBillNumber',
   purchaseOrder: 'orderNumber',
 } as const

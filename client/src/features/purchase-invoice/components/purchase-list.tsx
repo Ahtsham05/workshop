@@ -210,7 +210,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="search"
-                  placeholder={t('Search by invoice number...')}
+                  placeholder={t('Search by invoice number or vendor bill no...')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -260,7 +260,12 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                 {currentPurchases.map((purchase: any) => (
                   <TableRow key={purchase._id || purchase.id}>
                     <TableCell className="font-medium">
-                      {purchase.invoiceNumber}
+                      <div>{purchase.invoiceNumber}</div>
+                      {purchase.vendorBillNumber && (
+                        <div className="text-xs font-normal text-muted-foreground">
+                          {t('Vendor Bill No')}: {purchase.vendorBillNumber}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className='max-w-[14rem]'>
                       <div className='flex min-w-0 items-center gap-2'>
@@ -536,6 +541,12 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
           <Label>{t('Invoice Number')}</Label>
           <p className="font-medium">{purchase.invoiceNumber}</p>
         </div>
+        {purchase.vendorBillNumber && (
+          <div>
+            <Label>{t('Vendor Bill No')}</Label>
+            <p className="font-medium">{purchase.vendorBillNumber}</p>
+          </div>
+        )}
         <div>
           <Label>{t('Purchase Date')}</Label>
           <p className="font-medium">

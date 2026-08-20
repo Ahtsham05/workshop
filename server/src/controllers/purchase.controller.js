@@ -6,7 +6,7 @@ const purchaseVisionService = require('../services/purchaseVision.service');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
-const TRACKED_PURCHASE_FIELDS = ['totalAmount', 'paidAmount', 'balance', 'status', 'items'];
+const TRACKED_PURCHASE_FIELDS = ['totalAmount', 'paidAmount', 'balance', 'status', 'items', 'vendorBillNumber'];
 
 const createPurchase = catchAsync(async (req, res) => {
   // A manually-typed override (see invoiceNumber input in the New Purchase form) is kept

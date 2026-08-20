@@ -427,7 +427,7 @@ const queryImeis = async (filter, options) => {
   // invoice # and purchase # alongside each unit for a complete transaction trail.
   queryOptions.populate = [
     { path: 'batchId', select: 'batchNumber' },
-    { path: 'purchaseId', select: 'invoiceNumber paymentType' },
+    { path: 'purchaseId', select: 'invoiceNumber vendorBillNumber paymentType' },
     { path: 'invoiceId', select: 'invoiceNumber paymentMethod walletType' },
   ];
   return Imei.paginate(queryFilter, queryOptions);

@@ -93,6 +93,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
         string,
         Array<{
           invoiceNumber: string
+          vendorBillNumber?: string
           productName: string
           productNameUrdu?: string
           quantity: number
@@ -110,6 +111,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
         p.items.forEach((item) => {
           dateMap.get(dateStr)!.push({
             invoiceNumber: p.invoiceNumber,
+            vendorBillNumber: p.vendorBillNumber,
             productName: item.name,
             productNameUrdu: item.nameUrdu,
             quantity: item.quantity,
@@ -156,6 +158,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
               p.items.forEach((item, idx) => {
                 rows.push({
                   'Invoice #': idx === 0 ? p.invoiceNumber : '',
+                  'Vendor Bill No': idx === 0 ? p.vendorBillNumber || '' : '',
                   Date: idx === 0 ? format(new Date(p.purchaseDate), 'yyyy-MM-dd') : '',
                   Supplier:
                     idx === 0 ? reportEntityName(language, p.supplierName, p.supplierNameUrdu) : '',
@@ -174,6 +177,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
             })
             rows.push({
               'Invoice #': 'TOTAL',
+              'Vendor Bill No': '',
               Date: '',
               Supplier: `${detailData.summary.totalInvoices} invoices`,
               'Supplier Phone': '',
@@ -433,7 +437,10 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                           >
                             <TableCell className='text-sm text-muted-foreground pl-6' />
                             <TableCell className='font-mono text-xs text-primary'>
-                              {row.invoiceNumber}
+                              <div>{row.invoiceNumber}</div>
+                              {row.vendorBillNumber && (
+                                <div className='text-muted-foreground'>Bill: {row.vendorBillNumber}</div>
+                              )}
                             </TableCell>
                             <TableCell
                               className={cn(
@@ -519,7 +526,10 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                               </Button>
                             </TableCell>
                             <TableCell className='font-mono font-semibold text-primary'>
-                              {p.invoiceNumber}
+                              <div>{p.invoiceNumber}</div>
+                              {p.vendorBillNumber && (
+                                <div className='text-xs font-normal text-muted-foreground'>Bill: {p.vendorBillNumber}</div>
+                              )}
                             </TableCell>
                             <TableCell className='text-sm text-muted-foreground'>
                               {format(new Date(p.purchaseDate), 'dd MMM yyyy')}
@@ -649,6 +659,11 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                 <DialogHeader>
                   <DialogTitle className='flex items-center gap-2'>
                     <span className='font-mono text-primary'>{viewInvoice.invoiceNumber}</span>
+                    {viewInvoice.vendorBillNumber && (
+                      <span className='text-xs font-normal text-muted-foreground'>
+                        (Bill #{viewInvoice.vendorBillNumber})
+                      </span>
+                    )}
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[viewInvoice.status] ?? ''}`}
                     >

@@ -242,6 +242,35 @@ const generateNextPurchaseInvoiceNumber = async () => {
 };
 
 /**
+ * Guard against accidentally recording the same supplier bill twice — a common data-entry
+ * mistake this field exists specifically to catch. Scoped to (organizationId, supplier),
+ * not global: different suppliers routinely reuse the same small bill numbers (e.g. "001"),
+ * so a global unique index would throw false positives. `excludePurchaseId` skips the
+ * purchase being edited so re-saving it unchanged doesn't collide with itself.
+ */
+const assertVendorBillNumberAvailable = async ({ organizationId, supplier, vendorBillNumber, excludePurchaseId }) => {
+  const trimmed = String(vendorBillNumber || '').trim();
+  if (!trimmed || !supplier) return;
+
+  const duplicateFilter = {
+    organizationId,
+    supplier,
+    vendorBillNumber: trimmed,
+  };
+  if (excludePurchaseId) {
+    duplicateFilter._id = { $ne: excludePurchaseId };
+  }
+
+  const duplicate = await Purchase.findOne(duplicateFilter).select('invoiceNumber').lean();
+  if (duplicate) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Vendor bill number "${trimmed}" is already recorded for this supplier (Purchase #${duplicate.invoiceNumber})`
+    );
+  }
+};
+
+/**
  * Sync Cash Book + Wallet Entry + Wallet.balance for a purchase's payment, from the resolved
  * cash/wallet legs. `previous` is a plain snapshot of the pre-update payment fields (or `null`
  * on create) — used only to compute the correct wallet-balance delta on edits; Cash Book /
@@ -341,6 +370,12 @@ const syncPurchaseCashAndWalletEntries = async (purchase, previous) => {
  * @returns {Promise<Purchase>}
  */
 const createPurchase = async (purchaseBody) => {
+  await assertVendorBillNumberAvailable({
+    organizationId: purchaseBody.organizationId,
+    supplier: purchaseBody.supplier,
+    vendorBillNumber: purchaseBody.vendorBillNumber,
+  });
+
   const businessType = await getOrganizationBusinessType(purchaseBody.organizationId);
 
   const normalizedBody = {
@@ -521,6 +556,7 @@ const createPurchase = async (purchaseBody) => {
         supplierId: purchase.supplier,
         referenceId: purchase._id,
         invoiceNumber: purchase.invoiceNumber,
+        vendorBillNumber: purchase.vendorBillNumber,
         transactionDate: purchase.purchaseDate || new Date(),
         totalAmount: purchase.totalAmount,
         paidAmount: purchase.paidAmount,
@@ -559,7 +595,7 @@ const createPurchase = async (purchaseBody) => {
 const queryPurchases = async (filter, options) => {
   const opts = { ...options };
   await applySupplierLinkedListSearch(filter, opts, {
-    documentFields: ['invoiceNumber', 'notes'],
+    documentFields: ['invoiceNumber', 'vendorBillNumber', 'notes'],
   });
   // Array form, not a comma-joined string — the paginate plugin's string parser
   // converts each dotted path into a nested {path,populate} shorthand via
@@ -603,6 +639,16 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const originalPaidAmount = purchase.paidAmount || 0;
   const originalSupplier = purchase.supplier?._id || purchase.supplier;
   const originalPaymentType = purchase.paymentType;
+  const originalVendorBillNumber = purchase.vendorBillNumber || '';
+
+  if (updateBody.vendorBillNumber !== undefined) {
+    await assertVendorBillNumberAvailable({
+      organizationId: purchase.organizationId,
+      supplier: updateBody.supplier || originalSupplier,
+      vendorBillNumber: updateBody.vendorBillNumber,
+      excludePurchaseId: purchase._id,
+    });
+  }
   // Snapshot of every payment-leg field, for delta-aware Cash Book/Wallet resync below.
   const previousPaymentLegSnapshot = {
     paymentMethod: purchase.paymentMethod,
@@ -930,10 +976,11 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const hasLedgerEntries = await SupplierLedger.exists({ referenceId: purchase._id });
 
   if (originalSupplier && (
-    originalTotalAmount !== newTotalAmount || 
+    originalTotalAmount !== newTotalAmount ||
     originalPaidAmount !== newPaidAmount ||
     originalSupplier.toString() !== newSupplier.toString() ||
     originalPaymentType !== purchase.paymentType ||
+    originalVendorBillNumber !== (purchase.vendorBillNumber || '') ||
     !hasLedgerEntries
   )) {
     try {
@@ -961,6 +1008,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           supplierId: newSupplier,
           referenceId: purchase._id,
           invoiceNumber: purchase.invoiceNumber,
+          vendorBillNumber: purchase.vendorBillNumber,
           transactionDate: purchase.purchaseDate || new Date(),
           totalAmount: newTotalAmount,
           paidAmount: newPaidAmount,
@@ -984,6 +1032,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
           totalAmount: newTotalAmount,
           paidAmount: newPaidAmount,
           invoiceNumber: purchase.invoiceNumber,
+          vendorBillNumber: purchase.vendorBillNumber,
           purchaseDate: purchase.purchaseDate,
           paymentMethod: ledgerPaymentMethod,
           paymentType: purchase.paymentType,

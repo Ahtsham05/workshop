@@ -126,6 +126,9 @@ function createInitialPurchaseItems(showProductCatalog: boolean): PurchaseItem[]
 export interface Purchase {
   _id?: string;
   invoiceNumber: string;
+  // The supplier's own invoice/bill number for this purchase, as printed on their paper
+  // bill — distinct from `invoiceNumber` (our own internally-generated purchase number).
+  vendorBillNumber?: string;
   supplier: Supplier;
   items: PurchaseItem[];
   subtotal: number;
@@ -192,6 +195,7 @@ const PurchaseInvoicePage = () => {
   );
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
+    vendorBillNumber: '',
     supplier: {} as Supplier,
     items: createInitialPurchaseItems(getInitialShowProductCatalog()),
     subtotal: 0,
@@ -284,6 +288,7 @@ const PurchaseInvoicePage = () => {
   const resetPurchaseForm = useCallback(() => {
     setPurchase({
       invoiceNumber: '',
+      vendorBillNumber: '',
       supplier: {} as Supplier,
       items: createInitialPurchaseItems(showProductCatalog),
       subtotal: 0,
@@ -812,6 +817,7 @@ const PurchaseInvoicePage = () => {
     setEditingPurchase(null);
     setPurchase({
       invoiceNumber: '',
+      vendorBillNumber: '',
       supplier: {} as Supplier,
       items: createInitialPurchaseItems(showProductCatalog),
       subtotal: 0,
@@ -839,6 +845,7 @@ const PurchaseInvoicePage = () => {
     setEditingPurchase(null);
     setPurchase({
       invoiceNumber: '',
+      vendorBillNumber: '',
       supplier: {} as Supplier,
       items: createInitialPurchaseItems(showProductCatalog),
       subtotal: 0,

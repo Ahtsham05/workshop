@@ -43,6 +43,11 @@ type RefDoc<T> = string | (T & { id: string }) | null | undefined
 const invoiceNumberOf = (ref: RefDoc<{ invoiceNumber?: string }>) =>
   ref && typeof ref === 'object' ? ref.invoiceNumber || '—' : '—'
 
+/** The supplier's own bill number for the purchase this unit came in on — undefined when
+ *  the purchase predates the field or never had one, so callers should render nothing. */
+const vendorBillNumberOf = (ref: RefDoc<{ vendorBillNumber?: string }>) =>
+  ref && typeof ref === 'object' ? ref.vendorBillNumber : undefined
+
 const paymentMethodOf = (ref: RefDoc<{ paymentMethod?: string; walletType?: string }>) => {
   if (!ref || typeof ref !== 'object') return '—'
   if (ref.paymentMethod === 'wallet') return `Wallet${ref.walletType ? ` (${ref.walletType})` : ''}`
@@ -280,7 +285,12 @@ function NewPhonesTab({ startDate, endDate }: MobilePhoneReportProps) {
                         <TableCell className='whitespace-nowrap'>{unit.saleDate ? formatBusinessDate(unit.saleDate) : '—'}</TableCell>
                         <TableCell className='whitespace-nowrap font-mono text-xs'>{invoiceNumberOf(unit.invoiceId)}</TableCell>
                         <TableCell className='whitespace-nowrap capitalize'>{paymentMethodOf(unit.invoiceId)}</TableCell>
-                        <TableCell className='whitespace-nowrap font-mono text-xs'>{invoiceNumberOf(unit.purchaseId)}</TableCell>
+                        <TableCell className='whitespace-nowrap font-mono text-xs'>
+                          <div>{invoiceNumberOf(unit.purchaseId)}</div>
+                          {vendorBillNumberOf(unit.purchaseId) && (
+                            <div className='text-muted-foreground'>Bill: {vendorBillNumberOf(unit.purchaseId)}</div>
+                          )}
+                        </TableCell>
                         <TableCell className='whitespace-nowrap'>{fmt(unit.purchasePrice)}</TableCell>
                         <TableCell className='whitespace-nowrap font-medium'>{fmt(unit.salePrice)}</TableCell>
                         <TableCell className={cn('whitespace-nowrap font-medium', profit >= 0 ? 'text-emerald-600' : 'text-destructive')}>

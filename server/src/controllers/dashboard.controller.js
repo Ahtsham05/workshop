@@ -690,7 +690,7 @@ const getRecentActivities = catchAsync(async (req, res) => {
   })
     .sort({ createdAt: -1 })
     .limit(share)
-    .select('invoiceNumber totalAmount paidAmount balance paymentType createdAt supplier')
+    .select('invoiceNumber vendorBillNumber totalAmount paidAmount balance paymentType createdAt supplier')
     .populate('supplier', 'name')
     .lean();
 
@@ -728,7 +728,7 @@ const getRecentActivities = catchAsync(async (req, res) => {
     return {
       id: pur._id,
       type: 'purchase',
-      description: `Purchase ${pur.invoiceNumber} - ${pur.supplier?.name || 'Supplier'}`,
+      description: `Purchase ${pur.invoiceNumber}${pur.vendorBillNumber ? ` (Bill #${pur.vendorBillNumber})` : ''} - ${pur.supplier?.name || 'Supplier'}`,
       amount: pur.totalAmount,
       paidAmount: pay.paidAmount,
       balance: pay.balance,
