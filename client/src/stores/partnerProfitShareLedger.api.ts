@@ -12,6 +12,8 @@ export interface PartnerProfitShareLedgerEntry {
   referenceId?: string;
   referenceModel?: string;
   productId?: { id: string; name: string } | string | null;
+  variantId?: { id: string; attributes?: Record<string, string> } | string | null;
+  batchId?: { id: string; batchNumber: string } | string | null;
   ruleId?: string;
   debit: number;
   credit: number;

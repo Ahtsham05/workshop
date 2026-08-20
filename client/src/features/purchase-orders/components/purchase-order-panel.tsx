@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import {
-  ArrowLeft,
   ArrowLeftRight,
   Check,
   ChevronDown,
@@ -11,7 +10,9 @@ import {
   Loader2,
   Minus,
   Package,
+  Percent,
   Plus,
+  Receipt,
   Save,
   Search,
   Send,
@@ -231,7 +232,6 @@ function buildInitialDraft(
 }
 
 interface Props {
-  onBack: () => void
   onSaved: () => void
   editing?: PurchaseOrder | null
   products: Product[]
@@ -242,14 +242,14 @@ interface Props {
   /** When false (catalog hidden), the panel switches to a dense two-column "fast
    * ordering" layout — single-row items and a sticky save bar — matching InvoicePanel. */
   showProductCatalog?: boolean
-  /** Fast-ordering mode only: DOM node (owned by the page, outside the cards' scroll
-   * region) to portal the save/print bar into, so it's always visible without scrolling.
-   * Falls back to an inline sticky bar until this is available. */
+  /** Fast-ordering mode only: DOM node (owned by the page, in its header toolbar) to
+   * portal the save/send bar into, so it's always visible without scrolling. Falls back
+   * to an inline sticky bar until this is available. Mirrors PurchasePanel's identical
+   * header-portaled bar (see purchase-panel.tsx). */
   stickyActionsContainer?: HTMLElement | null
 }
 
 export default function PurchaseOrderPanel({
-  onBack,
   onSaved,
   editing,
   productsLoading = false,
@@ -266,6 +266,7 @@ export default function PurchaseOrderPanel({
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
+  const [applyDiscountOpen, setApplyDiscountOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // Raw text the user is currently typing into a decimal field (cost/discount/sell/
@@ -749,619 +750,656 @@ export default function PurchaseOrderPanel({
     <div
       className={cn(
         !showProductCatalog
-          ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] items-start'
+          ? // Three columns — details / items / summary+actions — mirrors PurchasePanel's
+            // compact-mode grid exactly (see purchase-panel.tsx). Each column is its own
+            // independent top-to-bottom stack, so a column's height is just its own content.
+            'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
           : 'space-y-4',
       )}
     >
-      <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between', !showProductCatalog && 'lg:col-start-1 lg:col-span-2 lg:row-start-1')}>
-        <div className='flex items-center gap-3'>
-          <Button variant='ghost' size='sm' onClick={onBack}>
-            <ArrowLeft className='h-4 w-4' />
-          </Button>
-          <div>
-            <h1 className='text-xl font-bold tracking-tight flex items-center gap-2'>
+      {/* Column 1 (compact mode): Order details. Mirrors Purchase Invoice's Purchase
+          Details column exactly (see purchase-panel.tsx) — same card shape and supplier
+          picker, minus the Purchase Type control (an order isn't itself a cash/credit
+          transaction — that only applies once it's received as an actual Purchase). */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-1 xl:row-start-1 xl:col-start-1')}>
+        <Card>
+          <CardHeader className='pb-3'>
+            <CardTitle className='flex items-center gap-2 text-base'>
               <ClipboardList className='h-5 w-5' />
-              {editing ? `Edit ${editing.orderNumber}` : 'New Purchase Order'}
-            </h1>
-            <p className='text-xs text-muted-foreground mt-0.5'>
-              Enter to move fields · Ctrl+D save draft · Ctrl+S save &amp; send · Ctrl+Enter save &amp; send
-            </p>
-          </div>
-        </div>
-        <div className='flex flex-wrap items-center gap-2'>
-          <Button variant='outline' size='sm' disabled={saving} onClick={() => handleSave('draft')}>
-            <Save className='mr-2 h-4 w-4' />
-            Save draft
-          </Button>
-          <Button size='sm' disabled={saving} onClick={() => handleSave('sent')}>
-            <Send className='mr-2 h-4 w-4' />
-            {editing && editing.status !== 'draft' ? 'Save' : 'Save & send'}
-          </Button>
-        </div>
+              Order details
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            <div>
+              <Label className='mb-2'>
+                Supplier <span className='text-red-500'>*</span>
+              </Label>
+              <Popover open={supplierSelectOpen} onOpenChange={setSupplierSelectOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant='outline'
+                    role='combobox'
+                    aria-expanded={supplierSelectOpen}
+                    className={cn(
+                      'w-full justify-between min-h-[2.5rem]',
+                      !supplierId && 'border-red-500 bg-red-50 dark:bg-red-950/20',
+                    )}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setSupplierSelectOpen(true)
+                        return
+                      }
+                      if (!supplierSelectOpen && supplierId) {
+                        onEnterAdvance(e, () => focusField(orderDateRef.current))
+                      }
+                    }}
+                  >
+                    <div className='flex items-center gap-2 flex-1 min-w-0'>
+                      <Search className='h-4 w-4 shrink-0 text-muted-foreground' />
+                      {supplierId ? (
+                        <Badge variant='secondary' className='flex items-center gap-1.5 max-w-full pl-1'>
+                          <ContactPhotoCell
+                            picture={draft.supplier.picture}
+                            name={draft.supplier.name}
+                            className='h-5 w-5 shrink-0 rounded-full'
+                          />
+                          <span className='truncate text-xs'>{draft.supplier.name}</span>
+                        </Badge>
+                      ) : (
+                        <span className='text-muted-foreground truncate'>Select supplier *</span>
+                      )}
+                    </div>
+                    <ChevronDown className='h-4 w-4 opacity-50 shrink-0' />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className='w-[calc(100vw-2rem)] max-w-[400px] p-0' align='start'>
+                  <Command shouldFilter={false}>
+                    <div className='relative'>
+                      <CommandInput
+                        placeholder='Search suppliers...'
+                        value={supplierSearchQuery}
+                        onValueChange={setSupplierSearchQuery}
+                      />
+                      <div className='absolute right-2 top-1/2 -translate-y-1/2'>
+                        <VoiceInputButton
+                          onTranscript={(text) => setSupplierSearchQuery(text)}
+                          size='sm'
+                        />
+                      </div>
+                    </div>
+                    <CommandList className='max-h-[280px] overflow-y-auto'>
+                      {filteredSuppliers.length === 0 ? (
+                        <p className='py-6 text-center text-sm text-muted-foreground'>No suppliers found</p>
+                      ) : (
+                        <CommandGroup>
+                          {filteredSuppliers.map((s, index) => {
+                            const sid = s._id || (s as { id?: string }).id || `s-${index}`
+                            const selected = supplierId === sid
+                            return (
+                              <CommandItem
+                                key={sid}
+                                value={`${s.name} ${s.phone || ''} ${sid}`}
+                                onSelect={() => selectSupplier(s)}
+                                className='flex cursor-pointer items-center gap-3 p-3'
+                              >
+                                <ContactPhotoCell picture={s.picture} name={s.name} className='h-8 w-8 shrink-0' />
+                                <div className='min-w-0 flex-1'>
+                                  <p className='truncate font-medium text-sm'>{s.name}</p>
+                                  {s.phone ? (
+                                    <p className='text-xs text-muted-foreground'>{s.phone}</p>
+                                  ) : null}
+                                </div>
+                                {selected ? <Check className='h-4 w-4 text-primary shrink-0' /> : null}
+                              </CommandItem>
+                            )
+                          })}
+                        </CommandGroup>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+              <div>
+                <Label htmlFor='po-order-date'>Order date *</Label>
+                <Input
+                  ref={orderDateRef}
+                  id='po-order-date'
+                  type='date'
+                  value={draft.orderDate}
+                  onChange={(e) => setDraft((p) => ({ ...p, orderDate: e.target.value }))}
+                  onKeyDown={(e) => onEnterAdvance(e, () => focusField(expectedDateRef.current))}
+                  className='mt-2'
+                />
+              </div>
+              <div>
+                <Label htmlFor='po-expected-date'>Expected delivery</Label>
+                <Input
+                  ref={expectedDateRef}
+                  id='po-expected-date'
+                  type='date'
+                  value={draft.expectedDeliveryDate}
+                  onChange={(e) =>
+                    setDraft((p) => ({ ...p, expectedDeliveryDate: e.target.value }))
+                  }
+                  onKeyDown={(e) => onEnterAdvance(e, openProductSelector)}
+                  className='mt-2'
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor='po-notes'>Notes</Label>
+              <Textarea
+                id='po-notes'
+                rows={2}
+                value={draft.notes}
+                onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
+                placeholder='Internal notes...'
+                className='mt-2'
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-2')}>
-        <CardHeader className='pb-3'>
-          <CardTitle className='text-base'>Order details</CardTitle>
-        </CardHeader>
-        <CardContent className='space-y-4'>
-          <div>
-            <Label className='mb-2'>
-              Supplier <span className='text-red-500'>*</span>
-            </Label>
-            <Popover open={supplierSelectOpen} onOpenChange={setSupplierSelectOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant='outline'
-                  role='combobox'
-                  aria-expanded={supplierSelectOpen}
-                  className={cn(
-                    'w-full justify-between min-h-[2.5rem]',
-                    !supplierId && 'border-red-500 bg-red-50 dark:bg-red-950/20',
-                  )}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault()
-                      setSupplierSelectOpen(true)
-                      return
-                    }
-                    if (!supplierSelectOpen && supplierId) {
-                      onEnterAdvance(e, () => focusField(orderDateRef.current))
-                    }
-                  }}
-                >
-                  <div className='flex items-center gap-2 flex-1 min-w-0'>
-                    <Search className='h-4 w-4 shrink-0 text-muted-foreground' />
-                    {supplierId ? (
-                      <Badge variant='secondary' className='flex items-center gap-1.5 max-w-full pl-1'>
-                        <ContactPhotoCell
-                          picture={draft.supplier.picture}
-                          name={draft.supplier.name}
-                          className='h-5 w-5 shrink-0 rounded-full'
-                        />
-                        <span className='truncate text-xs'>{draft.supplier.name}</span>
-                      </Badge>
-                    ) : (
-                      <span className='text-muted-foreground truncate'>Select supplier *</span>
-                    )}
-                  </div>
-                  <ChevronDown className='h-4 w-4 opacity-50 shrink-0' />
+      {/* Column 2 (compact mode): at-a-glance stats + Order items. Mirrors Purchase
+          Invoice's Column 2 exactly (see purchase-panel.tsx). */}
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-2 md:col-span-2 xl:row-start-1 xl:col-span-1 xl:col-start-2')}>
+        {/* At-a-glance totals strip — same numbers as the Summary card below. Hidden once
+            the catalog is showing and below sm (phone widths). */}
+        {!showProductCatalog && (
+          <div className='hidden grid-cols-4 gap-2 sm:grid'>
+            {[
+              { label: 'Items', value: String(draft.items.filter((i) => getProductId(i) && i.product.name).length) },
+              { label: 'Subtotal', value: `Rs${subtotal.toFixed(2)}` },
+              { label: 'Discount', value: `Rs${(discountAmount + itemDiscountTotal).toFixed(2)}` },
+              { label: 'Total', value: `Rs${totalAmount.toFixed(2)}`, highlight: true },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className={cn(
+                  'min-w-0 rounded-lg border px-2 py-1.5',
+                  stat.highlight ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20' : 'bg-card',
+                )}
+              >
+                <p className='truncate text-[10px] text-muted-foreground'>{stat.label}</p>
+                <p className={cn('truncate text-sm font-bold tabular-nums', stat.highlight && 'text-emerald-700 dark:text-emerald-400')}>
+                  {stat.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Card className='min-w-0'>
+          <CardHeader className='py-3'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <CardTitle className='text-base'>Order items ({draft.items.length})</CardTitle>
+              <div className='flex flex-wrap items-center gap-2'>
+                {draft.items.length > 0 && (
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={toggleAllDiscountTypes}
+                    className='flex items-center gap-1'
+                    title='Switch every discount (all items + overall) to this unit at once'
+                  >
+                    <ArrowLeftRight className='h-4 w-4' />
+                    <span className='hidden sm:inline'>Switch All Discounts to</span>
+                    <span className='sm:hidden'>Switch to</span>
+                    {' '}{draft.discountType === 'percentage' ? 'Rs' : '%'}
+                  </Button>
+                )}
+                <Button size='sm' variant='outline' onClick={addNewRowAndOpenProduct} className='gap-1'>
+                  <Plus className='h-4 w-4' />
+                  Add Row
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className='w-[calc(100vw-2rem)] max-w-[400px] p-0' align='start'>
-                <Command shouldFilter={false}>
-                  <div className='relative'>
-                    <CommandInput
-                      placeholder='Search suppliers...'
-                      value={supplierSearchQuery}
-                      onValueChange={setSupplierSearchQuery}
-                    />
-                    <div className='absolute right-2 top-1/2 -translate-y-1/2'>
-                      <VoiceInputButton
-                        onTranscript={(text) => setSupplierSearchQuery(text)}
-                        size='sm'
-                      />
-                    </div>
-                  </div>
-                  <CommandList className='max-h-[280px] overflow-y-auto'>
-                    {filteredSuppliers.length === 0 ? (
-                      <p className='py-6 text-center text-sm text-muted-foreground'>No suppliers found</p>
-                    ) : (
-                      <CommandGroup>
-                        {filteredSuppliers.map((s, index) => {
-                          const sid = s._id || (s as { id?: string }).id || `s-${index}`
-                          const selected = supplierId === sid
-                          return (
-                            <CommandItem
-                              key={sid}
-                              value={`${s.name} ${s.phone || ''} ${sid}`}
-                              onSelect={() => selectSupplier(s)}
-                              className='flex cursor-pointer items-center gap-3 p-3'
-                            >
-                              <ContactPhotoCell picture={s.picture} name={s.name} className='h-8 w-8 shrink-0' />
-                              <div className='min-w-0 flex-1'>
-                                <p className='truncate font-medium text-sm'>{s.name}</p>
-                                {s.phone ? (
-                                  <p className='text-xs text-muted-foreground'>{s.phone}</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className='flex flex-1 flex-col p-0 lg:min-h-0'>
+            {/* Capped + internally scrollable regardless of layout mode — without a
+                max-h here, the item list grew with the item count and pushed the Save
+                buttons off screen. Mirrors Purchase Invoice's identical fix. */}
+            <div
+              ref={itemsScrollRef}
+              className='space-y-2 overflow-y-auto max-h-[460px] p-3'
+            >
+              {draft.items.map((item, index) => {
+                const productId = getProductId(item)
+                const compact = !showProductCatalog
+
+                if (item.isManualEntry && !productId) {
+                  return (
+                    <div
+                      key={`manual-${index}`}
+                      className='overflow-hidden rounded-xl border bg-card shadow-sm'
+                    >
+                      <div className={cn('flex items-center gap-3', compact ? 'p-2' : 'p-3')}>
+                        <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'h-10 w-10')}>
+                          <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
+                        </div>
+                        <div className='min-w-0 flex-1'>
+                          <Popover
+                            open={productSelectOpen === `manual-${index}`}
+                            onOpenChange={(open) => {
+                              setProductSelectOpen(open ? `manual-${index}` : '')
+                              if (!open) setProductSearchQuery('')
+                            }}
+                          >
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant='outline'
+                                className='h-8 w-full justify-start border-dashed text-xs'
+                              >
+                                <Search className='mr-2 h-3 w-3 shrink-0' />
+                                Select product *
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className='w-[calc(100vw-2rem)] max-w-[560px] p-0' align='start'>
+                              <Command shouldFilter={false}>
+                                <div className='relative'>
+                                  <CommandInput
+                                    placeholder='Search name or barcode...'
+                                    value={productSearchQuery}
+                                    onValueChange={setProductSearchQuery}
+                                  />
+                                  <div className='absolute right-2 top-1/2 -translate-y-1/2'>
+                                    <VoiceInputButton
+                                      onTranscript={(text) => setProductSearchQuery(text)}
+                                      size='sm'
+                                    />
+                                  </div>
+                                </div>
+                                <CommandList className='max-h-[300px] overflow-y-auto'>
+                                  {productsLoading && filteredCatalogItems.length === 0 ? (
+                                    <div className='flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground'>
+                                      <Loader2 className='h-6 w-6 animate-spin' />
+                                      Loading products...
+                                    </div>
+                                  ) : filteredCatalogItems.length === 0 ? (
+                                    <p className='py-6 text-center text-sm text-muted-foreground'>
+                                      No products found
+                                    </p>
+                                  ) : (
+                                    <CommandGroup>
+                                      {visibleCatalogItems.map((catalogItem) => (
+                                        <CommandItem
+                                          key={catalogItem.id}
+                                          value={`${catalogItem.id}-${catalogItem.name}`}
+                                          onSelect={() => handleCatalogItemSelect(index, catalogItem)}
+                                          className='flex cursor-pointer items-center gap-3 p-3'
+                                        >
+                                          {catalogItem.image?.url ? (
+                                            <img
+                                              src={catalogItem.image.url}
+                                              alt={catalogItem.name}
+                                              className='h-8 w-8 shrink-0 rounded-lg object-cover'
+                                            />
+                                          ) : (
+                                            <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
+                                              <Package className='h-4 w-4 text-muted-foreground' />
+                                            </div>
+                                          )}
+                                          <div className='min-w-0 flex-1'>
+                                            <div className='flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
+                                              <div className='shrink-0 truncate text-sm font-medium'>{catalogItem.name}</div>
+                                              {catalogItem.nameUrdu?.trim() ? (
+                                                <span
+                                                  dir='rtl'
+                                                  className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
+                                                >
+                                                  {catalogItem.nameUrdu.trim()}
+                                                </span>
+                                              ) : null}
+                                              {catalogItem.brand?.name && (
+                                                <Badge variant='secondary' className='shrink-0 px-1.5 py-0 text-[10px]'>
+                                                  {catalogItem.brand.name}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                                              {catalogItem.barcode && <span>{catalogItem.barcode}</span>}
+                                              <span className='text-amber-600'>Purchase Price: Rs{Number(catalogItem.cost || 0).toFixed(2)}</span>
+                                              <span className={catalogItem.stockQuantity <= 5 ? 'font-medium text-red-500' : 'text-green-600'}>
+                                                Stock: {catalogItem.stockQuantity}
+                                              </span>
+                                              {catalogItem.trackBatch && (
+                                                <span className='text-blue-600'>
+                                                  {catalogItem.batches?.length || 0} batch{catalogItem.batches?.length === 1 ? '' : 'es'}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  )}
+                                </CommandList>
+                                {filteredCatalogItems.length > visibleCatalogItems.length ? (
+                                  <div className='border-t px-3 py-2 text-center text-xs text-muted-foreground'>
+                                    Showing {visibleCatalogItems.length} of {filteredCatalogItems.length} — keep typing to narrow
+                                  </div>
                                 ) : null}
-                              </div>
-                              {selected ? <Check className='h-4 w-4 text-primary shrink-0' /> : null}
-                            </CommandItem>
-                          )
-                        })}
-                      </CommandGroup>
-                    )}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-            <div>
-              <Label htmlFor='po-order-date'>Order date *</Label>
-              <Input
-                ref={orderDateRef}
-                id='po-order-date'
-                type='date'
-                value={draft.orderDate}
-                onChange={(e) => setDraft((p) => ({ ...p, orderDate: e.target.value }))}
-                onKeyDown={(e) => onEnterAdvance(e, () => focusField(expectedDateRef.current))}
-                className='mt-2'
-              />
-            </div>
-            <div>
-              <Label htmlFor='po-expected-date'>Expected delivery</Label>
-              <Input
-                ref={expectedDateRef}
-                id='po-expected-date'
-                type='date'
-                value={draft.expectedDeliveryDate}
-                onChange={(e) =>
-                  setDraft((p) => ({ ...p, expectedDeliveryDate: e.target.value }))
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <Button
+                          size='sm'
+                          variant='ghost'
+                          className='h-7 w-7 shrink-0 p-0'
+                          onClick={() =>
+                            setDraft((p) => ({
+                              ...p,
+                              items: p.items.filter((_, i) => i !== index),
+                            }))
+                          }
+                          disabled={draft.items.length === 1}
+                        >
+                          <Trash2 className='h-3.5 w-3.5 text-red-400' />
+                        </Button>
+                      </div>
+                    </div>
+                  )
                 }
-                onKeyDown={(e) => onEnterAdvance(e, openProductSelector)}
-                className='mt-2'
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      <Card className={cn(!showProductCatalog && 'min-w-0 lg:col-start-2 lg:row-start-2 lg:row-span-2 lg:self-stretch')}>
-        <CardHeader className={cn('pb-3', !showProductCatalog && 'py-3')}>
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <CardTitle className={cn('text-base')}>Order items ({draft.items.length})</CardTitle>
-            <div className='flex flex-wrap items-center gap-2'>
-              {draft.items.length > 0 && (
-                <Button
-                  type='button'
-                  size='sm'
-                  variant='outline'
-                  onClick={toggleAllDiscountTypes}
-                  className='flex items-center gap-1'
-                  title='Switch every discount (all items + overall) to this unit at once'
-                >
-                  <ArrowLeftRight className='h-4 w-4' />
-                  <span className='hidden sm:inline'>Switch All Discounts to</span>
-                  <span className='sm:hidden'>Switch to</span>
-                  {' '}{draft.discountType === 'percentage' ? 'Rs' : '%'}
-                </Button>
-              )}
-              <Button size='sm' variant='outline' onClick={addNewRowAndOpenProduct} className='gap-1'>
-                <Plus className='h-4 w-4' />
-                Add Row
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className={cn('p-4', !showProductCatalog && 'flex flex-1 flex-col p-2 lg:min-h-0')}>
-          <div
-            ref={itemsScrollRef}
-            className={cn(
-              'space-y-2 overflow-y-auto pr-1',
-              showProductCatalog ? 'max-h-[420px]' : 'space-y-1.5',
-            )}
-          >
-            {draft.items.map((item, index) => {
-              const productId = getProductId(item)
-              const compact = !showProductCatalog
+                const rk = rowKey(productId, item.variantId)
+                const deleteButton = (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    className='h-7 w-7 shrink-0 p-0'
+                    onClick={() => removeItem(productId, item.variantId)}
+                  >
+                    <Trash2 className='h-3.5 w-3.5 text-red-400' />
+                  </Button>
+                )
 
-              if (item.isManualEntry && !productId) {
+                // Line-level discount (supplier discounting this one product) — net is
+                // what actually feeds the order subtotal.
+                const itemGross = item.quantity * item.expectedPrice
+                const itemDiscountAmount = computeDiscountAmount(itemGross, item.discountType, item.discountValue)
+                const itemNet = itemGross - itemDiscountAmount
+
                 return (
                   <div
-                    key={`manual-${index}`}
+                    key={`${rk}-${index}`}
                     className='overflow-hidden rounded-xl border bg-card shadow-sm'
                   >
-                    <div className={cn('flex items-center gap-3', compact ? 'p-2' : 'p-3')}>
-                      <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'h-10 w-10')}>
+                    {/* Compact (catalog hidden): row1 + row2 flatten via `contents` into one
+                        flex-wrap line, same trick as InvoicePanel's compact item rows. */}
+                    <div className={cn(compact && 'flex flex-wrap items-center gap-2 p-2')}>
+                    <div className={cn(compact ? 'contents' : 'flex items-start gap-3 p-3')}>
+                      <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'mt-0.5 h-10 w-10')}>
                         <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
                       </div>
-                      <div className='min-w-0 flex-1'>
-                        <Popover
-                          open={productSelectOpen === `manual-${index}`}
-                          onOpenChange={(open) => {
-                            setProductSelectOpen(open ? `manual-${index}` : '')
-                            if (!open) setProductSearchQuery('')
-                          }}
-                        >
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant='outline'
-                              className='h-8 w-full justify-start border-dashed text-xs'
-                            >
-                              <Search className='mr-2 h-3 w-3 shrink-0' />
-                              Select product *
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className='w-[calc(100vw-2rem)] max-w-[560px] p-0' align='start'>
-                            <Command shouldFilter={false}>
-                              <div className='relative'>
-                                <CommandInput
-                                  placeholder='Search name or barcode...'
-                                  value={productSearchQuery}
-                                  onValueChange={setProductSearchQuery}
-                                />
-                                <div className='absolute right-2 top-1/2 -translate-y-1/2'>
-                                  <VoiceInputButton
-                                    onTranscript={(text) => setProductSearchQuery(text)}
-                                    size='sm'
-                                  />
-                                </div>
-                              </div>
-                              <CommandList className='max-h-[300px] overflow-y-auto'>
-                                {productsLoading && filteredCatalogItems.length === 0 ? (
-                                  <div className='flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground'>
-                                    <Loader2 className='h-6 w-6 animate-spin' />
-                                    Loading products...
-                                  </div>
-                                ) : filteredCatalogItems.length === 0 ? (
-                                  <p className='py-6 text-center text-sm text-muted-foreground'>
-                                    No products found
-                                  </p>
-                                ) : (
-                                  <CommandGroup>
-                                    {visibleCatalogItems.map((catalogItem) => (
-                                      <CommandItem
-                                        key={catalogItem.id}
-                                        value={`${catalogItem.id}-${catalogItem.name}`}
-                                        onSelect={() => handleCatalogItemSelect(index, catalogItem)}
-                                        className='flex cursor-pointer items-center gap-3 p-3'
-                                      >
-                                        {catalogItem.image?.url ? (
-                                          <img
-                                            src={catalogItem.image.url}
-                                            alt={catalogItem.name}
-                                            className='h-8 w-8 shrink-0 rounded-lg object-cover'
-                                          />
-                                        ) : (
-                                          <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
-                                            <Package className='h-4 w-4 text-muted-foreground' />
-                                          </div>
-                                        )}
-                                        <div className='min-w-0 flex-1'>
-                                          <div className='flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
-                                            <div className='shrink-0 truncate text-sm font-medium'>{catalogItem.name}</div>
-                                            {catalogItem.nameUrdu?.trim() ? (
-                                              <span
-                                                dir='rtl'
-                                                className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
-                                              >
-                                                {catalogItem.nameUrdu.trim()}
-                                              </span>
-                                            ) : null}
-                                            {catalogItem.brand?.name && (
-                                              <Badge variant='secondary' className='shrink-0 px-1.5 py-0 text-[10px]'>
-                                                {catalogItem.brand.name}
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
-                                            {catalogItem.barcode && <span>{catalogItem.barcode}</span>}
-                                            <span className='text-amber-600'>Purchase Price: Rs{Number(catalogItem.cost || 0).toFixed(2)}</span>
-                                            <span className={catalogItem.stockQuantity <= 5 ? 'font-medium text-red-500' : 'text-green-600'}>
-                                              Stock: {catalogItem.stockQuantity}
-                                            </span>
-                                            {catalogItem.trackBatch && (
-                                              <span className='text-blue-600'>
-                                                {catalogItem.batches?.length || 0} batch{catalogItem.batches?.length === 1 ? '' : 'es'}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </CommandItem>
-                                    ))}
-                                  </CommandGroup>
-                                )}
-                              </CommandList>
-                              {filteredCatalogItems.length > visibleCatalogItems.length ? (
-                                <div className='border-t px-3 py-2 text-center text-xs text-muted-foreground'>
-                                  Showing {visibleCatalogItems.length} of {filteredCatalogItems.length} — keep typing to narrow
-                                </div>
-                              ) : null}
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
+                      {/* min-w-[110px] (instead of min-w-0) in compact mode — without a floor,
+                          flex-1 lets this shrink to near-nothing once the qty/cost/discount/
+                          sell/total controls (siblings on the same flex-wrap line) claim their
+                          fixed widths, truncating the name to 2-3 characters. The floor forces
+                          those controls to wrap to their own line instead once space is tight. */}
+                      <div className={cn('flex-1', compact ? 'min-w-[110px]' : 'min-w-0')}>
+                        <BilingualName
+                          primary={item.product.name}
+                          secondary={item.product.nameUrdu}
+                          primaryClassName='font-semibold text-sm'
+                          truncate={compact}
+                        />
+                        <div className='mt-0.5 flex flex-wrap items-center gap-2'>
+                          {!compact && (
+                            <span className='text-xs text-muted-foreground'>{item.unit || item.product.unit || 'pcs'}</span>
+                          )}
+                          {(() => {
+                            const stock = getDisplayStock(item.product)
+                            return (
+                              <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
+                                stock <= 0 ? 'bg-red-100 text-red-700' :
+                                stock <= 5 ? 'bg-red-50 text-red-500' :
+                                stock <= 20 ? 'bg-amber-50 text-amber-600' :
+                                'bg-green-50 text-green-700'
+                              }`}>
+                                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                  stock <= 0 ? 'bg-red-500' :
+                                  stock <= 5 ? 'bg-red-400' :
+                                  stock <= 20 ? 'bg-amber-400' :
+                                  'bg-green-500'
+                                }`} />
+                                {stock <= 0 ? 'Out of stock' : `${stock} in stock`}
+                              </span>
+                            )
+                          })()}
+                        </div>
                       </div>
-                      <Button
-                        size='sm'
-                        variant='ghost'
-                        className='h-7 w-7 shrink-0 p-0'
-                        onClick={() =>
-                          setDraft((p) => ({
-                            ...p,
-                            items: p.items.filter((_, i) => i !== index),
-                          }))
-                        }
-                        disabled={draft.items.length === 1}
-                      >
-                        <Trash2 className='h-3.5 w-3.5 text-red-400' />
-                      </Button>
+                      {!compact && deleteButton}
+                    </div>
+                    <div className={cn(compact ? 'contents' : 'flex flex-wrap items-center gap-3 border-t bg-muted/20 px-3 py-2.5')}>
+                      <div className='flex items-center gap-1.5 shrink-0'>
+                        <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='ghost'
+                            className='h-7 w-7 rounded-none border-r p-0'
+                            onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1), item.variantId)}
+                          >
+                            <Minus className='h-3.5 w-3.5' />
+                          </Button>
+                          <Input
+                            ref={(el) => {
+                              qtyInputRefs.current[rk] = el
+                            }}
+                            type='number'
+                            min={1}
+                            value={item.quantity}
+                            onChange={(e) =>
+                              updateQuantity(productId, parseInt(e.target.value, 10) || 1, item.variantId)
+                            }
+                            onKeyDown={(e) =>
+                              onEnterAdvance(e, () => focusField(costInputRefs.current[rk]))
+                            }
+                            onFocus={(e) => e.target.select()}
+                            className='h-7 w-14 border-0 text-center text-sm font-semibold focus-visible:ring-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                          />
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='ghost'
+                            className='h-7 w-7 rounded-none border-l p-0'
+                            onClick={() => updateQuantity(productId, item.quantity + 1, item.variantId)}
+                          >
+                            <Plus className='h-3.5 w-3.5' />
+                          </Button>
+                        </div>
+                      </div>
+                      <span className='text-sm text-muted-foreground/60'>×</span>
+                      <div className='flex flex-col gap-0.5 shrink-0'>
+                        <span className='text-[10px] leading-none text-muted-foreground'>Purchase Price</span>
+                        <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
+                          <span className='flex h-7 items-center border-r bg-muted px-2 text-xs'>Rs</span>
+                          <Input
+                            ref={(el) => {
+                              costInputRefs.current[rk] = el
+                            }}
+                            type='text'
+                            inputMode='decimal'
+                            showVoiceInput={false}
+                            value={getNumericDraftValue(`${rk}:expectedPrice`, item.expectedPrice)}
+                            onChange={(e) =>
+                              handleNumericDraftChange(`${rk}:expectedPrice`, e.target.value, (parsed) =>
+                                updateExpectedPrice(productId, parsed, item.variantId),
+                              )
+                            }
+                            onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => clearNumericDraft(`${rk}:expectedPrice`)}
+                            className='h-7 w-20 border-0 text-sm font-semibold focus-visible:ring-0'
+                          />
+                        </div>
+                      </div>
+
+                      {/* − separator */}
+                      <span className='text-sm text-muted-foreground/60'>−</span>
+
+                      {/* Item Discount Input */}
+                      <div className='flex flex-col gap-0.5 shrink-0'>
+                        <span className='text-[10px] leading-none text-muted-foreground'>Discount</span>
+                        <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
+                          <Input
+                            type='text'
+                            inputMode='decimal'
+                            showVoiceInput={false}
+                            value={getNumericDraftValue(`${rk}:itemDiscount`, item.discountValue || 0)}
+                            onChange={(e) =>
+                              handleNumericDraftChange(`${rk}:itemDiscount`, e.target.value, (parsed) =>
+                                updateItemDiscount(productId, { value: Math.max(0, parsed) }, item.variantId),
+                              )
+                            }
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => clearNumericDraft(`${rk}:itemDiscount`)}
+                            placeholder='0'
+                            className='h-7 w-14 border-0 text-sm font-semibold focus-visible:ring-0'
+                          />
+                          <button
+                            type='button'
+                            onClick={() =>
+                              updateItemDiscount(
+                                productId,
+                                { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' },
+                                item.variantId,
+                              )
+                            }
+                            title='Click to switch between Rs and % discount'
+                            className='flex h-7 items-center border-l bg-muted px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
+                          >
+                            {item.discountType === 'percentage' ? '%' : 'Rs'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <span className='text-sm text-muted-foreground/60'>→</span>
+                      <div className='flex flex-col gap-0.5 shrink-0'>
+                        <span className='text-[10px] font-medium leading-none text-blue-500'>Sale Price</span>
+                        <div className='flex items-center overflow-hidden rounded-lg border border-blue-200 bg-blue-50/50'>
+                          <span className='flex h-7 items-center border-r border-blue-200 bg-blue-100/60 px-2 text-xs text-blue-600'>
+                            Rs
+                          </span>
+                          <Input
+                            type='text'
+                            inputMode='decimal'
+                            showVoiceInput={false}
+                            value={getNumericDraftValue(`${rk}:expectedSellingPrice`, item.expectedSellingPrice ?? 0)}
+                            onChange={(e) =>
+                              handleNumericDraftChange(`${rk}:expectedSellingPrice`, e.target.value, (parsed) =>
+                                updateSellingPrice(productId, parsed, item.variantId),
+                              )
+                            }
+                            onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => clearNumericDraft(`${rk}:expectedSellingPrice`)}
+                            placeholder='0'
+                            className='h-7 w-20 border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0'
+                          />
+                        </div>
+                      </div>
+                      <div className='ml-auto flex flex-col items-end gap-0 shrink-0'>
+                        {itemDiscountAmount > 0 && (
+                          <span className='text-[10px] leading-none text-muted-foreground line-through'>Rs{itemGross.toFixed(2)}</span>
+                        )}
+                        <div className='flex items-center gap-1.5'>
+                          <span className='text-sm text-muted-foreground/60'>=</span>
+                          <p className='text-sm font-bold tabular-nums'>
+                            Rs{itemNet.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {compact && deleteButton}
                     </div>
                   </div>
                 )
-              }
+              })}
+            </div>
 
-              const rk = rowKey(productId, item.variantId)
-              const deleteButton = (
-                <Button
-                  size='sm'
-                  variant='ghost'
-                  className='h-7 w-7 shrink-0 p-0'
-                  onClick={() => removeItem(productId, item.variantId)}
-                >
-                  <Trash2 className='h-3.5 w-3.5 text-red-400' />
-                </Button>
-              )
-
-              // Line-level discount (supplier discounting this one product) — net is
-              // what actually feeds the order subtotal.
-              const itemGross = item.quantity * item.expectedPrice
-              const itemDiscountAmount = computeDiscountAmount(itemGross, item.discountType, item.discountValue)
-              const itemNet = itemGross - itemDiscountAmount
-
-              return (
-                <div
-                  key={`${rk}-${index}`}
-                  className='overflow-hidden rounded-xl border bg-card shadow-sm'
-                >
-                  {/* Compact (catalog hidden): row1 + row2 flatten via `contents` into one
-                      flex-wrap line, same trick as InvoicePanel's compact item rows. */}
-                  <div className={cn(compact && 'flex flex-wrap items-center gap-2 p-2')}>
-                  <div className={cn(compact ? 'contents' : 'flex items-start gap-3 p-3')}>
-                    <div className={cn('flex shrink-0 items-center justify-center rounded-lg bg-muted', compact ? 'h-8 w-8' : 'mt-0.5 h-10 w-10')}>
-                      <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
-                    </div>
-                    {/* min-w-[110px] (instead of min-w-0) in compact mode — without a floor,
-                        flex-1 lets this shrink to near-nothing once the qty/cost/discount/
-                        sell/total controls (siblings on the same flex-wrap line) claim their
-                        fixed widths, truncating the name to 2-3 characters. The floor forces
-                        those controls to wrap to their own line instead once space is tight. */}
-                    <div className={cn('flex-1', compact ? 'min-w-[110px]' : 'min-w-0')}>
-                      <BilingualName
-                        primary={item.product.name}
-                        secondary={item.product.nameUrdu}
-                        primaryClassName='font-semibold text-sm'
-                        truncate={compact}
-                      />
-                      <div className='mt-0.5 flex flex-wrap items-center gap-2'>
-                        {!compact && (
-                          <span className='text-xs text-muted-foreground'>{item.unit || item.product.unit || 'pcs'}</span>
-                        )}
-                        {(() => {
-                          const stock = getDisplayStock(item.product)
-                          return (
-                            <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
-                              stock <= 0 ? 'bg-red-100 text-red-700' :
-                              stock <= 5 ? 'bg-red-50 text-red-500' :
-                              stock <= 20 ? 'bg-amber-50 text-amber-600' :
-                              'bg-green-50 text-green-700'
-                            }`}>
-                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                stock <= 0 ? 'bg-red-500' :
-                                stock <= 5 ? 'bg-red-400' :
-                                stock <= 20 ? 'bg-amber-400' :
-                                'bg-green-500'
-                              }`} />
-                              {stock <= 0 ? 'Out of stock' : `${stock} in stock`}
-                            </span>
-                          )
-                        })()}
-                      </div>
-                    </div>
-                    {!compact && deleteButton}
+            {/* Apply Discount — the one place the overall (whole-order) discount is
+                edited; feeds the Summary card's totals directly. Mirrors Purchase
+                Invoice's items-table footer popover exactly (see purchase-panel.tsx). */}
+            <div className='flex flex-wrap items-center gap-2 border-t p-3'>
+              <Popover open={applyDiscountOpen} onOpenChange={setApplyDiscountOpen}>
+                <PopoverTrigger asChild>
+                  <Button type='button' variant='outline' size='sm' className='gap-1.5'>
+                    <Percent className='h-4 w-4' />
+                    Apply Discount
+                    {discountAmount > 0 && (
+                      <Badge variant='secondary' className='ml-1 tabular-nums'>-Rs{discountAmount.toFixed(2)}</Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className='w-64 p-3' align='start'>
+                  <Label className='mb-2 block text-xs'>Discount</Label>
+                  <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                    <Input
+                      type='text'
+                      inputMode='decimal'
+                      showVoiceInput={false}
+                      value={getNumericDraftValue('overallDiscount', draft.discountValue || 0)}
+                      onChange={(e) =>
+                        handleNumericDraftChange('overallDiscount', e.target.value, (parsed) =>
+                          setDraft((p) => ({ ...p, discountValue: Math.max(0, parsed) })),
+                        )
+                      }
+                      onFocus={(e) => e.target.select()}
+                      onBlur={() => clearNumericDraft('overallDiscount')}
+                      placeholder='0'
+                      className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                    />
+                    <button
+                      type='button'
+                      onClick={() => setDraft((p) => ({ ...p, discountType: p.discountType === 'percentage' ? 'fixed' : 'percentage' }))}
+                      title='Click to switch between Rs and % discount'
+                      className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
+                    >
+                      {draft.discountType === 'percentage' ? '%' : 'Rs'}
+                    </button>
                   </div>
-                  <div className={cn(compact ? 'contents' : 'flex flex-wrap items-center gap-3 border-t bg-muted/20 px-3 py-2.5')}>
-                    <div className='flex items-center gap-1.5 shrink-0'>
-                      <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='ghost'
-                          className='h-7 w-7 rounded-none border-r p-0'
-                          onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1), item.variantId)}
-                        >
-                          <Minus className='h-3.5 w-3.5' />
-                        </Button>
-                        <Input
-                          ref={(el) => {
-                            qtyInputRefs.current[rk] = el
-                          }}
-                          type='number'
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateQuantity(productId, parseInt(e.target.value, 10) || 1, item.variantId)
-                          }
-                          onKeyDown={(e) =>
-                            onEnterAdvance(e, () => focusField(costInputRefs.current[rk]))
-                          }
-                          onFocus={(e) => e.target.select()}
-                          className='h-7 w-14 border-0 text-center text-sm font-semibold focus-visible:ring-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                        />
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='ghost'
-                          className='h-7 w-7 rounded-none border-l p-0'
-                          onClick={() => updateQuantity(productId, item.quantity + 1, item.variantId)}
-                        >
-                          <Plus className='h-3.5 w-3.5' />
-                        </Button>
-                      </div>
-                    </div>
-                    <span className='text-sm text-muted-foreground/60'>×</span>
-                    <div className='flex flex-col gap-0.5 shrink-0'>
-                      <span className='text-[10px] leading-none text-muted-foreground'>Purchase Price</span>
-                      <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                        <span className='flex h-7 items-center border-r bg-muted px-2 text-xs'>Rs</span>
-                        <Input
-                          ref={(el) => {
-                            costInputRefs.current[rk] = el
-                          }}
-                          type='text'
-                          inputMode='decimal'
-                          showVoiceInput={false}
-                          value={getNumericDraftValue(`${rk}:expectedPrice`, item.expectedPrice)}
-                          onChange={(e) =>
-                            handleNumericDraftChange(`${rk}:expectedPrice`, e.target.value, (parsed) =>
-                              updateExpectedPrice(productId, parsed, item.variantId),
-                            )
-                          }
-                          onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
-                          onFocus={(e) => e.target.select()}
-                          onBlur={() => clearNumericDraft(`${rk}:expectedPrice`)}
-                          className='h-7 w-20 border-0 text-sm font-semibold focus-visible:ring-0'
-                        />
-                      </div>
-                    </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-                    {/* − separator */}
-                    <span className='text-sm text-muted-foreground/60'>−</span>
-
-                    {/* Item Discount Input */}
-                    <div className='flex flex-col gap-0.5 shrink-0'>
-                      <span className='text-[10px] leading-none text-muted-foreground'>Discount</span>
-                      <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                        <Input
-                          type='text'
-                          inputMode='decimal'
-                          showVoiceInput={false}
-                          value={getNumericDraftValue(`${rk}:itemDiscount`, item.discountValue || 0)}
-                          onChange={(e) =>
-                            handleNumericDraftChange(`${rk}:itemDiscount`, e.target.value, (parsed) =>
-                              updateItemDiscount(productId, { value: Math.max(0, parsed) }, item.variantId),
-                            )
-                          }
-                          onFocus={(e) => e.target.select()}
-                          onBlur={() => clearNumericDraft(`${rk}:itemDiscount`)}
-                          placeholder='0'
-                          className='h-7 w-14 border-0 text-sm font-semibold focus-visible:ring-0'
-                        />
-                        <button
-                          type='button'
-                          onClick={() =>
-                            updateItemDiscount(
-                              productId,
-                              { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' },
-                              item.variantId,
-                            )
-                          }
-                          title='Click to switch between Rs and % discount'
-                          className='flex h-7 items-center border-l bg-muted px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
-                        >
-                          {item.discountType === 'percentage' ? '%' : 'Rs'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <span className='text-sm text-muted-foreground/60'>→</span>
-                    <div className='flex flex-col gap-0.5 shrink-0'>
-                      <span className='text-[10px] font-medium leading-none text-blue-500'>Sale Price</span>
-                      <div className='flex items-center overflow-hidden rounded-lg border border-blue-200 bg-blue-50/50'>
-                        <span className='flex h-7 items-center border-r border-blue-200 bg-blue-100/60 px-2 text-xs text-blue-600'>
-                          Rs
-                        </span>
-                        <Input
-                          type='text'
-                          inputMode='decimal'
-                          showVoiceInput={false}
-                          value={getNumericDraftValue(`${rk}:expectedSellingPrice`, item.expectedSellingPrice ?? 0)}
-                          onChange={(e) =>
-                            handleNumericDraftChange(`${rk}:expectedSellingPrice`, e.target.value, (parsed) =>
-                              updateSellingPrice(productId, parsed, item.variantId),
-                            )
-                          }
-                          onKeyDown={(e) => onEnterAdvance(e, addNewRowAndOpenProduct)}
-                          onFocus={(e) => e.target.select()}
-                          onBlur={() => clearNumericDraft(`${rk}:expectedSellingPrice`)}
-                          placeholder='0'
-                          className='h-7 w-20 border-0 bg-transparent text-sm font-semibold text-blue-700 focus-visible:ring-0'
-                        />
-                      </div>
-                    </div>
-                    <div className='ml-auto flex flex-col items-end gap-0 shrink-0'>
-                      {itemDiscountAmount > 0 && (
-                        <span className='text-[10px] leading-none text-muted-foreground line-through'>Rs{itemGross.toFixed(2)}</span>
-                      )}
-                      <div className='flex items-center gap-1.5'>
-                        <span className='text-sm text-muted-foreground/60'>=</span>
-                        <p className='text-sm font-bold tabular-nums'>
-                          Rs{itemNet.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  {compact && deleteButton}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className={cn(!showProductCatalog && 'lg:col-start-1 lg:row-start-3')}>
-        <CardContent className='space-y-4 p-4'>
-          <div>
-            <Label htmlFor='po-notes'>Notes</Label>
-            <Textarea
-              id='po-notes'
-              rows={2}
-              value={draft.notes}
-              onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
-              placeholder='Internal notes...'
-              className='mt-2'
-            />
-          </div>
-          <Separator />
-          <div className='space-y-2'>
-            <div className='flex justify-between text-sm'>
+      {/* Column 3 (compact mode): Summary + save actions. Mirrors Purchase Invoice's
+          Summary card exactly (see purchase-panel.tsx); Tax/Shipping stay editable here
+          since — unlike Purchase Invoice — there's no Payment & Amount card for them to
+          live in instead, and Purchase Invoice has no tax/shipping fields to mirror. */}
+      <div className={cn('space-y-4', !showProductCatalog && 'md:col-start-2 md:row-start-1 xl:row-start-1 xl:col-start-3')}>
+        <Card>
+          <CardHeader className='pb-3'>
+            <CardTitle className='flex items-center gap-2 text-base'>
+              <Receipt className='h-4 w-4 text-muted-foreground' />
+              Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-2 pt-0'>
+            <div className='flex justify-between gap-6'>
               <span className='text-muted-foreground'>Subtotal</span>
-              <span className='font-medium tabular-nums'>Rs{grossSubtotal.toFixed(2)}</span>
+              <span className='tabular-nums font-medium'>Rs{grossSubtotal.toFixed(2)}</span>
             </div>
             {itemDiscountTotal > 0 && (
-              <div className='flex justify-between text-sm text-green-600'>
+              <div className='flex justify-between gap-6 text-sm text-green-600'>
                 <span>Item Discounts</span>
                 <span className='tabular-nums'>-Rs{itemDiscountTotal.toFixed(2)}</span>
               </div>
             )}
-            <div className='flex items-center justify-between gap-2 text-sm'>
-              <span className='text-muted-foreground'>Discount</span>
-              <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                <Input
-                  type='text'
-                  inputMode='decimal'
-                  showVoiceInput={false}
-                  value={getNumericDraftValue('overallDiscount', draft.discountValue || 0)}
-                  onChange={(e) =>
-                    handleNumericDraftChange('overallDiscount', e.target.value, (parsed) =>
-                      setDraft((p) => ({ ...p, discountValue: Math.max(0, parsed) })),
-                    )
-                  }
-                  onFocus={(e) => e.target.select()}
-                  onBlur={() => clearNumericDraft('overallDiscount')}
-                  placeholder='0'
-                  className='h-8 w-20 border-0 text-right focus-visible:ring-0'
-                />
-                <button
-                  type='button'
-                  onClick={() =>
-                    setDraft((p) => ({
-                      ...p,
-                      discountType: p.discountType === 'percentage' ? 'fixed' : 'percentage',
-                    }))
-                  }
-                  title='Click to switch between Rs and % discount'
-                  className='flex h-8 items-center border-l bg-muted px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
-                >
-                  {draft.discountType === 'percentage' ? '%' : 'Rs'}
-                </button>
-              </div>
-            </div>
             {discountAmount > 0 && (
-              <div className='flex justify-between text-sm text-green-600'>
-                <span>Discount Applied</span>
+              <div className='flex justify-between gap-6 text-red-600'>
+                <span>Discount</span>
                 <span className='tabular-nums'>-Rs{discountAmount.toFixed(2)}</span>
               </div>
             )}
@@ -1380,7 +1418,7 @@ export default function PurchaseOrderPanel({
                 onFocus={(e) => e.target.select()}
                 onBlur={() => clearNumericDraft('tax')}
                 placeholder='0'
-                className='h-8 w-28 text-right'
+                className='h-8 w-24 text-right'
               />
             </div>
             <div className='flex items-center justify-between gap-2 text-sm'>
@@ -1398,7 +1436,7 @@ export default function PurchaseOrderPanel({
                 onFocus={(e) => e.target.select()}
                 onBlur={() => clearNumericDraft('shippingCost')}
                 placeholder='0'
-                className='h-8 w-28 text-right'
+                className='h-8 w-24 text-right'
               />
             </div>
             <Separator />
@@ -1412,59 +1450,65 @@ export default function PurchaseOrderPanel({
                 <span className='tabular-nums'>Rs{(itemDiscountTotal + discountAmount).toFixed(2)}</span>
               </div>
             )}
-          </div>
-          {/* Save buttons — compact mode (catalog hidden): the sticky bar below and the
-              header row above already cover these actions, so this duplicate is hidden. */}
-          {showProductCatalog && (
-          <div className='flex flex-wrap gap-2 pt-2'>
-            <Button variant='outline' disabled={saving} onClick={() => handleSave('draft')}>
-              <Save className='mr-2 h-4 w-4' />
-              Save draft (Ctrl+D)
-            </Button>
-            <Button disabled={saving} onClick={() => handleSave('sent')}>
-              <Send className='mr-2 h-4 w-4' />
-              Save &amp; send (Ctrl+S)
-            </Button>
-          </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Fast-ordering buttons bar — catalog hidden means the panel is a two-column
-          layout (details+totals on the left, items on the right); the primary actions are
-          always reachable without scrolling. Portaled into a footer slot the page keeps
-          outside the cards' scroll region — see PurchasePanel's identical bar for why. */}
+            {/* Save buttons — compact mode (catalog hidden): the header-portaled bar
+                below already covers these actions, so this duplicate stays hidden.
+                Mirrors Purchase Invoice's identical Payment & Amount card footer. */}
+            {showProductCatalog && (
+              <div className='flex flex-col gap-2 pt-2'>
+                <Button variant='outline' disabled={saving} onClick={() => handleSave('draft')}>
+                  <Save className='mr-2 h-4 w-4' />
+                  Save draft (Ctrl+D)
+                </Button>
+                <Button disabled={saving} onClick={() => handleSave('sent')}>
+                  <Send className='mr-2 h-4 w-4' />
+                  {editing && editing.status !== 'draft' ? 'Save' : 'Save & send'} (Ctrl+S)
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Fast-ordering buttons bar — catalog hidden means the panel is a 3-column
+          layout; the primary actions are always reachable without scrolling. Portaled
+          into a slot the page places in its header (see purchase-order-form.tsx). Falls
+          back to a floating bottom bar (with item count/total for context) until that
+          slot exists. Mirrors PurchasePanel's identical bar (see purchase-panel.tsx). */}
       {!showProductCatalog && (() => {
         const bar = (
-          <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              disabled={saving}
+              onClick={() => handleSave('draft')}
+              className='gap-1.5'
+            >
+              <Save className='h-4 w-4' />
+              Save draft
+            </Button>
+            <Button type='button' size='sm' disabled={saving} onClick={() => handleSave('sent')} className='gap-1.5'>
+              <Send className='h-4 w-4' />
+              {editing && editing.status !== 'draft' ? 'Save' : 'Save & send'}
+            </Button>
+          </div>
+        )
+        if (stickyActionsContainer) return createPortal(bar, stickyActionsContainer)
+        // No header slot yet — fall back to a floating bottom bar (with item count/total
+        // for context, since it's not sitting next to the page title in this fallback).
+        return (
+          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
             <div className='flex items-baseline gap-2 pl-1'>
               <span className='text-xs text-muted-foreground'>
                 {draft.items.filter((i) => getProductId(i) && i.product.name).length} items
               </span>
               <span className='text-lg font-bold tabular-nums'>Rs{totalAmount.toFixed(2)}</span>
             </div>
-            <div className='flex flex-wrap items-center gap-2'>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                disabled={saving}
-                onClick={() => handleSave('draft')}
-                className='gap-1.5'
-              >
-                <Save className='h-4 w-4' />
-                Save draft
-              </Button>
-              <Button type='button' size='sm' disabled={saving} onClick={() => handleSave('sent')} className='gap-1.5'>
-                <Send className='h-4 w-4' />
-                {editing && editing.status !== 'draft' ? 'Save' : 'Save & send'}
-              </Button>
-            </div>
+            {bar}
           </div>
         )
-        return stickyActionsContainer
-          ? createPortal(bar, stickyActionsContainer)
-          : <div className='sticky bottom-3 z-20 lg:col-span-2'>{bar}</div>
       })()}
     </div>
   )

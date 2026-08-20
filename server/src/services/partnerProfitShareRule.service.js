@@ -11,6 +11,8 @@ const scopeTargetFilter = (body) => {
   const filter = { organizationId: body.organizationId, partnerId: body.partnerId, scope: body.scope };
   if (body.scope === 'branch') filter.branchId = body.branchId;
   if (body.scope === 'product') filter.productId = body.productId;
+  if (body.scope === 'variant') filter.variantId = body.variantId;
+  if (body.scope === 'batch') filter.batchId = body.batchId;
   return filter;
 };
 
@@ -20,14 +22,22 @@ const scopeTargetFilter = (body) => {
  * rule's effectiveFrom — same "effective dates behave like a real rate change" reasoning as
  * commissionRule.service.js's createCommissionRule.
  * @param {Object} ruleBody
+ * @param {import('mongoose').ClientSession} [session] - joins the caller's transaction, e.g.
+ *   purchase.service.js's createPurchase auto-creating a batch-scoped rule alongside the batch.
  * @returns {Promise<PartnerProfitShareRule>}
  */
-const createProfitShareRule = async (ruleBody) => {
+const createProfitShareRule = async (ruleBody, session) => {
   if (ruleBody.scope === 'branch' && !ruleBody.branchId) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'branchId is required for a branch-scoped rule');
   }
-  if (ruleBody.scope === 'product' && !ruleBody.productId) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'productId is required for a product-scoped rule');
+  if (['product', 'variant', 'batch'].includes(ruleBody.scope) && !ruleBody.productId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'productId is required for this rule scope');
+  }
+  if (['variant', 'batch'].includes(ruleBody.scope) && !ruleBody.variantId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'variantId is required for this rule scope');
+  }
+  if (ruleBody.scope === 'batch' && !ruleBody.batchId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'batchId is required for a batch-scoped rule');
   }
   if (!SHARE_TYPES.includes(ruleBody.shareType)) {
     throw new ApiError(httpStatus.BAD_REQUEST, `shareType must be one of: ${SHARE_TYPES.join(', ')}`);
@@ -38,29 +48,42 @@ const createProfitShareRule = async (ruleBody) => {
 
   const effectiveFrom = ruleBody.effectiveFrom ? new Date(ruleBody.effectiveFrom) : new Date();
 
-  const openEndedPrior = await PartnerProfitShareRule.findOne({
+  const openEndedPriorQuery = PartnerProfitShareRule.findOne({
     ...scopeTargetFilter(ruleBody),
     isActive: true,
     effectiveTo: null,
   }).sort({ effectiveFrom: -1 });
+  if (session) openEndedPriorQuery.session(session);
+  const openEndedPrior = await openEndedPriorQuery;
 
   if (openEndedPrior && openEndedPrior.effectiveFrom < effectiveFrom) {
     openEndedPrior.effectiveTo = new Date(effectiveFrom.getTime() - 24 * 60 * 60 * 1000);
-    await openEndedPrior.save();
+    await openEndedPrior.save({ session });
   }
 
-  return PartnerProfitShareRule.create({
-    ...ruleBody,
-    branchId: ruleBody.scope === 'branch' ? ruleBody.branchId : null,
-    productId: ruleBody.scope === 'product' ? ruleBody.productId : null,
-    effectiveFrom,
-  });
+  const scopesWithProduct = ['product', 'variant', 'batch'];
+  const [created] = await PartnerProfitShareRule.create(
+    [
+      {
+        ...ruleBody,
+        branchId: ruleBody.scope === 'branch' ? ruleBody.branchId : null,
+        productId: scopesWithProduct.includes(ruleBody.scope) ? ruleBody.productId : null,
+        variantId: ['variant', 'batch'].includes(ruleBody.scope) ? ruleBody.variantId : null,
+        batchId: ruleBody.scope === 'batch' ? ruleBody.batchId : null,
+        effectiveFrom,
+      },
+    ],
+    session ? { session } : undefined
+  );
+  return created;
 };
 
 const POPULATE = [
   { path: 'partnerId', select: 'name partnerType' },
   { path: 'branchId', select: 'name' },
   { path: 'productId', select: 'name' },
+  { path: 'variantId', select: 'attributes sku' },
+  { path: 'batchId', select: 'batchNumber expiryDate' },
   { path: 'sourcePurchaseId', select: 'invoiceNumber' },
 ];
 
@@ -148,6 +171,48 @@ const resolveActiveProductRules = async ({ organizationId, productId, date }) =>
 };
 
 /**
+ * Every currently-active, date-effective variant-scoped rule for a product variant — earns
+ * on every batch of that variant, unlike a batch-scoped rule which narrows to one lot.
+ * @param {Object} params
+ * @param {ObjectId} params.organizationId
+ * @param {ObjectId} params.variantId
+ * @param {Date} [params.date] - defaults to now
+ * @returns {Promise<Array<{ partnerId: ObjectId, ruleId: ObjectId, shareType: string, rate: number }>>}
+ */
+const resolveActiveVariantRules = async ({ organizationId, variantId, date }) => {
+  if (!variantId) return [];
+  const asOf = date ? new Date(date) : new Date();
+  const rules = await PartnerProfitShareRule.find({
+    organizationId,
+    scope: 'variant',
+    variantId,
+    ...activeDateFilter(asOf),
+  });
+  return rules.map((r) => ({ partnerId: r.partnerId, ruleId: r._id, shareType: r.shareType, rate: r.rate }));
+};
+
+/**
+ * Every currently-active, date-effective batch-scoped rule for one exact lot — e.g. the
+ * investor who funded this specific purchase.
+ * @param {Object} params
+ * @param {ObjectId} params.organizationId
+ * @param {ObjectId} params.batchId
+ * @param {Date} [params.date] - defaults to now
+ * @returns {Promise<Array<{ partnerId: ObjectId, ruleId: ObjectId, shareType: string, rate: number }>>}
+ */
+const resolveActiveBatchRules = async ({ organizationId, batchId, date }) => {
+  if (!batchId) return [];
+  const asOf = date ? new Date(date) : new Date();
+  const rules = await PartnerProfitShareRule.find({
+    organizationId,
+    scope: 'batch',
+    batchId,
+    ...activeDateFilter(asOf),
+  });
+  return rules.map((r) => ({ partnerId: r.partnerId, ruleId: r._id, shareType: r.shareType, rate: r.rate }));
+};
+
+/**
  * Every currently-active, date-effective organization- or branch-scoped rule that applies
  * to a sale in `branchId` — again, every match, not one winner. Run as two separate finds
  * (not a single query with two $or clauses) to avoid the classic Mongo bug where a second
@@ -186,5 +251,7 @@ module.exports = {
   updateProfitShareRuleById,
   deleteProfitShareRuleById,
   resolveActiveProductRules,
+  resolveActiveVariantRules,
+  resolveActiveBatchRules,
   resolveActiveOrgRules,
 };

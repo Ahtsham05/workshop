@@ -32,6 +32,20 @@ function partnerLabel(ref: PartnerProfitShareLedgerEntry['partnerId']): string {
   return typeof ref === 'string' ? ref : ref.name;
 }
 
+// "from Batch LOT-2026-08" / "from Red / XL" — lets the ledger stay legible about exactly
+// which lot/variant a credit came from, for entries earned off a batch- or variant-scoped
+// rule (see partnerProfitShareEngine.service.js).
+function entryContext(entry: PartnerProfitShareLedgerEntry): string | null {
+  if (entry.batchId && typeof entry.batchId !== 'string') {
+    return `Batch ${entry.batchId.batchNumber}`;
+  }
+  if (entry.variantId && typeof entry.variantId !== 'string') {
+    const label = Object.values(entry.variantId.attributes || {}).join(' / ');
+    return label ? `Variant ${label}` : null;
+  }
+  return null;
+}
+
 const TRANSACTION_TYPE_STYLES: Record<string, string> = {
   share_earned: 'bg-green-100 text-green-800',
   share_reversed: 'bg-red-100 text-red-800',
@@ -156,7 +170,10 @@ export function PartnerLedgerTab() {
                           {transactionTypeLabel[entry.transactionType]}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{entry.reference || '—'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {entry.reference || '—'}
+                        {entryContext(entry) && <div className="text-xs">{entryContext(entry)}</div>}
+                      </TableCell>
                       <TableCell className="text-right text-sm text-muted-foreground">
                         {entry.rate !== undefined
                           ? entry.shareType === 'fixed_per_unit'

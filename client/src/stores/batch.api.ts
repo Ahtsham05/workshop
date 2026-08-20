@@ -48,6 +48,8 @@ export interface Batch {
   manufactureDate?: string
   expiryDate?: string
   supplierId?: string
+  // Investor/partner who funded this lot, if tagged at purchase time.
+  partnerId?: { id?: string; _id?: string; name: string } | string | null
   status?: 'active' | 'depleted' | 'expired' | 'written_off'
   createdAt?: string
 }

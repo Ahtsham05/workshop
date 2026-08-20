@@ -46,6 +46,10 @@ const partnerProfitShareLedgerSchema = mongoose.Schema(
     // Set only for entries earned from a product-scoped rule — lets the ledger UI show
     // "earned from sale of Product X". null for organization/branch-scoped entries.
     productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null },
+    // Set only for entries earned from a variant- or batch-scoped rule — lets the ledger UI
+    // show exactly which variant/lot a credit came from. null otherwise.
+    variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: null },
+    batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
     // The specific rule that fired — snapshotted since several rules can apply to one
     // invoice, and this is the actual idempotency key alongside referenceId/referenceModel.
     ruleId: { type: mongoose.Schema.Types.ObjectId, ref: 'PartnerProfitShareRule', index: true },

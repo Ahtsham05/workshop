@@ -479,8 +479,8 @@ export function InvoicePanel({
     }
   }, [t, invoice.customerName, invoice.customerId, branchData, customerBalance, preferredLanguage, orgData, customers])
 
-  /** Builds A4/A5 print data + WhatsApp/SMS contact for the invoice being saved/printed. Shared by full and half-sheet printing. */
-  const buildA4PrintData = useCallback(async (invoiceData: any) => {
+  /** Builds print data + WhatsApp/SMS contact for the invoice being saved/printed. Format-agnostic — feeds both the thermal and A4/A5 HTML generators. */
+  const buildPrintData = useCallback(async (invoiceData: any) => {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
 
@@ -559,7 +559,7 @@ export function InvoicePanel({
   // A4 Print functionality using utility — sheetSize also accepts the A4-half-sheet formats
   const printA4Invoice = useCallback(async (invoiceData: any, sheetSize: SheetSize = 'a4') => {
     try {
-      const { printData, printContact } = await buildA4PrintData(invoiceData)
+      const { printData, printContact } = await buildPrintData(invoiceData)
       const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
       openPrintWindowForFormat(htmlContent, sheetSize, printContact)
       // Don't show success toast - let the print dialog speak for itself
@@ -572,11 +572,13 @@ export function InvoicePanel({
         toast.error('Failed to open print window')
       }
     }
-  }, [buildA4PrintData, invoiceTemplate])
+  }, [buildPrintData, invoiceTemplate])
 
-  // "Preview" header action — opens the same A4 print HTML used by Save & Print, but built
-  // straight from the live, not-yet-saved `invoice` state (no create/update API call, no
-  // invoiceNumber yet). Lets the cashier sanity-check layout/totals before committing.
+  // "Preview" header action — opens the same print HTML the Save & Print button would
+  // produce for the branch's configured paper size (thermal80/58, A4, A5, or A4-half),
+  // built straight from the live, not-yet-saved `invoice` state (no create/update API
+  // call, no invoiceNumber yet). Lets the cashier sanity-check the actual print layout —
+  // not a generic A4 sheet — before committing.
   const previewInvoice = useCallback(async () => {
     const itemsWithProducts = invoice.items.filter((item) => item.productId && item.name)
     if (itemsWithProducts.length === 0) {
@@ -606,14 +608,21 @@ export function InvoicePanel({
       isUrduOnly: invoice.isUrduOnly,
     }
     try {
-      const { printData, printContact } = await buildA4PrintData(draftInvoiceData)
-      const htmlContent = generateA4InvoiceHTML(printData, 'a4', invoiceTemplate)
-      openPrintWindowForFormat(htmlContent, 'a4', printContact)
+      const { printData, printContact } = await buildPrintData(draftInvoiceData)
+      if (PAPER_FORMATS[defaultPaperSize].family === 'thermal') {
+        const thermalSize = resolveThermalSize(defaultPaperSize)
+        const htmlContent = generateInvoiceHTML(printData, thermalSize)
+        openPrintWindowForFormat(htmlContent, thermalSize, printContact)
+      } else {
+        const sheetSize = resolveSheetFormat(defaultPaperSize, printOrientation)
+        const htmlContent = generateA4InvoiceHTML(printData, sheetSize, invoiceTemplate)
+        openPrintWindowForFormat(htmlContent, sheetSize, printContact)
+      }
     } catch (error: any) {
       console.error('Preview error:', error)
       toast.error('Failed to open preview')
     }
-  }, [invoice, buildA4PrintData, invoiceTemplate, isEditing, editingInvoice, t])
+  }, [invoice, buildPrintData, invoiceTemplate, isEditing, editingInvoice, t, defaultPaperSize, printOrientation])
 
   // Initialize form values when in edit mode
   useEffect(() => {
@@ -4122,7 +4131,7 @@ export function InvoicePanel({
               ) : (
                 <Save className='h-4 w-4' />
               )}
-              {isEditing ? t('update_invoice') : t('Save Draft')}
+              {isEditing ? t('update_invoice') : t('Save Invoice')}
             </Button>
             <PrintFormatButton
               onPrint={(paperSize) => handleSaveInvoice(paperSize)}

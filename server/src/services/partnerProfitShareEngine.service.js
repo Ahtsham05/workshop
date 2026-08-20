@@ -21,11 +21,79 @@ const summarizeItemsByProduct = (items) => {
 };
 
 /**
+ * Sum profit and quantity per distinct variantId across an invoice's items — a variant-scoped
+ * rule earns on every batch of that variant, so this doesn't care which batch(es) the line
+ * actually drew from (see summarizeItemsByBatch for that). Items with no variantId (legacy
+ * flat products) are skipped, same as summarizeItemsByProduct skips items with no productId.
+ */
+const summarizeItemsByVariant = (items) => {
+  const byVariant = new Map();
+  for (const item of items || []) {
+    if (!item.variantId) continue;
+    const key = String(item.variantId);
+    const existing = byVariant.get(key) || { variantId: item.variantId, productId: item.productId, profit: 0, quantity: 0 };
+    existing.profit += Number(item.profit || 0);
+    existing.quantity += Number(item.quantity || 0);
+    byVariant.set(key, existing);
+  }
+  return [...byVariant.values()];
+};
+
+/** Same normalization invoice.service.js's getItemBatchAllocations uses when saving an
+ * invoice — inlined here (rather than imported) to avoid a circular require, since
+ * invoice.service.js is what calls into this engine. */
+const getItemBatchAllocations = (item) => {
+  if (Array.isArray(item.batchAllocations) && item.batchAllocations.length > 0) {
+    return item.batchAllocations;
+  }
+  if (item.batchId) {
+    return [{ batchId: item.batchId, quantity: item.quantity }];
+  }
+  return [];
+};
+
+/**
+ * Sum profit and quantity per distinct batchId across an invoice's items — a batch-scoped
+ * rule (e.g. an investor who funded that exact lot) only earns off units that actually came
+ * from their batch. A line's profit is prorated across its batch allocations by each
+ * allocation's share of the line's quantity, since batchAllocations only records quantity,
+ * not a per-batch profit split.
+ */
+const summarizeItemsByBatch = (items) => {
+  const byBatch = new Map();
+  for (const item of items || []) {
+    const allocations = getItemBatchAllocations(item);
+    if (allocations.length === 0) continue;
+    const lineQuantity = Number(item.quantity || 0);
+    if (lineQuantity <= 0) continue;
+    const unitProfit = Number(item.profit || 0) / lineQuantity;
+    for (const alloc of allocations) {
+      if (!alloc.batchId) continue;
+      const key = String(alloc.batchId);
+      const existing = byBatch.get(key) || {
+        batchId: alloc.batchId,
+        variantId: item.variantId,
+        productId: item.productId,
+        profit: 0,
+        quantity: 0,
+      };
+      existing.profit += unitProfit * Number(alloc.quantity || 0);
+      existing.quantity += Number(alloc.quantity || 0);
+      byBatch.set(key, existing);
+    }
+  }
+  return [...byBatch.values()];
+};
+
+/**
  * Credit every partner/rule entitled to a share of this invoice — every distinct product's
- * rules (against that product's summed profit/quantity), plus every org/branch-scoped rule
- * (against the invoice's totalProfit). Several different partners can earn independently on
- * the same invoice; this fires all of them, not just one (see
- * partnerProfitShareRule.model.js for why resolution returns an array).
+ * rules, every distinct variant's rules, every distinct batch's rules (each against that
+ * item's summed/prorated profit/quantity), plus every org/branch-scoped rule (against the
+ * invoice's totalProfit). Several different partners can earn independently on the same
+ * invoice — an org-wide partner, a product investor, a variant investor, and the specific
+ * investor who funded the batch that sold can all earn off the very same sale; this fires
+ * every one of them, not just one (see partnerProfitShareRule.model.js for why resolution
+ * returns an array).
  */
 const creditPartnerSharesForInvoice = async (invoice, userId) => {
   const date = invoice.invoiceDate || invoice.createdAt;
@@ -49,6 +117,67 @@ const creditPartnerSharesForInvoice = async (invoice, userId) => {
         referenceModel: 'Invoice',
         reference: invoice.invoiceNumber,
         productId: summary.productId,
+        shareType: rule.shareType,
+        rate: rule.rate,
+        saleProfit: summary.profit,
+        quantity: summary.quantity,
+        date,
+        userId,
+      });
+    }
+  }
+
+  const variantSummaries = summarizeItemsByVariant(invoice.items);
+  for (const summary of variantSummaries) {
+    // eslint-disable-next-line no-await-in-loop
+    const rules = await partnerProfitShareRuleService.resolveActiveVariantRules({
+      organizationId: invoice.organizationId,
+      variantId: summary.variantId,
+      date,
+    });
+    for (const rule of rules) {
+      // eslint-disable-next-line no-await-in-loop
+      await partnerProfitShareLedgerService.creditShareEarned({
+        organizationId: invoice.organizationId,
+        branchId: invoice.branchId,
+        partnerId: rule.partnerId,
+        ruleId: rule.ruleId,
+        referenceId: invoice._id,
+        referenceModel: 'Invoice',
+        reference: invoice.invoiceNumber,
+        productId: summary.productId,
+        variantId: summary.variantId,
+        shareType: rule.shareType,
+        rate: rule.rate,
+        saleProfit: summary.profit,
+        quantity: summary.quantity,
+        date,
+        userId,
+      });
+    }
+  }
+
+  const batchSummaries = summarizeItemsByBatch(invoice.items);
+  for (const summary of batchSummaries) {
+    // eslint-disable-next-line no-await-in-loop
+    const rules = await partnerProfitShareRuleService.resolveActiveBatchRules({
+      organizationId: invoice.organizationId,
+      batchId: summary.batchId,
+      date,
+    });
+    for (const rule of rules) {
+      // eslint-disable-next-line no-await-in-loop
+      await partnerProfitShareLedgerService.creditShareEarned({
+        organizationId: invoice.organizationId,
+        branchId: invoice.branchId,
+        partnerId: rule.partnerId,
+        ruleId: rule.ruleId,
+        referenceId: invoice._id,
+        referenceModel: 'Invoice',
+        reference: invoice.invoiceNumber,
+        productId: summary.productId,
+        variantId: summary.variantId,
+        batchId: summary.batchId,
         shareType: rule.shareType,
         rate: rule.rate,
         saleProfit: summary.profit,

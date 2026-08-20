@@ -66,13 +66,17 @@ export interface PurchaseItem {
   variantId?: string;
   batchNumber?: string;
   expiryDate?: string;
+  // Optional: tags the batch this line creates with an investor and asks the server to
+  // auto-create a matching batch-scoped profit-share rule for them. Only meaningful when
+  // this line is actually creating a new Batch (trackBatch/trackExpiry + a fresh batchNumber).
+  investorRule?: { partnerId: string; shareType: 'percentage_of_profit' | 'fixed_per_unit'; rate: number };
   // Snapshot captured at selection time from the purchasable catalog (which already
   // has this for free) so the batch fields render instantly instead of waiting on a
   // fresh useGetProductVariantsQuery/useGetBatchesForVariantQuery round-trip — see
   // docs/architecture/universal-product-migration.md.
   trackBatch?: boolean;
   trackExpiry?: boolean;
-  knownBatches?: { id: string; _id?: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit: number; status?: 'active' | 'depleted' | 'expired' | 'written_off' }[];
+  knownBatches?: { id: string; _id?: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit: number; status?: 'active' | 'depleted' | 'expired' | 'written_off'; partnerId?: { id?: string; _id?: string; name: string } | string | null }[];
 }
 
 // Supplier Interface

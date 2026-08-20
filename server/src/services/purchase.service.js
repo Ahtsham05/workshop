@@ -13,6 +13,7 @@ const imeiService = require('./imei.service');
 const inventorySyncService = require('./inventorySync.service');
 const inventoryService = require('./inventory.service');
 const batchService = require('./batch.service');
+const partnerProfitShareRuleService = require('./partnerProfitShareRule.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 
 /** Post (or re-post) double-entry journal entries for a purchase. Fire-and-forget. */
@@ -89,6 +90,40 @@ const syncVariantSerials = async ({ variant, imeis, batchId, purchase, netUnitCo
     createdBy: purchase.createdBy,
     session,
   });
+};
+
+/**
+ * Tags a just-created/re-stocked Batch with the investor who funded it, and auto-creates the
+ * matching batch-scoped PartnerProfitShareRule so that partner earns off units sold from this
+ * exact lot — one purchase-time step instead of a separate manual rule setup. No-op unless
+ * the line explicitly carries an investorRule. Runs inside the caller's transaction (`session`)
+ * so a failure here rolls back the whole purchase, same integrity guarantee as batch/serial
+ * creation above it.
+ */
+const applyInvestorRuleToBatch = async ({ item, batch, variant, purchase, session }) => {
+  const investorRule = item.investorRule;
+  if (!investorRule || !investorRule.partnerId) return;
+
+  batch.partnerId = investorRule.partnerId;
+  await batch.save({ session });
+
+  await partnerProfitShareRuleService.createProfitShareRule(
+    {
+      organizationId: purchase.organizationId,
+      partnerId: investorRule.partnerId,
+      scope: 'batch',
+      productId: variant.productId,
+      variantId: variant._id,
+      batchId: batch._id,
+      shareType: investorRule.shareType,
+      rate: investorRule.rate,
+      sourcePurchaseId: purchase._id,
+      effectiveFrom: purchase.purchaseDate,
+      isActive: true,
+      createdBy: purchase.createdBy,
+    },
+    session
+  );
 };
 
 /** Sum of all line totals (each already net of its own item-level discount) — the
@@ -369,6 +404,7 @@ const createPurchase = async (purchaseBody) => {
                 session,
               });
               batchId = batch._id;
+              await applyInvestorRuleToBatch({ item, batch, variant, purchase, session });
             } else {
               await inventoryService.adjustInventory(variant._id, {
                 quantityDelta,
@@ -717,6 +753,7 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
             createdBy: purchase.createdBy,
           });
           batchId = batch._id;
+          await applyInvestorRuleToBatch({ item: updatedItem, batch, variant, purchase, session: undefined });
         } else {
           await inventoryService.adjustInventory(variant._id, {
             quantityDelta,

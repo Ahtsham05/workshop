@@ -12,6 +12,8 @@ import {
 import { useGetAllPartnersQuery } from '@/stores/partner.api';
 import { useGetBranchesQuery } from '@/stores/branch.api';
 import { useSearchProductsQuery } from '@/stores/product.api';
+import { useGetProductVariantsQuery } from '@/stores/productVariant.api';
+import { useGetBatchesForVariantQuery } from '@/stores/batch.api';
 import {
   Dialog,
   DialogContent,
@@ -41,9 +43,11 @@ import toast from 'react-hot-toast';
 const ruleSchema = z
   .object({
     partnerId: z.string().min(1, 'Select a partner'),
-    scope: z.enum(['organization', 'branch', 'product']),
+    scope: z.enum(['organization', 'branch', 'product', 'variant', 'batch']),
     branchId: z.string(),
     productId: z.string(),
+    variantId: z.string(),
+    batchId: z.string(),
     shareType: z.enum(['percentage_of_profit', 'fixed_per_unit']),
     rate: z.coerce.number().min(0),
     effectiveFrom: z.string().min(1, 'Effective from date is required'),
@@ -55,9 +59,17 @@ const ruleSchema = z
     message: 'Select a branch',
     path: ['branchId'],
   })
-  .refine((data) => data.scope !== 'product' || !!data.productId, {
+  .refine((data) => !['product', 'variant', 'batch'].includes(data.scope) || !!data.productId, {
     message: 'Select a product',
     path: ['productId'],
+  })
+  .refine((data) => !['variant', 'batch'].includes(data.scope) || !!data.variantId, {
+    message: 'Select a variant',
+    path: ['variantId'],
+  })
+  .refine((data) => data.scope !== 'batch' || !!data.batchId, {
+    message: 'Select a batch',
+    path: ['batchId'],
   })
   .refine((data) => data.shareType !== 'percentage_of_profit' || data.rate <= 100, {
     message: 'A percentage-of-profit rate cannot exceed 100',
@@ -95,11 +107,6 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
     [branchesData]
   );
 
-  const productOptions = useMemo(
-    () => (productsData?.results || []).map((p) => ({ value: (p.id || p._id) as string, label: p.name })),
-    [productsData]
-  );
-
   const form = useForm<RuleFormValues>({
     resolver: zodResolver(ruleSchema),
     defaultValues: {
@@ -107,6 +114,8 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
       scope: 'product',
       branchId: '',
       productId: '',
+      variantId: '',
+      batchId: '',
       shareType: 'percentage_of_profit',
       rate: 0,
       effectiveFrom: toDateInput(new Date().toISOString()),
@@ -119,6 +128,82 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
 
   const scope = form.watch('scope');
   const shareType = form.watch('shareType');
+  const productId = form.watch('productId');
+  const variantId = form.watch('variantId');
+
+  const needsVariant = scope === 'variant' || scope === 'batch';
+  const needsBatch = scope === 'batch';
+
+  // Only products that can actually support the chosen scope — a "specific variant" rule
+  // is meaningless on a product with no real variants, and a "specific batch" rule needs
+  // either real variants or batch/expiry tracking turned on. Prevents the dead-end where
+  // picking a product with nothing to drill into next leaves an empty picker.
+  const productOptions = useMemo(() => {
+    const results = productsData?.results || [];
+    // In edit mode the product picker is disabled/locked to the rule's existing target,
+    // so the eligibility filter would only risk hiding that product from its own picker
+    // (showing a blank placeholder) if its tracking flags changed after the rule was
+    // created — skip filtering there since nothing is actually selectable anyway.
+    const eligible = isEdit
+      ? results
+      : results.filter((p) => {
+          if (scope === 'variant') return !!p.hasVariants;
+          if (scope === 'batch') return !!p.hasVariants || !!p.trackBatch || !!p.trackExpiry;
+          return true;
+        });
+    return eligible.map((p) => ({
+      value: (p.id || p._id) as string,
+      label: p.name,
+      sublabel: p.hasVariants ? 'Has variants' : p.trackBatch || p.trackExpiry ? 'Batch tracked' : undefined,
+    }));
+  }, [productsData, scope]);
+
+  const selectedProduct = useMemo(
+    () => (productsData?.results || []).find((p) => (p.id || p._id) === productId),
+    [productsData, productId]
+  );
+  const productHasVariants = !!selectedProduct?.hasVariants;
+  // A simple product with batch/expiry tracking turned on still has exactly one
+  // ProductVariant behind the scenes (its hidden "default" variant) — batches live on
+  // that, but there's nothing meaningful for the user to pick between, so scope='batch'
+  // skips the variant step entirely for these and resolves it automatically below.
+  const productIsSimpleTracked = !!selectedProduct && !selectedProduct.hasVariants && !!(selectedProduct.trackBatch || selectedProduct.trackExpiry);
+
+  const { data: variantsData } = useGetProductVariantsQuery(productId, { skip: !open || !needsVariant || !productId });
+  const { data: batchesData } = useGetBatchesForVariantQuery(variantId, { skip: !open || !needsBatch || !variantId });
+
+  const realVariants = useMemo(() => (variantsData || []).filter((v) => !v.isDefault), [variantsData]);
+  const variantOptions = useMemo(
+    () =>
+      realVariants.map((v) => {
+        const id = (v._id || v.id) as string;
+        const label = Object.values(v.attributes || {}).join(' / ') || v.sku || id;
+        return { value: id, label };
+      }),
+    [realVariants]
+  );
+
+  const batchOptions = useMemo(
+    () =>
+      (batchesData || []).map((b) => {
+        const id = (b._id || b.id) as string;
+        const expiry = b.expiryDate ? ` · exp ${new Date(b.expiryDate).toLocaleDateString()}` : '';
+        return { value: id, label: `${b.batchNumber} · ${b.quantity} left${expiry}` };
+      }),
+    [batchesData]
+  );
+
+  // Simple batch-tracked product under scope='batch': silently resolve variantId to its
+  // one hidden default variant the moment it loads, so the batch picker can go straight
+  // from Product to Batch without ever showing a one-item "Variant" step.
+  useEffect(() => {
+    if (!needsBatch || !productIsSimpleTracked) return;
+    const defaultVariant = (variantsData || []).find((v) => v.isDefault);
+    const defaultId = defaultVariant ? ((defaultVariant._id || defaultVariant.id) as string) : '';
+    if (defaultId && form.getValues('variantId') !== defaultId) {
+      form.setValue('variantId', defaultId);
+    }
+  }, [needsBatch, productIsSimpleTracked, variantsData, form]);
 
   useEffect(() => {
     if (rule) {
@@ -127,6 +212,8 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
         scope: rule.scope,
         branchId: typeof rule.branchId === 'string' ? rule.branchId : rule.branchId?.id || '',
         productId: typeof rule.productId === 'string' ? rule.productId : rule.productId?.id || '',
+        variantId: typeof rule.variantId === 'string' ? rule.variantId : rule.variantId?.id || '',
+        batchId: typeof rule.batchId === 'string' ? rule.batchId : rule.batchId?.id || '',
         shareType: rule.shareType,
         rate: rule.rate,
         effectiveFrom: toDateInput(rule.effectiveFrom),
@@ -140,6 +227,8 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
         scope: 'product',
         branchId: '',
         productId: '',
+        variantId: '',
+        batchId: '',
         shareType: 'percentage_of_profit',
         rate: 0,
         effectiveFrom: toDateInput(new Date().toISOString()),
@@ -170,7 +259,9 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
           partnerId: data.partnerId,
           scope: data.scope,
           branchId: data.scope === 'branch' ? data.branchId : undefined,
-          productId: data.scope === 'product' ? data.productId : undefined,
+          productId: ['product', 'variant', 'batch'].includes(data.scope) ? data.productId : undefined,
+          variantId: ['variant', 'batch'].includes(data.scope) ? data.variantId : undefined,
+          batchId: data.scope === 'batch' ? data.batchId : undefined,
           shareType: data.shareType,
           rate: data.rate,
           effectiveFrom: data.effectiveFrom,
@@ -237,6 +328,8 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="product">{t('a_specific_product') || 'A specific product'}</SelectItem>
+                      <SelectItem value="variant">{t('a_specific_variant') || 'A specific product variant'}</SelectItem>
+                      <SelectItem value="batch">{t('a_specific_batch') || 'A specific batch / lot'}</SelectItem>
                       <SelectItem value="branch">{t('a_specific_branch') || 'A specific branch (all products)'}</SelectItem>
                       <SelectItem value="organization">{t('whole_organization') || 'The whole organization'}</SelectItem>
                     </SelectContent>
@@ -246,7 +339,7 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
               )}
             />
 
-            {scope === 'product' && (
+            {(scope === 'product' || needsVariant) && (
               <FormField
                 control={form.control}
                 name="productId"
@@ -257,8 +350,65 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
                       <SearchableSelect
                         options={productOptions}
                         value={field.value}
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          // Switching the product invalidates whatever variant/batch was
+                          // already picked for the old one.
+                          form.setValue('variantId', '');
+                          form.setValue('batchId', '');
+                        }}
                         placeholder={t('select_product') || 'Select a product...'}
+                        disabled={isEdit}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {needsVariant && productId && productHasVariants && (
+              <FormField
+                control={form.control}
+                name="variantId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('variant') || 'Variant'} *</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        options={variantOptions}
+                        value={field.value}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          form.setValue('batchId', '');
+                        }}
+                        placeholder={t('select_variant') || 'Select a variant...'}
+                        disabled={isEdit}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {needsBatch && productId && productIsSimpleTracked && !variantId && (
+              <p className="text-sm text-muted-foreground">{t('loading_batches') || 'Loading batches...'}</p>
+            )}
+
+            {needsBatch && variantId && (
+              <FormField
+                control={form.control}
+                name="batchId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('batch') || 'Batch / Lot'} *</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        options={batchOptions}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        placeholder={t('select_batch') || 'Select a batch...'}
                         disabled={isEdit}
                       />
                     </FormControl>

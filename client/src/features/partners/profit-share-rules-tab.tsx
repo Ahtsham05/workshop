@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   useGetProfitShareRulesQuery,
   useDeleteProfitShareRuleMutation,
@@ -7,6 +7,8 @@ import {
 } from '@/stores/partnerProfitShareRule.api';
 import { useGetAllPartnersQuery } from '@/stores/partner.api';
 import { useSearchProductsQuery } from '@/stores/product.api';
+import { useGetProductVariantsQuery } from '@/stores/productVariant.api';
+import { useGetBatchesForVariantQuery } from '@/stores/batch.api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -34,6 +36,14 @@ function partnerLabel(ref: PartnerProfitShareRule['partnerId']): string {
 }
 
 function scopeLabel(rule: PartnerProfitShareRule): string {
+  if (rule.scope === 'batch') {
+    const b = rule.batchId;
+    return typeof b === 'string' ? 'Batch' : b?.batchNumber || 'Batch';
+  }
+  if (rule.scope === 'variant') {
+    const v = rule.variantId;
+    return typeof v === 'string' ? 'Variant' : Object.values(v?.attributes || {}).join(' / ') || v?.sku || 'Variant';
+  }
   if (rule.scope === 'product') {
     const p = rule.productId;
     return typeof p === 'string' ? 'Product' : p?.name || 'Product';
@@ -56,11 +66,15 @@ export function ProfitShareRulesTab() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState<PartnerProfitShareRule | null>(null);
   const [previewProductId, setPreviewProductId] = useState('');
+  const [previewVariantId, setPreviewVariantId] = useState('');
+  const [previewBatchId, setPreviewBatchId] = useState('');
 
   const { data, isLoading, refetch } = useGetProfitShareRulesQuery({ page: 1, limit: 100 });
   const [deleteRule, { isLoading: isDeleting }] = useDeleteProfitShareRuleMutation();
   const { data: partners } = useGetAllPartnersQuery({ isActive: true });
   const { data: productsData } = useSearchProductsQuery({ limit: 200 });
+  const { data: previewVariantsData } = useGetProductVariantsQuery(previewProductId, { skip: !previewProductId });
+  const { data: previewBatchesData } = useGetBatchesForVariantQuery(previewVariantId, { skip: !previewVariantId });
   const [resolveRules, { data: previewResult, isFetching: isPreviewing }] = useLazyResolveProfitShareRulesQuery();
 
   const rules = data?.results || [];
@@ -69,6 +83,41 @@ export function ProfitShareRulesTab() {
     () => (productsData?.results || []).map((p) => ({ value: (p.id || p._id) as string, label: p.name })),
     [productsData]
   );
+
+  const previewVariantOptions = useMemo(
+    () =>
+      (previewVariantsData || [])
+        .filter((v) => !v.isDefault)
+        .map((v) => {
+          const id = (v._id || v.id) as string;
+          const label = Object.values(v.attributes || {}).join(' / ') || v.sku || id;
+          return { value: id, label };
+        }),
+    [previewVariantsData]
+  );
+
+  const previewBatchOptions = useMemo(
+    () =>
+      (previewBatchesData || []).map((b) => {
+        const id = (b._id || b.id) as string;
+        const expiry = b.expiryDate ? ` · exp ${new Date(b.expiryDate).toLocaleDateString()}` : '';
+        return { value: id, label: `${b.batchNumber} · ${b.quantity} left${expiry}` };
+      }),
+    [previewBatchesData]
+  );
+
+  // A simple product with batch/expiry tracking has no real variant to pick — it has
+  // exactly one hidden "default" variant, filtered out of previewVariantOptions above.
+  // Resolve it silently so batches for these products can still be previewed, instead of
+  // the variant step (and therefore the batch step) never appearing at all.
+  useEffect(() => {
+    if (!previewProductId || previewVariantOptions.length > 0) return;
+    const defaultVariant = (previewVariantsData || []).find((v) => v.isDefault);
+    const defaultId = defaultVariant ? ((defaultVariant._id || defaultVariant.id) as string) : '';
+    if (defaultId && previewVariantId !== defaultId) {
+      setPreviewVariantId(defaultId);
+    }
+  }, [previewProductId, previewVariantOptions, previewVariantsData, previewVariantId]);
 
   const partnerNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -124,22 +173,62 @@ export function ProfitShareRulesTab() {
               <SearchableSelect
                 options={productOptions}
                 value={previewProductId}
-                onValueChange={setPreviewProductId}
+                onValueChange={(value) => {
+                  setPreviewProductId(value);
+                  setPreviewVariantId('');
+                  setPreviewBatchId('');
+                }}
                 placeholder={t('select_product') || 'Select a product...'}
                 clearLabel={t('none') || 'None'}
               />
             </div>
+            {previewProductId && previewVariantOptions.length > 0 && (
+              <div className="w-full sm:w-56">
+                <SearchableSelect
+                  options={previewVariantOptions}
+                  value={previewVariantId}
+                  onValueChange={(value) => {
+                    setPreviewVariantId(value);
+                    setPreviewBatchId('');
+                  }}
+                  placeholder={t('select_variant') || 'Select a variant...'}
+                  clearLabel={t('none') || 'None'}
+                />
+              </div>
+            )}
+            {previewVariantId && previewBatchOptions.length > 0 && (
+              <div className="w-full sm:w-56">
+                <SearchableSelect
+                  options={previewBatchOptions}
+                  value={previewBatchId}
+                  onValueChange={setPreviewBatchId}
+                  placeholder={t('select_batch') || 'Select a batch...'}
+                  clearLabel={t('none') || 'None'}
+                />
+              </div>
+            )}
             <Button
               variant="outline"
               disabled={isPreviewing}
-              onClick={() => resolveRules({ productId: previewProductId || undefined })}
+              onClick={() =>
+                resolveRules({
+                  productId: previewProductId || undefined,
+                  variantId: previewVariantId || undefined,
+                  batchId: previewBatchId || undefined,
+                })
+              }
             >
               {isPreviewing ? t('checking') || 'Checking...' : t('check') || 'Check'}
             </Button>
           </div>
           {previewResult && (
             <div className="mt-4 space-y-2 text-sm">
-              {[...(previewResult.productRules || []), ...previewResult.orgRules].length === 0 ? (
+              {[
+                ...(previewResult.productRules || []),
+                ...(previewResult.variantRules || []),
+                ...(previewResult.batchRules || []),
+                ...previewResult.orgRules,
+              ].length === 0 ? (
                 <p className="text-muted-foreground">
                   {t('no_active_claims') || 'No partner currently has an active claim here.'}
                 </p>
@@ -148,6 +237,24 @@ export function ProfitShareRulesTab() {
                   {(previewResult.productRules || []).map((r) => (
                     <div key={r.ruleId} className="flex items-center gap-2">
                       <Badge variant="outline">{t('product') || 'Product'}</Badge>
+                      <span>{partnerNameById.get(r.partnerId) || r.partnerId}</span>
+                      <span className="text-muted-foreground">
+                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `Rs ${r.rate}/unit`}
+                      </span>
+                    </div>
+                  ))}
+                  {(previewResult.variantRules || []).map((r) => (
+                    <div key={r.ruleId} className="flex items-center gap-2">
+                      <Badge variant="outline">{t('variant') || 'Variant'}</Badge>
+                      <span>{partnerNameById.get(r.partnerId) || r.partnerId}</span>
+                      <span className="text-muted-foreground">
+                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `Rs ${r.rate}/unit`}
+                      </span>
+                    </div>
+                  ))}
+                  {(previewResult.batchRules || []).map((r) => (
+                    <div key={r.ruleId} className="flex items-center gap-2">
+                      <Badge variant="outline">{t('batch') || 'Batch'}</Badge>
                       <span>{partnerNameById.get(r.partnerId) || r.partnerId}</span>
                       <span className="text-muted-foreground">
                         — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `Rs ${r.rate}/unit`}

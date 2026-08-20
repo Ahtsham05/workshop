@@ -515,10 +515,11 @@ export default function PurchasePanel({
   const updateItemVariant = useCallback((index: number, variantId: string | undefined) => {
     setPurchase((prev) => ({
       ...prev,
-      // Clear batch/expiry when the variant changes — they belong to the previously
-      // selected variant and may no longer apply (e.g. switching to a non-batch variant).
+      // Clear batch/expiry/investor when the variant changes — they belong to the
+      // previously selected variant and may no longer apply (e.g. switching to a
+      // non-batch variant).
       items: prev.items.map((item, i) =>
-        i === index ? { ...item, variantId, batchNumber: undefined, expiryDate: undefined } : item,
+        i === index ? { ...item, variantId, batchNumber: undefined, expiryDate: undefined, investorRule: undefined } : item,
       ),
     }))
   }, [setPurchase])
@@ -526,9 +527,23 @@ export default function PurchasePanel({
   const updateItemBatchNumber = useCallback((index: number, value: string) => {
     setPurchase((prev) => ({
       ...prev,
-      items: prev.items.map((item, i) => (i === index ? { ...item, batchNumber: value } : item)),
+      // Clearing the batch (removing the pill) also clears any investor tagged for it —
+      // the tag was for that specific lot, not the variant in general.
+      items: prev.items.map((item, i) =>
+        i === index ? { ...item, batchNumber: value, ...(value ? {} : { investorRule: undefined }) } : item,
+      ),
     }))
   }, [setPurchase])
+
+  const updateItemInvestorRule = useCallback(
+    (index: number, value: PurchaseItem['investorRule'] | undefined) => {
+      setPurchase((prev) => ({
+        ...prev,
+        items: prev.items.map((item, i) => (i === index ? { ...item, investorRule: value } : item)),
+      }))
+    },
+    [setPurchase],
+  )
 
   const updateItemExpiryDate = useCallback((index: number, value: string) => {
     setPurchase((prev) => ({
@@ -782,10 +797,11 @@ export default function PurchasePanel({
     [purchase.supplier, t, preferredLanguage, invoiceTemplate, purchaseBranchDetails]
   )
 
-  // "Preview" header action (dense mode only) — opens the same A4 print HTML used by
-  // Save & Print, but built straight from the live, not-yet-saved `purchase` state (no
-  // create/update API call, no invoiceNumber yet). Mirrors InvoicePanel's
-  // previewInvoice/buildA4PrintData (see invoice-panel.tsx).
+  // "Preview" header action (dense mode only) — opens the same print HTML the Save & Print
+  // button would produce for the branch's configured paper size (thermal80/58, A4, or A5),
+  // built straight from the live, not-yet-saved `purchase` state (no create/update API call,
+  // no invoiceNumber yet). Mirrors InvoicePanel's previewInvoice/buildPrintData (see
+  // invoice-panel.tsx).
   const previewPurchase = useCallback(async () => {
     const itemsWithProducts = purchase.items.filter((item) => {
       const pid = item.product.id || (item.product as any)?._id
@@ -812,9 +828,11 @@ export default function PurchasePanel({
     try {
       const module = await import('@/utils/purchasePrintUtils')
       const supplierName = purchase.supplier?.name || 'Unknown'
-      const sheetFormat = withPrintOrientation(resolveSheetSize(defaultPaperSize), printOrientation)
-      const html = module.generatePurchaseInvoiceA4HTML(draftPurchaseData, supplierName, t, purchaseBranchDetails, preferredLanguage, getInvoicePrintInUrdu(), sheetFormat, invoiceTemplate)
-      const format = PAPER_FORMATS[sheetFormat]
+      const format = PAPER_FORMATS[withPrintOrientation(defaultPaperSize, printOrientation)]
+      const html =
+        format.family === 'thermal'
+          ? module.generatePurchaseInvoiceHTML(draftPurchaseData, supplierName, t, purchaseBranchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(defaultPaperSize))
+          : module.generatePurchaseInvoiceA4HTML(draftPurchaseData, supplierName, t, purchaseBranchDetails, preferredLanguage, getInvoicePrintInUrdu(), withPrintOrientation(resolveSheetSize(defaultPaperSize), printOrientation), invoiceTemplate)
       const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
       if (printWindow) {
         printWindow.document.write(html)
@@ -1135,6 +1153,7 @@ export default function PurchasePanel({
             variantId: item.variantId || undefined,
             batchNumber: item.variantId ? (item.batchNumber || undefined) : undefined,
             expiryDate: item.variantId ? (item.expiryDate || undefined) : undefined,
+            investorRule: item.variantId && item.batchNumber ? item.investorRule : undefined,
           };
         }),
         discountType: purchase.discountType || 'fixed',
@@ -1726,6 +1745,7 @@ export default function PurchasePanel({
                       onBatchNumberChange={updateItemBatchNumber}
                       onExpiryDateChange={updateItemExpiryDate}
                       onBatchCostChange={updateItemBatchCost}
+                      onInvestorRuleChange={updateItemInvestorRule}
                       onNeedsBatchChange={(i, needsBatch) => { itemNeedsBatchRef.current[i] = needsBatch }}
                       onRegisterBatchTrigger={(i, trigger) => { itemBatchTriggerRef.current[i] = trigger }}
                       onLastFieldEnter={addNewPurchaseRowAndOpenProduct}

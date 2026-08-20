@@ -11,9 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { CalendarClock, Layers, Plus, Sparkles, X } from 'lucide-react'
+import { CalendarClock, HandCoins, Layers, Plus, Sparkles, X } from 'lucide-react'
 import { useGetProductVariantsQuery } from '@/stores/productVariant.api'
 import { useGetBatchesForVariantQuery } from '@/stores/batch.api'
+import { useGetAllPartnersQuery } from '@/stores/partner.api'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { generateBatchNumber } from '@/features/products/components/variants/generate-variant-combinations'
 import { cn } from '@/lib/utils'
 import { focusField, onEnterAdvance } from '@/lib/invoice-form-keyboard'
@@ -28,6 +30,9 @@ interface Props {
   // Applies the selected batch's own cost so re-stocking an existing batch doesn't
   // silently keep whatever purchase price was last typed for this row.
   onBatchCostChange: (index: number, cost: number) => void
+  // Tags the batch being created with an investor + their earning rate — server
+  // auto-creates a matching batch-scoped profit-share rule on save.
+  onInvestorRuleChange: (index: number, value: PurchaseItem['investorRule'] | undefined) => void
   // Hands the parent a callback that opens (or advances past) this row's batch
   // dialog, so Sale Price's Enter can invoke it directly — a plain function registry
   // rather than a focusable DOM node, since there's no visible input to focus and
@@ -63,6 +68,7 @@ export function PurchaseItemVariantBatchFields({
   onBatchNumberChange,
   onExpiryDateChange,
   onBatchCostChange,
+  onInvestorRuleChange,
   onNeedsBatchChange,
   onRegisterBatchTrigger,
   onLastFieldEnter,
@@ -101,8 +107,18 @@ export function PurchaseItemVariantBatchFields({
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create')
   const [draftBatchNumber, setDraftBatchNumber] = useState('')
   const [draftExpiryDate, setDraftExpiryDate] = useState('')
+  const [draftPartnerId, setDraftPartnerId] = useState('')
+  const [draftShareType, setDraftShareType] = useState<'percentage_of_profit' | 'fixed_per_unit'>('percentage_of_profit')
+  const [draftRate, setDraftRate] = useState('')
   const batchInputRef = useRef<HTMLInputElement | null>(null)
   const expiryInputRef = useRef<HTMLInputElement | null>(null)
+
+  const { data: partners } = useGetAllPartnersQuery({ isActive: true }, { skip: !dialogOpen })
+  const partnerOptions = (partners || []).map((p) => ({
+    value: p.id,
+    label: p.name,
+    sublabel: p.partnerType === 'product_investor' ? 'Investor' : 'Partner',
+  }))
 
   useEffect(() => {
     if (!dialogOpen) return
@@ -128,10 +144,17 @@ export function PurchaseItemVariantBatchFields({
   // ones instead of a separate summary block.
   const isNewBatch = !!item.batchNumber && !activeBatches.some((b) => b.batchNumber === item.batchNumber)
 
+  const resetInvestorDraft = () => {
+    setDraftPartnerId(item.investorRule?.partnerId || '')
+    setDraftShareType(item.investorRule?.shareType || 'percentage_of_profit')
+    setDraftRate(item.investorRule?.rate != null ? String(item.investorRule.rate) : '')
+  }
+
   const openCreateDialog = () => {
     setDialogMode('create')
     setDraftBatchNumber(generateBatchNumber())
     setDraftExpiryDate('')
+    resetInvestorDraft()
     setDialogOpen(true)
   }
 
@@ -139,12 +162,14 @@ export function PurchaseItemVariantBatchFields({
     setDialogMode('edit')
     setDraftBatchNumber(item.batchNumber || generateBatchNumber())
     setDraftExpiryDate(item.expiryDate || '')
+    resetInvestorDraft()
     setDialogOpen(true)
   }
 
   const clearBatch = () => {
     onBatchNumberChange(index, '')
     onExpiryDateChange(index, '')
+    onInvestorRuleChange(index, undefined)
   }
 
   // Shared by the dialog's Enter-to-confirm cascade and its "Create/Save Batch"
@@ -154,6 +179,11 @@ export function PurchaseItemVariantBatchFields({
     if (!trimmed) return
     onBatchNumberChange(index, trimmed)
     if (isExpirable) onExpiryDateChange(index, draftExpiryDate)
+    const rate = Number(draftRate)
+    onInvestorRuleChange(
+      index,
+      draftPartnerId && draftRate && rate >= 0 ? { partnerId: draftPartnerId, shareType: draftShareType, rate } : undefined,
+    )
     setDialogOpen(false)
     onLastFieldEnter()
   }
@@ -217,6 +247,11 @@ export function PurchaseItemVariantBatchFields({
             {activeBatches.map((b) => {
               const id = b._id || b.id
               const isSelected = item.batchNumber === b.batchNumber
+              const fundedByName = typeof b.partnerId === 'object' ? b.partnerId?.name : undefined
+              const titleParts = [
+                b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : null,
+                fundedByName ? `Funded by ${fundedByName}` : null,
+              ].filter(Boolean)
               return (
                 <span key={id} className={pillClass(isSelected)}>
                   <button
@@ -225,9 +260,10 @@ export function PurchaseItemVariantBatchFields({
                       onBatchNumberChange(index, b.batchNumber)
                       onBatchCostChange(index, b.costPerUnit)
                     }}
-                    title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+                    title={titleParts.length ? titleParts.join(' · ') : undefined}
                     className={cn('py-1', isSelected ? 'pl-2.5' : 'px-2.5')}
                   >
+                    {fundedByName && <HandCoins className='mr-1 inline h-3 w-3' />}
                     {b.batchNumber} · {b.quantity} left
                   </button>
                   {isSelected && (
@@ -254,6 +290,7 @@ export function PurchaseItemVariantBatchFields({
                   <Sparkles className='mr-1 inline h-3 w-3' />
                   {item.batchNumber}
                   {isExpirable && !item.expiryDate && <CalendarClock className='ml-1 inline h-3 w-3 text-amber-300' />}
+                  {item.investorRule && <HandCoins className='ml-1 inline h-3 w-3' />}
                 </button>
                 <button type='button' onClick={clearBatch} title='Remove batch' className={removeButtonClass(true)}>
                   <X className='h-3 w-3' />
@@ -315,6 +352,43 @@ export function PurchaseItemVariantBatchFields({
                 />
               </div>
             )}
+
+            <div className='space-y-1.5 border-t pt-3'>
+              <Label htmlFor={`batch-investor-${index}`} className='text-muted-foreground'>
+                Investor funding this batch (optional)
+              </Label>
+              <SearchableSelect
+                options={partnerOptions}
+                value={draftPartnerId}
+                onValueChange={setDraftPartnerId}
+                placeholder='No investor'
+                clearLabel='No investor'
+              />
+              {draftPartnerId && (
+                <div className='flex items-center gap-2'>
+                  <Select value={draftShareType} onValueChange={(v) => setDraftShareType(v as typeof draftShareType)}>
+                    <SelectTrigger className='h-9 flex-1 text-sm'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='percentage_of_profit'>% of profit</SelectItem>
+                      <SelectItem value='fixed_per_unit'>Rs / unit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type='number'
+                    min={0}
+                    max={draftShareType === 'percentage_of_profit' ? 100 : undefined}
+                    step='0.01'
+                    placeholder='Rate'
+                    value={draftRate}
+                    showVoiceInput={false}
+                    onChange={(e) => setDraftRate(e.target.value)}
+                    className='h-9 w-24'
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter>

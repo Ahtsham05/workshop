@@ -41,6 +41,11 @@ export interface ProductSearchResult {
   id?: string
   _id?: string
   name: string
+  // Always present on every result (attachVariantAggregates merges these onto every
+  // product, real-variant or simple) — see docs/architecture/universal-product-migration.md.
+  hasVariants?: boolean
+  trackBatch?: boolean
+  trackExpiry?: boolean
 }
 
 export interface ProductSearchResponse {

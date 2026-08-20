@@ -26,6 +26,11 @@ const BatchSchema = new mongoose.Schema({
     expiryDate: { type: Date, index: true }, // FEFO queries, expiry alert jobs
     supplierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
     purchaseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase' },
+    // Investor/partner who funded this specific lot, if any — set at purchase time when
+    // tagging a batch with an investor (see purchase.service.js's createPurchase). This is
+    // informational/denormalized; the actual earning mechanism is a batch-scoped
+    // PartnerProfitShareRule, not this field.
+    partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner', default: null, index: true },
     status: {
         type: String,
         enum: ['active', 'depleted', 'expired', 'written_off'],

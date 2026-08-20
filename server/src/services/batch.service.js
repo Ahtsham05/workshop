@@ -192,7 +192,9 @@ const findBatchIdByNumber = async (variantId, batchNumber) => {
 const getBatchesForVariant = async (variantId) => {
   const inventory = await Inventory.findOne({ variantId });
   if (!inventory) return [];
-  return Batch.find({ inventoryId: inventory._id }).sort({ expiryDate: 1, createdAt: 1 });
+  return Batch.find({ inventoryId: inventory._id })
+    .sort({ expiryDate: 1, createdAt: 1 })
+    .populate('partnerId', 'name');
 };
 
 /** Batches expiring within `days` (default 30), for the expiry-alert widget. */

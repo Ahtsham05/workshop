@@ -9,6 +9,14 @@ const imeiEntry = Joi.alternatives().try(
   }),
 );
 
+// Optional per-line investor tag — only meaningful when the line creates a new Batch (see
+// purchase.service.js's createPurchase), ignored otherwise.
+const investorRuleEntry = Joi.object().keys({
+  partnerId: Joi.string().required(),
+  shareType: Joi.string().valid('percentage_of_profit', 'fixed_per_unit').required(),
+  rate: Joi.number().min(0).required(),
+});
+
 const createPurchase = {
   body: Joi.object().keys({
     supplier: Joi.string().required(),
@@ -30,6 +38,7 @@ const createPurchase = {
         variantId: Joi.string().optional(),
         batchNumber: Joi.string().trim().allow('').optional(),
         expiryDate: Joi.date().optional(),
+        investorRule: investorRuleEntry.optional(),
       })
     ).required(),
     discountType: Joi.string().valid('fixed', 'percentage').optional(),
@@ -106,6 +115,7 @@ const updatePurchase = {
         variantId: Joi.string().optional(),
         batchNumber: Joi.string().trim().allow('').optional(),
         expiryDate: Joi.date().optional(),
+        investorRule: investorRuleEntry.optional(),
       })
     ),
     discountType: Joi.string().valid('fixed', 'percentage').optional(),

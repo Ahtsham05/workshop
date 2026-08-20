@@ -1,7 +1,7 @@
 const Joi = require('joi');
 
 const SHARE_TYPES = ['percentage_of_profit', 'fixed_per_unit'];
-const SCOPES = ['organization', 'branch', 'product'];
+const SCOPES = ['organization', 'branch', 'product', 'variant', 'batch'];
 
 const createProfitShareRule = {
   body: Joi.object().keys({
@@ -13,7 +13,17 @@ const createProfitShareRule = {
       otherwise: Joi.string().optional().allow(null, ''),
     }),
     productId: Joi.when('scope', {
-      is: 'product',
+      is: Joi.valid('product', 'variant', 'batch'),
+      then: Joi.string().required(),
+      otherwise: Joi.string().optional().allow(null, ''),
+    }),
+    variantId: Joi.when('scope', {
+      is: Joi.valid('variant', 'batch'),
+      then: Joi.string().required(),
+      otherwise: Joi.string().optional().allow(null, ''),
+    }),
+    batchId: Joi.when('scope', {
+      is: 'batch',
       then: Joi.string().required(),
       otherwise: Joi.string().optional().allow(null, ''),
     }),
@@ -32,6 +42,8 @@ const getProfitShareRules = {
     partnerId: Joi.string(),
     scope: Joi.string().valid(...SCOPES),
     productId: Joi.string(),
+    variantId: Joi.string(),
+    batchId: Joi.string(),
     branchId: Joi.string(),
     isActive: Joi.boolean(),
     limit: Joi.number(),
@@ -69,6 +81,8 @@ const deleteProfitShareRule = {
 const resolveProfitShareRules = {
   query: Joi.object().keys({
     productId: Joi.string().optional(),
+    variantId: Joi.string().optional(),
+    batchId: Joi.string().optional(),
     date: Joi.date().optional(),
   }),
 };

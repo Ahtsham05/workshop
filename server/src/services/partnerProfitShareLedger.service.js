@@ -78,6 +78,8 @@ const getNetShareForReference = async (referenceId, referenceModel, partnerId, r
  * @param {string} params.referenceModel - 'Invoice'
  * @param {string} [params.reference] - human-readable number (invoice #) for display
  * @param {ObjectId} [params.productId] - set for product-scoped rules
+ * @param {ObjectId} [params.variantId] - set for variant-scoped rules
+ * @param {ObjectId} [params.batchId] - set for batch-scoped rules
  * @param {string} params.shareType - 'percentage_of_profit' | 'fixed_per_unit'
  * @param {number} params.rate
  * @param {number} params.saleProfit - the profit amount this was computed against
@@ -87,7 +89,7 @@ const getNetShareForReference = async (referenceId, referenceModel, partnerId, r
  * @param {import('mongoose').ClientSession} [session]
  */
 const creditShareEarned = async (
-  { organizationId, branchId, partnerId, ruleId, referenceId, referenceModel, reference, productId, shareType, rate, saleProfit, quantity, date, userId },
+  { organizationId, branchId, partnerId, ruleId, referenceId, referenceModel, reference, productId, variantId, batchId, shareType, rate, saleProfit, quantity, date, userId },
   session
 ) => {
   if (!partnerId || !ruleId || !referenceId || !referenceModel) return null;
@@ -115,6 +117,8 @@ const creditShareEarned = async (
       referenceId,
       referenceModel,
       productId: productId || null,
+      variantId: variantId || null,
+      batchId: batchId || null,
       credit: amount,
       shareType,
       rate,
@@ -222,6 +226,8 @@ const reverseShareForSalesReturn = async (salesReturn, invoice, session) => {
         partnerId: original.partnerId,
         ruleId: original.ruleId,
         productId: original.productId,
+        variantId: original.variantId,
+        batchId: original.batchId,
         transactionType: 'share_reversed',
         transactionDate: salesReturn.date || new Date(),
         reference: salesReturn.returnNumber,
@@ -254,6 +260,8 @@ const queryLedgerEntries = async (filter, options) => {
     populate: [
       { path: 'partnerId', select: 'name partnerType' },
       { path: 'productId', select: 'name' },
+      { path: 'variantId', select: 'attributes' },
+      { path: 'batchId', select: 'batchNumber' },
     ],
   };
   return PartnerProfitShareLedger.paginate(filter, opts);

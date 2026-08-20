@@ -1,8 +1,20 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
 
-export type ProfitShareRuleScope = 'organization' | 'branch' | 'product';
+export type ProfitShareRuleScope = 'organization' | 'branch' | 'product' | 'variant' | 'batch';
 export type ProfitShareType = 'percentage_of_profit' | 'fixed_per_unit';
+
+export interface RuleVariantRef {
+  id: string;
+  attributes?: Record<string, string>;
+  sku?: string;
+}
+
+export interface RuleBatchRef {
+  id: string;
+  batchNumber: string;
+  expiryDate?: string | null;
+}
 
 export interface PartnerProfitShareRule {
   id: string;
@@ -10,6 +22,8 @@ export interface PartnerProfitShareRule {
   scope: ProfitShareRuleScope;
   branchId?: { id: string; name: string } | string | null;
   productId?: { id: string; name: string } | string | null;
+  variantId?: RuleVariantRef | string | null;
+  batchId?: RuleBatchRef | string | null;
   shareType: ProfitShareType;
   rate: number;
   sourcePurchaseId?: { id: string; invoiceNumber: string } | string | null;
@@ -26,6 +40,8 @@ export interface CreateProfitShareRuleRequest {
   scope: ProfitShareRuleScope;
   branchId?: string;
   productId?: string;
+  variantId?: string;
+  batchId?: string;
   shareType: ProfitShareType;
   rate: number;
   sourcePurchaseId?: string | null;
@@ -63,6 +79,8 @@ export interface ResolvedProfitShareRule {
 export interface ResolvedProfitShareRules {
   orgRules: ResolvedProfitShareRule[];
   productRules?: ResolvedProfitShareRule[];
+  variantRules?: ResolvedProfitShareRule[];
+  batchRules?: ResolvedProfitShareRule[];
 }
 
 export const partnerProfitShareRuleApi = createApi({
@@ -72,12 +90,25 @@ export const partnerProfitShareRuleApi = createApi({
   endpoints: (builder) => ({
     getProfitShareRules: builder.query<
       ProfitShareRulesResponse,
-      { page?: number; limit?: number; partnerId?: string; scope?: ProfitShareRuleScope; productId?: string; isActive?: boolean } | void
+      | {
+          page?: number;
+          limit?: number;
+          partnerId?: string;
+          scope?: ProfitShareRuleScope;
+          productId?: string;
+          variantId?: string;
+          batchId?: string;
+          isActive?: boolean;
+        }
+      | void
     >({
       query: (params) => ({ url: '/partner-profit-share-rules', params: params || undefined }),
       providesTags: ['PartnerProfitShareRule'],
     }),
-    resolveProfitShareRules: builder.query<ResolvedProfitShareRules, { productId?: string; date?: string }>({
+    resolveProfitShareRules: builder.query<
+      ResolvedProfitShareRules,
+      { productId?: string; variantId?: string; batchId?: string; date?: string }
+    >({
       query: (params) => ({ url: '/partner-profit-share-rules/resolve', params }),
     }),
     createProfitShareRule: builder.mutation<PartnerProfitShareRule, CreateProfitShareRuleRequest>({

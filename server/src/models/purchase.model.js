@@ -59,6 +59,15 @@ const PurchaseSchema = new mongoose.Schema({
       // this line item creates a Batch instead of a plain inventory increment.
       batchNumber: { type: String, trim: true },
       expiryDate: { type: Date },
+      // Optional: tags the batch this line creates with an investor and auto-creates a
+      // matching batch-scoped PartnerProfitShareRule (see purchase.service.js's
+      // createPurchase) so that partner earns specifically off this lot. Meaningless
+      // (ignored) unless this line actually creates a new Batch.
+      investorRule: {
+        partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner' },
+        shareType: { type: String, enum: ['percentage_of_profit', 'fixed_per_unit'] },
+        rate: { type: Number, min: 0 },
+      },
     },
   ],
   purchaseDate: { type: Date, default: Date.now },

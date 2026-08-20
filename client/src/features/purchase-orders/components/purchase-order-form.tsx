@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { toast } from 'sonner'
-import { Columns2, LayoutGrid } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Columns2, LayoutGrid } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useSidebar } from '@/components/ui/sidebar'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchSuppliers } from '@/stores/supplier.slice'
 import type { AppDispatch } from '@/stores/store'
@@ -42,7 +41,6 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   const dispatch = useDispatch<AppDispatch>()
   const addProductRef = useRef<(product: Product, quantity?: number, variantId?: string) => void>(() => {})
   const prefillAppliedRef = useRef(false)
-  const { state: sidebarState, isMobile: sidebarIsMobile } = useSidebar()
 
   const [products, setProducts] = useState<Product[]>([])
   const [categorizedProducts, setCategorizedProducts] = useState<Category[]>([])
@@ -50,9 +48,11 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   const [showImages, setShowImages] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [showProductCatalog, setShowProductCatalog] = useState(getInitialShowCatalog)
-  // Fast-ordering mode's save/print bar is portaled here — a footer slot the page keeps
-  // outside the cards' scroll region, see PurchaseOrderPanel's sticky bar for why.
-  const [stickyFooterSlot, setStickyFooterSlot] = useState<HTMLDivElement | null>(null)
+  // Fast-ordering mode's save/send bar is portaled here — a slot the header toolbar
+  // keeps mounted, so PurchaseOrderPanel's own save state/handlers stay right where
+  // they're defined. Mirrors Purchase Invoice's identical headerActionsSlot (see
+  // purchase-invoice/index.tsx).
+  const [headerActionsSlot, setHeaderActionsSlot] = useState<HTMLDivElement | null>(null)
 
   const toggleProductCatalog = useCallback(() => {
     setShowProductCatalog((prev) => {
@@ -216,6 +216,8 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
     [products, addToOrder],
   )
 
+  const title = editing ? `Edit ${editing.orderNumber}` : 'New Purchase Order'
+
   return (
     <div
       className={cn(
@@ -223,12 +225,26 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
         showProductCatalog ? 'gap-4' : 'gap-3 pt-3',
       )}
     >
-      <div className='flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between'>
+      {/* Title + back button, its own row — the toolbar below carries the byline and
+          action buttons (including the primary Save draft/Save & send actions, compact
+          mode only). Mirrors Purchase Invoice's header exactly — see
+          features/purchase-invoice/index.tsx. */}
+      <div className='flex items-center gap-2'>
+        <Button type='button' variant='ghost' size='sm' className='-ml-2 h-8 w-8 p-0' onClick={onBack}>
+          <ArrowLeft className='h-4 w-4' aria-hidden />
+        </Button>
+        <h1 className='flex items-center gap-2 text-lg font-semibold sm:text-xl'>
+          <ClipboardList className='h-5 w-5' />
+          {title}
+        </h1>
+      </div>
+
+      <div className={cn('flex flex-wrap items-center gap-2', showProductCatalog ? 'justify-end' : 'justify-between')}>
         <p className='order-2 max-w-xl text-xs leading-snug text-muted-foreground sm:order-1'>
           Pick supplier → order date → products. Press Enter to move to the next field. Click
           products in the catalog or scan a barcode to add lines quickly.
         </p>
-        <div className='order-1 flex flex-wrap justify-end gap-2 sm:order-2'>
+        <div className='order-1 flex flex-wrap items-center justify-end gap-2 sm:order-2'>
           <Button
             type='button'
             variant='outline'
@@ -250,6 +266,9 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
             )}
           </Button>
         </div>
+        {!showProductCatalog && (
+          <div ref={setHeaderActionsSlot} className='order-3 flex flex-wrap items-center gap-2' />
+        )}
       </div>
 
       <div
@@ -260,7 +279,6 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
       >
         <div className='min-w-0 pb-6'>
           <PurchaseOrderPanel
-            onBack={onBack}
             onSaved={onSaved}
             editing={editing}
             products={products}
@@ -270,7 +288,7 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
               addProductRef.current = fn
             }}
             showProductCatalog={showProductCatalog}
-            stickyActionsContainer={stickyFooterSlot}
+            stickyActionsContainer={headerActionsSlot}
           />
         </div>
 
@@ -289,23 +307,6 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
           </div>
         ) : null}
       </div>
-
-      {/* Footer slot for PurchaseOrderPanel's save bar (portaled in) — `position: fixed`
-          to the viewport: this page scrolls as a whole, so a sticky bar only shows once
-          you've scrolled far enough for it. Inset from the left by the sidebar's actual
-          current width so it never overlaps it, and follows collapse/expand. */}
-      {!showProductCatalog && (
-        <div
-          ref={setStickyFooterSlot}
-          className={cn(
-            'fixed inset-x-4 bottom-4 z-30 transition-[left] duration-200 ease-linear',
-            !sidebarIsMobile &&
-              (sidebarState === 'collapsed'
-                ? 'md:left-[calc(var(--sidebar-width-icon)+2rem)]'
-                : 'md:left-[calc(var(--sidebar-width)+1rem)]'),
-          )}
-        />
-      )}
     </div>
   )
 }
