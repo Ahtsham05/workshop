@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLanguage } from '@/context/language-context'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -93,7 +94,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
       try {
         const printModule = await import('@/utils/purchasePrintUtils')
         const branchDetails = {
-          name: orgData?.name || branchData?.name,
+          name: resolveBranchCompanyName(orgData?.name, branchData?.name),
           nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
           address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
             .filter(Boolean)

@@ -49,6 +49,7 @@ import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { cn } from '@/lib/utils'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { purchaseCatalogApi, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { BranchStockTrigger } from '@/components/branch-stock-trigger'
 
@@ -416,7 +417,7 @@ export function InvoicePanel({
         serviceCharge: invoiceData.serviceCharge,
         previousBalance: prevBal,
         netBalance: netBal,
-        companyName: orgData?.name || branchData?.name,
+        companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,
@@ -505,7 +506,7 @@ export function InvoicePanel({
         serviceCharge: invoiceData.serviceCharge,
         previousBalance: prevBal,
         netBalance: netBal,
-        companyName: orgData?.name || branchData?.name,
+        companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,
@@ -1686,7 +1687,7 @@ export function InvoicePanel({
           // always in Urdu, instead of the usual financial summary.
           const isPendingHandoff = savedInvoicePayload.type === 'pending'
           const pendingMessage = () => buildPendingInvoiceItemsMessageUrdu({
-            branchName: orgData?.name || branchData?.name,
+            branchName: resolveBranchCompanyName(orgData?.name, branchData?.name),
             invoiceNumber: String(savedInvoicePayload.invoiceNumber || ''),
             items: validItems.map((item: any) => ({
               name: item.name,
@@ -1706,7 +1707,7 @@ export function InvoicePanel({
               return
             }
             const msg = isPendingHandoff ? pendingMessage() : buildInvoiceSmsMessage({
-              branchName: orgData?.name || branchData?.name,
+              branchName: resolveBranchCompanyName(orgData?.name, branchData?.name),
               invoiceNumber: String(savedInvoicePayload.invoiceNumber || ''),
               customerName: custName || undefined,
               total: Number(savedInvoicePayload.total ?? 0),
@@ -1787,7 +1788,7 @@ export function InvoicePanel({
               serviceCharge: savedInvoicePayload.serviceCharge,
               previousBalance: prevBal,
               netBalance: netBal,
-              companyName: orgData?.name || branchData?.name,
+              companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
               companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
               companyPhone: branchData?.phone,
               companyEmail: branchData?.email,

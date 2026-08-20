@@ -69,6 +69,7 @@ import {
   getSupplierLedgerFormPreset,
 } from '@/features/accounting/utils/supplier-ledger-entry-navigation';
 import { cn } from '@/lib/utils';
+import { resolveBranchCompanyName } from '@/utils/branch-company-name';
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button';
 import { useBranchName } from '@/hooks/use-branch-name'
@@ -919,7 +920,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
       const purchase = await dispatch(purchaseApi.endpoints.getPurchaseById.initiate(id)).unwrap();
       const printModule = await import('@/utils/purchasePrintUtils');
       const branchDetails = {
-        name: orgData?.name || branchData?.name,
+        name: resolveBranchCompanyName(orgData?.name, branchData?.name),
         nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
         address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
           .filter(Boolean)
@@ -1034,7 +1035,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoice.deliveryCharge ?? 0,
         serviceCharge: invoice.serviceCharge ?? 0,
-        companyName: orgData?.name || branchData?.name,
+        companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,
@@ -1359,7 +1360,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                 currentBalance: selectedPayment.currentBalance,
               }}
               company={{
-                name: branchData?.name || orgData?.name || 'Logix Plus Solutions',
+                name: resolveBranchCompanyName(orgData?.name, branchData?.name) || 'Logix Plus Solutions',
                 nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
                 address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
                   .filter((v) => v != null && String(v).trim() !== '')
@@ -1378,6 +1379,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               receiptNumber={selectedPayment.entry.reference || `RCP-${format(new Date(selectedPayment.entry.transactionDate), 'yyyyMMdd')}-${(selectedPayment.entry.id || selectedPayment.entry._id)?.slice(-6)}`}
               userPreferredLanguage={preferredLanguage as 'en' | 'ur'}
               isTrial={orgData?.subscription?.isTrial}
+              partyType="supplier"
             />
           )}
           {selectedPayment && supplier.phone && (

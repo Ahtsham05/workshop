@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -458,7 +459,7 @@ export default function RepairPage() {
       advanceAmount: printRepair.advanceAmount ?? 0,
       paymentMethod: printRepair.paymentMethod ?? 'cash',
       date: printRepair.date,
-      companyName: orgData?.name || branchData?.name,
+      companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
       companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
         .filter(Boolean)
         .join(', ') || undefined,

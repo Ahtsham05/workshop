@@ -17,6 +17,7 @@ import { entryImei, SerialNumberDialog } from '@/components/serial-batch-line-co
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '@/features/invoice/utils/print-utils'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat } from '@/features/invoice/utils/paper-format'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import {
   loadFastBillWorkspace,
   saveFastBillWorkspace,
@@ -636,7 +637,7 @@ export default function FastBillingPage() {
         splitPaidAmount,
       })
       receiptData.printInUrdu = getInvoicePrintInUrdu()
-      receiptData.companyName = orgData?.name || branchData?.name
+      receiptData.companyName = resolveBranchCompanyName(orgData?.name, branchData?.name)
       receiptData.companyAddress =
         [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
           .filter(Boolean)

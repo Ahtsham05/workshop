@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -419,7 +420,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         serviceCharge: 0,
         previousBalance,
         newBalance: previousBalance + (invoiceData.total ?? 0) - (invoiceData.paidAmount ?? 0),
-        companyName: orgData?.name || branchData?.name,
+        companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,

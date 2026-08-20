@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { CalendarClock, Layers, Minus, Package, PackageCheck, Plus, Sparkles, X } from 'lucide-react'
@@ -372,7 +373,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
 
   const branchPrintDetails = useMemo(
     () => ({
-      name: orgData?.name || branchData?.name,
+      name: resolveBranchCompanyName(orgData?.name, branchData?.name),
       nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
       address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
         .filter(Boolean)

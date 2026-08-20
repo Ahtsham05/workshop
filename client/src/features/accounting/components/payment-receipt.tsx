@@ -81,7 +81,27 @@ interface PaymentReceiptProps {
   receiptNumber?: string;
   userPreferredLanguage?: InvoiceLanguage;
   isTrial?: boolean;
+  /** Who the "customer" party actually is — flips balance-direction wording/labels.
+   * For a supplier, a positive balance means money we still owe them (Payable), the
+   * opposite of a customer receipt where positive means money still owed to us (Receivable). */
+  partyType?: 'customer' | 'supplier';
 }
+
+/** Status of the remaining balance after this payment, independent of who owes whom. */
+type BalanceStatus = 'settled' | 'payable' | 'receivable';
+
+function resolveBalanceStatus(currentBalance: number, partyType: 'customer' | 'supplier'): BalanceStatus {
+  if (currentBalance === 0) return 'settled';
+  const owedByUs = partyType === 'supplier' ? currentBalance > 0 : currentBalance < 0;
+  return owedByUs ? 'payable' : 'receivable';
+}
+
+/** Flat, print-safe colors — amber for anything still outstanding (either direction), green once settled. */
+const BALANCE_STATUS_COLORS: Record<BalanceStatus, { fg: string; bg: string }> = {
+  settled: { fg: '#15803d', bg: '#dcfce7' },
+  payable: { fg: '#b45309', bg: '#fef3c7' },
+  receivable: { fg: '#b45309', bg: '#fef3c7' },
+};
 
 export function PaymentReceipt({
   customer,
@@ -91,6 +111,7 @@ export function PaymentReceipt({
   receiptNumber,
   userPreferredLanguage,
   isTrial,
+  partyType = 'customer',
 }: PaymentReceiptProps) {
   const { t: tUi } = useLanguage();
   // Urdu Print toggle is shared with invoice printing (`invoicePrintInUrdu` in localStorage) —
@@ -102,6 +123,14 @@ export function PaymentReceipt({
   const dir = isUrdu ? 'rtl' : 'ltr';
   const startAlign = isUrdu ? 'right' : 'left';
   const locale = isUrdu ? 'ur-PK' : 'en-PK';
+  const isSupplier = partyType === 'supplier';
+  const partyLabel = isSupplier ? labels.paid_to : labels.received_from;
+  const amountLabel = isSupplier ? labels.payment_made : labels.payment_received;
+  const receivedByLabel = isSupplier ? labels.paid_by : labels.received_by;
+  const partySignatureLabel = isSupplier ? labels.supplier_signature : labels.customer_signature;
+  const getBalanceStatus = (amount: number): BalanceStatus => resolveBalanceStatus(amount, partyType);
+  const getStatusLabel = (status: BalanceStatus) =>
+    status === 'settled' ? labels.settled : status === 'payable' ? labels.payable : labels.receivable;
 
   const resolvedCompany = resolveReceiptCompany(language, company);
   const displayCustomerName = resolveReceiptPartyName(language, customer.name, customer.nameUrdu);
@@ -170,6 +199,8 @@ export function PaymentReceipt({
   const generateReceiptHTML = (data: any, paperSize: PaperSize) => {
     const paperFormat = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)];
     const cardWidth = (paperFormat.bodyWidthPx ?? 380) + (paperFormat.family === 'thermal' ? 80 : 220);
+    const balanceStatus = getBalanceStatus(data.balance.currentBalance);
+    const balanceColors = BALANCE_STATUS_COLORS[balanceStatus];
     return `
 <!DOCTYPE html>
 <html dir="${dir}" lang="${language}">
@@ -209,25 +240,32 @@ export function PaymentReceipt({
       font-feature-settings: 'kern' 1;
     }
 
+    .receipt-accent-bar {
+      height: 4px;
+      margin: -12px -14px 14px;
+      background: #111827;
+    }
+
     .receipt-header {
       text-align: center;
       margin-bottom: 14px;
       border-bottom: 1px solid #1f2937;
       padding-bottom: 12px;
     }
-    
+
     .company-logo {
       max-width: 120px;
       height: auto;
       margin: 0 auto 8px;
       display: block;
     }
-    
+
     .business-name {
-      font-size: 15px;
-      font-weight: 700;
+      font-size: 16px;
+      font-weight: 800;
       margin-bottom: 6px;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
       color: #111827;
     }
 
@@ -239,12 +277,34 @@ export function PaymentReceipt({
     }
 
     .receipt-title {
-      font-size: 14px;
+      display: inline-block;
+      font-size: 12px;
       font-weight: 700;
-      margin: 10px 0 6px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin: 12px 0 6px;
+      padding: 4px 12px;
       color: #111827;
-      border-bottom: none;
-      text-decoration: none;
+      border: 1px solid #111827;
+      border-radius: 999px;
+    }
+
+    .receipt-number {
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 0.03em;
+      color: #4b5563;
+      margin-top: 2px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
     }
 
     .receipt-info {
@@ -281,6 +341,29 @@ export function PaymentReceipt({
       border-radius: 6px;
     }
 
+    .amount-highlight {
+      text-align: center;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #111827;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin: 14px 0;
+    }
+
+    .amount-highlight .info-label {
+      color: #15803d;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+
+    .amount-highlight .amount-paid {
+      color: #15803d;
+      font-size: 20px;
+    }
+
     .payment-details {
       background: #fafafa;
       border: 1px solid #1f2937;
@@ -298,11 +381,11 @@ export function PaymentReceipt({
       border-bottom: 1px solid #e5e7eb;
       font-size: 12px;
     }
-    
+
     .amount-row:last-child {
       border-bottom: none;
     }
-    
+
     .amount-row.total {
       font-size: 13px;
       font-weight: 700;
@@ -317,7 +400,7 @@ export function PaymentReceipt({
       font-weight: 700;
       font-variant-numeric: tabular-nums;
     }
-    
+
     .signature-section {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -335,19 +418,27 @@ export function PaymentReceipt({
       color: #374151;
     }
 
+    .cut-line {
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      color: #9ca3af;
+      margin: 16px 0 6px;
+    }
+
     .footer {
       text-align: center;
       font-size: 10px;
-      margin-top: 14px;
+      margin-top: 6px;
       border-top: 1px solid #d1d5db;
       padding-top: 10px;
       color: #6b7280;
     }
-    
+
     .footer-line {
       margin-bottom: 2px;
     }
-    
+
     .no-print {
       text-align: center;
       margin: 20px 0;
@@ -391,6 +482,7 @@ export function PaymentReceipt({
   <link href="${RECEIPT_GOOGLE_FONTS_HREF}" rel="stylesheet">
 </head>
 <body>
+  <div class="receipt-accent-bar"></div>
   <div class="receipt-header">
     ${data.company.logo ? `<img src="${escapeHtml(data.company.logo)}" alt="" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus Solutions" class="company-logo" />` : ''}
     <div class="business-name">${escapeHtml(data.company.name)}</div>
@@ -403,12 +495,12 @@ export function PaymentReceipt({
       </div>
     ` : ''}
     <div class="receipt-title">${labels.payment_receipt}</div>
-    ${data.receiptNumber ? `<div class="business-info">${labels.receipt_no}: ${escapeHtml(data.receiptNumber)}</div>` : ''}
+    ${data.receiptNumber ? `<div class="receipt-number">${labels.receipt_no}: ${escapeHtml(data.receiptNumber)}</div>` : ''}
   </div>
 
   <div class="receipt-info">
     <div class="info-row">
-      <span class="info-label">${labels.received_from}:</span>
+      <span class="info-label">${partyLabel}:</span>
       <span>${escapeHtml(data.customer.name)}</span>
     </div>
     ${data.customer.phone ? `
@@ -452,41 +544,42 @@ export function PaymentReceipt({
   </div>
   ` : ''}
   
+  <div class="amount-highlight">
+    <div class="info-label">${amountLabel}</div>
+    <div class="amount-paid">${formatCurrency(data.payment.amount)}</div>
+  </div>
+
   <div class="payment-details">
     <div class="amount-row">
       <span>${labels.previous_balance}:</span>
       <span>${formatCurrency(data.balance.previousBalance)}</span>
     </div>
-    <div class="amount-row">
-      <span>${labels.payment_received}:</span>
-      <span class="amount-paid">${formatCurrency(data.payment.amount)}</span>
-    </div>
     <div class="amount-row total">
       <span>${labels.remaining_balance}:</span>
-      <span style="color: ${data.balance.currentBalance > 0 ? '#dc2626' : data.balance.currentBalance < 0 ? '#16a34a' : '#000'}">
-        ${formatCurrency(data.balance.currentBalance)}
-        ${data.balance.currentBalance > 0 ? ` (${labels.receivable})` : ''}
-        ${data.balance.currentBalance < 0 ? ` (${labels.payable})` : ''}
-        ${data.balance.currentBalance === 0 ? ` (${labels.settled})` : ''}
+      <span>
+        <span style="color: ${balanceColors.fg}; font-weight: 700;">${formatCurrency(data.balance.currentBalance)}</span>
+        <span class="status-badge" style="color: ${balanceColors.fg}; background: ${balanceColors.bg}; margin-inline-start: 6px;">${getStatusLabel(balanceStatus)}</span>
       </span>
     </div>
   </div>
-  
+
   <div class="signature-section">
     <div>
-      <div class="signature-line">${labels.received_by}</div>
+      <div class="signature-line">${receivedByLabel}</div>
     </div>
     <div>
-      <div class="signature-line">${labels.customer_signature}</div>
+      <div class="signature-line">${partySignatureLabel}</div>
     </div>
   </div>
-  
+
+  <div class="cut-line">&#9986; &#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;&#8213;</div>
+
   <div class="footer">
     <div class="footer-line"><strong>${labels.thank_you}</strong></div>
     <div class="footer-line">${labels.computer_generated}</div>
     <div class="footer-line" style="margin-top: 4px; font-style: italic;">${labels.powered_by}</div>
   </div>
-  
+
   <div class="no-print">
     <button onclick="window.print()" class="print-btn print-btn-primary">
       🖨️ ${labels.print_receipt}
@@ -509,10 +602,9 @@ export function PaymentReceipt({
       ? `<span class="contact-label">${escapeHtml(labels.contact_label)}:</span> ${escapeHtml(data.company.phone)}`
       : '';
 
-    const balanceStatus =
-      data.balance.currentBalance > 0 ? labels.receivable : data.balance.currentBalance < 0 ? labels.payable : labels.settled;
-    const balanceColor =
-      data.balance.currentBalance > 0 ? '#dc2626' : data.balance.currentBalance < 0 ? '#16a34a' : '#000';
+    const balanceStatus = getBalanceStatus(data.balance.currentBalance);
+    const balanceStatusLabel = getStatusLabel(balanceStatus);
+    const balanceColors = BALANCE_STATUS_COLORS[balanceStatus];
 
     return `
 <!DOCTYPE html>
@@ -567,6 +659,32 @@ export function PaymentReceipt({
     .invoice-meta div { margin-bottom: 2px; }
     .company-contact-line { display: inline-block; margin-top: 4px; font-size: 16px; color: #000; }
     .company-contact-line .contact-label { font-weight: 700; color: #000; }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+
+    .amount-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #111827;
+      border-radius: 8px;
+      padding: 18px 24px;
+      margin-bottom: 24px;
+    }
+
+    .amount-banner .info-label { color: #15803d; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; margin: 0; }
+    .amount-banner .amount-banner-value { font-size: 32px; font-weight: 800; color: #15803d; }
 
     .invoice-info {
       display: grid;
@@ -715,12 +833,18 @@ export function PaymentReceipt({
           <div>${labels.payment_date}: ${formatDate(data.payment.date)}</div>
           <div>${labels.payment_time}: ${formatTime(data.payment.date)}</div>
         </div>
+        <div class="status-badge" style="color: ${balanceColors.fg}; background: ${balanceColors.bg};">${balanceStatusLabel}</div>
       </div>
+    </div>
+
+    <div class="amount-banner">
+      <div class="info-label">${amountLabel}</div>
+      <div class="amount-banner-value">${formatCurrency(data.payment.amount)}</div>
     </div>
 
     <div class="invoice-info">
       <div class="info-section">
-        <div class="info-title">${labels.received_from}</div>
+        <div class="info-title">${partyLabel}</div>
         <div class="bill-to-customer-name">${escapeHtml(data.customer.name)}</div>
         ${data.customer.phone ? `
         <div class="info-row"><span class="info-label">${labels.phone}:</span><span class="detail-value">${escapeHtml(data.customer.phone)}</span></div>
@@ -754,19 +878,19 @@ export function PaymentReceipt({
           <td class="total-amount">${formatCurrency(data.balance.previousBalance)}</td>
         </tr>
         <tr>
-          <td class="total-label">${labels.payment_received}:</td>
+          <td class="total-label">${amountLabel}:</td>
           <td class="total-amount" style="color: #15803d;">${formatCurrency(data.payment.amount)}</td>
         </tr>
         <tr class="final-total">
           <td class="total-label">${labels.remaining_balance}:</td>
-          <td class="total-amount" style="color: ${balanceColor};">${formatCurrency(data.balance.currentBalance)} (${balanceStatus})</td>
+          <td class="total-amount" style="color: ${balanceColors.fg};">${formatCurrency(data.balance.currentBalance)} (${balanceStatusLabel})</td>
         </tr>
       </table>
     </div>
 
     <div class="signature-section">
-      <div class="signature-line">${labels.received_by}</div>
-      <div class="signature-line">${labels.customer_signature}</div>
+      <div class="signature-line">${receivedByLabel}</div>
+      <div class="signature-line">${partySignatureLabel}</div>
     </div>
 
     <div class="footer">
@@ -803,6 +927,9 @@ export function PaymentReceipt({
       : buildA4TwoUpPageHTML(full, '', body, label);
   };
 
+  const previewStatus = getBalanceStatus(balance.currentBalance);
+  const previewColors = BALANCE_STATUS_COLORS[previewStatus];
+
   return (
     <div className="payment-receipt-container" dir={dir}>
       <style>
@@ -815,11 +942,21 @@ export function PaymentReceipt({
           line-height: 1.45;
           max-width: 420px;
           margin: 0 auto;
-          padding: 22px 24px;
+          padding: 0 0 24px;
           border: 1px solid #e5e7eb;
-          border-radius: 10px;
+          border-radius: 12px;
           box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
           -webkit-font-smoothing: antialiased;
+          overflow: hidden;
+        }
+
+        .receipt-accent-bar {
+          height: 5px;
+          background: #111827;
+        }
+
+        .receipt-body {
+          padding: 22px 24px 0;
         }
 
         .receipt-header {
@@ -831,24 +968,63 @@ export function PaymentReceipt({
 
         .company-name {
           font-size: 17px;
-          font-weight: 700;
+          font-weight: 800;
           margin-bottom: 8px;
-          letter-spacing: 0.02em;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
           color: #111827;
         }
 
         .receipt-title {
-          font-size: 16px;
+          display: inline-block;
+          font-size: 13px;
           font-weight: 700;
-          margin: 12px 0 8px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          margin: 12px 0 6px;
+          padding: 4px 14px;
           color: #111827;
-          text-decoration: none;
+          border: 1px solid #111827;
+          border-radius: 999px;
         }
 
         .receipt-number {
           font-size: 13px;
+          font-family: 'Courier New', monospace;
           color: #4b5563;
           margin-top: 6px;
+        }
+
+        .status-badge {
+          display: inline-block;
+          padding: 3px 12px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          margin-top: 8px;
+        }
+
+        .amount-banner {
+          text-align: center;
+          background: #f0fdf4;
+          border: 1px solid #bbf7d0;
+          border-radius: 8px;
+          padding: 14px 16px;
+          margin: 18px 0;
+        }
+
+        .amount-banner .info-label {
+          color: #15803d;
+          margin-bottom: 4px;
+        }
+
+        .amount-banner .amount-banner-value {
+          font-size: 24px;
+          font-weight: 800;
+          color: #15803d;
+          font-variant-numeric: tabular-nums;
         }
 
         .receipt-info {
@@ -953,6 +1129,8 @@ export function PaymentReceipt({
       </style>
 
       <div className="receipt-content">
+        <div className="receipt-accent-bar" />
+        <div className="receipt-body">
         <div className="receipt-header">
           <div className="company-name">{resolvedCompany.name}</div>
           {resolvedCompany.address?.trim() ? (
@@ -973,11 +1151,16 @@ export function PaymentReceipt({
               {labels.receipt_no}: {receiptNumber}
             </div>
           )}
+          <div>
+            <span className="status-badge" style={{ color: previewColors.fg, background: previewColors.bg }}>
+              {getStatusLabel(previewStatus)}
+            </span>
+          </div>
         </div>
 
         <div className="receipt-info">
           <div className="info-section">
-            <div className="info-label">{labels.received_from}:</div>
+            <div className="info-label">{partyLabel}:</div>
             <div className="info-value">{displayCustomerName}</div>
             {customer.phone && (
               <>
@@ -1034,22 +1217,26 @@ export function PaymentReceipt({
           </div>
         )}
 
+        <div className="amount-banner">
+          <div className="info-label">{amountLabel}</div>
+          <div className="amount-banner-value">{formatCurrency(payment.amount)}</div>
+        </div>
+
         <div className="payment-details">
           <div className="amount-row">
             <span>{labels.previous_balance}:</span>
             <span>{formatCurrency(balance.previousBalance)}</span>
           </div>
-          <div className="amount-row">
-            <span>{labels.payment_received}:</span>
-            <span className="amount-paid">{formatCurrency(payment.amount)}</span>
-          </div>
           <div className="amount-row total">
             <span>{labels.remaining_balance}:</span>
-            <span style={{ color: balance.currentBalance > 0 ? '#dc2626' : balance.currentBalance < 0 ? '#16a34a' : '#000' }}>
-              {formatCurrency(balance.currentBalance)}
-              {balance.currentBalance > 0 && ` (${labels.receivable})`}
-              {balance.currentBalance < 0 && ` (${labels.payable})`}
-              {balance.currentBalance === 0 && ` (${labels.settled})`}
+            <span>
+              <span style={{ color: previewColors.fg, fontWeight: 700 }}>{formatCurrency(balance.currentBalance)}</span>{' '}
+              <span
+                className="status-badge"
+                style={{ color: previewColors.fg, background: previewColors.bg, marginTop: 0 }}
+              >
+                {getStatusLabel(previewStatus)}
+              </span>
             </span>
           </div>
         </div>
@@ -1057,10 +1244,10 @@ export function PaymentReceipt({
         <div className="receipt-footer">
           <div className="signature-section">
             <div>
-              <div className="signature-line">{labels.received_by}</div>
+              <div className="signature-line">{receivedByLabel}</div>
             </div>
             <div>
-              <div className="signature-line">{labels.customer_signature}</div>
+              <div className="signature-line">{partySignatureLabel}</div>
             </div>
           </div>
 
@@ -1069,6 +1256,7 @@ export function PaymentReceipt({
             <br />
             {labels.thank_you}
           </div>
+        </div>
         </div>
       </div>
 

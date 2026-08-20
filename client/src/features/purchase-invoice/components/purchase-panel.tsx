@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -707,7 +708,7 @@ export default function PurchasePanel({
         import('@/utils/purchasePrintUtils').then((module) => {
           const supplierName = purchase.supplier?.name || 'Unknown'
           const branchDetails = {
-            name: orgData?.name || branchData?.name,
+            name: resolveBranchCompanyName(orgData?.name, branchData?.name),
             nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
             address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
               .filter(Boolean)

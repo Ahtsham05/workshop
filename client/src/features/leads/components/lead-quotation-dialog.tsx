@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { useSelector } from 'react-redux'
 import { format } from 'date-fns'
 import { FileText, Loader2, MessageCircle } from 'lucide-react'
@@ -109,7 +110,7 @@ export function LeadQuotationDialog({ invoiceId, onOpenChange, leadName, leadPho
       invoiceAddress: branchData?.location?.address?.trim() || undefined,
       deliveryCharge: invoice.deliveryCharge || 0,
       serviceCharge: invoice.serviceCharge || 0,
-      companyName: orgData?.name || branchData?.name,
+      companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
       companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
       companyPhone: branchData?.phone,
       companyEmail: branchData?.email,

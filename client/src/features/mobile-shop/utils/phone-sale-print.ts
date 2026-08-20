@@ -7,6 +7,7 @@ import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preference
 import type { ImeiEntryInput } from '@/stores/imei.api'
 import type { Organization } from '@/stores/organization.api'
 import type { Branch } from '@/stores/branch.api'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 
 /** Shape of the Invoice an Old/New Phone sale creates — just the fields the print template needs. */
 export type PhoneSaleInvoice = {
@@ -61,7 +62,7 @@ export function printPhoneSaleInvoice(
     balance: invoiceRecord.balance ?? 0,
     notes: invoiceRecord.notes,
     invoiceAddress: branchData?.location?.address?.trim() || undefined,
-    companyName: org?.name || branchData?.name,
+    companyName: resolveBranchCompanyName(org?.name, branchData?.name),
     companyNameUrdu: branchData?.nameUrdu?.trim() || org?.nameUrdu?.trim() || undefined,
     companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
     companyPhone: branchData?.phone,

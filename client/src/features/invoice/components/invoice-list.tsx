@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useLanguage } from '@/context/language-context'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
 import { usePermissions } from '@/context/permission-context'
 import { permissionMessage } from '@/lib/permission-messages'
@@ -350,7 +351,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoice.deliveryCharge || 0,
         serviceCharge: invoice.serviceCharge || 0,
-        companyName: orgData?.name || branchData?.name,
+        companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,

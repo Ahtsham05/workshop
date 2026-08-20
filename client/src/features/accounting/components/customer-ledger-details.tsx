@@ -73,6 +73,7 @@ import {
   getLedgerFormPreset,
 } from '@/features/accounting/utils/customer-ledger-entry-navigation';
 import { cn } from '@/lib/utils';
+import { resolveBranchCompanyName } from '@/utils/branch-company-name';
 import { withCustomerContactForPrint } from '@/features/invoice/utils/invoice-print-whatsapp';
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button';
@@ -1292,7 +1293,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoice.deliveryCharge ?? 0,
         serviceCharge: invoice.serviceCharge ?? 0,
-        companyName: orgData?.name || branchData?.name,
+        companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim() || undefined,
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country].filter(Boolean).join(', ') || undefined,
         companyPhone: branchData?.phone,
@@ -1399,7 +1400,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         totalDebit: periodSummary.periodDebit,
         totalCredit: periodSummary.periodCredit,
         closingBalance: periodSummary.closingBalance,
-        companyName: orgData?.name || branchData?.name,
+        companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
           .filter(Boolean)
@@ -1701,7 +1702,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                 currentBalance: selectedPayment.currentBalance,
               }}
               company={{
-                name: branchData?.name || orgData?.name || 'Logix Plus Solutions',
+                name: resolveBranchCompanyName(orgData?.name, branchData?.name) || 'Logix Plus Solutions',
                 nameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
                 address: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
                   .filter((v) => v != null && String(v).trim() !== '')
