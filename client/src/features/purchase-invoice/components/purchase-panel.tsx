@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -399,6 +400,7 @@ export default function PurchasePanel({
   stickyActionsContainer = null,
 }: PurchasePanelProps) {
   const { t } = useLanguage()
+  const { showUrdu } = useUrduDisplay()
   // Below sm (640px): items render as cards instead of the table (see the items list
   // below) — same isPhone gating InvoicePanel uses (see invoice-panel.tsx).
   const isPhone = useIsPhone()
@@ -1399,7 +1401,7 @@ export default function PurchasePanel({
                                           <div className="flex-1 min-w-0">
                                             <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
                                               <div className="font-medium text-sm truncate shrink-0">{catalogItem.name}</div>
-                                              {catalogItem.nameUrdu?.trim() ? (
+                                              {showUrdu && catalogItem.nameUrdu?.trim() ? (
                                                 <span
                                                   dir="rtl"
                                                   className={cn(
@@ -1966,7 +1968,7 @@ export default function PurchasePanel({
                             <span className="text-xs truncate shrink-0" title={purchase.supplier.name}>
                               {purchase.supplier.name}
                             </span>
-                            {purchase.supplier.nameUrdu?.trim() ? (
+                            {showUrdu && purchase.supplier.nameUrdu?.trim() ? (
                               <span
                                 dir="rtl"
                                 className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(purchase.supplier.nameUrdu))}
@@ -2044,7 +2046,7 @@ export default function PurchasePanel({
                                   <span className="truncate font-medium shrink-0" title={supplier.name}>
                                     {supplier.name}
                                   </span>
-                                  {supplier.nameUrdu?.trim() ? (
+                                  {showUrdu && supplier.nameUrdu?.trim() ? (
                                     <span
                                       dir="rtl"
                                       className={cn('min-w-0 truncate text-sm', getUrduSecondaryNameClasses(supplier.nameUrdu))}

@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { BilingualName } from '@/components/bilingual-name'
+import { useUrduDisplay } from '@/context/urdu-display-context'
 import { Separator } from '@/components/ui/separator'
 import {
   Popover,
@@ -258,6 +259,7 @@ export default function PurchaseOrderPanel({
   showProductCatalog = true,
   stickyActionsContainer = null,
 }: Props) {
+  const { showUrdu } = useUrduDisplay()
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG } = useGetPurchasableCatalogQuery()
   const [draft, setDraft] = useState<PurchaseOrderDraft>(() =>
     buildInitialDraft(editing, purchasableCatalog, showProductCatalog)
@@ -1048,7 +1050,7 @@ export default function PurchaseOrderPanel({
                                           <div className='min-w-0 flex-1'>
                                             <div className='flex min-w-0 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
                                               <div className='shrink-0 truncate text-sm font-medium'>{catalogItem.name}</div>
-                                              {catalogItem.nameUrdu?.trim() ? (
+                                              {showUrdu && catalogItem.nameUrdu?.trim() ? (
                                                 <span
                                                   dir='rtl'
                                                   className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}

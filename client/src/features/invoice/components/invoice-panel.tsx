@@ -1287,6 +1287,10 @@ export function InvoicePanel({
           customerId,
           customerName: entity.name,
           type: 'credit',
+          // See the customer-select handler above: reset the cash-default
+          // paidAmount/balance so a fresh credit invoice doesn't save as fully paid.
+          paidAmount: 0,
+          balance: prev.total,
         }))
         setCustomerSearchQuery('')
         focusInvoiceType()
@@ -3079,11 +3083,17 @@ export function InvoicePanel({
                             <CommandItem
                               key={customerId}
                               onSelect={() => {
-                                setInvoice(prev => ({ 
-                                  ...prev, 
+                                setInvoice(prev => ({
+                                  ...prev,
                                   customerId,
                                   customerName: customer.name, // Set customer name for editing
                                   type: 'credit',
+                                  // Switching to credit must clear the cash-default paidAmount/balance
+                                  // (mirrors updateInvoiceType) — items added before a customer is
+                                  // picked default to type 'cash', which forces paidAmount = total;
+                                  // left uncorrected, the invoice saves as fully paid/cash-equivalent.
+                                  paidAmount: 0,
+                                  balance: prev.total,
                                 }))
                                 setCustomerSelectOpen(false)
                                 setCustomerSearchQuery('')

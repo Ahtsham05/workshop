@@ -226,18 +226,31 @@ const parsePurchaseInvoiceSequence = (invoiceNumber) => {
  * Generate the next purchase invoice number (format: INV-####).
  * Scans existing numbers and uses the highest trailing numeric suffix,
  * ignoring malformed values like INV-NaN.
+ *
+ * Same trailing-digit-suffix scan as before, but computed inside MongoDB via
+ * aggregation instead of pulling every Purchase document across the wire and
+ * looping in JS — this runs on every create attempt (up to 3x on a collision
+ * retry) and every time the New Purchase panel previews the next number, so it
+ * scaled directly with total purchase count. $regexFind mirrors the same
+ * /(\d+)$/ pattern used by parsePurchaseInvoiceSequence.
  */
 const generateNextPurchaseInvoiceNumber = async () => {
-  const purchases = await Purchase.find({}).select('invoiceNumber').lean();
+  const [result] = await Purchase.aggregate([
+    { $match: { invoiceNumber: { $regex: /(\d+)$/ } } },
+    {
+      $project: {
+        seq: {
+          $let: {
+            vars: { m: { $regexFind: { input: '$invoiceNumber', regex: /(\d+)$/ } } },
+            in: { $toInt: { $arrayElemAt: ['$$m.captures', 0] } },
+          },
+        },
+      },
+    },
+    { $group: { _id: null, maxSeq: { $max: '$seq' } } },
+  ]);
 
-  let maxSeq = DEFAULT_PURCHASE_INVOICE_SEQ;
-  for (const purchase of purchases) {
-    const seq = parsePurchaseInvoiceSequence(purchase.invoiceNumber);
-    if (seq !== null) {
-      maxSeq = Math.max(maxSeq, seq);
-    }
-  }
-
+  const maxSeq = Math.max(DEFAULT_PURCHASE_INVOICE_SEQ, result?.maxSeq ?? DEFAULT_PURCHASE_INVOICE_SEQ);
   return `INV-${maxSeq + 1}`;
 };
 
@@ -370,13 +383,16 @@ const syncPurchaseCashAndWalletEntries = async (purchase, previous) => {
  * @returns {Promise<Purchase>}
  */
 const createPurchase = async (purchaseBody) => {
-  await assertVendorBillNumberAvailable({
-    organizationId: purchaseBody.organizationId,
-    supplier: purchaseBody.supplier,
-    vendorBillNumber: purchaseBody.vendorBillNumber,
-  });
-
-  const businessType = await getOrganizationBusinessType(purchaseBody.organizationId);
+  // Independent pre-checks — the duplicate-bill guard doesn't need the business type
+  // (and vice versa) — so run them concurrently instead of one after another.
+  const [, businessType] = await Promise.all([
+    assertVendorBillNumberAvailable({
+      organizationId: purchaseBody.organizationId,
+      supplier: purchaseBody.supplier,
+      vendorBillNumber: purchaseBody.vendorBillNumber,
+    }),
+    getOrganizationBusinessType(purchaseBody.organizationId),
+  ]);
 
   const normalizedBody = {
     ...purchaseBody,
@@ -411,6 +427,20 @@ const createPurchase = async (purchaseBody) => {
       const purchaseSubtotal = resolvePurchaseSubtotal(purchase.items);
       const purchaseDiscount = Number(purchase.discount || 0);
 
+      // Batch-fetch every product/variant the items reference up front instead of one
+      // round trip per item (same fix already applied to invoice.service.js's createInvoice
+      // item loop). Sequential, not Promise.all, since a ClientSession can't run concurrent
+      // operations. Variants are read-only here so a shared Map is safe; products are
+      // mutated + saved per item below, and reusing the same fetched document across
+      // repeated saves (when two lines reference the same product) applies the exact same
+      // increments in the exact same order as separate per-item fetches would have.
+      const productIds = [...new Set(purchase.items.filter((i) => !i.variantId && i.product).map((i) => String(i.product)))];
+      const variantIds = [...new Set(purchase.items.filter((i) => i.variantId).map((i) => String(i.variantId)))];
+      const productsList = productIds.length ? await Product.find({ _id: { $in: productIds } }).session(session) : [];
+      const variantsList = variantIds.length ? await ProductVariant.find({ _id: { $in: variantIds } }).session(session) : [];
+      const productById = new Map(productsList.map((p) => [String(p._id), p]));
+      const variantById = new Map(variantsList.map((v) => [String(v._id), v]));
+
       // Now, update the stock quantity of each product in the purchase
       for (const item of purchase.items) {
         const netUnitCost = resolveItemNetUnitCost(item, purchaseSubtotal, purchaseDiscount);
@@ -421,7 +451,7 @@ const createPurchase = async (purchaseBody) => {
         // docs/architecture/universal-product-migration.md); other real variants get a
         // plain inventory increment via inventory.service.js.
         if (item.variantId) {
-          const variant = await ProductVariant.findById(item.variantId).session(session);
+          const variant = variantById.get(String(item.variantId));
           if (variant) {
             const quantityDelta = Number(item.quantity || 0);
             item.stockQuantity = quantityDelta;
@@ -465,7 +495,7 @@ const createPurchase = async (purchaseBody) => {
           continue;
         }
 
-        const product = await Product.findById(item.product).session(session);
+        const product = productById.get(String(item.product));
 
         if (product) {
           const conversion = toStockQuantity({ product, item, businessType });
