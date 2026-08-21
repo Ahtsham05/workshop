@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
+import { Fragment, useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
@@ -1470,20 +1470,19 @@ export default function PurchasePanel({
                   </Button>
                 )
 
-                // Line-level discount (supplier discounting this one product) — net is
-                // what actually feeds the purchase subtotal.
-                const itemGross = item.quantity * item.purchasePrice
-                const itemDiscountAmount = computeDiscountAmount(itemGross, item.discountType, item.discountValue)
-                const itemNet = itemGross - itemDiscountAmount
+                // Reuse the same control markup the desktop table uses (no labels, no unit/
+                // separator decoration) so card mode and table mode render pixel-identical
+                // inputs — only the surrounding layout differs.
+                const { qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay } =
+                  renderPurchaseItemParts(item, index)
 
                 return (
                   <div key={`${productId}-${index}`} className='rounded-xl border bg-card shadow-sm overflow-hidden'>
-                    {/* Compact (catalog hidden): row1 + row2 flatten via `contents` into one
-                        flex-wrap line — name flexes in the middle, qty/price/subtotal/delete
-                        pack to the end — instead of stacking, so each item takes ~half the height. */}
-                    <div className={cn(compact && 'flex flex-wrap items-center gap-2 p-2')}>
-                    {/* Row 1: Image + Info + Delete */}
-                    <div className={cn(compact ? 'contents' : 'flex items-start gap-3 p-3')}>
+                    {/* Row 1: Image + Info + Delete — always its own row (both compact and
+                        normal), with the delete button pinned to its right edge, so it's
+                        always beside the product name rather than orphaned below the
+                        controls row. */}
+                    <div className={cn('flex items-start gap-3', compact ? 'gap-2 p-2' : 'p-3')}>
                       {item.product.image?.url ? (
                         <img
                           src={item.product.image.url}
@@ -1549,54 +1548,19 @@ export default function PurchasePanel({
                         </div>
                       </div>
 
-                      {!compact && deleteButton}
+                      {deleteButton}
                     </div>
 
-                    {/* Row 2: Controls — the qty/price and discount/sale-price/total fields
-                        are each nested in their own flex-wrap group (below) so, once the row
-                        runs out of width, a whole group drops to the next line together
-                        instead of individual fields peeling off one at a time. Always a real
-                        flex container (never `contents`) so those groups stay grouped even in
-                        compact mode, rather than flattening into the outer image/name flow. */}
-                    <div className={cn('flex items-center gap-3 flex-wrap', !compact && 'border-t bg-muted/20 px-3 py-2.5')}>
-                      {/* Group 1: quantity × purchase price */}
-                      <div className='flex items-center gap-3 flex-wrap'>
-                      {/* Quantity Stepper */}
-                      <div className='flex items-center gap-1.5 shrink-0'>
-                        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className='h-7 w-7 rounded-none border-r p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
-                            onClick={() => updateQuantity(productId, Math.max(1, item.quantity - 1), item.variantId)}
-                          >
-                            <Minus className='h-3.5 w-3.5' />
-                          </Button>
-                          <Input
-                            ref={setItemFieldRef(index, 'quantity')}
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => updateQuantity(productId, parseInt(e.target.value) || 1, item.variantId)}
-                            onKeyDown={(e) => handlePurchaseQuantityKeyDown(e, index)}
-                            onFocus={(e) => e.target.select()}
-                            className='h-7 w-14 text-center text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                          />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className='h-7 w-7 rounded-none border-l p-0 text-muted-foreground hover:text-foreground hover:bg-muted'
-                            onClick={() => updateQuantity(productId, item.quantity + 1, item.variantId)}
-                          >
-                            <Plus className='h-3.5 w-3.5' />
-                          </Button>
-                        </div>
-                        <span className='text-xs text-muted-foreground'>{item.unit || item.product.unit || 'pcs'}</span>
-                      </div>
-
+                    {/* Row 2: Controls — one line, fixed widths matching the desktop table's
+                        columns exactly (shares renderPurchaseItemParts so table and card modes
+                        stay pixel-identical, no per-field labels needed since the list-level
+                        header above already names each column). Falls back to horizontal
+                        scroll instead of wrapping on very narrow viewports, same as the
+                        desktop table does. */}
+                    <div className={cn('flex items-center gap-2 overflow-x-auto', !compact && 'border-t bg-muted/20 px-3 py-2.5', compact && 'px-2 pb-2')}>
+                      <div className='flex w-[100px] shrink-0 justify-center'>{qtyControl}</div>
                       {showUnitConversions && (
-                        <div className='flex flex-col gap-1 min-w-[80px] shrink-0'>
-                          <Label className='text-[10px] text-muted-foreground'>{t('unit')}</Label>
+                        <div className='w-[90px] shrink-0'>
                           <Select
                             value={item.unit || item.product.unit || 'pcs'}
                             onValueChange={(value) => {
@@ -1631,7 +1595,7 @@ export default function PurchasePanel({
                               }))
                             }}
                           >
-                            <SelectTrigger className='h-6 text-xs px-2'>
+                            <SelectTrigger className='h-7 text-xs px-2'>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1644,118 +1608,10 @@ export default function PurchasePanel({
                           </Select>
                         </div>
                       )}
-
-                      {/* × separator */}
-                      <span className='text-muted-foreground/60 text-sm select-none'>×</span>
-
-                      {/* Purchase Price Input */}
-                      <div className='flex flex-col gap-0.5'>
-                        <span className='text-[10px] text-muted-foreground leading-none'>Purchase Price</span>
-                        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-                          <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
-                          <Input
-                            ref={setItemFieldRef(index, 'purchasePrice')}
-                            type="text"
-                            inputMode="decimal"
-                            showVoiceInput={false}
-                            value={getNumericDraftValue(`${index}:purchasePrice`, item.purchasePrice)}
-                            onChange={(e) =>
-                              handleNumericDraftChange(`${index}:purchasePrice`, e.target.value, (parsed) =>
-                                updatePurchasePrice(productId, parsed, item.variantId),
-                              )
-                            }
-                            onKeyDown={(e) => handlePurchasePriceKeyDown(e, index)}
-                            onFocus={(e) => e.target.select()}
-                            onBlur={() => clearNumericDraft(`${index}:purchasePrice`)}
-                            className='h-7 w-20 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                          />
-                        </div>
-                      </div>
-                      </div>
-
-                      {/* Group 2: discount → sale price = line total — wraps to its own
-                          line as a whole once Group 1 no longer leaves it room. */}
-                      <div className='flex items-center gap-3 flex-wrap'>
-                      {/* − separator */}
-                      <span className='text-muted-foreground/60 text-sm select-none'>−</span>
-
-                      {/* Item Discount Input */}
-                      <div className='flex flex-col gap-0.5'>
-                        <span className='text-[10px] text-muted-foreground leading-none'>Discount</span>
-                        <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            showVoiceInput={false}
-                            value={getNumericDraftValue(`${index}:discountValue`, item.discountValue || 0)}
-                            onChange={(e) =>
-                              handleNumericDraftChange(`${index}:discountValue`, e.target.value, (parsed) =>
-                                updateItemDiscount(productId, { value: Math.max(0, parsed) }, item.variantId),
-                              )
-                            }
-                            onFocus={(e) => e.target.select()}
-                            onBlur={() => clearNumericDraft(`${index}:discountValue`)}
-                            placeholder='0'
-                            className='h-7 w-14 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateItemDiscount(
-                                productId,
-                                { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' },
-                                item.variantId,
-                              )
-                            }
-                            title='Click to switch between Rs and % discount'
-                            className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
-                          >
-                            {item.discountType === 'percentage' ? '%' : 'Rs'}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* → separator */}
-                      <span className='text-muted-foreground/60 text-sm select-none'>→</span>
-
-                      {/* Sale Price Input */}
-                      <div className='flex flex-col gap-0.5'>
-                        <span className='text-[10px] text-blue-500 leading-none font-medium'>Sale Price</span>
-                        <div className='flex items-center rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 overflow-hidden'>
-                          <span className='px-2 h-7 flex items-center text-xs text-blue-500 bg-blue-100/60 dark:bg-blue-900/30 border-r border-blue-200 dark:border-blue-800 font-medium select-none'>Rs</span>
-                          <Input
-                            ref={setItemFieldRef(index, 'sellingPrice')}
-                            type="text"
-                            inputMode="decimal"
-                            showVoiceInput={false}
-                            value={getNumericDraftValue(`${index}:sellingPrice`, item.sellingPrice ?? 0)}
-                            onChange={(e) =>
-                              handleNumericDraftChange(`${index}:sellingPrice`, e.target.value, (parsed) =>
-                                updateSellingPrice(productId, parsed, item.variantId),
-                              )
-                            }
-                            onKeyDown={(e) => handleSellingPriceKeyDown(e, index)}
-                            onFocus={(e) => e.target.select()}
-                            onBlur={() => clearNumericDraft(`${index}:sellingPrice`)}
-                            placeholder='0'
-                            className='h-7 w-20 text-sm font-semibold border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-blue-700 dark:text-blue-300 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                          />
-                        </div>
-                      </div>
-
-                      {/* = subtotal */}
-                      <div className='flex flex-col items-end gap-0 shrink-0'>
-                        {itemDiscountAmount > 0 && (
-                          <span className='text-[10px] text-muted-foreground line-through leading-none'>Rs{itemGross.toFixed(2)}</span>
-                        )}
-                        <div className='flex items-center gap-1.5'>
-                          <span className='text-muted-foreground/60 text-sm select-none'>=</span>
-                          <p className='font-bold text-sm'>Rs{itemNet.toFixed(2)}</p>
-                        </div>
-                      </div>
-                      </div>
-                    </div>
-                    {compact && deleteButton}
+                      <div className='flex w-[116px] shrink-0 justify-center'>{purchasePriceControl}</div>
+                      <div className='flex w-[116px] shrink-0 justify-center'>{sellingPriceControl}</div>
+                      <div className='flex w-[92px] shrink-0 justify-center'>{discountControl}</div>
+                      <div className='ml-auto w-[110px] shrink-0'>{totalDisplay}</div>
                     </div>
 
 
@@ -1777,9 +1633,9 @@ export default function PurchasePanel({
   }
 
   // Whether a line needs the batch/expiry/variant sub-fields (PurchaseItemVariantBatchFields
-  // renders something for it) — those fields are block-level and don't fit in table cells,
-  // so these rows always render as the expanded card (colSpan-ing the dense-mode table),
-  // same escape hatch InvoicePanel uses for isSplitAcrossBatches lines.
+  // renders something for it) — those fields are block-level and don't fit in a table cell
+  // alongside the Qty/Price/etc. controls, so the dense-mode table gives them their own
+  // colSpan row directly below the item's normal, column-aligned row.
   const purchaseItemNeedsExpandedRow = (item: PurchaseItem): boolean =>
     !!(item.product.hasVariants || item.trackBatch || item.trackExpiry)
 
@@ -1879,7 +1735,7 @@ export default function PurchasePanel({
           onKeyDown={(e) => handlePurchasePriceKeyDown(e, index)}
           onFocus={(e) => e.target.select()}
           onBlur={() => clearNumericDraft(`${index}:purchasePrice`)}
-          className='h-7 w-16 border-0 rounded-none text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+          className='h-7 w-20 border-0 rounded-none text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
         />
       </div>
     )
@@ -1901,7 +1757,7 @@ export default function PurchasePanel({
           onKeyDown={(e) => handleSellingPriceKeyDown(e, index)}
           onFocus={(e) => e.target.select()}
           onBlur={() => clearNumericDraft(`${index}:sellingPrice`)}
-          className='h-7 w-16 border-0 rounded-none bg-transparent text-sm font-semibold text-blue-700 dark:text-blue-300 focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+          className='h-7 w-20 border-0 rounded-none bg-transparent text-sm font-semibold text-blue-700 dark:text-blue-300 focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
         />
       </div>
     )
@@ -1921,7 +1777,7 @@ export default function PurchasePanel({
           onFocus={(e) => e.target.select()}
           onBlur={() => clearNumericDraft(`${index}:discountValue`)}
           placeholder='0'
-          className='h-7 w-12 border-0 rounded-none text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+          className='h-7 w-14 border-0 rounded-none text-sm font-semibold text-center focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
         />
         <button
           type='button'
@@ -2435,6 +2291,22 @@ export default function PurchasePanel({
           </div>
         </CardHeader>
         <CardContent ref={itemsAreaRef} className='flex flex-1 flex-col p-0 lg:min-h-0'>
+          {/* Column labels shown once above the whole list — card rows below have no
+              per-field labels of their own (see renderPurchaseItemCard), same as the
+              desktop table only labels columns in its own header, not every cell. */}
+          {(showProductCatalog || isPhone || isItemsAreaNarrow) && purchase.items.length > 0 && (
+            <div className={cn(
+              'flex items-center gap-2 border-b bg-muted/40 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground',
+              !showProductCatalog ? 'px-2' : 'px-3',
+            )}>
+              <div className='flex w-[100px] shrink-0 justify-center'>{t('Qty')}</div>
+              {showUnitConversions && <div className='w-[90px] shrink-0 text-center'>{t('unit')}</div>}
+              <div className='flex w-[116px] shrink-0 justify-center'>{t('Purchase Price')}</div>
+              <div className='flex w-[116px] shrink-0 justify-center'>{t('Sale Price')}</div>
+              <div className='flex w-[92px] shrink-0 justify-center'>{t('discount') || 'Discount'}</div>
+              <div className='ml-auto w-[110px] shrink-0 text-right'>{t('total') || 'Total'}</div>
+            </div>
+          )}
           {/* Capped + internally scrollable regardless of table vs. stacked-card layout —
               without max-h here, the card layout (catalog-visible/phone/narrow) grew with
               the item count and pushed Payment & Amount off screen, forcing a full-page
@@ -2462,34 +2334,34 @@ export default function PurchasePanel({
                 <colgroup>
                   <col className='w-8' />
                   <col />
-                  <col className='w-[110px]' />
-                  <col className='w-[100px]' />
-                  <col className='w-[100px]' />
-                  <col className='w-[85px]' />
-                  <col className='w-[90px]' />
+                  <col className='w-[104px]' />
+                  <col className='w-[120px]' />
+                  <col className='w-[120px]' />
+                  <col className='w-[96px]' />
+                  <col className='w-[120px]' />
                   <col className='w-10' />
                 </colgroup>
                 <TableHeader className='sticky top-0 z-10 bg-muted'>
                   <TableRow className='hover:bg-transparent'>
                     <TableHead className='w-8 pl-3'>#</TableHead>
                     <TableHead className='min-w-[140px]'>{t('product') || 'Product'}</TableHead>
-                    <TableHead className='min-w-[100px]'>{t('Qty')}</TableHead>
-                    <TableHead className='min-w-[100px]'>{t('Purchase Price')}</TableHead>
-                    <TableHead className='min-w-[100px]'>{t('Sale Price')}</TableHead>
-                    <TableHead className='min-w-[85px]'>{t('discount') || 'Discount'}</TableHead>
-                    <TableHead className='min-w-[90px] text-right'>{t('total') || 'Total'}</TableHead>
+                    <TableHead className='w-[104px]'>{t('Qty')}</TableHead>
+                    <TableHead className='w-[120px]'>{t('Purchase Price')}</TableHead>
+                    <TableHead className='w-[120px]'>{t('Sale Price')}</TableHead>
+                    <TableHead className='w-[96px]'>{t('discount') || 'Discount'}</TableHead>
+                    <TableHead className='w-[120px] text-right'>{t('total') || 'Total'}</TableHead>
                     <TableHead className='w-10 pr-2' />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {purchase.items.map((item: PurchaseItem, index: number) => {
                     const productId = item.product.id || (item.product as any)?._id
-                    // Manual/unselected rows, and rows needing batch/expiry/variant fields,
-                    // don't fit in table cells — expand to the full-width card instead,
-                    // same escape hatch InvoicePanel uses for isSplitAcrossBatches lines.
-                    if ((item.isManualEntry && !productId) || purchaseItemNeedsExpandedRow(item)) {
+                    // Manual/unselected rows don't have a product yet — nothing to put in
+                    // the Qty/Price/etc. cells, so they still expand to the full-width
+                    // product-search card, same escape hatch InvoicePanel uses.
+                    if (item.isManualEntry && !productId) {
                       return (
-                        <TableRow key={`${productId || 'manual'}-${index}`} className='hover:bg-transparent'>
+                        <TableRow key={`manual-${index}`} className='hover:bg-transparent'>
                           <TableCell colSpan={8} className='p-2'>
                             {renderPurchaseItemCard(item, index)}
                           </TableCell>
@@ -2497,17 +2369,42 @@ export default function PurchasePanel({
                       )
                     }
                     const { productCell, qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay, deleteButton } = renderPurchaseItemParts(item, index)
+                    // Batch/expiry/variant-tracked items still render as a normal, fully
+                    // column-aligned row — only their extra batch UI drops into a second,
+                    // full-width row right below, instead of swapping the whole row to the
+                    // card layout (which didn't line up under the table's header columns).
+                    const needsExpandedRow = purchaseItemNeedsExpandedRow(item)
                     return (
-                      <TableRow key={`${productId}-${index}`}>
-                        <TableCell className='py-3 pl-3 align-top text-xs text-muted-foreground'>{index + 1}</TableCell>
-                        <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
-                        <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
-                        <TableCell className='align-middle py-3'>{purchasePriceControl}</TableCell>
-                        <TableCell className='align-middle py-3'>{sellingPriceControl}</TableCell>
-                        <TableCell className='align-middle py-3'>{discountControl}</TableCell>
-                        <TableCell className='align-middle py-3 text-right'>{totalDisplay}</TableCell>
-                        <TableCell className='py-3 pr-2 align-middle'>{deleteButton}</TableCell>
-                      </TableRow>
+                      <Fragment key={`${productId}-${index}`}>
+                        <TableRow className={needsExpandedRow ? 'hover:bg-transparent border-b-0' : undefined}>
+                          <TableCell className='py-3 pl-3 align-top text-xs text-muted-foreground'>{index + 1}</TableCell>
+                          <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
+                          <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
+                          <TableCell className='align-middle py-3'>{purchasePriceControl}</TableCell>
+                          <TableCell className='align-middle py-3'>{sellingPriceControl}</TableCell>
+                          <TableCell className='align-middle py-3'>{discountControl}</TableCell>
+                          <TableCell className='align-middle py-3 text-right'>{totalDisplay}</TableCell>
+                          <TableCell className='py-3 pr-2 align-middle'>{deleteButton}</TableCell>
+                        </TableRow>
+                        {needsExpandedRow && (
+                          <TableRow className='hover:bg-transparent'>
+                            <TableCell colSpan={8} className='whitespace-normal px-3 pb-3 pt-0 align-top'>
+                              <PurchaseItemVariantBatchFields
+                                item={item}
+                                index={index}
+                                onVariantChange={updateItemVariant}
+                                onBatchNumberChange={updateItemBatchNumber}
+                                onExpiryDateChange={updateItemExpiryDate}
+                                onBatchCostChange={updateItemBatchCost}
+                                onInvestorRuleChange={updateItemInvestorRule}
+                                onNeedsBatchChange={(i, needsBatch) => { itemNeedsBatchRef.current[i] = needsBatch }}
+                                onRegisterBatchTrigger={(i, trigger) => { itemBatchTriggerRef.current[i] = trigger }}
+                                onLastFieldEnter={addNewPurchaseRowAndOpenProduct}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
                     )
                   })}
                 </TableBody>

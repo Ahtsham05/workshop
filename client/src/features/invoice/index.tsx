@@ -1,6 +1,7 @@
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { permissionMessage } from '@/lib/permission-messages'
+import { useCollapseSidebarOnMount } from '@/hooks/use-collapse-sidebar-on-mount'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useDispatch, useSelector } from 'react-redux'
@@ -256,6 +257,7 @@ export interface Category {
 }
 
 export default function InvoicePage() {
+  useCollapseSidebarOnMount()
   const { t } = useLanguage()
   const { hasExplicitPermission } = usePermissions()
   const dispatch = useDispatch<AppDispatch>()

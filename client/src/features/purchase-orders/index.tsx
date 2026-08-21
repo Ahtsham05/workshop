@@ -6,12 +6,14 @@ import PurchaseOrderForm from './components/purchase-order-form'
 import ReceiveItemsDialog from './components/receive-items-dialog'
 import PurchaseOrderDetailsDialog from './components/purchase-order-details-dialog'
 import { usePermissions } from '@/context/permission-context'
+import { useCollapseSidebarOnMount } from '@/hooks/use-collapse-sidebar-on-mount'
 
 import type { PurchaseOrder } from '@/stores/purchaseOrder.api'
 
 type View = 'list' | 'form'
 
 export default function PurchaseOrdersPage() {
+  useCollapseSidebarOnMount()
   const navigate = useNavigate()
   const { hasExplicitPermission } = usePermissions()
   const search = useSearch({ strict: false }) as {

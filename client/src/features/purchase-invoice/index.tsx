@@ -16,6 +16,7 @@ import { ProductCatalog } from './components/product-catalog';
 import { toast } from 'sonner';
 import { useLanguage } from '@/context/language-context';
 import { usePermissions } from '@/context/permission-context';
+import { useCollapseSidebarOnMount } from '@/hooks/use-collapse-sidebar-on-mount';
 import type { Product, Category } from '../invoice/index';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -177,6 +178,7 @@ const getInitialShowProductCatalog = (): boolean => {
 };
 
 const PurchaseInvoicePage = () => {
+  useCollapseSidebarOnMount();
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as {
