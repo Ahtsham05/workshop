@@ -563,21 +563,19 @@ const createInvoice = async (invoiceBody, userId) => {
     }
   }
 
-  // If this was sold to an employee's shadow customer account, mirror the
-  // unpaid balance into their salary ledger.
-  try {
-    await employeeLedgerService.syncPurchaseFromInvoice(invoice);
-  } catch (error) {
-    console.error('Failed to sync employee ledger for invoice:', error);
-  }
-
-  // Same, but for a supplier's shadow customer account — nets the unpaid
-  // balance against what the business owes that supplier.
-  try {
-    await supplierLedgerService.syncPurchaseFromInvoice(invoice);
-  } catch (error) {
-    console.error('Failed to sync supplier ledger for invoice:', error);
-  }
+  // Shadow-account mirroring: if this was sold to an employee's or a supplier's
+  // shadow customer account, mirror the unpaid balance into their salary/supplier
+  // ledger. The two checks are independent (a customer is at most one of the two,
+  // and they touch disjoint collections), so run them concurrently instead of
+  // one-after-another.
+  await Promise.all([
+    employeeLedgerService.syncPurchaseFromInvoice(invoice).catch((error) => {
+      console.error('Failed to sync employee ledger for invoice:', error);
+    }),
+    supplierLedgerService.syncPurchaseFromInvoice(invoice).catch((error) => {
+      console.error('Failed to sync supplier ledger for invoice:', error);
+    }),
+  ]);
 
   // Update product stock quantities (quotations do not affect stock until converted).
   // Real-variant line items bypass the legacy Product.stockQuantity path entirely —

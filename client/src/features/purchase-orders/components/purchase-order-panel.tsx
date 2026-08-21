@@ -131,7 +131,7 @@ export function createEmptyOrderManualItem(): OrderItem {
  * addNewRowAndOpenProduct below). When the catalog is visible, clicking a tile always
  * appends its own new row, so only one placeholder row is needed — mirrors
  * invoice/index.tsx's identical NEW_INVOICE_ROW_COUNT pattern. */
-const NEW_ORDER_ROW_COUNT = 12
+const NEW_ORDER_ROW_COUNT = 6
 const NEW_ORDER_ROW_COUNT_WITH_CATALOG = 1
 
 function createInitialOrderItems(showProductCatalog: boolean): OrderItem[] {

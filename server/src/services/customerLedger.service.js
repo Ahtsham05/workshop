@@ -275,7 +275,8 @@ const recalculateBalances = async (customerId, _fromTransactionDate) => {
 
   const allEntries = await CustomerLedger.find({ customer: customerId })
     .sort({ transactionDate: 1, createdAt: 1 })
-    .select('_id debit credit balance');
+    .select('_id debit credit balance')
+    .lean();
 
   let runningBalance = 0;
   const bulkOps = [];
@@ -431,13 +432,20 @@ const cleanupLedgerForConvertedPendingInvoices = async (customerId) => {
     customerId,
     type: 'pending',
     isConvertedToBill: true,
-  }).select('_id');
+  }).select('_id').lean();
 
-  for (const inv of convertedPending) {
-    const count = await CustomerLedger.countDocuments({ referenceId: inv._id });
-    if (count > 0) {
-      await deleteLedgerEntriesByReference(inv._id);
-    }
+  if (convertedPending.length === 0) return;
+
+  // One query to find which of those invoices still have stale ledger rows,
+  // instead of a countDocuments + conditional delete per invoice — this list only
+  // grows over a customer's lifetime, and after the first cleanup pass it's
+  // normally all-clean, so most calls should cost a single empty-result query.
+  const staleReferenceIds = await CustomerLedger.distinct('referenceId', {
+    referenceId: { $in: convertedPending.map((inv) => inv._id) },
+  });
+
+  for (const referenceId of staleReferenceIds) {
+    await deleteLedgerEntriesByReference(referenceId);
   }
 };
 

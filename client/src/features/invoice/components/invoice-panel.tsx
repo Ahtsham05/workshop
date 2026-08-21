@@ -394,6 +394,10 @@ export function InvoicePanel({
     try {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
+      const cidForContact = invoiceData.customerId ?? invoice.customerId
+      const loadedCustomer = cidForContact && cidForContact !== 'walk-in'
+        ? customers.find((c) => String(c._id || c.id) === String(cidForContact))
+        : undefined
 
       const printData = withCustomerContactForPrint({
         invoiceNumber: invoiceData.invoiceNumber,
@@ -447,7 +451,7 @@ export function InvoicePanel({
         printInUrdu: getInvoicePrintInUrdu(),
         printAsQuotation: invoiceData.type === 'quotation',
         invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
-      }, invoiceData)
+      }, invoiceData, loadedCustomer)
 
       const customerIdStr = resolveCustomerIdString(printData.customerId)
       const printContact: PrintWindowContact = {
@@ -457,11 +461,14 @@ export function InvoicePanel({
       }
       if (customerIdStr) {
         stashPrintContact(printContact)
-        try {
-          await fetchAndStashPrintContact(customerIdStr)
-        } catch {
+        // Already-loaded customer data (above) covers phone/whatsapp for the print
+        // window itself — refresh from the server in the background instead of
+        // blocking the print window on a network round trip. Its Send SMS/WhatsApp
+        // actions read window.__invoicePrintContactById lazily when clicked, well
+        // after this resolves.
+        fetchAndStashPrintContact(customerIdStr).catch(() => {
           /* prompt in print window */
-        }
+        })
       }
 
       const htmlContent = generateInvoiceHTML(printData, thermalSize)
@@ -483,6 +490,10 @@ export function InvoicePanel({
   const buildPrintData = useCallback(async (invoiceData: any) => {
       const prevBal = invoiceData.previousBalance ?? customerBalance
       const netBal = (prevBal || 0) + (invoiceData.total || 0) - (invoiceData.paidAmount || 0)
+      const cidForContact = invoiceData.customerId ?? invoice.customerId
+      const loadedCustomer = cidForContact && cidForContact !== 'walk-in'
+        ? customers.find((c) => String(c._id || c.id) === String(cidForContact))
+        : undefined
 
       const printData = withCustomerContactForPrint({
         invoiceNumber: invoiceData.invoiceNumber,
@@ -536,7 +547,7 @@ export function InvoicePanel({
         printInUrdu: getInvoicePrintInUrdu(),
         printAsQuotation: invoiceData.type === 'quotation',
         invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
-      }, invoiceData)
+      }, invoiceData, loadedCustomer)
 
       const customerIdStr = resolveCustomerIdString(printData.customerId)
       const printContact: PrintWindowContact = {
@@ -546,11 +557,12 @@ export function InvoicePanel({
       }
       if (customerIdStr) {
         stashPrintContact(printContact)
-        try {
-          await fetchAndStashPrintContact(customerIdStr)
-        } catch {
+        // Already-loaded customer data (above) covers phone/whatsapp for the print
+        // window itself — refresh from the server in the background instead of
+        // blocking on a network round trip before the print window can open.
+        fetchAndStashPrintContact(customerIdStr).catch(() => {
           /* prompt in print window */
-        }
+        })
       }
 
       return { printData, printContact }
