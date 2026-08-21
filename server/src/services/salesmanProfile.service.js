@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { SalesmanProfile, User } = require('../models');
 const ApiError = require('../utils/ApiError');
 
@@ -7,6 +8,39 @@ const getTenantFilter = (data = {}) => {
   if (data.organizationId) filter.organizationId = data.organizationId;
   if (data.branchId) filter.branchId = data.branchId;
   return filter;
+};
+
+let indexesEnsured = false;
+
+/**
+ * The organizationId_1_userId_1 unique index was originally created (pre-standalone-
+ * salesman support) without a partialFilterExpression, so every standalone salesman
+ * (userId: null) in an org collided with the next one. The schema now declares the index
+ * with partialFilterExpression: { userId: { $type: 'objectId' } }, but Mongo keeps
+ * enforcing whatever options the index already has on disk — changing the schema alone
+ * doesn't rebuild it. Drop the stale plain-unique version once per process so the
+ * partial one mongoose creates actually takes effect.
+ */
+const ensureSalesmanProfileIndexes = async () => {
+  if (indexesEnsured) return;
+
+  const collection = mongoose.connection.collection('salesmanprofiles');
+  try {
+    const indexes = await collection.indexes();
+    const staleUserIdIndex = indexes.find(
+      (idx) => idx.key?.organizationId === 1 && idx.key?.userId === 1 && idx.unique && !idx.partialFilterExpression
+    );
+    if (staleUserIdIndex) {
+      await collection.dropIndex(staleUserIdIndex.name);
+    }
+  } catch (err) {
+    if (err.codeName !== 'IndexNotFound') {
+      // Non-fatal — syncIndexes below will still attempt to create the partial index.
+    }
+  }
+
+  await SalesmanProfile.syncIndexes();
+  indexesEnsured = true;
 };
 
 const generateSalesmanCode = async (tenantFilter) => {
@@ -44,6 +78,7 @@ const generateSalesmanCode = async (tenantFilter) => {
  * @returns {Promise<SalesmanProfile>}
  */
 const createSalesmanProfile = async (profileBody) => {
+  await ensureSalesmanProfileIndexes();
   const tenantFilter = getTenantFilter(profileBody);
   let name = (profileBody.name || '').trim();
 
