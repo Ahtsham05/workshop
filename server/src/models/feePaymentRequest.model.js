@@ -48,7 +48,7 @@ const feePaymentRequestSchema = mongoose.Schema(
     ],
     bankAccountId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'BankAccount',
+      ref: 'Wallet',
     },
     bankAccountLabel: {
       type: String,

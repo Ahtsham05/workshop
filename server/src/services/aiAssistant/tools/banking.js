@@ -1,20 +1,20 @@
-const { BankAccount } = require('../../../models');
+const { Wallet } = require('../../../models');
 const walletService = require('../../wallet.service');
 const { buildFilter } = require('./shared');
 
 async function getCashAndBankSummary(args, ctx) {
   const [accounts, cashInHand] = await Promise.all([
-    BankAccount.find({ ...buildFilter(ctx), isActive: { $ne: false } }),
+    Wallet.find({ ...buildFilter(ctx), isActive: { $ne: false }, accountType: { $ne: 'cash' } }),
     walletService.resolveCashInHandBalance(ctx.organizationId, ctx.branchId),
   ]);
 
-  const bankAccountsTotal = accounts.reduce((s, a) => s + (a.currentBalance || 0), 0);
+  const bankAccountsTotal = accounts.reduce((s, a) => s + (a.balance || 0), 0);
 
   return {
     cashInHand,
     bankAccountsTotal,
     grandTotal: cashInHand + bankAccountsTotal,
-    accounts: accounts.map((a) => ({ name: a.name, type: a.accountType, bankName: a.bankName, balance: a.currentBalance })),
+    accounts: accounts.map((a) => ({ name: a.type, type: a.accountType, bankName: a.bankName, balance: a.balance })),
   };
 }
 

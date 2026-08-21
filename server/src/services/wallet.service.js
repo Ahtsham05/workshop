@@ -35,9 +35,7 @@ const ensureWallet = async ({ organizationId, branchId, type, userId }) => {
       createdBy: userId,
       updatedBy: userId,
     });
-    accountsSystemService
-      .ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet)
-      .catch(() => {});
+    accountsSystemService.ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet).catch(() => {});
   }
 
   return wallet;
@@ -55,12 +53,25 @@ const createOrUpdateWallet = async ({
   bankName,
   accountNumber,
   branchName,
+  isDefault,
+  accountHeadId,
   id,
   userId,
 }) => {
   let wallet;
   // '' (cleared select) must not hit Mongoose's enum validator — normalize to undefined.
   const normalizedAccountType = accountType || undefined;
+
+  // Only one wallet can be "the" default per branch (mirrors the cash-type-exclusivity
+  // guard below) — unset any existing default before assigning a new one. Callers that
+  // don't pass isDefault at all (the wallet page's own form has no such control) must
+  // never touch an existing wallet's flag, so this only runs when explicitly requested.
+  if (isDefault === true) {
+    await Wallet.updateMany(
+      { organizationId, branchId, isDefault: true, ...(id ? { _id: { $ne: id } } : {}) },
+      { $set: { isDefault: false } }
+    );
+  }
 
   // Cash-type is meant to be a singular concept per branch — the "Cash in Hand" account
   // that Cash Book balance gets overlaid onto (see overlayCashInHandBalances/
@@ -98,6 +109,8 @@ const createOrUpdateWallet = async ({
     wallet.bankName = bankName || undefined;
     wallet.accountNumber = accountNumber || undefined;
     wallet.branchName = branchName || undefined;
+    if (isDefault !== undefined) wallet.isDefault = isDefault;
+    if (accountHeadId) wallet.accountHeadId = accountHeadId;
     wallet.updatedBy = userId;
   } else {
     wallet = await Wallet.findOne({ organizationId, branchId, type });
@@ -110,6 +123,8 @@ const createOrUpdateWallet = async ({
       wallet.bankName = bankName || undefined;
       wallet.accountNumber = accountNumber || undefined;
       wallet.branchName = branchName || undefined;
+      if (isDefault !== undefined) wallet.isDefault = isDefault;
+      if (accountHeadId) wallet.accountHeadId = accountHeadId;
       wallet.updatedBy = userId;
     } else {
       wallet = new Wallet({
@@ -124,6 +139,8 @@ const createOrUpdateWallet = async ({
         bankName: bankName || undefined,
         accountNumber: accountNumber || undefined,
         branchName: branchName || undefined,
+        isDefault: isDefault === true,
+        accountHeadId: accountHeadId || undefined,
         createdBy: userId,
         updatedBy: userId,
       });
@@ -135,9 +152,7 @@ const createOrUpdateWallet = async ({
   // Give the wallet a dedicated ledger account so its transactions post real
   // double-entry journal lines. Fire-and-forget: accounting must never block
   // wallet management.
-  accountsSystemService
-    .ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet)
-    .catch(() => {});
+  accountsSystemService.ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet).catch(() => {});
 
   return wallet;
 };
@@ -204,9 +219,7 @@ const ensureDefaultCashWallet = async ({ organizationId, branchId, userId }) => 
     createdBy: userId,
     updatedBy: userId,
   });
-  accountsSystemService
-    .ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet)
-    .catch(() => {});
+  accountsSystemService.ensureWalletAccount({ organizationId, branchId, createdBy: userId }, wallet).catch(() => {});
 };
 
 /** Overlay the live Cash Book balance onto every cash-type wallet in `wallets` (in place). */
@@ -221,12 +234,15 @@ const overlayCashInHandBalances = async (wallets, organizationId, branchId) => {
 };
 
 const queryWallets = async (filter, options = {}) => {
-  const result = await Wallet.paginate(filter, {
-    ...options,
-    sortBy: options.sortBy || 'createdAt:desc',
-    limit: options.limit || 10,
-    page: options.page || 1,
-  });
+  const result = await Wallet.paginate(
+    { isActive: true, ...filter },
+    {
+      ...options,
+      sortBy: options.sortBy || 'createdAt:desc',
+      limit: options.limit || 10,
+      page: options.page || 1,
+    }
+  );
 
   if (filter.organizationId && filter.branchId) {
     await overlayCashInHandBalances(result.results, filter.organizationId, filter.branchId);
@@ -262,6 +278,23 @@ const deleteWallet = async ({ walletId, organizationId, branchId }) => {
   return wallet;
 };
 
+// Soft delete — used by the Accounts System "Bank & Cash" tab, which (like the old
+// BankAccount model it now delegates to) never cascades away transaction history, unlike
+// deleteWallet's hard delete above. The account simply stops appearing in either page's list
+// (queryWallets filters isActive: true) while its historical transactions stay intact.
+const deactivateWallet = async ({ walletId, organizationId, branchId, userId }) => {
+  const wallet = await Wallet.findOne({ _id: walletId, organizationId, branchId });
+
+  if (!wallet) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Wallet not found');
+  }
+
+  wallet.isActive = false;
+  wallet.updatedBy = userId;
+  await wallet.save();
+  return wallet;
+};
+
 module.exports = {
   ensureWallet,
   ensureDefaultCashWallet,
@@ -270,5 +303,6 @@ module.exports = {
   queryWallets,
   getWalletById,
   deleteWallet,
+  deactivateWallet,
   resolveCashInHandBalance,
 };

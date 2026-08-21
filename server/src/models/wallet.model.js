@@ -29,6 +29,12 @@ const walletSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Marks the one preferred bank/cash account per branch to default to in pickers
+    // (mirrors the retired BankAccount model's `isDefault` flag).
+    isDefault: {
+      type: Boolean,
+      default: false,
+    },
     // Dedicated chart-of-accounts ledger account for this wallet, auto-created
     // so wallet transactions (sales, expenses, purchases) post real double-entry
     // journal lines instead of collapsing into the generic Cash account.

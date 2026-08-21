@@ -2,18 +2,22 @@ import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 import { reportsApi } from './reports.api'
 import { bankReconciliationApi } from './bankReconciliation.api'
+import { schoolApi } from './school.api'
 
 /** Every mutation below that invalidates this slice's own 'Wallets'/'CashBook' tags
  *  (Load Purchase, Cash Withdrawal, Wallet Transfer, Repair, Bill Payment, Installment,
  *  Sim Sale, Agent Bill, ...) moves a Bank Account's balance or posts a Cash Book entry
- *  server-side too — but reportsApi (Bank Account Statement / Bank & Cash Position) and
- *  bankReconciliationApi (the Bank Reconciliation workspace) are separate RTK Query
- *  slices, so tag invalidation here never reaches them; those pages would otherwise keep
- *  showing a stale balance until an unrelated action happens to refetch them. Same class
- *  of bug as `wallet-cache-invalidation.ts` fixes for the other, standalone API slices —
- *  this one is scoped to reportsApi/bankReconciliationApi only, since this file already
- *  invalidates its own Wallets/CashBook/MobileDashboard tags via `invalidatesTags`. */
-const invalidateReportsAndReconciliation = async (
+ *  server-side too — but reportsApi (Bank Account Statement / Bank & Cash Position),
+ *  bankReconciliationApi (the Bank Reconciliation workspace), and schoolApi (the Accounts
+ *  System "Bank & Cash" tab — same underlying Wallet documents, see accountsSystem.service.js)
+ *  are separate RTK Query slices, so tag invalidation here never reaches them; those pages
+ *  would otherwise keep showing stale data until an unrelated action happens to refetch
+ *  them. Same class of bug as `wallet-cache-invalidation.ts` fixes for the other, standalone
+ *  API slices — this one is inline (not routed through that shared hub) because schoolApi
+ *  itself needs to invalidate this slice's tags too (see school.api.ts's own bank-account
+ *  mutations), and wallet-cache-invalidation.ts already imports this file — routing through
+ *  it here would cycle back. */
+const invalidateCrossSliceWalletCaches = async (
   _arg: unknown,
   { dispatch, queryFulfilled }: { dispatch: (action: unknown) => unknown; queryFulfilled: Promise<unknown> },
 ) => {
@@ -21,6 +25,7 @@ const invalidateReportsAndReconciliation = async (
     await queryFulfilled
     dispatch(reportsApi.util.invalidateTags(['WalletBalanceStatement', 'BankPositionReport', 'BankReconciliationSessionsReport']))
     dispatch(bankReconciliationApi.util.invalidateTags(['ReconciliationSummary', 'UnreconciledEntries']))
+    dispatch(schoolApi.util.invalidateTags(['BankAccount', 'AccountsDashboard']))
   } catch {
     // mutation failed — nothing to invalidate
   }
@@ -695,7 +700,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['Wallets', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteWallet: builder.mutation<void, string>({
       query: (id) => ({
@@ -703,7 +708,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Wallets', 'LoadPurchases', 'LoadTransactions', 'CashWithdrawals', 'SimSales', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getLoadPurchases: builder.query<PaginatedResult<LoadPurchaseRecord>, { page?: number; limit?: number } | void>({
       query: (params) => {
@@ -720,7 +725,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateLoadPurchase: builder.mutation<LoadPurchaseRecord, { id: string; body: Partial<CreateLoadPurchaseInput> }>({
       query: ({ id, body }) => ({
@@ -729,7 +734,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteLoadPurchase: builder.mutation<void, string>({
       query: (id) => ({
@@ -737,7 +742,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['LoadPurchases', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getLoadPurchaseById: builder.query<LoadPurchaseRecord, string>({
       query: (id) => `/load-purchases/${id}`,
@@ -758,7 +763,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateLoadTransaction: builder.mutation<LoadTransactionRecord, { id: string; body: Partial<CreateLoadTransactionInput> }>({
       query: ({ id, body }) => ({
@@ -767,7 +772,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteLoadTransaction: builder.mutation<void, string>({
       query: (id) => ({
@@ -775,7 +780,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['LoadTransactions', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getLoadTransactionById: builder.query<LoadTransactionRecord, string>({
       query: (id) => `/load-transactions/${id}`,
@@ -800,7 +805,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     createCashWithdrawalsBatch: builder.mutation<CashWithdrawalRecord[], CreateCashWithdrawalsBatchInput>({
       query: (body) => ({
@@ -810,7 +815,7 @@ export const mobileShopApi = createApi({
         timeout: 120000,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateCashWithdrawal: builder.mutation<CashWithdrawalRecord, { id: string; body: Partial<CreateCashWithdrawalInput> }>({
       query: ({ id, body }) => ({
@@ -819,7 +824,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteCashWithdrawal: builder.mutation<void, string>({
       query: (id) => ({
@@ -827,7 +832,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteCashWithdrawalsBatch: builder.mutation<{ deleted: number; failed: number }, { ids: string[] }>({
       query: (body) => ({
@@ -837,7 +842,7 @@ export const mobileShopApi = createApi({
         timeout: 120000,
       }),
       invalidatesTags: ['CashWithdrawals', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getWalletTransfers: builder.query<PaginatedResult<WalletTransferRecord>, { page?: number; limit?: number; walletType?: string } | void>({
       query: (params) => {
@@ -855,7 +860,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['WalletTransfers', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteWalletTransfer: builder.mutation<void, string>({
       query: (id) => ({
@@ -863,7 +868,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['WalletTransfers', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getRepairJobs: builder.query<PaginatedResult<RepairJobRecord>, { page?: number; limit?: number; status?: string } | void>({
       query: (params) => {
@@ -881,7 +886,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateRepairJob: builder.mutation<RepairJobRecord, { id: string; body: Partial<RepairJobRecord> }>({
       query: ({ id, body }) => ({
@@ -890,7 +895,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteRepairJob: builder.mutation<void, string>({
       query: (id) => ({
@@ -898,7 +903,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Repairs', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
 
     // ─── Services Catalog ───────────────────────────────────────────────────
@@ -962,7 +967,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateServiceInvoice: builder.mutation<ServiceInvoiceRecord, { id: string; body: UpdateServiceInvoiceInput }>({
       query: ({ id, body }) => ({
@@ -971,7 +976,7 @@ export const mobileShopApi = createApi({
         body,
       }),
       invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteServiceInvoice: builder.mutation<void, string>({
       query: (id) => ({
@@ -979,7 +984,7 @@ export const mobileShopApi = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['ServiceInvoices', 'CashBook', 'MobileDashboard', 'Customer'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
 
     // ─── Repair Stock Ledger ─────────────────────────────────────────────────
@@ -996,7 +1001,7 @@ export const mobileShopApi = createApi({
     createRepairStockPurchase: builder.mutation<RepairStockEntry, CreateRepairStockPurchaseInput>({
       query: (body) => ({ url: '/repair-stock', method: 'POST', body }),
       invalidatesTags: ['RepairStock', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     createRepairStockUsage: builder.mutation<RepairStockEntry, CreateRepairStockUsageInput>({
       query: (body) => ({ url: '/repair-stock/use', method: 'POST', body }),
@@ -1005,7 +1010,7 @@ export const mobileShopApi = createApi({
     deleteRepairStockEntry: builder.mutation<void, string>({
       query: (id) => ({ url: `/repair-stock/${id}`, method: 'DELETE' }),
       invalidatesTags: ['RepairStock', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getRepairStockSummary: builder.query<RepairStockSummary, void>({
       query: () => '/repair-stock/summary',
@@ -1030,7 +1035,7 @@ export const mobileShopApi = createApi({
     setOpeningBalance: builder.mutation<{ amount: number; id: string | null }, { amount: number }>({
       query: (body) => ({ url: '/cash-book/opening-balance', method: 'POST', body }),
       invalidatesTags: ['CashBook'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getCashBookSummary: builder.query<CashBookSummary, CashBookQueryParams | void>({
       query: (params) => {
@@ -1108,12 +1113,12 @@ export const mobileShopApi = createApi({
     createBillPayment: builder.mutation<BillPaymentRecord, CreateBillPaymentInput>({
       query: (body) => ({ url: '/bill-payments', method: 'POST', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     createBillPaymentsBatch: builder.mutation<BillPaymentRecord[], CreateBillPaymentsBatchInput>({
       query: (body) => ({ url: '/bill-payments/batch', method: 'POST', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     settleCombinedBill: builder.mutation<
       { newBill: BillPaymentRecord; oldBill: BillPaymentRecord },
@@ -1121,17 +1126,17 @@ export const mobileShopApi = createApi({
     >({
       query: (body) => ({ url: '/bill-payments/settle-combined', method: 'POST', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateBillPayment: builder.mutation<BillPaymentRecord, { id: string; body: Partial<CreateBillPaymentInput> }>({
       query: ({ id, body }) => ({ url: `/bill-payments/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteBillPayment: builder.mutation<void, string>({
       query: (id) => ({ url: `/bill-payments/${id}`, method: 'DELETE' }),
       invalidatesTags: ['BillPayments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getBillPaymentReceipt: builder.query<BillPaymentReceipt, string>({
       query: (id) => `/bill-payments/${id}/receipt`,
@@ -1197,7 +1202,7 @@ export const mobileShopApi = createApi({
     createInstallmentPlan: builder.mutation<InstallmentPlanRecord, Partial<InstallmentPlanRecord> & { paymentMethod?: string; walletType?: string }>({
       query: (body) => ({ url: '/installments', method: 'POST', body }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateInstallmentPlan: builder.mutation<InstallmentPlanRecord, { id: string; body: Partial<InstallmentPlanRecord> }>({
       query: ({ id, body }) => ({ url: `/installments/${id}`, method: 'PATCH', body }),
@@ -1206,7 +1211,7 @@ export const mobileShopApi = createApi({
     deleteInstallmentPlan: builder.mutation<void, string>({
       query: (id) => ({ url: `/installments/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     recordInstallmentPayment: builder.mutation<
       { payment: InstallmentPaymentRecord; plan: InstallmentPlanRecord },
@@ -1214,7 +1219,7 @@ export const mobileShopApi = createApi({
     >({
       query: ({ planId, ...body }) => ({ url: `/installments/${planId}/payments`, method: 'POST', body }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getInstallmentPayments: builder.query<
       PaginatedResult<InstallmentPaymentRecord>,
@@ -1230,7 +1235,7 @@ export const mobileShopApi = createApi({
     deleteInstallmentPayment: builder.mutation<void, { planId: string; paymentId: string }>({
       query: ({ planId, paymentId }) => ({ url: `/installments/${planId}/payments/${paymentId}`, method: 'DELETE' }),
       invalidatesTags: ['Installments', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getInstallmentSummary: builder.query<InstallmentSummary, void>({
       query: () => '/installments/summary',
@@ -1254,17 +1259,17 @@ export const mobileShopApi = createApi({
     createSimSale: builder.mutation<SimSaleRecord, CreateSimSaleInput>({
       query: (body) => ({ url: '/sim-sales', method: 'POST', body }),
       invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateSimSale: builder.mutation<SimSaleRecord, { id: string; body: Partial<CreateSimSaleInput> }>({
       query: ({ id, body }) => ({ url: `/sim-sales/${id}`, method: 'PATCH', body }),
       invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     deleteSimSale: builder.mutation<void, string>({
       query: (id) => ({ url: `/sim-sales/${id}`, method: 'DELETE' }),
       invalidatesTags: ['SimSales', 'Wallets', 'CashBook', 'MobileDashboard'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
 
     // ─── Agent Bills (bilalmulazim7086@gmail.com) ─────────────────────────────
@@ -1282,7 +1287,7 @@ export const mobileShopApi = createApi({
     createAgentBillsBatch: builder.mutation<AgentBillRecord[], CreateAgentBillsBatchInput>({
       query: (body) => ({ url: '/agent-bills/batch', method: 'POST', body }),
       invalidatesTags: ['AgentBills', 'CashBook', 'MobileDashboard', 'Wallets'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     updateAgentBill: builder.mutation<AgentBillRecord, { id: string } & Partial<AgentBillRecord>>({
       query: ({ id, ...body }) => ({ url: `/agent-bills/${id}`, method: 'PATCH', body }),
@@ -1291,7 +1296,7 @@ export const mobileShopApi = createApi({
     deleteAgentBill: builder.mutation<void, string>({
       query: (id) => ({ url: `/agent-bills/${id}`, method: 'DELETE' }),
       invalidatesTags: ['AgentBills', 'CashBook', 'MobileDashboard', 'Wallets'],
-      onQueryStarted: invalidateReportsAndReconciliation,
+      onQueryStarted: invalidateCrossSliceWalletCaches,
     }),
     getAgentBillReport: builder.query<AgentBillReport, { startDate?: string; endDate?: string; companyId?: string } | void>({
       query: (params) => {

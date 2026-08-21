@@ -43,32 +43,57 @@ const ensureSalesmanProfileIndexes = async () => {
   indexesEnsured = true;
 };
 
-const generateSalesmanCode = async (tenantFilter) => {
-  const prefix = 'SM-';
-  const latest = await SalesmanProfile.findOne({
-    ...tenantFilter,
-    salesmanCode: { $regex: `^${prefix}\\d+$` },
-  })
-    .sort({ createdAt: -1 })
-    .select('salesmanCode')
-    .lean();
+const parseSalesmanCodeSequence = (salesmanCode) => {
+  const match = String(salesmanCode || '').match(/(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+};
 
-  let nextNumber = 1;
-  if (latest?.salesmanCode) {
-    const numericPart = Number(latest.salesmanCode.replace(prefix, ''));
-    if (!Number.isNaN(numericPart) && numericPart > 0) {
-      nextNumber = numericPart + 1;
+/**
+ * Generate a sequential salesman code using an atomic per-organization counter.
+ * Format: SM-{seq, zero-padded to 4}.
+ *
+ * The organizationId_1_salesmanCode_1 unique index is scoped to organizationId only
+ * (no branchId — a salesman code is org-wide), so the code must be generated from an
+ * org-wide sequence too. Scanning "latest code" within a branchId-scoped filter (as this
+ * used to do) let two different branches in the same org each independently compute
+ * "SM-0001" as their first code, then collide on insert. An atomic $inc counter also
+ * closes the separate check-then-create race between two concurrent creates in the same
+ * branch, matching the pattern used for purchase order numbers (purchaseOrder.service.js).
+ */
+const generateSalesmanCode = async (organizationId) => {
+  const prefix = 'SM-';
+  const db = mongoose.connection.db;
+  const seqKey = `salesmanProfile_${organizationId}`;
+
+  const existingCounter = await db.collection('_sequences').findOne({ _id: seqKey });
+  if (!existingCounter) {
+    const profiles = await SalesmanProfile.find({ organizationId }).select('salesmanCode').lean();
+    let maxSeq = 0;
+    for (const profile of profiles) {
+      maxSeq = Math.max(maxSeq, parseSalesmanCodeSequence(profile.salesmanCode));
+    }
+    await db.collection('_sequences').updateOne({ _id: seqKey }, { $setOnInsert: { seq: maxSeq } }, { upsert: true });
+  }
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const result = await db
+      .collection('_sequences')
+      .findOneAndUpdate({ _id: seqKey }, { $inc: { seq: 1 } }, { returnDocument: 'after' });
+
+    const seq = Number(result?.seq ?? result?.value?.seq);
+    if (!Number.isFinite(seq) || seq <= 0) {
+      continue;
+    }
+
+    const candidate = `${prefix}${String(seq).padStart(4, '0')}`;
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await SalesmanProfile.exists({ organizationId, salesmanCode: candidate });
+    if (!exists) {
+      return candidate;
     }
   }
 
-  // Resolve rare collisions (parallel creates) with incremental probing.
-  while (true) {
-    const candidate = `${prefix}${String(nextNumber).padStart(4, '0')}`;
-    // eslint-disable-next-line no-await-in-loop
-    const exists = await SalesmanProfile.exists({ ...tenantFilter, salesmanCode: candidate });
-    if (!exists) return candidate;
-    nextNumber += 1;
-  }
+  return `${prefix}${Date.now()}`;
 };
 
 /**
@@ -95,8 +120,22 @@ const createSalesmanProfile = async (profileBody) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Either userId or name is required');
   }
 
-  const salesmanCode = await generateSalesmanCode(tenantFilter);
-  return SalesmanProfile.create({ ...profileBody, name, salesmanCode });
+  const maxRetries = 5;
+  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+    const salesmanCode = await generateSalesmanCode(profileBody.organizationId);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await SalesmanProfile.create({ ...profileBody, name, salesmanCode });
+    } catch (err) {
+      if (err.code === 11000 && err.keyPattern?.salesmanCode && attempt < maxRetries - 1) {
+        continue;
+      }
+      if (err.code === 11000 && err.keyPattern?.salesmanCode) {
+        throw new ApiError(httpStatus.CONFLICT, 'Could not assign a unique salesman code. Please try again.');
+      }
+      throw err;
+    }
+  }
 };
 
 /**

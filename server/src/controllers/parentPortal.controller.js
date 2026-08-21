@@ -5,7 +5,7 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { Student, Mark, SchoolAttendance, FeeVoucher, Exam, BankAccount, Branch } = require('../models');
+const { Student, Mark, SchoolAttendance, FeeVoucher, Exam, Wallet, Branch } = require('../models');
 const { schoolReportService, diaryService, feePaymentRequestService } = require('../services');
 const { uploadToCloudinary } = require('../middlewares/upload');
 
@@ -262,15 +262,24 @@ const getBankAccounts = catchAsync(async (req, res) => {
     return res.send(branchAccounts);
   }
 
-  // Fallback: legacy organization-level bank accounts from the accounts module.
-  const accounts = await BankAccount.find({
+  // Fallback: organization-level bank accounts from the accounts module.
+  const accounts = await Wallet.find({
     organizationId: req.organizationId,
     isActive: true,
     accountType: { $in: ['bank', 'mobile_wallet'] },
   })
-    .select('name bankName accountNumber branchName accountType')
+    .select('type bankName accountNumber branchName accountType')
     .lean();
-  res.send(accounts);
+  res.send(
+    accounts.map((a) => ({
+      id: String(a._id),
+      name: a.type,
+      bankName: a.bankName || '',
+      accountNumber: a.accountNumber || '',
+      branchName: a.branchName || '',
+      accountType: a.accountType,
+    }))
+  );
 });
 
 /** GET /parent-portal/payment-requests?studentId= — the family's own submissions */

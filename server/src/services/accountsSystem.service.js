@@ -411,15 +411,39 @@ const seedChartOfAccounts = async (scope, options = {}) => {
   }
 
   const cashHead = created.find((a) => a.code === '1101');
-  if (cashHead) {
-    await BankAccount.create({
-      ...filter,
-      accountHeadId: cashHead._id,
-      name: 'Cash in Hand',
-      accountType: 'cash',
-      isDefault: true,
-      createdBy: enriched.createdBy,
+  // The Bank & Cash tab and the Bank Accounts page both read/write the Wallet collection
+  // (see accountsSystem bank-account functions below) — ensure/create the "Cash in Hand"
+  // wallet here too, rather than a separate BankAccount doc, so a freshly seeded org never
+  // ends up with the two disconnected "Cash in Hand" records this unification fixed.
+  // Only when a branch is in scope — Wallet.branchId is required, and per-branch wallets
+  // are auto-created lazily on first use (ensureDefaultCashWallet) otherwise.
+  if (cashHead && enriched.branchId) {
+    const walletService = require('./wallet.service');
+    // Re-seeding (force / mismatched-profile reset) must never zero out an existing
+    // wallet's real balance — only link/flag it. createOrUpdateWallet's update path always
+    // overwrites `balance`, so only go through it on a genuine first-time creation.
+    const existingCashWallet = await Wallet.findOne({
+      organizationId: enriched.organizationId,
+      branchId: enriched.branchId,
+      type: 'Cash in Hand',
     });
+    if (existingCashWallet) {
+      existingCashWallet.isDefault = true;
+      existingCashWallet.accountType = existingCashWallet.accountType || 'cash';
+      if (!existingCashWallet.accountHeadId) existingCashWallet.accountHeadId = cashHead._id;
+      await existingCashWallet.save();
+    } else {
+      await walletService.createOrUpdateWallet({
+        organizationId: enriched.organizationId,
+        branchId: enriched.branchId,
+        type: 'Cash in Hand',
+        balance: 0,
+        accountType: 'cash',
+        isDefault: true,
+        accountHeadId: cashHead._id,
+        userId: enriched.createdBy,
+      });
+    }
   }
 
   const profile = getExpectedChartProfile(businessType);
@@ -684,53 +708,122 @@ const getJournalEntryById = async (id, scope) => {
 // ─── Bank Accounts ────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 
+// The "Bank & Cash" tab (this file) and the "Bank Accounts" page (wallet.service.js) are two
+// UIs over the SAME underlying accounts — both read/write the Wallet collection, so creating
+// or editing an account from either page is immediately visible on the other. BankAccount
+// (the model) is kept only for historical/legacy data; nothing writes to it anymore. See the
+// "Unify Bank/Cash Accounts" plan for the full rationale.
+const walletToBankAccountShape = (w) => ({
+  _id: w._id,
+  organizationId: w.organizationId,
+  branchId: w.branchId,
+  accountHeadId: w.accountHeadId,
+  name: w.type,
+  // Wallet.accountType is optional (pre-existing wallets created before that field existed,
+  // or ones left blank in the Bank Accounts page's optional selector) — BankAccount.accountType
+  // was always required, and the Bank & Cash tab's UI assumes a string here (renders
+  // `accountType.replace(...)`). Default rather than pass undefined through.
+  accountType: w.accountType || 'bank',
+  bankName: w.bankName,
+  accountNumber: w.accountNumber,
+  branchName: w.branchName,
+  openingBalance: w.balance,
+  currentBalance: w.balance,
+  isDefault: !!w.isDefault,
+  isActive: w.isActive,
+  commissionRate: w.commissionRate,
+  withdrawalCommissionRate: w.withdrawalCommissionRate,
+  depositCommissionRate: w.depositCommissionRate,
+});
+
 const getBankAccounts = async (scope) => {
-  return BankAccount.find({ ...getTenantFilter(scope), isActive: true })
-    .populate('accountHeadId', 'code name currentBalance')
-    .sort({ isDefault: -1, name: 1 })
+  const walletService = require('./wallet.service');
+  const wallets = await Wallet.find({ ...getTenantFilter(scope), isActive: true })
+    .sort({ isDefault: -1, type: 1 })
     .lean();
+
+  // Overlay the live Cash Book balance onto cash-type wallets, same as the Bank Accounts
+  // page — only resolvable when scoped to a single branch.
+  if (scope.branchId) {
+    const cashWallets = wallets.filter((w) => w.accountType === 'cash');
+    if (cashWallets.length) {
+      const liveBalance = await walletService.resolveCashInHandBalance(scope.organizationId, scope.branchId);
+      cashWallets.forEach((w) => {
+        w.balance = liveBalance;
+      });
+    }
+  }
+
+  return wallets.map(walletToBankAccountShape);
 };
 
 const createBankAccount = async (data, scope) => {
-  // Create linked AccountHead under "Current Assets" if not provided
-  if (!data.accountHeadId) {
-    const parent = await AccountHead.findOne({ ...getTenantFilter(scope), code: '1100' }); // Current Assets
-    if (parent) {
-      const count = await BankAccount.countDocuments(getTenantFilter(scope));
-      const code = `1110${count + 1}`;
-      const head = await AccountHead.create({
-        ...getTenantFilter(scope),
-        code,
-        name: data.name,
-        rootType: 'ASSET',
-        balanceType: 'DEBIT',
-        parentId: parent._id,
-        level: 2,
-        isGroup: false,
-        openingBalance: data.openingBalance || 0,
-        currentBalance: data.openingBalance || 0,
-        createdBy: scope.createdBy,
-      });
-      data.accountHeadId = head._id;
-    }
+  const walletService = require('./wallet.service');
+  if (!scope.branchId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Select a branch before adding a bank/cash account');
   }
-  return BankAccount.create({ ...getTenantFilter(scope), ...data, createdBy: scope.createdBy });
+  const wallet = await walletService.createOrUpdateWallet({
+    organizationId: scope.organizationId,
+    branchId: scope.branchId,
+    type: data.name,
+    balance: data.openingBalance || 0,
+    accountType: data.accountType,
+    bankName: data.bankName,
+    accountNumber: data.accountNumber,
+    branchName: data.branchName,
+    isDefault: data.isDefault,
+    userId: scope.createdBy,
+  });
+  return walletToBankAccountShape(wallet);
+};
+
+const findScopedWalletOrThrow = async (id, scope) => {
+  const walletService = require('./wallet.service');
+  const wallet = await walletService.getWalletById(id);
+  if (
+    !wallet ||
+    String(wallet.organizationId) !== String(scope.organizationId) ||
+    (scope.branchId && String(wallet.branchId) !== String(scope.branchId))
+  ) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Bank account not found');
+  }
+  return wallet;
 };
 
 const updateBankAccount = async (id, updates, scope) => {
-  const bank = await BankAccount.findOne({ _id: id, ...getTenantFilter(scope) });
-  if (!bank) throw new ApiError(httpStatus.NOT_FOUND, 'Bank account not found');
-  Object.assign(bank, updates);
-  await bank.save();
-  return bank;
+  const walletService = require('./wallet.service');
+  const existing = await findScopedWalletOrThrow(id, scope);
+
+  const wallet = await walletService.createOrUpdateWallet({
+    id,
+    organizationId: existing.organizationId,
+    branchId: existing.branchId,
+    type: updates.name !== undefined ? updates.name : existing.type,
+    balance: updates.openingBalance !== undefined ? updates.openingBalance : existing.balance,
+    // The Bank & Cash form has no commission fields — carry the existing values through so
+    // an edit here never silently zeroes out JazzCash/EasyPaisa-style commission rates.
+    commissionRate: existing.commissionRate,
+    withdrawalCommissionRate: existing.withdrawalCommissionRate,
+    depositCommissionRate: existing.depositCommissionRate,
+    accountType: updates.accountType !== undefined ? updates.accountType : existing.accountType,
+    bankName: updates.bankName !== undefined ? updates.bankName : existing.bankName,
+    accountNumber: updates.accountNumber !== undefined ? updates.accountNumber : existing.accountNumber,
+    branchName: updates.branchName !== undefined ? updates.branchName : existing.branchName,
+    isDefault: updates.isDefault,
+    userId: scope.createdBy,
+  });
+  return walletToBankAccountShape(wallet);
 };
 
 const deleteBankAccount = async (id, scope) => {
-  const bank = await BankAccount.findOne({ _id: id, ...getTenantFilter(scope) });
-  if (!bank) throw new ApiError(httpStatus.NOT_FOUND, 'Bank account not found');
-  bank.isActive = false;
-  await bank.save();
-  return bank;
+  const walletService = require('./wallet.service');
+  const existing = await findScopedWalletOrThrow(id, scope);
+  return walletService.deactivateWallet({
+    walletId: id,
+    organizationId: existing.organizationId,
+    branchId: existing.branchId,
+    userId: scope.createdBy,
+  });
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

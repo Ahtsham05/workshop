@@ -33,6 +33,28 @@ const baseQueryWithAuth: BaseQueryFn<
   return result;
 };
 
+/**
+ * The Bank & Cash mutations below (create/update/delete bank account) write to the same
+ * Wallet documents the Mobile Shop "Bank Accounts" page reads (see
+ * accountsSystem.service.js) — but `mobileShopApi` is a separate RTK Query slice, so its
+ * `Wallets` cache never refreshes just because this slice's `BankAccount` tag was
+ * invalidated. Inline (not imported from `wallet-cache-invalidation.ts`) because that hub
+ * already imports `schoolApi` to dispatch the reverse direction — importing it back here
+ * would cycle.
+ */
+const invalidateWalletCachesFromBankAccount = async (
+  _arg: unknown,
+  { dispatch, queryFulfilled }: { dispatch: (action: unknown) => unknown; queryFulfilled: Promise<unknown> },
+) => {
+  try {
+    await queryFulfilled;
+    const { mobileShopApi } = await import('./mobile-shop.api');
+    dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'CashBook', 'MobileDashboard']));
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+};
+
 export const schoolApi = createApi({
   reducerPath: 'schoolApi',
   baseQuery: baseQueryWithAuth,
@@ -1209,14 +1231,17 @@ export const schoolApi = createApi({
     createBankAccount: builder.mutation({
       query: (data) => ({ url: '/accounts-system/bank-accounts', method: 'POST', body: data }),
       invalidatesTags: ['BankAccount', 'AccountHead', 'AccountsDashboard'],
+      onQueryStarted: invalidateWalletCachesFromBankAccount,
     }),
     updateBankAccount: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/accounts-system/bank-accounts/${id}`, method: 'PATCH', body: data }),
       invalidatesTags: ['BankAccount'],
+      onQueryStarted: invalidateWalletCachesFromBankAccount,
     }),
     deleteBankAccount: builder.mutation({
       query: (id) => ({ url: `/accounts-system/bank-accounts/${id}`, method: 'DELETE' }),
       invalidatesTags: ['BankAccount', 'AccountHead'],
+      onQueryStarted: invalidateWalletCachesFromBankAccount,
     }),
 
     // Budgets
