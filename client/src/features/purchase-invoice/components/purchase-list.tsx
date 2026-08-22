@@ -78,6 +78,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   const queryParams = {
     page: currentPage,
     limit: itemsPerPage,
+    sortBy: 'purchaseDate:desc',
     ...(debouncedSearch && {
       search: debouncedSearch,
       fieldName: LIST_SEARCH_FIELDS.purchase,
@@ -245,6 +246,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('Invoice Number')}</TableHead>
+                  <TableHead>{t('Vendor Bill No')}</TableHead>
                   <TableHead>{t('Supplier')}</TableHead>
                   {/* <TableHead>{t('Phone')}</TableHead> */}
                   <TableHead>{t('Items')}</TableHead>
@@ -259,14 +261,8 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
               <TableBody>
                 {currentPurchases.map((purchase: any) => (
                   <TableRow key={purchase._id || purchase.id}>
-                    <TableCell className="font-medium">
-                      <div>{purchase.invoiceNumber}</div>
-                      {purchase.vendorBillNumber && (
-                        <div className="text-xs font-normal text-muted-foreground">
-                          {t('Vendor Bill No')}: {purchase.vendorBillNumber}
-                        </div>
-                      )}
-                    </TableCell>
+                    <TableCell className="font-medium">{purchase.invoiceNumber}</TableCell>
+                    <TableCell className="text-muted-foreground">{purchase.vendorBillNumber || '—'}</TableCell>
                     <TableCell className='max-w-[14rem]'>
                       <div className='flex min-w-0 items-center gap-2'>
                         <ContactPhotoCell
