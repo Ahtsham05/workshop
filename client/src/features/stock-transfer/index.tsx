@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
-import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Ban, Plus, Eye } from 'lucide-react'
+import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Ban, Plus, Eye, Printer } from 'lucide-react'
 import { formatDateSafe } from '@/lib/utils'
 
 import type { RootState } from '@/stores/store'
@@ -13,7 +13,9 @@ import {
   type InventoryTransfer,
   type TransferStatus,
 } from '@/stores/inventoryTransfer.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useLanguage } from '@/context/language-context'
+import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow } from './utils/print-utils'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -38,8 +40,10 @@ function branchId(ref: InventoryTransfer['fromBranchId']): string {
 }
 
 export default function StockTransfer() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
+  const user = useSelector((s: RootState) => s.auth.data?.user)
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
 
   const [statusFilter, setStatusFilter] = useState<TransferStatus | 'all'>('all')
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all')
@@ -72,6 +76,21 @@ export default function StockTransfer() {
   }
 
   const transfers = data?.results || []
+
+  const handlePrint = (tr: InventoryTransfer) => {
+    try {
+      const printData = buildTransferPrintData(tr, {
+        companyName: orgData?.name,
+        companyAddress: [orgData?.address, orgData?.city].filter(Boolean).join(', '),
+        companyPhone: orgData?.phone,
+        companyLogo: orgData?.logo?.url,
+        language: language === 'ur' ? 'ur' : 'en',
+      })
+      openTransferPrintWindow(generateTransferHTML(printData))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('Failed to open print window'))
+    }
+  }
 
   const openCreateDialog = () => {
     setPrefill(null)
@@ -184,6 +203,14 @@ export default function StockTransfer() {
                           >
                             <Eye className='mr-1 h-3.5 w-3.5' />
                             {t('View')}
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant='ghost'
+                            onClick={() => handlePrint(tr)}
+                          >
+                            <Printer className='mr-1 h-3.5 w-3.5' />
+                            {t('Print')}
                           </Button>
                           {tr.status === 'suggested' && isSource && (
                             <Button

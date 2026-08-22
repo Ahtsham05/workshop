@@ -1,10 +1,17 @@
 import type { ReactNode } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useSelector } from 'react-redux'
+import { toast } from 'sonner'
+import { Printer } from 'lucide-react'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useGetTransferQuery, type InventoryTransfer } from '@/stores/inventoryTransfer.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useLanguage } from '@/context/language-context'
 import { formatDateSafe } from '@/lib/utils'
+import type { RootState } from '@/stores/store'
 import { TransferStatusBadge } from './transfer-status-badge'
+import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow } from '../utils/print-utils'
 
 interface TransferDetailsDialogProps {
   transferId: string | null
@@ -31,12 +38,30 @@ function DetailField({ label, value }: { label: string; value: ReactNode }) {
 }
 
 export function TransferDetailsDialog({ transferId, onClose }: TransferDetailsDialogProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { data: tr, isFetching } = useGetTransferQuery(transferId!, { skip: !transferId })
+  const user = useSelector((s: RootState) => s.auth.data?.user)
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
 
   if (!transferId) return null
 
   const formatDate = (value?: string | null) => formatDateSafe(value, 'MMM dd, yyyy hh:mm a')
+
+  const handlePrint = () => {
+    if (!tr) return
+    try {
+      const printData = buildTransferPrintData(tr, {
+        companyName: orgData?.name,
+        companyAddress: [orgData?.address, orgData?.city].filter(Boolean).join(', '),
+        companyPhone: orgData?.phone,
+        companyLogo: orgData?.logo?.url,
+        language: language === 'ur' ? 'ur' : 'en',
+      })
+      openTransferPrintWindow(generateTransferHTML(printData))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('Failed to open print window'))
+    }
+  }
 
   return (
     <Dialog open={!!transferId} onOpenChange={onClose}>
@@ -76,6 +101,13 @@ export function TransferDetailsDialog({ transferId, onClose }: TransferDetailsDi
 
             {tr.reason && <DetailField label={t('Reason')} value={tr.reason} />}
             {tr.notes && <DetailField label={t('Notes')} value={tr.notes} />}
+
+            <DialogFooter>
+              <Button variant='outline' onClick={handlePrint}>
+                <Printer className='mr-2 h-4 w-4' />
+                {t('Print')}
+              </Button>
+            </DialogFooter>
           </div>
         )}
       </DialogContent>
