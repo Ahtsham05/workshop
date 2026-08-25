@@ -36,6 +36,13 @@ router
   .route('/all')
   .get(auth(...CATALOG_READ_PERMISSIONS), validate(productValidation.getAllProducts), productController.getAllProducts);
 
+// Catalog-wide totals (count, stock quantity, stock value) for the Products page
+// header badges — same read access as the list itself, not the broader catalog-picker
+// permissions above.
+router
+  .route('/stats')
+  .get(auth('viewProducts'), validate(productValidation.getProductStats), productController.getProductStats);
+
 router.route('/purchasable').get(
   auth(...CATALOG_READ_PERMISSIONS),
   validate(productValidation.getAllProducts),

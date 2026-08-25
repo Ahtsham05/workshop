@@ -22,7 +22,7 @@ export function resolveRequestTimeoutMs(
   }
 
   const path = url.toLowerCase()
-  if (path.includes('/batch') || path.includes('send-bulk') || path.includes('send-to-all')) {
+  if (path.includes('/batch') || path.includes('/bulk') || path.includes('send-bulk') || path.includes('send-to-all')) {
     return BATCH_API_TIMEOUT_MS
   }
 

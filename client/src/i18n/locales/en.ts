@@ -745,7 +745,12 @@ const en: Record<string, string> = {
     "stock_must_be_positive": "Stock quantity must be a valid positive number",
     "low_stock_must_be_positive": "Low stock threshold must be a valid positive number",
     "ready_to_import": "Ready to import",
-    
+    "duplicate_barcode_in_file_message": "Duplicate barcode \"{{barcode}}\" — already used in row {{row}} of this file",
+    "import_completed_with_errors": "Import completed with errors",
+    "products_imported_with_errors_message": "{{inserted}} of {{total}} products imported — {{failed}} failed",
+    "import_failed_all_products": "Import failed — no products were imported",
+    "close": "Close",
+
     // Customer import functionality
     "import_customers_from_excel": "Import Customers from Excel",
     "upload_excel_file_to_import_customers": "Upload an Excel file to bulk import customers",

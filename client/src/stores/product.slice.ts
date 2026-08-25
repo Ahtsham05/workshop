@@ -88,6 +88,16 @@ export const fetchAllProducts = createAsyncThunk(
     })
 )
 
+export const fetchProductStats = createAsyncThunk(
+    'product/fetchProductStats',
+    catchAsync(async (_) => {
+        const response = await Axios({
+            ...summery.fetchProductStats,
+        });
+        return response.data;
+    })
+)
+
 export const bulkUpdateProducts = createAsyncThunk(
     'product/bulkUpdateProducts',
     catchAsync(async (data: { products: any[] }) => {

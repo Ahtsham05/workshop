@@ -249,6 +249,17 @@ const getAllProducts = catchAsync(async (req, res) => {
   res.send(canViewCost ? products : products.map(stripCostFields));
 });
 
+// Same branch scope as getProducts, but unfiltered by search — these are the
+// catalog-wide totals shown in the Products page header badges, computed by the
+// database over the whole collection rather than by the client summing a page (or
+// even a large capped fetch) of results.
+const getProductStats = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const stats = await productService.getProductStats(filter);
+  res.send(stats);
+});
+
 const getPurchasableCatalog = catchAsync(async (req, res) => {
   const filter = {};
   applyBranchFilter(filter, req);
@@ -310,8 +321,13 @@ const bulkAddProducts = catchAsync(async (req, res) => {
       throw new ApiError(httpStatus.BAD_REQUEST, `Bulk import failed: ${firstError}`);
     }
     
+    const failedCount = result.errors?.length || 0;
+    const message = failedCount > 0
+      ? `Imported ${result.insertedCount} of ${result.insertedCount + failedCount} products (${failedCount} failed)`
+      : `Successfully imported ${result.insertedCount} products`;
+
     res.status(httpStatus.CREATED).send({
-      message: `Successfully imported ${result.insertedCount} products`,
+      message,
       ...result
     });
   } catch (error) {
@@ -340,6 +356,7 @@ module.exports = {
   updateProduct,
   deleteProduct,
   getAllProducts,
+  getProductStats,
   getPurchasableCatalog,
   getProductBranchAvailability,
   uploadProductImage,

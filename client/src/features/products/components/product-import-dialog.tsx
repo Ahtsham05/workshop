@@ -17,13 +17,21 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import * as XLSX from 'xlsx'
 
+interface BulkImportResult {
+  insertedCount?: number
+  errors?: Array<{ index: number; error?: string; name?: string; barcode?: string | null }>
+}
+
 interface ProductImportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onImport: (products: any[]) => Promise<void>
+  onImport: (products: any[]) => Promise<BulkImportResult | void>
 }
 
 interface ImportProduct {
+  // Original row number in the uploaded file — for local display only, stripped
+  // before the product objects are sent to the API.
+  _row: number
   name: string
   nameUrdu?: string
   barcode?: string | null
@@ -45,6 +53,12 @@ interface ValidationError {
   message: string
 }
 
+interface ImportRowError {
+  row: number
+  name: string
+  message: string
+}
+
 export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImportDialogProps) {
   const { t } = useLanguage()
   const [file, setFile] = useState<File | null>(null)
@@ -52,6 +66,8 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
   const [parsedData, setParsedData] = useState<ImportProduct[]>([])
   const [errors, setErrors] = useState<ValidationError[]>([])
   const [parseSuccess, setParseSuccess] = useState(false)
+  const [importErrors, setImportErrors] = useState<ImportRowError[]>([])
+  const [importedCount, setImportedCount] = useState(0)
 
   const downloadTemplate = useCallback(() => {
     const template = [
@@ -166,6 +182,8 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
     setParseSuccess(false)
     setParsedData([])
     setErrors([])
+    setImportErrors([])
+    setImportedCount(0)
   }
 
   const parseFile = useCallback(async () => {
@@ -176,6 +194,8 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
 
     try {
       setImporting(true)
+      setImportErrors([])
+      setImportedCount(0)
       const data = await file.arrayBuffer()
       // codepage 65001 (UTF-8) is required so non-Latin text (e.g. Urdu) in
       // CSV files isn't misread as a legacy codepage and turned into "?"/mojibake
@@ -226,18 +246,14 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
         if (!hasAnyData) {
           return
         }
-        
-        // Skip rows that don't have at least a name
-        if (!row.name || row.name.toString().trim() === '') {
-          return
-        }
-        
+
         const rowErrors = validateProduct(row, index + rowOffset)
-        
+
         if (rowErrors.length > 0) {
           allErrors.push(...rowErrors)
         } else {
           const product: ImportProduct = {
+            _row: index + rowOffset,
             name: row.name.toString().trim(),
             barcode: row.barcode?.toString().trim() || null,
             price: Number(row.price),
@@ -267,6 +283,24 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
         }
       })
 
+      // Duplicate barcodes within the file itself would otherwise only surface as an
+      // opaque "already used by another product" failure at import time — catch them
+      // here instead, while we still know which two rows collided.
+      const firstRowForBarcode = new Map<string, number>()
+      products.forEach((product) => {
+        if (!product.barcode) return
+        const seenAtRow = firstRowForBarcode.get(product.barcode)
+        if (seenAtRow === undefined) {
+          firstRowForBarcode.set(product.barcode, product._row)
+        } else {
+          allErrors.push({
+            row: product._row,
+            field: 'barcode',
+            message: t('duplicate_barcode_in_file_message', { barcode: product.barcode, row: seenAtRow })
+          })
+        }
+      })
+
       if (allErrors.length > 0) {
         setErrors(allErrors)
         toast.error(`${t('validation_errors')}: ${allErrors.length} errors found`)
@@ -292,18 +326,53 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
 
     try {
       setImporting(true)
-      await onImport(parsedData)
-      toast.success(`${t('import_successful')}: ${parsedData.length} products imported`)
-      
-      // Reset state
+      const totalSubmitted = parsedData.length
+      // _row only exists for local display — the API doesn't know about it.
+      const productsToSend = parsedData.map(({ _row, ...rest }) => rest)
+      const result = await onImport(productsToSend)
+
+      const failed = result?.errors || []
+      const inserted = result?.insertedCount ?? (totalSubmitted - failed.length)
+
+      const rowErrors: ImportRowError[] = failed.map((err) => {
+        const source = parsedData[err.index]
+        return {
+          row: source?._row ?? err.index + 1,
+          name: source?.name || err.name || '',
+          message: err.error || t('unknown_error')
+        }
+      })
+
+      setImportErrors(rowErrors)
+      setImportedCount(inserted)
+
+      if (inserted === 0) {
+        toast.error(t('import_failed_all_products'))
+      } else if (rowErrors.length > 0) {
+        toast.warning(t('products_imported_with_errors_message', {
+          inserted,
+          total: totalSubmitted,
+          failed: rowErrors.length
+        }))
+      } else {
+        toast.success(`${t('import_successful')}: ${inserted} ${t('products_imported')}`)
+      }
+
+      // Clear the file and parsed preview either way — the rows that succeeded are
+      // already saved, so re-parsing and re-clicking Import must not be possible, or
+      // it would silently re-insert them as duplicates. Only a fully successful run
+      // closes the dialog; a partial run stays open (file cleared) showing what failed,
+      // so the user has to explicitly pick a (corrected) file to try again.
       setFile(null)
       setParsedData([])
-      setErrors([])
       setParseSuccess(false)
-      onOpenChange(false)
+      setErrors([])
+      if (rowErrors.length === 0) {
+        onOpenChange(false)
+      }
     } catch (error) {
       console.error('Error importing products:', error)
-      toast.error(t('error_importing_products'))
+      toast.error(error instanceof Error ? error.message : t('error_importing_products'))
     } finally {
       setImporting(false)
     }
@@ -314,6 +383,8 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
     setParsedData([])
     setErrors([])
     setParseSuccess(false)
+    setImportErrors([])
+    setImportedCount(0)
   }
 
   return (
@@ -442,6 +513,45 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
               </AlertDescription>
             </Alert>
           )}
+
+          {/* Import Result */}
+          {(importedCount > 0 || importErrors.length > 0) && !parseSuccess && (
+            <Alert variant={importErrors.length > 0 ? 'destructive' : undefined}>
+              {importErrors.length > 0 ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}
+              <AlertDescription>
+                <div className={`font-semibold mb-2 ${importErrors.length === 0 ? 'text-green-600' : ''}`}>
+                  {importErrors.length > 0
+                    ? t('import_completed_with_errors')
+                    : `${t('import_successful')}: ${importedCount} ${t('products_imported')}`}
+                </div>
+                {importErrors.length > 0 && (
+                  <>
+                    <div className="text-xs text-muted-foreground mb-2">
+                      {t('products_imported_with_errors_message', {
+                        inserted: importedCount,
+                        total: importedCount + importErrors.length,
+                        failed: importErrors.length
+                      })}
+                    </div>
+                    <ScrollArea className="h-40">
+                      <div className="space-y-1">
+                        {importErrors.slice(0, 50).map((err, index) => (
+                          <div key={index} className="text-xs">
+                            {t('row')} {err.row}{err.name ? ` (${err.name})` : ''}: {err.message}
+                          </div>
+                        ))}
+                        {importErrors.length > 50 && (
+                          <div className="text-xs text-muted-foreground">
+                            ... and {importErrors.length - 50} more
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         <DialogFooter>
@@ -450,7 +560,7 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
             onClick={() => onOpenChange(false)}
             disabled={importing}
           >
-            {t('cancel')}
+            {importErrors.length > 0 || importedCount > 0 ? t('close') : t('cancel')}
           </Button>
           {parseSuccess && (
             <Button

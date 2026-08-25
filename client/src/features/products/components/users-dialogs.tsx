@@ -16,12 +16,13 @@ export default function UsersDialogs({setFetch}:any) {
   const handleImport = async (products: any[]) => {
     try {
       const result = await dispatch(bulkAddProducts({ products }))
-      
+
       if (result.meta.requestStatus === 'fulfilled') {
         setFetch((prev: boolean) => !prev)
-        return Promise.resolve()
+        return result.payload
       } else {
-        throw new Error(result.payload || 'Import failed')
+        const payload = result.payload as { response?: { data?: { message?: string } }; message?: string } | undefined
+        throw new Error(payload?.response?.data?.message || payload?.message || 'Import failed')
       }
     } catch (error) {
       console.error('Import error:', error)

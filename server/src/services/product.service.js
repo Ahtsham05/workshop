@@ -223,6 +223,83 @@ const createProduct = async (productBody) => {
 };
 
 /**
+ * Org/branch-wide product totals for the Products page header badges (total product
+ * count, total stock quantity, total stock value) — computed by the database over the
+ * WHOLE filtered collection, not by summing a page (or even a large capped fetch) of
+ * results client-side, so it stays correct no matter how large the catalog grows.
+ *
+ * Mirrors client/src/lib/product-stock-display.ts's getDisplayStock/
+ * getDisplayStockValue exactly: a simple product's stock/value comes from its own
+ * stockQuantity/cost fields, while a hasVariants product's real numbers live on
+ * ProductVariant/Inventory instead (see attachVariantAggregates above) — stock is the
+ * sum of Inventory.quantity across its variants, value is that stock times the
+ * *lowest* variant cost (an accepted under-valuing approximation for a summary figure,
+ * same as the per-row list display).
+ */
+const getProductStats = async (filter) => {
+  // Unlike find()/countDocuments(), aggregate()'s $match does NOT run Mongoose's
+  // schema-based query casting — a string organizationId/branchId (as applyBranchFilter
+  // sets from req.organizationId/req.branchId) would compare against the field's real
+  // ObjectId-typed value and match nothing, silently zeroing out every non-variant
+  // product. Cast explicitly, same pattern as cashBook/expense/recurringExpense
+  // services' aggregate filters.
+  const castFilter = { ...filter };
+  if (castFilter.organizationId && mongoose.Types.ObjectId.isValid(castFilter.organizationId)) {
+    castFilter.organizationId = new mongoose.Types.ObjectId(String(castFilter.organizationId));
+  }
+  if (castFilter.branchId && mongoose.Types.ObjectId.isValid(castFilter.branchId)) {
+    castFilter.branchId = new mongoose.Types.ObjectId(String(castFilter.branchId));
+  }
+
+  const [[simpleTotals], variantProducts] = await Promise.all([
+    Product.aggregate([
+      { $match: { ...castFilter, hasVariants: { $ne: true } } },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          stockQuantity: { $sum: { $ifNull: ['$stockQuantity', 0] } },
+          stockValue: { $sum: { $multiply: [{ $ifNull: ['$stockQuantity', 0] }, { $ifNull: ['$cost', 0] }] } },
+        },
+      },
+    ]),
+    Product.find({ ...filter, hasVariants: true }).select('_id').lean(),
+  ]);
+
+  const simple = simpleTotals || { count: 0, stockQuantity: 0, stockValue: 0 };
+  const variantIds = variantProducts.map((p) => p._id);
+
+  let variantStockQuantity = 0;
+  let variantStockValue = 0;
+  if (variantIds.length) {
+    const [stockTotals, costRanges] = await Promise.all([
+      Inventory.aggregate([
+        { $match: { productId: { $in: variantIds } } },
+        { $group: { _id: '$productId', totalStock: { $sum: '$quantity' } } },
+      ]),
+      ProductVariant.aggregate([
+        { $match: { productId: { $in: variantIds }, isDefault: false } },
+        { $group: { _id: '$productId', minCost: { $min: '$cost' } } },
+      ]),
+    ]);
+    const stockById = new Map(stockTotals.map((s) => [s._id.toString(), s.totalStock]));
+    const minCostById = new Map(costRanges.map((c) => [c._id.toString(), c.minCost ?? 0]));
+    for (const id of variantIds) {
+      const key = id.toString();
+      const stock = stockById.get(key) ?? 0;
+      variantStockQuantity += stock;
+      variantStockValue += stock * (minCostById.get(key) ?? 0);
+    }
+  }
+
+  return {
+    totalProducts: simple.count + variantIds.length,
+    totalStockQuantity: simple.stockQuantity + variantStockQuantity,
+    totalStockValue: simple.stockValue + variantStockValue,
+  };
+};
+
+/**
  * Query for products
  * @param {Object} filter - Mongo filter
  * @param {Object} options - Query options
@@ -528,24 +605,34 @@ const bulkUpdateProducts = async (productsToUpdate) => {
 const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
   try {
     // Process each product to ensure proper data format
-    const processedProducts = productsToAdd.map(product => ({
-      name: product.name,
-      nameUrdu: product.nameUrdu || '',
-      description: product.description || '',
-      barcode: product.barcode || null,
-      price: Number(product.price),
-      cost: Number(product.cost),
-      stockQuantity: Number(product.stockQuantity),
-      unit: product.unit || 'pcs',
-      sku: product.sku || '',
-      category: product.category || '',
-      categories: product.categories || [],
-      supplier: product.supplier || null,
-      lowStockThreshold: product.lowStockThreshold ? Number(product.lowStockThreshold) : undefined,
-      organizationId: branchContext.organizationId,
-      branchId: branchContext.branchId,
-      createdBy: branchContext.createdBy,
-    }));
+    const processedProducts = productsToAdd.map(product => {
+      const doc = {
+        name: product.name,
+        nameUrdu: product.nameUrdu || '',
+        description: product.description || '',
+        price: Number(product.price),
+        cost: Number(product.cost),
+        stockQuantity: Number(product.stockQuantity),
+        unit: product.unit || 'pcs',
+        sku: product.sku || '',
+        category: product.category || '',
+        categories: product.categories || [],
+        supplier: product.supplier || null,
+        lowStockThreshold: product.lowStockThreshold ? Number(product.lowStockThreshold) : undefined,
+        organizationId: branchContext.organizationId,
+        branchId: branchContext.branchId,
+        createdBy: branchContext.createdBy,
+      };
+      // insertMany() does NOT run the schema's pre('save') hook, which is what
+      // normally converts an empty barcode to a genuinely *absent* field. Without
+      // this, every barcode-less row would get an explicit `barcode: null` and, since
+      // a sparse unique index only exempts truly missing fields (not null ones),
+      // every row after the first would collide on the shared `null` value.
+      if (product.barcode) {
+        doc.barcode = product.barcode;
+      }
+      return doc;
+    });
 
     // Insert products
     const insertedProducts = await Product.insertMany(processedProducts, {
@@ -554,9 +641,9 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
 
     // Master Product Catalog migration: auto-link every newly imported product (Excel
     // or AI-vision scan, both funnel through here) to the shared org-level catalog.
-    for (const product of insertedProducts) {
-      await masterProductService.linkProductToMasterProduct(product);
-    }
+    // Batched — a small constant number of queries regardless of how many products were
+    // just inserted (see masterProduct.service.js#linkProductsToMasterProductsBulk).
+    await masterProductService.linkProductsToMasterProductsBulk(insertedProducts);
 
     return {
       success: true,
@@ -567,14 +654,31 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
     // Handle bulk insert errors
     if (error.writeErrors) {
       const successfulInserts = error.insertedDocs || [];
-      const failedInserts = error.writeErrors.map(err => ({
-        index: err.index,
-        error: err.errmsg
-      }));
+      const failedInserts = error.writeErrors.map(writeError => {
+        // Mongoose's insertMany() flattens each write error with `{...writeError, index}`.
+        // Since errmsg/code only exist as prototype getters on the driver's WriteError
+        // (not as own enumerable properties), that spread drops them — the real message
+        // survives only nested under `.err`. Fall back to the top level in case that
+        // ever changes in a future mongoose/mongodb-driver version.
+        const raw = writeError.err || writeError;
+        const index = writeError.index ?? raw.index;
+        const failedProduct = processedProducts[index];
+        const errmsg = raw.errmsg || writeError.errmsg || '';
+        const dupMatch = raw.code === 11000 ? errmsg.match(/dup key:\s*\{\s*(\w+):\s*"?([^}"]*)"?\s*\}/) : null;
 
-      for (const product of successfulInserts) {
-        await masterProductService.linkProductToMasterProduct(product);
-      }
+        const message = dupMatch
+          ? `Duplicate ${dupMatch[1]} "${failedProduct?.[dupMatch[1]] ?? dupMatch[2]}" — already used by another product`
+          : errmsg || 'Failed to import this product';
+
+        return {
+          index,
+          name: failedProduct?.name,
+          barcode: failedProduct?.barcode,
+          error: message
+        };
+      });
+
+      await masterProductService.linkProductsToMasterProductsBulk(successfulInserts);
 
       return {
         success: successfulInserts.length > 0,
@@ -595,6 +699,7 @@ module.exports = {
   updateProductById,
   deleteProductById,
   getAllProducts,
+  getProductStats,
   bulkUpdateProducts,
   bulkAddProducts,
   attachVariantAggregates,

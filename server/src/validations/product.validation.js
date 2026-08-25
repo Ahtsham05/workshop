@@ -97,6 +97,8 @@ const getProducts = {
 
 const getAllProducts = {}
 
+const getProductStats = {}
+
 const getProduct = {
   params: Joi.object().keys({
     productId: Joi.string().required(),
@@ -237,6 +239,7 @@ module.exports = {
   updateProduct,
   deleteProduct,
   getAllProducts,
+  getProductStats,
   bulkUpdateProducts,
   bulkAddProducts,
 };

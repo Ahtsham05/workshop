@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const { Product, ProductVariant, Inventory, MasterProduct, MasterProductVariant, Branch } = require('../models');
-const { buildMatchQuery } = require('../utils/productMatchKey');
+const { buildMatchQuery, escapeRegex } = require('../utils/productMatchKey');
 const ApiError = require('../utils/ApiError');
 const batchService = require('./batch.service');
 const imeiService = require('./imei.service');
@@ -170,6 +170,133 @@ const linkProductToMasterProduct = async (product, session) => {
     logger.error(`[masterProduct] Failed to link product ${product._id} to a MasterProduct — leaving unlinked, will retry on next backfill run.`, err);
   }
   return product;
+};
+
+/**
+ * Bulk-optimized equivalent of linkProductToMasterProduct, for flows that create many
+ * Products at once (Excel import / AI-vision scan — both funnel through
+ * product.service.js#bulkAddProducts). The per-product version does ~4 sequential DB
+ * round trips each; multiplied across a multi-thousand-row import that's minutes of
+ * serialized latency — long enough to blow through any request timeout, and it only
+ * gets worse as import size grows. This does the same match/create/link work as
+ * findOrCreateMasterProductForProduct, but as a small constant number of batched
+ * queries — O(1) round trips regardless of how many products are passed in.
+ *
+ * Only handles the `hasVariants === false` case (no real-ProductVariant linking, no
+ * trackBatch/trackExpiry healing), because every product bulkAddProducts creates is a
+ * simple flat product: insertMany() never creates a default ProductVariant for it (that
+ * only happens via product.service.js#syncDefaultVariantTracking, which the regular
+ * single-product create/update paths call and bulk import doesn't) — so there is never
+ * a default variant, and therefore never tracking to heal, at this call site.
+ *
+ * Deliberately never throws, same as linkProductToMasterProduct: this is additive
+ * bookkeeping and must never fail the import it's attached to.
+ */
+const linkProductsToMasterProductsBulk = async (products) => {
+  if (!products.length) return;
+  try {
+    const organizationId = products[0].organizationId;
+
+    // 1. One query to find every existing MasterProduct that could match ANY product in
+    // the batch — barcode-in-list OR name-in-list (case-insensitive exact) — mirroring
+    // productMatchKey.js#buildMatchQuery's per-item semantics.
+    const barcodes = products.filter((p) => p.barcode).map((p) => p.barcode);
+    const uniqueNames = [...new Set(products.map((p) => p.name.trim()))];
+    const orClauses = [];
+    if (barcodes.length) orClauses.push({ barcode: { $in: barcodes } });
+    if (uniqueNames.length) {
+      orClauses.push({ name: { $in: uniqueNames.map((n) => new RegExp(`^${escapeRegex(n)}$`, 'i')) } });
+    }
+    const existingMasters = orClauses.length
+      ? await MasterProduct.find({ organizationId, $or: orClauses }).select('_id barcode name').lean()
+      : [];
+
+    const existingByBarcode = new Map();
+    const existingByNameLower = new Map();
+    for (const mp of existingMasters) {
+      if (mp.barcode) existingByBarcode.set(mp.barcode, mp);
+      existingByNameLower.set(mp.name.trim().toLowerCase(), mp);
+    }
+    const findExisting = (product) =>
+      (product.barcode && existingByBarcode.get(product.barcode)) || existingByNameLower.get(product.name.trim().toLowerCase());
+
+    // 2. Resolve each product to a MasterProduct id: either an existing match, or a new
+    // one to create. Two rows in the same batch that share a match key are deduped onto
+    // a single new MasterProduct up front instead of each racing to create their own —
+    // the correctness risk a naively-parallelized per-item loop would have.
+    const createDocs = [];
+    const createIndexByKey = new Map();
+    const resolvedMasterIdByIndex = new Array(products.length); // real _id for products matched to an EXISTING master
+    const pendingKeyByIndex = new Array(products.length); // match key for products needing a NEW master, resolved in step 3
+
+    products.forEach((product, idx) => {
+      const existing = findExisting(product);
+      if (existing) {
+        resolvedMasterIdByIndex[idx] = existing._id;
+        return;
+      }
+
+      const key = product.barcode ? `barcode:${product.barcode}` : `name:${product.name.trim().toLowerCase()}`;
+      pendingKeyByIndex[idx] = key;
+      if (createIndexByKey.has(key)) {
+        return;
+      }
+      createIndexByKey.set(key, createDocs.length);
+      createDocs.push({
+        organizationId: product.organizationId,
+        createdBy: product.createdBy,
+        name: product.name,
+        nameUrdu: product.nameUrdu,
+        description: product.description,
+        barcode: product.barcode || undefined,
+        unit: product.unit,
+        unitConversions: product.unitConversions,
+        trackImei: product.trackImei,
+        trackSerial: product.trackSerial,
+        trackBatch: false,
+        trackExpiry: false,
+        warrantyMonths: product.warrantyMonths,
+        category: product.category,
+        categories: product.categories,
+        subCategories: product.subCategories,
+        brandId: product.brandId,
+        image: product.image,
+        defaultPrice: product.price,
+        defaultCost: product.cost,
+        hasVariants: false,
+      });
+    });
+
+    // 3. One insert for every new MasterProduct, then resolve the pending keys to ids.
+    const createdMasters = createDocs.length ? await MasterProduct.insertMany(createDocs, { ordered: false }) : [];
+    const createdIdByKey = new Map();
+    createDocs.forEach((doc, i) => {
+      const key = doc.barcode ? `barcode:${doc.barcode}` : `name:${doc.name.trim().toLowerCase()}`;
+      createdIdByKey.set(key, createdMasters[i]._id);
+    });
+    pendingKeyByIndex.forEach((key, idx) => {
+      if (key) resolvedMasterIdByIndex[idx] = createdIdByKey.get(key);
+    });
+
+    // 4. One bulkWrite to stamp masterProductId back onto every Product.
+    const productUpdates = products
+      .map((product, idx) => ({ product, masterProductId: resolvedMasterIdByIndex[idx] }))
+      .filter(({ masterProductId }) => masterProductId)
+      .map(({ product, masterProductId }) => ({
+        updateOne: { filter: { _id: product._id }, update: { $set: { masterProductId } } },
+      }));
+
+    if (productUpdates.length) {
+      await Product.bulkWrite(productUpdates, { ordered: false });
+      // Keep the in-memory documents (returned to the caller/API response) in sync with
+      // what was just written, same as the per-item version's product.save().
+      products.forEach((product, idx) => {
+        if (resolvedMasterIdByIndex[idx]) product.masterProductId = resolvedMasterIdByIndex[idx];
+      });
+    }
+  } catch (err) {
+    logger.error(`[masterProduct] Bulk-link failed for a batch of ${products.length} products — leaving unlinked, will retry on next backfill run.`, err);
+  }
 };
 
 /**
@@ -426,6 +553,7 @@ module.exports = {
   findOrCreateMasterProductForProduct,
   findOrCreateMasterVariantForVariant,
   linkProductToMasterProduct,
+  linkProductsToMasterProductsBulk,
   getImportableMasterProducts,
   importMasterProducts,
 };

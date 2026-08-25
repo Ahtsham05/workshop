@@ -9,7 +9,7 @@ import { ImportBranchProductsBanner } from './components/import-branch-products-
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { fetchProducts, bulkUpdateProducts } from '@/stores/product.slice'
+import { fetchProducts, bulkUpdateProducts, fetchProductStats } from '@/stores/product.slice'
 import { fetchCategories } from '@/stores/category.slice'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
@@ -33,6 +33,8 @@ export default function Products() {
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingAllProducts, setLoadingAllProducts] = useState(true)
+  const [productStats, setProductStats] = useState<{ totalProducts: number; totalStockQuantity: number; totalStockValue: number } | null>(null)
+  const [loadingStats, setLoadingStats] = useState(true)
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
   const [selectedProducts, setSelectedProducts] = useState<any[]>([])
@@ -63,6 +65,25 @@ export default function Products() {
       .catch((error) => {
         console.error('Error fetching all products:', error)
         setLoadingAllProducts(false)
+      })
+  }, [fetch, dispatch])
+
+  // Header badge totals (total product count, total stock quantity, total stock
+  // value) — computed by the database over the WHOLE catalog, not derived from
+  // `allProducts` above, which is capped at 1000 rows and would silently under-report
+  // once the catalog grows past that.
+  useEffect(() => {
+    setLoadingStats(true)
+    dispatch(fetchProductStats({}))
+      .then((data) => {
+        if (data.payload) {
+          setProductStats(data.payload)
+        }
+        setLoadingStats(false)
+      })
+      .catch((error) => {
+        console.error('Error fetching product stats:', error)
+        setLoadingStats(false)
       })
   }, [fetch, dispatch])
 
@@ -185,17 +206,6 @@ export default function Products() {
     setEditValues({})
   }, [])
 
-  // Totals across all products (allProducts is fetched unfiltered, independent of
-  // the current search/page) — not from `products`, which is just the current page.
-  const totalStockQuantity = useMemo(
-    () => allProducts.reduce((sum, product) => sum + getDisplayStock(product), 0),
-    [allProducts]
-  )
-  const totalStockValue = useMemo(
-    () => allProducts.reduce((sum, product) => sum + getDisplayStockValue(product), 0),
-    [allProducts]
-  )
-
   // Cumulative qty/value from every page before the current one, for the table's
   // "Brought Forward" footer row. allProducts is fetched with the same sort as the
   // paginated `products` fetch, so its first (currentPage-1)*limit entries line up
@@ -254,15 +264,15 @@ export default function Products() {
               <div className='flex flex-wrap items-center gap-2'>
                 <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
                   <Package className='h-3.5 w-3.5' />
-                  {t('total_products')}: {loadingAllProducts ? '…' : allProducts.length}
+                  {t('total_products')}: {loadingStats ? '…' : (productStats?.totalProducts ?? 0)}
                 </Badge>
                 <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
                   <Boxes className='h-3.5 w-3.5' />
-                  {t('total_stock_quantity')}: {loadingAllProducts ? '…' : totalStockQuantity}
+                  {t('total_stock_quantity')}: {loadingStats ? '…' : (productStats?.totalStockQuantity ?? 0)}
                 </Badge>
                 <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
                   <Wallet className='h-3.5 w-3.5' />
-                  {t('total_value_of_stock')}: {loadingAllProducts ? '…' : totalStockValue.toLocaleString()}
+                  {t('total_value_of_stock')}: {loadingStats ? '…' : (productStats?.totalStockValue ?? 0).toLocaleString()}
                 </Badge>
               </div>
             </div>
