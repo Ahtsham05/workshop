@@ -307,46 +307,40 @@ const scanProductImage = catchAsync(async (req, res) => {
 });
 
 const bulkAddProducts = catchAsync(async (req, res) => {
-  try {
-    const { products } = req.body;
-    
-    if (!products || !Array.isArray(products) || products.length === 0) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'Products array is required');
-    }
+  const { products } = req.body;
 
-    const result = await productService.bulkAddProducts(products, getBranchContext(req));
-
-    if (!result.success || result.insertedCount === 0) {
-      const firstError = result.errors && result.errors.length > 0 ? result.errors[0].error : 'No products were inserted';
-      throw new ApiError(httpStatus.BAD_REQUEST, `Bulk import failed: ${firstError}`);
-    }
-    
-    const failedCount = result.errors?.length || 0;
-    const message = failedCount > 0
-      ? `Imported ${result.insertedCount} of ${result.insertedCount + failedCount} products (${failedCount} failed)`
-      : `Successfully imported ${result.insertedCount} products`;
-
-    res.status(httpStatus.CREATED).send({
-      message,
-      ...result
-    });
-  } catch (error) {
-    console.error('Bulk add error:', error);
-    
-    // Handle MongoDB duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern || {})[0];
-      const value = error.keyValue ? error.keyValue[field] : 'unknown';
-      
-      if (field === 'name') {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Product name "${value}" already exists. Skipping duplicates.`);
-      } else if (field === 'barcode') {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Barcode "${value}" already exists. Skipping duplicates.`);
-      }
-    }
-    
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Bulk import failed: ' + error.message);
+  if (!products || !Array.isArray(products) || products.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Products array is required');
   }
+
+  // Same fallback-to-the-user's-own-branch resolution createProduct uses — without it,
+  // a request that arrives without an x-branch-id header (e.g. the branch switcher's
+  // auto-select-on-login effect hasn't resolved yet) would silently try to insert every
+  // row with branchId: undefined. Mongoose's insertMany() then fails schema validation
+  // for the entire batch with NO thrown error at all, previously surfacing as an opaque
+  // "No products were inserted" — see product.service.js#bulkAddProducts.
+  await resolveWriteBranchId(req);
+
+  const result = await productService.bulkAddProducts(products, getBranchContext(req));
+
+  const failedCount = result.errors?.length || 0;
+  const categoryNote = result.createdCategories?.length
+    ? ` — created ${result.createdCategories.length} new categor${result.createdCategories.length === 1 ? 'y' : 'ies'}`
+    : '';
+  const message = result.insertedCount === 0
+    ? `No products were imported — ${failedCount} row(s) failed validation`
+    : failedCount > 0
+      ? `Imported ${result.insertedCount} of ${result.insertedCount + failedCount} products (${failedCount} failed)${categoryNote}`
+      : `Successfully imported ${result.insertedCount} products${categoryNote}`;
+
+  // Always resolve with the full per-row breakdown — even when every row failed —
+  // instead of throwing, matching student.controller.js#bulkImport's pattern. This is
+  // what lets the client show exactly which rows failed and why, rather than a single
+  // generic error message for the whole request.
+  res.status(httpStatus.CREATED).send({
+    message,
+    ...result,
+  });
 });
 
 module.exports = {

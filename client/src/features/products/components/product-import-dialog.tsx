@@ -20,6 +20,9 @@ import * as XLSX from 'xlsx'
 interface BulkImportResult {
   insertedCount?: number
   errors?: Array<{ index: number; error?: string; name?: string; barcode?: string | null }>
+  warnings?: Array<{ index: number; name?: string; message: string }>
+  createdCategories?: string[]
+  createdSubCategories?: string[]
 }
 
 interface ProductImportDialogProps {
@@ -38,10 +41,18 @@ interface ImportProduct {
   price: number
   cost: number
   stockQuantity: number
+  // Free-text names — the server resolves these to real Category/SubCategory records,
+  // auto-creating whichever ones don't already exist, rather than requiring the file to
+  // reference an existing category by id.
   category?: string
+  subCategory?: string
   categories?: any[]
   unit?: string
   sku?: string
+  // Free-text supplier name, matched case-insensitively against existing suppliers on
+  // the server. Unlike categories, an unmatched supplier is never auto-created (a
+  // supplier needs contact/payment details a spreadsheet row can't supply) — the
+  // product still imports, just without a supplier link.
   supplier?: string | null
   lowStockThreshold?: number
   description?: string
@@ -79,6 +90,8 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
         cost: 80,
         stockQuantity: 50,
         category: 'Electronics',
+        subCategory: 'Mobile Accessories',
+        supplier: 'Acme Distributors',
         unit: 'pcs',
         sku: 'SKU001',
         lowStockThreshold: 10,
@@ -92,6 +105,8 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
         cost: 200,
         stockQuantity: 30,
         category: 'Accessories',
+        subCategory: '',
+        supplier: '',
         unit: 'pcs',
         sku: 'SKU002',
         lowStockThreshold: 5,
@@ -112,6 +127,8 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
       { wch: 15 }, // cost
       { wch: 18 }, // stockQuantity
       { wch: 20 }, // category
+      { wch: 22 }, // subCategory
+      { wch: 22 }, // supplier
       { wch: 12 }, // unit
       { wch: 15 }, // sku
       { wch: 20 }, // lowStockThreshold
@@ -123,6 +140,17 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
     toast.success(t('template_downloaded'))
   }, [t])
 
+  // Strips currency symbols, thousands separators, and stray whitespace from a
+  // spreadsheet cell (e.g. "Rs 62,000", "1,250.50") before it's treated as a number —
+  // real-world exports routinely carry this kind of formatting.
+  const cleanNumber = (raw: unknown): number => {
+    if (raw === undefined || raw === null || raw === '') return NaN
+    if (typeof raw === 'number') return raw
+    const cleaned = String(raw).replace(/[^0-9.-]/g, '')
+    if (cleaned === '' || cleaned === '-' || cleaned === '.') return NaN
+    return Number(cleaned)
+  }
+
   const validateProduct = (product: any, rowIndex: number): ValidationError[] => {
     const errors: ValidationError[] = []
 
@@ -133,25 +161,25 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
 
     if (product.price === undefined || product.price === null || product.price === '') {
       errors.push({ row: rowIndex, field: 'price', message: t('price_required') })
-    } else if (isNaN(Number(product.price)) || Number(product.price) < 0) {
+    } else if (isNaN(cleanNumber(product.price)) || cleanNumber(product.price) < 0) {
       errors.push({ row: rowIndex, field: 'price', message: t('price_must_be_positive') })
     }
 
     if (product.cost === undefined || product.cost === null || product.cost === '') {
       errors.push({ row: rowIndex, field: 'cost', message: t('cost_required') })
-    } else if (isNaN(Number(product.cost)) || Number(product.cost) < 0) {
+    } else if (isNaN(cleanNumber(product.cost)) || cleanNumber(product.cost) < 0) {
       errors.push({ row: rowIndex, field: 'cost', message: t('cost_must_be_positive') })
     }
 
     if (product.stockQuantity === undefined || product.stockQuantity === null || product.stockQuantity === '') {
       errors.push({ row: rowIndex, field: 'stockQuantity', message: t('stock_quantity_required') })
-    } else if (isNaN(Number(product.stockQuantity)) || Number(product.stockQuantity) < 0) {
+    } else if (isNaN(cleanNumber(product.stockQuantity)) || cleanNumber(product.stockQuantity) < 0) {
       errors.push({ row: rowIndex, field: 'stockQuantity', message: t('stock_must_be_positive') })
     }
 
     // Optional field validation
     if (product.lowStockThreshold !== undefined && product.lowStockThreshold !== null && product.lowStockThreshold !== '') {
-      if (isNaN(Number(product.lowStockThreshold)) || Number(product.lowStockThreshold) < 0) {
+      if (isNaN(cleanNumber(product.lowStockThreshold)) || cleanNumber(product.lowStockThreshold) < 0) {
         errors.push({ row: rowIndex, field: 'lowStockThreshold', message: t('low_stock_must_be_positive') })
       }
     }
@@ -225,10 +253,10 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
         const isHeaderByName = firstRowName === 'name' || 
                                firstRowName.includes('product name') || 
                                firstRowName.includes('required')
-        const isHeaderByValues = priceValue === 'price' || 
-                                 costValue === 'cost' || 
+        const isHeaderByValues = priceValue === 'price' ||
+                                 costValue === 'cost' ||
                                  stockValue === 'stockquantity' ||
-                                 (isNaN(Number(firstRow.price)) && firstRow.price !== '' && firstRow.price !== null)
+                                 (isNaN(cleanNumber(firstRow.price)) && firstRow.price !== '' && firstRow.price !== null)
         
         if (isHeaderByName || isHeaderByValues) {
           dataToProcess = jsonData.slice(1)
@@ -256,9 +284,9 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
             _row: index + rowOffset,
             name: row.name.toString().trim(),
             barcode: row.barcode?.toString().trim() || null,
-            price: Number(row.price),
-            cost: Number(row.cost),
-            stockQuantity: Number(row.stockQuantity),
+            price: cleanNumber(row.price),
+            cost: cleanNumber(row.cost),
+            stockQuantity: cleanNumber(row.stockQuantity),
             unit: row.unit?.toString().trim() || 'pcs',
           }
 
@@ -269,16 +297,22 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
           if (row.category?.toString().trim()) {
             product.category = row.category.toString().trim()
           }
+          if (row.subCategory?.toString().trim()) {
+            product.subCategory = row.subCategory.toString().trim()
+          }
+          if (row.supplier?.toString().trim()) {
+            product.supplier = row.supplier.toString().trim()
+          }
           if (row.sku?.toString().trim()) {
             product.sku = row.sku.toString().trim()
           }
           if (row.description?.toString().trim()) {
             product.description = row.description.toString().trim()
           }
-          if (row.lowStockThreshold && !isNaN(Number(row.lowStockThreshold))) {
-            product.lowStockThreshold = Number(row.lowStockThreshold)
+          if (row.lowStockThreshold !== undefined && row.lowStockThreshold !== null && row.lowStockThreshold !== '' && !isNaN(cleanNumber(row.lowStockThreshold))) {
+            product.lowStockThreshold = cleanNumber(row.lowStockThreshold)
           }
-          
+
           products.push(product)
         }
       })
@@ -356,6 +390,26 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
         }))
       } else {
         toast.success(`${t('import_successful')}: ${inserted} ${t('products_imported')}`)
+      }
+
+      // Categories/sub-categories referenced by name in the file are auto-created on
+      // the server when they don't already exist — surface that so it isn't a silent
+      // side effect the user only discovers later on the Categories page.
+      const createdCategories = result?.createdCategories || []
+      const createdSubCategories = result?.createdSubCategories || []
+      if (createdCategories.length || createdSubCategories.length) {
+        const parts = []
+        if (createdCategories.length) parts.push(`${createdCategories.length} ${t('categories')}`)
+        if (createdSubCategories.length) parts.push(`${createdSubCategories.length} ${t('subcategories')}`)
+        toast.info(`${t('created')}: ${parts.join(', ')}`)
+      }
+
+      // Non-fatal per-row notes (an unrecognized unit that was defaulted, a supplier
+      // name that didn't match any existing supplier) — the row still imported, this is
+      // just visibility into what the server had to guess or skip.
+      const warnings = result?.warnings || []
+      if (warnings.length > 0) {
+        toast.info(t('products_imported_with_notes', { count: String(warnings.length) }))
       }
 
       // Clear the file and parsed preview either way — the rows that succeeded are

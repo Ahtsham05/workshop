@@ -1,11 +1,12 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Product, ProductVariant, Inventory, Batch, Imei, Organization } = require('../models');
+const { Product, ProductVariant, Inventory, Batch, Imei, Organization, Category, SubCategory, Supplier } = require('../models');
 const ApiError = require('../utils/ApiError');
 const imeiService = require('./imei.service');
 const batchService = require('./batch.service');
 const { getOrCreateDefaultVariant, getOrCreateInventory } = require('./inventorySync.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
+const { UNITS, DEFAULT_UNIT } = require('../config/units');
 const masterProductService = require('./masterProduct.service');
 
 /**
@@ -596,99 +597,398 @@ const bulkUpdateProducts = async (productsToUpdate) => {
   return updatedProducts;
 };
 
+const UNIT_ALIASES = {
+  piece: UNITS.PCS, pieces: UNITS.PCS, pc: UNITS.PCS, pcs: UNITS.PCS, nos: UNITS.PCS, no: UNITS.PCS, each: UNITS.PCS,
+  unit: UNITS.UNIT, units: UNITS.UNIT,
+  item: UNITS.ITEM, items: UNITS.ITEM,
+  pair: UNITS.PAIR, pairs: UNITS.PAIR,
+  set: UNITS.SET, sets: UNITS.SET,
+  dozen: UNITS.DOZEN, dz: UNITS.DOZEN, doz: UNITS.DOZEN,
+  kg: UNITS.KG, kgs: UNITS.KG, kilogram: UNITS.KG, kilograms: UNITS.KG,
+  g: UNITS.G, gram: UNITS.G, grams: UNITS.G, gm: UNITS.G,
+  mg: UNITS.MG, milligram: UNITS.MG, milligrams: UNITS.MG,
+  lb: UNITS.LB, lbs: UNITS.LB, pound: UNITS.LB, pounds: UNITS.LB,
+  oz: UNITS.OZ, ounce: UNITS.OZ, ounces: UNITS.OZ,
+  ton: UNITS.TON, tonne: UNITS.TON, tons: UNITS.TON,
+  m: UNITS.M, meter: UNITS.M, meters: UNITS.M, metre: UNITS.M, metres: UNITS.M,
+  cm: UNITS.CM, centimeter: UNITS.CM, centimeters: UNITS.CM,
+  mm: UNITS.MM, millimeter: UNITS.MM, millimeters: UNITS.MM,
+  km: UNITS.KM, kilometer: UNITS.KM, kilometers: UNITS.KM,
+  in: UNITS.IN, inch: UNITS.IN, inches: UNITS.IN,
+  ft: UNITS.FT, foot: UNITS.FT, feet: UNITS.FT,
+  yd: UNITS.YD, yard: UNITS.YD, yards: UNITS.YD,
+  l: UNITS.L, liter: UNITS.L, liters: UNITS.L, litre: UNITS.L, litres: UNITS.L,
+  ml: UNITS.ML, milliliter: UNITS.ML, milliliters: UNITS.ML,
+  gal: UNITS.GAL, gallon: UNITS.GAL, gallons: UNITS.GAL,
+  qt: UNITS.QT, quart: UNITS.QT,
+  pt: UNITS.PT, pint: UNITS.PT,
+  sqm: UNITS.SQM, sqft: UNITS.SQFT, sqyd: UNITS.SQYD, acre: UNITS.ACRE, acres: UNITS.ACRE,
+  box: UNITS.BOX, boxes: UNITS.BOX,
+  carton: UNITS.CARTON, cartons: UNITS.CARTON,
+  pack: UNITS.PACK, packs: UNITS.PACK, packet: UNITS.PACK, packets: UNITS.PACK,
+  bag: UNITS.BAG, bags: UNITS.BAG,
+  bottle: UNITS.BOTTLE, bottles: UNITS.BOTTLE,
+  can: UNITS.CAN, cans: UNITS.CAN,
+  jar: UNITS.JAR, jars: UNITS.JAR,
+  roll: UNITS.ROLL, rolls: UNITS.ROLL,
+  sheet: UNITS.SHEET, sheets: UNITS.SHEET,
+  bundle: UNITS.BUNDLE, bundles: UNITS.BUNDLE,
+  hour: UNITS.HOUR, hours: UNITS.HOUR, hr: UNITS.HOUR,
+  day: UNITS.DAY, days: UNITS.DAY,
+  week: UNITS.WEEK, weeks: UNITS.WEEK,
+  month: UNITS.MONTH, months: UNITS.MONTH,
+  year: UNITS.YEAR, years: UNITS.YEAR,
+};
+const VALID_UNITS = new Set(Object.values(UNITS));
+
 /**
- * Bulk add products (import from Excel)
+ * Normalizes a free-text unit cell (case/plural/synonym variance from a spreadsheet,
+ * e.g. "Kg", "Pieces", "PCS") to one of the schema's allowed enum values. Never
+ * rejects — an unrecognized unit falls back to the default rather than sinking an
+ * otherwise-valid row, and callers get a soft warning to show the user.
+ */
+const normalizeImportUnit = (raw) => {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed) return { unit: DEFAULT_UNIT, warning: null };
+  const lower = trimmed.toLowerCase();
+  if (VALID_UNITS.has(lower)) return { unit: lower, warning: null };
+  const alias = UNIT_ALIASES[lower];
+  if (alias) return { unit: alias, warning: null };
+  return { unit: DEFAULT_UNIT, warning: `Unit "${trimmed}" was not recognized — used "${DEFAULT_UNIT}" instead` };
+};
+
+/**
+ * Parses a numeric spreadsheet cell that may carry currency symbols, thousands
+ * separators, or stray whitespace (e.g. "Rs 62,000", "1,250.50") into a clean number.
+ * Returns `valid: false` instead of throwing, so the caller can attach a specific
+ * per-row error rather than let one bad cell fail the whole batch.
+ */
+const parseImportNumber = (raw) => {
+  if (raw === undefined || raw === null || raw === '') return { value: undefined, valid: true };
+  if (typeof raw === 'number') return { value: raw, valid: Number.isFinite(raw) };
+  const cleaned = String(raw).replace(/[^0-9.-]/g, '');
+  if (cleaned === '' || cleaned === '-' || cleaned === '.') return { value: undefined, valid: false };
+  const value = Number(cleaned);
+  return { value, valid: Number.isFinite(value) };
+};
+
+/**
+ * Coerces a spreadsheet cell to a trimmed string, treating anything that isn't
+ * already a string/number (e.g. an accidental nested object from a malformed API
+ * call — the bulk-import validation layer is deliberately permissive about per-field
+ * types, see product.validation.js#bulkAddProducts) as absent rather than falling back
+ * to JS's `String()` coercion, which would silently turn it into the literal text
+ * "[object Object]".
+ */
+const toImportText = (raw) => (typeof raw === 'string' || typeof raw === 'number' ? String(raw).trim() : '');
+
+/**
+ * Resolves free-text category/sub-category names from an import batch to real
+ * Category/SubCategory documents, auto-creating whichever ones don't already exist for
+ * this org/branch. Batched the same way masterProduct.service.js#linkProductsToMasterProductsBulk
+ * batches its lookups — one read + one insertMany per collection regardless of batch
+ * size, not one round trip per row.
+ */
+const resolveImportCategories = async (rows, branchContext) => {
+  const { organizationId, branchId, createdBy } = branchContext;
+
+  const categoryOriginalByLower = new Map();
+  rows.forEach((r) => {
+    if (r.categoryName && !categoryOriginalByLower.has(r.categoryName.toLowerCase())) {
+      categoryOriginalByLower.set(r.categoryName.toLowerCase(), r.categoryName);
+    }
+  });
+
+  // Most imports don't reference a category at all — skip the collection-wide fetch
+  // entirely rather than pulling every existing category just to match against nothing.
+  if (categoryOriginalByLower.size === 0) {
+    return { categoryByLower: new Map(), subByKey: new Map(), createdCategories: [], createdSubCategories: [] };
+  }
+
+  const existingCategories = await Category.find({ organizationId, branchId }).select('_id name image').lean();
+  const categoryByLower = new Map(existingCategories.map((c) => [c.name.trim().toLowerCase(), c]));
+
+  const missingCategoryLowers = [...categoryOriginalByLower.keys()].filter((lower) => !categoryByLower.has(lower));
+  const createdCategories = [];
+  if (missingCategoryLowers.length) {
+    const docs = missingCategoryLowers.map((lower) => ({
+      name: categoryOriginalByLower.get(lower),
+      organizationId,
+      branchId,
+      createdBy,
+    }));
+    const inserted = await Category.insertMany(docs, { ordered: false });
+    inserted.forEach((c) => {
+      categoryByLower.set(c.name.trim().toLowerCase(), c);
+      createdCategories.push(c.name);
+    });
+  }
+
+  const subOriginalByKey = new Map(); // `${categoryId}::${subNameLower}` -> original casing
+  rows.forEach((r) => {
+    if (!r.subCategoryName || !r.categoryName) return;
+    const category = categoryByLower.get(r.categoryName.toLowerCase());
+    if (!category) return;
+    const key = `${category._id}::${r.subCategoryName.toLowerCase()}`;
+    if (!subOriginalByKey.has(key)) subOriginalByKey.set(key, r.subCategoryName);
+  });
+
+  const categoryIds = [...categoryByLower.values()].map((c) => c._id);
+  const existingSubCategories = categoryIds.length
+    ? await SubCategory.find({ organizationId, branchId, category: { $in: categoryIds } }).select('_id name category image').lean()
+    : [];
+  const subByKey = new Map(existingSubCategories.map((s) => [`${s.category}::${s.name.trim().toLowerCase()}`, s]));
+
+  const missingSubKeys = [...subOriginalByKey.keys()].filter((key) => !subByKey.has(key));
+  const createdSubCategories = [];
+  if (missingSubKeys.length) {
+    const docs = missingSubKeys.map((key) => {
+      const [categoryId] = key.split('::');
+      return { name: subOriginalByKey.get(key), category: categoryId, organizationId, branchId, createdBy };
+    });
+    const inserted = await SubCategory.insertMany(docs, { ordered: false });
+    inserted.forEach((s) => {
+      subByKey.set(`${s.category}::${s.name.trim().toLowerCase()}`, s);
+      createdSubCategories.push(s.name);
+    });
+  }
+
+  return { categoryByLower, subByKey, createdCategories, createdSubCategories };
+};
+
+/**
+ * Matches free-text supplier names against existing suppliers for this org/branch.
+ * Unlike categories, suppliers are never auto-created here — a supplier record needs
+ * contact/payment details an import row can't supply — so an unmatched name is reported
+ * as a warning and the product is imported without a supplier link rather than guessed.
+ */
+const resolveImportSuppliers = async (rows, branchContext) => {
+  const { organizationId, branchId } = branchContext;
+  const names = new Set(rows.filter((r) => r.supplierName).map((r) => r.supplierName.toLowerCase()));
+  if (!names.size) return { supplierByLower: new Map() };
+
+  const suppliers = await Supplier.find({ organizationId, branchId }).select('_id name').lean();
+  return { supplierByLower: new Map(suppliers.map((s) => [s.name.trim().toLowerCase(), s])) };
+};
+
+const BULK_IMPORT_CHUNK_SIZE = 500;
+
+/**
+ * Bulk add products (import from Excel/CSV or the AI vision scanner — both the
+ * product-import-dialog and product-ai-scan-dialog funnel through this one function).
+ *
+ * Every field is handled defensively rather than trusting the upload: numbers strip
+ * stray currency/formatting noise, units are matched against common synonyms, and
+ * category/sub-category names are resolved to real records — auto-creating whichever
+ * ones don't exist yet for this org/branch — instead of silently dropping the text or
+ * failing the row. Rows that are genuinely unfixable (missing name, non-numeric price,
+ * a barcode already used elsewhere, etc.) are validated out up front with a specific
+ * per-row reason, so a handful of bad rows in a multi-thousand-row file can never sink
+ * the rest of the import.
+ *
+ * This also fixes the previous opaque "No products were inserted" failure: Mongoose's
+ * insertMany() silently resolves to an empty array — no thrown error at all — when
+ * every document in the batch fails schema validation (e.g. a missing organizationId/
+ * branchId, which used to happen when the caller forgot to resolve a write branch).
+ * Pre-validating each doc with `validateSync()` here means that can never again surface
+ * as a blanket, undiagnosable failure.
+ *
  * @param {Array} productsToAdd - Array of products to create
  * @param {Object} branchContext - Organization and branch context
  * @returns {Promise<Object>}
  */
 const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
-  try {
-    // Process each product to ensure proper data format
-    const processedProducts = productsToAdd.map(product => {
-      const doc = {
-        name: product.name,
-        nameUrdu: product.nameUrdu || '',
-        description: product.description || '',
-        price: Number(product.price),
-        cost: Number(product.cost),
-        stockQuantity: Number(product.stockQuantity),
-        unit: product.unit || 'pcs',
-        sku: product.sku || '',
-        category: product.category || '',
-        categories: product.categories || [],
-        supplier: product.supplier || null,
-        lowStockThreshold: product.lowStockThreshold ? Number(product.lowStockThreshold) : undefined,
-        organizationId: branchContext.organizationId,
-        branchId: branchContext.branchId,
-        createdBy: branchContext.createdBy,
-      };
-      // insertMany() does NOT run the schema's pre('save') hook, which is what
-      // normally converts an empty barcode to a genuinely *absent* field. Without
-      // this, every barcode-less row would get an explicit `barcode: null` and, since
-      // a sparse unique index only exempts truly missing fields (not null ones),
-      // every row after the first would collide on the shared `null` value.
-      if (product.barcode) {
-        doc.barcode = product.barcode;
-      }
-      return doc;
-    });
+  const { organizationId, branchId, createdBy } = branchContext;
 
-    // Insert products
-    const insertedProducts = await Product.insertMany(processedProducts, {
-      ordered: false // Continue inserting even if some fail (e.g., duplicates)
-    });
-
-    // Master Product Catalog migration: auto-link every newly imported product (Excel
-    // or AI-vision scan, both funnel through here) to the shared org-level catalog.
-    // Batched — a small constant number of queries regardless of how many products were
-    // just inserted (see masterProduct.service.js#linkProductsToMasterProductsBulk).
-    await masterProductService.linkProductsToMasterProductsBulk(insertedProducts);
-
+  // Row-level normalization first — pure, no DB access — so the batched lookups below
+  // only ever see clean, trimmed names.
+  const rows = productsToAdd.map((product, index) => {
+    const supplierIsId = typeof product.supplier === 'string' && mongoose.isValidObjectId(product.supplier);
     return {
-      success: true,
-      insertedCount: insertedProducts.length,
-      products: insertedProducts
+      index,
+      original: product,
+      name: toImportText(product.name),
+      barcode: toImportText(product.barcode),
+      categoryName: toImportText(product.category),
+      subCategoryName: toImportText(product.subCategory),
+      supplierName: supplierIsId ? '' : toImportText(product.supplier),
+      supplierId: supplierIsId ? product.supplier : '',
     };
-  } catch (error) {
-    // Handle bulk insert errors
-    if (error.writeErrors) {
-      const successfulInserts = error.insertedDocs || [];
-      const failedInserts = error.writeErrors.map(writeError => {
+  });
+
+  const [{ categoryByLower, subByKey, createdCategories, createdSubCategories }, { supplierByLower }] = await Promise.all([
+    resolveImportCategories(rows, branchContext),
+    resolveImportSuppliers(rows, branchContext),
+  ]);
+
+  // Existing barcodes already in the database — Product.barcode is a *globally* unique
+  // sparse index (not scoped per org/branch), so this has to check across all products.
+  const requestedBarcodes = [...new Set(rows.map((r) => r.barcode).filter(Boolean))];
+  const existingBarcodeDocs = requestedBarcodes.length
+    ? await Product.find({ barcode: { $in: requestedBarcodes } }).select('barcode').lean()
+    : [];
+  const existingBarcodes = new Set(existingBarcodeDocs.map((d) => d.barcode));
+
+  const errors = [];
+  const warnings = [];
+  const validDocs = [];
+  const validMeta = [];
+  const seenBarcodesInBatch = new Map(); // barcode -> row index that first claimed it
+
+  rows.forEach((row) => {
+    const product = row.original;
+    const fail = (message) =>
+      errors.push({ index: row.index, name: row.name || product.name, barcode: row.barcode || null, error: message });
+
+    if (!row.name) return fail('Product name is required');
+
+    const price = parseImportNumber(product.price);
+    if (!price.valid || price.value === undefined || price.value < 0) return fail(`Invalid price "${product.price}"`);
+
+    const cost = parseImportNumber(product.cost);
+    if (!cost.valid || cost.value === undefined || cost.value < 0) return fail(`Invalid cost "${product.cost}"`);
+
+    const stockQuantity = parseImportNumber(product.stockQuantity);
+    if (!stockQuantity.valid || stockQuantity.value === undefined || stockQuantity.value < 0) {
+      return fail(`Invalid stock quantity "${product.stockQuantity}"`);
+    }
+
+    const lowStockThreshold = parseImportNumber(product.lowStockThreshold);
+    if (!lowStockThreshold.valid || (lowStockThreshold.value !== undefined && lowStockThreshold.value < 0)) {
+      return fail(`Invalid low stock threshold "${product.lowStockThreshold}"`);
+    }
+
+    if (row.barcode) {
+      if (existingBarcodes.has(row.barcode)) return fail(`Barcode "${row.barcode}" already exists — already used by another product`);
+      const firstSeenAt = seenBarcodesInBatch.get(row.barcode);
+      if (firstSeenAt !== undefined) return fail(`Duplicate barcode "${row.barcode}" — also used by row ${firstSeenAt + 1} in this import`);
+      seenBarcodesInBatch.set(row.barcode, row.index);
+    }
+
+    const { unit, warning: unitWarning } = normalizeImportUnit(product.unit);
+    if (unitWarning) warnings.push({ index: row.index, name: row.name, message: unitWarning });
+
+    let categories = [];
+    let categoryLegacy = '';
+    if (Array.isArray(product.categories) && product.categories.length) {
+      categories = product.categories;
+      categoryLegacy = product.category || categories[0]?.name || '';
+    } else if (row.categoryName) {
+      const category = categoryByLower.get(row.categoryName.toLowerCase());
+      if (category) {
+        categories = [{ _id: category._id, name: category.name, ...(category.image ? { image: category.image } : {}) }];
+        categoryLegacy = category.name;
+      }
+    }
+
+    let subCategories = [];
+    if (Array.isArray(product.subCategories) && product.subCategories.length) {
+      subCategories = product.subCategories;
+    } else if (row.subCategoryName && categories[0]?._id) {
+      const sub = subByKey.get(`${categories[0]._id}::${row.subCategoryName.toLowerCase()}`);
+      if (sub) subCategories = [{ _id: sub._id, name: sub.name, ...(sub.image ? { image: sub.image } : {}) }];
+    } else if (row.subCategoryName && !row.categoryName) {
+      warnings.push({ index: row.index, name: row.name, message: `Sub-category "${row.subCategoryName}" was skipped — no category given for this row` });
+    }
+
+    let supplier = null;
+    if (row.supplierId) {
+      supplier = row.supplierId;
+    } else if (row.supplierName) {
+      const match = supplierByLower.get(row.supplierName.toLowerCase());
+      if (match) supplier = match._id;
+      else warnings.push({ index: row.index, name: row.name, message: `Supplier "${row.supplierName}" was not found — imported without a supplier` });
+    }
+
+    const doc = {
+      name: row.name,
+      nameUrdu: toImportText(product.nameUrdu),
+      description: toImportText(product.description),
+      price: price.value,
+      cost: cost.value,
+      stockQuantity: stockQuantity.value,
+      unit,
+      sku: toImportText(product.sku),
+      category: categoryLegacy,
+      categories,
+      subCategories,
+      supplier,
+      lowStockThreshold: lowStockThreshold.value,
+      organizationId,
+      branchId,
+      createdBy,
+    };
+    // insertMany() does NOT run the schema's pre('save') hook, which is what normally
+    // converts an empty barcode to a genuinely *absent* field. Without this, every
+    // barcode-less row would get an explicit `barcode: null` and, since a sparse unique
+    // index only exempts truly missing fields (not null ones), every row after the
+    // first would collide on the shared `null` value.
+    if (row.barcode) doc.barcode = row.barcode;
+
+    // Defense-in-depth: validate against the real schema before ever handing the batch
+    // to insertMany(). See the function-level comment above for why this specifically
+    // matters — it's what stands between a genuinely bad row and the whole import
+    // silently reporting zero insertions with no explanation.
+    const validationError = new Product(doc).validateSync();
+    if (validationError) {
+      const firstIssue = Object.values(validationError.errors)[0];
+      return fail(firstIssue?.message || validationError.message);
+    }
+
+    validDocs.push(doc);
+    validMeta.push({ index: row.index, name: row.name, barcode: row.barcode || null });
+  });
+
+  const insertedProducts = [];
+  for (let i = 0; i < validDocs.length; i += BULK_IMPORT_CHUNK_SIZE) {
+    const chunk = validDocs.slice(i, i + BULK_IMPORT_CHUNK_SIZE);
+    const chunkMeta = validMeta.slice(i, i + BULK_IMPORT_CHUNK_SIZE);
+    try {
+      const inserted = await Product.insertMany(chunk, { ordered: false });
+      insertedProducts.push(...inserted);
+    } catch (error) {
+      // Real driver-level failures (e.g. a barcode collision from a concurrent import
+      // that slipped past the pre-check above) still land here — everything else was
+      // already filtered out before reaching insertMany().
+      if (!error.writeErrors) throw error;
+      insertedProducts.push(...(error.insertedDocs || []));
+      error.writeErrors.forEach((writeError) => {
         // Mongoose's insertMany() flattens each write error with `{...writeError, index}`.
         // Since errmsg/code only exist as prototype getters on the driver's WriteError
         // (not as own enumerable properties), that spread drops them — the real message
         // survives only nested under `.err`. Fall back to the top level in case that
         // ever changes in a future mongoose/mongodb-driver version.
         const raw = writeError.err || writeError;
-        const index = writeError.index ?? raw.index;
-        const failedProduct = processedProducts[index];
+        const meta = chunkMeta[writeError.index ?? raw.index];
         const errmsg = raw.errmsg || writeError.errmsg || '';
         const dupMatch = raw.code === 11000 ? errmsg.match(/dup key:\s*\{\s*(\w+):\s*"?([^}"]*)"?\s*\}/) : null;
-
         const message = dupMatch
-          ? `Duplicate ${dupMatch[1]} "${failedProduct?.[dupMatch[1]] ?? dupMatch[2]}" — already used by another product`
+          ? `Duplicate ${dupMatch[1]} "${meta?.[dupMatch[1]] ?? dupMatch[2]}" — already used by another product`
           : errmsg || 'Failed to import this product';
-
-        return {
-          index,
-          name: failedProduct?.name,
-          barcode: failedProduct?.barcode,
-          error: message
-        };
+        errors.push({ index: meta?.index, name: meta?.name, barcode: meta?.barcode, error: message });
       });
-
-      await masterProductService.linkProductsToMasterProductsBulk(successfulInserts);
-
-      return {
-        success: successfulInserts.length > 0,
-        insertedCount: successfulInserts.length,
-        products: successfulInserts,
-        errors: failedInserts
-      };
     }
-    throw error;
   }
+
+  // Master Product Catalog migration: auto-link every newly imported product to the
+  // shared org-level catalog. Batched — a small constant number of queries regardless
+  // of how many products were just inserted (see
+  // masterProduct.service.js#linkProductsToMasterProductsBulk).
+  if (insertedProducts.length) {
+    await masterProductService.linkProductsToMasterProductsBulk(insertedProducts);
+  }
+
+  errors.sort((a, b) => a.index - b.index);
+
+  return {
+    success: insertedProducts.length > 0,
+    insertedCount: insertedProducts.length,
+    products: insertedProducts,
+    errors,
+    warnings,
+    createdCategories,
+    createdSubCategories,
+  };
 };
 
 module.exports = {

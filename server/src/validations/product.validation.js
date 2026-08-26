@@ -188,18 +188,28 @@ const bulkUpdateProducts = {
   }),
 };
 
+// Deliberately permissive per-field: this validates the *shape* of a bulk-import
+// request (an array of row-ish objects), not the content of each row. A real-world
+// spreadsheet import routinely has a handful of rows with a missing name, a
+// non-numeric price cell, or an extra column Excel added — Joi's array validation
+// rejects the ENTIRE request (`abortEarly: false` still 400s the whole batch) the
+// moment any single item fails its schema, which would sink a 6000-row import over one
+// bad row before productService.bulkAddProducts ever gets a chance to give a specific,
+// per-row diagnostic and just skip that row. `.unknown(true)` on the row schema means
+// a stray spreadsheet column doesn't 400 the request either.
 const bulkAddProducts = {
   body: Joi.object().keys({
     products: Joi.array().items(
       Joi.object().keys({
-        name: Joi.string().required(),
-        nameUrdu: Joi.string().allow('').optional(),
-        price: Joi.number().required(),
-        cost: Joi.number().required(),
-        stockQuantity: Joi.number().required(),
-        barcode: Joi.string().allow('', null).optional(),
-        description: Joi.string().allow('').optional(),
-        category: Joi.string().allow('').optional(),
+        name: Joi.any(),
+        nameUrdu: Joi.any(),
+        price: Joi.any(),
+        cost: Joi.any(),
+        stockQuantity: Joi.any(),
+        barcode: Joi.any(),
+        description: Joi.any(),
+        category: Joi.any(),
+        subCategory: Joi.any(),
         categories: Joi.array().items(
           Joi.object().keys({
             _id: Joi.string().required(),
@@ -220,12 +230,12 @@ const bulkAddProducts = {
             }).optional(),
           })
         ).optional(),
-        supplier: Joi.string().allow('', null).optional(),
-        unit: Joi.string().allow('').optional(),
-        sku: Joi.string().allow('').optional(),
-        lowStockThreshold: Joi.number().optional(),
+        supplier: Joi.any(),
+        unit: Joi.any(),
+        sku: Joi.any(),
+        lowStockThreshold: Joi.any(),
         unitConversions: Joi.array().items(unitConversionSchema).optional(),
-      })
+      }).unknown(true)
     ).required().min(1)
   }),
 };

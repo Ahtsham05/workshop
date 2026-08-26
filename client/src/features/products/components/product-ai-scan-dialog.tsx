@@ -38,10 +38,15 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 
+interface BulkImportResult {
+  insertedCount?: number
+  errors?: Array<{ index: number; error?: string; name?: string; barcode?: string | null }>
+}
+
 interface ProductAiScanDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onImport: (products: Record<string, string | number>[]) => Promise<void>
+  onImport: (products: Record<string, string | number>[]) => Promise<BulkImportResult | void>
 }
 
 interface ScannedProduct {
@@ -401,10 +406,28 @@ export function ProductAiScanDialog({
 
     try {
       setImporting(true)
-      await onImport(products)
-      toast.success(
-        `${t('import_successful')}: ${products.length} ${t('products_imported')}`,
-      )
+      const result = await onImport(products)
+
+      // The bulk-import endpoint always resolves (even when every row failed
+      // validation) so it can report exactly which rows failed and why, rather than
+      // reject the whole request — so success/failure has to be read from the payload,
+      // not just from whether the call threw.
+      const failed = result?.errors || []
+      const inserted = result?.insertedCount ?? (products.length - failed.length)
+
+      if (inserted === 0) {
+        toast.error(failed[0]?.error || t('import_failed_all_products'))
+        return
+      }
+      if (failed.length > 0) {
+        toast.warning(t('products_imported_with_errors_message', {
+          inserted,
+          total: products.length,
+          failed: failed.length,
+        }))
+      } else {
+        toast.success(`${t('import_successful')}: ${inserted} ${t('products_imported')}`)
+      }
       resetDialog()
       onOpenChange(false)
     } catch (error) {
