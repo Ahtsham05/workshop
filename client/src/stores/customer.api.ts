@@ -38,11 +38,23 @@ const baseQueryWithAuth: BaseQueryFn<
   return result
 }
 
+export interface CustomerStats {
+  totalCustomers: number
+  newThisMonth: number
+  outstandingBalance: number
+}
+
 export const customerApi = createApi({
   reducerPath: 'customerApi',
   baseQuery: baseQueryWithAuth,
   tagTypes: ['Customer'],
   endpoints: (builder) => ({
+    // Live counts + outstanding balance for the list page's stat cards
+    getCustomerStats: builder.query<CustomerStats, void>({
+      query: () => '/stats',
+      providesTags: ['Customer'],
+    }),
+
     // Get customers with pagination and search
     getCustomers: builder.query({
       query: (params = {}) => {
@@ -116,6 +128,7 @@ export const customerApi = createApi({
 })
 
 export const {
+  useGetCustomerStatsQuery,
   useGetCustomersQuery,
   useGetCustomerByIdQuery,
   useCreateCustomerMutation,

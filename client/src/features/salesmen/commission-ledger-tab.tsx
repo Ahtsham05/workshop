@@ -1,18 +1,30 @@
 import { useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { useGetCommissionLedgerEntriesQuery, useGetCommissionBalanceQuery, CommissionLedgerEntry } from '@/stores/salesmanCommissionLedger.api';
 import { useGetAllSalesmanProfilesQuery } from '@/stores/salesmanProfile.api';
 import { useDeleteCommissionPaymentMutation } from '@/stores/salesmanCommissionPayment.api';
+import { useGetSalesmanCommissionReportQuery } from '@/stores/reports.api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Wallet, Banknote, Trash2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Wallet, Banknote, Trash2, Users, TrendingUp, HandCoins, AlertCircle, Filter, Download } from 'lucide-react';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog';
 import { CommissionPaymentDialog } from './commission-payment-dialog';
 import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
-import { format } from 'date-fns';
+import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones';
+import { cn } from '@/lib/utils';
+import { format, startOfMonth } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   AlertDialog,
@@ -36,6 +48,10 @@ const TRANSACTION_TYPE_STYLES: Record<string, string> = {
   adjustment: 'bg-gray-100 text-gray-800',
 };
 
+const ALL_TRANSACTION_TYPES = ['commission_earned', 'commission_reversed', 'commission_payment', 'adjustment'];
+
+const formatRs = (amount: number) => `Rs ${amount.toFixed(2)}`;
+
 export function CommissionLedgerTab() {
   const { t } = useLanguage();
   const [selectedSalesmanId, setSelectedSalesmanId] = useState('');
@@ -43,6 +59,7 @@ export function CommissionLedgerTab() {
   const [entryToVoid, setEntryToVoid] = useState<CommissionLedgerEntry | null>(null);
   const [viewingInvoiceId, setViewingInvoiceId] = useState<string | undefined>(undefined);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
 
   const { data: salesmen } = useGetAllSalesmanProfilesQuery();
   const { data, isLoading, refetch } = useGetCommissionLedgerEntriesQuery({
@@ -56,9 +73,24 @@ export function CommissionLedgerTab() {
   );
   const [deletePayment, { isLoading: isVoiding }] = useDeleteCommissionPaymentMutation();
 
-  const entries = data?.results || [];
+  // This-month totals + all-time outstanding balance for the KPI row — one call covers
+  // all four cards since `totalOutstanding` is a current snapshot, not period-scoped.
+  const monthRange = useMemo(() => {
+    const now = new Date();
+    return { startDate: format(startOfMonth(now), 'yyyy-MM-dd'), endDate: format(now, 'yyyy-MM-dd') };
+  }, []);
+  const { data: commissionSummary } = useGetSalesmanCommissionReportQuery(monthRange);
+
+  const entries = useMemo(() => data?.results || [], [data?.results]);
+  const filteredEntries = useMemo(
+    () => entries.filter((entry) => !hiddenTypes.has(entry.transactionType)),
+    [entries, hiddenTypes]
+  );
   const selectedSalesmanLabel = salesmen?.find((s) => s.id === selectedSalesmanId);
   const selectedSalesmanName = selectedSalesmanLabel?.name || '';
+
+  const totalSalesmenCount = salesmen?.length ?? 0;
+  const activeSalesmenCount = salesmen?.filter((s) => s.status !== 'inactive').length ?? 0;
 
   const refetchAll = () => {
     refetch();
@@ -77,6 +109,33 @@ export function CommissionLedgerTab() {
     adjustment: t('adjustment') || 'Adjustment',
   };
 
+  const toggleTypeVisible = (type: string) => {
+    setHiddenTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
+
+  const handleExport = () => {
+    const rows = filteredEntries.map((entry) => ({
+      Date: format(new Date(entry.transactionDate), 'yyyy-MM-dd'),
+      ...(selectedSalesmanId ? {} : { Salesman: salesmanName(entry.salesmanId) }),
+      Type: transactionTypeLabel[entry.transactionType] || entry.transactionType,
+      Reference: entry.reference || '',
+      'Rate (%)': entry.rate ?? '',
+      Credit: entry.credit || 0,
+      Debit: entry.debit || 0,
+      Balance: entry.balance,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Commission Ledger');
+    const label = selectedSalesmanName ? selectedSalesmanName.replace(/\s+/g, '-') : 'all-salesmen';
+    XLSX.writeFile(wb, `commission-ledger-${label}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   const handleVoidConfirm = async () => {
     if (!entryToVoid?.referenceId) return;
     try {
@@ -92,13 +151,120 @@ export function CommissionLedgerTab() {
 
   return (
     <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className={kpiCardClass('sky')}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{t('total_salesmen') || 'Total Salesmen'}</CardTitle>
+            <div className={cn('shrink-0', toneIconWrapClass('sky'))}>
+              <Users className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalSalesmenCount}</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {activeSalesmenCount} {t('active') || 'active'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className={kpiCardClass('emerald')}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {t('total_earned_this_month') || 'Total Earned (This Month)'}
+            </CardTitle>
+            <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
+              <TrendingUp className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+              {formatRs(commissionSummary?.summary.totalEarned ?? 0)}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('from_n_transactions', { count: commissionSummary?.summary.totalSalesCount ?? 0 }) ||
+                `From ${commissionSummary?.summary.totalSalesCount ?? 0} transactions`}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className={kpiCardClass('orange')}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {t('total_paid_this_month') || 'Total Paid (This Month)'}
+            </CardTitle>
+            <div className={cn('shrink-0', toneIconWrapClass('orange'))}>
+              <HandCoins className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+              {formatRs(commissionSummary?.summary.totalPaid ?? 0)}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('from_n_transactions', { count: commissionSummary?.summary.totalPaidCount ?? 0 }) ||
+                `From ${commissionSummary?.summary.totalPaidCount ?? 0} transactions`}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className={kpiCardClass('rose')}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{t('outstanding_balance') || 'Outstanding Balance'}</CardTitle>
+            <div className={cn('shrink-0', toneIconWrapClass('rose'))}>
+              <AlertCircle className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+              {formatRs(commissionSummary?.summary.totalOutstanding ?? 0)}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{t('unpaid_commissions') || 'Unpaid commissions'}</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
-        <CardHeader>
-          <CardTitle>{t('commission_ledger') || 'Commission Ledger'}</CardTitle>
-          <CardDescription>
-            {t('commission_ledger_description') ||
-              'Every commission credited or reversed, with a running balance per salesman'}
-          </CardDescription>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>{t('commission_ledger') || 'Commission Ledger'}</CardTitle>
+            <CardDescription>
+              {t('commission_ledger_description') ||
+                'Every commission credited or reversed, with a running balance per salesman'}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Filter className="mr-2 h-4 w-4" />
+                  {t('filter') || 'Filter'}
+                  {hiddenTypes.size > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[10px]">
+                      {ALL_TRANSACTION_TYPES.length - hiddenTypes.size}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuLabel>{t('transaction_type') || 'Transaction Type'}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {ALL_TRANSACTION_TYPES.map((type) => (
+                  <DropdownMenuCheckboxItem
+                    key={type}
+                    checked={!hiddenTypes.has(type)}
+                    onCheckedChange={() => toggleTypeVisible(type)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {transactionTypeLabel[type]}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={filteredEntries.length === 0}>
+              <Download className="mr-2 h-4 w-4" />
+              {t('export') || 'Export'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -149,7 +315,7 @@ export function CommissionLedgerTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.map((entry) => (
+                  {filteredEntries.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="whitespace-nowrap">
                         {format(new Date(entry.transactionDate), 'MMM dd, yyyy')}
@@ -203,11 +369,13 @@ export function CommissionLedgerTab() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {entries.length === 0 && (
+                  {filteredEntries.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={selectedSalesmanId ? 8 : 9} className="text-center py-8 text-muted-foreground">
-                        {t('no_commission_entries_found') ||
-                          'No commission entries yet — they appear once a salesman-attributed invoice is finalized.'}
+                        {entries.length > 0
+                          ? t('no_commission_entries_match_filter') || 'No entries match the selected filter.'
+                          : t('no_commission_entries_found') ||
+                            'No commission entries yet — they appear once a salesman-attributed invoice is finalized.'}
                       </TableCell>
                     </TableRow>
                   )}

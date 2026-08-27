@@ -116,6 +116,10 @@ const summery = {
     url: '/suppliers/all',
     method: 'get'
   },
+  fetchSupplierStats: {
+    url: '/suppliers/stats',
+    method: 'get',
+  },
   getSupplierPurchaseAndTransactions: {
     url: '/suppliers/ledger',
     method: 'get'

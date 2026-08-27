@@ -14,8 +14,8 @@ interface ImageUploadProps {
   currentImageUrl?: string
   disabled?: boolean
   className?: string
-  /** Larger drop zone and preview */
-  layout?: 'default' | 'comfortable'
+  /** 'comfortable' = larger drop zone and preview. 'compact' = smaller, for tight grids (e.g. a 3-up ID photo row) where the dialog must fit without scrolling. */
+  layout?: 'default' | 'comfortable' | 'compact'
   /**
    * When set together with getSearchQuery, shows the top banner for products/categories:
    * manual “Find from name” (Pexels via API) plus device upload. No automatic fetch.
@@ -51,6 +51,7 @@ export default function ImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isComfortable = layout === 'comfortable'
+  const isCompact = layout === 'compact'
 
   const showLocalPhotoBanner = Boolean(getSearchQuery) || autoSearchFromText !== undefined
 
@@ -216,7 +217,7 @@ export default function ImageUpload({
     onImageRemove()
   }
 
-  const previewHeight = isComfortable ? 280 : 192
+  const previewHeight = isComfortable ? 280 : isCompact ? 110 : 192
 
   if (currentImageUrl) {
     return (
@@ -286,7 +287,7 @@ export default function ImageUpload({
         className,
       )}
     >
-      <div className={cn('p-4 sm:p-5', isComfortable && 'sm:p-6')}>
+      <div className={cn('p-4 sm:p-5', isComfortable && 'sm:p-6', isCompact && 'p-2.5 sm:p-2.5')}>
         <input
           ref={fileInputRef}
           type='file'
@@ -295,7 +296,7 @@ export default function ImageUpload({
           className='hidden'
         />
 
-        <div className='space-y-5'>
+        <div className={isCompact ? 'space-y-2' : 'space-y-5'}>
           {showLocalPhotoBanner ? (
             <div className='flex flex-wrap items-center gap-3'>
               <Button
@@ -332,7 +333,11 @@ export default function ImageUpload({
             {...getRootProps()}
             className={cn(
               'cursor-pointer rounded-xl border-2 border-dashed text-center transition-all duration-200',
-              isComfortable ? 'min-h-[12rem] p-6 sm:min-h-[14rem] sm:p-8' : 'min-h-[10rem] p-4 sm:min-h-[11rem] sm:p-6',
+              isComfortable
+                ? 'min-h-[12rem] p-6 sm:min-h-[14rem] sm:p-8'
+                : isCompact
+                  ? 'min-h-[4.5rem] p-2'
+                  : 'min-h-[10rem] p-4 sm:min-h-[11rem] sm:p-6',
               isDragActive ? 'border-primary bg-primary/[0.07] shadow-inner' : 'border-muted-foreground/30 bg-muted/20',
               disabled || uploading || stockSearching ? 'cursor-not-allowed opacity-50' : 'hover:border-primary/60 hover:bg-primary/[0.04]',
             )}
@@ -340,37 +345,41 @@ export default function ImageUpload({
             <input {...getInputProps()} />
 
             {uploading || stockSearching ? (
-              <div className='flex flex-col items-center gap-3'>
-                <Loader2 className={cn('animate-spin text-primary', isComfortable ? 'h-10 w-10' : 'h-8 w-8')} />
-                <p className='text-sm font-medium text-muted-foreground'>
+              <div className={cn('flex flex-col items-center', isCompact ? 'gap-1.5' : 'gap-3')}>
+                <Loader2 className={cn('animate-spin text-primary', isComfortable ? 'h-10 w-10' : isCompact ? 'h-5 w-5' : 'h-8 w-8')} />
+                <p className={cn('font-medium text-muted-foreground', isCompact ? 'text-xs' : 'text-sm')}>
                   {stockSearching
                     ? t('searching_stock_photo')
                     : t('uploading_image') || 'Uploading image…'}
                 </p>
               </div>
             ) : (
-              <div className='flex flex-col items-center gap-3'>
+              <div className={cn('flex flex-col items-center', isCompact ? 'gap-1' : 'gap-3')}>
                 {isDragActive ? (
-                  <Upload className={cn('text-primary', isComfortable ? 'h-12 w-12' : 'h-8 w-8')} />
+                  <Upload className={cn('text-primary', isComfortable ? 'h-12 w-12' : isCompact ? 'h-5 w-5' : 'h-8 w-8')} />
                 ) : (
-                  <ImageIcon className={cn('text-muted-foreground', isComfortable ? 'h-12 w-12' : 'h-8 w-8')} />
+                  <ImageIcon className={cn('text-muted-foreground', isComfortable ? 'h-12 w-12' : isCompact ? 'h-5 w-5' : 'h-8 w-8')} />
                 )}
 
                 <div className='text-center'>
-                  <p className={cn('font-medium', isComfortable ? 'text-sm sm:text-base' : 'text-xs sm:text-sm')}>
+                  <p className={cn('font-medium', isComfortable ? 'text-sm sm:text-base' : isCompact ? 'text-xs' : 'text-xs sm:text-sm')}>
                     {isDragActive
                       ? t('drop_image_here') || 'Drop image here'
-                      : t('drag_drop_image') || 'Drag & drop an image here'}
+                      : isCompact
+                        ? t('drag_drop_or_browse') || 'Drag & drop or browse'
+                        : t('drag_drop_image') || 'Drag & drop an image here'}
                   </p>
-                  <p className='mt-2 text-xs text-muted-foreground'>
-                    {t('or_use_options_below') || 'or use the options below'} — PNG, JPG, WebP, GIF up to 5MB
-                  </p>
+                  {!isCompact ? (
+                    <p className='mt-2 text-xs text-muted-foreground'>
+                      {t('or_use_options_below') || 'or use the options below'} — PNG, JPG, WebP, GIF up to 5MB
+                    </p>
+                  ) : null}
                 </div>
               </div>
             )}
           </div>
 
-          <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
+          <div className={isCompact ? 'flex gap-1.5' : 'grid grid-cols-1 gap-2 sm:grid-cols-2'}>
             <Button
               type='button'
               variant='outline'
@@ -380,9 +389,9 @@ export default function ImageUpload({
                 handleFileSelect()
               }}
               disabled={disabled || uploading || stockSearching}
-              className='h-11 w-full border-border/80 bg-background/80'
+              className={isCompact ? 'h-7 flex-1 border-border/80 bg-background/80 px-2 text-xs' : 'h-11 w-full border-border/80 bg-background/80'}
             >
-              <Upload className='mr-2 h-4 w-4' />
+              <Upload className={isCompact ? 'mr-1 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
               {t('select_file') || 'Select file'}
             </Button>
             <CameraCapture
@@ -394,9 +403,9 @@ export default function ImageUpload({
                   variant='outline'
                   size={isComfortable ? 'default' : 'sm'}
                   disabled={disabled || uploading || stockSearching}
-                  className='h-11 w-full border-border/80 bg-background/80'
+                  className={isCompact ? 'h-7 flex-1 border-border/80 bg-background/80 px-2 text-xs' : 'h-11 w-full border-border/80 bg-background/80'}
                 >
-                  <Camera className='mr-2 h-4 w-4' />
+                  <Camera className={isCompact ? 'mr-1 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
                   {t('take_photo') || 'Take photo'}
                 </Button>
               }

@@ -24,9 +24,11 @@ import {
 } from '@/components/ui/table'
 import { Customer } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
-import { DataTableToolbar } from './data-table-toolbar'
+import { DataTableViewOptions } from './data-table-view-options'
+import { CustomerListToolbar } from './customer-list-toolbar'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
+import type { CustomerListViewMode } from '../utils/customer-list-view'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -40,6 +42,11 @@ interface DataTableProps {
   data: Customer[]
   paggination: any
   loading?: boolean
+  searchInput: string
+  onSearchChange: (value: string) => void
+  viewMode: CustomerListViewMode
+  onViewModeChange: (mode: CustomerListViewMode) => void
+  actions?: React.ReactNode
 }
 
 export function CustomerTable({
@@ -47,9 +54,17 @@ export function CustomerTable({
   data,
   paggination,
   loading,
+  searchInput,
+  onSearchChange,
+  viewMode,
+  onViewModeChange,
+  actions,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    email: false,
+    address: false,
+  })
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
@@ -82,7 +97,14 @@ export function CustomerTable({
 
   return (
     <div className='space-y-4'>
-      <DataTableToolbar table={table} />
+      <CustomerListToolbar
+        searchInput={searchInput}
+        onSearchChange={onSearchChange}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
+        actions={actions}
+        trailing={<DataTableViewOptions table={table} />}
+      />
       <TableLoadingOverlay loading={loading}>
         <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>

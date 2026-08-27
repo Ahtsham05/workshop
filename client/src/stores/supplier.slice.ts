@@ -85,6 +85,16 @@ export const deleteSupplier = createAsyncThunk(
   })
 );
 
+export const fetchSupplierStats = createAsyncThunk(
+  'supplier/fetchSupplierStats',
+  catchAsync(async () => {
+    const response = await Axios({
+      ...summery.fetchSupplierStats,
+    });
+    return response.data;
+  })
+);
+
 export const fetchAllSuppliers = createAsyncThunk(
   'supplier/fetchAllSuppliers',
   catchAsync(async () => {
@@ -183,6 +193,7 @@ const supplierSlice = createSlice({
             updateSupplier,
             deleteSupplier,
             fetchAllSuppliers,
+            fetchSupplierStats,
             getSupplierPurchaseAndTransactions,
             bulkAddSuppliers,
           ])

@@ -26,6 +26,10 @@ router
   .route('/all')
   .get(auth('viewCustomers'), customerController.getAllCustomers);
 
+router
+  .route('/stats')
+  .get(auth('viewCustomers'), customerController.getCustomerStats);
+
 // Bulk add (import) route
 router
   .route('/bulk')

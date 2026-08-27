@@ -4653,6 +4653,7 @@ const getSalesmanCommissionReport = catchAsync(async (req, res) => {
       netCommission: roundReportAmount(earned.credit - reversed.debit),
       totalSalesAmount: roundReportAmount(earned.saleAmount),
       totalSalesCount: earned.count,
+      totalPaidCount: paid.count,
       activeSalesmenCount: salesmen.length,
       totalOutstanding: roundReportAmount(totalOutstanding),
     },

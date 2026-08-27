@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { format } from 'date-fns';
 import { escapeHtml } from '@/lib/escape-html';
 import { useLanguage } from '@/context/language-context';
@@ -85,6 +85,10 @@ interface PaymentReceiptProps {
    * For a supplier, a positive balance means money we still owe them (Payable), the
    * opposite of a customer receipt where positive means money still owed to us (Receivable). */
   partyType?: 'customer' | 'supplier';
+  /** Extra controls (e.g. WhatsApp/SMS send buttons) rendered in the same sticky action
+   * bar as the Urdu toggle and Print button, below a divider. Kept out of the scrollable
+   * receipt body so they're always reachable without scrolling. */
+  footerExtra?: ReactNode;
 }
 
 /** Status of the remaining balance after this payment, independent of who owes whom. */
@@ -112,6 +116,7 @@ export function PaymentReceipt({
   userPreferredLanguage,
   isTrial,
   partyType = 'customer',
+  footerExtra,
 }: PaymentReceiptProps) {
   const { t: tUi } = useLanguage();
   // Urdu Print toggle is shared with invoice printing (`invoicePrintInUrdu` in localStorage) —
@@ -931,7 +936,7 @@ export function PaymentReceipt({
   const previewColors = BALANCE_STATUS_COLORS[previewStatus];
 
   return (
-    <div className="payment-receipt-container" dir={dir}>
+    <div className="payment-receipt-container flex min-h-0 flex-1 flex-col" dir={dir}>
       <style>
         {`
         .receipt-content {
@@ -1128,6 +1133,7 @@ export function PaymentReceipt({
         `}
       </style>
 
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-md bg-muted/30 px-4 py-5 sm:px-6">
       <div className="receipt-content">
         <div className="receipt-accent-bar" />
         <div className="receipt-body">
@@ -1259,27 +1265,35 @@ export function PaymentReceipt({
         </div>
         </div>
       </div>
+      </div>
 
-      <div className="no-print" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginTop: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Label htmlFor="receipt-print-urdu" className="text-sm font-normal whitespace-nowrap">
-            {tUi('urdu_print')}
-          </Label>
-          <Switch
-            id="receipt-print-urdu"
-            checked={printInUrdu}
-            onCheckedChange={(v) => {
-              setPrintInUrdu(v);
-              setInvoicePrintInUrdu(v);
-            }}
+      <div className="no-print flex shrink-0 flex-col gap-3 border-t px-4 pt-4 pb-5 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="receipt-print-urdu" className="text-sm font-normal whitespace-nowrap">
+              {tUi('urdu_print')}
+            </Label>
+            <Switch
+              id="receipt-print-urdu"
+              checked={printInUrdu}
+              onCheckedChange={(v) => {
+                setPrintInUrdu(v);
+                setInvoicePrintInUrdu(v);
+              }}
+            />
+          </div>
+          <PrintFormatButton
+            label={labels.print_receipt}
+            defaultPaperSize={defaultPaperSize}
+            allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+            onPrint={printReceipt}
           />
         </div>
-        <PrintFormatButton
-          label={labels.print_receipt}
-          defaultPaperSize={defaultPaperSize}
-          allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
-          onPrint={printReceipt}
-        />
+        {footerExtra && (
+          <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+            {footerExtra}
+          </div>
+        )}
       </div>
     </div>
   );

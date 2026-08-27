@@ -1678,8 +1678,8 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       </Dialog>
 
       <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
-        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[90vh] overflow-y-auto overflow-x-hidden">
-          <DialogHeader>
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] !max-h-[90vh] !p-0 !gap-0 flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>{t('Payment Receipt')}</DialogTitle>
           </DialogHeader>
           {selectedPayment && (
@@ -1721,45 +1721,47 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               receiptNumber={selectedPayment.entry.reference || `RCP-${format(new Date(selectedPayment.entry.transactionDate), 'yyyyMMdd')}-${(selectedPayment.entry.id || selectedPayment.entry._id)?.slice(-6)}`}
               userPreferredLanguage={preferredLanguage as 'en' | 'ur'}
               isTrial={orgData?.subscription?.isTrial}
+              footerExtra={
+                customer.phone ? (
+                  <>
+                    <span className="text-sm text-muted-foreground">Send payment confirmation:</span>
+                    <WhatsAppSendButton
+                      phone={customer.phone}
+                      whatsapp={customer.whatsapp}
+                      name={customer.name}
+                      showLabel
+                      size="sm"
+                      variant="outline"
+                      message={buildPaymentReceivedMessage({
+                        branchName,
+                        name: customer.name,
+                        amount: selectedPayment.entry.credit,
+                        remainingBalance: selectedPayment.currentBalance,
+                      })}
+                      templateCategory="payment_received"
+                      templateParams={[
+                        customer.name || 'there',
+                        Math.abs(selectedPayment.entry.credit ?? 0).toFixed(0),
+                        Math.abs(selectedPayment.currentBalance ?? 0).toFixed(0),
+                      ]}
+                    />
+                    <SmsSendButton
+                      phone={customer.phone}
+                      name={customer.name}
+                      showLabel
+                      size="sm"
+                      variant="outline"
+                      defaultMessage={buildPaymentReceivedMessage({
+                        branchName,
+                        name: customer.name,
+                        amount: selectedPayment.entry.credit,
+                        remainingBalance: selectedPayment.currentBalance,
+                      })}
+                    />
+                  </>
+                ) : undefined
+              }
             />
-          )}
-          {selectedPayment && customer.phone && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-              <span className="text-sm text-muted-foreground">Send payment confirmation:</span>
-              <WhatsAppSendButton
-                phone={customer.phone}
-                whatsapp={customer.whatsapp}
-                name={customer.name}
-                showLabel
-                size="sm"
-                variant="outline"
-                message={buildPaymentReceivedMessage({
-                  branchName,
-                  name: customer.name,
-                  amount: selectedPayment.entry.credit,
-                  remainingBalance: selectedPayment.currentBalance,
-                })}
-                templateCategory="payment_received"
-                templateParams={[
-                  customer.name || 'there',
-                  Math.abs(selectedPayment.entry.credit ?? 0).toFixed(0),
-                  Math.abs(selectedPayment.currentBalance ?? 0).toFixed(0),
-                ]}
-              />
-              <SmsSendButton
-                phone={customer.phone}
-                name={customer.name}
-                showLabel
-                size="sm"
-                variant="outline"
-                defaultMessage={buildPaymentReceivedMessage({
-                  branchName,
-                  name: customer.name,
-                  amount: selectedPayment.entry.credit,
-                  remainingBalance: selectedPayment.currentBalance,
-                })}
-              />
-            </div>
           )}
         </DialogContent>
       </Dialog>

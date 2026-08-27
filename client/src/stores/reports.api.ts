@@ -1113,6 +1113,7 @@ export interface SalesmanCommissionReport {
     netCommission: number
     totalSalesAmount: number
     totalSalesCount: number
+    totalPaidCount: number
     activeSalesmenCount: number
     totalOutstanding: number
   }

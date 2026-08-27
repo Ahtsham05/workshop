@@ -32,6 +32,11 @@ export const customerSchema = z.object({
   whatsapp: z.string().optional(),
   balance: z.number().optional(),
   address: z.string().optional(), // customer address is optional
+  customerType: z.enum(['retail', 'wholesale', 'vip', 'corporate']).optional(),
+  creditLimit: z.number().optional(),
+  paymentTerms: z.enum(['cash', 'due_on_receipt', 'net_15', 'net_30', 'net_60']).optional(),
+  taxNumber: z.string().optional(),
+  notes: z.string().optional(),
   isEmployeeAccount: z.boolean().optional(), // hidden shadow account for billing an employee as a customer
   linkedEmployeeId: z.string().optional(),
   isSupplierAccount: z.boolean().optional(), // hidden shadow account for billing a supplier as a customer

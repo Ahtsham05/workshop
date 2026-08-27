@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Supplier, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const supplierLedgerService = require('./supplierLedger.service');
@@ -224,6 +225,47 @@ const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}) => {
   }
 };
 
+/**
+ * Live supplier counts + outstanding payable for the list page's stat cards.
+ * Outstanding payable is the sum of positive balances (a negative balance means the
+ * supplier owes us, not the other way round — same sign convention as customer.balance,
+ * see supplier-ledger-list.tsx's Payable/Receivable/Settled labeling).
+ * @param {Object} filter - Mongo filter (already branch-scoped)
+ */
+const getSupplierStats = async (filter) => {
+  const startOfMonth = new Date();
+  startOfMonth.setHours(0, 0, 0, 0);
+  startOfMonth.setDate(1);
+
+  // Unlike find()/countDocuments(), aggregate()'s $match does NOT run Mongoose's
+  // schema-based query casting — a string organizationId/branchId (as applyBranchFilter
+  // sets from req.organizationId/req.branchId) would compare against the field's real
+  // ObjectId-typed value and match nothing, silently zeroing out the balance sum. Cast
+  // explicitly, same pattern as customer/product/cashBook services' aggregate filters.
+  const castFilter = { ...filter };
+  if (castFilter.organizationId && mongoose.Types.ObjectId.isValid(castFilter.organizationId)) {
+    castFilter.organizationId = new mongoose.Types.ObjectId(String(castFilter.organizationId));
+  }
+  if (castFilter.branchId && mongoose.Types.ObjectId.isValid(castFilter.branchId)) {
+    castFilter.branchId = new mongoose.Types.ObjectId(String(castFilter.branchId));
+  }
+
+  const [totalSuppliers, newThisMonth, balanceAgg] = await Promise.all([
+    Supplier.countDocuments(filter),
+    Supplier.countDocuments({ ...filter, createdAt: { $gte: startOfMonth } }),
+    Supplier.aggregate([
+      { $match: castFilter },
+      { $group: { _id: null, outstandingPayable: { $sum: { $max: [{ $ifNull: ['$balance', 0] }, 0] } } } },
+    ]),
+  ]);
+
+  return {
+    totalSuppliers,
+    newThisMonth,
+    outstandingPayable: balanceAgg[0]?.outstandingPayable || 0,
+  };
+};
+
 module.exports = {
   createSupplier,
   ensureSupplierCustomerAccount,
@@ -232,5 +274,6 @@ module.exports = {
   updateSupplierById,
   deleteSupplierById,
   getAllSuppliers,
+  getSupplierStats,
   bulkAddSuppliers,
 };

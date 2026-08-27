@@ -25,10 +25,12 @@ import {
 } from '@/components/ui/table'
 import { Supplier } from '../data/schema'  // Changed from Customer to Supplier
 import { DataTablePagination } from './data-table-pagination'
-import { DataTableToolbar } from './data-table-toolbar'
+import { DataTableViewOptions } from './data-table-view-options'
+import { SupplierListToolbar } from './supplier-list-toolbar'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
+import type { SupplierListViewMode } from '../utils/supplier-list-view'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -42,11 +44,29 @@ interface DataTableProps {
   data: Supplier[]
   paggination: any
   loading?: boolean
+  searchInput: string
+  onSearchChange: (value: string) => void
+  viewMode: SupplierListViewMode
+  onViewModeChange: (mode: SupplierListViewMode) => void
+  actions?: React.ReactNode
 }
 
-export function SupplierTable({ columns, data, paggination, loading }: DataTableProps) {
+export function SupplierTable({
+  columns,
+  data,
+  paggination,
+  loading,
+  searchInput,
+  onSearchChange,
+  viewMode,
+  onViewModeChange,
+  actions,
+}: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    email: false,
+    address: false,
+  })
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
@@ -83,7 +103,14 @@ export function SupplierTable({ columns, data, paggination, loading }: DataTable
 
   return (
     <div className='space-y-4'>
-      <DataTableToolbar table={table} />
+      <SupplierListToolbar
+        searchInput={searchInput}
+        onSearchChange={onSearchChange}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
+        actions={actions}
+        trailing={<DataTableViewOptions table={table} />}
+      />
       <TableLoadingOverlay loading={loading}>
         <div className='rounded-md border'>
         <Table>

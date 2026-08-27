@@ -46,6 +46,15 @@ const deleteCustomer = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const getCustomerStats = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  filter.isEmployeeAccount = { $ne: true };
+  filter.isSupplierAccount = { $ne: true };
+  const stats = await customerService.getCustomerStats(filter);
+  res.send(stats);
+});
+
 const getAllCustomers = catchAsync(async (req, res) => {
   const filter = {};
   applyBranchFilter(filter, req);
@@ -116,6 +125,7 @@ module.exports = {
   updateCustomer,
   deleteCustomer,
   getAllCustomers,
+  getCustomerStats,
   bulkAddCustomers,
   scanCustomerImage,
   uploadCustomerImage,

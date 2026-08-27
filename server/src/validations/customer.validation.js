@@ -7,18 +7,26 @@ const cloudinaryImage = Joi.object({
 
 const nullableCloudinaryImage = Joi.alternatives().try(cloudinaryImage, Joi.valid(null));
 
+const customerType = Joi.string().valid('retail', 'wholesale', 'vip', 'corporate').allow('');
+const paymentTerms = Joi.string().valid('cash', 'due_on_receipt', 'net_15', 'net_30', 'net_60').allow('');
+
 const createCustomer = {
   body: Joi.object().keys({
     name: Joi.string().required(),
     nameUrdu: Joi.string().allow(''),
-    email: Joi.string().email(),
-    phone: Joi.string(),
-    whatsapp: Joi.string(),
-    address: Joi.string(),
+    email: Joi.string().email().allow(''),
+    phone: Joi.string().allow(''),
+    whatsapp: Joi.string().allow(''),
+    address: Joi.string().allow(''),
     balance: Joi.number().optional(),
     picture: cloudinaryImage,
     idCardFront: cloudinaryImage,
     idCardBack: cloudinaryImage,
+    customerType,
+    creditLimit: Joi.number().optional(),
+    paymentTerms,
+    taxNumber: Joi.string().allow(''),
+    notes: Joi.string().allow(''),
   }),
 };
 
@@ -55,14 +63,19 @@ const updateCustomer = {
     _id: Joi.string(),
     name: Joi.string(),
     nameUrdu: Joi.string().allow(''),
-    email: Joi.string().email(),
-    phone: Joi.string(),
-    whatsapp: Joi.string(),
-    address: Joi.string(),
+    email: Joi.string().email().allow(''),
+    phone: Joi.string().allow(''),
+    whatsapp: Joi.string().allow(''),
+    address: Joi.string().allow(''),
     balance: Joi.number().optional(),
     picture: nullableCloudinaryImage,
     idCardFront: nullableCloudinaryImage,
     idCardBack: nullableCloudinaryImage,
+    customerType,
+    creditLimit: Joi.number().optional(),
+    paymentTerms,
+    taxNumber: Joi.string().allow(''),
+    notes: Joi.string().allow(''),
   }),
 };
 

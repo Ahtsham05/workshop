@@ -26,6 +26,10 @@ router
   .route('/all')
   .get(auth('viewSuppliers'), validate(supplierValidation.getAllSuppliers), supplierController.getAllSuppliers);
 
+router
+  .route('/stats')
+  .get(auth('viewSuppliers'), supplierController.getSupplierStats);
+
 // Bulk add (import) route
 router
   .route('/bulk')

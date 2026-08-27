@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const customerLedgerService = require('./customerLedger.service');
@@ -112,6 +113,47 @@ const deleteCustomerById = async (customerId) => {
   return customer;
 };
 
+/**
+ * Live customer counts + outstanding balance for the list page's stat cards.
+ * Outstanding balance mirrors accounts-dashboard.tsx's totalReceivables definition
+ * (sum of positive balances only — a negative balance is money owed *to* the
+ * customer, not receivable).
+ * @param {Object} filter - Mongo filter (already branch/employee/supplier scoped)
+ */
+const getCustomerStats = async (filter) => {
+  const startOfMonth = new Date();
+  startOfMonth.setHours(0, 0, 0, 0);
+  startOfMonth.setDate(1);
+
+  // Unlike find()/countDocuments(), aggregate()'s $match does NOT run Mongoose's
+  // schema-based query casting — a string organizationId/branchId (as applyBranchFilter
+  // sets from req.organizationId/req.branchId) would compare against the field's real
+  // ObjectId-typed value and match nothing, silently zeroing out the balance sum. Cast
+  // explicitly, same pattern as product/cashBook/expense services' aggregate filters.
+  const castFilter = { ...filter };
+  if (castFilter.organizationId && mongoose.Types.ObjectId.isValid(castFilter.organizationId)) {
+    castFilter.organizationId = new mongoose.Types.ObjectId(String(castFilter.organizationId));
+  }
+  if (castFilter.branchId && mongoose.Types.ObjectId.isValid(castFilter.branchId)) {
+    castFilter.branchId = new mongoose.Types.ObjectId(String(castFilter.branchId));
+  }
+
+  const [totalCustomers, newThisMonth, balanceAgg] = await Promise.all([
+    Customer.countDocuments(filter),
+    Customer.countDocuments({ ...filter, createdAt: { $gte: startOfMonth } }),
+    Customer.aggregate([
+      { $match: castFilter },
+      { $group: { _id: null, outstandingBalance: { $sum: { $max: [{ $ifNull: ['$balance', 0] }, 0] } } } },
+    ]),
+  ]);
+
+  return {
+    totalCustomers,
+    newThisMonth,
+    outstandingBalance: balanceAgg[0]?.outstandingBalance || 0,
+  };
+};
+
 const getAllCustomers = async (filter = {}, { includeEmployees = false, includeSuppliers = false } = {}) => {
   const query = { ...filter };
   if (!includeEmployees) {
@@ -191,5 +233,6 @@ module.exports = {
   updateCustomerById,
   deleteCustomerById,
   getAllCustomers,
+  getCustomerStats,
   bulkAddCustomers,
 };

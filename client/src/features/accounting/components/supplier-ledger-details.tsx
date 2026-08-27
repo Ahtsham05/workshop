@@ -1357,8 +1357,8 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
       </Dialog>
 
       <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
-        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] max-h-[90vh] overflow-y-auto overflow-x-hidden">
-          <DialogHeader>
+        <DialogContent className="!w-fit !max-w-[min(96vw,1400px)] min-w-[min(90vw,520px)] !max-h-[90vh] !p-0 !gap-0 flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>{t('Payment Receipt')}</DialogTitle>
           </DialogHeader>
           {selectedPayment && (
@@ -1401,45 +1401,47 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               userPreferredLanguage={preferredLanguage as 'en' | 'ur'}
               isTrial={orgData?.subscription?.isTrial}
               partyType="supplier"
+              footerExtra={
+                supplier.phone ? (
+                  <>
+                    <span className="text-sm text-muted-foreground">Send payment confirmation:</span>
+                    <WhatsAppSendButton
+                      phone={supplier.phone}
+                      whatsapp={(supplier as { whatsapp?: string }).whatsapp}
+                      name={supplier.name}
+                      showLabel
+                      size="sm"
+                      variant="outline"
+                      message={buildPaymentMadeMessage({
+                        branchName,
+                        name: supplier.name,
+                        amount: selectedPayment.entry.debit,
+                        remainingBalance: selectedPayment.currentBalance,
+                      })}
+                      templateCategory="payment_made"
+                      templateParams={[
+                        supplier.name || 'there',
+                        Math.abs(selectedPayment.entry.debit ?? 0).toFixed(0),
+                        Math.abs(selectedPayment.currentBalance ?? 0).toFixed(0),
+                      ]}
+                    />
+                    <SmsSendButton
+                      phone={supplier.phone}
+                      name={supplier.name}
+                      showLabel
+                      size="sm"
+                      variant="outline"
+                      defaultMessage={buildPaymentMadeMessage({
+                        branchName,
+                        name: supplier.name,
+                        amount: selectedPayment.entry.debit,
+                        remainingBalance: selectedPayment.currentBalance,
+                      })}
+                    />
+                  </>
+                ) : undefined
+              }
             />
-          )}
-          {selectedPayment && supplier.phone && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-              <span className="text-sm text-muted-foreground">Send payment confirmation:</span>
-              <WhatsAppSendButton
-                phone={supplier.phone}
-                whatsapp={(supplier as { whatsapp?: string }).whatsapp}
-                name={supplier.name}
-                showLabel
-                size="sm"
-                variant="outline"
-                message={buildPaymentMadeMessage({
-                  branchName,
-                  name: supplier.name,
-                  amount: selectedPayment.entry.debit,
-                  remainingBalance: selectedPayment.currentBalance,
-                })}
-                templateCategory="payment_made"
-                templateParams={[
-                  supplier.name || 'there',
-                  Math.abs(selectedPayment.entry.debit ?? 0).toFixed(0),
-                  Math.abs(selectedPayment.currentBalance ?? 0).toFixed(0),
-                ]}
-              />
-              <SmsSendButton
-                phone={supplier.phone}
-                name={supplier.name}
-                showLabel
-                size="sm"
-                variant="outline"
-                defaultMessage={buildPaymentMadeMessage({
-                  branchName,
-                  name: supplier.name,
-                  amount: selectedPayment.entry.debit,
-                  remainingBalance: selectedPayment.currentBalance,
-                })}
-              />
-            </div>
           )}
         </DialogContent>
       </Dialog>

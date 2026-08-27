@@ -46,6 +46,13 @@ const getAllSuppliers = catchAsync(async (req, res) => {
   res.send(suppliers);
 });
 
+const getSupplierStats = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const stats = await supplierService.getSupplierStats(filter);
+  res.send(stats);
+});
+
 const bulkAddSuppliers = catchAsync(async (req, res) => {
   try {
     const { suppliers } = req.body;
@@ -106,6 +113,7 @@ module.exports = {
   updateSupplier,
   deleteSupplier,
   getAllSuppliers,
+  getSupplierStats,
   bulkAddSuppliers,
   scanSupplierImage,
   uploadSupplierImage,

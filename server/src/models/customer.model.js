@@ -38,6 +38,17 @@ const CustomerSchema = new mongoose.Schema({
   whatsapp: { type: String },
   address: { type: String },
   balance: { type: Number, default: 0 },
+  customerType: {
+    type: String,
+    enum: ['retail', 'wholesale', 'vip', 'corporate'],
+  },
+  creditLimit: { type: Number, default: 0 },
+  paymentTerms: {
+    type: String,
+    enum: ['cash', 'due_on_receipt', 'net_15', 'net_30', 'net_60'],
+  },
+  taxNumber: { type: String, trim: true },
+  notes: { type: String, trim: true },
   // Auto-created subsidiary account under Accounts Receivable (double-entry).
   accountHeadId: {
     type: mongoose.Schema.Types.ObjectId,
