@@ -65,6 +65,12 @@ const SupplierSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Customer',
   },
+  // Whether this supplier shows up as selectable across the app (Purchase supplier
+  // picker, etc). Defaults true; deactivating hides it from those pickers without
+  // deleting the record or its ledger history — see supplier.service.js's
+  // ACTIVE_ONLY_FILTER on getAllSuppliers. The Suppliers admin list itself still shows
+  // deactivated suppliers, with their own Active/Inactive toggle.
+  isActive: { type: Boolean, default: true, index: true },
 }, {
   timestamps: true,
 });

@@ -15,7 +15,7 @@ const createCustomer = catchAsync(async (req, res) => {
 });
 
 const getCustomers = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['name', 'email', 'phone']);
+  const filter = pick(req.query, ['name', 'email', 'phone', 'isActive']);
   applyBranchFilter(filter, req);
   if (req.query.includeEmployees !== 'true' && req.query.includeEmployees !== true) {
     filter.isEmployeeAccount = { $ne: true };
@@ -44,6 +44,23 @@ const updateCustomer = catchAsync(async (req, res) => {
 const deleteCustomer = catchAsync(async (req, res) => {
   await customerService.deleteCustomerById(req.params.customerId);
   res.status(httpStatus.NO_CONTENT).send();
+});
+
+const bulkUpdateCustomers = catchAsync(async (req, res) => {
+  const { customers } = req.body;
+  const result = await customerService.bulkUpdateCustomers(customers);
+  res.send({ message: `Updated ${result.modifiedCount} customer(s)`, ...result });
+});
+
+const bulkDeleteCustomers = catchAsync(async (req, res) => {
+  const { ids } = req.body;
+  const { deleted, notFoundIds } = await customerService.bulkDeleteCustomersByIds(ids);
+  res.send({
+    message: `Deleted ${deleted.length} of ${ids.length} customer(s)`,
+    deletedCount: deleted.length,
+    deletedIds: deleted.map((customer) => customer._id),
+    notFoundIds,
+  });
 });
 
 const getCustomerStats = catchAsync(async (req, res) => {
@@ -124,6 +141,8 @@ module.exports = {
   getCustomer,
   updateCustomer,
   deleteCustomer,
+  bulkUpdateCustomers,
+  bulkDeleteCustomers,
   getAllCustomers,
   getCustomerStats,
   bulkAddCustomers,

@@ -41,6 +41,9 @@ export const customerSchema = z.object({
   linkedEmployeeId: z.string().optional(),
   isSupplierAccount: z.boolean().optional(), // hidden shadow account for billing a supplier as a customer
   linkedSupplierId: z.string().optional(),
+  // Defaults true; deactivating hides the customer from Invoice/POS pickers without
+  // deleting the record or its ledger history — see server customer.service.js.
+  isActive: z.boolean().optional(),
   createdAt: z.string().optional(), // timestamp of when the customer was created (optional)
   updatedAt: z.string().optional(), // timestamp of when the customer was last updated (optional)
 });

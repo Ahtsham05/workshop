@@ -366,6 +366,10 @@ export interface InventoryReportData {
   // imeisTotalCount for the real count when it exceeds what's included here.
   imeis: string[]
   imeisTotalCount: number
+  tags?: string[]
+  color?: string | null
+  shelfLocation?: string
+  flag?: { color: string; reason?: string; note?: string } | null
 }
 
 export interface BatchExpiryReportRow {

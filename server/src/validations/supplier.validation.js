@@ -19,6 +19,7 @@ const createSupplier = {
     picture: cloudinaryImage,
     idCardFront: cloudinaryImage,
     idCardBack: cloudinaryImage,
+    isActive: Joi.boolean().optional(),
   }),
 };
 
@@ -27,6 +28,7 @@ const getSuppliers = {
     name: Joi.string(),
     email: Joi.string(),
     phone: Joi.string(),
+    isActive: Joi.boolean(),
     limit: Joi.number(),
     page: Joi.number(),
     sortBy: Joi.string(),
@@ -57,12 +59,30 @@ const updateSupplier = {
     picture: nullableCloudinaryImage,
     idCardFront: nullableCloudinaryImage,
     idCardBack: nullableCloudinaryImage,
+    isActive: Joi.boolean().optional(),
   }),
 };
 
 const deleteSupplier = {
   params: Joi.object().keys({
     supplierId: Joi.string().required(),
+  }),
+};
+
+const bulkUpdateSuppliers = {
+  body: Joi.object().keys({
+    suppliers: Joi.array().items(
+      Joi.object().keys({
+        id: Joi.string().required(),
+        isActive: Joi.boolean().optional(),
+      })
+    ).required().min(1)
+  }),
+};
+
+const bulkDeleteSuppliers = {
+  body: Joi.object().keys({
+    ids: Joi.array().items(Joi.string()).required().min(1),
   }),
 };
 
@@ -88,5 +108,7 @@ module.exports = {
   getSupplier,
   updateSupplier,
   deleteSupplier,
+  bulkUpdateSuppliers,
+  bulkDeleteSuppliers,
   bulkAddSuppliers,
 };

@@ -49,8 +49,10 @@ import {
   Columns2,
   Loader2,
   Zap,
+  Flag,
 } from 'lucide-react'
-import { useGetInvoicesQuery } from '@/stores/invoice.api'
+import { useGetInvoicesQuery, useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
+import { FlagBadge, FlagPickerPopover } from '@/components/flag-badge'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
@@ -125,6 +127,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const canDelete = hasExplicitPermission('deleteInvoices')
   const canPrint = hasExplicitPermission('printInvoices')
   const canViewCreatedBy = useCanViewCreatedBy()
+  const [updateInvoiceFlag] = useUpdateInvoiceFlagMutation()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -720,6 +723,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {invoice.invoiceNumber}
+                        <FlagBadge flag={invoice.flag} />
                         {invoice.offlinePending && (
                           <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
                             {t('Pending sync') || 'Pending sync'}
@@ -842,6 +846,36 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
+                        )}
+
+                        {canEdit && (
+                          <FlagPickerPopover
+                            flag={invoice.flag}
+                            onSave={async (data) => {
+                              try {
+                                await updateInvoiceFlag({ id: invoice._id, ...data }).unwrap()
+                                toast.success(invoice.flag ? 'Flag updated' : 'Invoice flagged for review')
+                              } catch {
+                                toast.error('Failed to update flag')
+                              }
+                            }}
+                            onClear={async () => {
+                              try {
+                                await updateInvoiceFlag({ id: invoice._id, clear: true }).unwrap()
+                                toast.success('Flag cleared')
+                              } catch {
+                                toast.error('Failed to clear flag')
+                              }
+                            }}
+                            trigger={
+                              <Button variant="ghost" size="sm">
+                                <Flag
+                                  className="h-4 w-4"
+                                  style={invoice.flag ? { color: invoice.flag.color, fill: invoice.flag.color } : undefined}
+                                />
+                              </Button>
+                            }
+                          />
                         )}
 
                         {canPrint && (

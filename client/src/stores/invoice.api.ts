@@ -164,6 +164,16 @@ export const invoiceApi = createApi({
       onQueryStarted: invalidateDownstreamCaches,
     }),
 
+    // Set/clear an invoice's discrepancy flag (pass { clear: true } to unflag)
+    updateInvoiceFlag: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/${id}/flag`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: (_result, _err, { id }) => [{ type: 'Invoice', id }, 'Invoice'],
+    }),
+
     // Delete invoice
     deleteInvoice: builder.mutation({
       query: (id) => ({
@@ -298,6 +308,7 @@ export const {
   useLazyGetInvoicesQuery,
   useGetInvoiceByIdQuery,
   useUpdateInvoiceMutation,
+  useUpdateInvoiceFlagMutation,
   useDeleteInvoiceMutation,
   useFinalizeInvoiceMutation,
   useProcessPaymentMutation,

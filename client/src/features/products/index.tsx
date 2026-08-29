@@ -2,32 +2,48 @@ import { useProductColumns } from './components/users-columns' // Updated to use
 import ProductDialogs from './components/users-dialogs' // Adjusted for products
 import ProductPrimaryButtons from './components/users-primary-buttons' // Adjusted for products
 import { ProductTable } from './components/users-table' // Adjusted for products
-import ProductsProvider from './context/users-context' // Adjusted for products
+import ProductsProvider, { useUsers } from './context/users-context' // Adjusted for products
 import { LowStockAlert } from './components/low-stock-alert'
 import { LowStockDetails } from './components/low-stock-details'
 import { ImportBranchProductsBanner } from './components/import-branch-products-banner'
-import { useDispatch } from 'react-redux'
-import { AppDispatch } from '@/stores/store'
+import { ProductStatCards } from './components/product-stat-cards'
+import { useDispatch, useSelector } from 'react-redux'
+import { AppDispatch, RootState } from '@/stores/store'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { fetchProducts, bulkUpdateProducts, fetchProductStats } from '@/stores/product.slice'
+import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import { fetchCategories } from '@/stores/category.slice'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Edit, Package, Boxes, Wallet } from 'lucide-react'
+import { Can } from '@/context/permission-context'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Edit, Package, Boxes, Wallet, CircleDollarSign, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
+import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 
 const SEARCH_DEBOUNCE_MS = 400
+const ALL_CATEGORIES = 'all'
+const ALL_STATUS = 'all'
+// Active products first, inactive last; newest-first within each group.
+const PRODUCTS_SORT_BY = 'isActive:desc,createdAt:desc'
 
 export default function Products() {
   // Parse product list
   const [products, setProducts] = useState<any[]>([])
   const [allProducts, setAllProducts] = useState<any[]>([]) // Store all products for low stock alert
   const [totalPage, setTotalPage] = useState(1)
+  const [totalResults, setTotalResults] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [fetch, setFetch] = useState(false)
@@ -42,10 +58,19 @@ export default function Products() {
   const [editValues, setEditValues] = useState<Record<string, { price?: number; cost?: number; stockQuantity?: number }>>({})
   const [showLowStockDetails, setShowLowStockDetails] = useState(false)
   const [lowStockThreshold, setLowStockThreshold] = useState(10)
+  const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES)
+  const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
+  const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
-  const columns = useProductColumns() // Get columns with translations
+  // Re-sorts the current page (active-first/inactive-last) after a per-row Active
+  // toggle — that switch flips instantly on its own but has no way to move the row
+  // without this, see active-toggle-cell.tsx.
+  const handleProductStatusChange = useCallback(() => setFetch((prev) => !prev), [])
+  const columns = useProductColumns(lowStockThreshold, handleProductStatusChange) // Get columns with translations
+  const { categories } = useSelector((state: RootState) => state.category)
 
   // Fetch categories once when products page loads
   useEffect(() => {
@@ -55,7 +80,7 @@ export default function Products() {
   // Fetch ALL products for low stock alert (runs once on mount and when fetch changes)
   useEffect(() => {
     setLoadingAllProducts(true)
-    dispatch(fetchProducts({ page: 1, limit: 1000, sortBy: 'createdAt:desc' }))
+    dispatch(fetchProducts({ page: 1, limit: 1000, sortBy: PRODUCTS_SORT_BY }))
       .then((data) => {
         if (data.payload?.results) {
           setAllProducts(data.payload.results)
@@ -89,7 +114,7 @@ export default function Products() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch])
+  }, [debouncedSearch, categoryFilter, statusFilter])
 
   // Fetch paginated products for table display
   useEffect(() => {
@@ -98,18 +123,22 @@ export default function Products() {
     const params = {
       page: currentPage,
       limit: limit,
-      sortBy: 'createdAt:desc',
+      sortBy: PRODUCTS_SORT_BY,
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.product } : {}),
+      ...(categoryFilter !== ALL_CATEGORIES ? { category: categoryFilter } : {}),
+      ...(statusFilter !== ALL_STATUS ? { isActive: statusFilter === 'active' } : {}),
     };
-    
+
     dispatch(fetchProducts(params))
         .then((data) => {
         if (data.payload?.results) {
           setProducts(data.payload.results)
           setTotalPage(data.payload.totalPages || 1)
+          setTotalResults(data.payload.totalResults || 0)
         } else {
           setProducts([])
           setTotalPage(1)
+          setTotalResults(0)
         }
         setLoading(false)
       })
@@ -117,10 +146,11 @@ export default function Products() {
         console.error('Error fetching products:', error)
         setProducts([])
         setTotalPage(1)
+        setTotalResults(0)
         setLoading(false)
         toast.error('Failed to fetch products')
       })
-  }, [currentPage, limit, fetch, debouncedSearch, dispatch])
+  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, statusFilter, dispatch])
 
   // Handle bulk product update with individual values
   const handleBulkUpdate = useCallback(async () => {
@@ -179,6 +209,37 @@ export default function Products() {
     }
   }, [editValues, selectedProducts, t, fetch, dispatch])
 
+  // Activate/deactivate every selected row in one call — reuses the same bulk-update
+  // endpoint the price/cost/stock bulk edit above already uses.
+  const handleBulkSetActive = useCallback(async (isActive: boolean) => {
+    if (selectedProducts.length === 0) return
+    setBulkStatusUpdating(true)
+    try {
+      const productsToUpdate = selectedProducts.map((product: any) => ({
+        id: product._id || product.id || '',
+        isActive,
+      }))
+      const result = await dispatch(bulkUpdateProducts({ products: productsToUpdate }))
+      if (result.meta.requestStatus === 'fulfilled') {
+        setSelectedProducts([])
+        setFetch((prev) => !prev)
+        // Same cross-slice cache as the per-row Active toggle (active-toggle-cell.tsx) —
+        // Invoice/Purchase/POS pickers read from purchaseCatalogApi's own RTK Query
+        // cache, which this plain bulkUpdateProducts thunk has no way to invalidate on
+        // its own.
+        dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
+        toast.success(`${productsToUpdate.length} product(s) ${isActive ? 'activated' : 'deactivated'}`)
+      } else {
+        throw new Error(result.payload || 'Bulk status update failed')
+      }
+    } catch (error) {
+      console.error('Bulk status update error:', error)
+      toast.error('Failed to update product status')
+    } finally {
+      setBulkStatusUpdating(false)
+    }
+  }, [selectedProducts, dispatch])
+
   const handleSelectedRowsChange = useCallback((selectedRows: any[]) => {
     setSelectedProducts(selectedRows)
   }, [])
@@ -220,6 +281,26 @@ export default function Products() {
     }
   }, [allProducts, currentPage, limit, debouncedSearch, loadingAllProducts])
 
+  // Out of Stock / Low Stock / Critical Stock counts for the header stat cards — same
+  // thresholds LowStockAlert uses internally (critical = at or below half the low-stock
+  // threshold), computed here too since the alert banner no longer exposes them.
+  const stockCounts = useMemo(() => {
+    let outOfStock = 0
+    let lowStock = 0
+    let criticalStock = 0
+    for (const product of allProducts) {
+      const stock = getDisplayStock(product)
+      if (stock === 0) outOfStock++
+      else if (stock <= Math.floor(lowStockThreshold / 2)) criticalStock++
+      else if (stock <= lowStockThreshold) lowStock++
+    }
+    return { outOfStock, lowStock, criticalStock }
+  }, [allProducts, lowStockThreshold])
+
+  const avgPurchasePrice = productStats && productStats.totalStockQuantity > 0
+    ? productStats.totalStockValue / productStats.totalStockQuantity
+    : 0
+
   // Load threshold from localStorage
   useEffect(() => {
     const savedThreshold = localStorage.getItem('lowStockThreshold');
@@ -248,54 +329,61 @@ export default function Products() {
 {/* "N products found at your other branches" banner — only when this branch's catalog is empty */}
           <ImportBranchProductsBanner productCount={allProducts.length} loading={loadingAllProducts} />
 
-{/* Low Stock Alert Banner */}
-          <div className='mb-4'>
-            <div onClick={() => !loadingAllProducts && setShowLowStockDetails(true)} className={loadingAllProducts ? '' : 'cursor-pointer'}>
-              <LowStockAlert products={allProducts} defaultThreshold={lowStockThreshold} loading={loadingAllProducts} />
-            </div>
-          </div>
-
-          <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
+          <div className='mb-4 flex flex-wrap items-start justify-between gap-3'>
             <div>
               <h2 className='text-2xl font-bold tracking-tight'>{t('products_list')}</h2>
-              <p className='text-muted-foreground mb-2'>
+              <p className='text-muted-foreground'>
                 {t('manage_products')}
               </p>
-              <div className='flex flex-wrap items-center gap-2'>
-                <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
-                  <Package className='h-3.5 w-3.5' />
-                  {t('total_products')}: {loadingStats ? '…' : (productStats?.totalProducts ?? 0)}
-                </Badge>
-                <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
-                  <Boxes className='h-3.5 w-3.5' />
-                  {t('total_stock_quantity')}: {loadingStats ? '…' : (productStats?.totalStockQuantity ?? 0)}
-                </Badge>
-                <Badge variant='secondary' className='gap-1.5 py-1 text-xs font-medium'>
-                  <Wallet className='h-3.5 w-3.5' />
-                  {t('total_value_of_stock')}: {loadingStats ? '…' : (productStats?.totalStockValue ?? 0).toLocaleString()}
-                </Badge>
-              </div>
             </div>
             <div className='flex gap-2'>
               {selectedProducts.length > 0 && !inlineEditMode && (
-                <Button 
-                  variant="outline" 
-                  onClick={startInlineEdit}
-                  className='space-x-1'
-                >
-                  <Edit size={16} />
-                  <span>{t('bulk_edit_selected')} ({selectedProducts.length})</span>
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={startInlineEdit}
+                    className='space-x-1'
+                  >
+                    <Edit size={16} />
+                    <span>{t('bulk_edit_selected')} ({selectedProducts.length})</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={bulkStatusUpdating}
+                    onClick={() => handleBulkSetActive(true)}
+                    className='space-x-1'
+                  >
+                    <span>{t('Activate Selected')} ({selectedProducts.length})</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={bulkStatusUpdating}
+                    onClick={() => handleBulkSetActive(false)}
+                    className='space-x-1'
+                  >
+                    <span>{t('Deactivate Selected')} ({selectedProducts.length})</span>
+                  </Button>
+                  <Can permission='deleteProducts'>
+                    <Button
+                      variant="destructive"
+                      onClick={() => setBulkDeleteOpen(true)}
+                      className='space-x-1'
+                    >
+                      <Trash2 size={16} />
+                      <span>{t('delete_selected')} ({selectedProducts.length})</span>
+                    </Button>
+                  </Can>
+                </>
               )}
               {inlineEditMode && (
                 <>
-                  <Button 
+                  <Button
                     onClick={handleBulkUpdate}
                     className='space-x-1'
                   >
                     <span>{t('update_products')} ({selectedProducts.length})</span>
                   </Button>
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={cancelInlineEdit}
                     className='space-x-1'
@@ -307,6 +395,47 @@ export default function Products() {
               <ProductPrimaryButtons />
             </div>
           </div>
+
+          <div className='mb-4'>
+            <ProductStatCards
+              outOfStock={stockCounts.outOfStock}
+              lowStock={stockCounts.lowStock}
+              criticalStock={stockCounts.criticalStock}
+              totalProducts={productStats?.totalProducts ?? 0}
+              loading={loadingAllProducts || loadingStats}
+            />
+          </div>
+
+{/* Out of stock / low stock banner */}
+          <div className='mb-4'>
+            <div onClick={() => !loadingAllProducts && setShowLowStockDetails(true)} className={loadingAllProducts ? '' : 'cursor-pointer'}>
+              <LowStockAlert products={allProducts} defaultThreshold={lowStockThreshold} loading={loadingAllProducts} />
+            </div>
+          </div>
+
+          <div className='mb-4 flex flex-wrap items-center gap-2'>
+            <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
+              <Package className='h-4 w-4 text-muted-foreground' />
+              <span className='text-muted-foreground'>{t('total_products')}:</span>
+              <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalProducts ?? 0).toLocaleString()}</span>
+            </div>
+            <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
+              <Boxes className='h-4 w-4 text-muted-foreground' />
+              <span className='text-muted-foreground'>{t('total_stock_quantity')}:</span>
+              <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalStockQuantity ?? 0).toLocaleString()}</span>
+            </div>
+            <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
+              <Wallet className='h-4 w-4 text-muted-foreground' />
+              <span className='text-muted-foreground'>{t('total_value_of_stock')}:</span>
+              <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalStockValue ?? 0).toLocaleString()}</span>
+            </div>
+            <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
+              <CircleDollarSign className='h-4 w-4 text-muted-foreground' />
+              <span className='text-muted-foreground'>{t('Avg Purchase Price')}:</span>
+              <span className='font-semibold tabular-nums'>{loadingStats ? '…' : avgPurchasePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
             <ProductTable
               data={products}
@@ -322,8 +451,35 @@ export default function Products() {
                   aria-label={t('search_products')}
                 />
               }
+              toolbarTrailing={
+                <>
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className='h-9 w-[180px]'>
+                      <SelectValue placeholder={t('all_categories')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_CATEGORIES}>{t('all_categories')}</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className='h-9 w-[150px]'>
+                      <SelectValue placeholder={t('All Status')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_STATUS}>{t('All Status')}</SelectItem>
+                      <SelectItem value='active'>{t('Active')}</SelectItem>
+                      <SelectItem value='inactive'>{t('Inactive')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <AiScanButton />
+                </>
+              }
               paggination={{
                 totalPage,
+                totalResults,
                 currentPage,
                 setCurrentPage,
                 limit,
@@ -341,7 +497,32 @@ export default function Products() {
           </div>
 
         <ProductDialogs setFetch={setFetch} />
+
+        <BulkDeleteDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          products={selectedProducts}
+          onDeleted={() => {
+            setSelectedProducts([])
+            setFetch((prev) => !prev)
+          }}
+        />
       </div>
     </ProductsProvider>
+  )
+}
+
+/** Small standalone component (rather than inline in Products' toolbar JSX) purely so it
+ * can call useUsers() — that hook only works inside ProductsProvider's subtree, and
+ * Products() itself renders the provider rather than being inside it. */
+function AiScanButton() {
+  const { setOpen } = useUsers()
+  const { t } = useLanguage()
+  return (
+    <Button variant='outline' size='sm' className='h-9 gap-1.5' onClick={() => setOpen('ai-scan')}>
+      <Sparkles className='h-4 w-4' />
+      {t('ai_scan')}
+      <Badge variant='secondary' className='ml-1 h-4 px-1.5 text-[10px] leading-none'>{t('New')}</Badge>
+    </Button>
   )
 }

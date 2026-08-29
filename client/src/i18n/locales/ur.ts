@@ -288,7 +288,35 @@ const ur: Record<string, string> = {
     "enter_new": "نئی داخل کریں",
     "current": "موجودہ",
     // "bulk_update_success": "پروڈکٹس کامیابی سے اپ ڈیٹ ہوگئے!",
-    
+
+    // Bulk Delete Products
+    "delete_selected": "منتخب کردہ حذف کریں",
+    "bulk_delete_products": "پروڈکٹس حذف کریں",
+    "bulk_delete_confirmation": "آپ مستقل طور پر حذف کرنے والے ہیں",
+    "bulk_delete_confirmation_suffix": "پروڈکٹ(س)۔ اس عمل کو واپس نہیں کیا جا سکتا۔",
+    "bulk_delete_type_to_confirm": "تصدیق کے لیے DELETE لکھیں",
+    "bulk_delete_placeholder": "DELETE لکھیں",
+    "bulk_delete_success": "پروڈکٹ(س) کامیابی سے حذف ہوگئے",
+    "bulk_delete_partial": "منتخب پروڈکٹس میں سے حذف ہوگئے",
+    "bulk_delete_failed": "منتخب پروڈکٹس حذف کرنے میں ناکامی",
+    "and_more_products": "اور {{count}} مزید",
+
+    // Bulk Delete Customers
+    "bulk_delete_customers": "کسٹمرز حذف کریں",
+    "bulk_delete_customers_confirmation_suffix": "کسٹمر(ز)۔ اس عمل کو واپس نہیں کیا جا سکتا۔",
+    "bulk_delete_customers_success": "کسٹمر(ز) کامیابی سے حذف ہوگئے",
+    "bulk_delete_customers_partial": "منتخب کسٹمرز میں سے حذف ہوگئے",
+    "bulk_delete_customers_failed": "منتخب کسٹمرز حذف کرنے میں ناکامی",
+    "and_more_customers": "اور {{count}} مزید",
+
+    // Bulk Delete Suppliers
+    "bulk_delete_suppliers": "سپلائرز حذف کریں",
+    "bulk_delete_suppliers_confirmation_suffix": "سپلائر(ز)۔ اس عمل کو واپس نہیں کیا جا سکتا۔",
+    "bulk_delete_suppliers_success": "سپلائر(ز) کامیابی سے حذف ہوگئے",
+    "bulk_delete_suppliers_partial": "منتخب سپلائرز میں سے حذف ہوگئے",
+    "bulk_delete_suppliers_failed": "منتخب سپلائرز حذف کرنے میں ناکامی",
+    "and_more_suppliers": "اور {{count}} مزید",
+
     // Low Stock Alert System
     "low_stock_alert": "کم اسٹاک الرٹ",
     "low_stock_alerts_disabled": "کم اسٹاک الرٹس غیر فعال ہیں",

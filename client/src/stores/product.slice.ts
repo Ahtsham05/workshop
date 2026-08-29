@@ -62,12 +62,36 @@ export const updateProduct = createAsyncThunk(
     })
 );
 
+// Set/clear a product's discrepancy flag — pass { clear: true } to unflag.
+export const updateProductFlag = createAsyncThunk(
+    'product/updateProductFlag',
+    catchAsync(async ({ id, ...body }: { id: string; clear?: true; color?: string; reason?: string; note?: string }) => {
+        const response = await Axios({
+            ...summery.updateProductFlag,
+            url: `${summery.updateProductFlag.url}/${id}/flag`,
+            data: body,
+        });
+        return response.data;
+    })
+);
+
 export const deleteProduct = createAsyncThunk(
     'product/deleteProduct',
     catchAsync(async (productId: string) => {
         const response = await Axios({
             ...summery.deleteProduct, // Assuming your API for deleting a product
             url: `${summery.deleteProduct.url}/${productId}`,
+        });
+        return response.data;
+    })
+);
+
+export const bulkDeleteProducts = createAsyncThunk(
+    'product/bulkDeleteProducts',
+    catchAsync(async (ids: string[]) => {
+        const response = await Axios({
+            ...summery.bulkDeleteProducts,
+            data: { ids },
         });
         return response.data;
     })
@@ -148,12 +172,26 @@ const productSlice = createSlice({
                     );
                 }
             })
+            .addCase(updateProductFlag.fulfilled, (state, action) => {
+                const updatedProduct = action.payload;
+                if (Array.isArray(state.data)) {
+                    state.data = state.data.map((product) =>
+                        product.id === updatedProduct.id ? updatedProduct : product
+                    );
+                }
+            })
             .addCase(deleteProduct.fulfilled, (state, action) => {
                 // Ensure state.data is an array before using filter
                 if (Array.isArray(state.data)) {
                     state.data = state.data.filter((product: any) => product.id !== action.payload.id);
                 } else {
                     state.data = []; // Optionally reset to an empty array
+                }
+            })
+            .addCase(bulkDeleteProducts.fulfilled, (state, action) => {
+                const deletedIds = new Set((action.payload.deletedIds || []).map((id: any) => String(id)));
+                if (Array.isArray(state.data)) {
+                    state.data = state.data.filter((product: any) => !deletedIds.has(String(product.id || product._id)));
                 }
             })
             .addCase(fetchAllProducts.fulfilled, (state, action) => {
@@ -196,6 +234,7 @@ const productSlice = createSlice({
                         addProduct,
                         updateProduct,
                         deleteProduct,
+                        bulkDeleteProducts,
                         fetchAllProducts,
                         bulkUpdateProducts,
                         bulkAddProducts

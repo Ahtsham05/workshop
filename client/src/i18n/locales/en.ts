@@ -376,7 +376,35 @@ const en: Record<string, string> = {
     "enter_new": "Enter new",
     "current": "Current",
     // "bulk_update_success": "Products updated successfully!",
-    
+
+    // Bulk Delete Products
+    "delete_selected": "Delete Selected",
+    "bulk_delete_products": "Delete Products",
+    "bulk_delete_confirmation": "You are about to permanently delete",
+    "bulk_delete_confirmation_suffix": "product(s). This action cannot be undone.",
+    "bulk_delete_type_to_confirm": "Type DELETE to confirm",
+    "bulk_delete_placeholder": "Type DELETE",
+    "bulk_delete_success": "product(s) deleted successfully",
+    "bulk_delete_partial": "of the selected products were deleted",
+    "bulk_delete_failed": "Failed to delete selected products",
+    "and_more_products": "and {{count}} more",
+
+    // Bulk Delete Customers
+    "bulk_delete_customers": "Delete Customers",
+    "bulk_delete_customers_confirmation_suffix": "customer(s). This action cannot be undone.",
+    "bulk_delete_customers_success": "customer(s) deleted successfully",
+    "bulk_delete_customers_partial": "of the selected customers were deleted",
+    "bulk_delete_customers_failed": "Failed to delete selected customers",
+    "and_more_customers": "and {{count}} more",
+
+    // Bulk Delete Suppliers
+    "bulk_delete_suppliers": "Delete Suppliers",
+    "bulk_delete_suppliers_confirmation_suffix": "supplier(s). This action cannot be undone.",
+    "bulk_delete_suppliers_success": "supplier(s) deleted successfully",
+    "bulk_delete_suppliers_partial": "of the selected suppliers were deleted",
+    "bulk_delete_suppliers_failed": "Failed to delete selected suppliers",
+    "and_more_suppliers": "and {{count}} more",
+
     // Low Stock Alert System
     "low_stock_alert": "Low Stock Alert",
     "low_stock_alerts_disabled": "Low stock alerts are disabled",

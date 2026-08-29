@@ -27,6 +27,7 @@ const createCustomer = {
     paymentTerms,
     taxNumber: Joi.string().allow(''),
     notes: Joi.string().allow(''),
+    isActive: Joi.boolean().optional(),
   }),
 };
 
@@ -35,6 +36,7 @@ const getCustomers = {
     name: Joi.string(),
     email: Joi.string(),
     phone: Joi.string(),
+    isActive: Joi.boolean(),
     limit: Joi.number(),
     page: Joi.number(),
     search: Joi.string(),
@@ -76,12 +78,30 @@ const updateCustomer = {
     paymentTerms,
     taxNumber: Joi.string().allow(''),
     notes: Joi.string().allow(''),
+    isActive: Joi.boolean().optional(),
   }),
 };
 
 const deleteCustomer = {
   params: Joi.object().keys({
     customerId: Joi.string().required(),
+  }),
+};
+
+const bulkUpdateCustomers = {
+  body: Joi.object().keys({
+    customers: Joi.array().items(
+      Joi.object().keys({
+        id: Joi.string().required(),
+        isActive: Joi.boolean().optional(),
+      })
+    ).required().min(1)
+  }),
+};
+
+const bulkDeleteCustomers = {
+  body: Joi.object().keys({
+    ids: Joi.array().items(Joi.string()).required().min(1),
   }),
 };
 
@@ -107,5 +127,7 @@ module.exports = {
   getCustomer,
   updateCustomer,
   deleteCustomer,
+  bulkUpdateCustomers,
+  bulkDeleteCustomers,
   bulkAddCustomers,
 };

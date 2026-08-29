@@ -131,6 +131,30 @@ export const bulkAddCustomers = createAsyncThunk(
   })
 )
 
+export const bulkDeleteCustomers = createAsyncThunk(
+  'customer/bulkDeleteCustomers',
+  catchAsync(async (ids: string[], { dispatch }) => {
+    const response = await Axios({
+      ...summery.bulkDeleteCustomers,
+      data: { ids },
+    })
+    dispatch(customerApi.util.invalidateTags(['Customer']));
+    return response.data
+  })
+)
+
+export const bulkUpdateCustomers = createAsyncThunk(
+  'customer/bulkUpdateCustomers',
+  catchAsync(async (data: { customers: any[] }, { dispatch }) => {
+    const response = await Axios({
+      ...summery.bulkUpdateCustomers,
+      data,
+    })
+    dispatch(customerApi.util.invalidateTags(['Customer']));
+    return response.data
+  })
+)
+
 const customerSlice = createSlice({
   name: "customer",
   initialState,
@@ -176,6 +200,12 @@ const customerSlice = createSlice({
         // Bulk customers added, backend returns the list
         console.log('Bulk customers added:', action.payload)
       })
+      .addCase(bulkDeleteCustomers.fulfilled, (state, action) => {
+        const deletedIds = new Set((action.payload.deletedIds || []).map((id: any) => String(id)));
+        if (Array.isArray(state.data)) {
+          state.data = state.data.filter((customer: any) => !deletedIds.has(String(customer.id || customer._id)));
+        }
+      })
       .addMatcher(
         isAnyOf(
           ...reduxToolKitCaseBuilder([
@@ -185,7 +215,9 @@ const customerSlice = createSlice({
             deleteCustomer,
             fetchAllCutomers,
             getCustomerSalesAndTransactions,
-            bulkAddCustomers
+            bulkAddCustomers,
+            bulkDeleteCustomers,
+            bulkUpdateCustomers,
           ])
         ),
         handleLoadingErrorParamsForAsycThunk

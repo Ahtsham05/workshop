@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ColumnDef,
@@ -49,6 +49,10 @@ interface DataTableProps {
   viewMode: SupplierListViewMode
   onViewModeChange: (mode: SupplierListViewMode) => void
   actions?: React.ReactNode
+  onSelectedRowsChange?: (selectedRows: Supplier[]) => void
+  /** Row (by _id/id) to scroll into view and briefly highlight — set after a deactivate
+   *  jumps the list to the last page, so the user can see where the row landed. */
+  highlightRowId?: string | null
 }
 
 export function SupplierTable({
@@ -61,6 +65,8 @@ export function SupplierTable({
   viewMode,
   onViewModeChange,
   actions,
+  onSelectedRowsChange,
+  highlightRowId,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
@@ -71,6 +77,23 @@ export function SupplierTable({
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
   const navigate = useNavigate()
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
+
+  useEffect(() => {
+    if (onSelectedRowsChange) {
+      const selectedSuppliers = Object.keys(rowSelection)
+        .filter((key) => rowSelection[key as keyof typeof rowSelection])
+        .map((index) => data[parseInt(index)])
+        .filter(Boolean)
+      onSelectedRowsChange(selectedSuppliers)
+    }
+  }, [rowSelection, data, onSelectedRowsChange])
+
+  useEffect(() => {
+    if (highlightRowId && highlightRowRef.current) {
+      highlightRowRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [highlightRowId, data])
 
   // console.log("data", data)
   // console.log("paggination", paggination)
@@ -138,13 +161,19 @@ export function SupplierTable({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
+              table.getRowModel().rows.map((row) => {
+                const supplierId = row.original._id || row.original.id
+                const isHighlighted = !!highlightRowId && supplierId === highlightRowId
+                return (
                 <TableRow
                   key={row.id}
+                  ref={isHighlighted ? highlightRowRef : undefined}
                   data-state={row.getIsSelected() && 'selected'}
-                  className='group/row cursor-pointer hover:bg-muted/50'
+                  className={cn(
+                    'group/row cursor-pointer hover:bg-muted/50',
+                    isHighlighted && 'animate-pulse bg-primary/10 ring-2 ring-inset ring-primary/40'
+                  )}
                   onClick={() => {
-                    const supplierId = row.original._id || row.original.id;
                     navigate({ to: '/accounting', search: { tab: 'supplier-ledger', supplierId, supplierName: row.original.name } })
                   }}
                 >
@@ -163,7 +192,8 @@ export function SupplierTable({
                     </TableCell>
                   ))}
                 </TableRow>
-              ))
+                )
+              })
             ) : (
               <TableRow>
                 <TableCell

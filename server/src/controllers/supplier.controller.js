@@ -14,7 +14,7 @@ const createSupplier = catchAsync(async (req, res) => {
 });
 
 const getSuppliers = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['name', 'email', 'phone']);
+  const filter = pick(req.query, ['name', 'email', 'phone', 'isActive']);
   applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await supplierService.querySuppliers(filter, options);
@@ -37,6 +37,23 @@ const updateSupplier = catchAsync(async (req, res) => {
 const deleteSupplier = catchAsync(async (req, res) => {
   await supplierService.deleteSupplierById(req.params.supplierId);
   res.status(httpStatus.NO_CONTENT).send();
+});
+
+const bulkUpdateSuppliers = catchAsync(async (req, res) => {
+  const { suppliers } = req.body;
+  const result = await supplierService.bulkUpdateSuppliers(suppliers);
+  res.send({ message: `Updated ${result.modifiedCount} supplier(s)`, ...result });
+});
+
+const bulkDeleteSuppliers = catchAsync(async (req, res) => {
+  const { ids } = req.body;
+  const { deleted, notFoundIds } = await supplierService.bulkDeleteSuppliersByIds(ids);
+  res.send({
+    message: `Deleted ${deleted.length} of ${ids.length} supplier(s)`,
+    deletedCount: deleted.length,
+    deletedIds: deleted.map((supplier) => supplier._id),
+    notFoundIds,
+  });
 });
 
 const getAllSuppliers = catchAsync(async (req, res) => {
@@ -112,6 +129,8 @@ module.exports = {
   getSupplier,
   updateSupplier,
   deleteSupplier,
+  bulkUpdateSuppliers,
+  bulkDeleteSuppliers,
   getAllSuppliers,
   getSupplierStats,
   bulkAddSuppliers,

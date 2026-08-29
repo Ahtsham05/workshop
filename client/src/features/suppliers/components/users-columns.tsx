@@ -4,6 +4,7 @@ import LongText from '@/components/long-text'
 import { Supplier } from '../data/schema' // Changed from Customer to Supplier
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
+import { ActiveToggleCell } from './active-toggle-cell'
 import { useLanguage } from '@/context/language-context'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
@@ -12,7 +13,7 @@ import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { buildSupplierBalanceMessage } from '@/utils/sms-messages'
 
-export function useSupplierColumns() {
+export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: boolean) => void) {
   const { t, language } = useLanguage()
   const isUrdu = language === 'ur'
   const branchName = useBranchName()
@@ -118,6 +119,17 @@ export function useSupplierColumns() {
     cell: ({ row }) => <div className={getTextClasses(row.getValue('address'), '')}>{row.getValue('address')}</div>,
   }
 
+  const isActiveColumn: ColumnDef<Supplier> = {
+    id: 'isActive',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='Active' />,
+    cell: ({ row }) => (
+      <div onClick={(e) => e.stopPropagation()}>
+        <ActiveToggleCell supplier={row.original} onToggled={(next) => onStatusChange?.(row.original, next)} />
+      </div>
+    ),
+    enableHiding: true,
+  }
+
   const actionsColumn: ColumnDef<Supplier> = {
     id: 'actions',
     header: t('actions'),
@@ -139,6 +151,7 @@ export function useSupplierColumns() {
       phoneColumn,
       whatsappColumn,
       addressColumn,
+      isActiveColumn,
       actionsColumn,
     ]
   } else {
@@ -150,6 +163,7 @@ export function useSupplierColumns() {
       phoneColumn,
       whatsappColumn,
       addressColumn,
+      isActiveColumn,
       actionsColumn,
     ]
   }

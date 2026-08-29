@@ -33,7 +33,7 @@ import { useLanguage } from '@/context/language-context'
 import InlineBarcodeInput from '@/components/inline-barcode-input'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { Badge } from '@/components/ui/badge'
-import { X, Search, Check, Plus } from 'lucide-react'
+import { X, Search, Check, Plus, Package, DollarSign, Barcode, Image as ImageIcon, Layers } from 'lucide-react'
 import SmartInput from '@/components/smart-input.tsx'
 import {
   Command,
@@ -67,7 +67,7 @@ import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-engl
 import { useUrduDisplay } from '@/context/urdu-display-context'
 import { EntityFormSection } from '@/components/entity-form-section'
 import { useGetOpeningStockImeisQuery, imeiApi } from '@/stores/imei.api'
-import { useGetProductQuery, productApi } from '@/stores/product.api'
+import { useGetProductQuery, productApi, useLazyLookupProductByCodeQuery } from '@/stores/product.api'
 import { ProductVariantsSection } from './variants/product-variants-section'
 import { VariantInventoryTable } from './variants/variant-inventory-table'
 import { ProductDefaultVariantBatchPanel } from './variants/product-default-variant-batch-panel'
@@ -76,6 +76,9 @@ import { generateBatchNumber } from './variants/generate-variant-combinations'
 import { useCreateProductVariantMutation } from '@/stores/productVariant.api'
 import { BrandSelector } from './brand-selector'
 import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
+import { TagsInput } from '@/components/tags-input'
+import { ColorSwatchPicker } from '@/components/color-swatch-picker'
+import { useGetDistinctProductTagsQuery } from '@/stores/product.api'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -130,6 +133,9 @@ const formSchema = z.object({
       publicId: z.string(),
     }).optional(),
   })).optional(),
+  tags: z.array(z.string()).optional(),
+  color: z.string().nullable().optional(),
+  shelfLocation: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.hasVariants) return
   if (!data.price || data.price < 1) {
@@ -155,7 +161,13 @@ interface Props {
 }
 
 export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
-  const isEdit = !!currentRow
+  // A product discovered mid-session by scanning/typing its SKU/barcode in "Add
+  // Product" mode (see handleCodeCommitted below) — switches this same dialog into
+  // editing that product instead of risking a duplicate create. The explicit
+  // `currentRow` prop (dialog opened directly via an "Edit" row action) always wins.
+  const [scannedProduct, setScannedProduct] = useState<any>(null)
+  const activeRow = currentRow ?? scannedProduct
+  const isEdit = !!activeRow
   const { t, isRTL } = useLanguage()
   const { showUrduInput } = useUrduDisplay()
   const [imageKey, setImageKey] = useState(0) // Force image component re-render
@@ -173,7 +185,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [imei2Draft, setImei2Draft] = useState('')
   const imei1InputRef = useRef<HTMLInputElement>(null)
   const imei2InputRef = useRef<HTMLInputElement>(null)
-  
+  const formRef = useRef<HTMLFormElement>(null)
+  const tagsInputRef = useRef<HTMLInputElement>(null)
+
   const dispatch = useDispatch<AppDispatch>()
   const [createProductVariant] = useCreateProductVariantMutation()
   const { categories } = useSelector((state: RootState) => state.category)
@@ -197,28 +211,31 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     resolver: zodResolver(formSchema),
     defaultValues: isEdit
       ? {
-        name: currentRow?.name || '',
-        nameUrdu: currentRow?.nameUrdu || '',
-        description: currentRow?.description || '',
-        sku: currentRow?.sku || '',
-        brandId: currentRow?.brandId || undefined,
-        barcode: currentRow?.barcode || '',
-        hasVariants: currentRow?.hasVariants || false,
-        trackImei: currentRow?.trackImei || false,
-        trackSerial: currentRow?.trackSerial || false,
-        trackBatch: currentRow?.trackBatch || false,
-        trackExpiry: currentRow?.trackExpiry || false,
+        name: activeRow?.name || '',
+        nameUrdu: activeRow?.nameUrdu || '',
+        description: activeRow?.description || '',
+        sku: activeRow?.sku || '',
+        brandId: activeRow?.brandId || undefined,
+        barcode: activeRow?.barcode || '',
+        hasVariants: activeRow?.hasVariants || false,
+        trackImei: activeRow?.trackImei || false,
+        trackSerial: activeRow?.trackSerial || false,
+        trackBatch: activeRow?.trackBatch || false,
+        trackExpiry: activeRow?.trackExpiry || false,
         batchNumber: '',
         expiryDate: '',
-        warrantyMonths: currentRow?.warrantyMonths || 0,
-        price: currentRow?.price || 0,
-        cost: currentRow?.cost || 0,
-        stockQuantity: currentRow?.stockQuantity || 0,
-        unit: currentRow?.unit || DEFAULT_UNIT,
-        unitConversions: currentRow?.unitConversions || [],
-        image: currentRow?.image || undefined,
-        categories: currentRow?.categories || [],
-        subCategories: currentRow?.subCategories || [],
+        warrantyMonths: activeRow?.warrantyMonths || 0,
+        price: activeRow?.price || 0,
+        cost: activeRow?.cost || 0,
+        stockQuantity: activeRow?.stockQuantity || 0,
+        unit: activeRow?.unit || DEFAULT_UNIT,
+        unitConversions: activeRow?.unitConversions || [],
+        image: activeRow?.image || undefined,
+        categories: activeRow?.categories || [],
+        subCategories: activeRow?.subCategories || [],
+        tags: activeRow?.tags || [],
+        color: activeRow?.color ?? null,
+        shelfLocation: activeRow?.shelfLocation || '',
       }
       : {
         name: '',
@@ -244,35 +261,41 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         image: undefined,
         categories: [],
         subCategories: [],
+        tags: [],
+        color: null,
+        shelfLocation: '',
       },
   })
 
   useEffect(() => {
     if (!open) return
-    if (isEdit && currentRow) {
+    if (isEdit && activeRow) {
       form.reset({
-        name: currentRow.name || '',
-        nameUrdu: currentRow.nameUrdu || '',
-        description: currentRow.description || '',
-        sku: currentRow.sku || '',
-        brandId: currentRow.brandId || undefined,
-        barcode: currentRow.barcode || '',
-        hasVariants: currentRow.hasVariants || false,
-        trackImei: currentRow.trackImei || false,
-        trackSerial: currentRow.trackSerial || false,
-        trackBatch: currentRow.trackBatch || false,
-        trackExpiry: currentRow.trackExpiry || false,
+        name: activeRow.name || '',
+        nameUrdu: activeRow.nameUrdu || '',
+        description: activeRow.description || '',
+        sku: activeRow.sku || '',
+        brandId: activeRow.brandId || undefined,
+        barcode: activeRow.barcode || '',
+        hasVariants: activeRow.hasVariants || false,
+        trackImei: activeRow.trackImei || false,
+        trackSerial: activeRow.trackSerial || false,
+        trackBatch: activeRow.trackBatch || false,
+        trackExpiry: activeRow.trackExpiry || false,
         batchNumber: '',
         expiryDate: '',
-        warrantyMonths: currentRow.warrantyMonths || 0,
-        price: currentRow.price || 0,
-        cost: currentRow.cost || 0,
-        stockQuantity: currentRow.stockQuantity || 0,
-        unit: currentRow.unit || DEFAULT_UNIT,
-        unitConversions: currentRow.unitConversions || [],
-        image: currentRow.image || undefined,
-        categories: currentRow.categories || [],
-        subCategories: currentRow.subCategories || [],
+        warrantyMonths: activeRow.warrantyMonths || 0,
+        price: activeRow.price || 0,
+        cost: activeRow.cost || 0,
+        stockQuantity: activeRow.stockQuantity || 0,
+        unit: activeRow.unit || DEFAULT_UNIT,
+        unitConversions: activeRow.unitConversions || [],
+        image: activeRow.image || undefined,
+        categories: activeRow.categories || [],
+        subCategories: activeRow.subCategories || [],
+        tags: activeRow.tags || [],
+        color: activeRow.color ?? null,
+        shelfLocation: activeRow.shelfLocation || '',
       })
     } else {
       form.reset({
@@ -298,17 +321,22 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         image: undefined,
         categories: [],
         subCategories: [],
+        tags: [],
+        color: null,
+        shelfLocation: '',
       })
     }
     setImageRemoved(false)
     setDraftVariants([])
-  }, [open, currentRow, isEdit, form])
+  }, [open, activeRow, isEdit, form])
 
-  const productSessionKey = open ? (currentRow?.id ?? currentRow?._id ?? 'new') : null
+  const productSessionKey = open ? (activeRow?.id ?? activeRow?._id ?? 'new') : null
   useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', productSessionKey)
 
-  const editingProductId = isEdit ? (currentRow?.id || currentRow?._id) : undefined
-  // currentRow comes from the paginated product list, which doesn't carry
+  const { data: tagSuggestions } = useGetDistinctProductTagsQuery(undefined, { skip: !open })
+
+  const editingProductId = isEdit ? (activeRow?.id || activeRow?._id) : undefined
+  // activeRow comes from the paginated product list, which doesn't carry
   // trackBatch/trackExpiry (only the single-product GET does) — fetch fresh so the
   // checkboxes reflect reality instead of always defaulting to unchecked.
   const { data: freshProduct } = useGetProductQuery(editingProductId!, {
@@ -397,7 +425,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     setIsSubmitting(true)
     try {
       if (isEdit) {
-        const productId = currentRow?.id || currentRow?._id
+        const productId = activeRow?.id || activeRow?._id
         await dispatch(updateProduct({ ...values, _id: productId })).then(async () => {
           toast.success(t('product_updated_successfully'))
           if (values.hasVariants && draftVariants.length > 0) {
@@ -418,6 +446,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         onCreated?.(created)
       }
       form.reset()
+      setScannedProduct(null)
       onOpenChange(false)
     } catch {
       return
@@ -431,37 +460,50 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     form.setValue(field, Number(value), { shouldValidate: true })
   }
 
-  // Generate SKU function (e.g. for a "Classic T-Shirt" -> "CLASSIC-X7K3Q")
-  const generateSku = () => {
-    const namePart = (form.getValues('name') || 'SKU').trim().split(/\s+/)[0].toUpperCase().replace(/[^A-Z0-9]+/g, '') || 'SKU'
-    const random = Math.random().toString(36).slice(2, 7).toUpperCase()
-    form.setValue('sku', `${namePart}-${random}`, { shouldValidate: true })
-    toast.success('SKU generated')
-  }
-
-  // Auto-generate SKU when dialog opens for new product
-  useEffect(() => {
-    if (open && !isEdit && !form.getValues('sku')) {
-      generateSku()
-    }
-  }, [open, isEdit])
-
-  // Generate barcode function
-  const generateBarcode = () => {
+  // SKU and barcode are treated as one identifier — same value saved to both fields —
+  // so this fills them both at once. Manual only (no auto-fire on dialog open): a
+  // random placeholder shouldn't silently become a product's permanent code unless the
+  // user actually wants one (e.g. no printed barcode exists to scan/type instead).
+  const generateSkuBarcode = () => {
     const timestamp = Date.now().toString()
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-    const barcode = `${timestamp.slice(-10)}${random}` // 13 digit barcode
-    form.setValue('barcode', barcode, { shouldValidate: true })
+    const code = `${timestamp.slice(-10)}${random}` // 13 digits, barcode-scanner friendly
+    form.setValue('barcode', code, { shouldValidate: true })
+    form.setValue('sku', code, { shouldValidate: true })
     toast.success(t('barcode_generated'))
   }
 
-  // Auto-generate barcode when dialog opens for new product
-  useEffect(() => {
-    if (open && !isEdit && !form.getValues('barcode')) {
-      generateBarcode()
-    }
-  }, [open, isEdit])
-  
+  // Committing a SKU/barcode (Enter, scanner-gun burst, or camera scan — never a plain
+  // keystroke) does two things, both instantly: moves focus to Product Name so scanning
+  // continues to flow straight into filling the rest of the form, and — only while
+  // still in plain "Add Product" mode — kicks off a background exact-match lookup so an
+  // already-existing product opens for editing instead of risking a duplicate create.
+  const [lookupProductByCode] = useLazyLookupProductByCodeQuery()
+  const lastCommittedCodeRef = useRef<string | null>(null)
+  const handleCodeCommitted = (code: string) => {
+    const trimmed = code.trim()
+    formRef.current?.querySelector<HTMLInputElement>('input[name="name"]')?.focus()
+    // Skip the lookup once already editing a specific product (explicit "Edit" row, or
+    // an earlier scan already matched one this session) — silently swapping the whole
+    // form to a different product mid-edit would be destructive, not helpful.
+    if (!trimmed || currentRow || scannedProduct) return
+    lastCommittedCodeRef.current = trimmed
+    lookupProductByCode(trimmed)
+      .unwrap()
+      .then((result) => {
+        // Ignore a stale response for a code the user has since changed/cleared.
+        if (lastCommittedCodeRef.current !== trimmed) return
+        if (result.found && result.product) {
+          setScannedProduct(result.product)
+          toast.success(`Found existing product "${result.product.name}" — opened it for editing`)
+        }
+      })
+      .catch(() => {
+        // Silent — a failed lookup must never block creating a new product; the form
+        // just stays exactly as it was, ready to continue as a fresh create.
+      })
+  }
+
   // Create a new category inline from the product form's category combobox, then
   // immediately select it (mirrors the inline "create brand" flow in BrandSelector).
   const handleCreateCategory = async () => {
@@ -552,22 +594,322 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         form.reset()
         setImageRemoved(false) // Reset image removed flag when dialog opens/closes
         setDraftVariants([])
+        setScannedProduct(null)
         onOpenChange(state)
       }}
     >
       <DialogContent className='flex h-[95vh] w-[97vw] max-w-[1600px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1600px]'>
-        <DialogHeader className='shrink-0 space-y-2 border-b border-border/60 px-6 pb-4 pt-6 text-left'>
-          <DialogTitle className='text-xl'>
-            {isEdit ? t('edit_product') : t('add_product')}
-          </DialogTitle>
-          <DialogDescription>
-            {isEdit ? t('update_product_description') : t('create_product_description')}
-          </DialogDescription>
+        <DialogHeader className='shrink-0 flex-row items-start gap-3 space-y-0 border-b border-border/60 px-6 pb-4 pt-6 text-left'>
+          <span className='mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground'>
+            <Package className='h-5 w-5' />
+          </span>
+          <div className='space-y-1'>
+            <DialogTitle className='text-xl'>
+              {isEdit ? t('edit_product') : t('add_product')}
+            </DialogTitle>
+            <DialogDescription>
+              {isEdit ? t('update_product_description') : t('create_product_description')}
+            </DialogDescription>
+          </div>
         </DialogHeader>
         <div className='min-h-0 flex-1 overflow-y-auto px-6 py-4'>
           <Form {...form}>
-            <form id='user-form' onSubmit={form.handleSubmit(onSubmit, onInvalid)} onKeyDown={handleFormEnterKeyDown} className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+            <form ref={formRef} id='user-form' onSubmit={form.handleSubmit(onSubmit, onInvalid)} onKeyDown={handleFormEnterKeyDown} className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
               <EntityFormSection
+                icon={<Barcode />}
+                tone='violet'
+                className='p-3 sm:p-4'
+                title='SKU / barcode & scanning'
+              >
+              <FormField
+                control={form.control}
+                name='barcode'
+                render={({ field }) => {
+                  // SKU and barcode are the same identifier on this form — one input,
+                  // saved to both fields. `barcode` drives the visible field; every
+                  // change mirrors onto `sku` so the two can never diverge from here.
+                  const setSkuBarcode = (value: string) => {
+                    field.onChange(value)
+                    form.setValue('sku', value, { shouldValidate: true })
+                  }
+                  // Enter / scanner-gun burst / camera scan — a "commit", not just a
+                  // keystroke — also jumps to Product Name and kicks off the existing-
+                  // product lookup (see handleCodeCommitted above).
+                  const commitSkuBarcode = (value: string) => {
+                    setSkuBarcode(value)
+                    handleCodeCommitted(value)
+                  }
+                  return (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>SKU / {t('barcode')}</FormLabel>
+                      <FormControl>
+                        <div className='space-y-2'>
+                          <div className="flex gap-2">
+                            <InlineBarcodeInput
+                              onBarcodeEntered={commitSkuBarcode}
+                              placeholder={t('enter_or_scan_barcode')}
+                              value={field.value}
+                              onChange={setSkuBarcode}
+                              className="flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={generateSkuBarcode}
+                              className="whitespace-nowrap"
+                            >
+                              {t('generate')}
+                            </Button>
+                          </div>
+                          <div className="text-center">
+                            <MobileCameraScanner
+                              onScanResult={commitSkuBarcode}
+                              trigger={
+                                <Button type="button" variant="outline" size="sm" className="w-full text-xs sm:text-sm">
+                                  <Camera className="h-4 w-4 mr-2 text-xs sm:text-sm" />
+                                  {t('scan_with_camera')}
+                                </Button>
+                              }
+                            />
+                          </div>
+                        </div>
+                      </FormControl>
+                      <p className='text-xs text-muted-foreground'>
+                        One code, used as both the SKU and the barcode — scan or type it,
+                        then press Enter. Matches an existing product? It opens right
+                        here for editing instead of creating a duplicate.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )
+                }}
+              />
+              <div className='grid gap-2'>
+                {isMobileShop && (
+                  <FormField
+                    control={form.control}
+                    name='trackImei'
+                    render={({ field }) => (
+                      <FormItem className='gap-1.5'>
+                        <FormLabel>Track IMEI</FormLabel>
+                        <FormControl>
+                          <div className='flex items-center gap-2'>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked)
+                                if (checked) form.setValue('trackSerial', false)
+                              }}
+                            />
+                            <span className='text-sm text-muted-foreground'>
+                              Track an IMEI number for each unit of this product (mobile phones)
+                            </span>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                <FormField
+                  control={form.control}
+                  name='trackSerial'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>Track Serial Number</FormLabel>
+                      <FormControl>
+                        <div className='flex items-center gap-2'>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={(checked) => {
+                              field.onChange(checked)
+                              if (checked) form.setValue('trackImei', false)
+                            }}
+                          />
+                          <span className='text-sm text-muted-foreground'>
+                            Track a serial number for each unit of this product (TVs, laptops, appliances, etc.)
+                          </span>
+                        </div>
+                      </FormControl>
+                      {isMobileShop && (
+                        <p className='text-xs text-muted-foreground'>
+                          A product tracks one or the other, never both — pick IMEI for phones, Serial Number for everything else that's individually serialized.
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              {(form.watch('trackImei') || form.watch('trackSerial')) && (
+                <FormField
+                  control={form.control}
+                  name='warrantyMonths'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>Warranty (months)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          min={0}
+                          step={1}
+                          showVoiceInput={false}
+                          placeholder='e.g. 12'
+                          value={field.value ?? 0}
+                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <p className='text-xs text-muted-foreground'>
+                        Applied automatically to every unit sold for this product. Set 0 for no warranty.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              {(form.watch('trackImei') || form.watch('trackSerial')) && (form.watch('stockQuantity') > 0 || isEdit) && (
+                <FormField
+                  control={form.control}
+                  name='imeis'
+                  render={({ field }) => {
+                    const imeis: (string | { imei: string; imei2?: string })[] = field.value || []
+                    const stockQuantity = form.watch('stockQuantity')
+                    const isSerial = form.watch('trackSerial')
+                    const label = isSerial ? 'serial number' : 'IMEI'
+                    const entryImei = (e: string | { imei: string; imei2?: string }) => (typeof e === 'string' ? e : e.imei)
+                    const entryImei2 = (e: string | { imei: string; imei2?: string }) => (typeof e === 'string' ? undefined : e.imei2)
+                    // Real IMEIs are always 15 digits — serial numbers vary (letters, dashes,
+                    // etc.) and are left free-form. Sanitizing on change (not just capping
+                    // maxLength) also strips pasted spaces/dashes from a scanner's raw output.
+                    const sanitizeImei = (raw: string) => (isSerial ? raw : raw.replace(/\D/g, '').slice(0, 15))
+                    const addImei = () => {
+                      const cleaned = imeiDraft.trim()
+                      const cleaned2 = imei2Draft.trim()
+                      if (!cleaned) return
+                      if (cleaned2 && cleaned2 === cleaned) {
+                        toast.error(`IMEI and IMEI 2 cannot be the same number`)
+                        return
+                      }
+                      // Check both slots of every existing entry, not just its primary
+                      // number — otherwise "112 / 12" already entered lets a second phone
+                      // reuse "12" as its own primary IMEI undetected (they'd then be
+                      // treated as the same dual-SIM unit everywhere).
+                      const usedNumbers = new Set(imeis.flatMap((e) => [entryImei(e), entryImei2(e)].filter(Boolean)))
+                      if (usedNumbers.has(cleaned) || (cleaned2 && usedNumbers.has(cleaned2))) {
+                        toast.error(`This ${label} is already entered for another phone`)
+                        return
+                      }
+                      field.onChange([...imeis, cleaned2 ? { imei: cleaned, imei2: cleaned2 } : cleaned])
+                      setImeiDraft('')
+                      setImei2Draft('')
+                      imei1InputRef.current?.focus()
+                    }
+                    const imei1Field = (
+                      <Input
+                        ref={imei1InputRef}
+                        placeholder={isSerial ? `Scan or type ${label}` : 'Scan or type IMEI'}
+                        value={imeiDraft}
+                        showVoiceInput={false}
+                        inputMode={isSerial ? undefined : 'numeric'}
+                        onChange={(e) => setImeiDraft(sanitizeImei(e.target.value))}
+                        onKeyDown={(e) => {
+                          if (e.key === ',') {
+                            e.preventDefault()
+                            addImei()
+                          } else if (e.key === 'Enter') {
+                            e.preventDefault()
+                            // A serial-tracked product has no second field to hop to — Enter
+                            // commits right away. For IMEI, Enter first moves to IMEI 2 (in
+                            // case this is a dual-SIM unit); a second Enter there commits.
+                            if (isSerial) addImei()
+                            else if (imeiDraft.trim()) imei2InputRef.current?.focus()
+                          }
+                        }}
+                      />
+                    )
+                    return (
+                      <FormItem className='gap-1.5'>
+                        <FormLabel>{isSerial ? 'Serial Numbers' : 'IMEI Numbers'}</FormLabel>
+                        <FormControl>
+                          <div className='space-y-2'>
+                            <span className='text-xs font-medium text-amber-700'>
+                              {`${imeis.length}/${stockQuantity} entered`}
+                            </span>
+                            {isSerial ? (
+                              <div className='flex items-center gap-2'>
+                                {imei1Field}
+                                <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={addImei}>
+                                  <Plus className='h-3.5 w-3.5' />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className='space-y-1.5'>
+                                <div className='space-y-1'>
+                                  {imei1Field}
+                                  {imeiDraft.length > 0 && (
+                                    <p className='text-[11px] text-muted-foreground'>{imeiDraft.length}/15 digits</p>
+                                  )}
+                                </div>
+                                <div className='flex items-center gap-2'>
+                                  <Input
+                                    ref={imei2InputRef}
+                                    placeholder='IMEI 2 (optional)'
+                                    value={imei2Draft}
+                                    showVoiceInput={false}
+                                    inputMode='numeric'
+                                    className='flex-1 min-w-0'
+                                    onChange={(e) => setImei2Draft(sanitizeImei(e.target.value))}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ',') {
+                                        e.preventDefault()
+                                        addImei()
+                                      } else if (e.key === 'Backspace' && !imei2Draft) {
+                                        // Empty + Backspace hops back to fix IMEI 1 instead of doing nothing.
+                                        imei1InputRef.current?.focus()
+                                      }
+                                    }}
+                                  />
+                                  <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={addImei}>
+                                    <Plus className='h-3.5 w-3.5' />
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                            {imeis.length > 0 && (
+                              <div className='flex flex-wrap gap-1.5'>
+                                {imeis.map((entry, idx) => {
+                                  const num = entryImei(entry)
+                                  const num2 = entryImei2(entry)
+                                  return (
+                                    <Badge key={`${num}-${idx}`} variant='secondary' className='gap-1 pr-1'>
+                                      {num2 ? `${num} · ${num2}` : num}
+                                      <button
+                                        type='button'
+                                        onClick={() => field.onChange(imeis.filter((e) => entryImei(e) !== num))}
+                                        className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
+                                      >
+                                        <X className='h-3 w-3' />
+                                      </button>
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )
+                  }}
+                />
+              )}
+              </EntityFormSection>
+
+              <EntityFormSection
+                icon={<Package />}
+                tone='sky'
+                className='p-3 sm:p-4'
                 title={isEdit ? 'Product details' : 'New product'}
                 description='Name, description, and categories shoppers see in menus and lists.'
               >
@@ -977,7 +1319,13 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
               />
               </EntityFormSection>
 
-              <EntityFormSection title='Pricing & inventory' description='Purchase price, sale price, and stock on hand.'>
+              <EntityFormSection
+                icon={<DollarSign />}
+                tone='emerald'
+                className='p-3 sm:p-4'
+                title='Pricing & inventory'
+                description='Purchase price, sale price, and stock on hand.'
+              >
               {hasVariantsWatch ? (
                 <p className='rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground'>
                   Cost, sale price, and stock are set per variant below — these fields are
@@ -1046,6 +1394,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             setNumericValue('stockQuantity', e.target.value)
                             // field.onChange(e)
                           }}
+                          onKeyDown={(e) => {
+                            // Custom hop instead of the generic next-field jump — the
+                            // Unit combobox is a button/popover, not a plain input, so it
+                            // would otherwise be skipped entirely.
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              setUnitsOpen(true)
+                            }
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1092,6 +1449,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                         onSelect={() => {
                                           field.onChange(unit.value)
                                           setUnitsOpen(false)
+                                          // Popover close returns focus to its trigger button first —
+                                          // defer past that so this focus call is the one that wins.
+                                          setTimeout(() => tagsInputRef.current?.focus(), 0)
                                         }}
                                         className="flex items-center justify-between cursor-pointer"
                                       >
@@ -1290,296 +1650,64 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   }}
                 />
               )}
-              </EntityFormSection>
-
-              <EntityFormSection title='SKU, barcode & scanning'>
               <FormField
                 control={form.control}
-                name='sku'
+                name='tags'
                 render={({ field }) => (
                   <FormItem className='gap-1.5'>
-                    <FormLabel>SKU</FormLabel>
+                    <FormLabel>Tags</FormLabel>
                     <FormControl>
-                      <div className='flex gap-2'>
-                        <Input placeholder='Auto-generated SKU' showVoiceInput={false} {...field} value={field.value ?? ''} />
-                        <Button type='button' variant='outline' size='sm' onClick={generateSku}>
-                          Generate
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='barcode'
-                render={({ field }) => (
-                  <FormItem className='gap-1.5'>
-                    <FormLabel>{t('barcode')}</FormLabel>
-                    <FormControl>
-                      <div className='space-y-2'>
-                        <div className="flex gap-2">
-                          <InlineBarcodeInput
-                            onBarcodeEntered={(barcode) => {
-                              field.onChange(barcode)
-                            }}
-                            placeholder={t('enter_or_scan_barcode')}
-                            value={field.value}
-                            onChange={field.onChange}
-                            className="flex-1"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={generateBarcode}
-                            className="whitespace-nowrap"
-                          >
-                            {t('generate')}
-                          </Button>
-                        </div>
-                        <div className="text-center">
-                          <MobileCameraScanner
-                            onScanResult={(barcode) => {
-                              field.onChange(barcode)
-                            }}
-                            trigger={
-                              <Button type="button" variant="outline" size="sm" className="w-full text-xs sm:text-sm">
-                                <Camera className="h-4 w-4 mr-2 text-xs sm:text-sm" />
-                                {t('scan_with_camera')}
-                              </Button>
-                            }
-                          />
-                        </div>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className='grid gap-2'>
-                {isMobileShop && (
-                  <FormField
-                    control={form.control}
-                    name='trackImei'
-                    render={({ field }) => (
-                      <FormItem className='gap-1.5'>
-                        <FormLabel>Track IMEI</FormLabel>
-                        <FormControl>
-                          <div className='flex items-center gap-2'>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={(checked) => {
-                                field.onChange(checked)
-                                if (checked) form.setValue('trackSerial', false)
-                              }}
-                            />
-                            <span className='text-sm text-muted-foreground'>
-                              Track an IMEI number for each unit of this product (mobile phones)
-                            </span>
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-                <FormField
-                  control={form.control}
-                  name='trackSerial'
-                  render={({ field }) => (
-                    <FormItem className='gap-1.5'>
-                      <FormLabel>Track Serial Number</FormLabel>
-                      <FormControl>
-                        <div className='flex items-center gap-2'>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={(checked) => {
-                              field.onChange(checked)
-                              if (checked) form.setValue('trackImei', false)
-                            }}
-                          />
-                          <span className='text-sm text-muted-foreground'>
-                            Track a serial number for each unit of this product (TVs, laptops, appliances, etc.)
-                          </span>
-                        </div>
-                      </FormControl>
-                      {isMobileShop && (
-                        <p className='text-xs text-muted-foreground'>
-                          A product tracks one or the other, never both — pick IMEI for phones, Serial Number for everything else that's individually serialized.
-                        </p>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              {(form.watch('trackImei') || form.watch('trackSerial')) && (
-                <FormField
-                  control={form.control}
-                  name='warrantyMonths'
-                  render={({ field }) => (
-                    <FormItem className='gap-1.5'>
-                      <FormLabel>Warranty (months)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type='number'
-                          min={0}
-                          step={1}
-                          showVoiceInput={false}
-                          placeholder='e.g. 12'
-                          value={field.value ?? 0}
-                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                        />
-                      </FormControl>
-                      <p className='text-xs text-muted-foreground'>
-                        Applied automatically to every unit sold for this product. Set 0 for no warranty.
-                      </p>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-              {(form.watch('trackImei') || form.watch('trackSerial')) && (form.watch('stockQuantity') > 0 || isEdit) && (
-                <FormField
-                  control={form.control}
-                  name='imeis'
-                  render={({ field }) => {
-                    const imeis: (string | { imei: string; imei2?: string })[] = field.value || []
-                    const stockQuantity = form.watch('stockQuantity')
-                    const isSerial = form.watch('trackSerial')
-                    const label = isSerial ? 'serial number' : 'IMEI'
-                    const entryImei = (e: string | { imei: string; imei2?: string }) => (typeof e === 'string' ? e : e.imei)
-                    const entryImei2 = (e: string | { imei: string; imei2?: string }) => (typeof e === 'string' ? undefined : e.imei2)
-                    // Real IMEIs are always 15 digits — serial numbers vary (letters, dashes,
-                    // etc.) and are left free-form. Sanitizing on change (not just capping
-                    // maxLength) also strips pasted spaces/dashes from a scanner's raw output.
-                    const sanitizeImei = (raw: string) => (isSerial ? raw : raw.replace(/\D/g, '').slice(0, 15))
-                    const addImei = () => {
-                      const cleaned = imeiDraft.trim()
-                      const cleaned2 = imei2Draft.trim()
-                      if (!cleaned) return
-                      if (cleaned2 && cleaned2 === cleaned) {
-                        toast.error(`IMEI and IMEI 2 cannot be the same number`)
-                        return
-                      }
-                      // Check both slots of every existing entry, not just its primary
-                      // number — otherwise "112 / 12" already entered lets a second phone
-                      // reuse "12" as its own primary IMEI undetected (they'd then be
-                      // treated as the same dual-SIM unit everywhere).
-                      const usedNumbers = new Set(imeis.flatMap((e) => [entryImei(e), entryImei2(e)].filter(Boolean)))
-                      if (usedNumbers.has(cleaned) || (cleaned2 && usedNumbers.has(cleaned2))) {
-                        toast.error(`This ${label} is already entered for another phone`)
-                        return
-                      }
-                      field.onChange([...imeis, cleaned2 ? { imei: cleaned, imei2: cleaned2 } : cleaned])
-                      setImeiDraft('')
-                      setImei2Draft('')
-                      imei1InputRef.current?.focus()
-                    }
-                    const imei1Field = (
-                      <Input
-                        ref={imei1InputRef}
-                        placeholder={isSerial ? `Scan or type ${label}` : 'Scan or type IMEI'}
-                        value={imeiDraft}
-                        showVoiceInput={false}
-                        inputMode={isSerial ? undefined : 'numeric'}
-                        onChange={(e) => setImeiDraft(sanitizeImei(e.target.value))}
-                        onKeyDown={(e) => {
-                          if (e.key === ',') {
-                            e.preventDefault()
-                            addImei()
-                          } else if (e.key === 'Enter') {
-                            e.preventDefault()
-                            // A serial-tracked product has no second field to hop to — Enter
-                            // commits right away. For IMEI, Enter first moves to IMEI 2 (in
-                            // case this is a dual-SIM unit); a second Enter there commits.
-                            if (isSerial) addImei()
-                            else if (imeiDraft.trim()) imei2InputRef.current?.focus()
-                          }
+                      <TagsInput
+                        ref={tagsInputRef}
+                        value={field.value || []}
+                        onChange={field.onChange}
+                        suggestions={tagSuggestions}
+                        placeholder='e.g. clearance, fragile, best-seller...'
+                        onEmptyEnter={() => {
+                          formRef.current?.querySelector<HTMLInputElement>('input[name="shelfLocation"]')?.focus()
                         }}
                       />
-                    )
-                    return (
-                      <FormItem className='gap-1.5'>
-                        <FormLabel>{isSerial ? 'Serial Numbers' : 'IMEI Numbers'}</FormLabel>
-                        <FormControl>
-                          <div className='space-y-2'>
-                            <span className='text-xs font-medium text-amber-700'>
-                              {`${imeis.length}/${stockQuantity} entered`}
-                            </span>
-                            {isSerial ? (
-                              <div className='flex items-center gap-2'>
-                                {imei1Field}
-                                <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={addImei}>
-                                  <Plus className='h-3.5 w-3.5' />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className='space-y-1.5'>
-                                <div className='space-y-1'>
-                                  {imei1Field}
-                                  {imeiDraft.length > 0 && (
-                                    <p className='text-[11px] text-muted-foreground'>{imeiDraft.length}/15 digits</p>
-                                  )}
-                                </div>
-                                <div className='flex items-center gap-2'>
-                                  <Input
-                                    ref={imei2InputRef}
-                                    placeholder='IMEI 2 (optional)'
-                                    value={imei2Draft}
-                                    showVoiceInput={false}
-                                    inputMode='numeric'
-                                    className='flex-1 min-w-0'
-                                    onChange={(e) => setImei2Draft(sanitizeImei(e.target.value))}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter' || e.key === ',') {
-                                        e.preventDefault()
-                                        addImei()
-                                      } else if (e.key === 'Backspace' && !imei2Draft) {
-                                        // Empty + Backspace hops back to fix IMEI 1 instead of doing nothing.
-                                        imei1InputRef.current?.focus()
-                                      }
-                                    }}
-                                  />
-                                  <Button type='button' size='sm' variant='outline' className='shrink-0' onClick={addImei}>
-                                    <Plus className='h-3.5 w-3.5' />
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-                            {imeis.length > 0 && (
-                              <div className='flex flex-wrap gap-1.5'>
-                                {imeis.map((entry, idx) => {
-                                  const num = entryImei(entry)
-                                  const num2 = entryImei2(entry)
-                                  return (
-                                    <Badge key={`${num}-${idx}`} variant='secondary' className='gap-1 pr-1'>
-                                      {num2 ? `${num} · ${num2}` : num}
-                                      <button
-                                        type='button'
-                                        onClick={() => field.onChange(imeis.filter((e) => entryImei(e) !== num))}
-                                        className='ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5'
-                                      >
-                                        <X className='h-3 w-3' />
-                                      </button>
-                                    </Badge>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )
-                  }}
-                />
-              )}
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='color'
+                render={({ field }) => (
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>Display color</FormLabel>
+                    <FormControl>
+                      <ColorSwatchPicker value={field.value} onChange={field.onChange} clearable />
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>Shown as a quick visual marker in lists.</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='shelfLocation'
+                render={({ field }) => (
+                  <FormItem className='gap-1.5'>
+                    <FormLabel>Shelf location</FormLabel>
+                    <FormControl>
+                      <Input placeholder='e.g. A-12-3' autoComplete='off' {...field} />
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>Where this product physically sits in the shop.</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               </EntityFormSection>
 
-              <EntityFormSection title={t('product_photo_section_title')}>
+              <EntityFormSection
+                icon={<ImageIcon />}
+                tone='amber'
+                className='p-3 sm:p-4'
+                title={t('product_photo_section_title')}
+              >
               <FormField
                 control={form.control}
                 name='image'
@@ -1616,9 +1744,11 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
               </EntityFormSection>
 
               <EntityFormSection
+                icon={<Layers />}
+                tone='indigo'
                 title='Variants'
                 description='Sell this product in multiple options (e.g. size, color, pack size) instead of a single price and stock count.'
-                className='col-span-full'
+                className='col-span-full p-3 sm:p-4'
               >
                 <FormField
                   control={form.control}
@@ -1655,7 +1785,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
             </form>
           </Form>
         </div>
-        <DialogFooter className='shrink-0 border-t border-border/60 bg-background/95 px-6 py-4'>
+        <DialogFooter className='shrink-0 border-t border-border/60 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80'>
+          <Button type='button' variant='outline' onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            {t('cancel')}
+          </Button>
           <Button type='submit' form='user-form' disabled={isSubmitting}>
             {isSubmitting ? 'Saving...' : t('save_changes')}
           </Button>

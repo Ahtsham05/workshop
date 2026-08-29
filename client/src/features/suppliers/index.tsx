@@ -15,20 +15,37 @@ import {
 } from './utils/supplier-list-view'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { useEffect, useState } from 'react'
-import { fetchSuppliers, fetchSupplierStats } from '@/stores/supplier.slice'
-import { MessageSquare, Users, Wallet, UserPlus, Receipt, ChevronRight } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
+import { fetchSuppliers, fetchSupplierStats, bulkUpdateSuppliers } from '@/stores/supplier.slice'
+import { MessageSquare, Users, Wallet, UserPlus, Receipt, ChevronRight, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { BulkSmsDialog } from '@/components/sms/bulk-sms-dialog'
+import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { Can } from '@/context/permission-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { toneColor } from '@/lib/stat-card-tones'
+import type { Supplier } from './data/schema'
 
 const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`
 
 const SEARCH_DEBOUNCE_MS = 400
+const ALL_STATUS = 'all'
+// Active suppliers first, inactive last; newest-first within each group.
+const SUPPLIERS_SORT_BY = 'isActive:desc,createdAt:desc'
+
+// Hidden for now — re-enable by flipping this back to true.
+const SHOW_QUICK_ADD_SUPPLIER = false
 
 interface SupplierStats {
   totalSuppliers: number
@@ -46,15 +63,39 @@ export default function Suppliers() {
   const [searchInput, setSearchInput] = useState('')
   const [viewMode, setViewMode] = useState<SupplierListViewMode>(() => getStoredSupplierListViewMode())
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
+  const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
+  const [selectedSuppliers, setSelectedSuppliers] = useState<Supplier[]>([])
+  const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [highlightRowId, setHighlightRowId] = useState<string | null>(null)
   const [bulkSmsOpen, setBulkSmsOpen] = useState(false)
   const branchName = useBranchName()
   const { t } = useLanguage()
-  const columns = useSupplierColumns()
 
   const dispatch = useDispatch<AppDispatch>()
 
   const [stats, setStats] = useState<SupplierStats | undefined>(undefined)
   const [isStatsLoading, setIsStatsLoading] = useState(true)
+
+  // Re-sorts/re-navigates the list after a per-row Active toggle — see
+  // active-toggle-cell.tsx. Deactivating moves a supplier to the inactive group at the
+  // end of the (unfiltered) list, so jump to the last page and briefly highlight the
+  // row there — but only when no status filter would otherwise just remove it from view.
+  const handleSupplierStatusChange = useCallback((supplier: Supplier, next: boolean) => {
+    if (!next && statusFilter === ALL_STATUS) {
+      const id = supplier._id || supplier.id || null
+      setHighlightRowId(id)
+      setCurrentPage(totalPage)
+    }
+    setFetch((prev) => !prev)
+  }, [statusFilter, totalPage])
+  const columns = useSupplierColumns(handleSupplierStatusChange)
+
+  useEffect(() => {
+    if (!highlightRowId) return
+    const timeout = setTimeout(() => setHighlightRowId(null), 3000)
+    return () => clearTimeout(timeout)
+  }, [highlightRowId])
 
   useEffect(() => {
     setViewMode(getStoredSupplierListViewMode())
@@ -67,7 +108,7 @@ export default function Suppliers() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch])
+  }, [debouncedSearch, statusFilter])
 
   useEffect(() => {
     setLoading(true)
@@ -76,8 +117,9 @@ export default function Suppliers() {
     const params = {
       page: currentPage,
       limit: limitValue,
-      sortBy: 'createdAt:desc',
+      sortBy: SUPPLIERS_SORT_BY,
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.supplier } : {}),
+      ...(statusFilter !== ALL_STATUS ? { isActive: statusFilter === 'active' } : {}),
     }
 
     dispatch(fetchSuppliers(params))
@@ -91,7 +133,7 @@ export default function Suppliers() {
       .catch(() => {
         setLoading(false)
       })
-  }, [dispatch, currentPage, limit, fetch, debouncedSearch])
+  }, [dispatch, currentPage, limit, fetch, debouncedSearch, statusFilter])
 
   useEffect(() => {
     setIsStatsLoading(true)
@@ -103,6 +145,51 @@ export default function Suppliers() {
       .catch(() => setIsStatsLoading(false))
   }, [dispatch, fetch])
 
+  const handleSelectedRowsChange = useCallback((rows: Supplier[]) => {
+    setSelectedSuppliers(rows)
+  }, [])
+
+  // Activate/deactivate every selected row in one call.
+  const handleBulkSetActive = useCallback(async (isActive: boolean) => {
+    if (selectedSuppliers.length === 0) return
+    setBulkStatusUpdating(true)
+    try {
+      const suppliersToUpdate = selectedSuppliers.map((supplier) => ({
+        id: supplier._id || supplier.id || '',
+        isActive,
+      }))
+      const result = await dispatch(bulkUpdateSuppliers({ suppliers: suppliersToUpdate }))
+      if (result.meta.requestStatus === 'fulfilled') {
+        setSelectedSuppliers([])
+        if (!isActive && statusFilter === ALL_STATUS) {
+          setCurrentPage(totalPage)
+        }
+        setFetch((prev) => !prev)
+        toast.success(`${suppliersToUpdate.length} supplier(s) ${isActive ? 'activated' : 'deactivated'}`)
+      } else {
+        throw new Error((result.payload as string) || 'Bulk status update failed')
+      }
+    } catch (error) {
+      console.error('Bulk status update error:', error)
+      toast.error('Failed to update supplier status')
+    } finally {
+      setBulkStatusUpdating(false)
+    }
+  }, [selectedSuppliers, statusFilter, totalPage, dispatch])
+
+  const statusFilterSelect = (
+    <Select value={statusFilter} onValueChange={setStatusFilter}>
+      <SelectTrigger className='h-9 w-[150px]'>
+        <SelectValue placeholder={t('All Status')} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL_STATUS}>{t('All Status')}</SelectItem>
+        <SelectItem value='active'>{t('Active')}</SelectItem>
+        <SelectItem value='inactive'>{t('Inactive')}</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+
   return (
     <SupplierProvider>
         <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
@@ -112,7 +199,39 @@ export default function Suppliers() {
               {t('manage_suppliers')}
             </p>
           </div>
-          <SupplierPrimaryButtons />
+          <div className='flex flex-wrap gap-2'>
+            {viewMode === 'table' && selectedSuppliers.length > 0 && (
+              <>
+                <Button
+                  variant='outline'
+                  disabled={bulkStatusUpdating}
+                  onClick={() => handleBulkSetActive(true)}
+                  className='space-x-1'
+                >
+                  <span>{t('Activate Selected')} ({selectedSuppliers.length})</span>
+                </Button>
+                <Button
+                  variant='outline'
+                  disabled={bulkStatusUpdating}
+                  onClick={() => handleBulkSetActive(false)}
+                  className='space-x-1'
+                >
+                  <span>{t('Deactivate Selected')} ({selectedSuppliers.length})</span>
+                </Button>
+                <Can permission='deleteSuppliers'>
+                  <Button
+                    variant='destructive'
+                    onClick={() => setBulkDeleteOpen(true)}
+                    className='space-x-1'
+                  >
+                    <Trash2 size={16} />
+                    <span>{t('delete_selected')} ({selectedSuppliers.length})</span>
+                  </Button>
+                </Can>
+              </>
+            )}
+            <SupplierPrimaryButtons />
+          </div>
         </div>
 
         <div className='mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4'>
@@ -142,7 +261,7 @@ export default function Suppliers() {
           />
         </div>
 
-        <div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]'>
+        <div className={`grid grid-cols-1 items-start gap-4 ${SHOW_QUICK_ADD_SUPPLIER ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
             {viewMode === 'cards' ? (
               <>
@@ -152,10 +271,13 @@ export default function Suppliers() {
                   viewMode={viewMode}
                   onViewModeChange={handleViewModeChange}
                   actions={
-                    <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      {t('Send SMS')}
-                    </Button>
+                    <>
+                      {statusFilterSelect}
+                      <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        {t('Send SMS')}
+                      </Button>
+                    </>
                   }
                 />
                 <SupplierCardGrid
@@ -183,10 +305,13 @@ export default function Suppliers() {
                 viewMode={viewMode}
                 onViewModeChange={handleViewModeChange}
                 actions={
-                  <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    {t('Send SMS')}
-                  </Button>
+                  <>
+                    {statusFilterSelect}
+                    <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      {t('Send SMS')}
+                    </Button>
+                  </>
                 }
                 paggination={{
                   totalPage,
@@ -198,11 +323,13 @@ export default function Suppliers() {
                     setCurrentPage(1)
                   },
                 }}
+                onSelectedRowsChange={handleSelectedRowsChange}
+                highlightRowId={highlightRowId}
               />
             )}
           </div>
 
-          <QuickAddSupplierCard setFetch={setFetch} />
+          {SHOW_QUICK_ADD_SUPPLIER && <QuickAddSupplierCard setFetch={setFetch} />}
         </div>
 
         <Link
@@ -231,6 +358,16 @@ export default function Suppliers() {
         recipients={suppliers}
         entityType="supplier"
         branchName={branchName}
+      />
+
+      <BulkDeleteDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        suppliers={selectedSuppliers}
+        onDeleted={() => {
+          setSelectedSuppliers([])
+          setFetch((prev) => !prev)
+        }}
       />
     </SupplierProvider>
   )

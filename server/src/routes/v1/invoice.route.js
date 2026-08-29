@@ -55,6 +55,12 @@ router
   .route('/:invoiceId/finalize')
   .patch(auth('editInvoices'), validate(invoiceValidation.finalizeInvoice), invoiceController.finalizeInvoice);
 
+// Set/clear an invoice's discrepancy flag — a one-click action separate from the main
+// edit form, so it can be triggered straight from a list row.
+router
+  .route('/:invoiceId/flag')
+  .patch(auth('editInvoices'), validate(invoiceValidation.updateInvoiceFlag), invoiceController.updateInvoiceFlag);
+
 router
   .route('/:invoiceId/payment')
   .post(auth('createInvoices'), validate(invoiceValidation.processPayment), invoiceController.processPayment);

@@ -35,6 +35,17 @@ router
   .route('/bulk')
   .post(auth('createCustomers'), validate(customerValidation.bulkAddCustomers), customerController.bulkAddCustomers);
 
+// Bulk update route (Activate/Deactivate selected)
+router
+  .route('/bulk-update')
+  .patch(auth('editCustomers'), validate(customerValidation.bulkUpdateCustomers), customerController.bulkUpdateCustomers);
+
+// Bulk delete route — registered before the `/:customerId` catch-all below so
+// `/bulk-delete` isn't swallowed as a customerId.
+router
+  .route('/bulk-delete')
+  .delete(auth('deleteCustomers'), validate(customerValidation.bulkDeleteCustomers), customerController.bulkDeleteCustomers);
+
 router
   .route('/:customerId')
   .get(auth('viewCustomers'), validate(customerValidation.getCustomer), customerController.getCustomer)

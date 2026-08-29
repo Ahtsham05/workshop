@@ -2,7 +2,9 @@ import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { Row } from '@tanstack/react-table'
 import { useNavigate } from '@tanstack/react-router'
 import { IconEdit, IconTrash } from '@tabler/icons-react'
-import { ClipboardEdit } from 'lucide-react'
+import { ClipboardEdit, Flag } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { useDispatch } from 'react-redux'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -12,6 +14,9 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { FlagPickerPopover } from '@/components/flag-badge'
+import { AppDispatch } from '@/stores/store'
+import { updateProductFlag } from '@/stores/product.slice'
 import { useUsers } from '../context/users-context'
 import { Product } from '../data/schema'
 import { useLanguage } from '@/context/language-context'
@@ -26,6 +31,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t } = useLanguage()
   const { hasPermission } = usePermissions()
   const navigate = useNavigate()
+  const dispatch = useDispatch<AppDispatch>()
 
   const canEdit = hasPermission('editProducts' as any)
   const canDelete = hasPermission('deleteProducts' as any)
@@ -35,8 +41,40 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     return null
   }
 
+  const productId = row.original._id || row.original.id || ''
+
   return (
-    <>
+    <div className='flex items-center justify-end gap-0.5'>
+      {canEdit && (
+        <FlagPickerPopover
+          flag={row.original.flag}
+          onSave={async (data) => {
+            try {
+              await dispatch(updateProductFlag({ id: productId, ...data })).unwrap()
+              toast.success(row.original.flag ? 'Flag updated' : 'Product flagged for review')
+            } catch {
+              toast.error('Failed to update flag')
+            }
+          }}
+          onClear={async () => {
+            try {
+              await dispatch(updateProductFlag({ id: productId, clear: true })).unwrap()
+              toast.success('Flag cleared')
+            } catch {
+              toast.error('Failed to clear flag')
+            }
+          }}
+          trigger={
+            <Button variant='ghost' className='flex h-8 w-8 p-0'>
+              <Flag
+                className='h-4 w-4'
+                style={row.original.flag ? { color: row.original.flag.color, fill: row.original.flag.color } : undefined}
+              />
+              <span className='sr-only'>Flag for review</span>
+            </Button>
+          }
+        />
+      )}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
@@ -64,7 +102,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           {canEdit && (
             <DropdownMenuItem
               onClick={() => {
-                const productId = row.original._id || row.original.id || ''
                 navigate({
                   to: '/stock-adjustments',
                   search: { productId, productName: row.original.name },
@@ -94,6 +131,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-    </>
+    </div>
   )
 }

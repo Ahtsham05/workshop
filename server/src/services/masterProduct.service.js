@@ -473,6 +473,9 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
       image: master.image,
       hasVariants: master.hasVariants,
       masterProductId: master._id,
+      // Same as a fresh Excel/AI-scan import — starts deactivated so it can be reviewed
+      // (price/stock/branch-specific details) before it's sellable at this branch.
+      isActive: false,
     });
 
     if (master.hasVariants) {

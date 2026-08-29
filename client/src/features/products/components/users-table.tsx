@@ -48,6 +48,7 @@ interface DataTableProps {
   editValues?: Record<string, { price?: number; cost?: number; stockQuantity?: number }>
   onEditValueChange?: (productId: string, field: string, value: number) => void
   toolbarLeading?: ReactNode
+  toolbarTrailing?: ReactNode
   /** Cumulative qty/value from every page before the current one — null/undefined
    *  hides the row (e.g. on page 1, or while it can't be reliably computed). */
   broughtForward?: { qty: number; value: number } | null
@@ -63,10 +64,17 @@ export function ProductTable({
   editValues = {},
   onEditValueChange,
   toolbarLeading,
+  toolbarTrailing,
   broughtForward,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({ description: false })
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    description: false,
+    subCategories: false,
+    tags: false,
+    shelfLocation: false,
+    tracking: false,
+  })
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
@@ -109,7 +117,7 @@ export function ProductTable({
 
   return (
     <div className='space-y-4'>
-      <DataTableToolbar table={table} leading={toolbarLeading} />
+      <DataTableToolbar table={table} leading={toolbarLeading} trailing={toolbarTrailing} />
       <TableLoadingOverlay loading={loading}>
         <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>

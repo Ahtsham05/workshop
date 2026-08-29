@@ -82,6 +82,12 @@ const CustomerSchema = new mongoose.Schema({
     index: true,
     sparse: true,
   },
+  // Whether this customer shows up as billable/selectable across the app (Invoice
+  // customer picker, POS, etc). Defaults true; deactivating hides it from those pickers
+  // without deleting the record or its ledger history — see customer.service.js's
+  // ACTIVE_ONLY_FILTER on getAllCustomers. The Customers admin list itself still shows
+  // deactivated customers, with their own Active/Inactive toggle.
+  isActive: { type: Boolean, default: true, index: true },
 }, {
   timestamps: true,
 });

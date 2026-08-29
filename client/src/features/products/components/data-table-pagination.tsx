@@ -1,8 +1,6 @@
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  DoubleArrowLeftIcon,
-  DoubleArrowRightIcon,
 } from '@radix-ui/react-icons';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,87 +21,110 @@ interface DataTablePaginationProps<TData> {
     currentPage: number; // Current page number
     setCurrentPage: (page: number) => void; // Function to update the current page
     totalPage: number; // Total number of pages
+    /** Total matching rows across all pages — omit to fall back to the page-count text. */
+    totalResults?: number;
   };
+}
+
+/** Page numbers to render around the current page, with `null` standing in for an
+ * ellipsis — always keeps the first and last page visible. */
+function buildPageList(current: number, total: number): (number | null)[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+
+  const pages = new Set<number>([1, total, current, current - 1, current + 1])
+  const sorted = Array.from(pages).filter((p) => p >= 1 && p <= total).sort((a, b) => a - b)
+
+  const result: (number | null)[] = []
+  let prev = 0
+  for (const page of sorted) {
+    if (prev && page - prev > 1) result.push(null)
+    result.push(page)
+    prev = page
+  }
+  return result
 }
 
 export function DataTablePagination<TData>({
   table,
   paggination,
 }: DataTablePaginationProps<TData>) {
-  const { limit, setLimit, currentPage, setCurrentPage, totalPage } = paggination;
+  const { limit, setLimit, currentPage, setCurrentPage, totalPage, totalResults } = paggination;
   const { t } = useLanguage();
 
+  const rangeStart = totalResults ? (currentPage - 1) * limit + 1 : null
+  const rangeEnd = totalResults ? Math.min(currentPage * limit, totalResults) : null
+
   return (
-    <div
-      className="flex items-center justify-between overflow-clip px-2"
-      style={{ overflowClipMargin: 1 }}
-    >
-      <div className="text-muted-foreground hidden flex-1 text-sm sm:block">
-        {table.getFilteredSelectedRowModel().rows.length} {t('of')}{' '}
-        {table.getFilteredRowModel().rows.length} {t('row_selected')}
+    <div className="flex flex-wrap items-center justify-between gap-3 overflow-clip px-2" style={{ overflowClipMargin: 1 }}>
+      <div className="text-muted-foreground text-sm">
+        {table.getFilteredSelectedRowModel().rows.length > 0 ? (
+          <>
+            {table.getFilteredSelectedRowModel().rows.length} {t('of')}{' '}
+            {table.getFilteredRowModel().rows.length} {t('row_selected')}
+          </>
+        ) : rangeStart && rangeEnd ? (
+          <>
+            {t('Showing')} {rangeStart} {t('to')} {rangeEnd} {t('of')} {totalResults!.toLocaleString()} {t('products_list')}
+          </>
+        ) : (
+          <>{t('page')} {currentPage} {t('of')} {totalPage}</>
+        )}
       </div>
-      <div className="flex items-center sm:space-x-6 lg:space-x-8">
-        <div className="flex items-center space-x-2">
-          <p className="hidden text-sm font-medium sm:block">{t('rows_per_page')}</p>
-          <Select
-            value={`${limit}`}
-            onValueChange={(value) => {
-              setLimit(Number(value))
-            }}
-          >
-            <SelectTrigger className="h-8 w-[70px]">
-              <SelectValue placeholder={limit} />
-            </SelectTrigger>
-            <SelectContent side="top">
-              {[10, 20, 30, 40, 50].map((pageSize) => (
-                <SelectItem key={pageSize} value={`${pageSize}`}>
-                  {pageSize}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-          {t('page')} {currentPage} {t('of')} {totalPage}
-        </div>
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1">
           <Button
             variant="outline"
-            className="hidden h-8 w-8 p-0 lg:flex"
-            onClick={() => setCurrentPage(1)} // Go to first page
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setCurrentPage(currentPage - 1)}
             disabled={currentPage === 1}
           >
-            <span className="sr-only">Go to first page</span>
-            <DoubleArrowLeftIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            className="h-8 w-8 p-0"
-            onClick={() => setCurrentPage(currentPage - 1)} // Go to previous page
-            disabled={currentPage === 1}
-          >
-            <span className="sr-only">Go to previous page</span>
+            <span className="sr-only">{t('previous') || 'Previous'}</span>
             <ChevronLeftIcon className="h-4 w-4" />
           </Button>
+          {buildPageList(currentPage, totalPage).map((page, idx) =>
+            page === null ? (
+              <span key={`ellipsis-${idx}`} className="px-1.5 text-sm text-muted-foreground">…</span>
+            ) : (
+              <Button
+                key={page}
+                variant={page === currentPage ? 'default' : 'outline'}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setCurrentPage(page)}
+              >
+                {page}
+              </Button>
+            )
+          )}
           <Button
             variant="outline"
-            className="h-8 w-8 p-0"
-            onClick={() => setCurrentPage(currentPage + 1)} // Go to next page
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setCurrentPage(currentPage + 1)}
             disabled={currentPage === totalPage}
           >
-            <span className="sr-only">Go to next page</span>
+            <span className="sr-only">{t('next') || 'Next'}</span>
             <ChevronRightIcon className="h-4 w-4" />
           </Button>
-          <Button
-            variant="outline"
-            className="hidden h-8 w-8 p-0 lg:flex"
-            onClick={() => setCurrentPage(totalPage)} // Go to last page
-            disabled={currentPage === totalPage}
-          >
-            <span className="sr-only">Go to last page</span>
-            <DoubleArrowRightIcon className="h-4 w-4" />
-          </Button>
         </div>
+        <Select
+          value={`${limit}`}
+          onValueChange={(value) => {
+            setLimit(Number(value))
+          }}
+        >
+          <SelectTrigger className="h-8 w-[100px]">
+            <SelectValue placeholder={limit} />
+          </SelectTrigger>
+          <SelectContent side="top">
+            {[10, 20, 30, 40, 50].map((pageSize) => (
+              <SelectItem key={pageSize} value={`${pageSize}`}>
+                {pageSize} / {t('page')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

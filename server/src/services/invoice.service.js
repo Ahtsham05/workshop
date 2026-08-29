@@ -755,6 +755,22 @@ const queryInvoices = async (filter, options) => {
  * @param {ObjectId} id
  * @returns {Promise<Invoice>}
  */
+/**
+ * Set or clear an invoice's discrepancy flag. Deliberately a direct, minimal update (not
+ * routed through updateInvoiceById) — flagging is a one-click "mark for review" action
+ * from a list row and must not trigger updateInvoiceById's stock/ledger reconciliation.
+ */
+const setInvoiceFlag = async (invoiceId, body, userId) => {
+  const update = body.clear
+    ? { $unset: { flag: 1 } }
+    : { flag: { color: body.color, reason: body.reason || '', note: body.note || '', flaggedBy: userId, flaggedAt: new Date() } };
+  const invoice = await Invoice.findByIdAndUpdate(invoiceId, update, { new: true });
+  if (!invoice) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Invoice not found');
+  }
+  return invoice;
+};
+
 const getInvoiceById = async (id) => {
   const invoice = await Invoice.findById(id);
   
@@ -1756,6 +1772,7 @@ module.exports = {
   createInvoice,
   queryInvoices,
   getInvoiceById,
+  setInvoiceFlag,
   updateInvoiceById,
   deleteInvoiceById,
   finalizeInvoice,

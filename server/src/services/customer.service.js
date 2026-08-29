@@ -154,8 +154,17 @@ const getCustomerStats = async (filter) => {
   };
 };
 
+// Excludes deactivated customers from every "pick a customer" picker (Invoice, POS,
+// Load/Sim-Sale/Services, header search — anything built on getAllCustomers below)
+// without a backfill migration: `$ne: false` matches `isActive: true` AND any customer
+// created before this field existed (absent in Mongo — a plain `{ isActive: true }`
+// filter would wrongly exclude those). The Customers admin list (queryCustomers) is
+// deliberately NOT filtered here — deactivated customers still need to show there, with
+// their own Active/Inactive toggle. Same pattern as product.service.js.
+const ACTIVE_ONLY_FILTER = { isActive: { $ne: false } };
+
 const getAllCustomers = async (filter = {}, { includeEmployees = false, includeSuppliers = false } = {}) => {
-  const query = { ...filter };
+  const query = { ...filter, ...ACTIVE_ONLY_FILTER };
   if (!includeEmployees) {
     query.isEmployeeAccount = { $ne: true };
   }
@@ -226,12 +235,56 @@ const bulkAddCustomers = async (customersToAdd, branchContext = {}) => {
   }
 };
 
+/**
+ * Bulk activate/deactivate (or otherwise patch) customers in one call — the Customers
+ * list's "Activate/Deactivate selected" actions. Only `isActive` is supported today;
+ * unlike updateCustomerById this is a direct bulkWrite, so it deliberately skips the
+ * ledger/accounting side effects a balance change there would trigger.
+ * @param {{ id: string, isActive?: boolean }[]} customersToUpdate
+ */
+const bulkUpdateCustomers = async (customersToUpdate) => {
+  const bulkOps = customersToUpdate
+    .filter((customer) => customer.isActive !== undefined)
+    .map((customer) => ({
+      updateOne: {
+        filter: { _id: customer.id },
+        update: { $set: { isActive: customer.isActive } },
+      },
+    }));
+
+  if (bulkOps.length === 0) {
+    return { modifiedCount: 0 };
+  }
+
+  const result = await Customer.bulkWrite(bulkOps);
+  return { modifiedCount: result.modifiedCount };
+};
+
+/**
+ * Deletes multiple customers by id in one call, for the Customers list's bulk-delete
+ * action. Ids that don't match an existing customer are silently skipped and reported
+ * back as `notFoundIds` rather than failing the whole batch.
+ * @param {string[]} ids
+ * @returns {Promise<{ deleted: Customer[], notFoundIds: string[] }>}
+ */
+const bulkDeleteCustomersByIds = async (ids) => {
+  const customers = await Customer.find({ _id: { $in: ids } });
+  const foundIds = new Set(customers.map((customer) => customer._id.toString()));
+  const notFoundIds = ids.filter((id) => !foundIds.has(id));
+
+  await Customer.deleteMany({ _id: { $in: customers.map((customer) => customer._id) } });
+
+  return { deleted: customers, notFoundIds };
+};
+
 module.exports = {
   createCustomer,
   queryCustomers,
   getCustomerById,
   updateCustomerById,
   deleteCustomerById,
+  bulkDeleteCustomersByIds,
+  bulkUpdateCustomers,
   getAllCustomers,
   getCustomerStats,
   bulkAddCustomers,

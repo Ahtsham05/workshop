@@ -20,6 +20,8 @@ import { ProductHistoryDialog } from './product-history-dialog'
 import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
 import { usePermissions } from '@/context/permission-context'
 import { useUrduDisplay } from '@/context/urdu-display-context'
+import { ColorDot } from '@/components/color-swatch-picker'
+import { FlagBadge } from '@/components/flag-badge'
 
 interface ProductCatalogProps {
   categorizedProducts: Category[]
@@ -402,18 +404,22 @@ export function ProductCatalog({
                               showImages && 'items-center text-center',
                             )}
                           >
-                            <p
-                              className={getTextClasses(
-                                product.name,
-                                cn(
-                                  'w-full min-w-0 max-w-full font-medium text-sm leading-snug line-clamp-2 break-words',
-                                  showImages && 'text-center',
-                                ),
-                              )}
-                              title={product.name}
-                            >
-                              {product.name}
-                            </p>
+                            <span className={cn('flex min-w-0 max-w-full items-center gap-1', showImages && 'justify-center')}>
+                              <ColorDot hex={product.color} />
+                              <p
+                                className={getTextClasses(
+                                  product.name,
+                                  cn(
+                                    'min-w-0 font-medium text-sm leading-snug line-clamp-2 break-words',
+                                    showImages && 'text-center',
+                                  ),
+                                )}
+                                title={product.name}
+                              >
+                                {product.name}
+                              </p>
+                              <FlagBadge flag={product.flag} />
+                            </span>
                             {showUrdu && product.nameUrdu?.trim() ? (
                               <p
                                 dir="rtl"

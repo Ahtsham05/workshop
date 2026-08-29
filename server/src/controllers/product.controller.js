@@ -10,6 +10,7 @@ const productVisionService = require('../services/productVision.service');
 const branchAvailabilityService = require('../services/branchAvailability.service');
 const { auditLogService } = require('../services');
 const { userHasAnyPermission } = require('../middlewares/permission');
+const { toDuplicateKeyApiError } = require('../utils/duplicateKeyError');
 
 const TRACKED_PRODUCT_FIELDS = ['name', 'price', 'cost', 'stockQuantity', 'lowStockThreshold', 'barcode'];
 
@@ -75,25 +76,13 @@ const createProduct = catchAsync(async (req, res) => {
     });
     res.status(httpStatus.CREATED).send(product);
   } catch (error) {
-    // Handle MongoDB duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      const value = error.keyValue[field];
-      
-      if (field === 'name') {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Product name "${value}" already exists. Please choose a different name.`);
-      } else if (field === 'barcode') {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Barcode "${value}" already exists. Please use a different barcode.`);
-      } else {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Duplicate value for ${field}: "${value}"`);
-      }
-    }
-    throw error;
+    // Handle MongoDB duplicate key errors (name/sku/barcode — each unique per org+branch)
+    throw toDuplicateKeyApiError(error) || error;
   }
 });
 
 const getProducts = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['name', 'category', 'description']);
+  const filter = pick(req.query, ['name', 'category', 'description', 'isActive']);
   applyBranchFilter(filter, req);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await productService.queryProducts(filter, options);
@@ -153,21 +142,31 @@ const updateProduct = catchAsync(async (req, res) => {
     });
     res.send(product);
   } catch (error) {
-    // Handle MongoDB duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      const value = error.keyValue[field];
-      
-      if (field === 'name') {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Product name "${value}" already exists. Please choose a different name.`);
-      } else if (field === 'barcode') {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Barcode "${value}" already exists. Please use a different barcode.`);
-      } else {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Duplicate value for ${field}: "${value}"`);
-      }
-    }
-    throw error;
+    // Handle MongoDB duplicate key errors (name/sku/barcode — each unique per org+branch)
+    throw toDuplicateKeyApiError(error) || error;
   }
+});
+
+const updateProductFlag = catchAsync(async (req, res) => {
+  const product = await productService.setProductFlag(req.params.productId, req.body, req.user.id);
+  res.send(product);
+});
+
+const getDistinctProductTags = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const tags = await productService.getDistinctTags(filter);
+  res.send(tags.filter(Boolean).sort());
+});
+
+// Backs the Add Product dialog's scan/type-then-Enter flow: an indexed exact-match
+// lookup so the dialog can offer to edit an already-existing product instead of the
+// user accidentally creating a duplicate. See productService.findProductByCode for why
+// this stays fast even against a large catalog.
+const lookupProductByCode = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = getBranchContext(req);
+  const product = await productService.findProductByCode({ organizationId, branchId, code: req.query.code });
+  res.send({ found: !!product, product: product || null });
 });
 
 const deleteProduct = catchAsync(async (req, res) => {
@@ -194,6 +193,46 @@ const deleteProduct = catchAsync(async (req, res) => {
     metadata: { price: product?.price, cost: product?.cost, stockQuantity: product?.stockQuantity },
   });
   res.status(httpStatus.NO_CONTENT).send();
+});
+
+const bulkDeleteProducts = catchAsync(async (req, res) => {
+  const { ids } = req.body;
+  const { deleted, notFoundIds } = await productService.bulkDeleteProductsByIds(ids);
+
+  // Best-effort Cloudinary cleanup — same "log and continue" tolerance the single-product
+  // delete above uses; a failed image delete shouldn't block the product records from
+  // being removed.
+  await Promise.all(
+    deleted.map(async (product) => {
+      if (product.image?.publicId) {
+        try {
+          await deleteFromCloudinary(product.image.publicId);
+        } catch (error) {
+          console.error(`Failed to delete image from Cloudinary for product ${product._id}:`, error);
+        }
+      }
+    })
+  );
+
+  await Promise.all(
+    deleted.map((product) =>
+      auditLogService.recordAuditLog({
+        req,
+        action: 'delete',
+        module: 'Product',
+        entityId: product._id,
+        entityName: product.name,
+        metadata: { price: product.price, cost: product.cost, stockQuantity: product.stockQuantity },
+      })
+    )
+  );
+
+  res.send({
+    message: `Deleted ${deleted.length} of ${ids.length} product(s)`,
+    deletedCount: deleted.length,
+    deletedIds: deleted.map((product) => product._id),
+    notFoundIds,
+  });
 });
 
 const uploadProductImage = catchAsync(async (req, res) => {
@@ -349,6 +388,7 @@ module.exports = {
   getProduct,
   updateProduct,
   deleteProduct,
+  bulkDeleteProducts,
   getAllProducts,
   getProductStats,
   getPurchasableCatalog,
@@ -359,4 +399,7 @@ module.exports = {
   bulkUpdateProducts,
   bulkAddProducts,
   scanProductImage,
+  updateProductFlag,
+  getDistinctProductTags,
+  lookupProductByCode,
 };

@@ -8,6 +8,67 @@ const { getOrCreateDefaultVariant, getOrCreateInventory } = require('./inventory
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { UNITS, DEFAULT_UNIT } = require('../config/units');
 const masterProductService = require('./masterProduct.service');
+const { extractDuplicateFieldFromMessage, labelFor } = require('../utils/duplicateKeyError');
+const logger = require('../config/logger');
+
+let productIndexesEnsured = false;
+
+/**
+ * Migrate from the legacy globally-unique `barcode` index (pre org/branch-scoped SKU
+ * rework) to the per-(organizationId, branchId) partial unique indexes now declared on
+ * the schema. Mongo keeps enforcing whatever index already exists on disk — dropping a
+ * field's `unique: true` from the schema alone doesn't drop or rebuild it — so the old
+ * global index has to be dropped explicitly once before `syncIndexes()` can put the new
+ * scoped ones (and the new `sku` index, which didn't exist before at all) in place.
+ *
+ * Before that new `sku` index can be built at all, every pre-existing product with a
+ * literal `sku: ""` (or `sku: null`) has to be cleaned up first: `sku` never had any
+ * empty-value normalization before this migration, so — same as every `barcode`-less
+ * product used to look before that field got its own hook — years of "just leave SKU
+ * blank" products all have the *same* empty string stored, not a genuinely absent
+ * field. Building a unique index straight over that would fail outright (Mongo refuses
+ * to create a unique index over existing duplicates), and that failure surfaces to
+ * whatever request happened to trigger this function as a wildly misleading
+ * `SKU "" already exists` error for a product that never even set one.
+ */
+const ensureProductIndexes = async () => {
+  if (productIndexesEnsured) return;
+
+  const collection = mongoose.connection.collection('products');
+  try {
+    const indexes = await collection.indexes();
+    const legacyBarcodeIndex = indexes.find(
+      (idx) => idx.key?.barcode === 1 && Object.keys(idx.key).length === 1 && idx.unique
+    );
+    if (legacyBarcodeIndex) {
+      await collection.dropIndex(legacyBarcodeIndex.name);
+    }
+  } catch (err) {
+    if (err.codeName !== 'IndexNotFound') {
+      logger.warn(`[ensureProductIndexes] failed to drop legacy barcode index: ${err.message}`);
+    }
+  }
+
+  try {
+    await collection.updateMany({ sku: { $in: ['', null] } }, { $unset: { sku: '' } });
+    await collection.updateMany({ barcode: { $in: ['', null] } }, { $unset: { barcode: '' } });
+  } catch (err) {
+    logger.warn(`[ensureProductIndexes] failed to clean up empty sku/barcode values: ${err.message}`);
+  }
+
+  try {
+    await Product.syncIndexes();
+    productIndexesEnsured = true;
+  } catch (err) {
+    // Don't let an index-build hiccup (e.g. a duplicate the cleanup above didn't
+    // anticipate) masquerade as *this* request's own product having a duplicate
+    // sku/barcode — that's an unrelated, pre-existing data problem, not something the
+    // person creating/editing a product right now did. Log it and let the write
+    // proceed under whatever indexes are currently actually live; `productIndexesEnsured`
+    // stays false, so the next write retries the sync.
+    logger.error(`[ensureProductIndexes] syncIndexes failed, will retry on next write: ${err.message}`);
+  }
+};
 
 /**
  * IMEI tracking only makes sense for mobile phones, so it's restricted to mobile_shop
@@ -174,6 +235,7 @@ const attachVariantAggregates = async (products) => {
  * @returns {Promise<Product>}
  */
 const createProduct = async (productBody) => {
+  await ensureProductIndexes();
   // trackBatch/trackExpiry aren't Product fields — they're proxied onto the product's
   // hidden default ProductVariant, see syncDefaultVariantTracking. businessType isn't a
   // Product field either — it's only passed through to gate trackImei below.
@@ -328,6 +390,28 @@ const getProductById = async (id) => {
 };
 
 /**
+ * Set or clear a product's discrepancy flag. Deliberately a direct, minimal update (not
+ * routed through updateProductById) — flagging is a one-click "mark for review" action
+ * from a list row and must not trigger updateProductById's transactional IMEI/variant
+ * sync side effects.
+ */
+const setProductFlag = async (productId, body, userId) => {
+  const update = body.clear
+    ? { $unset: { flag: 1 } }
+    : { flag: { color: body.color, reason: body.reason || '', note: body.note || '', flaggedBy: userId, flaggedAt: new Date() } };
+  const product = await Product.findByIdAndUpdate(productId, update, { new: true });
+  if (!product) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
+  }
+  return product;
+};
+
+/** Distinct tag values already used across the org/branch's products — powers tag autocomplete/filter options. */
+const getDistinctTags = async (filter) => {
+  return Product.distinct('tags', filter);
+};
+
+/**
  * Same as getProductById, but also exposes the hidden default variant's
  * trackBatch/trackExpiry/id for simple products — used by the single-product GET route
  * that feeds the edit dialog. Returns a plain object (not a Mongoose doc); callers that
@@ -349,12 +433,38 @@ const getProductForEdit = async (id) => {
 };
 
 /**
+ * Fast exact-match lookup used by the Add Product dialog: when a scanned/typed SKU or
+ * barcode is committed, this checks whether it already belongs to a product in this
+ * org+branch so the dialog can switch into editing it instead of risking a duplicate.
+ *
+ * Deliberately two queries, not one: the id-only lookup is a pure index hit (one of the
+ * `{organizationId, branchId, sku}` / `{..., barcode}` partial indexes from
+ * product.model.js) and stays cheap on every keystroke-adjacent call, even against a
+ * huge catalog. The fuller getProductForEdit() populate (a second query) only runs on
+ * an actual match, which is the rare case during normal "create a new product" flow.
+ */
+const findProductByCode = async ({ organizationId, branchId, code }) => {
+  const trimmed = String(code || '').trim();
+  if (!trimmed) return null;
+  const match = await Product.findOne({
+    organizationId,
+    branchId,
+    $or: [{ sku: trimmed }, { barcode: trimmed }],
+  })
+    .select('_id')
+    .lean();
+  if (!match) return null;
+  return getProductForEdit(match._id);
+};
+
+/**
  * Update product by id
  * @param {ObjectId} productId
  * @param {Object} updateBody
  * @returns {Promise<Product>}
  */
 const updateProductById = async (productId, updateBody) => {
+  await ensureProductIndexes();
   const product = await getProductById(productId);
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
@@ -429,9 +539,56 @@ const deleteProductById = async (productId) => {
   return product;
 };
 
+/**
+ * Deletes multiple products by id in one call, for the Products list's bulk-delete
+ * action. Ids that don't match an existing product are silently skipped and reported
+ * back as `notFoundIds` rather than failing the whole batch — same "skip and report"
+ * tolerance bulkAddProducts uses for import rows.
+ * @param {string[]} ids
+ * @returns {Promise<{ deleted: Product[], notFoundIds: string[] }>}
+ */
+const bulkDeleteProductsByIds = async (ids) => {
+  const products = await Product.find({ _id: { $in: ids } });
+  const foundIds = new Set(products.map((product) => product._id.toString()));
+  const notFoundIds = ids.filter((id) => !foundIds.has(id));
+
+  // Same unsold-IMEI cleanup deleteProductById does for a single product.
+  await Promise.all(products.map((product) => imeiService.deleteInStockImeisForProduct(product._id)));
+  await Product.deleteMany({ _id: { $in: products.map((product) => product._id) } });
+
+  return { deleted: products, notFoundIds };
+};
+
+// Excludes deactivated products from every operational picker (Invoice, Fast Billing,
+// POS, Purchase, Stock Adjustment/Transfer, header search — anything built on
+// getAllProducts/getPurchasableCatalog below) without a backfill migration: `$ne: false`
+// matches `isActive: true` AND any product created before this field existed (where the
+// field is simply absent in Mongo — a plain `{ isActive: true }` filter would wrongly
+// exclude those, since Mongoose's schema `default` only applies to new documents, never
+// retroactively to what's already stored). The Products admin list (queryProducts) is
+// deliberately NOT filtered here — deactivated products still need to show there, with
+// their own Active/Inactive toggle, so a batch can be reviewed before going live.
+const ACTIVE_ONLY_FILTER = { isActive: { $ne: false } };
+
+// .lean() skips Mongoose document hydration (getters, virtuals, change-tracking) — the
+// toJSON.plugin's _id->id/__v/timestamps transform (see models/plugins/toJSON.plugin.js)
+// never runs for a lean result, so it has to be replicated by hand here to keep
+// getAllProducts's response shape identical to before for its many consumers (every
+// "pick a product" screen in the app) rather than silently swapping `id` for `_id`.
+const normalizeLeanProduct = (product) => {
+  const { _id, __v, createdAt, updatedAt, ...rest } = product;
+  return { ...rest, id: _id.toString() };
+};
+
 const getAllProducts = async (filter = {}) => {
-  const products = await Product.find(filter).populate('brandId', 'name logo');
-  return attachVariantAggregates(products);
+  // This is the app-wide "pick a product" source (Invoice, Fast Billing, POS, Purchase,
+  // Stock Adjustment/Transfer, header search) and orgs can have tens of thousands of
+  // products (the request this was timing out on came from an 18,811-product catalog) —
+  // .lean() is the single biggest win at that scale, since it skips hydrating every row
+  // into a full Mongoose document.
+  const products = await Product.find({ ...filter, ...ACTIVE_ONLY_FILTER }).populate('brandId', 'name logo').lean();
+  const withAggregates = await attachVariantAggregates(products);
+  return withAggregates.map(normalizeLeanProduct);
 }
 
 /**
@@ -442,7 +599,7 @@ const getAllProducts = async (filter = {}) => {
  * product row. See docs/architecture/universal-product-migration.md.
  */
 const getPurchasableCatalog = async (filter = {}) => {
-  const products = await Product.find(filter).populate('brandId', 'name logo').lean();
+  const products = await Product.find({ ...filter, ...ACTIVE_ONLY_FILTER }).populate('brandId', 'name logo').lean();
   const toBrand = (p) =>
     p.brandId && typeof p.brandId === 'object' ? { _id: p.brandId._id, name: p.brandId.name, logo: p.brandId.logo } : null;
 
@@ -579,6 +736,7 @@ const bulkUpdateProducts = async (productsToUpdate) => {
     if (product.price !== undefined) updateFields.price = product.price;
     if (product.cost !== undefined) updateFields.cost = product.cost;
     if (product.stockQuantity !== undefined) updateFields.stockQuantity = product.stockQuantity;
+    if (product.isActive !== undefined) updateFields.isActive = product.isActive;
     
     return {
       updateOne: {
@@ -798,6 +956,7 @@ const BULK_IMPORT_CHUNK_SIZE = 500;
  * @returns {Promise<Object>}
  */
 const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
+  await ensureProductIndexes();
   const { organizationId, branchId, createdBy } = branchContext;
 
   // Row-level normalization first — pure, no DB access — so the batched lookups below
@@ -809,6 +968,7 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
       original: product,
       name: toImportText(product.name),
       barcode: toImportText(product.barcode),
+      sku: toImportText(product.sku),
       categoryName: toImportText(product.category),
       subCategoryName: toImportText(product.subCategory),
       supplierName: supplierIsId ? '' : toImportText(product.supplier),
@@ -821,19 +981,28 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
     resolveImportSuppliers(rows, branchContext),
   ]);
 
-  // Existing barcodes already in the database — Product.barcode is a *globally* unique
-  // sparse index (not scoped per org/branch), so this has to check across all products.
+  // Existing barcodes/SKUs already in the database for this org+branch — both are
+  // unique per (organizationId, branchId), not globally, so the check is scoped the
+  // same way the schema's partial indexes are (see product.model.js).
   const requestedBarcodes = [...new Set(rows.map((r) => r.barcode).filter(Boolean))];
-  const existingBarcodeDocs = requestedBarcodes.length
-    ? await Product.find({ barcode: { $in: requestedBarcodes } }).select('barcode').lean()
-    : [];
+  const requestedSkus = [...new Set(rows.map((r) => r.sku).filter(Boolean))];
+  const [existingBarcodeDocs, existingSkuDocs] = await Promise.all([
+    requestedBarcodes.length
+      ? Product.find({ organizationId, branchId, barcode: { $in: requestedBarcodes } }).select('barcode').lean()
+      : [],
+    requestedSkus.length
+      ? Product.find({ organizationId, branchId, sku: { $in: requestedSkus } }).select('sku').lean()
+      : [],
+  ]);
   const existingBarcodes = new Set(existingBarcodeDocs.map((d) => d.barcode));
+  const existingSkus = new Set(existingSkuDocs.map((d) => d.sku));
 
   const errors = [];
   const warnings = [];
   const validDocs = [];
   const validMeta = [];
   const seenBarcodesInBatch = new Map(); // barcode -> row index that first claimed it
+  const seenSkusInBatch = new Map(); // sku -> row index that first claimed it
 
   rows.forEach((row) => {
     const product = row.original;
@@ -863,6 +1032,13 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
       const firstSeenAt = seenBarcodesInBatch.get(row.barcode);
       if (firstSeenAt !== undefined) return fail(`Duplicate barcode "${row.barcode}" — also used by row ${firstSeenAt + 1} in this import`);
       seenBarcodesInBatch.set(row.barcode, row.index);
+    }
+
+    if (row.sku) {
+      if (existingSkus.has(row.sku)) return fail(`SKU "${row.sku}" already exists — already used by another product`);
+      const firstSeenAt = seenSkusInBatch.get(row.sku);
+      if (firstSeenAt !== undefined) return fail(`Duplicate SKU "${row.sku}" — also used by row ${firstSeenAt + 1} in this import`);
+      seenSkusInBatch.set(row.sku, row.index);
     }
 
     const { unit, warning: unitWarning } = normalizeImportUnit(product.unit);
@@ -908,7 +1084,6 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
       cost: cost.value,
       stockQuantity: stockQuantity.value,
       unit,
-      sku: toImportText(product.sku),
       category: categoryLegacy,
       categories,
       subCategories,
@@ -917,13 +1092,20 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
       organizationId,
       branchId,
       createdBy,
+      // Imported products (Excel/CSV or the AI vision scanner — both funnel through
+      // here) start deactivated so a batch can be reviewed/priced before it's sellable,
+      // rather than immediately live. Toggled on later via the product list's Active
+      // switch or a bulk "Activate selected" action — see bulkUpdateProducts below.
+      isActive: false,
     };
     // insertMany() does NOT run the schema's pre('save') hook, which is what normally
-    // converts an empty barcode to a genuinely *absent* field. Without this, every
-    // barcode-less row would get an explicit `barcode: null` and, since a sparse unique
-    // index only exempts truly missing fields (not null ones), every row after the
-    // first would collide on the shared `null` value.
+    // converts an empty barcode/sku to a genuinely *absent* field. Without this, every
+    // barcode/sku-less row would get an explicit empty string, and since the partial
+    // unique index only exempts documents where the field doesn't exist as a string at
+    // all (see product.model.js), an empty string would still be indexed — colliding
+    // every barcode/sku-less row in the batch against every other one.
     if (row.barcode) doc.barcode = row.barcode;
+    if (row.sku) doc.sku = row.sku;
 
     // Defense-in-depth: validate against the real schema before ever handing the batch
     // to insertMany(). See the function-level comment above for why this specifically
@@ -936,7 +1118,7 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
     }
 
     validDocs.push(doc);
-    validMeta.push({ index: row.index, name: row.name, barcode: row.barcode || null });
+    validMeta.push({ index: row.index, name: row.name, barcode: row.barcode || null, sku: row.sku || null });
   });
 
   const insertedProducts = [];
@@ -961,11 +1143,14 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
         const raw = writeError.err || writeError;
         const meta = chunkMeta[writeError.index ?? raw.index];
         const errmsg = raw.errmsg || writeError.errmsg || '';
-        const dupMatch = raw.code === 11000 ? errmsg.match(/dup key:\s*\{\s*(\w+):\s*"?([^}"]*)"?\s*\}/) : null;
+        // Compound org/branch-scoped indexes list organizationId/branchId first in the
+        // dup key clause — extractDuplicateFieldFromMessage skips those and finds the
+        // real sku/barcode/name field, unlike a naive "first key after {" regex.
+        const dupMatch = raw.code === 11000 ? extractDuplicateFieldFromMessage(errmsg) : null;
         const message = dupMatch
-          ? `Duplicate ${dupMatch[1]} "${meta?.[dupMatch[1]] ?? dupMatch[2]}" — already used by another product`
+          ? `Duplicate ${labelFor(dupMatch.field)} "${meta?.[dupMatch.field] ?? dupMatch.value}" — already used by another product`
           : errmsg || 'Failed to import this product';
-        errors.push({ index: meta?.index, name: meta?.name, barcode: meta?.barcode, error: message });
+        errors.push({ index: meta?.index, name: meta?.name, barcode: meta?.barcode, sku: meta?.sku, error: message });
       });
     }
   }
@@ -996,12 +1181,16 @@ module.exports = {
   queryProducts,
   getProductById,
   getProductForEdit,
+  findProductByCode,
   updateProductById,
   deleteProductById,
+  bulkDeleteProductsByIds,
   getAllProducts,
   getProductStats,
   bulkUpdateProducts,
   bulkAddProducts,
   attachVariantAggregates,
   getPurchasableCatalog,
+  setProductFlag,
+  getDistinctTags,
 };

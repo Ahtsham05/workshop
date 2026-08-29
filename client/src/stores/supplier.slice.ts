@@ -140,6 +140,28 @@ export const bulkAddSuppliers = createAsyncThunk(
   })
 );
 
+export const bulkDeleteSuppliers = createAsyncThunk(
+  'supplier/bulkDeleteSuppliers',
+  catchAsync(async (ids: string[]) => {
+    const response = await Axios({
+      ...summery.bulkDeleteSuppliers,
+      data: { ids },
+    });
+    return response.data;
+  })
+);
+
+export const bulkUpdateSuppliers = createAsyncThunk(
+  'supplier/bulkUpdateSuppliers',
+  catchAsync(async (data: { suppliers: any[] }) => {
+    const response = await Axios({
+      ...summery.bulkUpdateSuppliers,
+      data,
+    });
+    return response.data;
+  })
+);
+
 const supplierSlice = createSlice({
   name: "supplier",
   initialState,
@@ -185,6 +207,12 @@ const supplierSlice = createSlice({
         // Handle bulk add success - could refresh the list or append new suppliers
         // For simplicity, we'll let the component refetch after import
       })
+      .addCase(bulkDeleteSuppliers.fulfilled, (state, action) => {
+        const deletedIds = new Set((action.payload.deletedIds || []).map((id: any) => String(id)));
+        if (Array.isArray(state.data)) {
+          state.data = state.data.filter((supplier: any) => !deletedIds.has(String(supplier.id || supplier._id)));
+        }
+      })
       .addMatcher(
         isAnyOf(
           ...reduxToolKitCaseBuilder([
@@ -196,6 +224,8 @@ const supplierSlice = createSlice({
             fetchSupplierStats,
             getSupplierPurchaseAndTransactions,
             bulkAddSuppliers,
+            bulkDeleteSuppliers,
+            bulkUpdateSuppliers,
           ])
         ),
         handleLoadingErrorParamsForAsycThunk

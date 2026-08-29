@@ -164,6 +164,11 @@ const updateInvoice = catchAsync(async (req, res) => {
   res.send(invoice);
 });
 
+const updateInvoiceFlag = catchAsync(async (req, res) => {
+  const invoice = await invoiceService.setInvoiceFlag(req.params.invoiceId, req.body, req.user.id);
+  res.send(invoice);
+});
+
 const deleteInvoice = catchAsync(async (req, res) => {
   const invoice = await invoiceService.getInvoiceById(req.params.invoiceId);
   await invoiceService.deleteInvoiceById(req.params.invoiceId);
@@ -448,6 +453,7 @@ module.exports = {
   getInvoices,
   getInvoice,
   updateInvoice,
+  updateInvoiceFlag,
   deleteInvoice,
   finalizeInvoice,
   processPayment,

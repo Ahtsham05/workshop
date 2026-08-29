@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ColumnDef,
@@ -47,6 +47,10 @@ interface DataTableProps {
   viewMode: CustomerListViewMode
   onViewModeChange: (mode: CustomerListViewMode) => void
   actions?: React.ReactNode
+  onSelectedRowsChange?: (selectedRows: Customer[]) => void
+  /** Row (by _id/id) to scroll into view and briefly highlight — set after a deactivate
+   *  jumps the list to the last page, so the user can see where the row landed. */
+  highlightRowId?: string | null
 }
 
 export function CustomerTable({
@@ -59,6 +63,8 @@ export function CustomerTable({
   viewMode,
   onViewModeChange,
   actions,
+  onSelectedRowsChange,
+  highlightRowId,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
@@ -69,6 +75,23 @@ export function CustomerTable({
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
   const navigate = useNavigate()
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
+
+  useEffect(() => {
+    if (onSelectedRowsChange) {
+      const selectedCustomers = Object.keys(rowSelection)
+        .filter((key) => rowSelection[key as keyof typeof rowSelection])
+        .map((index) => data[parseInt(index)])
+        .filter(Boolean)
+      onSelectedRowsChange(selectedCustomers)
+    }
+  }, [rowSelection, data, onSelectedRowsChange])
+
+  useEffect(() => {
+    if (highlightRowId && highlightRowRef.current) {
+      highlightRowRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [highlightRowId, data])
 
   // console.log("data",data)
   // console.log("paggination",paggination)
@@ -134,16 +157,20 @@ export function CustomerTable({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
+              table.getRowModel().rows.map((row) => {
+                const customerId = row.original._id || row.original.id
+                const isHighlighted = !!highlightRowId && customerId === highlightRowId
+                return (
                 <TableRow
                   key={row.id}
+                  ref={isHighlighted ? highlightRowRef : undefined}
                   data-state={row.getIsSelected() && 'selected'}
-                  className='group/row cursor-pointer hover:bg-muted/50'
+                  className={`group/row cursor-pointer hover:bg-muted/50 ${isHighlighted ? 'animate-pulse bg-primary/10 ring-2 ring-inset ring-primary/40' : ''}`}
                   onClick={() => {
-                    const customerId = row.original._id || row.original.id;
                     navigate({ to: '/accounting', search: { tab: 'customer-ledger', customerId, customerName: row.original.name } })
                   }}
                 >
+
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
@@ -158,7 +185,8 @@ export function CustomerTable({
                     </TableCell>
                   ))}
                 </TableRow>
-              ))
+                )
+              })
             ) : (
               <TableRow>
                 <TableCell

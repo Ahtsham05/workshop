@@ -1,10 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useLanguage } from '@/context/language-context';
-import { AlertTriangle, Package, TrendingDown, Bell, BellOff, Settings } from 'lucide-react';
+import { AlertTriangle, Package, Bell, BellOff, Settings } from 'lucide-react';
 import { Product } from '../data/schema';
 import {
   Dialog,
@@ -16,7 +15,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getDisplayStock } from '@/lib/product-stock-display';
-import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product';
 
 interface LowStockAlertProps {
   products: Product[];
@@ -30,7 +28,6 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
   const [showSettings, setShowSettings] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [tempThreshold, setTempThreshold] = useState(defaultThreshold);
-  const expiringByProduct = useExpiringBatchesByProduct();
 
   // Load settings from localStorage
   useEffect(() => {
@@ -60,14 +57,6 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
   const outOfStockProducts = useMemo(() => {
     return products.filter(product => getDisplayStock(product) === 0);
   }, [products]);
-
-  // Calculate critical stock products (< 50% of threshold)
-  const criticalStockProducts = useMemo(() => {
-    return products.filter(product => {
-      const stock = getDisplayStock(product)
-      return stock > 0 && stock <= Math.floor(threshold / 2)
-    });
-  }, [products, threshold]);
 
   const handleSaveSettings = () => {
     setThreshold(tempThreshold);
@@ -133,131 +122,65 @@ export function LowStockAlert({ products, defaultThreshold = 10, loading = false
     );
   }
 
+  // Counts (Out of Stock / Low Stock / Critical Stock) already surface as their own
+  // stat cards above this banner — see ProductStatCards — so this banner's only job now
+  // is to call out the most urgent case (out-of-stock products) with a "View All" link
+  // into the fuller LowStockDetails breakdown, rather than repeating every count here.
+  if (outOfStockProducts.length === 0) {
+    if (lowStockProducts.length === 0) return null
+    return (
+      <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20">
+        <CardContent className="flex items-center justify-between gap-3 py-3">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span className="text-sm font-medium">
+              {lowStockProducts.length} {t('low_stock_products')}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-sm font-medium text-primary">{t('View All')}</span>
+            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setShowSettings(true) }}>
+              <Settings className="w-4 h-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <>
-      <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20">
+      <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-              <CardTitle className="text-lg">{t('low_stock_alert')}</CardTitle>
+            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+              <AlertTriangle className="w-5 h-5" />
+              <CardTitle className="text-lg text-red-700 dark:text-red-400">{t('out_of_stock_products')}</CardTitle>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={toggleAlerts}>
+              <span className="text-sm font-medium text-primary">{t('View All')}</span>
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); toggleAlerts() }}>
                 <BellOff className="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setShowSettings(true) }}>
                 <Settings className="w-4 h-4" />
               </Button>
             </div>
           </div>
-          <CardDescription>
-            {t('products_need_attention')}
-          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Summary Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-card rounded-lg p-3 border border-orange-200 dark:border-orange-900/50">
-              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 mb-1">
-                <TrendingDown className="w-4 h-4" />
-                <span className="text-xs font-medium">{t('out_of_stock')}</span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">{outOfStockProducts.length}</div>
-            </div>
-
-            <div className="bg-card rounded-lg p-3 border border-orange-200 dark:border-orange-900/50">
-              <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 mb-1">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-xs font-medium">{t('critical_stock')}</span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">{criticalStockProducts.length}</div>
-            </div>
-
-            <div className="bg-card rounded-lg p-3 border border-orange-200 dark:border-orange-900/50">
-              <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400 mb-1">
-                <Package className="w-4 h-4" />
-                <span className="text-xs font-medium">{t('low_stock')}</span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">{lowStockProducts.length}</div>
-            </div>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-2">
+            {outOfStockProducts.slice(0, 3).map((product) => (
+              <Badge key={product._id || product.id} variant="destructive">
+                {product.name}
+              </Badge>
+            ))}
+            {outOfStockProducts.length > 3 && (
+              <span className="text-sm italic text-red-600 dark:text-red-400">
+                {`${t('and')} ${outOfStockProducts.length - 3} ${t('more')}...`}
+              </span>
+            )}
           </div>
-
-          {/* Out of Stock Products */}
-          {outOfStockProducts.length > 0 && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                <div className="font-semibold mb-2">{t('out_of_stock_products')}:</div>
-                <div className="space-y-1">
-                  {outOfStockProducts.slice(0, 3).map((product) => (
-                    <div key={product._id || product.id} className="flex items-center justify-between">
-                      <span className="text-sm">{product.name}</span>
-                      <Badge variant="destructive">{t('out_of_stock')}</Badge>
-                    </div>
-                  ))}
-                  {outOfStockProducts.length > 3 && (
-                    <div className="text-sm italic">
-                      {`${t('and')} ${outOfStockProducts.length - 3} ${t('more')}...`}
-                    </div>
-                  )}
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Critical Stock Products */}
-          {criticalStockProducts.length > 0 && (
-            <Alert>
-              <AlertDescription>
-                <div className="font-semibold mb-2 text-orange-700 dark:text-orange-400">{t('critical_stock_products')}:</div>
-                <div className="space-y-1">
-                  {criticalStockProducts.slice(0, 3).map((product) => (
-                    <div key={product._id || product.id} className="flex items-center justify-between">
-                      <span className="text-sm">{product.name}</span>
-                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900">
-                        {getDisplayStock(product)} {t('left')}
-                      </Badge>
-                    </div>
-                  ))}
-                  {criticalStockProducts.length > 3 && (
-                    <div className="text-sm italic text-gray-600 dark:text-gray-400">
-                      {`${t('and')} ${criticalStockProducts.length - 3} ${t('more')}...`}
-                    </div>
-                  )}
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Low Stock Products */}
-          {lowStockProducts.length > 0 && criticalStockProducts.length !== lowStockProducts.length && (
-            <div>
-              <div className="font-medium text-sm mb-2 text-orange-700 dark:text-orange-400">{t('low_stock_products')}:</div>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {lowStockProducts
-                  .filter(p => getDisplayStock(p) > Math.floor(threshold / 2))
-                  .slice(0, 5)
-                  .map((product) => {
-                    const expiry = expiringByProduct.get((product._id || product.id || '').toString())
-                    return (
-                      <div key={product._id || product.id} className="flex items-center justify-between bg-card p-2 rounded border border-orange-100 dark:border-orange-900/40">
-                        <span className="text-sm text-foreground">{product.name}</span>
-                        <div className="flex items-center gap-1.5">
-                          {expiry && (
-                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900">
-                              {t('expires_in_days', { days: daysUntil(expiry) }) || `Expires in ${daysUntil(expiry)}d`}
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/40 dark:text-yellow-400 dark:border-yellow-900">
-                            {getDisplayStock(product)} {t('left')}
-                          </Badge>
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 

@@ -33,6 +33,9 @@ export const supplierSchema = z.object({
   address: z.string().optional(), // supplier address is optional
   balance: z.number().optional(),
   customerId: z.string().optional(), // linked shadow Customer record so this supplier can also be billed as a customer
+  // Defaults true; deactivating hides the supplier from Purchase pickers without
+  // deleting the record or its ledger history — see server supplier.service.js.
+  isActive: z.boolean().optional(),
   createdAt: z.string().optional(), // timestamp of when the supplier was created (optional)
   updatedAt: z.string().optional(), // timestamp of when the supplier was last updated (optional)
 });

@@ -29,11 +29,13 @@ const ProductVariantSchema = new mongoose.Schema({
         ref: 'User',
     },
     isDefault: { type: Boolean, default: false }, // true = auto-generated legacy variant
+    // No `default: null` here — the partial unique index below only indexes documents
+    // where the field genuinely exists as a string, not where it's explicitly null, so
+    // defaulting to null would make every sku/barcode-less variant collide on the index.
+    // Uniqueness is enforced per (organizationId, branchId) — see the compound indexes
+    // at the bottom of this file, same pattern as product.model.js.
     sku: { type: String, trim: true },
-    // No `default: null` here — Mongo's sparse index only skips documents where the
-    // field is truly *missing*, not where it's explicitly null, so defaulting to null
-    // would make every barcode-less variant collide on the unique index.
-    barcode: { type: String, trim: true, sparse: true, unique: true },
+    barcode: { type: String, trim: true },
     attributes: { type: Map, of: String, default: {} }, // { Size: "Large", Color: "Black" }
     price: { type: Number, required: true },
     cost: { type: Number, required: true },
@@ -58,12 +60,15 @@ const ProductVariantSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Convert empty-string barcode to a genuinely *absent* field (not null) so it doesn't
-// collide with other docs under the sparse unique index — sparse only excludes missing
-// fields, not explicit nulls.
+// Convert empty-string sku/barcode to a genuinely *absent* field (not null) so it
+// doesn't collide with other docs under the partial unique index — see the index
+// declarations below for why a plain sparse index isn't the right tool here.
 ProductVariantSchema.pre('save', function (next) {
     if (this.barcode === '' || this.barcode === null) {
         this.barcode = undefined;
+    }
+    if (this.sku === '' || this.sku === null) {
+        this.sku = undefined;
     }
     next();
 });
@@ -73,6 +78,10 @@ ProductVariantSchema.pre(['updateOne', 'findOneAndUpdate'], function (next) {
         delete update.barcode;
         update.$unset = { ...(update.$unset || {}), barcode: '' };
     }
+    if (update.sku === '' || update.sku === null) {
+        delete update.sku;
+        update.$unset = { ...(update.$unset || {}), sku: '' };
+    }
     next();
 });
 
@@ -80,7 +89,18 @@ ProductVariantSchema.plugin(toJSON);
 ProductVariantSchema.plugin(paginate);
 
 ProductVariantSchema.index({ organizationId: 1, branchId: 1, productId: 1 });
-ProductVariantSchema.index({ organizationId: 1, branchId: 1, sku: 1 }, { sparse: true });
+
+// SKU and barcode are each unique per (organizationId, branchId), same scoping and same
+// partial-index reasoning as product.model.js — NOT `sparse: true` on a compound index,
+// see that file's comment for the production incident this avoids.
+ProductVariantSchema.index(
+    { organizationId: 1, branchId: 1, sku: 1 },
+    { unique: true, partialFilterExpression: { sku: { $type: 'string' } } },
+);
+ProductVariantSchema.index(
+    { organizationId: 1, branchId: 1, barcode: 1 },
+    { unique: true, partialFilterExpression: { barcode: { $type: 'string' } } },
+);
 
 const ProductVariant = mongoose.model('ProductVariant', ProductVariantSchema);
 

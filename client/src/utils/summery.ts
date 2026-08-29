@@ -43,6 +43,10 @@ const summery = {
     url: '/products',
     method: 'delete',
   },
+  bulkDeleteProducts: {
+    url: '/products/bulk-delete',
+    method: 'delete',
+  },
   fetchProducts: {
     url: '/products',
     method: 'get',
@@ -63,6 +67,10 @@ const summery = {
     url: '/products/bulk',
     method: 'post'
   },
+  updateProductFlag: {
+    url: '/products',
+    method: 'patch'
+  },
 
   // customers
   addCustomer: {
@@ -76,6 +84,14 @@ const summery = {
   deleteCustomer: {
     url: '/customers',
     method: 'delete',
+  },
+  bulkDeleteCustomers: {
+    url: '/customers/bulk-delete',
+    method: 'delete',
+  },
+  bulkUpdateCustomers: {
+    url: '/customers/bulk-update',
+    method: 'patch',
   },
   fetchCustomers: {
     url: '/customers',
@@ -107,6 +123,14 @@ const summery = {
   deleteSupplier: {
     url: '/suppliers',
     method: 'delete',
+  },
+  bulkDeleteSuppliers: {
+    url: '/suppliers/bulk-delete',
+    method: 'delete',
+  },
+  bulkUpdateSuppliers: {
+    url: '/suppliers/bulk-update',
+    method: 'patch',
   },
   fetchSuppliers: {
     url: '/suppliers',

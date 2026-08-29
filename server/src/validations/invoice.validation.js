@@ -278,6 +278,22 @@ const duplicateInvoice = {
   })
 };
 
+const updateInvoiceFlag = {
+  params: Joi.object({
+    invoiceId: Joi.string().custom(objectId)
+  }),
+  body: Joi.alternatives().try(
+    Joi.object().keys({
+      clear: Joi.boolean().valid(true).required(),
+    }),
+    Joi.object().keys({
+      color: Joi.string().trim().required(),
+      reason: Joi.string().trim().allow('').optional(),
+      note: Joi.string().trim().allow('').optional(),
+    }),
+  ),
+};
+
 const convertQuotation = {
   params: Joi.object({
     invoiceId: Joi.string().custom(objectId)
@@ -311,4 +327,5 @@ module.exports = {
   cancelInvoice,
   duplicateInvoice,
   convertQuotation,
+  updateInvoiceFlag,
 };

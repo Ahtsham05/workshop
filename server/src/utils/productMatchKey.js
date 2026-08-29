@@ -3,8 +3,13 @@
  * same physical item is a separate Product doc per branch. This is the one shared
  * heuristic for recognizing "the same physical item" across branches: match by
  * barcode when present, else fall back to an exact case-insensitive name match.
- * Barcode has a global unique index (see product.model.js / productVariant.model.js),
- * so it's intentionally never duplicated across branches — name is the real workhorse.
+ * Barcode/SKU uniqueness is scoped per (organizationId, branchId), not global (see
+ * product.model.js / productVariant.model.js) — a barcode CAN legitimately repeat
+ * across branches (usually because it's the same physical item copied there), which is
+ * exactly what this heuristic is trying to detect. Name is still the real workhorse
+ * (see buildMatchQuery below): an accidental cross-branch barcode collision on two
+ * genuinely different items is a rare, low-stakes mismatch for a *suggestion* feature,
+ * not a data-integrity concern.
  * Used by purchaseSuggestions.service.js (transfer suggestions) and
  * branchAvailability.service.js (per-branch stock lookup on Invoice).
  */
@@ -15,12 +20,10 @@ const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /**
  * Builds a Mongo query matching "the same physical item" as `product`, scoped by
  * `scope` (e.g. {organizationId, branchId} or just {organizationId}). Tries barcode OR
- * name — never barcode *instead of* name. This matters precisely because barcode is
- * globally unique: a second branch's copy of a barcoded item can never carry that same
- * barcode value, so a barcode-only query always misses it even when the same-named
- * product genuinely exists there. Name is always tried, whether or not a barcode is
- * present, so a barcoded source can still find a barcode-less (or differently-barcoded)
- * match elsewhere.
+ * name — never barcode *instead of* name — since barcode is only unique within a
+ * single branch now, not across the whole match scope: a same-barcode copy in another
+ * branch is the common case this is meant to catch, but a barcode-less counterpart (or
+ * one whose barcode was entered differently) still needs the name fallback to be found.
  */
 const buildMatchQuery = (scope, product) => {
   const nameQuery = { name: { $regex: `^${escapeRegex(product.name.trim())}$`, $options: 'i' } };

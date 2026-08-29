@@ -1363,6 +1363,10 @@ const getInventoryReport = catchAsync(async (req, res) => {
       stockQuantity: 1, cost: 1, price: 1,
       trackImei: { $ifNull: ['$trackImei', false] },
       trackSerial: { $ifNull: ['$trackSerial', false] },
+      tags: { $ifNull: ['$tags', []] },
+      color: 1,
+      shelfLocation: 1,
+      flag: 1,
     } },
   ]);
 

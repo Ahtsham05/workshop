@@ -160,8 +160,17 @@ const deleteSupplierById = async (supplierId) => {
   return supplier;
 };
 
+// Excludes deactivated suppliers from every "pick a supplier" picker (Purchase, header
+// search — anything built on getAllSuppliers below) without a backfill migration:
+// `$ne: false` matches `isActive: true` AND any supplier created before this field
+// existed (absent in Mongo — a plain `{ isActive: true }` filter would wrongly exclude
+// those). The Suppliers admin list (querySuppliers) is deliberately NOT filtered here —
+// deactivated suppliers still need to show there, with their own Active/Inactive
+// toggle. Same pattern as product/customer.service.js.
+const ACTIVE_ONLY_FILTER = { isActive: { $ne: false } };
+
 const getAllSuppliers = async (filter = {}) => {
-  return Supplier.find(filter);
+  return Supplier.find({ ...filter, ...ACTIVE_ONLY_FILTER });
 };
 
 /**
@@ -266,6 +275,48 @@ const getSupplierStats = async (filter) => {
   };
 };
 
+/**
+ * Bulk activate/deactivate (or otherwise patch) suppliers in one call — the Suppliers
+ * list's "Activate/Deactivate selected" actions. Only `isActive` is supported today;
+ * unlike updateSupplierById this is a direct bulkWrite, so it deliberately skips the
+ * ledger/accounting side effects a balance change there would trigger.
+ * @param {{ id: string, isActive?: boolean }[]} suppliersToUpdate
+ */
+const bulkUpdateSuppliers = async (suppliersToUpdate) => {
+  const bulkOps = suppliersToUpdate
+    .filter((supplier) => supplier.isActive !== undefined)
+    .map((supplier) => ({
+      updateOne: {
+        filter: { _id: supplier.id },
+        update: { $set: { isActive: supplier.isActive } },
+      },
+    }));
+
+  if (bulkOps.length === 0) {
+    return { modifiedCount: 0 };
+  }
+
+  const result = await Supplier.bulkWrite(bulkOps);
+  return { modifiedCount: result.modifiedCount };
+};
+
+/**
+ * Deletes multiple suppliers by id in one call, for the Suppliers list's bulk-delete
+ * action. Ids that don't match an existing supplier are silently skipped and reported
+ * back as `notFoundIds` rather than failing the whole batch.
+ * @param {string[]} ids
+ * @returns {Promise<{ deleted: Supplier[], notFoundIds: string[] }>}
+ */
+const bulkDeleteSuppliersByIds = async (ids) => {
+  const suppliers = await Supplier.find({ _id: { $in: ids } });
+  const foundIds = new Set(suppliers.map((supplier) => supplier._id.toString()));
+  const notFoundIds = ids.filter((id) => !foundIds.has(id));
+
+  await Supplier.deleteMany({ _id: { $in: suppliers.map((supplier) => supplier._id) } });
+
+  return { deleted: suppliers, notFoundIds };
+};
+
 module.exports = {
   createSupplier,
   ensureSupplierCustomerAccount,
@@ -273,6 +324,8 @@ module.exports = {
   getSupplierById,
   updateSupplierById,
   deleteSupplierById,
+  bulkDeleteSuppliersByIds,
+  bulkUpdateSuppliers,
   getAllSuppliers,
   getSupplierStats,
   bulkAddSuppliers,

@@ -135,6 +135,9 @@ import {
 } from '@/components/entity-create-shortcut'
 import { QuotationConvertDialog } from './quotation-convert-dialog'
 import { ProductHistoryDialog } from './product-history-dialog'
+import { ColorDot } from '@/components/color-swatch-picker'
+import { FlagBadge, FlagPickerPopover } from '@/components/flag-badge'
+import { useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
 
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
@@ -341,6 +344,7 @@ export function InvoicePanel({
   // RTK Query mutations
   const [createInvoice] = useCreateInvoiceMutation()
   const [updateInvoice] = useUpdateInvoiceMutation()
+  const [updateInvoiceFlag] = useUpdateInvoiceFlagMutation()
   const { isElectron, online } = useSync()
   
   // Fetch active branch data for invoice printing
@@ -2137,6 +2141,7 @@ export function InvoicePanel({
                                   <div className="flex items-center gap-2 flex-1 min-w-0">
                                     <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
                                     <span className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0 text-left'>
+                                      <ColorDot hex={currentProduct?.color} />
                                       <span
                                         className={getTextClasses(item.name || t('select_product'), 'truncate shrink-0 text-muted-foreground')}
                                         title={item.name || t('select_product')}
@@ -2144,6 +2149,7 @@ export function InvoicePanel({
                                         {item.name || t('select_product')}
                                         {!item.productId && ' *'}
                                       </span>
+                                      <FlagBadge flag={currentProduct?.flag} />
                                       {showUrdu && item.nameUrdu?.trim() ? (
                                         <span
                                           className={cn('min-w-0 truncate rtl text-xs shrink', getUrduSecondaryNameClasses(item.nameUrdu))}
@@ -2854,6 +2860,25 @@ export function InvoicePanel({
                 <span className='rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs'>
                   {editingInvoice.invoiceNumber}
                 </span>
+                <FlagPickerPopover
+                  flag={editingInvoice.flag}
+                  onSave={async (data) => {
+                    try {
+                      await updateInvoiceFlag({ id: editingInvoice._id, ...data }).unwrap()
+                      toast.success(editingInvoice.flag ? 'Flag updated' : 'Invoice flagged for review')
+                    } catch {
+                      toast.error('Failed to update flag')
+                    }
+                  }}
+                  onClear={async () => {
+                    try {
+                      await updateInvoiceFlag({ id: editingInvoice._id, clear: true }).unwrap()
+                      toast.success('Flag cleared')
+                    } catch {
+                      toast.error('Failed to clear flag')
+                    }
+                  }}
+                />
               </div>
             )
           ) : (
@@ -3194,10 +3219,30 @@ export function InvoicePanel({
           {isEditing && editingInvoice?.invoiceNumber && (
             <div>
               <Label>{t('invoice_number') || 'Invoice No.'}</Label>
-              <div className='flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm'>
+              <div className='flex h-10 items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm'>
                 <span className='truncate font-medium' title={editingInvoice.invoiceNumber}>
                   {editingInvoice.invoiceNumber}
                 </span>
+                <FlagPickerPopover
+                  flag={editingInvoice.flag}
+                  align='start'
+                  onSave={async (data) => {
+                    try {
+                      await updateInvoiceFlag({ id: editingInvoice._id, ...data }).unwrap()
+                      toast.success(editingInvoice.flag ? 'Flag updated' : 'Invoice flagged for review')
+                    } catch {
+                      toast.error('Failed to update flag')
+                    }
+                  }}
+                  onClear={async () => {
+                    try {
+                      await updateInvoiceFlag({ id: editingInvoice._id, clear: true }).unwrap()
+                      toast.success('Flag cleared')
+                    } catch {
+                      toast.error('Failed to clear flag')
+                    }
+                  }}
+                />
               </div>
             </div>
           )}

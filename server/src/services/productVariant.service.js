@@ -1,7 +1,59 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Product, ProductVariant, Inventory } = require('../models');
 const ApiError = require('../utils/ApiError');
 const batchService = require('./batch.service');
+const logger = require('../config/logger');
+
+let variantIndexesEnsured = false;
+
+/**
+ * Migrate from the legacy globally-unique `barcode` index (pre org/branch-scoped SKU
+ * rework) to the per-(organizationId, branchId) partial unique indexes now declared on
+ * the schema, and from the old non-unique `sku` index to its now-unique partial form.
+ * Same reasoning as product.service.js#ensureProductIndexes, cleanup included: `sku`
+ * went straight from "no index at all" to "unique", so every pre-existing variant with
+ * a literal `sku: ""` has to be normalized to a genuinely absent field first, or the
+ * new unique index build fails outright on those pre-existing duplicates.
+ */
+const ensureProductVariantIndexes = async () => {
+  if (variantIndexesEnsured) return;
+
+  const collection = mongoose.connection.collection('productvariants');
+  try {
+    const indexes = await collection.indexes();
+    const legacyBarcodeIndex = indexes.find(
+      (idx) => idx.key?.barcode === 1 && Object.keys(idx.key).length === 1 && idx.unique
+    );
+    if (legacyBarcodeIndex) {
+      await collection.dropIndex(legacyBarcodeIndex.name);
+    }
+    const legacySkuIndex = indexes.find(
+      (idx) => idx.key?.organizationId === 1 && idx.key?.branchId === 1 && idx.key?.sku === 1 && !idx.unique
+    );
+    if (legacySkuIndex) {
+      await collection.dropIndex(legacySkuIndex.name);
+    }
+  } catch (err) {
+    if (err.codeName !== 'IndexNotFound') {
+      logger.warn(`[ensureProductVariantIndexes] failed to drop legacy index: ${err.message}`);
+    }
+  }
+
+  try {
+    await collection.updateMany({ sku: { $in: ['', null] } }, { $unset: { sku: '' } });
+    await collection.updateMany({ barcode: { $in: ['', null] } }, { $unset: { barcode: '' } });
+  } catch (err) {
+    logger.warn(`[ensureProductVariantIndexes] failed to clean up empty sku/barcode values: ${err.message}`);
+  }
+
+  try {
+    await ProductVariant.syncIndexes();
+    variantIndexesEnsured = true;
+  } catch (err) {
+    logger.error(`[ensureProductVariantIndexes] syncIndexes failed, will retry on next write: ${err.message}`);
+  }
+};
 
 /**
  * Create a real (non-default) variant for a product and its matching Inventory row.
@@ -10,6 +62,7 @@ const batchService = require('./batch.service');
  * docs/architecture/universal-product-migration.md section 4.
  */
 const createProductVariant = async (productId, body) => {
+  await ensureProductVariantIndexes();
   const product = await Product.findById(productId);
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
@@ -79,6 +132,7 @@ const getProductVariantById = async (variantId) => {
 };
 
 const updateProductVariantById = async (variantId, updateBody) => {
+  await ensureProductVariantIndexes();
   const variant = await getProductVariantById(variantId);
   // attributes/price/cost/unit/tracking flags only — stock changes go through
   // inventory.service.js so every quantity change is ledgered.

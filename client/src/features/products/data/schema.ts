@@ -66,6 +66,22 @@ export const productSchema = z.object({
     minCost: z.number(),
     maxCost: z.number(),
   }).nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  color: z.string().nullable().optional(),
+  shelfLocation: z.string().optional(),
+  // Defaults true for a manual create; bulk imports (Excel/AI scan/import-from-other-
+  // branches) create products deactivated — see server product.service.js#bulkAddProducts.
+  isActive: z.boolean().optional(),
+  flag: z.object({
+    color: z.string(),
+    reason: z.string().optional(),
+    note: z.string().optional(),
+    flaggedAt: z.string().optional(),
+    flaggedBy: z.union([
+      z.string(),
+      z.object({ name: z.string().optional(), email: z.string().optional() }),
+    ]).nullable().optional(),
+  }).nullable().optional(),
 })
 
 // Define a schema for a list of products

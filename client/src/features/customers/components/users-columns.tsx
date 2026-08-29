@@ -4,6 +4,7 @@ import LongText from '@/components/long-text'
 import { Customer } from '../data/schema'
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
+import { ActiveToggleCell } from './active-toggle-cell'
 import { useLanguage } from '@/context/language-context'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { ContactMediaNameCell } from '@/components/contact-media-name-cell'
@@ -13,7 +14,7 @@ import { useBranchName } from '@/hooks/use-branch-name'
 import { buildCustomerBalanceMessage, getCustomerBalanceTemplate } from '@/utils/sms-messages'
 import { formatCustomerBalanceDisplay } from '../utils/customer-list-view'
 
-export const useCustomerColumns = (): ColumnDef<Customer>[] => {
+export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: boolean) => void): ColumnDef<Customer>[] => {
   const { t } = useLanguage()
   const branchName = useBranchName()
 
@@ -109,6 +110,16 @@ export const useCustomerColumns = (): ColumnDef<Customer>[] => {
       accessorKey: 'address',
       header: ({ column }) => <DataTableColumnHeader column={column} title='address' />,
       cell: ({ row }) => <div className={getTextClasses(row.getValue('address'), '')}>{row.getValue('address')}</div>,
+    },
+    {
+      id: 'isActive',
+      header: ({ column }) => <DataTableColumnHeader column={column} title='Active' />,
+      cell: ({ row }) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ActiveToggleCell customer={row.original} onToggled={(next) => onStatusChange?.(row.original, next)} />
+        </div>
+      ),
+      enableHiding: true,
     },
     {
       id: 'actions',

@@ -14,22 +14,39 @@ import {
 } from './utils/customer-list-view'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { useEffect, useState } from 'react'
-import { MessageSquare, Users, Wallet, UserPlus, Receipt, ChevronRight } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
+import { MessageSquare, Users, Wallet, UserPlus, Receipt, ChevronRight, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { BulkSmsDialog } from '@/components/sms/bulk-sms-dialog'
+import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 import { useBranchName } from '@/hooks/use-branch-name'
-import { fetchCustomers } from '@/stores/customer.slice'
+import { fetchCustomers, bulkUpdateCustomers } from '@/stores/customer.slice'
 import { useGetCustomerStatsQuery } from '@/stores/customer.api'
 import { useLanguage } from '@/context/language-context'
+import { Can } from '@/context/permission-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { toneColor } from '@/lib/stat-card-tones'
+import type { Customer } from './data/schema'
 
 const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`
 
 const SEARCH_DEBOUNCE_MS = 400
+const ALL_STATUS = 'all'
+// Active customers first, inactive last; newest-first within each group.
+const CUSTOMERS_SORT_BY = 'isActive:desc,createdAt:desc'
+
+// Hidden for now — re-enable by flipping this back to true.
+const SHOW_QUICK_ADD_CUSTOMER = false
 
 export default function Customers() {
   const [customers, setCustomers] = useState([])
@@ -41,13 +58,37 @@ export default function Customers() {
   const [searchInput, setSearchInput] = useState('')
   const [viewMode, setViewMode] = useState<CustomerListViewMode>(() => getStoredCustomerListViewMode())
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
+  const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
+  const [selectedCustomers, setSelectedCustomers] = useState<Customer[]>([])
+  const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [highlightRowId, setHighlightRowId] = useState<string | null>(null)
 
   const [bulkSmsOpen, setBulkSmsOpen] = useState(false)
   const branchName = useBranchName()
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
-  const columns = useCustomerColumns()
   const { data: stats, isLoading: isStatsLoading } = useGetCustomerStatsQuery()
+
+  // Re-sorts/re-navigates the list after a per-row Active toggle — see
+  // active-toggle-cell.tsx. Deactivating moves a customer to the inactive group at the
+  // end of the (unfiltered) list, so jump to the last page and briefly highlight the
+  // row there — but only when no status filter would otherwise just remove it from view.
+  const handleCustomerStatusChange = useCallback((customer: Customer, next: boolean) => {
+    if (!next && statusFilter === ALL_STATUS) {
+      const id = customer._id || customer.id || null
+      setHighlightRowId(id)
+      setCurrentPage(totalPage)
+    }
+    setFetch((prev) => !prev)
+  }, [statusFilter, totalPage])
+  const columns = useCustomerColumns(handleCustomerStatusChange)
+
+  useEffect(() => {
+    if (!highlightRowId) return
+    const timeout = setTimeout(() => setHighlightRowId(null), 3000)
+    return () => clearTimeout(timeout)
+  }, [highlightRowId])
 
   useEffect(() => {
     setViewMode(getStoredCustomerListViewMode())
@@ -60,7 +101,7 @@ export default function Customers() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch])
+  }, [debouncedSearch, statusFilter])
 
   useEffect(() => {
     setLoading(true)
@@ -68,15 +109,61 @@ export default function Customers() {
     const params = {
       page: currentPage,
       limit,
-      sortBy: 'createdAt:desc',
+      sortBy: CUSTOMERS_SORT_BY,
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.customer } : {}),
+      ...(statusFilter !== ALL_STATUS ? { isActive: statusFilter === 'active' } : {}),
     }
     dispatch(fetchCustomers(params)).then((data) => {
       setCustomers(data.payload?.results ?? [])
       setTotalPage(data.payload?.totalPages ?? 1)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [dispatch, currentPage, limit, fetch, debouncedSearch])
+  }, [dispatch, currentPage, limit, fetch, debouncedSearch, statusFilter])
+
+  const handleSelectedRowsChange = useCallback((rows: Customer[]) => {
+    setSelectedCustomers(rows)
+  }, [])
+
+  // Activate/deactivate every selected row in one call.
+  const handleBulkSetActive = useCallback(async (isActive: boolean) => {
+    if (selectedCustomers.length === 0) return
+    setBulkStatusUpdating(true)
+    try {
+      const customersToUpdate = selectedCustomers.map((customer) => ({
+        id: customer._id || customer.id || '',
+        isActive,
+      }))
+      const result = await dispatch(bulkUpdateCustomers({ customers: customersToUpdate }))
+      if (result.meta.requestStatus === 'fulfilled') {
+        setSelectedCustomers([])
+        if (!isActive && statusFilter === ALL_STATUS) {
+          setCurrentPage(totalPage)
+        }
+        setFetch((prev) => !prev)
+        toast.success(`${customersToUpdate.length} customer(s) ${isActive ? 'activated' : 'deactivated'}`)
+      } else {
+        throw new Error((result.payload as string) || 'Bulk status update failed')
+      }
+    } catch (error) {
+      console.error('Bulk status update error:', error)
+      toast.error('Failed to update customer status')
+    } finally {
+      setBulkStatusUpdating(false)
+    }
+  }, [selectedCustomers, statusFilter, totalPage, dispatch])
+
+  const statusFilterSelect = (
+    <Select value={statusFilter} onValueChange={setStatusFilter}>
+      <SelectTrigger className='h-9 w-[150px]'>
+        <SelectValue placeholder={t('All Status')} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL_STATUS}>{t('All Status')}</SelectItem>
+        <SelectItem value='active'>{t('Active')}</SelectItem>
+        <SelectItem value='inactive'>{t('Inactive')}</SelectItem>
+      </SelectContent>
+    </Select>
+  )
 
   return (
     <CustomersProvider>
@@ -88,7 +175,39 @@ export default function Customers() {
               {t('manage_customers')}
             </p>
           </div>
-          <CustomerPrimaryButtons />
+          <div className='flex flex-wrap gap-2'>
+            {viewMode === 'table' && selectedCustomers.length > 0 && (
+              <>
+                <Button
+                  variant='outline'
+                  disabled={bulkStatusUpdating}
+                  onClick={() => handleBulkSetActive(true)}
+                  className='space-x-1'
+                >
+                  <span>{t('Activate Selected')} ({selectedCustomers.length})</span>
+                </Button>
+                <Button
+                  variant='outline'
+                  disabled={bulkStatusUpdating}
+                  onClick={() => handleBulkSetActive(false)}
+                  className='space-x-1'
+                >
+                  <span>{t('Deactivate Selected')} ({selectedCustomers.length})</span>
+                </Button>
+                <Can permission='deleteCustomers'>
+                  <Button
+                    variant='destructive'
+                    onClick={() => setBulkDeleteOpen(true)}
+                    className='space-x-1'
+                  >
+                    <Trash2 size={16} />
+                    <span>{t('delete_selected')} ({selectedCustomers.length})</span>
+                  </Button>
+                </Can>
+              </>
+            )}
+            <CustomerPrimaryButtons />
+          </div>
         </div>
 
         <div className='mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4'>
@@ -118,7 +237,7 @@ export default function Customers() {
           />
         </div>
 
-        <div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]'>
+        <div className={`grid grid-cols-1 items-start gap-4 ${SHOW_QUICK_ADD_CUSTOMER ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
             {viewMode === 'cards' ? (
               <>
@@ -128,10 +247,13 @@ export default function Customers() {
                   viewMode={viewMode}
                   onViewModeChange={handleViewModeChange}
                   actions={
-                    <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      {t('Send SMS')}
-                    </Button>
+                    <>
+                      {statusFilterSelect}
+                      <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        {t('Send SMS')}
+                      </Button>
+                    </>
                   }
                 />
                 <CustomerCardGrid
@@ -159,10 +281,13 @@ export default function Customers() {
                 viewMode={viewMode}
                 onViewModeChange={handleViewModeChange}
                 actions={
-                  <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    {t('Send SMS')}
-                  </Button>
+                  <>
+                    {statusFilterSelect}
+                    <Button variant="outline" size="sm" onClick={() => setBulkSmsOpen(true)}>
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      {t('Send SMS')}
+                    </Button>
+                  </>
                 }
                 paggination={{
                   totalPage,
@@ -174,11 +299,13 @@ export default function Customers() {
                     setCurrentPage(1)
                   },
                 }}
+                onSelectedRowsChange={handleSelectedRowsChange}
+                highlightRowId={highlightRowId}
               />
             )}
           </div>
 
-          <QuickAddCustomerCard setFetch={setFetch} />
+          {SHOW_QUICK_ADD_CUSTOMER && <QuickAddCustomerCard setFetch={setFetch} />}
         </div>
 
         <Link
@@ -207,6 +334,16 @@ export default function Customers() {
           recipients={customers}
           entityType="customer"
           branchName={branchName}
+        />
+
+        <BulkDeleteDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          customers={selectedCustomers}
+          onDeleted={() => {
+            setSelectedCustomers([])
+            setFetch((prev) => !prev)
+          }}
         />
       </div>
     </CustomersProvider>

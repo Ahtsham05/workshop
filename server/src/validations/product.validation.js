@@ -74,6 +74,10 @@ const createProduct = {
     batchNumber: Joi.string().allow('').optional(),
     expiryDate: Joi.string().allow('').optional(),
     brandId: Joi.string().allow('', null).optional(),
+    tags: Joi.array().items(Joi.string().trim().allow('')).optional(),
+    color: Joi.string().trim().allow('', null).optional(),
+    shelfLocation: Joi.string().trim().allow('').optional(),
+    isActive: Joi.boolean().optional(),
   }).custom(noBothImeiAndSerial),
 };
 
@@ -87,6 +91,7 @@ const getProducts = {
   query: Joi.object().keys({
     name: Joi.string(),
     category: Joi.string(),
+    isActive: Joi.boolean(),
     sortBy: Joi.string(),
     limit: Joi.number(),
     page: Joi.number(),
@@ -166,12 +171,40 @@ const updateProduct = {
     batchNumber: Joi.string().allow('').optional(),
     expiryDate: Joi.string().allow('').optional(),
     brandId: Joi.string().allow('', null).optional(),
+    tags: Joi.array().items(Joi.string().trim().allow('')).optional(),
+    color: Joi.string().trim().allow('', null).optional(),
+    shelfLocation: Joi.string().trim().allow('').optional(),
+    isActive: Joi.boolean().optional(),
   }).custom(noBothImeiAndSerial),
 };
 
 const deleteProduct = {
   params: Joi.object().keys({
     productId: Joi.string().required(),
+  }),
+};
+
+const updateProductFlag = {
+  params: Joi.object().keys({
+    productId: Joi.string().required(),
+  }),
+  body: Joi.alternatives().try(
+    Joi.object().keys({
+      clear: Joi.boolean().valid(true).required(),
+    }),
+    Joi.object().keys({
+      color: Joi.string().trim().required(),
+      reason: Joi.string().trim().allow('').optional(),
+      note: Joi.string().trim().allow('').optional(),
+    }),
+  ),
+};
+
+const getDistinctProductTags = {};
+
+const lookupProductByCode = {
+  query: Joi.object().keys({
+    code: Joi.string().trim().min(1).required(),
   }),
 };
 
@@ -183,8 +216,15 @@ const bulkUpdateProducts = {
         price: Joi.number().optional(),
         cost: Joi.number().optional(),
         stockQuantity: Joi.number().optional(),
+        isActive: Joi.boolean().optional(),
       })
     ).required().min(1)
+  }),
+};
+
+const bulkDeleteProducts = {
+  body: Joi.object().keys({
+    ids: Joi.array().items(Joi.string()).required().min(1),
   }),
 };
 
@@ -251,5 +291,9 @@ module.exports = {
   getAllProducts,
   getProductStats,
   bulkUpdateProducts,
+  bulkDeleteProducts,
   bulkAddProducts,
+  updateProductFlag,
+  getDistinctProductTags,
+  lookupProductByCode,
 };

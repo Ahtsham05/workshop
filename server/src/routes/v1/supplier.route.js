@@ -34,7 +34,18 @@ router
 router
   .route('/bulk')
   .post(auth('createSuppliers'), validate(supplierValidation.bulkAddSuppliers), supplierController.bulkAddSuppliers);
-  
+
+// Bulk update route (Activate/Deactivate selected)
+router
+  .route('/bulk-update')
+  .patch(auth('editSuppliers'), validate(supplierValidation.bulkUpdateSuppliers), supplierController.bulkUpdateSuppliers);
+
+// Bulk delete route — registered before the `/:supplierId` catch-all below so
+// `/bulk-delete` isn't swallowed as a supplierId.
+router
+  .route('/bulk-delete')
+  .delete(auth('deleteSuppliers'), validate(supplierValidation.bulkDeleteSuppliers), supplierController.bulkDeleteSuppliers);
+
 router
   .route('/:supplierId')
   .get(auth('viewSuppliers'), validate(supplierValidation.getSupplier), supplierController.getSupplier)

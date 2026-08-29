@@ -3,8 +3,11 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Package, ShieldCheck, Fingerprint, Layers, Clock } from 'lucide-react'
+import { Package, ShieldCheck, Fingerprint, Layers, Clock, MapPin } from 'lucide-react'
 import LongText from '@/components/long-text'
+import { ColorDot } from '@/components/color-swatch-picker'
+import { FlagBadge } from '@/components/flag-badge'
+import { ActiveToggleCell } from './active-toggle-cell'
 import { Product } from '../data/schema'
 import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
@@ -12,10 +15,10 @@ import { useLanguage } from '@/context/language-context'
 import { useUrduDisplay } from '@/context/urdu-display-context'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
-import { getDisplayStockValue } from '@/lib/product-stock-display'
+import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
 import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product'
 
-export const useProductColumns = (): ColumnDef<Product>[] => {
+export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () => void): ColumnDef<Product>[] => {
   const { t } = useLanguage()
   const { showUrdu } = useUrduDisplay()
   const expiringByProduct = useExpiringBatchesByProduct()
@@ -62,9 +65,11 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
             </div>
           )}
           <div className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
+            <ColorDot hex={product.color} />
             <LongText className={getTextClasses(row.getValue('name') || 'Unnamed product', 'max-w-36 shrink-0')}>
               {row.getValue('name') || 'Unnamed product'}
             </LongText>
+            <FlagBadge flag={product.flag} />
             {urdu ? (
               <span
                 dir='rtl'
@@ -159,6 +164,46 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     enableHiding: true,
   },
   {
+    id: 'tags',
+    accessorFn: (product) => (product.tags || []).join(', '),
+    header: ({ column }) => <DataTableColumnHeader column={column} title='tags' />,
+    cell: ({ row }) => {
+      const tags = row.original.tags || []
+      if (tags.length === 0) {
+        return <span className="text-muted-foreground">-</span>
+      }
+      return (
+        <div className="flex flex-wrap gap-1">
+          {tags.slice(0, 2).map((tag) => (
+            <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+          ))}
+          {tags.length > 2 && (
+            <Badge variant="outline" className="text-xs">+{tags.length - 2}</Badge>
+          )}
+        </div>
+      )
+    },
+    enableHiding: true,
+  },
+  {
+    id: 'shelfLocation',
+    accessorKey: 'shelfLocation',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='shelf location' />,
+    cell: ({ row }) => {
+      const shelfLocation = row.original.shelfLocation
+      if (!shelfLocation) {
+        return <span className="text-muted-foreground">-</span>
+      }
+      return (
+        <Badge variant="outline" className="flex items-center gap-1 max-w-fit text-xs">
+          <MapPin className="h-3 w-3" />
+          {shelfLocation}
+        </Badge>
+      )
+    },
+    enableHiding: true,
+  },
+  {
     id: 'brand',
     accessorFn: (product) => (typeof product.brandId === 'object' && product.brandId ? product.brandId.name : ''),
     header: ({ column }) => <DataTableColumnHeader column={column} title='brand' />,
@@ -238,6 +283,42 @@ export const useProductColumns = (): ColumnDef<Product>[] => {
     id: 'stockValue',
     header: ({ column }) => <DataTableColumnHeader column={column} title='stock_value' />,
     cell: ({ row }) => <div className='tabular-nums'>{getDisplayStockValue(row.original).toLocaleString()}</div>,
+    enableHiding: true,
+  },
+  {
+    id: 'status',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='status' />,
+    cell: ({ row }) => {
+      const stock = getDisplayStock(row.original)
+      if (stock === 0) {
+        return <Badge variant='destructive'>{t('out_of_stock')}</Badge>
+      }
+      if (stock <= Math.floor(lowStockThreshold / 2)) {
+        return (
+          <Badge variant='outline' className='border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'>
+            {t('critical_stock')}
+          </Badge>
+        )
+      }
+      if (stock <= lowStockThreshold) {
+        return (
+          <Badge variant='outline' className='border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-400'>
+            {t('low_stock')}
+          </Badge>
+        )
+      }
+      return (
+        <Badge variant='outline' className='border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400'>
+          {t('in_stock')}
+        </Badge>
+      )
+    },
+    enableHiding: true,
+  },
+  {
+    id: 'isActive',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='Active' />,
+    cell: ({ row }) => <ActiveToggleCell product={row.original} onToggled={onStatusChange} />,
     enableHiding: true,
   },
   {

@@ -22,11 +22,14 @@ import {
   PackageCheck,
   ScanLine,
   Layers,
+  MapPin,
 } from 'lucide-react'
 import { reportEntityName } from '../utils/report-entity-name'
 import { ReportProductNameCell } from './report-product-name-cell'
 import { expiryBadge } from '../utils/expiry-badge'
 import { MovementTile } from './movement-tile'
+import { ColorDot } from '@/components/color-swatch-picker'
+import { FlagBadge } from '@/components/flag-badge'
 
 const STOCK_STATUS_STYLES: Record<string, string> = {
   'Out of Stock':
@@ -187,6 +190,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                 <TableHead className='min-w-[180px]'>{t('product')}</TableHead>
                 <TableHead className='min-w-[100px]'>{t('barcode')}</TableHead>
                 <TableHead className='min-w-[100px]'>{t('category')}</TableHead>
+                <TableHead className='min-w-[100px]'>Shelf</TableHead>
                 <TableHead className='text-right min-w-[80px]'>{t('stock')}</TableHead>
                 <TableHead className='text-right min-w-[100px]'>Cost/unit</TableHead>
                 <TableHead className='text-right min-w-[100px]'>Sale Price</TableHead>
@@ -220,6 +224,8 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                         nameUrdu={product.nameUrdu}
                         suffix={
                           <>
+                            <ColorDot hex={product.color} />
+                            <FlagBadge flag={product.flag} />
                             {hasBatches && (
                               <span className='shrink-0 text-xs text-muted-foreground'>
                                 ({product.batches!.length} {product.batches!.length === 1 ? 'batch' : 'batches'})
@@ -245,6 +251,16 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                         <span className='text-xs italic text-muted-foreground'>N/A</span>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {product.shelfLocation ? (
+                        <Badge variant='outline' className='flex w-fit items-center gap-1 font-normal text-muted-foreground'>
+                          <MapPin className='h-3 w-3' />
+                          {product.shelfLocation}
+                        </Badge>
+                      ) : (
+                        <span className='text-xs italic text-muted-foreground'>-</span>
+                      )}
+                    </TableCell>
                     <TableCell className='text-right'>
                       <span className='font-semibold tabular-nums'>{product.stockQuantity}</span>{' '}
                       <span className='text-xs text-muted-foreground'>{product.unit || 'pcs'}</span>
@@ -259,7 +275,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                   {isOpen && hasBatches && (
                     <TableRow className='bg-muted/10 hover:bg-muted/10'>
                       <TableCell />
-                      <TableCell colSpan={8} className='py-3'>
+                      <TableCell colSpan={9} className='py-3'>
                         <div className='overflow-hidden rounded-lg border bg-background shadow-sm'>
                           <div className='flex items-center gap-2 border-b bg-muted/40 px-3 py-2'>
                             <Layers className='h-3.5 w-3.5 text-blue-600' />
@@ -317,7 +333,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                   {isOpen && hasImeis && (
                     <TableRow className='bg-muted/10 hover:bg-muted/10'>
                       <TableCell />
-                      <TableCell colSpan={8} className='py-3'>
+                      <TableCell colSpan={9} className='py-3'>
                         <div className='overflow-hidden rounded-lg border bg-background shadow-sm'>
                           <div className='flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2'>
                             <div className='flex items-center gap-2'>

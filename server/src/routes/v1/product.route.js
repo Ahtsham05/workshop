@@ -43,6 +43,18 @@ router
   .route('/stats')
   .get(auth('viewProducts'), validate(productValidation.getProductStats), productController.getProductStats);
 
+// Distinct tag values already used in this org/branch — powers tag autocomplete/filter options.
+router
+  .route('/tags/distinct')
+  .get(auth('viewProducts'), validate(productValidation.getDistinctProductTags), productController.getDistinctProductTags);
+
+// Fast exact-match SKU/barcode lookup for the Add Product dialog's scan-then-Enter
+// flow — lets it offer editing an already-existing product instead of creating a
+// duplicate. Registered ahead of the `/:productId` catch-all below.
+router
+  .route('/lookup-by-code')
+  .get(auth('createProducts'), validate(productValidation.lookupProductByCode), productController.lookupProductByCode);
+
 router.route('/purchasable').get(
   auth(...CATALOG_READ_PERMISSIONS),
   validate(productValidation.getAllProducts),
@@ -57,10 +69,24 @@ router.route('/:productId/branch-availability').get(
   productController.getProductBranchAvailability
 );
 
+// Set/clear a product's discrepancy flag — a one-click action separate from the main
+// edit form, so it can be triggered straight from a list row.
+router.route('/:productId/flag').patch(
+  auth('editProducts'),
+  validate(productValidation.updateProductFlag),
+  productController.updateProductFlag
+);
+
 // Bulk update route
 router
   .route('/bulk-update')
   .patch(auth('editProducts'), validate(productValidation.bulkUpdateProducts), productController.bulkUpdateProducts);
+
+// Bulk delete route — registered before the `/:productId` catch-all below so
+// `/bulk-delete` isn't swallowed as a productId.
+router
+  .route('/bulk-delete')
+  .delete(auth('deleteProducts'), validate(productValidation.bulkDeleteProducts), productController.bulkDeleteProducts);
 
 // Bulk add (import) route
 router

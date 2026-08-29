@@ -245,6 +245,12 @@ export interface Product {
   // costPerUnit is omitted server-side for roles without product/purchasing access —
   // see getPurchasableCatalog's cost redaction.
   knownBatches?: { id: string; batchNumber: string; quantity: number; expiryDate?: string; costPerUnit?: number; sellingPrice?: number }[]
+  tags?: string[]
+  color?: string | null
+  shelfLocation?: string
+  // Internal-only discrepancy marker — surfaced in staff-facing pickers/lists, never on
+  // customer-facing prints. See EntityFlag in @/components/flag-badge.
+  flag?: { color: string; reason?: string; note?: string } | null
 }
 
 export interface Category {

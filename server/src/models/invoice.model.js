@@ -192,6 +192,21 @@ const InvoiceSchema = new mongoose.Schema({
     // Language preference (overrides user setting per invoice)
     language: { type: String, enum: ['en', 'ur'] },
     isUrduOnly: { type: Boolean, default: false },
+
+    // Set when a staff member marks this invoice as having a data discrepancy that needs
+    // review. Absence (null) = not flagged. Internal-only — never rendered on customer
+    // prints/PDFs. Set/cleared only via the dedicated PATCH .../flag endpoint — see
+    // invoice.service.js#setInvoiceFlag.
+    flag: {
+        type: new mongoose.Schema({
+            color: { type: String, required: true, trim: true },
+            reason: { type: String, trim: true, default: '' },
+            note: { type: String, trim: true, default: '' },
+            flaggedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            flaggedAt: { type: Date },
+        }, { _id: false }),
+        default: null,
+    },
 }, {
     timestamps: true
 });

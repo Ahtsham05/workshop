@@ -3,7 +3,7 @@ export const LIST_SEARCH_FIELDS = {
   customer: 'name,nameUrdu',
   supplier: 'name,nameUrdu',
   category: 'name,nameUrdu',
-  product: 'name,nameUrdu,barcode',
+  product: 'name,nameUrdu,barcode,tags,shelfLocation',
   purchase: 'invoiceNumber,vendorBillNumber',
   purchaseOrder: 'orderNumber',
 } as const
