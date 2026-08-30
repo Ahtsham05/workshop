@@ -20,18 +20,27 @@ export function DataTableViewOptions<TData>({
 }: DataTableViewOptionsProps<TData>) {
   const { t } = useLanguage()
   
-  // Column translations mapping
+  // Column translations mapping — kept in sync with the header titles passed to
+  // DataTableColumnHeader in users-columns.tsx, so a column reads the same in the
+  // header and in this toggle list.
   const columnTranslations: Record<string, string> = {
     'select': 'select',
     'name': 'product_name',
     'description': 'description',
     'categories': 'categories',
-    'subCategories': 'subcategories',
+    'subCategories': 'sub categories',
+    'tags': 'tags',
+    'shelfLocation': 'shelf location',
+    'brand': 'brand',
     'barcode': 'barcode',
     'price': 'price',
     'cost': 'cost',
     'stockQuantity': 'stock_quantity',
-    'actions': 'actions'
+    'stockValue': 'stock_value',
+    'status': 'status',
+    'isActive': 'Active',
+    'tracking': 'tracking',
+    'actions': 'actions',
   }
 
   return (
@@ -46,15 +55,12 @@ export function DataTableViewOptions<TData>({
           {t('view')}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' className='w-[150px]'>
+      <DropdownMenuContent align='end' className='w-[190px]'>
         <DropdownMenuLabel>{t('toggle_columns')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {table
           .getAllColumns()
-          .filter(
-            (column) =>
-              typeof column.accessorFn !== 'undefined' && column.getCanHide()
-          )
+          .filter((column) => column.getCanHide())
           .map((column) => {
             return (
               <DropdownMenuCheckboxItem

@@ -81,9 +81,31 @@ const createProduct = catchAsync(async (req, res) => {
   }
 });
 
+// Sentinel `category` value for "no category assigned" — matches the synthetic
+// bucket getCategoryBreakdown groups these products under.
+const UNCATEGORIZED_CATEGORY_VALUE = 'uncategorized';
+
+/**
+ * `category` here is a Category _id from the filter dropdown, or the UNCATEGORIZED
+ * sentinel. The legacy singular `Product.category` string field (kept only for old
+ * back-compat reads/exports) is NOT what real products carry a category in any more —
+ * modern products carry it in the `categories` array (see product.model.js) — so
+ * matching against `category` directly would silently match nothing for the vast
+ * majority of the catalog.
+ */
+const applyCategoryFilter = (filter, categoryParam) => {
+  if (!categoryParam) return;
+  if (categoryParam === UNCATEGORIZED_CATEGORY_VALUE) {
+    filter.$or = [{ categories: { $exists: false } }, { 'categories.0': { $exists: false } }];
+  } else {
+    filter['categories._id'] = categoryParam;
+  }
+};
+
 const getProducts = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['name', 'category', 'description', 'isActive']);
+  const filter = pick(req.query, ['name', 'description', 'isActive']);
   applyBranchFilter(filter, req);
+  applyCategoryFilter(filter, req.query.category);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await productService.queryProducts(filter, options);
   res.send(result);
@@ -295,8 +317,22 @@ const getAllProducts = catchAsync(async (req, res) => {
 const getProductStats = catchAsync(async (req, res) => {
   const filter = {};
   applyBranchFilter(filter, req);
+  // Optional category scope — lets the Products page show "total qty / total value"
+  // for just the selected category (or the "Uncategorized" bucket) instead of always
+  // the whole catalog.
+  applyCategoryFilter(filter, req.query.category);
   const stats = await productService.getProductStats(filter);
   res.send(stats);
+});
+
+// Powers the Products page's "All Categories" breakdown view — one row per category
+// (plus an "Uncategorized" bucket) with product count, total stock qty, and total
+// stock value, computed over the whole org/branch-scoped catalog.
+const getCategoryBreakdown = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const breakdown = await productService.getCategoryBreakdown(filter);
+  res.send({ data: breakdown });
 });
 
 const getPurchasableCatalog = catchAsync(async (req, res) => {
@@ -391,6 +427,7 @@ module.exports = {
   bulkDeleteProducts,
   getAllProducts,
   getProductStats,
+  getCategoryBreakdown,
   getPurchasableCatalog,
   getProductBranchAvailability,
   uploadProductImage,

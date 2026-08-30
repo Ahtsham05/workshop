@@ -313,6 +313,9 @@ const getProductStats = async (filter) => {
   if (castFilter.branchId && mongoose.Types.ObjectId.isValid(castFilter.branchId)) {
     castFilter.branchId = new mongoose.Types.ObjectId(String(castFilter.branchId));
   }
+  if (castFilter['categories._id'] && mongoose.Types.ObjectId.isValid(castFilter['categories._id'])) {
+    castFilter['categories._id'] = new mongoose.Types.ObjectId(String(castFilter['categories._id']));
+  }
 
   const [[simpleTotals], variantProducts] = await Promise.all([
     Product.aggregate([
@@ -360,6 +363,111 @@ const getProductStats = async (filter) => {
     totalStockQuantity: simple.stockQuantity + variantStockQuantity,
     totalStockValue: simple.stockValue + variantStockValue,
   };
+};
+
+const UNCATEGORIZED_CATEGORY_ID = 'uncategorized';
+
+/**
+ * Per-category rollup (product count, total stock qty, total stock value) across the
+ * whole org/branch-scoped catalog — powers the Products page's "All Categories"
+ * breakdown view. A product with no `categories` entries is folded into a synthetic
+ * "Uncategorized" bucket rather than dropped, since a large share of a catalog can
+ * legitimately have none (see getProducts' categories._id note on the legacy `category`
+ * field being unreliable). A product assigned to more than one category counts its full
+ * stock under each — the same "which categories is this stock visible under" semantics
+ * the category filter itself uses, not a strict partition, so the sum across rows can
+ * exceed the catalog-wide total from getProductStats above.
+ */
+const getCategoryBreakdown = async (filter) => {
+  const castFilter = { ...filter };
+  if (castFilter.organizationId && mongoose.Types.ObjectId.isValid(castFilter.organizationId)) {
+    castFilter.organizationId = new mongoose.Types.ObjectId(String(castFilter.organizationId));
+  }
+  if (castFilter.branchId && mongoose.Types.ObjectId.isValid(castFilter.branchId)) {
+    castFilter.branchId = new mongoose.Types.ObjectId(String(castFilter.branchId));
+  }
+
+  const buckets = new Map();
+  const addToBucket = (id, name, products, stockQuantity, stockValue) => {
+    const key = id ? id.toString() : UNCATEGORIZED_CATEGORY_ID;
+    if (!buckets.has(key)) {
+      buckets.set(key, {
+        categoryId: id ? id.toString() : null,
+        categoryName: name,
+        totalProducts: 0,
+        totalStockQuantity: 0,
+        totalStockValue: 0,
+      });
+    }
+    const bucket = buckets.get(key);
+    bucket.totalProducts += products;
+    bucket.totalStockQuantity += stockQuantity;
+    bucket.totalStockValue += stockValue;
+  };
+
+  // Simple (non-variant) products: unwind each product's categories (or a synthetic
+  // "Uncategorized" entry when it has none) and group directly in Mongo. Runs alongside
+  // the variant-product lookup below rather than after it — the two are independent.
+  const [simpleByCategory, variantProducts] = await Promise.all([
+    Product.aggregate([
+      { $match: { ...castFilter, hasVariants: { $ne: true } } },
+      {
+        $project: {
+          stockQuantity: { $ifNull: ['$stockQuantity', 0] },
+          cost: { $ifNull: ['$cost', 0] },
+          categoryBuckets: {
+            $cond: [
+              { $gt: [{ $size: { $ifNull: ['$categories', []] } }, 0] },
+              '$categories',
+              [{ _id: null, name: 'Uncategorized' }],
+            ],
+          },
+        },
+      },
+      { $unwind: '$categoryBuckets' },
+      {
+        $group: {
+          _id: '$categoryBuckets._id',
+          categoryName: { $first: '$categoryBuckets.name' },
+          totalProducts: { $sum: 1 },
+          totalStockQuantity: { $sum: '$stockQuantity' },
+          totalStockValue: { $sum: { $multiply: ['$stockQuantity', '$cost'] } },
+        },
+      },
+    ]),
+    Product.find({ ...filter, hasVariants: true }).select('_id categories').lean(),
+  ]);
+  simpleByCategory.forEach((row) => {
+    addToBucket(row._id, row.categoryName || 'Uncategorized', row.totalProducts, row.totalStockQuantity, row.totalStockValue);
+  });
+
+  // Variant products: same per-product stock/cost resolution as getProductStats above,
+  // then attribute each product's totals to every category it belongs to.
+  const variantIds = variantProducts.map((p) => p._id);
+  if (variantIds.length) {
+    const [stockTotals, costRanges] = await Promise.all([
+      Inventory.aggregate([
+        { $match: { productId: { $in: variantIds } } },
+        { $group: { _id: '$productId', totalStock: { $sum: '$quantity' } } },
+      ]),
+      ProductVariant.aggregate([
+        { $match: { productId: { $in: variantIds }, isDefault: false } },
+        { $group: { _id: '$productId', minCost: { $min: '$cost' } } },
+      ]),
+    ]);
+    const stockById = new Map(stockTotals.map((s) => [s._id.toString(), s.totalStock]));
+    const minCostById = new Map(costRanges.map((c) => [c._id.toString(), c.minCost ?? 0]));
+
+    for (const product of variantProducts) {
+      const key = product._id.toString();
+      const stock = stockById.get(key) ?? 0;
+      const value = stock * (minCostById.get(key) ?? 0);
+      const categories = product.categories && product.categories.length ? product.categories : [{ _id: null, name: 'Uncategorized' }];
+      categories.forEach((cat) => addToBucket(cat._id, cat.name || 'Uncategorized', 1, stock, value));
+    }
+  }
+
+  return [...buckets.values()].sort((a, b) => b.totalStockValue - a.totalStockValue);
 };
 
 /**
@@ -1187,6 +1295,7 @@ module.exports = {
   bulkDeleteProductsByIds,
   getAllProducts,
   getProductStats,
+  getCategoryBreakdown,
   bulkUpdateProducts,
   bulkAddProducts,
   attachVariantAggregates,

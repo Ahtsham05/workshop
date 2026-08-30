@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import {
   ColumnDef,
   ColumnFiltersState,
+  ColumnOrderState,
   RowData,
   SortingState,
   VisibilityState,
@@ -13,6 +14,21 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable'
 import {
   Table,
   TableBody,
@@ -26,6 +42,7 @@ import { Input } from '@/components/ui/input'
 import { Product } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { DraggableTableHead } from './draggable-table-head'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
@@ -36,6 +53,55 @@ declare module '@tanstack/react-table' {
   interface ColumnMeta<TData extends RowData, TValue> {
     className: string
   }
+}
+
+// Persisted across sessions so a user's column setup ("I hid Description and moved
+// Stock next to Name") sticks around instead of resetting on every reload.
+const COLUMN_VISIBILITY_STORAGE_KEY = 'products-table-column-visibility'
+const COLUMN_ORDER_STORAGE_KEY = 'products-table-column-order'
+
+const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
+  description: false,
+  subCategories: false,
+  tags: false,
+  shelfLocation: false,
+  tracking: false,
+}
+
+// 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
+// neither gets a drag handle nor takes part in reordering, everything else can move
+// freely between them.
+const LOCKED_COLUMN_IDS = ['select', 'actions']
+
+function loadColumnVisibility(): VisibilityState {
+  try {
+    const raw = localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY)
+    if (raw) return { ...DEFAULT_COLUMN_VISIBILITY, ...JSON.parse(raw) }
+  } catch {
+    // Corrupt JSON or storage blocked (private browsing) — fall back to defaults.
+  }
+  return DEFAULT_COLUMN_VISIBILITY
+}
+
+function loadColumnOrder(defaultOrder: string[]): string[] {
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY)
+    if (raw) {
+      const saved: string[] = JSON.parse(raw)
+      // Keep only ids that still exist (a column may have been removed/renamed since
+      // this was saved) and append any new columns that weren't part of the saved order.
+      const savedValid = saved.filter((id) => defaultOrder.includes(id))
+      const missing = defaultOrder.filter((id) => !savedValid.includes(id))
+      return [...savedValid, ...missing]
+    }
+  } catch {
+    // Corrupt JSON or storage blocked — fall back to the definition order.
+  }
+  return defaultOrder
+}
+
+function getColumnId(column: ColumnDef<Product>): string {
+  return (column as { id?: string; accessorKey?: string }).id ?? (column as { accessorKey?: string }).accessorKey ?? ''
 }
 
 interface DataTableProps {
@@ -68,16 +134,50 @@ export function ProductTable({
   broughtForward,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    description: false,
-    subCategories: false,
-    tags: false,
-    shelfLocation: false,
-    tracking: false,
-  })
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(loadColumnVisibility)
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(() =>
+    loadColumnOrder(columns.map(getColumnId))
+  )
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
+
+  // Persist customizations so they survive a reload.
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility))
+    } catch {
+      // Storage blocked (private browsing) — customization just won't persist.
+    }
+  }, [columnVisibility])
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(columnOrder))
+    } catch {
+      // Storage blocked — customization just won't persist.
+    }
+  }, [columnOrder])
+
+  const dndSensors = useSensors(
+    // A real drag now starts from anywhere on the header (see DraggableTableHead), so
+    // this threshold needs to be generous enough that an ordinary, slightly-imprecise
+    // click on the nested sort button never gets misread as a drag attempt.
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+  const draggableColumnIds = columnOrder.filter((id) => !LOCKED_COLUMN_IDS.includes(id))
+
+  const handleColumnDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setColumnOrder((prev) => {
+      const oldIndex = prev.indexOf(active.id as string)
+      const newIndex = prev.indexOf(over.id as string)
+      if (oldIndex === -1 || newIndex === -1) return prev
+      return arrayMove(prev, oldIndex, newIndex)
+    })
+  }
 
   // Get selected products whenever rowSelection changes
   React.useEffect(() => {
@@ -98,6 +198,7 @@ export function ProductTable({
     state: {
       sorting,
       columnVisibility,
+      columnOrder,
       rowSelection,
       columnFilters,
     },
@@ -106,6 +207,7 @@ export function ProductTable({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     manualPagination: true,
     pageCount: paggination.totalPage,
     getCoreRowModel: getCoreRowModel(),
@@ -122,28 +224,40 @@ export function ProductTable({
         <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>
           <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className='group/row'>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      className={`${header.column.columnDef.meta?.className ?? ''} ${
-                        language === 'ur' ? 'text-left' : 'text-left'
-                      }`}
-                    >
-                      {header.isPlaceholder
+            <DndContext
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleColumnDragEnd}
+            >
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className='group/row'>
+                  <SortableContext items={draggableColumnIds} strategy={horizontalListSortingStrategy}>
+                    {headerGroup.headers.map((header) => {
+                      const headerContent = header.isPlaceholder
                         ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
+                        : flexRender(header.column.columnDef.header, header.getContext())
+                      const className = `${header.column.columnDef.meta?.className ?? ''} ${
+                        language === 'ur' ? 'text-left' : 'text-left'
+                      }`
+
+                      if (LOCKED_COLUMN_IDS.includes(header.column.id)) {
+                        return (
+                          <TableHead key={header.id} colSpan={header.colSpan} className={className}>
+                            {headerContent}
+                          </TableHead>
+                        )
+                      }
+
+                      return (
+                        <DraggableTableHead key={header.id} id={header.column.id} colSpan={header.colSpan} className={className}>
+                          {headerContent}
+                        </DraggableTableHead>
+                      )
+                    })}
+                  </SortableContext>
+                </TableRow>
+              ))}
+            </DndContext>
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (

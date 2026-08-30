@@ -59,6 +59,10 @@ const summery = {
     url: '/products/stats',
     method: 'get'
   },
+  fetchCategoryBreakdown: {
+    url: '/products/stats/by-category',
+    method: 'get'
+  },
   bulkUpdateProducts: {
     url: '/products/bulk-update',
     method: 'patch'

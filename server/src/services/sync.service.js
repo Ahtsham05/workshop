@@ -442,7 +442,11 @@ const REPORT_PREFETCH_URLS = [
   '/reports/expenses?startDate=2020-01-01&endDate=2030-12-31',
   '/reports/profit-loss?startDate=2020-01-01&endDate=2030-12-31',
   '/reports/profit-loss-full?from=2020-01-01&to=2030-12-31',
-  '/reports/inventory',
+  // Must match the InventoryReport component's default request exactly (see
+  // PAGE_SIZE in inventory-report.tsx) — the offline cache below is keyed by the
+  // literal request path, so this only pre-warms page 1, same as every other
+  // paginated entry in this list (e.g. invoices/purchases page=1 above).
+  '/reports/inventory?page=1&limit=50',
   '/reports/tax?startDate=2020-01-01&endDate=2030-12-31',
   '/reports/sales-returns?startDate=2020-01-01&endDate=2030-12-31',
   '/reports/purchase-returns?startDate=2020-01-01&endDate=2030-12-31',

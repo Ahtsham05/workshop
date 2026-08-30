@@ -102,7 +102,11 @@ const getProducts = {
 
 const getAllProducts = {}
 
-const getProductStats = {}
+const getProductStats = {
+  query: Joi.object().keys({
+    category: Joi.string(),
+  }),
+};
 
 const getProduct = {
   params: Joi.object().keys({

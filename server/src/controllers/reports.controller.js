@@ -1345,63 +1345,45 @@ const getProfitLossReport = catchAsync(async (req, res) => {
 const getInventoryReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const { status } = req.query;
+  // The Excel export needs every matching row, not just one page — but still shouldn't
+  // pay for the full per-product IMEI preview fetch below (see serializedIds), which is
+  // the part that doesn't scale to the whole catalog.
+  const isExport = req.query.export === 'true';
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
 
-  // Every product in scope is fetched unfiltered here — the status filter (below,
-  // after batch correction) can no longer run as a Mongo $match on the raw
-  // Product.stockQuantity field, because that field silently drifts out of sync
-  // with the real batch-tracked quantity (see the correction below). Filtering
-  // and sorting both happen in JS once the corrected numbers are known, so a
-  // product that's actually in stock never gets miscategorized as "Out of Stock"
-  // just because its legacy field went stale.
-  const inventoryData = await Product.aggregate([
-    { $match: { ...scope } },
-    { $project: {
-      name: 1,
-      nameUrdu: { $ifNull: ['$nameUrdu', ''] },
-      barcode: 1, unit: 1,
-      category: { $ifNull: ['$category', 'N/A'] },
-      stockQuantity: 1, cost: 1, price: 1,
-      trackImei: { $ifNull: ['$trackImei', false] },
-      trackSerial: { $ifNull: ['$trackSerial', false] },
-      tags: { $ifNull: ['$tags', []] },
-      color: 1,
-      shelfLocation: 1,
-      flag: 1,
-    } },
-  ]);
+  // Lean, indexed (organizationId+branchId) fetch of every product in scope — just the
+  // fields needed to correct stock/value and to filter/sort/paginate. The expensive
+  // per-row detail (full batch breakdown, IMEI/serial preview) is attached further down
+  // ONLY for the current page's rows, not all of them — doing that for the whole catalog
+  // on every request (up to tens of thousands of products) is what made this report time
+  // out client-side (see DEFAULT_API_TIMEOUT_MS) instead of just being slow.
+  const products = await Product.find({ ...scope })
+    .select('name nameUrdu barcode unit category stockQuantity cost price trackImei trackSerial tags color shelfLocation flag')
+    .lean();
 
-  // Attach each product's active batches (if it — or its hidden default variant for
-  // simple products — has trackBatch/trackExpiry enabled), so the report can show
-  // expiry/FEFO detail instead of just a stock total. See
-  // docs/architecture/universal-product-migration.md.
-  const productIds = inventoryData.map((p) => p._id);
-  const trackedVariants = productIds.length
-    ? await ProductVariant.find({
-        productId: { $in: productIds },
-        $or: [{ trackBatch: true }, { trackExpiry: true }],
-      }).lean()
-    : [];
+  // Batch/expiry-tracked variants are what can make Product.stockQuantity/cost/price
+  // drift stale (see the correction below) — found directly by their own flag+scope
+  // instead of via an $in of every product id, since this tracked subset is normally
+  // much smaller than the full catalog.
+  const trackedVariants = await ProductVariant.find({
+    ...scope,
+    $or: [{ trackBatch: true }, { trackExpiry: true }],
+  }).select('_id productId').lean();
   const variantIds = trackedVariants.map((v) => v._id);
   const variantInventories = variantIds.length
-    ? await Inventory.find({ variantId: { $in: variantIds } }).lean()
+    ? await Inventory.find({ variantId: { $in: variantIds } }).select('_id variantId').lean()
     : [];
-  const inventoryByVariant = new Map(variantInventories.map((inv) => [inv.variantId.toString(), inv]));
+  const inventoryIdByVariant = new Map(variantInventories.map((inv) => [inv.variantId.toString(), inv._id]));
   const inventoryIds = variantInventories.map((inv) => inv._id);
   const batchDocs = inventoryIds.length
-    ? await Batch.find({ inventoryId: { $in: inventoryIds }, status: 'active' }).sort({ expiryDate: 1 }).lean()
+    ? await Batch.find({ inventoryId: { $in: inventoryIds }, status: 'active' }).lean()
     : [];
   const batchesByInventory = new Map();
   batchDocs.forEach((b) => {
     const key = b.inventoryId.toString();
     if (!batchesByInventory.has(key)) batchesByInventory.set(key, []);
-    batchesByInventory.get(key).push({
-      batchNumber: b.batchNumber,
-      quantity: b.quantity,
-      expiryDate: b.expiryDate,
-      costPerUnit: b.costPerUnit,
-      sellingPrice: b.sellingPrice,
-      value: b.quantity * (b.costPerUnit || 0),
-    });
+    batchesByInventory.get(key).push(b);
   });
   const variantsByProduct = new Map();
   trackedVariants.forEach((v) => {
@@ -1409,52 +1391,23 @@ const getInventoryReport = catchAsync(async (req, res) => {
     if (!variantsByProduct.has(key)) variantsByProduct.set(key, []);
     variantsByProduct.get(key).push(v);
   });
-
-  // Same idea as batches above, but for IMEI/serial-tracked products — "which units are
-  // actually available" is the one thing a plain stock number can't answer for these,
-  // so pull the real in-stock numbers instead of just the count. Capped per product so
-  // one heavily-serialized product (hundreds of phones) can't blow up the response for
-  // every other row in the report; the client gets the true total separately and can
-  // say "+N more" instead of silently truncating with no indication.
-  const IMEI_PREVIEW_LIMIT = 100;
-  const serializedProductIds = inventoryData.filter((p) => p.trackImei || p.trackSerial).map((p) => p._id);
-  const [imeiDocs, imeiCounts] = serializedProductIds.length
-    ? await Promise.all([
-        Imei.find({ productId: { $in: serializedProductIds }, status: 'in_stock' })
-          .sort({ createdAt: 1 })
-          .limit(serializedProductIds.length * IMEI_PREVIEW_LIMIT)
-          .select('productId imei')
-          .lean(),
-        Imei.aggregate([
-          { $match: { productId: { $in: serializedProductIds }, status: 'in_stock' } },
-          { $group: { _id: '$productId', count: { $sum: 1 } } },
-        ]),
-      ])
-    : [[], []];
-  const imeisByProduct = new Map();
-  imeiDocs.forEach((d) => {
-    const key = d.productId.toString();
-    if (!imeisByProduct.has(key)) imeisByProduct.set(key, []);
-    const list = imeisByProduct.get(key);
-    if (list.length < IMEI_PREVIEW_LIMIT) list.push(d.imei);
-  });
-  const imeiTotalByProduct = new Map(imeiCounts.map((c) => [c._id.toString(), c.count]));
+  const batchesForProduct = (productId) => {
+    const productVariants = variantsByProduct.get(productId.toString()) || [];
+    return productVariants.flatMap((v) => {
+      const invId = inventoryIdByVariant.get(v._id.toString());
+      return invId ? batchesByInventory.get(invId.toString()) || [] : [];
+    });
+  };
 
   // Batch-tracked products keep their real stock ledger in Batch/Inventory, not
-  // Product.stockQuantity/cost/price — those legacy fields are meant to mirror it
-  // via dual-write during the migration (see inventory.model.js) but can drift out
-  // of sync (a product can show 0/negative stockQuantity while its batches still
-  // hold real, positive quantity). Recomputing stockQuantity/cost/price/stockValue
-  // from the batches whenever any exist is the fix: it's the same data already
-  // rendered in the expandable batch rows below, just summed up to the parent row
-  // instead of trusting the possibly-stale product-level snapshot.
-  const dataWithBatches = inventoryData.map((p) => {
-    const productVariants = variantsByProduct.get(p._id.toString()) || [];
-    const batches = productVariants.flatMap((v) => {
-      const inv = inventoryByVariant.get(v._id.toString());
-      return inv ? batchesByInventory.get(inv._id.toString()) || [] : [];
-    });
-    const key = p._id.toString();
+  // Product.stockQuantity/cost/price — those legacy fields are meant to mirror it via
+  // dual-write during the migration (see inventory.model.js) but can drift out of sync.
+  // Recomputing stockQuantity/cost/price/stockValue from the batches whenever any exist
+  // is the fix. This pass is numeric-only (no batch/IMEI detail arrays kept) so it stays
+  // cheap even across the whole catalog — it's what lets status/sort/summary stay
+  // correct without needing every row's full detail.
+  const corrected = products.map((p) => {
+    const batches = batchesForProduct(p._id);
 
     let stockQuantity = p.stockQuantity || 0;
     let cost = p.cost || 0;
@@ -1476,23 +1429,12 @@ const getInventoryReport = catchAsync(async (req, res) => {
       price = batchQuantity > 0 ? batchRevenueValue / batchQuantity : price;
     }
 
-    const status = stockQuantity <= 0 ? 'Out of Stock' : stockQuantity <= 10 ? 'Low Stock' : 'In Stock';
+    const rowStatus = stockQuantity <= 0 ? 'Out of Stock' : stockQuantity <= 10 ? 'Low Stock' : 'In Stock';
 
-    return {
-      ...p,
-      stockQuantity,
-      cost,
-      price,
-      stockValue,
-      potentialRevenue,
-      status,
-      batches,
-      imeis: imeisByProduct.get(key) || [],
-      imeisTotalCount: imeiTotalByProduct.get(key) || 0,
-    };
+    return { product: p, stockQuantity, cost, price, stockValue, potentialRevenue, status: rowStatus };
   });
 
-  const summary = dataWithBatches.reduce(
+  const summary = corrected.reduce(
     (acc, p) => {
       acc.totalProducts += 1;
       acc.totalStockQuantity += p.stockQuantity;
@@ -1504,14 +1446,86 @@ const getInventoryReport = catchAsync(async (req, res) => {
     { totalProducts: 0, totalStockQuantity: 0, totalStockValue: 0, lowStockCount: 0, outOfStockCount: 0 }
   );
 
-  const filteredData = (status === 'low'
-    ? dataWithBatches.filter((p) => p.status === 'Low Stock')
+  const filtered = (status === 'low'
+    ? corrected.filter((p) => p.status === 'Low Stock')
     : status === 'out'
-    ? dataWithBatches.filter((p) => p.status === 'Out of Stock')
-    : dataWithBatches
+    ? corrected.filter((p) => p.status === 'Out of Stock')
+    : corrected
   ).sort((a, b) => a.stockQuantity - b.stockQuantity);
 
-  res.status(httpStatus.OK).send({ data: filteredData, summary });
+  const totalResults = filtered.length;
+  const totalPages = Math.max(Math.ceil(totalResults / limit), 1);
+  // Export ignores pagination — it's an explicit, infrequent "give me everything" action,
+  // not the page load this fix is targeting.
+  const pageItems = isExport ? filtered : filtered.slice((page - 1) * limit, page * limit);
+
+  // Only the current page's products pay for the expensive per-row detail below (full
+  // batch breakdown + IMEI/serial preview) — capped per product so one heavily-serialized
+  // product can't blow up the response for every other row on the page; the client gets
+  // the true total separately and can say "+N more" instead of silently truncating.
+  // On export, skip the per-unit preview fetch entirely (it doesn't scale to the whole
+  // catalog) and rely on the cheap count-only aggregate below for imeisTotalCount.
+  const IMEI_PREVIEW_LIMIT = 100;
+  const serializedIds = pageItems
+    .filter(({ product: p }) => p.trackImei || p.trackSerial)
+    .map(({ product: p }) => p._id);
+  const [imeiDocs, imeiCounts] = serializedIds.length
+    ? await Promise.all([
+        isExport
+          ? []
+          : Imei.find({ productId: { $in: serializedIds }, status: 'in_stock' })
+              .sort({ createdAt: 1 })
+              .limit(serializedIds.length * IMEI_PREVIEW_LIMIT)
+              .select('productId imei')
+              .lean(),
+        Imei.aggregate([
+          { $match: { productId: { $in: serializedIds }, status: 'in_stock' } },
+          { $group: { _id: '$productId', count: { $sum: 1 } } },
+        ]),
+      ])
+    : [[], []];
+  const imeisByProduct = new Map();
+  imeiDocs.forEach((d) => {
+    const key = d.productId.toString();
+    if (!imeisByProduct.has(key)) imeisByProduct.set(key, []);
+    const list = imeisByProduct.get(key);
+    if (list.length < IMEI_PREVIEW_LIMIT) list.push(d.imei);
+  });
+  const imeiTotalByProduct = new Map(imeiCounts.map((c) => [c._id.toString(), c.count]));
+
+  const data = pageItems.map(({ product: p, stockQuantity, cost, price, stockValue, potentialRevenue, status: rowStatus }) => {
+    const key = p._id.toString();
+    const batches = batchesForProduct(p._id)
+      .map((b) => ({
+        batchNumber: b.batchNumber,
+        quantity: b.quantity,
+        expiryDate: b.expiryDate,
+        costPerUnit: b.costPerUnit,
+        sellingPrice: b.sellingPrice,
+        value: b.quantity * (b.costPerUnit || 0),
+      }))
+      .sort((a, b) => (a.expiryDate ? new Date(a.expiryDate).getTime() : Infinity) - (b.expiryDate ? new Date(b.expiryDate).getTime() : Infinity));
+
+    return {
+      ...p,
+      nameUrdu: p.nameUrdu || '',
+      category: p.category || 'N/A',
+      trackImei: p.trackImei || false,
+      trackSerial: p.trackSerial || false,
+      tags: p.tags || [],
+      stockQuantity,
+      cost,
+      price,
+      stockValue,
+      potentialRevenue,
+      status: rowStatus,
+      batches,
+      imeis: imeisByProduct.get(key) || [],
+      imeisTotalCount: imeiTotalByProduct.get(key) || 0,
+    };
+  });
+
+  res.status(httpStatus.OK).send({ data, summary, pagination: { page, limit, totalPages, totalResults } });
 });
 
 /* ── Batch & Expiry (FEFO) ─────────────────────────────────────────────────── */

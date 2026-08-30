@@ -1423,10 +1423,14 @@ export const reportsApi = createApi({
     getInventoryReport: builder.query<{
       data: InventoryReportData[]
       summary: any
-    }, { status?: string }>({
+      pagination: { page: number; limit: number; totalPages: number; totalResults: number }
+    }, { status?: string; page?: number; limit?: number; export?: boolean }>({
       query: (params) => {
         const searchParams = new URLSearchParams()
         if (params.status) searchParams.set('status', params.status)
+        if (params.export) searchParams.set('export', 'true')
+        searchParams.set('page', String(params.page || 1))
+        searchParams.set('limit', String(params.limit || 50))
         return `/inventory?${searchParams.toString()}`
       },
       providesTags: ['Inventory'],
@@ -1670,6 +1674,7 @@ export const {
   useGetProfitLossReportQuery,
   useGetProfitLossFullReportQuery,
   useGetInventoryReportQuery,
+  useLazyGetInventoryReportQuery,
   useGetBatchExpiryReportQuery,
   useGetStockAdjustmentReportQuery,
   useGetStockTransferReportQuery,

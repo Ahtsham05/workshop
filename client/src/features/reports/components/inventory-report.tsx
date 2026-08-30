@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useGetInventoryReportQuery } from '@/stores/reports.api'
+import { useGetInventoryReportQuery, useLazyGetInventoryReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import {
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   ChevronsUpDown,
   ChevronsDownUp,
   Boxes,
@@ -56,11 +57,24 @@ function StockStatusBadge({ status }: { status: string }) {
   )
 }
 
+const PAGE_SIZE = 50
+
 export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
   const { t, language } = useLanguage()
   const [status, setStatus] = useState<string>('all')
-  const { data, isFetching: isLoading } = useGetInventoryReportQuery({ status: status === 'all' ? '' : status })
+  const [page, setPage] = useState(1)
+  const { data, isFetching: isLoading } = useGetInventoryReportQuery({
+    status: status === 'all' ? '' : status,
+    page,
+    limit: PAGE_SIZE,
+  })
+  const [fetchExportData] = useLazyGetInventoryReportQuery()
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+
+  const handleStatusChange = (value: string) => {
+    setStatus(value)
+    setPage(1)
+  }
 
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => {
@@ -81,14 +95,23 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
   const toggleAllRows = () => setExpandedRows(allExpanded ? new Set() : new Set(expandableIds))
 
   useImperativeHandle(ref, () => ({
-    exportToExcel: () => {
+    exportToExcel: async () => {
+      const toastId = toast.loading(t('Preparing export...'))
       try {
-        if (!data?.data || data.data.length === 0) {
-          toast.error(t('No data available to export'))
+        // Full catalog, not just the current page — a dedicated export fetch (server
+        // skips the per-unit IMEI preview in this mode) rather than reusing the paginated
+        // `data` already on screen.
+        const result = await fetchExportData({
+          status: status === 'all' ? '' : status,
+          export: true,
+        }).unwrap()
+
+        if (!result?.data || result.data.length === 0) {
+          toast.error(t('No data available to export'), { id: toastId })
           return
         }
 
-        const excelData = data.data.map((product) => ({
+        const excelData = result.data.map((product) => ({
           [t('product')]: reportEntityName(language, product.name, product.nameUrdu),
           [t('barcode')]: product.barcode || 'N/A',
           [t('category')]: product.category,
@@ -106,7 +129,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
         const wb = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(wb, ws, 'Stock Report')
 
-        const batchRows = data.data.flatMap((product) =>
+        const batchRows = result.data.flatMap((product) =>
           (product.batches || []).map((b) => ({
             [t('product')]: reportEntityName(language, product.name, product.nameUrdu),
             'Batch #': b.batchNumber,
@@ -120,21 +143,16 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
           XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(batchRows), 'Batches')
         }
 
-        const imeiRows = data.data.flatMap((product) =>
-          (product.imeis || []).map((imei) => ({
-            [t('product')]: reportEntityName(language, product.name, product.nameUrdu),
-            'IMEI/Serial': imei,
-          })),
-        )
-        if (imeiRows.length > 0) {
-          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(imeiRows), 'IMEI-Serial')
-        }
+        // Per-unit IMEI/serial numbers aren't included in the bulk export (see the
+        // server's `export=true` handling) — pulling every serial for the whole catalog
+        // doesn't scale, and the main sheet's "IMEI/Serial Available" column already
+        // carries the count per product.
 
         XLSX.writeFile(wb, `stock-report-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
-        toast.success(t('Data exported successfully'))
+        toast.success(t('Data exported successfully'), { id: toastId })
       } catch (error) {
         console.error('Export error:', error)
-        toast.error(t('Failed to export data'))
+        toast.error(t('Failed to export data'), { id: toastId })
       }
     },
   }))
@@ -143,6 +161,8 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+
+  const pagination = data?.pagination
 
   return (
     <div className='space-y-6'>
@@ -168,7 +188,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                   {allExpanded ? t('Collapse All') : t('Expand All')}
                 </Button>
               )}
-              <Select value={status} onValueChange={setStatus}>
+              <Select value={status} onValueChange={handleStatusChange}>
                 <SelectTrigger className='w-[180px]'>
                   <SelectValue placeholder={t('all_products')} />
                 </SelectTrigger>
@@ -368,6 +388,40 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
             </TableBody>
           </Table>
           </div>
+          {pagination && pagination.totalResults > 0 && (
+            <div className='flex flex-wrap items-center justify-between gap-3 pt-4'>
+              <p className='text-sm text-muted-foreground'>
+                {t('Showing')} {(pagination.page - 1) * pagination.limit + 1}
+                {' '}{t('to')}{' '}
+                {Math.min(pagination.page * pagination.limit, pagination.totalResults)}
+                {' '}{t('of')}{' '}
+                {pagination.totalResults.toLocaleString()}
+              </p>
+              <div className='flex items-center gap-2'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft className='h-4 w-4' />
+                  {t('previous') || 'Previous'}
+                </Button>
+                <span className='text-sm text-muted-foreground'>
+                  {t('page')} {pagination.page} {t('of')} {pagination.totalPages}
+                </span>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                  disabled={page >= pagination.totalPages}
+                >
+                  {t('next') || 'Next'}
+                  <ChevronRight className='h-4 w-4' />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

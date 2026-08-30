@@ -43,6 +43,12 @@ router
   .route('/stats')
   .get(auth('viewProducts'), validate(productValidation.getProductStats), productController.getProductStats);
 
+// Per-category rollup (product count, qty, value) — powers the Products page's "All
+// Categories" breakdown view.
+router
+  .route('/stats/by-category')
+  .get(auth('viewProducts'), productController.getCategoryBreakdown);
+
 // Distinct tag values already used in this org/branch — powers tag autocomplete/filter options.
 router
   .route('/tags/distinct')

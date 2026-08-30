@@ -7,10 +7,12 @@ import { LowStockAlert } from './components/low-stock-alert'
 import { LowStockDetails } from './components/low-stock-details'
 import { ImportBranchProductsBanner } from './components/import-branch-products-banner'
 import { ProductStatCards } from './components/product-stat-cards'
+import { CategoryFilterCombobox, NO_CATEGORY_FILTER, ALL_CATEGORIES_BREAKDOWN, UNCATEGORIZED_CATEGORY } from './components/category-filter-combobox'
+import { CategoryBreakdown, type CategoryBreakdownRow } from './components/category-breakdown'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { fetchProducts, bulkUpdateProducts, fetchProductStats } from '@/stores/product.slice'
+import { fetchProducts, bulkUpdateProducts, fetchProductStats, fetchCategoryBreakdown } from '@/stores/product.slice'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import { fetchCategories } from '@/stores/category.slice'
 import { Input } from '@/components/ui/input'
@@ -33,7 +35,6 @@ import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-displ
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 
 const SEARCH_DEBOUNCE_MS = 400
-const ALL_CATEGORIES = 'all'
 const ALL_STATUS = 'all'
 // Active products first, inactive last; newest-first within each group.
 const PRODUCTS_SORT_BY = 'isActive:desc,createdAt:desc'
@@ -58,10 +59,16 @@ export default function Products() {
   const [editValues, setEditValues] = useState<Record<string, { price?: number; cost?: number; stockQuantity?: number }>>({})
   const [showLowStockDetails, setShowLowStockDetails] = useState(false)
   const [lowStockThreshold, setLowStockThreshold] = useState(10)
-  const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES)
+  const [categoryFilter, setCategoryFilter] = useState(NO_CATEGORY_FILTER)
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [categoryBreakdown, setCategoryBreakdown] = useState<CategoryBreakdownRow[]>([])
+  const [loadingCategoryBreakdown, setLoadingCategoryBreakdown] = useState(false)
+
+  const isBreakdownMode = categoryFilter === ALL_CATEGORIES_BREAKDOWN
+  // A real category id — not the "no filter" or "breakdown" sentinels.
+  const isSingleCategorySelected = categoryFilter !== NO_CATEGORY_FILTER && categoryFilter !== ALL_CATEGORIES_BREAKDOWN
 
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
@@ -94,12 +101,12 @@ export default function Products() {
   }, [fetch, dispatch])
 
   // Header badge totals (total product count, total stock quantity, total stock
-  // value) — computed by the database over the WHOLE catalog, not derived from
-  // `allProducts` above, which is capped at 1000 rows and would silently under-report
-  // once the catalog grows past that.
+  // value) — computed by the database over the WHOLE catalog (or just the selected
+  // category, when one is chosen), not derived from `allProducts` above, which is
+  // capped at 1000 rows and would silently under-report once the catalog grows past that.
   useEffect(() => {
     setLoadingStats(true)
-    dispatch(fetchProductStats({}))
+    dispatch(fetchProductStats(isSingleCategorySelected ? { category: categoryFilter } : {}))
       .then((data) => {
         if (data.payload) {
           setProductStats(data.payload)
@@ -110,14 +117,16 @@ export default function Products() {
         console.error('Error fetching product stats:', error)
         setLoadingStats(false)
       })
-  }, [fetch, dispatch])
+  }, [fetch, dispatch, categoryFilter, isSingleCategorySelected])
 
   useEffect(() => {
     setCurrentPage(1)
   }, [debouncedSearch, categoryFilter, statusFilter])
 
-  // Fetch paginated products for table display
+  // Fetch paginated products for table display — skipped in breakdown mode, which
+  // shows the per-category rollup instead of the flat table.
   useEffect(() => {
+    if (isBreakdownMode) return
     setLoading(true)
     const q = debouncedSearch.trim()
     const params = {
@@ -125,7 +134,7 @@ export default function Products() {
       limit: limit,
       sortBy: PRODUCTS_SORT_BY,
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.product } : {}),
-      ...(categoryFilter !== ALL_CATEGORIES ? { category: categoryFilter } : {}),
+      ...(isSingleCategorySelected ? { category: categoryFilter } : {}),
       ...(statusFilter !== ALL_STATUS ? { isActive: statusFilter === 'active' } : {}),
     };
 
@@ -150,7 +159,25 @@ export default function Products() {
         setLoading(false)
         toast.error('Failed to fetch products')
       })
-  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, statusFilter, dispatch])
+  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, statusFilter, dispatch, isBreakdownMode, isSingleCategorySelected])
+
+  // Category-wise rollup for the "All Categories" breakdown view — fetched only while
+  // that mode is active.
+  useEffect(() => {
+    if (!isBreakdownMode) return
+    setLoadingCategoryBreakdown(true)
+    dispatch(fetchCategoryBreakdown())
+      .then((data) => {
+        setCategoryBreakdown(data.payload?.data || [])
+        setLoadingCategoryBreakdown(false)
+      })
+      .catch((error) => {
+        console.error('Error fetching category breakdown:', error)
+        setCategoryBreakdown([])
+        setLoadingCategoryBreakdown(false)
+        toast.error('Failed to fetch category breakdown')
+      })
+  }, [isBreakdownMode, fetch, dispatch])
 
   // Handle bulk product update with individual values
   const handleBulkUpdate = useCallback(async () => {
@@ -414,28 +441,49 @@ export default function Products() {
           </div>
 
           <div className='mb-4 flex flex-wrap items-center gap-2'>
-            <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
-              <Package className='h-4 w-4 text-muted-foreground' />
-              <span className='text-muted-foreground'>{t('total_products')}:</span>
-              <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalProducts ?? 0).toLocaleString()}</span>
-            </div>
-            <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
-              <Boxes className='h-4 w-4 text-muted-foreground' />
-              <span className='text-muted-foreground'>{t('total_stock_quantity')}:</span>
-              <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalStockQuantity ?? 0).toLocaleString()}</span>
-            </div>
-            <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
-              <Wallet className='h-4 w-4 text-muted-foreground' />
-              <span className='text-muted-foreground'>{t('total_value_of_stock')}:</span>
-              <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalStockValue ?? 0).toLocaleString()}</span>
-            </div>
-            <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
-              <CircleDollarSign className='h-4 w-4 text-muted-foreground' />
-              <span className='text-muted-foreground'>{t('Avg Purchase Price')}:</span>
-              <span className='font-semibold tabular-nums'>{loadingStats ? '…' : avgPurchasePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-            </div>
+            <CategoryFilterCombobox value={categoryFilter} onChange={setCategoryFilter} categories={categories} />
+            {isSingleCategorySelected && (
+              <Badge variant='secondary' className='h-9 px-3 text-sm font-normal'>
+                {t('Totals for')}: {
+                  categoryFilter === UNCATEGORIZED_CATEGORY
+                    ? t('Uncategorized')
+                    : categories.find((c) => c.id === categoryFilter)?.name || categoryFilter
+                }
+              </Badge>
+            )}
+            {!isBreakdownMode && (
+              <>
+                <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
+                  <Package className='h-4 w-4 text-muted-foreground' />
+                  <span className='text-muted-foreground'>{t('total_products')}:</span>
+                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalProducts ?? 0).toLocaleString()}</span>
+                </div>
+                <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
+                  <Boxes className='h-4 w-4 text-muted-foreground' />
+                  <span className='text-muted-foreground'>{t('total_stock_quantity')}:</span>
+                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalStockQuantity ?? 0).toLocaleString()}</span>
+                </div>
+                <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
+                  <Wallet className='h-4 w-4 text-muted-foreground' />
+                  <span className='text-muted-foreground'>{t('total_value_of_stock')}:</span>
+                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalStockValue ?? 0).toLocaleString()}</span>
+                </div>
+                <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
+                  <CircleDollarSign className='h-4 w-4 text-muted-foreground' />
+                  <span className='text-muted-foreground'>{t('Avg Purchase Price')}:</span>
+                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : avgPurchasePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                </div>
+              </>
+            )}
           </div>
 
+          {isBreakdownMode ? (
+            <CategoryBreakdown
+              data={categoryBreakdown}
+              loading={loadingCategoryBreakdown}
+              onSelectCategory={(categoryId) => setCategoryFilter(categoryId)}
+            />
+          ) : (
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
             <ProductTable
               data={products}
@@ -453,17 +501,6 @@ export default function Products() {
               }
               toolbarTrailing={
                 <>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className='h-9 w-[180px]'>
-                      <SelectValue placeholder={t('all_categories')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ALL_CATEGORIES}>{t('all_categories')}</SelectItem>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className='h-9 w-[150px]'>
                       <SelectValue placeholder={t('All Status')} />
@@ -495,6 +532,7 @@ export default function Products() {
               broughtForward={broughtForward}
             />
           </div>
+          )}
 
         <ProductDialogs setFetch={setFetch} />
 

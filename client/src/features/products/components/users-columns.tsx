@@ -43,7 +43,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
       />
     ),
     enableSorting: false,
-    enableHiding: true,
+    enableHiding: false,
   },
   {
     accessorKey: 'name',
@@ -380,6 +380,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   id: 'actions',
   header: () => t('actions'),
   cell: DataTableRowActions,
+  enableHiding: false,
 }
 ]
 }
