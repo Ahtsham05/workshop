@@ -93,6 +93,17 @@ const deleteSubCategory = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const bulkDeleteSubCategories = catchAsync(async (req, res) => {
+  const { ids } = req.body;
+  const { deleted, notFoundIds } = await subCategoryService.bulkDeleteSubCategoriesByIds(ids);
+  res.send({
+    message: `Deleted ${deleted.length} of ${ids.length} sub-categor${deleted.length === 1 ? 'y' : 'ies'}`,
+    deletedCount: deleted.length,
+    deletedIds: deleted.map((subCategory) => subCategory._id),
+    notFoundIds,
+  });
+});
+
 const uploadSubCategoryImage = catchAsync(async (req, res) => {
   if (!req.file) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
@@ -144,6 +155,7 @@ module.exports = {
   getSubCategory,
   updateSubCategory,
   deleteSubCategory,
+  bulkDeleteSubCategories,
   uploadSubCategoryImage,
   deleteSubCategoryImage,
   fetchImageFromSearch,

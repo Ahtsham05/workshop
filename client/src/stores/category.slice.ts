@@ -94,6 +94,17 @@ export const deleteCategory = createAsyncThunk(
   })
 )
 
+export const bulkDeleteCategories = createAsyncThunk(
+  'category/bulkDeleteCategories',
+  catchAsync(async (ids: string[]) => {
+    const response = await Axios({
+      ...summery.bulkDeleteCategories,
+      data: { ids },
+    })
+    return response.data
+  })
+)
+
 export const fetchAllCategories = createAsyncThunk(
   'category/fetchAllCategories',
   catchAsync(async () => {
@@ -176,7 +187,22 @@ const categorySlice = createSlice({
         state.loading = false
         state.error = action.error.message || 'Failed to delete category'
       })
-      
+
+      // Bulk delete categories
+      .addCase(bulkDeleteCategories.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(bulkDeleteCategories.fulfilled, (state, action) => {
+        state.loading = false
+        const deletedIds = new Set((action.payload.deletedIds || []).map((id: any) => String(id)))
+        state.categories = state.categories.filter((cat) => !deletedIds.has(String(cat.id)))
+      })
+      .addCase(bulkDeleteCategories.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.error.message || 'Failed to delete categories'
+      })
+
       // Fetch all categories
       .addCase(fetchAllCategories.pending, (state) => {
         state.loading = true

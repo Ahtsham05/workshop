@@ -48,6 +48,16 @@ router
     subCategoryController.fetchImageFromSearch,
   );
 
+// Registered before the `/:subCategoryId` catch-all below so `/bulk-delete` isn't
+// swallowed as a subCategoryId.
+router
+  .route('/bulk-delete')
+  .delete(
+    auth('deleteCategories'),
+    validate(subCategoryValidation.bulkDeleteSubCategories),
+    subCategoryController.bulkDeleteSubCategories
+  );
+
 router
   .route('/:subCategoryId')
   .get(auth('viewCategories'), validate(subCategoryValidation.getSubCategory), subCategoryController.getSubCategory)

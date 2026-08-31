@@ -81,6 +81,17 @@ const deleteCategory = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const bulkDeleteCategories = catchAsync(async (req, res) => {
+  const { ids } = req.body;
+  const { deleted, notFoundIds } = await categoryService.bulkDeleteCategoriesByIds(ids);
+  res.send({
+    message: `Deleted ${deleted.length} of ${ids.length} categor${deleted.length === 1 ? 'y' : 'ies'}`,
+    deletedCount: deleted.length,
+    deletedIds: deleted.map((category) => category._id),
+    notFoundIds,
+  });
+});
+
 // Image upload route handler
 const uploadCategoryImage = catchAsync(async (req, res) => {
   if (!req.file) {
@@ -133,6 +144,7 @@ module.exports = {
   getCategory,
   updateCategory,
   deleteCategory,
+  bulkDeleteCategories,
   uploadCategoryImage,
   deleteCategoryImage,
   fetchImageFromSearch,

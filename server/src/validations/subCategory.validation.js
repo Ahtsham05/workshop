@@ -77,6 +77,12 @@ const deleteSubCategory = {
   }),
 };
 
+const bulkDeleteSubCategories = {
+  body: Joi.object().keys({
+    ids: Joi.array().items(Joi.string()).required().min(1),
+  }),
+};
+
 const fetchImageFromSearch = {
   body: Joi.object().keys({
     query: Joi.string().trim().min(2).max(200).required(),
@@ -91,5 +97,6 @@ module.exports = {
   getSubCategory,
   updateSubCategory,
   deleteSubCategory,
+  bulkDeleteSubCategories,
   fetchImageFromSearch,
 };

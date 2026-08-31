@@ -405,6 +405,22 @@ const en: Record<string, string> = {
     "bulk_delete_suppliers_failed": "Failed to delete selected suppliers",
     "and_more_suppliers": "and {{count}} more",
 
+    // Bulk Delete Categories
+    "bulk_delete_categories": "Delete Categories",
+    "bulk_delete_categories_confirmation_suffix": "categories. Products in these categories will keep their existing category name, but it will no longer link to a managed category. This action cannot be undone.",
+    "bulk_delete_categories_success": "categories deleted successfully",
+    "bulk_delete_categories_partial": "of the selected categories were deleted",
+    "bulk_delete_categories_failed": "Failed to delete selected categories",
+    "and_more_categories": "and {{count}} more",
+
+    // Bulk Delete Sub-Categories
+    "bulk_delete_subcategories": "Delete Sub-Categories",
+    "bulk_delete_subcategories_confirmation_suffix": "sub-categories. Products in these sub-categories will keep their existing sub-category name, but it will no longer link to a managed sub-category. This action cannot be undone.",
+    "bulk_delete_subcategories_success": "sub-categories deleted successfully",
+    "bulk_delete_subcategories_partial": "of the selected sub-categories were deleted",
+    "bulk_delete_subcategories_failed": "Failed to delete selected sub-categories",
+    "and_more_subcategories": "and {{count}} more",
+
     // Low Stock Alert System
     "low_stock_alert": "Low Stock Alert",
     "low_stock_alerts_disabled": "Low stock alerts are disabled",

@@ -42,16 +42,28 @@ interface CategoriesTableProps {
   paggination: any
   loading?: boolean
   toolbarLeading?: ReactNode
+  toolbarTrailing?: ReactNode
   subCategoriesByCategory?: Record<string, Array<{ id: string; name: string }>>
+  onSelectedRowsChange?: (selectedRows: Category[]) => void
 }
 
-export function CategoriesTable({ categories, paggination, loading, toolbarLeading, subCategoriesByCategory }: CategoriesTableProps) {
+export function CategoriesTable({ categories, paggination, loading, toolbarLeading, toolbarTrailing, subCategoriesByCategory, onSelectedRowsChange }: CategoriesTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState({})
   const { t, language } = useLanguage()
   const columns = useCategoryColumns(subCategoriesByCategory)
+
+  React.useEffect(() => {
+    if (onSelectedRowsChange) {
+      const selectedCategories = Object.keys(rowSelection)
+        .filter((key) => rowSelection[key as keyof typeof rowSelection])
+        .map((index) => categories[parseInt(index)])
+        .filter(Boolean)
+      onSelectedRowsChange(selectedCategories)
+    }
+  }, [rowSelection, categories, onSelectedRowsChange])
 
   const table = useReactTable({
     data: categories,
@@ -77,7 +89,7 @@ export function CategoriesTable({ categories, paggination, loading, toolbarLeadi
 
   return (
     <div className="space-y-4">
-      <DataTableToolbar table={table} leading={toolbarLeading} />
+      <DataTableToolbar table={table} leading={toolbarLeading} trailing={toolbarTrailing} />
       <TableLoadingOverlay loading={loading}>
         <div className="rounded-md border">
         <Table>

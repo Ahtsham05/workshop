@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
-import { fetchCategories } from '@/stores/category.slice'
+import { fetchCategories, Category } from '@/stores/category.slice'
 import { CategoriesProvider } from './context/categories-context'
 import { CategoriesTable } from './components/categories-table'
 import { CategoriesActionDialog } from './components/categories-action-dialog'
 import { CategoriesDeleteDialog } from './components/categories-delete-dialog'
+import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 import CategoriesPrimaryButtons from './components/categories-primary-buttons'
 import { useLanguage } from '@/context/language-context'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Can } from '@/context/permission-context'
+import { Trash2 } from 'lucide-react'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import Axios from '@/utils/Axios'
@@ -29,6 +33,11 @@ export default function CategoriesIndex() {
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
   const [allSubCategories, setAllSubCategories] = useState<Array<{ id: string; name: string; category: { id?: string } | string }>>([])
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const handleSelectedRowsChange = useCallback((rows: Category[]) => {
+    setSelectedCategories(rows)
+  }, [])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -106,6 +115,21 @@ export default function CategoriesIndex() {
                   aria-label={t('search_categories')}
                 />
               }
+              toolbarTrailing={
+                selectedCategories.length > 0 && (
+                  <Can permission='deleteCategories'>
+                    <Button
+                      variant='destructive'
+                      onClick={() => setBulkDeleteOpen(true)}
+                      className='space-x-1'
+                    >
+                      <Trash2 size={16} />
+                      <span>{t('delete_selected')} ({selectedCategories.length})</span>
+                    </Button>
+                  </Can>
+                )
+              }
+              onSelectedRowsChange={handleSelectedRowsChange}
               paggination={{
                 totalPage,
                 currentPage,
@@ -121,6 +145,15 @@ export default function CategoriesIndex() {
 
         <CategoriesActionDialog setFetch={setFetch} />
         <CategoriesDeleteDialog setFetch={setFetch} />
+        <BulkDeleteDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          categories={selectedCategories}
+          onDeleted={() => {
+            setSelectedCategories([])
+            setFetch((prev) => !prev)
+          }}
+        />
       </div>
     </CategoriesProvider>
   )

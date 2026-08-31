@@ -47,6 +47,7 @@ interface SubCategoriesTableProps {
   toolbarTrailing?: ReactNode
   hasCategories: boolean
   onAddClick?: () => void
+  onSelectedRowsChange?: (selectedRows: SubCategory[]) => void
 }
 
 export function SubCategoriesTable({
@@ -57,6 +58,7 @@ export function SubCategoriesTable({
   toolbarTrailing,
   hasCategories,
   onAddClick,
+  onSelectedRowsChange,
 }: SubCategoriesTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -64,6 +66,16 @@ export function SubCategoriesTable({
   const [rowSelection, setRowSelection] = React.useState({})
   const { t, language } = useLanguage()
   const columns = useSubCategoryColumns()
+
+  React.useEffect(() => {
+    if (onSelectedRowsChange) {
+      const selectedSubCategories = Object.keys(rowSelection)
+        .filter((key) => rowSelection[key as keyof typeof rowSelection])
+        .map((index) => subCategories[parseInt(index)])
+        .filter(Boolean)
+      onSelectedRowsChange(selectedSubCategories)
+    }
+  }, [rowSelection, subCategories, onSelectedRowsChange])
 
   const table = useReactTable({
     data: subCategories,

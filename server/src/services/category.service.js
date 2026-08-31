@@ -83,6 +83,22 @@ const deleteCategoryById = async (categoryId) => {
   return category;
 };
 
+/**
+ * Delete many categories by id, skipping ones that don't exist rather than failing
+ * the whole batch.
+ * @param {string[]} ids
+ * @returns {Promise<{deleted: Category[], notFoundIds: string[]}>}
+ */
+const bulkDeleteCategoriesByIds = async (ids) => {
+  const categories = await Category.find({ _id: { $in: ids } });
+  const foundIds = new Set(categories.map((category) => category._id.toString()));
+  const notFoundIds = ids.filter((id) => !foundIds.has(id));
+
+  await Category.deleteMany({ _id: { $in: categories.map((category) => category._id) } });
+
+  return { deleted: categories, notFoundIds };
+};
+
 module.exports = {
   createCategory,
   queryCategories,
@@ -90,4 +106,5 @@ module.exports = {
   getCategoryById,
   updateCategoryById,
   deleteCategoryById,
+  bulkDeleteCategoriesByIds,
 };
