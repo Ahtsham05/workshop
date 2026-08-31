@@ -5,13 +5,17 @@ import { DataTableViewOptions } from './data-table-view-options'
 interface DataTableToolbarProps<TData> {
   table: Table<TData>
   leading?: ReactNode
+  trailing?: ReactNode
 }
 
-export function DataTableToolbar<TData>({ table, leading }: DataTableToolbarProps<TData>) {
+export function DataTableToolbar<TData>({ table, leading, trailing }: DataTableToolbarProps<TData>) {
   return (
     <div className='flex flex-wrap items-center justify-between gap-3'>
       {leading ? <div className='min-w-0 flex-1 max-w-md'>{leading}</div> : <span className='min-w-0 flex-1' aria-hidden />}
-      <DataTableViewOptions table={table} />
+      <div className='flex flex-wrap items-center gap-2'>
+        {trailing}
+        <DataTableViewOptions table={table} />
+      </div>
     </div>
   )
 }

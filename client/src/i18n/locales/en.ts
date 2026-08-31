@@ -421,6 +421,46 @@ const en: Record<string, string> = {
     "bulk_delete_subcategories_failed": "Failed to delete selected sub-categories",
     "and_more_subcategories": "and {{count}} more",
 
+    // Import / Export Categories
+    "export_excel": "Export Excel",
+    "exporting": "Exporting",
+    "export_successful": "Exported successfully",
+    "error_exporting_data": "Error exporting data",
+    "no_categories_to_export": "No categories to export",
+    "no_subcategories_to_export": "No sub-categories to export",
+    "import_categories_from_excel": "Import Categories from Excel",
+    "upload_excel_file_to_import_categories": "Upload an Excel file to bulk import categories",
+    "import_category_name_required": "Category name is required",
+    "no_categories_to_import": "No categories to import",
+    "error_importing_categories": "Error importing categories",
+    "warning_importing_categories": "Warning: Importing will add new categories. A category name that already exists in this branch will be skipped rather than duplicated.",
+    "categories_imported_with_errors_message": "{{inserted}} of {{total}} categories imported — {{failed}} failed",
+    "import_failed_all_categories": "Import failed — no categories were imported",
+    "categories_imported": "categories imported",
+    "categories_skipped_existing": "{{count}} row(s) skipped — category already existed",
+
+    // Import / Export Sub-Categories
+    "import_subcategories_from_excel": "Import Sub-Categories from Excel",
+    "upload_excel_file_to_import_subcategories": "Upload an Excel file to bulk import sub-categories",
+    "import_subcategory_name_required": "Sub-category name is required",
+    "import_subcategory_category_required": "Parent category is required",
+    "no_subcategories_to_import": "No sub-categories to import",
+    "error_importing_subcategories": "Error importing sub-categories",
+    "warning_importing_subcategories": "Warning: Importing will add new sub-categories. A parent category name that doesn't already exist will be created automatically. A sub-category name that already exists under its parent will be skipped rather than duplicated.",
+    "subcategories_imported_with_errors_message": "{{inserted}} of {{total}} sub-categories imported — {{failed}} failed",
+    "import_failed_all_subcategories": "Import failed — no sub-categories were imported",
+    "subcategories_imported": "sub-categories imported",
+    "subcategories_skipped_existing": "{{count}} row(s) skipped — sub-category already existed",
+    "parent_category_column": "Category",
+
+    // Active/Inactive toggle — Categories & Sub-Categories
+    "category_activated": "Category activated",
+    "category_deactivated": "Category deactivated",
+    "category_status_update_failed": "Failed to update category status",
+    "subcategory_activated": "Sub-category activated",
+    "subcategory_deactivated": "Sub-category deactivated",
+    "subcategory_status_update_failed": "Failed to update sub-category status",
+
     // Low Stock Alert System
     "low_stock_alert": "Low Stock Alert",
     "low_stock_alerts_disabled": "Low stock alerts are disabled",
@@ -832,7 +872,7 @@ const en: Record<string, string> = {
     "products_imported_with_errors_message": "{{inserted}} of {{total}} products imported — {{failed}} failed",
     "import_failed_all_products": "Import failed — no products were imported",
     "importing_progress": "Importing {{done}} / {{total}}...",
-    "import_stopped_early_message": "Import stopped after a batch failed — {{inserted}} of {{total}} products were saved before the error. Re-select the file to retry the rest.",
+    "import_stopped_early_message": "Import stopped after a batch failed — {{inserted}} of {{total}} were saved before the error. Re-select the file to retry the rest.",
     "close": "Close",
 
     // Customer import functionality

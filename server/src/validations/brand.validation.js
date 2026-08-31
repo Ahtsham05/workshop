@@ -71,6 +71,31 @@ const deleteBrand = {
   }),
 };
 
+const bulkDeleteBrands = {
+  body: Joi.object().keys({
+    ids: Joi.array().items(Joi.string()).required().min(1),
+  }),
+};
+
+const bulkAddBrands = {
+  body: Joi.object().keys({
+    brands: Joi.array()
+      .items(
+        Joi.object().keys({
+          name: Joi.string().trim().min(1).required(),
+          description: Joi.string().allow('').optional(),
+          website: Joi.string().allow('').optional(),
+          contactPerson: Joi.string().allow('').optional(),
+          email: Joi.string().allow('').optional(),
+          phone: Joi.string().allow('').optional(),
+          country: Joi.string().allow('').optional(),
+        })
+      )
+      .min(1)
+      .required(),
+  }),
+};
+
 const fetchImageFromSearch = {
   body: Joi.object().keys({
     query: Joi.string().trim().min(2).max(200).required(),
@@ -84,5 +109,7 @@ module.exports = {
   getBrand,
   updateBrand,
   deleteBrand,
+  bulkAddBrands,
+  bulkDeleteBrands,
   fetchImageFromSearch,
 };

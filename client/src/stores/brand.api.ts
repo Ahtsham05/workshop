@@ -53,6 +53,15 @@ export interface BrandListResponse {
   totalResults: number
 }
 
+export interface BulkAddBrandsResult {
+  message: string
+  success: boolean
+  insertedCount: number
+  brands: Brand[]
+  errors: Array<{ index: number; name?: string; error?: string }>
+  warnings: Array<{ index: number; name?: string; message: string }>
+}
+
 export const brandApi = createApi({
   reducerPath: 'brandApi',
   baseQuery: baseQueryWithAuth,
@@ -100,6 +109,16 @@ export const brandApi = createApi({
         { type: 'Brand', id: 'LIST' },
       ],
     }),
+
+    bulkAddBrands: builder.mutation<BulkAddBrandsResult, { brands: Array<Partial<Brand>> }>({
+      query: (body) => ({ url: '/bulk', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Brand', id: 'LIST' }],
+    }),
+
+    bulkDeleteBrands: builder.mutation<{ message: string; deletedCount: number; deletedIds: string[]; notFoundIds: string[] }, string[]>({
+      query: (ids) => ({ url: '/bulk-delete', method: 'DELETE', body: { ids } }),
+      invalidatesTags: [{ type: 'Brand', id: 'LIST' }],
+    }),
   }),
 })
 
@@ -110,4 +129,6 @@ export const {
   useCreateBrandMutation,
   useUpdateBrandMutation,
   useDeleteBrandMutation,
+  useBulkAddBrandsMutation,
+  useBulkDeleteBrandsMutation,
 } = brandApi

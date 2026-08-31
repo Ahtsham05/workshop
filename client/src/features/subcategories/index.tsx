@@ -7,6 +7,7 @@ import { SubCategoriesProvider, useSubCategories } from './context/subcategories
 import { SubCategoriesTable } from './components/subcategories-table'
 import { SubCategoriesActionDialog } from './components/subcategories-action-dialog'
 import { SubCategoriesDeleteDialog } from './components/subcategories-delete-dialog'
+import { SubCategoryImportDialog } from './components/subcategory-import-dialog'
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 import SubCategoriesPrimaryButtons from './components/subcategories-primary-buttons'
 import { useLanguage } from '@/context/language-context'
@@ -189,6 +190,7 @@ function SubCategoriesContent() {
 
       <SubCategoriesActionDialog setFetch={setFetch} categories={categories} />
       <SubCategoriesDeleteDialog setFetch={setFetch} />
+      <SubCategoryImportDialog setFetch={setFetch} />
       <BulkDeleteDialog
         open={bulkDeleteOpen}
         onOpenChange={setBulkDeleteOpen}

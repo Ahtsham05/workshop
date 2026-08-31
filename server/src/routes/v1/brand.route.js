@@ -39,6 +39,16 @@ router
     brandController.fetchImageFromSearch,
   );
 
+// Registered before the `/:brandId` catch-all below so `/bulk`/`/bulk-delete` aren't
+// swallowed as a brandId.
+router
+  .route('/bulk')
+  .post(auth('createBrands'), validate(brandValidation.bulkAddBrands), brandController.bulkAddBrands);
+
+router
+  .route('/bulk-delete')
+  .delete(auth('deleteBrands'), validate(brandValidation.bulkDeleteBrands), brandController.bulkDeleteBrands);
+
 router
   .route('/:brandId')
   .get(auth('viewBrands'), validate(brandValidation.getBrand), brandController.getBrand)

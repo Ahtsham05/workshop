@@ -25,6 +25,10 @@ const CategorySchema = new mongoose.Schema({
         url: { type: String },
         publicId: { type: String }
     },
+    // Deactivating a category hides it (and, per the product form's picker, its
+    // sub-categories) from the Add/Edit Product pickers without touching any product
+    // that already references it — those keep their denormalized category snapshot.
+    isActive: { type: Boolean, default: true },
 },{
     timestamps: true
 });

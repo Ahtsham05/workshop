@@ -41,14 +41,26 @@ interface BrandsTableProps {
   paggination: any
   loading?: boolean
   toolbarLeading?: ReactNode
+  toolbarTrailing?: ReactNode
+  onSelectedRowsChange?: (selectedRows: Brand[]) => void
 }
 
-export function BrandsTable({ brands, paggination, loading, toolbarLeading }: BrandsTableProps) {
+export function BrandsTable({ brands, paggination, loading, toolbarLeading, toolbarTrailing, onSelectedRowsChange }: BrandsTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState({})
   const columns = useBrandColumns()
+
+  React.useEffect(() => {
+    if (onSelectedRowsChange) {
+      const selectedBrands = Object.keys(rowSelection)
+        .filter((key) => rowSelection[key as keyof typeof rowSelection])
+        .map((index) => brands[parseInt(index)])
+        .filter(Boolean)
+      onSelectedRowsChange(selectedBrands)
+    }
+  }, [rowSelection, brands, onSelectedRowsChange])
 
   const table = useReactTable({
     data: brands,
@@ -74,7 +86,7 @@ export function BrandsTable({ brands, paggination, loading, toolbarLeading }: Br
 
   return (
     <div className="space-y-4">
-      <DataTableToolbar table={table} leading={toolbarLeading} />
+      <DataTableToolbar table={table} leading={toolbarLeading} trailing={toolbarTrailing} />
       <TableLoadingOverlay loading={loading}>
         <div className="rounded-md border">
           <Table>

@@ -6,6 +6,7 @@ type Action =
   | { type: 'SET_SUBCATEGORY'; payload: SubCategory | null }
   | { type: 'SET_DELETE_OPEN'; payload: boolean }
   | { type: 'SET_DEFAULT_CATEGORY_ID'; payload: string | null }
+  | { type: 'SET_IMPORT_OPEN'; payload: boolean }
 
 interface State {
   open: boolean
@@ -13,6 +14,7 @@ interface State {
   deleteOpen: boolean
   /** Category to pre-select when opening the create dialog from a filtered view. */
   defaultCategoryId: string | null
+  importOpen: boolean
 }
 
 const initialState: State = {
@@ -20,6 +22,7 @@ const initialState: State = {
   currentSubCategory: null,
   deleteOpen: false,
   defaultCategoryId: null,
+  importOpen: false,
 }
 
 const SubCategoriesContext = createContext<{
@@ -37,6 +40,8 @@ function subCategoriesReducer(state: State, action: Action): State {
       return { ...state, deleteOpen: action.payload }
     case 'SET_DEFAULT_CATEGORY_ID':
       return { ...state, defaultCategoryId: action.payload }
+    case 'SET_IMPORT_OPEN':
+      return { ...state, importOpen: action.payload }
     default:
       return state
   }

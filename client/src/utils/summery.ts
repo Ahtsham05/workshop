@@ -174,6 +174,10 @@ const summery = {
     url: '/categories/bulk-delete',
     method: 'delete',
   },
+  bulkAddCategories: {
+    url: '/categories/bulk',
+    method: 'post',
+  },
   fetchCategories: {
     url: '/categories',
     method: 'get',
@@ -203,6 +207,10 @@ const summery = {
   bulkDeleteSubCategories: {
     url: '/sub-categories/bulk-delete',
     method: 'delete',
+  },
+  bulkImportSubCategories: {
+    url: '/sub-categories/bulk-import',
+    method: 'post',
   },
   fetchSubCategories: {
     url: '/sub-categories',

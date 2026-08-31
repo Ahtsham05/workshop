@@ -9,11 +9,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import type { Brand } from '@/stores/brand.api'
 import { useBrands } from '../context/brands-context'
 import { usePermissions } from '@/context/permission-context'
+import { BrandActiveToggleCell } from './brand-active-toggle-cell'
 
 export function useBrandColumns(): ColumnDef<Brand>[] {
   const { dispatch } = useBrands()
@@ -83,14 +83,7 @@ export function useBrandColumns(): ColumnDef<Brand>[] {
   const statusColumn: ColumnDef<Brand> = {
     accessorKey: 'status',
     header: 'Status',
-    cell: ({ row }) => {
-      const status = row.original.status || 'active'
-      return (
-        <Badge variant={status === 'active' ? 'default' : 'outline'} className="capitalize">
-          {status}
-        </Badge>
-      )
-    },
+    cell: ({ row }) => <BrandActiveToggleCell brand={row.original} />,
   }
 
   const actionsColumn: ColumnDef<Brand> = {

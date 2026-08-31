@@ -31,6 +31,9 @@ const SubCategorySchema = new mongoose.Schema({
         url: { type: String },
         publicId: { type: String }
     },
+    // See Category#isActive — same "hide from product pickers, keep existing product
+    // references intact" semantics.
+    isActive: { type: Boolean, default: true },
 },{
     timestamps: true
 });

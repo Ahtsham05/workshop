@@ -13,6 +13,7 @@ export interface SubCategory {
     url: string
     publicId: string
   }
+  isActive?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -115,6 +116,17 @@ export const deleteSubCategory = createAsyncThunk(
       url: `${summery.deleteSubCategory.url}/${id}`,
     })
     return { id }
+  })
+)
+
+export const bulkImportSubCategories = createAsyncThunk(
+  'subCategory/bulkImportSubCategories',
+  catchAsync(async (data: { items: Array<{ name: string; nameUrdu?: string; category: string }> }) => {
+    const response = await Axios({
+      ...summery.bulkImportSubCategories,
+      data,
+    })
+    return response.data
   })
 )
 
@@ -229,6 +241,21 @@ const subCategorySlice = createSlice({
       .addCase(deleteSubCategory.rejected, (state, action) => {
         state.loading = false
         state.error = action.error.message || 'Failed to delete sub-category'
+      })
+
+      // Bulk import sub-categories (Excel import, mixed parent categories per row)
+      .addCase(bulkImportSubCategories.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(bulkImportSubCategories.fulfilled, (state, action) => {
+        state.loading = false
+        const inserted = action.payload?.subCategories || []
+        state.subCategories = [...inserted, ...state.subCategories]
+      })
+      .addCase(bulkImportSubCategories.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.error.message || 'Failed to import sub-categories'
       })
 
       // Bulk delete sub-categories

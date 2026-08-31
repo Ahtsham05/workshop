@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { usePermissions } from '@/context/permission-context'
+import { SubCategoryActiveToggleCell } from './subcategory-active-toggle-cell'
 
 export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
   const { dispatch } = useSubCategories()
@@ -113,6 +114,13 @@ export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
     },
   }
 
+  const statusColumn: ColumnDef<SubCategory> = {
+    id: 'status',
+    header: t('status'),
+    cell: ({ row }) => <SubCategoryActiveToggleCell subCategory={row.original} />,
+    enableSorting: false,
+  }
+
   const actionsColumn: ColumnDef<SubCategory> = {
     id: 'actions',
     header: t('actions'),
@@ -156,5 +164,5 @@ export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
     enableHiding: false,
   }
 
-  return [selectColumn, nameColumn, categoryColumn, actionsColumn]
+  return [selectColumn, nameColumn, categoryColumn, statusColumn, actionsColumn]
 }

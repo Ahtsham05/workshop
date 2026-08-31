@@ -6,6 +6,7 @@ import { CategoriesProvider } from './context/categories-context'
 import { CategoriesTable } from './components/categories-table'
 import { CategoriesActionDialog } from './components/categories-action-dialog'
 import { CategoriesDeleteDialog } from './components/categories-delete-dialog'
+import { CategoryImportDialog } from './components/category-import-dialog'
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 import CategoriesPrimaryButtons from './components/categories-primary-buttons'
 import { useLanguage } from '@/context/language-context'
@@ -145,6 +146,7 @@ export default function CategoriesIndex() {
 
         <CategoriesActionDialog setFetch={setFetch} />
         <CategoriesDeleteDialog setFetch={setFetch} />
+        <CategoryImportDialog setFetch={setFetch} />
         <BulkDeleteDialog
           open={bulkDeleteOpen}
           onOpenChange={setBulkDeleteOpen}

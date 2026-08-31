@@ -59,6 +59,10 @@ BrandSchema.pre('save', function (next) {
     next();
 });
 
+// Exposed as a static so callers that bypass the pre('save') hook (e.g. insertMany()
+// during bulk import) can still compute the same slug the single-create path would.
+BrandSchema.statics.slugify = slugify;
+
 BrandSchema.plugin(syncVersionPlugin);
 BrandSchema.plugin(toJSON);
 BrandSchema.plugin(paginate);

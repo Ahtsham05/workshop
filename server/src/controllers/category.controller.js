@@ -81,6 +81,29 @@ const deleteCategory = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const bulkAddCategories = catchAsync(async (req, res) => {
+  const { categories } = req.body;
+
+  if (!categories || !Array.isArray(categories) || categories.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Categories array is required');
+  }
+
+  const result = await categoryService.bulkAddCategories(categories, getBranchContext(req));
+
+  const skippedCount = result.warnings?.length || 0;
+  const failedCount = result.errors?.length || 0;
+  const skippedNote = skippedCount ? ` (${skippedCount} already existed)` : '';
+  const failedNote = failedCount ? ` (${failedCount} failed)` : '';
+  const message = result.insertedCount === 0
+    ? `No categories were imported${failedCount ? ` — ${failedCount} row(s) failed validation` : ''}${skippedNote}`
+    : `Imported ${result.insertedCount} of ${categories.length} categories${skippedNote}${failedNote}`;
+
+  res.status(httpStatus.CREATED).send({
+    message,
+    ...result,
+  });
+});
+
 const bulkDeleteCategories = catchAsync(async (req, res) => {
   const { ids } = req.body;
   const { deleted, notFoundIds } = await categoryService.bulkDeleteCategoriesByIds(ids);
@@ -144,6 +167,7 @@ module.exports = {
   getCategory,
   updateCategory,
   deleteCategory,
+  bulkAddCategories,
   bulkDeleteCategories,
   uploadCategoryImage,
   deleteCategoryImage,

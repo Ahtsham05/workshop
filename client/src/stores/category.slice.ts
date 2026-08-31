@@ -12,6 +12,7 @@ export interface Category {
     url: string
     publicId: string
   }
+  isActive?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -91,6 +92,17 @@ export const deleteCategory = createAsyncThunk(
       url: `${summery.deleteCategory.url}/${id}`,
     })
     return { id }
+  })
+)
+
+export const bulkAddCategories = createAsyncThunk(
+  'category/bulkAddCategories',
+  catchAsync(async (data: { categories: Array<{ name: string; nameUrdu?: string }> }) => {
+    const response = await Axios({
+      ...summery.bulkAddCategories,
+      data,
+    })
+    return response.data
   })
 )
 
@@ -186,6 +198,21 @@ const categorySlice = createSlice({
       .addCase(deleteCategory.rejected, (state, action) => {
         state.loading = false
         state.error = action.error.message || 'Failed to delete category'
+      })
+
+      // Bulk add categories (Excel import)
+      .addCase(bulkAddCategories.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(bulkAddCategories.fulfilled, (state, action) => {
+        state.loading = false
+        const inserted = action.payload?.categories || []
+        state.categories = [...inserted, ...state.categories]
+      })
+      .addCase(bulkAddCategories.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.error.message || 'Failed to import categories'
       })
 
       // Bulk delete categories

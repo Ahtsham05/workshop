@@ -83,6 +83,71 @@ const deleteCategoryById = async (categoryId) => {
   return category;
 };
 
+const BULK_IMPORT_CHUNK_SIZE = 500;
+
+/**
+ * Bulk add categories (Excel/CSV import). Categories have no unique index on name, so
+ * without an explicit check here a re-import (or a file with the same name twice) would
+ * silently double up every row — instead, a name that already exists for this org/branch
+ * (case-insensitive) is skipped and reported as a warning rather than duplicated.
+ * @param {Array<{name: string, nameUrdu?: string}>} categoriesToAdd
+ * @param {Object} branchContext - { organizationId, branchId, createdBy }
+ * @returns {Promise<Object>}
+ */
+const bulkAddCategories = async (categoriesToAdd, branchContext = {}) => {
+  const { organizationId, branchId, createdBy } = branchContext;
+
+  const existing = await Category.find({ organizationId, branchId }).select('name').lean();
+  const existingNames = new Set(existing.map((c) => c.name.trim().toLowerCase()));
+
+  const errors = [];
+  const warnings = [];
+  const validDocs = [];
+  const seenInBatch = new Set();
+
+  categoriesToAdd.forEach((category, index) => {
+    const name = (category.name || '').toString().trim();
+    if (!name) {
+      errors.push({ index, name: '', error: 'Category name is required' });
+      return;
+    }
+
+    const key = name.toLowerCase();
+    if (existingNames.has(key)) {
+      warnings.push({ index, name, message: `Category "${name}" already exists — skipped` });
+      return;
+    }
+    if (seenInBatch.has(key)) {
+      warnings.push({ index, name, message: `Duplicate "${name}" in this file — skipped` });
+      return;
+    }
+    seenInBatch.add(key);
+
+    validDocs.push({
+      name,
+      ...(category.nameUrdu ? { nameUrdu: category.nameUrdu.toString().trim() } : {}),
+      organizationId,
+      branchId,
+      createdBy,
+    });
+  });
+
+  const insertedCategories = [];
+  for (let i = 0; i < validDocs.length; i += BULK_IMPORT_CHUNK_SIZE) {
+    const chunk = validDocs.slice(i, i + BULK_IMPORT_CHUNK_SIZE);
+    const inserted = await Category.insertMany(chunk, { ordered: false });
+    insertedCategories.push(...inserted);
+  }
+
+  return {
+    success: insertedCategories.length > 0,
+    insertedCount: insertedCategories.length,
+    categories: insertedCategories,
+    errors,
+    warnings,
+  };
+};
+
 /**
  * Delete many categories by id, skipping ones that don't exist rather than failing
  * the whole batch.
@@ -106,5 +171,6 @@ module.exports = {
   getCategoryById,
   updateCategoryById,
   deleteCategoryById,
+  bulkAddCategories,
   bulkDeleteCategoriesByIds,
 };

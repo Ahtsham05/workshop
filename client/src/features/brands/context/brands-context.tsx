@@ -5,17 +5,20 @@ type Action =
   | { type: 'SET_OPEN'; payload: boolean }
   | { type: 'SET_BRAND'; payload: Brand | null }
   | { type: 'SET_DELETE_OPEN'; payload: boolean }
+  | { type: 'SET_IMPORT_OPEN'; payload: boolean }
 
 interface State {
   open: boolean
   currentBrand: Brand | null
   deleteOpen: boolean
+  importOpen: boolean
 }
 
 const initialState: State = {
   open: false,
   currentBrand: null,
   deleteOpen: false,
+  importOpen: false,
 }
 
 const BrandsContext = createContext<{
@@ -31,6 +34,8 @@ function brandsReducer(state: State, action: Action): State {
       return { ...state, currentBrand: action.payload }
     case 'SET_DELETE_OPEN':
       return { ...state, deleteOpen: action.payload }
+    case 'SET_IMPORT_OPEN':
+      return { ...state, importOpen: action.payload }
     default:
       return state
   }

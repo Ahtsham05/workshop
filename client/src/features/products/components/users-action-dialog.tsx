@@ -186,6 +186,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const imei1InputRef = useRef<HTMLInputElement>(null)
   const imei2InputRef = useRef<HTMLInputElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
+  // Description mirrors the product name as it's typed, until the user edits description
+  // directly — then it's theirs and name changes stop overwriting it. Only for new products;
+  // editing an existing one starts with description already "owned" by the user.
+  const descriptionAutoSyncRef = useRef(!isEdit)
   const tagsInputRef = useRef<HTMLInputElement>(null)
 
   const dispatch = useDispatch<AppDispatch>()
@@ -269,6 +273,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
 
   useEffect(() => {
     if (!open) return
+    descriptionAutoSyncRef.current = !isEdit
     if (isEdit && activeRow) {
       form.reset({
         name: activeRow.name || '',
@@ -535,9 +540,19 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   // to whichever categories are already selected on this product.
   const categoriesWatch = form.watch('categories')
   const selectedCategoryIds = (categoriesWatch || []).map((c) => c._id)
+  // Deactivated categories/sub-categories are hidden from the pickers so they can't be
+  // newly attached to a product — except one already selected on this product, which
+  // stays visible/removable so editing an existing product never silently hides its
+  // current category or sub-category.
+  const subCategoriesWatch = form.watch('subCategories')
+  const selectedSubCategoryIds = new Set((subCategoriesWatch || []).map((sc) => sc._id))
   const availableSubCategories = subCategories.filter((sc) => {
     const parentId = typeof sc.category === 'object' ? sc.category?.id : sc.category
-    return parentId && selectedCategoryIds.includes(parentId)
+    if (!parentId || !selectedCategoryIds.includes(parentId)) return false
+    if (selectedSubCategoryIds.has(sc.id)) return true
+    const parentCategory = categories.find((c) => c.id === parentId)
+    const parentIsActive = parentCategory ? parentCategory.isActive !== false : true
+    return sc.isActive !== false && parentIsActive
   })
 
   // If a category is removed, drop any of its sub-categories that were already selected
@@ -927,6 +942,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         voiceInputSize="sm"
                         className='min-h-11 text-base'
                         {...field}
+                        onChange={(e) => {
+                          field.onChange(e)
+                          if (descriptionAutoSyncRef.current) {
+                            form.setValue('description', e.target.value)
+                          }
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -968,6 +989,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         showVoiceInput={true}
                         voiceInputSize="sm"
                         {...field}
+                        onChange={(e) => {
+                          // Once the user edits description themselves, it's theirs —
+                          // stop overwriting it as they keep typing the product name.
+                          descriptionAutoSyncRef.current = false
+                          field.onChange(e)
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1063,7 +1090,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                               <CommandEmpty>{t('no_categories_found')}</CommandEmpty>
                               <CommandList>
                                 <CommandGroup>
-                                  {categories.map((category) => {
+                                  {categories
+                                    .filter((category) => category.isActive !== false || field.value?.some(c => c._id === category.id))
+                                    .map((category) => {
                                     const isSelected = field.value?.some(c => c._id === category.id) || false
                                     return (
                                       <CommandItem

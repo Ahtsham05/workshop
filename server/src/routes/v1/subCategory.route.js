@@ -48,8 +48,16 @@ router
     subCategoryController.fetchImageFromSearch,
   );
 
-// Registered before the `/:subCategoryId` catch-all below so `/bulk-delete` isn't
-// swallowed as a subCategoryId.
+// Registered before the `/:subCategoryId` catch-all below so `/bulk-import`/`/bulk-delete`
+// aren't swallowed as a subCategoryId.
+router
+  .route('/bulk-import')
+  .post(
+    auth('createCategories'),
+    validate(subCategoryValidation.bulkImportSubCategories),
+    subCategoryController.bulkImportSubCategories
+  );
+
 router
   .route('/bulk-delete')
   .delete(

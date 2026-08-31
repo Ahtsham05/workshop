@@ -40,8 +40,12 @@ router
     categoryController.fetchImageFromSearch,
   );
 
-// Registered before the `/:categoryId` catch-all below so `/bulk-delete` isn't
-// swallowed as a categoryId.
+// Registered before the `/:categoryId` catch-all below so `/bulk`/`/bulk-delete`
+// aren't swallowed as a categoryId.
+router
+  .route('/bulk')
+  .post(auth('createCategories'), validate(categoryValidation.bulkAddCategories), categoryController.bulkAddCategories);
+
 router
   .route('/bulk-delete')
   .delete(auth('deleteCategories'), validate(categoryValidation.bulkDeleteCategories), categoryController.bulkDeleteCategories);

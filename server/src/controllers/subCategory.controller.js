@@ -88,6 +88,32 @@ const updateSubCategory = catchAsync(async (req, res) => {
   res.send(subCategory);
 });
 
+const bulkImportSubCategories = catchAsync(async (req, res) => {
+  const { items } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Sub-categories array is required');
+  }
+
+  const result = await subCategoryService.bulkImportSubCategories(items, getBranchContext(req));
+
+  const skippedCount = result.warnings?.length || 0;
+  const failedCount = result.errors?.length || 0;
+  const skippedNote = skippedCount ? ` (${skippedCount} already existed)` : '';
+  const failedNote = failedCount ? ` (${failedCount} failed)` : '';
+  const categoryNote = result.createdCategories?.length
+    ? ` — created ${result.createdCategories.length} new categor${result.createdCategories.length === 1 ? 'y' : 'ies'}`
+    : '';
+  const message = result.insertedCount === 0
+    ? `No sub-categories were imported${failedCount ? ` — ${failedCount} row(s) failed validation` : ''}${skippedNote}`
+    : `Imported ${result.insertedCount} of ${items.length} sub-categories${skippedNote}${failedNote}${categoryNote}`;
+
+  res.status(httpStatus.CREATED).send({
+    message,
+    ...result,
+  });
+});
+
 const deleteSubCategory = catchAsync(async (req, res) => {
   await subCategoryService.deleteSubCategoryById(req.params.subCategoryId);
   res.status(httpStatus.NO_CONTENT).send();
@@ -150,6 +176,7 @@ const fetchImageFromSearch = catchAsync(async (req, res) => {
 module.exports = {
   createSubCategory,
   bulkCreateSubCategories,
+  bulkImportSubCategories,
   getSubCategories,
   getAllSubCategories,
   getSubCategory,

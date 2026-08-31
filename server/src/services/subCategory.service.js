@@ -106,6 +106,105 @@ const deleteSubCategoryById = async (subCategoryId) => {
   return subCategory;
 };
 
+const BULK_IMPORT_CHUNK_SIZE = 500;
+
+/**
+ * Bulk import sub-categories from a spreadsheet. Unlike bulkCreateSubCategories above
+ * (the tag-field UI's "add several names under one already-selected category" flow),
+ * every row here carries its own free-text parent category name — resolved
+ * case-insensitively against existing categories and auto-created when it doesn't exist
+ * yet, the same behavior product import already uses for category/sub-category names.
+ * A (category, name) pair that already exists is skipped and reported as a warning
+ * rather than duplicated, same reasoning as bulkAddCategories.
+ * @param {Array<{name: string, nameUrdu?: string, category: string}>} items
+ * @param {Object} branchContext - { organizationId, branchId, createdBy }
+ * @returns {Promise<Object>}
+ */
+const bulkImportSubCategories = async (items, branchContext = {}) => {
+  const { organizationId, branchId, createdBy } = branchContext;
+
+  const categoryNames = [...new Set(items.map((item) => (item.category || '').toString().trim()).filter(Boolean))];
+
+  const existingCategories = await Category.find({ organizationId, branchId }).select('name').lean();
+  const categoryByLower = new Map(existingCategories.map((c) => [c.name.trim().toLowerCase(), c]));
+
+  const createdCategories = [];
+  const missingCategoryNames = categoryNames.filter((name) => !categoryByLower.has(name.toLowerCase()));
+  if (missingCategoryNames.length) {
+    const docs = missingCategoryNames.map((name) => ({ name, organizationId, branchId, createdBy }));
+    const inserted = await Category.insertMany(docs, { ordered: false });
+    inserted.forEach((c) => {
+      categoryByLower.set(c.name.trim().toLowerCase(), c);
+      createdCategories.push(c.name);
+    });
+  }
+
+  const existingSubCategories = await SubCategory.find({ organizationId, branchId }).select('name category').lean();
+  const subByKey = new Map(existingSubCategories.map((s) => [`${s.category}::${s.name.trim().toLowerCase()}`, s]));
+
+  const errors = [];
+  const warnings = [];
+  const validDocs = [];
+  const seenInBatch = new Set();
+
+  items.forEach((item, index) => {
+    const name = (item.name || '').toString().trim();
+    const categoryName = (item.category || '').toString().trim();
+
+    if (!name) {
+      errors.push({ index, name: '', error: 'Sub-category name is required' });
+      return;
+    }
+    if (!categoryName) {
+      errors.push({ index, name, error: 'Parent category is required' });
+      return;
+    }
+
+    const category = categoryByLower.get(categoryName.toLowerCase());
+    if (!category) {
+      // Shouldn't happen — every referenced name was just resolved/created above.
+      errors.push({ index, name, error: `Category "${categoryName}" could not be resolved` });
+      return;
+    }
+
+    const key = `${category._id}::${name.toLowerCase()}`;
+    if (subByKey.has(key)) {
+      warnings.push({ index, name, message: `Sub-category "${name}" already exists under "${category.name}" — skipped` });
+      return;
+    }
+    if (seenInBatch.has(key)) {
+      warnings.push({ index, name, message: `Duplicate "${name}" under "${category.name}" in this file — skipped` });
+      return;
+    }
+    seenInBatch.add(key);
+
+    validDocs.push({
+      name,
+      ...(item.nameUrdu ? { nameUrdu: item.nameUrdu.toString().trim() } : {}),
+      category: category._id,
+      organizationId,
+      branchId,
+      createdBy,
+    });
+  });
+
+  const insertedSubCategories = [];
+  for (let i = 0; i < validDocs.length; i += BULK_IMPORT_CHUNK_SIZE) {
+    const chunk = validDocs.slice(i, i + BULK_IMPORT_CHUNK_SIZE);
+    const inserted = await SubCategory.insertMany(chunk, { ordered: false });
+    insertedSubCategories.push(...inserted);
+  }
+
+  return {
+    success: insertedSubCategories.length > 0,
+    insertedCount: insertedSubCategories.length,
+    subCategories: insertedSubCategories,
+    errors,
+    warnings,
+    createdCategories,
+  };
+};
+
 /**
  * Delete many sub-categories by id, skipping ones that don't exist rather than failing
  * the whole batch.
@@ -130,5 +229,6 @@ module.exports = {
   getSubCategoryById,
   updateSubCategoryById,
   deleteSubCategoryById,
+  bulkImportSubCategories,
   bulkDeleteSubCategoriesByIds,
 };

@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { usePermissions } from '@/context/permission-context'
+import { CategoryActiveToggleCell } from './category-active-toggle-cell'
 
 export function useCategoryColumns(
   subCategoriesByCategory: Record<string, Array<{ id: string; name: string }>> = {}
@@ -128,6 +129,13 @@ export function useCategoryColumns(
     },
   }
 
+  const statusColumn: ColumnDef<Category> = {
+    id: 'status',
+    header: t('status'),
+    cell: ({ row }) => <CategoryActiveToggleCell category={row.original} />,
+    enableSorting: false,
+  }
+
   const actionsColumn: ColumnDef<Category> = {
     id: 'actions',
     header: t('actions'),
@@ -174,8 +182,8 @@ export function useCategoryColumns(
   // Return columns in different order based on language
   if (language === 'ur') {
     // return [selectColumn, actionsColumn, nameColumn]
-    return [selectColumn, nameColumn, actionsColumn]
+    return [selectColumn, nameColumn, statusColumn, actionsColumn]
   } else {
-    return [selectColumn, nameColumn, actionsColumn]
+    return [selectColumn, nameColumn, statusColumn, actionsColumn]
   }
 }

@@ -166,7 +166,7 @@ export default function Products() {
   useEffect(() => {
     if (!isBreakdownMode) return
     setLoadingCategoryBreakdown(true)
-    dispatch(fetchCategoryBreakdown())
+    dispatch(fetchCategoryBreakdown({}))
       .then((data) => {
         setCategoryBreakdown(data.payload?.data || [])
         setLoadingCategoryBreakdown(false)

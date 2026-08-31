@@ -67,6 +67,7 @@ const updateSubCategory = {
         url: Joi.string(),
         publicId: Joi.string(),
       }).optional(),
+      isActive: Joi.boolean(),
     })
     .min(1),
 };
@@ -80,6 +81,21 @@ const deleteSubCategory = {
 const bulkDeleteSubCategories = {
   body: Joi.object().keys({
     ids: Joi.array().items(Joi.string()).required().min(1),
+  }),
+};
+
+const bulkImportSubCategories = {
+  body: Joi.object().keys({
+    items: Joi.array()
+      .items(
+        Joi.object().keys({
+          name: Joi.string().trim().min(1).required(),
+          nameUrdu: Joi.string().allow('').optional(),
+          category: Joi.string().trim().min(1).required(),
+        })
+      )
+      .min(1)
+      .required(),
   }),
 };
 
@@ -98,5 +114,6 @@ module.exports = {
   updateSubCategory,
   deleteSubCategory,
   bulkDeleteSubCategories,
+  bulkImportSubCategories,
   fetchImageFromSearch,
 };

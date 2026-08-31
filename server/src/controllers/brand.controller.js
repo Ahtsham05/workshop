@@ -64,9 +64,43 @@ const updateBrand = catchAsync(async (req, res) => {
   res.send(brand);
 });
 
+const bulkAddBrands = catchAsync(async (req, res) => {
+  const { brands } = req.body;
+
+  if (!brands || !Array.isArray(brands) || brands.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Brands array is required');
+  }
+
+  const result = await brandService.bulkAddBrands(brands, getBranchContext(req));
+
+  const skippedCount = result.warnings?.length || 0;
+  const failedCount = result.errors?.length || 0;
+  const skippedNote = skippedCount ? ` (${skippedCount} already existed)` : '';
+  const failedNote = failedCount ? ` (${failedCount} failed)` : '';
+  const message = result.insertedCount === 0
+    ? `No brands were imported${failedCount ? ` — ${failedCount} row(s) failed validation` : ''}${skippedNote}`
+    : `Imported ${result.insertedCount} of ${brands.length} brands${skippedNote}${failedNote}`;
+
+  res.status(httpStatus.CREATED).send({
+    message,
+    ...result,
+  });
+});
+
 const deleteBrand = catchAsync(async (req, res) => {
   await brandService.softDeleteBrandById(req.params.brandId);
   res.status(httpStatus.NO_CONTENT).send();
+});
+
+const bulkDeleteBrands = catchAsync(async (req, res) => {
+  const { ids } = req.body;
+  const { deleted, notFoundIds } = await brandService.bulkSoftDeleteBrandsByIds(ids);
+  res.send({
+    message: `Deactivated ${deleted.length} of ${ids.length} brand(s)`,
+    deletedCount: deleted.length,
+    deletedIds: deleted.map((brand) => brand._id),
+    notFoundIds,
+  });
 });
 
 const uploadBrandLogo = catchAsync(async (req, res) => {
@@ -111,7 +145,9 @@ module.exports = {
   getAllBrands,
   getBrand,
   updateBrand,
+  bulkAddBrands,
   deleteBrand,
+  bulkDeleteBrands,
   uploadBrandLogo,
   deleteBrandLogo,
   fetchImageFromSearch,
