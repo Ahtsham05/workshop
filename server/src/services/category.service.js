@@ -12,6 +12,21 @@ const createCategory = async (categoryBody) => {
   return category.save();
 };
 
+// `isActive` was added after this collection already had real data — a category saved
+// before that has no `isActive` field stored at all (not `false`, genuinely absent).
+// Mongoose applies the schema default (`true`) when it hydrates a document, so those
+// categories already display and behave as active everywhere — but a raw MongoDB sort
+// treats a missing field as lower than `false`, which would push every pre-existing
+// category to the very bottom, below ones a user has actually deactivated. Backfilling
+// the stored value once fixes the sort at the source. Guarded so it only ever touches
+// documents that genuinely lack the field, and only runs once per server process.
+let categoriesIsActiveBackfilled = false;
+const ensureCategoriesIsActiveBackfilled = async () => {
+  if (categoriesIsActiveBackfilled) return;
+  await Category.updateMany({ isActive: { $exists: false } }, { $set: { isActive: true } });
+  categoriesIsActiveBackfilled = true;
+};
+
 /**
  * Query for categories
  * @param {Object} filter - Mongo filter
@@ -24,6 +39,7 @@ const createCategory = async (categoryBody) => {
  * @returns {Promise<QueryResult>}
  */
 const queryCategories = async (filter, options) => {
+  await ensureCategoriesIsActiveBackfilled();
   const categories = await Category.paginate(filter, options);
   return categories;
 };

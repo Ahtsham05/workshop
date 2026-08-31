@@ -34,7 +34,10 @@ export default function BrandsIndex() {
   const { data, isFetching } = useGetBrandsQuery({
     page: currentPage,
     limit,
-    sortBy: 'createdAt:desc',
+    // Brand uses a 'active'/'inactive' status string rather than a boolean, and 'active'
+    // sorts before 'inactive' alphabetically — status:asc puts active brands first,
+    // inactive last, same end result as Products' isActive:desc.
+    sortBy: 'status:asc,createdAt:desc',
     ...(q ? { search: q, fieldName: 'name' } : {}),
   })
   // Stable reference across renders — `data?.results || []` would otherwise create a new

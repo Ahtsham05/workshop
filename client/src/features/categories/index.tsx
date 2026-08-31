@@ -77,7 +77,9 @@ export default function CategoriesIndex() {
     const params = {
       page: currentPage,
       limit: limit,
-      sortBy: 'createdAt:desc',
+      // Active categories first, inactive last (like Products' isActive:desc sort) —
+      // newest-first within each group.
+      sortBy: 'isActive:desc,createdAt:desc',
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.category } : {}),
     }
     

@@ -93,7 +93,9 @@ function SubCategoriesContent() {
     const params = {
       page: currentPage,
       limit: limit,
-      sortBy: 'createdAt:desc',
+      // Active sub-categories first, inactive last (like Products' isActive:desc sort) —
+      // newest-first within each group.
+      sortBy: 'isActive:desc,createdAt:desc',
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.category } : {}),
       ...(categoryFilter !== 'all' ? { category: categoryFilter } : {}),
     }

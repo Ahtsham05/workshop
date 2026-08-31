@@ -46,7 +46,17 @@ const bulkCreateSubCategories = async (categoryId, items, branchContext = {}) =>
  * @param {Object} options - Query options
  * @returns {Promise<QueryResult>}
  */
+// See category.service.js#ensureCategoriesIsActiveBackfilled for why this exists — same
+// "field added after real data already existed" backfill, one-time and additive-only.
+let subCategoriesIsActiveBackfilled = false;
+const ensureSubCategoriesIsActiveBackfilled = async () => {
+  if (subCategoriesIsActiveBackfilled) return;
+  await SubCategory.updateMany({ isActive: { $exists: false } }, { $set: { isActive: true } });
+  subCategoriesIsActiveBackfilled = true;
+};
+
 const querySubCategories = async (filter, options) => {
+  await ensureSubCategoriesIsActiveBackfilled();
   const subCategories = await SubCategory.paginate(filter, { ...options, populate: 'category' });
   return subCategories;
 };
