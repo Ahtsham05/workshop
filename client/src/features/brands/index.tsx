@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BrandsProvider } from './context/brands-context'
 import { BrandsTable } from './components/brands-table'
 import { BrandsActionDialog } from './components/brands-action-dialog'
@@ -37,6 +37,10 @@ export default function BrandsIndex() {
     sortBy: 'createdAt:desc',
     ...(q ? { search: q, fieldName: 'name' } : {}),
   })
+  // Stable reference across renders — `data?.results || []` would otherwise create a new
+  // array every render (even when data hasn't changed), which the selection-sync effect
+  // in BrandsTable depends on, causing setSelectedBrands -> re-render -> new [] -> loop.
+  const brands = useMemo(() => data?.results || [], [data])
 
   return (
     <BrandsProvider>
@@ -51,7 +55,7 @@ export default function BrandsIndex() {
 
         <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
           <BrandsTable
-            brands={data?.results || []}
+            brands={brands}
             loading={isFetching}
             toolbarLeading={
               <Input
