@@ -1,5 +1,13 @@
 const Joi = require('joi');
 
+const attachmentEntry = Joi.object().keys({
+  url: Joi.string().required(),
+  publicId: Joi.string().required(),
+  fileName: Joi.string().allow('').optional(),
+  fileType: Joi.string().valid('image', 'pdf').optional(),
+  fileSize: Joi.number().optional(),
+});
+
 // Each entry is either a plain IMEI string, or a { imei, imei2 } pair for dual-SIM phones.
 const imeiEntry = Joi.alternatives().try(
   Joi.string().trim(),
@@ -71,6 +79,7 @@ const createPurchase = {
     paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet').optional(),
     purchaseDate: Joi.date(),
     notes: Joi.string().allow(''),
+    attachments: Joi.array().items(attachmentEntry).optional(),
   }),
 };
 
@@ -149,6 +158,7 @@ const updatePurchase = {
     paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet').optional(),
     purchaseDate: Joi.date(),
     notes: Joi.string().allow(''),
+    attachments: Joi.array().items(attachmentEntry).optional(),
   }),
 };
 

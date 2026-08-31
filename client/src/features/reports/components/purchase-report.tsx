@@ -32,6 +32,7 @@ import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
+import { PurchaseAttachmentsButton } from '@/features/purchase-invoice/components/purchase-attachments-button'
 
 interface PurchaseReportProps {
   startDate: string
@@ -709,6 +710,15 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                       <p className='text-muted-foreground text-xs'>{viewInvoice.supplierPhone}</p>
                     )}
                   </div>
+                  {viewInvoice.attachments && viewInvoice.attachments.length > 0 && (
+                    <div className='space-y-1'>
+                      <p className='text-muted-foreground'>Attachments</p>
+                      <PurchaseAttachmentsButton
+                        attachments={viewInvoice.attachments}
+                        contextLabel={viewInvoice.invoiceNumber}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <Separator />

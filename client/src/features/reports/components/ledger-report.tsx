@@ -40,6 +40,7 @@ import {
   type ActivitySummaryEntry,
   type SalesInvoiceDetail,
   type PurchaseInvoiceDetail,
+  type PurchaseInvoiceDetailAttachment,
   type ReportBatchAllocation,
 } from '@/stores/reports.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -52,6 +53,7 @@ import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { formatImeiEntries } from '@/stores/imei.api'
+import { PurchaseAttachmentsButton } from '@/features/purchase-invoice/components/purchase-attachments-button'
 
 interface LedgerReportProps {
   startDate: string
@@ -95,6 +97,8 @@ interface LedgerEntry {
   paidAmount: number
   balance: number
   items: LedgerItem[]
+  /** Only ever set for module === 'Purchases' rows — see purchaseEntryFromDetail. */
+  attachments?: PurchaseInvoiceDetailAttachment[]
 }
 
 interface LedgerRow extends LedgerEntry {
@@ -134,6 +138,7 @@ const purchaseEntryFromDetail = (p: PurchaseInvoiceDetail): LedgerEntry => ({
   paidAmount: p.paidAmount,
   balance: p.balance,
   items: p.items.map((item) => ({ ...item })),
+  attachments: p.attachments,
 })
 
 // Every other module (load sale/purchase, and — when "Include All Cash Activities"
@@ -701,7 +706,20 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
                               </Badge>
                               <div className='text-xs text-muted-foreground mt-0.5'>{row.subType}</div>
                             </TableCell>
-                            <TableCell className='text-sm font-mono'>{row.reference || '—'}</TableCell>
+                            <TableCell className='text-sm font-mono'>
+                              <div className='flex items-center gap-1'>
+                                {row.reference || '—'}
+                                {row.attachments && row.attachments.length > 0 && (
+                                  <span onClick={(e) => e.stopPropagation()}>
+                                    <PurchaseAttachmentsButton
+                                      attachments={row.attachments}
+                                      contextLabel={row.reference}
+                                      iconOnly
+                                    />
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>
                               <div className='text-sm font-medium'>{row.party}</div>
                               {row.partyPhone && <div className='text-xs text-muted-foreground'>{row.partyPhone}</div>}

@@ -146,6 +146,31 @@ export const purchaseApi = createApi({
       query: () => '/next-number',
       providesTags: ['Purchase'],
     }),
+
+    // Uploads one attachment (image or PDF — a scanned copy of the supplier's physical
+    // invoice) and hands back its Cloudinary reference. Doesn't touch any Purchase
+    // document itself — the caller accumulates these into an `attachments` array and
+    // saves it through the normal create/update mutations above, same "upload first,
+    // attach the url via the regular save" pattern products/categories use for images.
+    // `body` is a FormData instance — fetchBaseQuery lets that pass through untouched
+    // (no forced JSON Content-Type), so the browser sets the multipart boundary itself.
+    uploadPurchaseAttachment: builder.mutation<
+      { url: string; publicId: string; fileName: string; fileType: 'image' | 'pdf'; fileSize: number },
+      File
+    >({
+      query: (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        return { url: '/upload-attachment', method: 'POST', body: formData }
+      },
+    }),
+
+    // Cloudinary-side cleanup for an attachment removed before/during a save — the
+    // Purchase document's `attachments` array itself is updated separately by whichever
+    // create/update call the caller makes next with the trimmed array.
+    deletePurchaseAttachment: builder.mutation<{ message: string }, string>({
+      query: (publicId) => ({ url: '/delete-attachment', method: 'DELETE', body: { publicId } }),
+    }),
   }),
 })
 
@@ -159,4 +184,6 @@ export const {
   useGetPurchasesByDateQuery,
   useGetPurchasesBySupplierQuery,
   useGetNextPurchaseNumberQuery,
+  useUploadPurchaseAttachmentMutation,
+  useDeletePurchaseAttachmentMutation,
 } = purchaseApi

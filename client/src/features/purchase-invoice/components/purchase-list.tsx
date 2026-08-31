@@ -23,6 +23,7 @@ import { useGetPurchasesQuery } from '@/stores/purchase.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
+import { PurchaseAttachmentsButton } from './purchase-attachments-button'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { BilingualName } from '@/components/bilingual-name'
@@ -335,6 +336,12 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                           </DialogContent>
                         </Dialog>
 
+                        <PurchaseAttachmentsButton
+                          attachments={purchase.attachments}
+                          contextLabel={purchase.invoiceNumber}
+                          iconOnly
+                        />
+
                         {canEdit && onEdit && (
                           <Button variant="ghost" size="sm" onClick={() => onEdit(purchase)}>
                             <Edit className="h-4 w-4" />
@@ -564,6 +571,14 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
             {purchase.status ? t('Completed') : t('Pending')}
           </Badge>
         </div>
+        {purchase.attachments?.length > 0 && (
+          <div>
+            <Label>{t('attachments')}</Label>
+            <div className='mt-1'>
+              <PurchaseAttachmentsButton attachments={purchase.attachments} contextLabel={purchase.invoiceNumber} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Purchase Items */}

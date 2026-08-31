@@ -5,6 +5,8 @@ const { purchaseService, supplierService, productService, auditLogService } = re
 const purchaseVisionService = require('../services/purchaseVision.service');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { uploadAttachmentToCloudinary } = require('../middlewares/attachmentUpload');
+const { deleteFromCloudinary } = require('../middlewares/upload');
 
 const TRACKED_PURCHASE_FIELDS = ['totalAmount', 'paidAmount', 'balance', 'status', 'items', 'vendorBillNumber'];
 
@@ -158,6 +160,46 @@ const scanPurchaseImage = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+// Uploads one attachment (image or PDF) and hands back its Cloudinary reference — it does
+// NOT touch any Purchase document. The caller (New/Edit Purchase form) accumulates these
+// into an `attachments` array client-side and sends the whole array through the normal
+// create/update endpoints, same "upload first, attach the url via the regular save" pattern
+// products/categories/brands already use for images.
+const uploadPurchaseAttachment = catchAsync(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No file provided');
+  }
+
+  const result = await uploadAttachmentToCloudinary(req.file.buffer, req.file.mimetype, {
+    public_id: `purchase_attachment_${Date.now()}`,
+  });
+
+  res.send({
+    url: result.secure_url,
+    publicId: result.public_id,
+    fileName: req.file.originalname,
+    fileType: req.file.mimetype === 'application/pdf' ? 'pdf' : 'image',
+    fileSize: req.file.size,
+  });
+});
+
+// Cloudinary-side cleanup for an attachment the user removed before saving (or is removing
+// as part of an edit) — mirrors category/brand's delete-image endpoints. The Purchase
+// document itself is updated separately by the normal PATCH, which sends the trimmed
+// `attachments` array.
+const deletePurchaseAttachment = catchAsync(async (req, res) => {
+  const { publicId } = req.body;
+  if (!publicId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Public ID is required');
+  }
+  try {
+    await deleteFromCloudinary(publicId);
+    res.send({ message: 'Attachment deleted successfully' });
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Attachment deletion failed');
+  }
+});
+
 module.exports = {
   createPurchase,
   getPurchases,
@@ -167,4 +209,6 @@ module.exports = {
   getPurchaseByDate,
   scanPurchaseImage,
   getNextPurchaseInvoiceNumber,
+  uploadPurchaseAttachment,
+  deletePurchaseAttachment,
 };

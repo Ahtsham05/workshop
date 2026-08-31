@@ -132,6 +132,15 @@ export interface PurchaseInvoiceItem {
   expiryDate?: string | null
 }
 
+export interface PurchaseInvoiceDetailAttachment {
+  url: string
+  publicId: string
+  fileName?: string
+  fileType?: 'image' | 'pdf'
+  fileSize?: number
+  uploadedAt?: string
+}
+
 export interface PurchaseInvoiceDetail {
   _id: string
   invoiceNumber: string
@@ -145,6 +154,7 @@ export interface PurchaseInvoiceDetail {
   supplierName: string
   supplierNameUrdu?: string
   supplierPhone?: string
+  attachments?: PurchaseInvoiceDetailAttachment[]
   items: PurchaseInvoiceItem[]
 }
 

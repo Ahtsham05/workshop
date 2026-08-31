@@ -39,6 +39,8 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { LedgerEntryForm } from './ledger-entry-form';
 import { purchaseApi, useGetPurchaseByIdQuery } from '@/stores/purchase.api';
+import { PurchaseAttachmentsButton } from '@/features/purchase-invoice/components/purchase-attachments-button';
+import type { PurchaseAttachment } from '@/features/purchase-invoice';
 import { invoiceApi, useGetInvoiceByIdQuery } from '@/stores/invoice.api';
 import { returnsApi, useGetPurchaseReturnByIdQuery } from '@/stores/returns.api';
 import { PaymentReceipt } from './payment-receipt';
@@ -184,6 +186,14 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
           <p className="text-sm text-gray-500">{t('Total Amount')}</p>
           <p className="font-medium text-lg">Rs{formatCurrency(purchaseData.totalAmount || purchaseData.total)}</p>
         </div>
+        {purchaseData.attachments?.length > 0 && (
+          <div>
+            <p className="text-sm text-gray-500">{t('attachments')}</p>
+            <div className="mt-1">
+              <PurchaseAttachmentsButton attachments={purchaseData.attachments} contextLabel={purchaseData.invoiceNumber} />
+            </div>
+          </div>
+        )}
       </div>
       <div>
         <p className="text-sm text-gray-500 mb-2">{t('Items')}</p>
@@ -408,6 +418,10 @@ function PurchaseReturnDialogContent({
     typeof pr.purchaseId === 'object' && pr.purchaseId != null
       ? (pr.purchaseId as { vendorBillNumber?: string }).vendorBillNumber
       : undefined;
+  const purchaseAttachments =
+    typeof pr.purchaseId === 'object' && pr.purchaseId != null
+      ? (pr.purchaseId as { attachments?: PurchaseAttachment[] }).attachments
+      : undefined;
 
   return (
     <div className="space-y-4">
@@ -438,6 +452,14 @@ function PurchaseReturnDialogContent({
           <div>
             <p className="text-sm text-gray-500">{t('Vendor Bill No')}</p>
             <p className="font-medium">{purchaseVendorBillNumber}</p>
+          </div>
+        ) : null}
+        {purchaseAttachments && purchaseAttachments.length > 0 ? (
+          <div>
+            <p className="text-sm text-gray-500">{t('attachments')}</p>
+            <div className="mt-1">
+              <PurchaseAttachmentsButton attachments={purchaseAttachments} contextLabel={purchaseLabel} />
+            </div>
           </div>
         ) : null}
         <div>

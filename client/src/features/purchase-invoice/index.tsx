@@ -123,6 +123,19 @@ function createInitialPurchaseItems(showProductCatalog: boolean): PurchaseItem[]
   return Array.from({ length: count }, () => createEmptyPurchaseManualItem());
 }
 
+// A scanned/photographed copy of the physical supplier invoice, uploaded independently
+// to Cloudinary (see purchase-attachments-field.tsx) — this is just the reference stored
+// on the Purchase document once uploaded, same {url, publicId} shape products/categories
+// already use for images.
+export interface PurchaseAttachment {
+  url: string;
+  publicId: string;
+  fileName?: string;
+  fileType?: 'image' | 'pdf';
+  fileSize?: number;
+  uploadedAt?: string;
+}
+
 // Purchase Interface - no types, no payments
 export interface Purchase {
   _id?: string;
@@ -132,6 +145,7 @@ export interface Purchase {
   vendorBillNumber?: string;
   supplier: Supplier;
   items: PurchaseItem[];
+  attachments?: PurchaseAttachment[];
   subtotal: number;
   total: number;
   // Overall invoice-level discount, applied on top of any per-item discounts.
@@ -214,6 +228,7 @@ const PurchaseInvoicePage = () => {
     splitPaidAmount: 0,
     notes: '',
     date: new Date().toISOString(),
+    attachments: [],
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState<any>(null);

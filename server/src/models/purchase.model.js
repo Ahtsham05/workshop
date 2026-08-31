@@ -108,6 +108,21 @@ const PurchaseSchema = new mongoose.Schema({
   splitPaidAmount: { type: Number, default: 0, min: 0 },
   notes: { type: String },
   status: { type: Boolean, default: false },
+  // Scanned/photographed copies of the physical supplier invoice — images and PDFs both
+  // land here (see middlewares/attachmentUpload.js). Uploaded to Cloudinary independently
+  // of this document (same "upload first, attach the returned url/publicId" pattern as
+  // product/category images), so `publicId` is what's needed to clean it up on removal.
+  attachments: [
+    {
+      url: { type: String, required: true },
+      publicId: { type: String, required: true },
+      fileName: { type: String },
+      fileType: { type: String, enum: ['image', 'pdf'] },
+      fileSize: { type: Number },
+      uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      uploadedAt: { type: Date, default: Date.now },
+    },
+  ],
 }, {
   timestamps: true,
 });

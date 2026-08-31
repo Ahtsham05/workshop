@@ -38,6 +38,7 @@ import { getDisplayStock } from '@/lib/product-stock-display'
 import { useIsPhone } from '@/hooks/use-mobile'
 import { useIsNarrower } from '@/hooks/use-element-width'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
+import { PurchaseAttachmentsField } from './purchase-attachments-field'
 import { PurchaseItemVariantBatchFields } from './purchase-item-variant-batch-fields'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import type { ImeiEntryInput } from '@/stores/imei.api'
@@ -84,7 +85,7 @@ import { SplitPaymentFields } from '@/components/split-payment-fields'
 import { toast } from 'sonner'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
-import { createEmptyPurchaseManualItem, type Purchase, type PurchaseItem, type Supplier } from '../index'
+import { createEmptyPurchaseManualItem, type Purchase, type PurchaseAttachment, type PurchaseItem, type Supplier } from '../index'
 import { computeDiscountAmount, type DiscountType } from '../utils/discount'
 import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
 import { isWholesaleRetailBusiness, isMobileShopBusiness } from '@/lib/business-types'
@@ -1175,6 +1176,7 @@ export default function PurchasePanel({
         purchaseDate: purchase.date || new Date().toISOString(),
         vendorBillNumber: purchase.vendorBillNumber?.trim() || undefined,
         notes: purchase.notes?.trim() || undefined,
+        attachments: purchase.attachments || [],
         // Manual override only applies on create — saved purchases keep their number.
         ...(!isEditing && purchase.invoiceNumber?.trim() ? { invoiceNumber: purchase.invoiceNumber.trim() } : {}),
       }
@@ -1869,6 +1871,11 @@ export default function PurchasePanel({
                   {t('ai_scan_invoice')}
                 </Button>
               )}
+              <PurchaseAttachmentsField
+                attachments={purchase.attachments || []}
+                onChange={(next: PurchaseAttachment[]) => setPurchase((prev) => ({ ...prev, attachments: next }))}
+                contextLabel={isEditing ? editingPurchase?.invoiceNumber : (purchase.invoiceNumber || previewedPurchaseNumber)}
+              />
             </div>
           </div>
 

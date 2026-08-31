@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PurchaseAttachmentsButton } from '@/features/purchase-invoice/components/purchase-attachments-button'
 import {
   Select,
   SelectContent,
@@ -259,17 +260,24 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
                     <TableCell className='font-medium'>{ret.returnNumber}</TableCell>
                     <TableCell>
                       {typeof ret.purchaseId === 'object' ? (
-                        <>
+                        <div className='flex items-center gap-1.5'>
                           <div>
-                            {(ret.purchaseId as any)?.purchaseNumber ||
-                              (ret.purchaseId as any)?.invoiceNumber}
-                          </div>
-                          {(ret.purchaseId as any)?.vendorBillNumber && (
-                            <div className='text-xs text-muted-foreground'>
-                              Bill: {(ret.purchaseId as any).vendorBillNumber}
+                            <div>
+                              {(ret.purchaseId as any)?.purchaseNumber ||
+                                (ret.purchaseId as any)?.invoiceNumber}
                             </div>
-                          )}
-                        </>
+                            {(ret.purchaseId as any)?.vendorBillNumber && (
+                              <div className='text-xs text-muted-foreground'>
+                                Bill: {(ret.purchaseId as any).vendorBillNumber}
+                              </div>
+                            )}
+                          </div>
+                          <PurchaseAttachmentsButton
+                            attachments={(ret.purchaseId as any)?.attachments}
+                            contextLabel={(ret.purchaseId as any)?.invoiceNumber}
+                            iconOnly
+                          />
+                        </div>
                       ) : (
                         ret.purchaseId
                       )}

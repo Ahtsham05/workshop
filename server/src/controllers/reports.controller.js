@@ -455,6 +455,7 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
         supplierName: { $first: { $ifNull: ['$supplierDoc.name', 'Unknown'] } },
         supplierNameUrdu: { $first: { $ifNull: ['$supplierDoc.nameUrdu', ''] } },
         supplierPhone: { $first: { $ifNull: ['$supplierDoc.phone', ''] } },
+        attachments: { $first: { $ifNull: ['$attachments', []] } },
         items: {
           $push: {
             $cond: [
@@ -530,6 +531,7 @@ const getPurchaseInvoiceDetails = catchAsync(async (req, res) => {
         supplierName: 1,
         supplierNameUrdu: 1,
         supplierPhone: 1,
+        attachments: 1,
         items: 1,
       },
     },

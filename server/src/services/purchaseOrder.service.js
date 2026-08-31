@@ -13,7 +13,7 @@ const POPULATE_PATHS = [
   { path: 'createdBy', select: 'name email' },
   {
     path: 'receipts.purchase',
-    select: 'invoiceNumber totalAmount paidAmount balance paymentType purchaseDate',
+    select: 'invoiceNumber totalAmount paidAmount balance paymentType purchaseDate vendorBillNumber attachments',
   },
   { path: 'receipts.receivedBy', select: 'name email' },
 ];

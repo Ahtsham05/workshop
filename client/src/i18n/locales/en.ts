@@ -926,6 +926,18 @@ const en: Record<string, string> = {
     "product_list_preview": "Product list preview",
     "ai_scan_products_barcode_note": "Leave barcode empty to auto-generate a unique code for each product on import.",
 
+    "attachments": "Attachments",
+    "attachment": "Attachment",
+    "view_attachments": "View Attachments",
+    "add_files": "Add Files",
+    "no_attachments_yet": "No attachments yet",
+    "purchase_attachments_editable_hint": "Attach photos or PDF copies of the physical supplier invoice — you can add more later.",
+    "purchase_attachments_view_hint": "Photos or PDF copies of the physical supplier invoice attached to this purchase.",
+    "purchase_attachments_file_types_hint": "Images or PDF, up to 10MB each",
+    "attachment_upload_failed": "Failed to upload attachment",
+    "attachment_removed": "Attachment removed",
+    "attachment_remove_failed": "Failed to remove attachment",
+
     "ai_scan_invoice": "AI Scan Invoice",
     "ai_scan_purchase_invoice": "AI Scan — Purchase Invoice",
     "ai_scan_purchase_description": "Take or upload a photo of a purchase invoice. AI will extract supplier, products, quantities, and prices for you to review before saving.",

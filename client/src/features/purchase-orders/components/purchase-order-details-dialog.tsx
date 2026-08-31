@@ -25,6 +25,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildPurchaseOrderMessage, buildPurchaseOrderItemsSummary } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { PurchaseAttachmentsButton } from '@/features/purchase-invoice/components/purchase-attachments-button'
 import type { PurchaseOrder, PurchaseOrderStatus } from '@/stores/purchaseOrder.api'
 
 const STATUS_STYLES: Record<PurchaseOrderStatus, string> = {
@@ -395,6 +396,13 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                           </div>
                           <div className='flex flex-wrap items-center gap-2'>
                             <Badge variant='outline'>{rcpt.items.length} lines</Badge>
+                            {typeof rcpt.purchase === 'object' && (
+                              <PurchaseAttachmentsButton
+                                attachments={(rcpt.purchase as any)?.attachments}
+                                contextLabel={rcpt.purchase?.invoiceNumber}
+                                iconOnly
+                              />
+                            )}
                           </div>
                         </div>
                         <div className='grid grid-cols-3 gap-2 border-b bg-background px-3 py-2 text-xs sm:text-sm'>
