@@ -815,6 +815,8 @@ const en: Record<string, string> = {
     "import_completed_with_errors": "Import completed with errors",
     "products_imported_with_errors_message": "{{inserted}} of {{total}} products imported — {{failed}} failed",
     "import_failed_all_products": "Import failed — no products were imported",
+    "importing_progress": "Importing {{done}} / {{total}}...",
+    "import_stopped_early_message": "Import stopped after a batch failed — {{inserted}} of {{total}} products were saved before the error. Re-select the file to retry the rest.",
     "close": "Close",
 
     // Customer import functionality

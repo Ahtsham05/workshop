@@ -70,6 +70,15 @@ interface ImportRowError {
   message: string
 }
 
+// Sent in batches rather than one giant request: production runs the API behind a
+// serverless platform that hard-caps request body size well below what a multi-thousand
+// row spreadsheet produces as a single JSON payload — that request gets rejected outright
+// (shows up in the browser as a cancelled request) before ever reaching the server code.
+// 500 matches the server's own internal insertMany() chunk size (see
+// BULK_IMPORT_CHUNK_SIZE in product.service.js), so each request maps to exactly one
+// database batch there too.
+const IMPORT_BATCH_SIZE = 500
+
 export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImportDialogProps) {
   const { t } = useLanguage()
   const [file, setFile] = useState<File | null>(null)
@@ -79,6 +88,7 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
   const [parseSuccess, setParseSuccess] = useState(false)
   const [importErrors, setImportErrors] = useState<ImportRowError[]>([])
   const [importedCount, setImportedCount] = useState(0)
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
 
   const downloadTemplate = useCallback(() => {
     const template = [
@@ -358,78 +368,115 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
       return
     }
 
-    try {
-      setImporting(true)
-      const totalSubmitted = parsedData.length
-      // _row only exists for local display — the API doesn't know about it.
-      const productsToSend = parsedData.map(({ _row, ...rest }) => rest)
-      const result = await onImport(productsToSend)
+    setImporting(true)
+    const totalSubmitted = parsedData.length
+    // _row only exists for local display — the API doesn't know about it.
+    const productsToSend = parsedData.map(({ _row, ...rest }) => rest)
 
-      const failed = result?.errors || []
-      const inserted = result?.insertedCount ?? (totalSubmitted - failed.length)
-
-      const rowErrors: ImportRowError[] = failed.map((err) => {
-        const source = parsedData[err.index]
-        return {
-          row: source?._row ?? err.index + 1,
-          name: source?.name || err.name || '',
-          message: err.error || t('unknown_error')
-        }
-      })
-
-      setImportErrors(rowErrors)
-      setImportedCount(inserted)
-
-      if (inserted === 0) {
-        toast.error(t('import_failed_all_products'))
-      } else if (rowErrors.length > 0) {
-        toast.warning(t('products_imported_with_errors_message', {
-          inserted,
-          total: totalSubmitted,
-          failed: rowErrors.length
-        }))
-      } else {
-        toast.success(`${t('import_successful')}: ${inserted} ${t('products_imported')}`)
-      }
-
-      // Categories/sub-categories referenced by name in the file are auto-created on
-      // the server when they don't already exist — surface that so it isn't a silent
-      // side effect the user only discovers later on the Categories page.
-      const createdCategories = result?.createdCategories || []
-      const createdSubCategories = result?.createdSubCategories || []
-      if (createdCategories.length || createdSubCategories.length) {
-        const parts = []
-        if (createdCategories.length) parts.push(`${createdCategories.length} ${t('categories')}`)
-        if (createdSubCategories.length) parts.push(`${createdSubCategories.length} ${t('subcategories')}`)
-        toast.info(`${t('created')}: ${parts.join(', ')}`)
-      }
-
-      // Non-fatal per-row notes (an unrecognized unit that was defaulted, a supplier
-      // name that didn't match any existing supplier) — the row still imported, this is
-      // just visibility into what the server had to guess or skip.
-      const warnings = result?.warnings || []
-      if (warnings.length > 0) {
-        toast.info(t('products_imported_with_notes', { count: String(warnings.length) }))
-      }
-
-      // Clear the file and parsed preview either way — the rows that succeeded are
-      // already saved, so re-parsing and re-clicking Import must not be possible, or
-      // it would silently re-insert them as duplicates. Only a fully successful run
-      // closes the dialog; a partial run stays open (file cleared) showing what failed,
-      // so the user has to explicitly pick a (corrected) file to try again.
-      setFile(null)
-      setParsedData([])
-      setParseSuccess(false)
-      setErrors([])
-      if (rowErrors.length === 0) {
-        onOpenChange(false)
-      }
-    } catch (error) {
-      console.error('Error importing products:', error)
-      toast.error(error instanceof Error ? error.message : t('error_importing_products'))
-    } finally {
-      setImporting(false)
+    const batches: any[][] = []
+    for (let i = 0; i < productsToSend.length; i += IMPORT_BATCH_SIZE) {
+      batches.push(productsToSend.slice(i, i + IMPORT_BATCH_SIZE))
     }
+
+    let inserted = 0
+    let warningsCount = 0
+    const rowErrors: ImportRowError[] = []
+    const createdCategories = new Set<string>()
+    const createdSubCategories = new Set<string>()
+    let stoppedEarly = false
+
+    setImportProgress({ done: 0, total: totalSubmitted })
+
+    for (let b = 0; b < batches.length; b++) {
+      const batch = batches[b]
+      const indexOffset = b * IMPORT_BATCH_SIZE
+      try {
+        const result = await onImport(batch)
+        inserted += result?.insertedCount ?? 0
+
+        const failed = result?.errors || []
+        failed.forEach((err) => {
+          const source = parsedData[indexOffset + err.index]
+          rowErrors.push({
+            row: source?._row ?? indexOffset + err.index + 1,
+            name: source?.name || err.name || '',
+            message: err.error || t('unknown_error')
+          })
+        })
+
+        const batchCreatedCategories = result?.createdCategories || []
+        const batchCreatedSubCategories = result?.createdSubCategories || []
+        batchCreatedCategories.forEach((c) => createdCategories.add(c))
+        batchCreatedSubCategories.forEach((c) => createdSubCategories.add(c))
+        warningsCount += result?.warnings?.length || 0
+
+        setImportProgress({ done: Math.min(indexOffset + batch.length, totalSubmitted), total: totalSubmitted })
+      } catch (error) {
+        // Stop sending further batches, but keep whatever already succeeded — those
+        // rows are really saved, and must not be silently dropped from the summary.
+        console.error('Error importing product batch:', error)
+        stoppedEarly = true
+        batch.forEach((product, i) => {
+          const source = parsedData[indexOffset + i]
+          rowErrors.push({
+            row: source?._row ?? indexOffset + i + 1,
+            name: source?.name || product.name || '',
+            message: error instanceof Error ? error.message : t('error_importing_products')
+          })
+        })
+        break
+      }
+    }
+
+    setImportProgress(null)
+    setImportErrors(rowErrors)
+    setImportedCount(inserted)
+
+    if (inserted === 0) {
+      toast.error(t('import_failed_all_products'))
+    } else if (stoppedEarly) {
+      toast.error(t('import_stopped_early_message', { inserted, total: totalSubmitted }))
+    } else if (rowErrors.length > 0) {
+      toast.warning(t('products_imported_with_errors_message', {
+        inserted,
+        total: totalSubmitted,
+        failed: rowErrors.length
+      }))
+    } else {
+      toast.success(`${t('import_successful')}: ${inserted} ${t('products_imported')}`)
+    }
+
+    // Categories/sub-categories referenced by name in the file are auto-created on
+    // the server when they don't already exist — surface that so it isn't a silent
+    // side effect the user only discovers later on the Categories page.
+    if (createdCategories.size || createdSubCategories.size) {
+      const parts = []
+      if (createdCategories.size) parts.push(`${createdCategories.size} ${t('categories')}`)
+      if (createdSubCategories.size) parts.push(`${createdSubCategories.size} ${t('subcategories')}`)
+      toast.info(`${t('created')}: ${parts.join(', ')}`)
+    }
+
+    // Non-fatal per-row notes (an unrecognized unit that was defaulted, a supplier
+    // name that didn't match any existing supplier) — the row still imported, this is
+    // just visibility into what the server had to guess or skip.
+    if (warningsCount > 0) {
+      toast.info(t('products_imported_with_notes', { count: String(warningsCount) }))
+    }
+
+    // Clear the file and parsed preview either way — the rows that succeeded are
+    // already saved, so re-parsing and re-clicking Import must not be possible, or
+    // it would silently re-insert them as duplicates. Only a fully successful run
+    // closes the dialog; a partial run stays open (file cleared) showing what failed,
+    // so the user has to explicitly pick a (corrected) file to try again.
+    setFile(null)
+    setParsedData([])
+    setParseSuccess(false)
+    setErrors([])
+    if (rowErrors.length === 0) {
+      onOpenChange(false)
+    }
+
+    setImporting(false)
   }, [parsedData, onImport, onOpenChange, t])
 
   const resetDialog = () => {
@@ -439,6 +486,7 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
     setParseSuccess(false)
     setImportErrors([])
     setImportedCount(0)
+    setImportProgress(null)
   }
 
   return (
@@ -624,7 +672,9 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
               {importing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('importing')}...
+                  {importProgress
+                    ? t('importing_progress', { done: importProgress.done, total: importProgress.total })
+                    : `${t('importing')}...`}
                 </>
               ) : (
                 <>
