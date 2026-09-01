@@ -30,7 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X, ArrowLeftRight, ScanLine, ListChecks, Smartphone, Eye, Percent, Receipt, Banknote, CreditCard, Pencil, RotateCcw } from 'lucide-react'
+import { Trash2, Package, Printer, Save, ArrowLeft, Minus, Plus, Loader2, Search, ChevronDown, Check, Sparkles, X, ArrowLeftRight, ScanLine, ListChecks, Smartphone, Eye, Percent, Receipt, Banknote, CreditCard, Pencil, RotateCcw, TriangleAlert } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { BilingualName } from '@/components/bilingual-name'
@@ -43,6 +43,20 @@ import { PurchaseItemVariantBatchFields } from './purchase-item-variant-batch-fi
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import type { ImeiEntryInput } from '@/stores/imei.api'
 import { resolvePurchaseInvoiceBalance } from '@/features/purchase-invoice/utils/purchase-balance'
+import { usePurchasePriceComparison, type PriceComparisonItemKey } from '../hooks/use-purchase-price-comparison'
+import { PriceChangeIndicator } from './price-change-indicator'
+import { calculatePriceChange, formatPriceChange, resolvePriceComparisonBasis } from '../utils/price-comparison'
+
+// Text color for each formatPriceChange() tone in the Summary card's price-change list —
+// same semantics as PriceChangeIndicator's TONE_CLASSES (warning = flag it, good = a
+// price drop even if large, bad = a non-critical increase), kept local since this is the
+// only other place a tone needs a color.
+const PRICE_TONE_TEXT: Record<string, string> = {
+  good: 'text-green-600 dark:text-green-400',
+  bad: 'text-amber-600 dark:text-amber-400',
+  warning: 'text-red-600 dark:text-red-400',
+  neutral: 'text-muted-foreground',
+}
 
 // Per-type accent for the Purchase Type buttons — mirrors Invoice's INVOICE_TYPE_STYLES
 // (see invoice-panel.tsx): a light tint + thin border, not a filled/shadowed badge.
@@ -1288,6 +1302,33 @@ export default function PurchasePanel({
     const pid = item.product.id || (item.product as any)?._id
     return pid && item.product.name
   })
+
+  // Purchase price intelligence — see use-purchase-price-comparison.ts for the bulk-fetch
+  // + cache/dedup strategy. `priceComparisonItems` is recomputed every render (cheap: a
+  // small array map), but the hook itself only fires a network request when the *set* of
+  // keys actually changes, never on a qty/price/discount edit.
+  const currentSupplierId = purchase.supplier?._id || (purchase.supplier as any)?.id || undefined
+  const priceComparisonItems: PriceComparisonItemKey[] = filledPurchaseItems.map((item) => {
+    const productId = item.product.id || (item.product as any)?._id
+    return { key: item.variantId || productId, productId, variantId: item.variantId }
+  })
+  const { getComparison: getPriceComparison } = usePurchasePriceComparison(priceComparisonItems, currentSupplierId)
+
+  // Products whose price moved enough to flag in the Summary card's compact warning —
+  // recomputed from whatever's already cached, never triggers a fetch of its own.
+  type SignificantPriceChange = { name: string; change: NonNullable<ReturnType<typeof calculatePriceChange>> }
+  const significantPriceChanges: SignificantPriceChange[] = filledPurchaseItems
+    .map((item): SignificantPriceChange | null => {
+      const productId = item.product.id || (item.product as any)?._id
+      const key = item.variantId || productId
+      const basis = resolvePriceComparisonBasis(getPriceComparison(key), purchase.supplier?.name)
+      if (!basis) return null
+      const change = calculatePriceChange(basis.previousPrice, item.purchasePrice)
+      if (!change || change.severity !== 'significant') return null
+      return { name: item.product.name, change }
+    })
+    .filter((entry): entry is SignificantPriceChange => entry !== null)
+
   // The split leg is an independent amount that adds to Paid Amount, not carved out of it —
   // see split-payment-fields.tsx. This is what's actually been paid so far.
   const totalPaidNow = (purchase.paidAmount || 0) + (purchase.splitPaymentMethod ? (purchase.splitPaidAmount || 0) : 0)
@@ -1477,7 +1518,7 @@ export default function PurchasePanel({
                 // Reuse the same control markup the desktop table uses (no labels, no unit/
                 // separator decoration) so card mode and table mode render pixel-identical
                 // inputs — only the surrounding layout differs.
-                const { qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay } =
+                const { qtyControl, purchasePriceControl, priceComparisonIndicator, sellingPriceControl, discountControl, totalDisplay } =
                   renderPurchaseItemParts(item, index)
 
                 return (
@@ -1612,7 +1653,10 @@ export default function PurchasePanel({
                           </Select>
                         </div>
                       )}
-                      <div className='flex w-[116px] shrink-0 justify-center'>{purchasePriceControl}</div>
+                      <div className='flex w-[116px] min-w-0 shrink-0 flex-col items-center'>
+                        {purchasePriceControl}
+                        {priceComparisonIndicator}
+                      </div>
                       <div className='flex w-[116px] shrink-0 justify-center'>{sellingPriceControl}</div>
                       <div className='flex w-[92px] shrink-0 justify-center'>{discountControl}</div>
                       <div className='ml-auto w-[110px] shrink-0'>{totalDisplay}</div>
@@ -1651,6 +1695,13 @@ export default function PurchasePanel({
     const itemDiscountAmount = computeDiscountAmount(itemGross, item.discountType, item.discountValue)
     const itemNet = itemGross - itemDiscountAmount
     const stock = getDisplayStock(item.product)
+    const priceComparisonIndicator = (
+      <PriceChangeIndicator
+        comparison={getPriceComparison(item.variantId || productId)}
+        currentPrice={item.purchasePrice}
+        supplierName={purchase.supplier?.name}
+      />
+    )
 
     const productCell = (
       <div className='flex items-start gap-2'>
@@ -1816,7 +1867,7 @@ export default function PurchasePanel({
       </Button>
     )
 
-    return { productCell, qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay, deleteButton }
+    return { productCell, qtyControl, purchasePriceControl, priceComparisonIndicator, sellingPriceControl, discountControl, totalDisplay, deleteButton }
   }
 
   return (
@@ -2377,7 +2428,7 @@ export default function PurchasePanel({
                         </TableRow>
                       )
                     }
-                    const { productCell, qtyControl, purchasePriceControl, sellingPriceControl, discountControl, totalDisplay, deleteButton } = renderPurchaseItemParts(item, index)
+                    const { productCell, qtyControl, purchasePriceControl, priceComparisonIndicator, sellingPriceControl, discountControl, totalDisplay, deleteButton } = renderPurchaseItemParts(item, index)
                     // Batch/expiry/variant-tracked items still render as a normal, fully
                     // column-aligned row — only their extra batch UI drops into a second,
                     // full-width row right below, instead of swapping the whole row to the
@@ -2389,7 +2440,12 @@ export default function PurchasePanel({
                           <TableCell className='py-3 pl-3 align-top text-xs text-muted-foreground'>{index + 1}</TableCell>
                           <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
                           <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
-                          <TableCell className='align-middle py-3'>{purchasePriceControl}</TableCell>
+                          <TableCell className='align-middle py-3'>
+                            <div className='flex min-w-0 flex-col items-center'>
+                              {purchasePriceControl}
+                              {priceComparisonIndicator}
+                            </div>
+                          </TableCell>
                           <TableCell className='align-middle py-3'>{sellingPriceControl}</TableCell>
                           <TableCell className='align-middle py-3'>{discountControl}</TableCell>
                           <TableCell className='align-middle py-3 text-right'>{totalDisplay}</TableCell>
@@ -2529,6 +2585,42 @@ export default function PurchasePanel({
               {t('Total Quantity')}: {filledPurchaseItems.reduce((sum, item) => sum + item.quantity, 0)}
             </Badge>
           </div>
+
+          {/* Purchase price intelligence — informational only, never blocks saving. Clicking
+              reveals which products moved and by how much; the badge itself never appears
+              until at least one line's price comparison has actually loaded and crossed the
+              "significant" threshold (see calculatePriceChange/getPriceStatus). */}
+          {significantPriceChanges.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type='button'
+                  className='flex w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-left text-xs font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400'
+                >
+                  <TriangleAlert className='h-3.5 w-3.5 shrink-0' />
+                  {significantPriceChanges.length === 1
+                    ? t('1 product has a significant price change')
+                    : t('{{count}} products have significant price changes', { count: significantPriceChanges.length })}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className='w-72 p-2' align='start'>
+                <p className='mb-1.5 px-1 text-xs font-semibold text-muted-foreground'>{t('Price changes vs last purchase')}</p>
+                <div className='max-h-56 space-y-0.5 overflow-y-auto'>
+                  {significantPriceChanges.map((entry, i) => {
+                    const formatted = formatPriceChange(entry.change)
+                    return (
+                      <div key={i} className='flex items-center justify-between gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/50'>
+                        <span className='truncate'>{entry.name}</span>
+                        <span className={cn('shrink-0 font-medium tabular-nums', PRICE_TONE_TEXT[formatted.tone])}>
+                          {formatted.text}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
         </CardContent>
       </Card>
 

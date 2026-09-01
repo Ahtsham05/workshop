@@ -171,8 +171,34 @@ export const purchaseApi = createApi({
     deletePurchaseAttachment: builder.mutation<{ message: string }, string>({
       query: (publicId) => ({ url: '/delete-attachment', method: 'DELETE', body: { publicId } }),
     }),
+
+    // Purchase price intelligence: bulk "last purchase price" lookup for a batch of
+    // product/variant keys, optionally scoped to one supplier. A `mutation` (not a
+    // `query`) on purpose — usePurchasePriceComparison owns its own request-dedup/cache
+    // (keyed by product/variant + supplier, never invalidated by qty/price/discount
+    // edits), so RTK Query's own arg-based cache would just be redundant bookkeeping
+    // for a request whose args differ on every batch anyway.
+    getBulkPurchasePriceComparison: builder.mutation<
+      { data: Record<string, PriceComparisonEntry> },
+      { items: { productId: string; variantId?: string }[]; supplierId?: string }
+    >({
+      query: (body) => ({ url: '/price-comparison/bulk', method: 'POST', body }),
+    }),
   }),
 })
+
+/** One product/variant's price-comparison result — see purchase.service.js's getBulkPriceComparison. */
+export interface PriceComparisonEntry {
+  hasHistory: boolean
+  lastPurchasePrice: number | null
+  lastPurchaseDate: string | null
+  lastPurchaseSupplierId: string | null
+  lastPurchaseSupplierName: string | null
+  // Present only when the request carried a supplierId — the same product/variant's
+  // most recent purchase from specifically that supplier, distinct from the overall
+  // (any-supplier) fields above.
+  supplierPrice: { hasHistory: boolean; lastPurchasePrice: number | null; lastPurchaseDate: string | null } | null
+}
 
 export const {
   useCreatePurchaseMutation,
@@ -186,4 +212,5 @@ export const {
   useGetNextPurchaseNumberQuery,
   useUploadPurchaseAttachmentMutation,
   useDeletePurchaseAttachmentMutation,
+  useGetBulkPurchasePriceComparisonMutation,
 } = purchaseApi

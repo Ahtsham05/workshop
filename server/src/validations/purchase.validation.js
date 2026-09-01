@@ -175,11 +175,32 @@ const getPurchaseByDate = {
   }),
 };
 
+// Purchase price intelligence: one bulk request for every product/variant currently in
+// the purchase form, instead of a request per product — see purchase.service.js's
+// getBulkPriceComparison. Capped at 500 items, well above what a single purchase invoice
+// realistically holds, just to bound the aggregation's input size.
+const getBulkPriceComparison = {
+  body: Joi.object().keys({
+    supplierId: Joi.string().optional(),
+    items: Joi.array()
+      .items(
+        Joi.object().keys({
+          productId: Joi.string().required(),
+          variantId: Joi.string().optional(),
+        })
+      )
+      .min(1)
+      .max(500)
+      .required(),
+  }),
+};
+
 module.exports = {
   createPurchase,
   getPurchases,
   getPurchase,
   updatePurchase,
   deletePurchase,
-  getPurchaseByDate
+  getPurchaseByDate,
+  getBulkPriceComparison,
 };

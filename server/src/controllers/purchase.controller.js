@@ -200,6 +200,21 @@ const deletePurchaseAttachment = catchAsync(async (req, res) => {
   }
 });
 
+// Purchase price intelligence: the New Purchase form's "price increased/decreased vs
+// last purchase" indicator. One bulk lookup per debounced batch of newly-added products
+// (see usePurchasePriceComparison on the client) instead of a request per product — see
+// purchaseService.getBulkPriceComparison for the aggregation this runs.
+const getBulkPriceComparison = catchAsync(async (req, res) => {
+  const scope = {};
+  applyBranchFilter(scope, req);
+  const data = await purchaseService.getBulkPriceComparison({
+    ...scope,
+    items: req.body.items,
+    supplierId: req.body.supplierId,
+  });
+  res.send({ data });
+});
+
 module.exports = {
   createPurchase,
   getPurchases,
@@ -211,4 +226,5 @@ module.exports = {
   getNextPurchaseInvoiceNumber,
   uploadPurchaseAttachment,
   deletePurchaseAttachment,
+  getBulkPriceComparison,
 };

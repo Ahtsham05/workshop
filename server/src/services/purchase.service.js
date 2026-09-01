@@ -1197,6 +1197,117 @@ const getPurchaseByDate = async (filter) => {
   }).populate('items.product').populate('items.variantId');
 };
 
+const toObjectId = (id) => (mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id);
+
+// Same "unit key" convention as productService.getPurchasableCatalog / purchaseSuggestions.service:
+// a real variant is keyed by its own variantId, never rolled up into its parent product,
+// so a 128GB/Black iPhone's price history is never blended with a 256GB/Blue one.
+const priceComparisonKey = (productId, variantId) => (variantId ? String(variantId) : String(productId));
+
+/**
+ * Bulk "last purchase price" lookup for many product/variant keys at once — the data
+ * source behind Purchase Invoice's price-change indicator. Always exactly ONE Purchase
+ * aggregation regardless of how many items are requested (no per-product query — see
+ * supplierScoring.service.js's computeSupplierPricesForProduct for the single-product
+ * analog this is modeled on, extended to bulk + "most recent" instead of "average").
+ *
+ * Finds, per (product, variantId) key: the most recent purchase overall (any supplier),
+ * and — only when `supplierId` is given — the most recent purchase from that specific
+ * supplier. Both come out of one aggregation via $facet sharing the same $match/$sort,
+ * so asking for supplier-aware pricing never costs a second round trip.
+ *
+ * @param {Object} params
+ * @param {ObjectId} params.organizationId
+ * @param {ObjectId} [params.branchId] - omitted (not filtered) for an org-wide superAdmin
+ *   read, same convention as applyBranchFilter/getPurchasableCatalog.
+ * @param {{productId: string, variantId?: string}[]} params.items
+ * @param {string} [params.supplierId]
+ * @returns {Promise<Object>} map of key -> comparison entry, one per requested item
+ */
+const getBulkPriceComparison = async ({ organizationId, branchId, items, supplierId }) => {
+  const productIds = [...new Set(items.map((item) => String(item.productId)))].map(toObjectId);
+  if (productIds.length === 0) return {};
+
+  const supplierObjectId =
+    supplierId && mongoose.Types.ObjectId.isValid(supplierId) ? toObjectId(supplierId) : null;
+
+  const matchStage = { 'items.product': { $in: productIds } };
+  if (organizationId) matchStage.organizationId = toObjectId(organizationId);
+  if (branchId) matchStage.branchId = toObjectId(branchId);
+
+  const facetStages = {
+    overall: [
+      {
+        $group: {
+          _id: { product: '$items.product', variantId: '$items.variantId' },
+          lastPurchasePrice: { $first: '$items.priceAtPurchase' },
+          lastPurchaseDate: { $first: '$purchaseDate' },
+          lastPurchaseSupplierId: { $first: '$supplier' },
+        },
+      },
+    ],
+  };
+  if (supplierObjectId) {
+    facetStages.bySupplier = [
+      { $match: { supplier: supplierObjectId } },
+      {
+        $group: {
+          _id: { product: '$items.product', variantId: '$items.variantId' },
+          lastPurchasePrice: { $first: '$items.priceAtPurchase' },
+          lastPurchaseDate: { $first: '$purchaseDate' },
+        },
+      },
+    ];
+  }
+
+  const [facetResult] = await Purchase.aggregate([
+    { $match: matchStage },
+    { $unwind: '$items' },
+    { $match: { 'items.product': { $in: productIds } } },
+    // Most recent first, so $first inside each $group below picks the latest purchase
+    // per key — the standard Mongo "top-N per group" pattern, one pass, no per-key query.
+    { $sort: { purchaseDate: -1, createdAt: -1 } },
+    { $facet: facetStages },
+  ]);
+
+  const overallRows = facetResult?.overall || [];
+  const supplierRows = facetResult?.bySupplier || [];
+
+  const supplierIds = [...new Set(overallRows.map((r) => r.lastPurchaseSupplierId).filter(Boolean).map(String))];
+  const suppliers = supplierIds.length
+    ? await Supplier.find({ _id: { $in: supplierIds } }).select('name').lean()
+    : [];
+  const supplierNameById = new Map(suppliers.map((s) => [String(s._id), s.name]));
+
+  const overallByKey = new Map(overallRows.map((r) => [priceComparisonKey(r._id.product, r._id.variantId), r]));
+  const supplierByKey = new Map(supplierRows.map((r) => [priceComparisonKey(r._id.product, r._id.variantId), r]));
+
+  const result = {};
+  for (const { productId, variantId } of items) {
+    const key = priceComparisonKey(productId, variantId);
+    const overall = overallByKey.get(key);
+    const supplierRow = supplierObjectId ? supplierByKey.get(key) : null;
+
+    result[key] = {
+      hasHistory: !!overall,
+      lastPurchasePrice: overall ? overall.lastPurchasePrice : null,
+      lastPurchaseDate: overall ? overall.lastPurchaseDate : null,
+      lastPurchaseSupplierId: overall?.lastPurchaseSupplierId ? String(overall.lastPurchaseSupplierId) : null,
+      lastPurchaseSupplierName: overall?.lastPurchaseSupplierId
+        ? supplierNameById.get(String(overall.lastPurchaseSupplierId)) || null
+        : null,
+      supplierPrice: supplierObjectId
+        ? {
+            hasHistory: !!supplierRow,
+            lastPurchasePrice: supplierRow ? supplierRow.lastPurchasePrice : null,
+            lastPurchaseDate: supplierRow ? supplierRow.lastPurchaseDate : null,
+          }
+        : null,
+    };
+  }
+  return result;
+};
+
 module.exports = {
   createPurchase,
   generateNextPurchaseInvoiceNumber,
@@ -1204,5 +1315,6 @@ module.exports = {
   getPurchaseById,
   updatePurchaseById,
   deletePurchaseById,
-  getPurchaseByDate
+  getPurchaseByDate,
+  getBulkPriceComparison,
 };

@@ -35,6 +35,16 @@ router
   .route('/next-number')
   .get(auth('viewPurchases'), purchaseController.getNextPurchaseInvoiceNumber);
 
+// Purchase price intelligence — bulk "last purchase price" lookup for the New Purchase
+// form's price-change indicator. Registered ahead of the /:purchaseId catch-all below.
+router
+  .route('/price-comparison/bulk')
+  .post(
+    auth('viewPurchases', 'createPurchases', 'editPurchases'),
+    validate(purchaseValidation.getBulkPriceComparison),
+    purchaseController.getBulkPriceComparison
+  );
+
 router
   .route('/:purchaseId')
   .get(auth('viewPurchases'), validate(purchaseValidation.getPurchase), purchaseController.getPurchase)

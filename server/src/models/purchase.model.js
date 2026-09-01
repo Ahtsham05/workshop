@@ -134,6 +134,11 @@ PurchaseSchema.plugin(paginate);
 PurchaseSchema.index({ organizationId: 1, branchId: 1 });
 // Supports the duplicate-vendor-bill check (per supplier) and direct lookups by vendor bill no.
 PurchaseSchema.index({ organizationId: 1, supplier: 1, vendorBillNumber: 1 });
+// Supports the bulk "last purchase price" lookup (purchase price intelligence) —
+// purchaseService.getBulkPriceComparison matches on items.product + org/branch, then sorts
+// by purchaseDate to find the most recent purchase per product/variant in one aggregation
+// instead of one query per product. purchaseDate: -1 lets that $sort use the index directly.
+PurchaseSchema.index({ organizationId: 1, branchId: 1, 'items.product': 1, purchaseDate: -1 });
 
 const Purchase = mongoose.model('Purchase', PurchaseSchema);
 
