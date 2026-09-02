@@ -128,6 +128,14 @@ const feeVoucherSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Exam',
     },
+    // Dedup key for structure-sourced vouchers, derived from the fee structure's
+    // frequency (e.g. "2026-September" for monthly, "2026-Q3" for quarterly, "2026"
+    // for annually, "once" for one-time) — lets an annual/quarterly fund like "Paper
+    // Fund" be generated once per its own period without blocking (or being blocked
+    // by) an unrelated monthly fund's voucher for the same student/month.
+    periodKey: {
+      type: String,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -209,12 +217,31 @@ feeVoucherSchema.index({ organizationId: 1, branchId: 1, studentId: 1 });
 feeVoucherSchema.index({ organizationId: 1, branchId: 1, status: 1 });
 feeVoucherSchema.index({ organizationId: 1, branchId: 1, month: 1, year: 1 });
 feeVoucherSchema.index({ organizationId: 1, branchId: 1, examId: 1 });
-// Prevent duplicate monthly vouchers for same student+month+year
+// Prevent duplicate monthly vouchers for the same student+month+year — scoped to
+// vouchers with no feeStructureId (admission-form-sourced vouchers, which aren't
+// tied to any one fund's frequency and are still deduped per calendar month).
 feeVoucherSchema.index(
   { organizationId: 1, studentId: 1, month: 1, year: 1 },
   {
     unique: true,
-    partialFilterExpression: { voucherType: { $in: ['monthly', 'admission', 'misc'] } },
+    partialFilterExpression: {
+      voucherType: { $in: ['monthly', 'admission', 'misc'] },
+      feeStructureId: { $exists: false },
+    },
+  }
+);
+// Prevent duplicate vouchers for the same student+fund+period — e.g. one "Paper
+// Fund" voucher per year if that structure's frequency is annual, one per quarter
+// if quarterly, one per month if monthly — independent of any other fund's vouchers
+// for the same student/month (see periodKey above).
+feeVoucherSchema.index(
+  { organizationId: 1, studentId: 1, feeStructureId: 1, periodKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      voucherType: { $in: ['monthly', 'admission', 'misc'] },
+      feeStructureId: { $exists: true },
+    },
   }
 );
 // Prevent duplicate exam fee vouchers per student+exam

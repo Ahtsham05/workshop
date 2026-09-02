@@ -23,18 +23,28 @@ const createVoucher = catchAsync(async (req, res) => {
  *   'mixed'          — prefer student individual fees; fall back to fee structure
  */
 const bulkGenerateVouchers = catchAsync(async (req, res) => {
-  const { classId, feeStructureId, month, year, feeSource = 'fee_structure', allClasses = false } = req.body;
+  const { classId, classIds, feeStructureId, fundName, month, year, feeSource = 'fee_structure', allClasses = false } = req.body;
   const scope = {
     organizationId: req.user.organizationId,
     branchId: req.branchId,
     createdBy: req.user._id,
   };
 
-  // ── All-classes mode: generate for every active student in the branch ──
-  if (allClasses) {
-    const result = await feeVoucherService.bulkGenerateVouchersAllClasses(month, year, scope, feeSource);
+  // ── All-classes or explicit multi-class mode: generate across several classes in
+  // one pass. Each class's own active fee structure matching `fundName` is used, so a
+  // fund like "Paper Fund" applies consistently across every selected class. ──
+  const hasClassIds = Array.isArray(classIds) && classIds.length > 0;
+  if (allClasses || hasClassIds) {
+    const result = await feeVoucherService.bulkGenerateVouchersForClasses(
+      allClasses ? null : classIds,
+      month,
+      year,
+      scope,
+      feeSource,
+      fundName
+    );
     return res.status(httpStatus.CREATED).send({
-      message: 'Vouchers generated for all classes',
+      message: allClasses ? 'Vouchers generated for all classes' : `Vouchers generated for ${classIds.length} classes`,
       generated: result.insertedCount ?? 0,
       skipped: result.skipped ?? 0,
       skippedDuplicates: result.skippedDuplicates ?? 0,

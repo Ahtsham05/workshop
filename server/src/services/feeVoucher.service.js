@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { FeeVoucher, SchoolTransaction, Student, FeeCategory, StudentCreditLedger, SchoolClass } = require('../models');
 const ApiError = require('../utils/ApiError');
 const accountsSystemService = require('./accountsSystem.service');
+const logger = require('../config/logger');
 
 const getTenantFilter = (scope = {}) => {
   const filter = {};
@@ -44,6 +45,68 @@ const getAggregateFilter = (scope = {}) => {
 };
 
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Derive the dedup period for a structure-sourced voucher from that structure's own
+ * frequency, so an annual fund like "Paper Fund" is only ever generated once per year,
+ * a quarterly fund once per quarter, etc. — independent of the calendar month the admin
+ * happened to run generation in. See periodKey on the FeeVoucher model.
+ */
+const computePeriodKey = (frequency, month, year) => {
+  const y = Number(year);
+  if (frequency === 'annually') return `${y}`;
+  if (frequency === 'one-time') return 'once';
+  if (frequency === 'quarterly') {
+    const idx = MONTH_ORDER.indexOf(month);
+    const quarter = idx >= 0 ? Math.floor(idx / 3) + 1 : 1;
+    return `${y}-Q${quarter}`;
+  }
+  return `${y}-${month}`; // monthly (default)
+};
+
+let feeVoucherIndexesEnsured = false;
+
+/**
+ * Migrate from the legacy student+month+year unique index (which blocked a second
+ * fund's voucher — e.g. an annual "Paper Fund" — for a student who already had a
+ * monthly tuition voucher that month) to the two partial indexes now declared on the
+ * schema: one for admission-form vouchers (no feeStructureId, still one per month) and
+ * one for structure-sourced vouchers (one per student+fund+period). Dropping a field
+ * from an index's key in the schema doesn't drop the index Mongo already built for it,
+ * so the old 4-field index has to be dropped explicitly before syncIndexes() can put
+ * the new ones in place.
+ */
+const ensureFeeVoucherIndexes = async () => {
+  if (feeVoucherIndexesEnsured) return;
+
+  const collection = mongoose.connection.collection('feevouchers');
+  try {
+    const indexes = await collection.indexes();
+    const legacyIndex = indexes.find(
+      (idx) =>
+        idx.unique &&
+        Object.keys(idx.key).length === 4 &&
+        idx.key.organizationId === 1 &&
+        idx.key.studentId === 1 &&
+        idx.key.month === 1 &&
+        idx.key.year === 1
+    );
+    if (legacyIndex) {
+      await collection.dropIndex(legacyIndex.name);
+    }
+  } catch (err) {
+    if (err.codeName !== 'IndexNotFound') {
+      logger.warn(`[ensureFeeVoucherIndexes] failed to drop legacy index: ${err.message}`);
+    }
+  }
+
+  try {
+    await FeeVoucher.syncIndexes();
+    feeVoucherIndexesEnsured = true;
+  } catch (err) {
+    logger.error(`[ensureFeeVoucherIndexes] syncIndexes failed, will retry on next write: ${err.message}`);
+  }
+};
 
 const resetCreditWalletsForStudentIds = async (studentIdsToReset, scope = {}) => {
   const tf = getTenantFilter(scope);
@@ -151,6 +214,7 @@ const adjustCredit = async (studentId, delta, type, extra = {}, scope = {}) => {
 };
 
 const createVoucher = async (body) => {
+  await ensureFeeVoucherIndexes();
   return FeeVoucher.create(body);
 };
 
@@ -230,21 +294,42 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
     dueDate = new Date(year, monthIndex + 1, 0);
   }
 
+  await ensureFeeVoucherIndexes();
+
   const skipped = [];  // students with no fees at all
 
-  // Skip students who already have a voucher for this month/year (avoid duplicate-key rejects)
+  // Dedup admission-form-sourced vouchers (no feeStructureId) per calendar month, same
+  // as before — these aren't tied to any one fund's frequency.
   const studentIds = students.map((s) => s._id || s.id).filter(Boolean);
-  const existingRows = studentIds.length
+  const existingMonthRows = studentIds.length
     ? await FeeVoucher.find({
       ...getTenantFilter(scope),
       studentId: { $in: studentIds },
       month,
       year: Number(year),
+      feeStructureId: null,
     })
       .select('studentId')
       .lean()
     : [];
-  const alreadyHasVoucher = new Set(existingRows.map((r) => r.studentId.toString()));
+  const alreadyHasMonthVoucher = new Set(existingMonthRows.map((r) => r.studentId.toString()));
+
+  // Dedup structure-sourced vouchers per student+fund+period (see computePeriodKey) — a
+  // quarterly/annual/one-time fund like "Paper Fund" is only blocked once it already has
+  // a voucher covering the SAME period, never by an unrelated fund's voucher.
+  const structurePeriodKey = feeStructure ? computePeriodKey(feeStructure.frequency, month, year) : null;
+  const structureId = feeStructure ? (feeStructure._id || feeStructure.id) : null;
+  const existingStructureRows = studentIds.length && structureId
+    ? await FeeVoucher.find({
+      ...getTenantFilter(scope),
+      studentId: { $in: studentIds },
+      feeStructureId: structureId,
+      periodKey: structurePeriodKey,
+    })
+      .select('studentId')
+      .lean()
+    : [];
+  const alreadyCoveredForPeriod = new Set(existingStructureRows.map((r) => r.studentId.toString()));
 
   // Admission fee is one-time. If any prior voucher already contains an admission line,
   // do not include admission fee again in newly generated monthly vouchers.
@@ -272,6 +357,7 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
       let feeItems;
       let discount;
       let classIdToUse;
+      let usedStructure = false;
 
       const sid = (student._id || student.id).toString();
       const includeAdmissionFee = !hasAdmissionCharged.has(sid);
@@ -289,6 +375,7 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
       } else {
         // Fall back to the class-level fee structure
         if (!feeStructure) return Promise.resolve(null); // skip — no fallback available
+        usedStructure = true;
         feeItems = (feeStructure.feeItems || []).map((item) => ({
           name: item.name,
           amount: item.amount,
@@ -305,7 +392,10 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
         return Promise.resolve(null);
       }
 
-      if (alreadyHasVoucher.has(sid)) {
+      // A fund-specific structure voucher is only blocked by an existing voucher for
+      // THAT SAME fund+period; an admission-form-sourced voucher is still deduped per
+      // calendar month, same as before.
+      if (usedStructure ? alreadyCoveredForPeriod.has(sid) : alreadyHasMonthVoucher.has(sid)) {
         return Promise.resolve(null);
       }
 
@@ -315,7 +405,8 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
         studentId: student._id || student.id,
         classId: classIdToUse,
         sectionId: student.sectionId,
-        feeStructureId: feeStructure ? (feeStructure._id || feeStructure.id) : undefined,
+        feeStructureId: usedStructure ? structureId : undefined,
+        periodKey: usedStructure ? structurePeriodKey : undefined,
         month,
         year,
         feeItems,
@@ -328,7 +419,7 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
 
   const insertedCount = results.filter((r) => r.status === 'fulfilled' && r.value !== null).length;
   const errorCount = results.filter((r) => r.status === 'rejected').length;
-  const skippedDuplicates = alreadyHasVoucher.size;
+  const skippedDuplicates = alreadyHasMonthVoucher.size + alreadyCoveredForPeriod.size;
   // Auto-apply credit wallet to ALL target month vouchers (including pre-existing duplicates).
   let autoAppliedAmount = 0;
   const autoAppliedVoucherIds = new Set();
@@ -390,42 +481,60 @@ const bulkGenerateVouchersV2 = async (students, feeStructure, month, year, scope
 };
 
 /**
- * Generate vouchers for ALL classes in a branch in one optimized pass.
+ * Generate vouchers across a set of classes (or, when classIds is omitted, every class
+ * in the branch) in one optimized pass. This is the shared engine behind both "All
+ * Classes" and an explicit multi-class selection.
  *
- * - admission_form: a single bulk pass over every active student (no per-class
+ * - admission_form: a single bulk pass over every active student in scope (no per-class
  *   fee structure needed — each student carries their own admission fees).
- * - fee_structure / mixed: students are grouped by class and each group is
- *   generated against that class's active fee structure. Classes with no
- *   structure are skipped (in pure fee_structure mode).
+ * - fee_structure / mixed: students are grouped by class, and each class's OWN active
+ *   fee structure whose name matches `fundName` is resolved and used for that group.
+ *   A class can have several simultaneously-active structures — one per fund, e.g.
+ *   "Standard Fee Structure" for tuition plus a separate "Paper Fund" — so `fundName`
+ *   picks which one applies; classes with no structure under that name are skipped.
  */
-const bulkGenerateVouchersAllClasses = async (month, year, scope, feeSource = 'admission_form') => {
+const bulkGenerateVouchersForClasses = async (classIds, month, year, scope, feeSource = 'admission_form', fundName = '') => {
   const { Student, FeeStructure } = require('../models');
 
-  const students = await Student.find({
+  const studentFilter = {
     organizationId: scope.organizationId,
     branchId: scope.branchId,
     status: 'active',
-  })
+  };
+  if (classIds && classIds.length) {
+    studentFilter.classId = { $in: classIds };
+  }
+
+  const students = await Student.find(studentFilter)
     .select('_id sectionId classId feeStructure creditBalance')
     .lean();
 
   if (!students.length) throw new ApiError(httpStatus.BAD_REQUEST, 'No active students found');
 
-  // admission_form: one bulk pass for everyone.
+  // admission_form: one bulk pass for everyone in scope.
   if (feeSource === 'admission_form') {
     const result = await bulkGenerateVouchersV2(students, null, month, year, scope, 'admission_form');
     return { ...result, total: students.length };
   }
 
-  // fee_structure / mixed: build a classId -> active fee structure map.
-  const structures = await FeeStructure.find({ ...getTenantFilter(scope), isActive: true })
+  const normalizedFundName = String(fundName || '').trim().toLowerCase();
+  if (!normalizedFundName) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'fundName is required to generate fee-structure vouchers for multiple classes');
+  }
+
+  // Build a classId -> matching-named active fee structure map (one per class, not
+  // "whichever structure the query returned first" — see doc comment above).
+  const structureFilter = { ...getTenantFilter(scope), isActive: true };
+  if (classIds && classIds.length) structureFilter.classId = { $in: classIds };
+  const structures = await FeeStructure.find(structureFilter)
     .populate('classId')
     .populate('feeItems.categoryId')
     .lean();
   const structureByClass = new Map();
   structures.forEach((s) => {
     const cid = String(s.classId?._id || s.classId);
-    if (cid && !structureByClass.has(cid)) structureByClass.set(cid, s);
+    if (!cid || String(s.name || '').trim().toLowerCase() !== normalizedFundName) return;
+    structureByClass.set(cid, s);
   });
 
   // Group students by class.
@@ -439,7 +548,7 @@ const bulkGenerateVouchersAllClasses = async (month, year, scope, feeSource = 'a
   const agg = { insertedCount: 0, skipped: 0, skippedDuplicates: 0, errorCount: 0, autoAppliedCount: 0, autoAppliedAmount: 0, total: students.length };
   for (const [cid, group] of groups) {
     const fs = structureByClass.get(cid) || null;
-    // Pure fee_structure mode requires a structure; mixed can still use admission fees.
+    // Pure fee_structure mode requires a matching structure; mixed can still use admission fees.
     if (!fs && feeSource === 'fee_structure') {
       agg.skipped += group.length;
       continue;
@@ -962,6 +1071,9 @@ const getStudentFeeSummary = async (studentId, scope = {}) => {
       remaining: Math.max(0, effectiveNet(v) - (v.paidAmount || 0)),
       status: v.status,
       dueDate: v.dueDate,
+      // Lets the UI label same-month vouchers by fund (e.g. "September 2026 · Paper
+      // Fund") when a student has more than one active fund's voucher for that month.
+      feeItems: (v.feeItems || []).map((fi) => ({ name: fi.name, amount: fi.amount })),
     })),
     lastPaid: lastPaidVoucher
       ? {
@@ -1738,7 +1850,7 @@ module.exports = {
   createVoucher,
   bulkGenerateVouchers,
   bulkGenerateVouchersV2,
-  bulkGenerateVouchersAllClasses,
+  bulkGenerateVouchersForClasses,
   bulkGenerateExamVouchers,
   queryVouchers,
   getVoucherById,

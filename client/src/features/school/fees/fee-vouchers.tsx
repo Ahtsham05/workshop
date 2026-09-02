@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Printer, Zap, DollarSign, Search, CheckCircle2, Clock, AlertTriangle, RefreshCcw, X, History, CalendarCheck, Wrench, Wallet, ArrowUpCircle, ChevronsUp, PlusCircle, Trash2, Plus, Calculator } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Printer, Zap, DollarSign, Search, CheckCircle2, Clock, AlertTriangle, RefreshCcw, X, History, CalendarCheck, Wrench, Wallet, ArrowUpCircle, ChevronsUp, ChevronDown, ChevronRight, PlusCircle, Trash2, Plus, Calculator } from 'lucide-react';
 import {
   useGetFeeVouchersQuery,
   useGetSchoolClassesQuery,
@@ -226,20 +227,27 @@ export default function FeeVouchers() {
   /** Which pending month(s)/voucher(s) the user has explicitly chosen to collect for in the Pay dialog */
   const [selectedMonthIds, setSelectedMonthIds] = useState<string[]>([]);
   const [genForm, setGenForm] = useState({
-    classId: '', feeStructureId: '',
+    classIds: [] as string[], feeStructureId: '', fundName: '',
     month: MONTHS[now.getMonth()], year: now.getFullYear(),
     feeSource: 'admission_form' as 'admission_form' | 'fee_structure' | 'mixed',
   });
 
   const { data: classesData } = useGetSchoolClassesQuery({ limit: 100 });
-  const genClassIsAll = genForm.classId === '__all__';
-  const { data: structuresData } = useGetFeeStructuresQuery(
-    genForm.classId && !genClassIsAll ? { classId: genForm.classId } : {},
-    { skip: genClassIsAll },
+  const { data: structuresData } = useGetFeeStructuresQuery({ limit: 200 });
+  const allStructures = structuresData?.results || [];
+  // Structures belonging to any of the currently-selected classes — a class can have
+  // several simultaneously-active structures, one per fund (e.g. "Standard Fee
+  // Structure" for tuition plus a separate "Paper Fund").
+  const structuresForSelectedClasses = allStructures.filter((s: any) =>
+    genForm.classIds.includes(s.classId?.id || s.classId)
   );
-  const structures = (structuresData?.results || []).filter((s: any) =>
-    !genForm.classId || genClassIsAll || (s.classId?.id || s.classId) === genForm.classId
-  );
+  // Single selected class: pick a specific structure document (existing behaviour).
+  const structures = genForm.classIds.length === 1 ? structuresForSelectedClasses : [];
+  // Multiple selected classes: pick a fund by NAME instead — each class's own
+  // matching-named structure is resolved server-side.
+  const fundNameOptions = Array.from(
+    new Set(structuresForSelectedClasses.map((s: any) => s.name).filter(Boolean))
+  ) as string[];
 
   const voucherParams: any = {
     page: filters.page, limit: filters.limit,
@@ -461,13 +469,35 @@ export default function FeeVouchers() {
     }
   };
 
+  const toggleGenClassSelection = (classId: string, checked: boolean) => {
+    setGenForm((prev) => ({
+      ...prev,
+      classIds: checked
+        ? prev.classIds.includes(classId) ? prev.classIds : [...prev.classIds, classId]
+        : prev.classIds.filter((id) => id !== classId),
+      feeStructureId: '',
+      fundName: '',
+    }));
+  };
+  const selectAllGenClasses = (checked: boolean) => {
+    setGenForm((prev) => ({
+      ...prev,
+      classIds: checked ? classes.map((c: any) => c.id) : [],
+      feeStructureId: '',
+      fundName: '',
+    }));
+  };
+
+  const genClassCount = genForm.classIds.length;
+  const genNeedsStructurePick = genForm.feeSource !== 'admission_form';
+  const genStructureMissing = genNeedsStructurePick && (
+    genClassCount === 1 ? !genForm.feeStructureId : !genForm.fundName
+  );
+
   const handleGenerate = async () => {
-    const isAllClasses = genForm.classId === '__all__';
-    if (!genForm.classId) return toast.error('Select a class');
-    // For a single class with fee_structure/mixed a structure must be picked.
-    // For all-classes mode each class's own active structure is used automatically.
-    if (!isAllClasses && genForm.feeSource !== 'admission_form' && !genForm.feeStructureId) {
-      return toast.error('Select a fee structure');
+    if (!genClassCount) return toast.error('Select at least one class');
+    if (genStructureMissing) {
+      return toast.error(genClassCount === 1 ? 'Select a fee structure' : 'Select a voucher category');
     }
     try {
       const payload: any = {
@@ -475,21 +505,22 @@ export default function FeeVouchers() {
         year: genForm.year,
         feeSource: genForm.feeSource,
       };
-      if (isAllClasses) {
-        payload.allClasses = true;
-      } else {
-        payload.classId = genForm.classId;
+      if (genClassCount === 1) {
+        payload.classId = genForm.classIds[0];
         if (genForm.feeStructureId) payload.feeStructureId = genForm.feeStructureId;
+      } else {
+        payload.classIds = genForm.classIds;
+        if (genForm.fundName) payload.fundName = genForm.fundName;
       }
       const result = await bulkGenerate(payload).unwrap();
       const skipped = result.skipped ? ` · ${result.skipped} skipped (no fees)` : '';
-      const dups = result.skippedDuplicates ? ` · ${result.skippedDuplicates} already had this month` : '';
+      const dups = result.skippedDuplicates ? ` · ${result.skippedDuplicates} already covered for this period` : '';
       const autoApplied = result.autoAppliedCount
         ? ` · ${result.autoAppliedCount} auto-paid from wallet (${formatMoney(result.autoAppliedAmount || 0)})`
         : '';
       toast.success(`Generated ${result.generated} / ${result.total} vouchers${skipped}${dups}${autoApplied}`);
       setGenerateDialog(false);
-      setGenForm({ classId: '', feeStructureId: '', month: MONTHS[now.getMonth()], year: now.getFullYear(), feeSource: 'admission_form' });
+      setGenForm({ classIds: [], feeStructureId: '', fundName: '', month: MONTHS[now.getMonth()], year: now.getFullYear(), feeSource: 'admission_form' });
     } catch (err: any) { toast.error(err?.data?.message || 'Generation failed'); }
   };
 
@@ -632,22 +663,51 @@ export default function FeeVouchers() {
     } catch (err: any) { toast.error(err?.data?.message || 'Failed to record advance'); }
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  };
   const toggleSelectAll = () => {
     if (selectedIds.length === vouchers.length) setSelectedIds([]);
     else setSelectedIds(vouchers.map((v: any) => v.id));
   };
+  const toggleSelectGroup = (ids: string[]) => {
+    const allSelected = ids.every((id) => selectedIds.includes(id));
+    setSelectedIds((prev) => allSelected
+      ? prev.filter((id) => !ids.includes(id))
+      : [...new Set([...prev, ...ids])]
+    );
+  };
 
-  const handlePrint = async (overrideVouchers?: any[], voucherId?: string) => {
+  const STATUS_PRIORITY = ['overdue', 'unpaid', 'partial', 'paid', 'cancelled'];
+  const worstStatus = (list: any[]) => list.reduce(
+    (worst, x) => STATUS_PRIORITY.indexOf(x.status) < STATUS_PRIORITY.indexOf(worst) ? x.status : worst,
+    list[0].status
+  );
+
+  // Same student + same month/year vouchers from different funds (e.g. tuition +
+  // "Paper Fund") aren't duplicates — group them into one row, with the individual
+  // funds shown only when expanded.
+  const voucherGroups = useMemo(() => {
+    const map = new Map<string, any[]>();
+    vouchers.forEach((v: any) => {
+      const sid = v.studentId?.id || v.studentId?._id || v.studentId;
+      const key = `${sid}_${v.month}_${v.year}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(v);
+    });
+    return Array.from(map.values());
+  }, [vouchers]);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const toggleGroupExpand = (key: string) => {
+    setExpandedGroups((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
+  };
+
+  const handlePrint = async (overrideVouchers?: any[], voucherId?: string | string[]) => {
     if (overrideVouchers) {
       openPrintWindow(overrideVouchers);
       return;
     }
     const includeArrears = printArrearsMode === 'with_arrears';
-    const printableVouchers = voucherId
-      ? vouchers.filter((v: any) => v.id === voucherId)
+    const voucherIds = Array.isArray(voucherId) ? voucherId : voucherId ? [voucherId] : null;
+    const printableVouchers = voucherIds
+      ? vouchers.filter((v: any) => voucherIds.includes(v.id))
       : selectedIds.length
         ? vouchers.filter((v: any) => selectedIds.includes(v.id))
         : vouchers.filter((v: any) => v.status !== 'paid');
@@ -742,6 +802,15 @@ export default function FeeVouchers() {
   const svNet = selectedVoucher ? vNet(selectedVoucher) : 0;
   const remaining = selectedVoucher ? Math.max(0, svNet - (selectedVoucher.paidAmount || 0)) : 0;
 
+  /** Short fund label for a voucher's line items — lets same-month vouchers from
+   * different funds (e.g. tuition vs. "Paper Fund") read as distinct rows. */
+  const voucherFundLabel = (feeItems: { name: string }[] = []): string => {
+    if (!feeItems.length) return '';
+    if (feeItems.length === 1) return feeItems[0].name;
+    const names = feeItems.map((fi) => fi.name);
+    return names.length <= 2 ? names.join(' + ') : `${names[0]} +${names.length - 1} more`;
+  };
+
   // Selectable months for the Pay dialog — the student's pending vouchers, always
   // including the one that was clicked (in case the summary hasn't loaded/refreshed yet).
   const monthOptions = useMemo(() => {
@@ -751,11 +820,15 @@ export default function FeeVouchers() {
       year: Number(pv.year),
       status: pv.status,
       remaining: Number(pv.remaining || 0),
+      label: voucherFundLabel(pv.feeItems),
     }));
     if (selectedVoucher) {
       const svId = selectedVoucher.id || selectedVoucher._id;
       if (!list.some((m) => m.id === svId)) {
-        list.push({ id: svId, month: selectedVoucher.month, year: Number(selectedVoucher.year), status: selectedVoucher.status, remaining });
+        list.push({
+          id: svId, month: selectedVoucher.month, year: Number(selectedVoucher.year),
+          status: selectedVoucher.status, remaining, label: voucherFundLabel(selectedVoucher.feeItems),
+        });
       }
     }
     return list.sort((a, b) => (a.year - b.year) || (MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month)));
@@ -1067,133 +1140,189 @@ export default function FeeVouchers() {
           </div>
           {/* Rows */}
           <div className={`divide-y transition-opacity ${isFetching ? 'opacity-60' : ''}`}>
-            {vouchers.map((v: any) => {
-              const cfg = STATUS_CONFIG[v.status] || STATUS_CONFIG.unpaid;
-              const net = vNet(v);
-              const pct = net > 0 ? Math.round(((v.paidAmount || 0) / net) * 100) : 0;
-              const isSelected = selectedIds.includes(v.id);
+            {voucherGroups.map((group: any[]) => {
+              const v = group[0];
+              const isMulti = group.length > 1;
+              const groupIds = group.map((g) => g.id);
+              const groupKey = groupIds.join('_');
+              const isExpanded = expandedGroups.includes(groupKey);
+              const cfg = STATUS_CONFIG[worstStatus(group)] || STATUS_CONFIG.unpaid;
+              const net = group.reduce((s, g) => s + vNet(g), 0);
+              const paid = group.reduce((s, g) => s + (g.paidAmount || 0), 0);
+              const pct = net > 0 ? Math.round((paid / net) * 100) : 0;
+              const earliestDueDate = group.reduce((earliest: string | null, g) =>
+                !earliest || (g.dueDate && g.dueDate < earliest) ? g.dueDate : earliest, null as string | null
+              );
+              const isSelected = groupIds.every((id) => selectedIds.includes(id));
               const bal = getStudentBalance(v);
               return (
-                <div
-                  key={v.id}
-                  className={`grid grid-cols-[2rem_1fr_auto_auto_auto] gap-3 items-center px-4 py-3 hover:bg-muted/20 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
-                >
-                  <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(v.id)} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm">
-                        {v.studentId?.firstName} {v.studentId?.lastName}
-                        {(v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName)
-                          ? ` (S/O ${v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName})`
-                          : ''}
-                      </span>
-                      {v.studentId?.admissionNumber && (
-                        <span className="text-xs text-muted-foreground">#{v.studentId.admissionNumber}</span>
-                      )}
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{v.classId?.name}</Badge>
-                      {v.voucherType === 'exam' && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-violet-50 text-violet-700 border-violet-200">
-                          Exam Fee
-                        </Badge>
-                      )}
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${cfg.bg} ${cfg.text}`}>
-                        {cfg.label}
-                      </span>
-                      {/* Credit wallet badge */}
-                      {bal.creditBalance > 0 && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700">
-                          <Wallet className="h-2.5 w-2.5" />
-                          +{bal.creditBalance.toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-[11px] text-muted-foreground">
-                        {v.voucherNumber || '—'}
-                        {v.voucherType === 'exam' && v.feeItems?.[0]?.name
-                          ? ` · ${v.feeItems[0].name}`
-                          : ` · ${v.month} ${v.year}`}
-                        {' · Due '}
-                        {v.dueDate ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                      </span>
-                      {v.studentId?.parent?.phone && (
-                        <span className="text-[11px] text-muted-foreground">
-                          Guardian: {v.studentId.parent.phone}
-                        </span>
-                      )}
-                      {net > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="h-1 w-16 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-amber-400'}`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <span className="text-[10px] text-muted-foreground">{pct}%</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">{formatMoney(net)}</p>
-                    {(v.paidAmount || 0) > 0 && v.status !== 'paid' && (
-                      <p className="text-[10px] text-amber-600">Due: {(net - (v.paidAmount || 0)).toLocaleString()}</p>
-                    )}
-                    {(v.discount || 0) > 0 && (
-                      <p className="text-[10px] text-muted-foreground">Disc: {v.discount?.toLocaleString()}</p>
-                    )}
-                  </div>
-                  {/* Total Due: all months, with arrears breakdown */}
-                  <div className="text-right min-w-[90px]">
-                    {bal.totalOutstanding > 0 ? (
-                      <>
-                        <p className="text-sm font-bold text-red-600">{formatMoney(bal.totalOutstanding)}</p>
-                        {(bal.previousArrears > 0 || (bal.futureMonthsOutstanding ?? 0) > 0) ? (
-                          <p className="text-[10px] text-muted-foreground leading-tight">
-                            <span className="text-amber-600">{filters.month}: {bal.thisMonthOutstanding.toLocaleString()}</span>
-                            {bal.previousArrears > 0 && (
-                              <>
-                                {' + '}
-                                <span className="text-red-500">earlier: {bal.previousArrears.toLocaleString()}</span>
-                              </>
-                            )}
-                            {(bal.futureMonthsOutstanding ?? 0) > 0 && (
-                              <>
-                                {' + '}
-                                <span className="text-violet-600">upcoming: {(bal.futureMonthsOutstanding ?? 0).toLocaleString()}</span>
-                              </>
-                            )}
-                          </p>
-                        ) : (
-                          <p className="text-[10px] text-muted-foreground">{bal.pendingCount} month{bal.pendingCount !== 1 ? 's' : ''} pending</p>
+                <div key={groupKey}>
+                  <div
+                    className={`grid grid-cols-[2rem_1fr_auto_auto_auto] gap-3 items-center px-4 py-3 hover:bg-muted/20 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
+                  >
+                    <Checkbox checked={isSelected} onCheckedChange={() => toggleSelectGroup(groupIds)} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {isMulti && (
+                          <button
+                            type="button"
+                            className="p-0.5 rounded hover:bg-muted shrink-0"
+                            onClick={() => toggleGroupExpand(groupKey)}
+                            title={isExpanded ? 'Hide fund breakdown' : 'Show fund breakdown'}
+                          >
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          </button>
                         )}
-                      </>
-                    ) : (
-                      <p className="text-sm font-semibold text-emerald-600">All Clear</p>
-                    )}
-                    {bal.creditBalance > 0 && (
-                      <p className="text-[10px] text-emerald-600 flex items-center justify-end gap-0.5">
-                        <Wallet className="h-2.5 w-2.5" />+{bal.creditBalance.toLocaleString()} credit
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-1.5 justify-end">
-                    {v.status !== 'cancelled' && bal.totalOutstanding > 0 && (
-                      <Button size="sm" className="h-7 text-xs px-2.5" onClick={() => openPay(v)}>
-                        <DollarSign className="h-3 w-3 mr-1" /> {v.status === 'paid' ? 'Collect Due' : 'Collect'}
+                        <span className="font-medium text-sm">
+                          {v.studentId?.firstName} {v.studentId?.lastName}
+                          {(v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName)
+                            ? ` (S/O ${v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName})`
+                            : ''}
+                        </span>
+                        {v.studentId?.admissionNumber && (
+                          <span className="text-xs text-muted-foreground">#{v.studentId.admissionNumber}</span>
+                        )}
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{v.classId?.name}</Badge>
+                        {v.voucherType === 'exam' && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-violet-50 text-violet-700 border-violet-200">
+                            Exam Fee
+                          </Badge>
+                        )}
+                        {isMulti && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{group.length} funds</Badge>
+                        )}
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${cfg.bg} ${cfg.text}`}>
+                          {cfg.label}
+                        </span>
+                        {/* Credit wallet badge */}
+                        {bal.creditBalance > 0 && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700">
+                            <Wallet className="h-2.5 w-2.5" />
+                            +{bal.creditBalance.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[11px] text-muted-foreground">
+                          {isMulti
+                            ? `${group.length} vouchers · ${v.month} ${v.year}`
+                            : (v.voucherNumber || '—') + (v.voucherType === 'exam' && v.feeItems?.[0]?.name
+                              ? ` · ${v.feeItems[0].name}`
+                              : ` · ${v.month} ${v.year}`)}
+                          {' · Due '}
+                          {earliestDueDate ? new Date(earliestDueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        </span>
+                        {v.studentId?.parent?.phone && (
+                          <span className="text-[11px] text-muted-foreground">
+                            Guardian: {v.studentId.parent.phone}
+                          </span>
+                        )}
+                        {net > 0 && (
+                          <div className="flex items-center gap-1">
+                            <div className="h-1 w-16 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-amber-400'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-muted-foreground">{pct}%</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold">{formatMoney(net)}</p>
+                      {paid > 0 && worstStatus(group) !== 'paid' && (
+                        <p className="text-[10px] text-amber-600">Due: {(net - paid).toLocaleString()}</p>
+                      )}
+                      {!isMulti && (v.discount || 0) > 0 && (
+                        <p className="text-[10px] text-muted-foreground">Disc: {v.discount?.toLocaleString()}</p>
+                      )}
+                    </div>
+                    {/* Total Due: all months, with arrears breakdown */}
+                    <div className="text-right min-w-[90px]">
+                      {bal.totalOutstanding > 0 ? (
+                        <>
+                          <p className="text-sm font-bold text-red-600">{formatMoney(bal.totalOutstanding)}</p>
+                          {(bal.previousArrears > 0 || (bal.futureMonthsOutstanding ?? 0) > 0) ? (
+                            <p className="text-[10px] text-muted-foreground leading-tight">
+                              <span className="text-amber-600">{filters.month}: {bal.thisMonthOutstanding.toLocaleString()}</span>
+                              {bal.previousArrears > 0 && (
+                                <>
+                                  {' + '}
+                                  <span className="text-red-500">earlier: {bal.previousArrears.toLocaleString()}</span>
+                                </>
+                              )}
+                              {(bal.futureMonthsOutstanding ?? 0) > 0 && (
+                                <>
+                                  {' + '}
+                                  <span className="text-violet-600">upcoming: {(bal.futureMonthsOutstanding ?? 0).toLocaleString()}</span>
+                                </>
+                              )}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground">{bal.pendingCount} month{bal.pendingCount !== 1 ? 's' : ''} pending</p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm font-semibold text-emerald-600">All Clear</p>
+                      )}
+                      {bal.creditBalance > 0 && (
+                        <p className="text-[10px] text-emerald-600 flex items-center justify-end gap-0.5">
+                          <Wallet className="h-2.5 w-2.5" />+{bal.creditBalance.toLocaleString()} credit
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5 justify-end">
+                      {worstStatus(group) !== 'cancelled' && bal.totalOutstanding > 0 && (
+                        <Button size="sm" className="h-7 text-xs px-2.5" onClick={() => openPay(v)}>
+                          <DollarSign className="h-3 w-3 mr-1" /> Collect
+                        </Button>
+                      )}
+                      <Button
+                        size="icon" variant="outline" className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                        title="Record advance payment to credit wallet"
+                        onClick={() => openAdvance(v)}
+                      >
+                        <ArrowUpCircle className="h-3.5 w-3.5" />
                       </Button>
-                    )}
-                    <Button
-                      size="icon" variant="outline" className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200"
-                      title="Record advance payment to credit wallet"
-                      onClick={() => openAdvance(v)}
-                    >
-                      <ArrowUpCircle className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => handlePrint(undefined, v.id)}>
-                      <Printer className="h-3 w-3" />
-                    </Button>
+                      <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => handlePrint(undefined, groupIds)}>
+                        <Printer className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
+
+                  {/* Per-fund breakdown — only when expanded */}
+                  {isMulti && isExpanded && (
+                    <div className="bg-muted/20 border-t divide-y">
+                      {group.map((g: any) => {
+                        const gCfg = STATUS_CONFIG[g.status] || STATUS_CONFIG.unpaid;
+                        const gNet = vNet(g);
+                        return (
+                          <div key={g.id} className="grid grid-cols-[2rem_1fr_auto_auto_auto] gap-3 items-center pl-11 pr-4 py-2">
+                            <span />
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs font-medium truncate">{voucherFundLabel(g.feeItems) || 'Fee'}</span>
+                              <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-medium border ${gCfg.bg} ${gCfg.text}`}>{gCfg.label}</span>
+                              <span className="text-[10px] text-muted-foreground">{g.voucherNumber || '—'}</span>
+                            </div>
+                            <span className="text-xs font-semibold text-right">{formatMoney(gNet)}</span>
+                            <span />
+                            <div className="flex gap-1.5 justify-end">
+                              {g.status !== 'cancelled' && g.status !== 'paid' && (
+                                <Button size="sm" variant="outline" className="h-6 text-[11px] px-2" onClick={() => openPay(g)}>
+                                  Collect
+                                </Button>
+                              )}
+                              <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => handlePrint(undefined, g.id)}>
+                                <Printer className="h-2.5 w-2.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1234,28 +1363,47 @@ export default function FeeVouchers() {
 
       {/* ── Generate Dialog ──────────────────────────────────────── */}
       <Dialog open={generateDialog} onOpenChange={setGenerateDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-primary" /> Bulk Generate Vouchers
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {/* Class */}
+            {/* Classes — one, several, or all */}
             <div className="space-y-1.5">
-              <Label>Class <span className="text-destructive">*</span></Label>
-              <Select value={genForm.classId} onValueChange={(v) => setGenForm({ ...genForm, classId: v, feeStructureId: '' })}>
-                <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">
-                    <span className="font-medium">All Classes</span>
-                  </SelectItem>
-                  {classes.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {genForm.classId === '__all__' && (
+              <Label>Classes <span className="text-destructive">*</span></Label>
+              <div className="rounded-lg border shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b bg-muted/40">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={classes.length > 0 && genClassCount === classes.length}
+                      onCheckedChange={(checked) => selectAllGenClasses(!!checked)}
+                    />
+                    <span className="text-sm font-semibold">Select All Classes</span>
+                  </label>
+                  <span className="text-xs font-medium text-muted-foreground">{genClassCount} of {classes.length} selected</span>
+                </div>
+                <ScrollArea className="h-40">
+                  <div className="grid grid-cols-2 gap-1.5 p-2.5">
+                    {classes.map((c: any) => {
+                      const isSelected = genForm.classIds.includes(c.id);
+                      return (
+                        <label
+                          key={c.id}
+                          className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer transition-colors ${isSelected ? 'border-primary/40 bg-primary/5' : 'border-transparent hover:bg-muted/50'}`}
+                        >
+                          <Checkbox checked={isSelected} onCheckedChange={(checked) => toggleGenClassSelection(c.id, !!checked)} />
+                          <span className="text-sm truncate">{c.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </div>
+              {genClassCount > 1 && (
                 <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-1.5">
-                  Vouchers will be generated for every active student across all classes in one go. Students who already have a voucher for this month are skipped automatically.
+                  Vouchers will be generated across all {genClassCount} selected classes in one go. Students who already have a voucher covering this period are skipped automatically.
                 </p>
               )}
             </div>
@@ -1265,7 +1413,7 @@ export default function FeeVouchers() {
               <Label>Fee Source <span className="text-destructive">*</span></Label>
               <Select
                 value={genForm.feeSource}
-                onValueChange={(v: any) => setGenForm({ ...genForm, feeSource: v, feeStructureId: '' })}
+                onValueChange={(v: any) => setGenForm({ ...genForm, feeSource: v, feeStructureId: '', fundName: '' })}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -1278,7 +1426,7 @@ export default function FeeVouchers() {
                   <SelectItem value="fee_structure">
                     <div className="flex flex-col items-start">
                       <span className="font-medium">From Fee Structure</span>
-                      <span className="text-xs text-muted-foreground">Apply a single class-level fee structure to all students</span>
+                      <span className="text-xs text-muted-foreground">Apply a class-level fee structure to all students</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="mixed">
@@ -1296,28 +1444,36 @@ export default function FeeVouchers() {
               )}
               {genForm.feeSource === 'mixed' && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-                  Students with individual fees will use those; the rest will get the selected fee structure below.
+                  Students with individual fees will use those; the rest will get the selected voucher category below.
                 </p>
               )}
             </div>
 
-            {/* All-classes + fee structure: each class's own structure is used */}
-            {genForm.feeSource !== 'admission_form' && genForm.classId === '__all__' && (
-              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-                Each class's own active fee structure will be applied automatically. Classes without a fee structure are skipped.
-              </p>
+            {/* Multiple classes + fee structure: pick a fund by name, applied per class */}
+            {genForm.feeSource !== 'admission_form' && genClassCount > 1 && (
+              <div className="space-y-1.5">
+                <Label>Voucher Category <span className="text-destructive">*</span></Label>
+                <Select value={genForm.fundName} onValueChange={(v) => setGenForm({ ...genForm, fundName: v })}>
+                  <SelectTrigger><SelectValue placeholder={fundNameOptions.length ? 'Select a fund' : 'No shared funds found'} /></SelectTrigger>
+                  <SelectContent>
+                    {fundNameOptions.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+                  Each selected class's own "{genForm.fundName || '…'}" structure is applied automatically — a monthly fund generates every month, quarterly once a quarter, annual/one-time only once. Classes without a matching structure are skipped.
+                </p>
+              </div>
             )}
 
-            {/* Fee structure — shown only for a single class with fee_structure or mixed */}
-            {genForm.feeSource !== 'admission_form' && genForm.classId !== '__all__' && (
+            {/* Single class + fee structure: pick a specific structure document */}
+            {genForm.feeSource !== 'admission_form' && genClassCount === 1 && (
               <div className="space-y-1.5">
                 <Label>Fee Structure <span className="text-destructive">*</span></Label>
                 <Select
                   value={genForm.feeStructureId}
                   onValueChange={(v) => setGenForm({ ...genForm, feeStructureId: v })}
-                  disabled={!genForm.classId}
                 >
-                  <SelectTrigger><SelectValue placeholder={genForm.classId ? 'Select structure' : 'Select class first'} /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select structure" /></SelectTrigger>
                   <SelectContent>
                     {structures.map((s: any) => (
                       <SelectItem key={s.id} value={s.id}>
@@ -1348,7 +1504,7 @@ export default function FeeVouchers() {
             <Button variant="outline" onClick={() => setGenerateDialog(false)}>Cancel</Button>
             <Button
               onClick={handleGenerate}
-              disabled={generating || !genForm.classId || (genForm.classId !== '__all__' && genForm.feeSource !== 'admission_form' && !genForm.feeStructureId)}
+              disabled={generating || !genClassCount || genStructureMissing}
             >
               {generating ? <><RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />Generating…</> : <><Zap className="mr-2 h-3.5 w-3.5" />Generate</>}
             </Button>
@@ -1497,10 +1653,13 @@ export default function FeeVouchers() {
                         key={m.id}
                         className={`flex items-center justify-between gap-2 px-3 py-2 cursor-pointer transition-colors ${checked ? 'bg-emerald-50/70' : 'hover:bg-muted/40'}`}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           <Checkbox checked={checked} onCheckedChange={() => toggleMonthSelect(m.id)} />
-                          <span className="text-sm font-medium">{m.month} {m.year}</span>
-                          <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-medium border ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
+                          <span className="text-sm font-medium truncate">
+                            {m.month} {m.year}
+                            {m.label && <span className="text-muted-foreground font-normal"> · {m.label}</span>}
+                          </span>
+                          <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-medium border shrink-0 ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
                         </div>
                         <span className="text-sm font-semibold text-red-600">{formatMoney(m.remaining)}</span>
                       </label>

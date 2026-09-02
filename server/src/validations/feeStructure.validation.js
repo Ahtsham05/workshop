@@ -8,15 +8,18 @@ const feeItemSchema = Joi.object().keys({
 });
 
 const createFeeStructure = {
-  body: Joi.object().keys({
-    classId: Joi.string().custom(objectId).required(),
-    name: Joi.string().trim(),
-    academicYear: Joi.string().allow('', null),
-    feeItems: Joi.array().items(feeItemSchema).min(1).required(),
-    frequency: Joi.string().valid('monthly', 'quarterly', 'annually', 'one-time'),
-    dueDay: Joi.number().integer().min(1).max(31),
-    isActive: Joi.boolean(),
-  }),
+  body: Joi.object()
+    .keys({
+      classId: Joi.string().custom(objectId),
+      classIds: Joi.array().items(Joi.string().custom(objectId)).min(1),
+      name: Joi.string().trim(),
+      academicYear: Joi.string().allow('', null),
+      feeItems: Joi.array().items(feeItemSchema).min(1).required(),
+      frequency: Joi.string().valid('monthly', 'quarterly', 'annually', 'one-time'),
+      dueDay: Joi.number().integer().min(1).max(31),
+      isActive: Joi.boolean(),
+    })
+    .xor('classId', 'classIds'),
 };
 
 const getFeeStructures = {

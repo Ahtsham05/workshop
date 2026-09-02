@@ -29,16 +29,24 @@ const createVoucher = {
 };
 
 const bulkGenerateVouchers = {
-  body: Joi.object().keys({
-    allClasses: Joi.boolean().default(false),
-    classId: Joi.string()
-      .custom(objectId)
-      .when('allClasses', { is: true, then: Joi.optional().allow(null, ''), otherwise: Joi.required() }),
-    feeStructureId: Joi.string().custom(objectId).allow(null, '').optional(),
-    month: Joi.string().valid(...MONTHS).required(),
-    year: Joi.number().integer().min(2000).max(2100).required(),
-    feeSource: Joi.string().valid('fee_structure', 'admission_form', 'mixed').default('fee_structure'),
-  }),
+  body: Joi.object()
+    .keys({
+      allClasses: Joi.boolean().default(false),
+      classId: Joi.string().custom(objectId),
+      classIds: Joi.array().items(Joi.string().custom(objectId)).min(1),
+      feeStructureId: Joi.string().custom(objectId).allow(null, ''),
+      fundName: Joi.string().trim().allow('', null),
+      month: Joi.string().valid(...MONTHS).required(),
+      year: Joi.number().integer().min(2000).max(2100).required(),
+      feeSource: Joi.string().valid('fee_structure', 'admission_form', 'mixed').default('fee_structure'),
+    })
+    .custom((value, helpers) => {
+      const hasClassIds = Array.isArray(value.classIds) && value.classIds.length > 0;
+      if (!value.allClasses && !value.classId && !hasClassIds) {
+        return helpers.message('Select a class, multiple classes, or All Classes');
+      }
+      return value;
+    }),
 };
 
 const getVouchers = {
