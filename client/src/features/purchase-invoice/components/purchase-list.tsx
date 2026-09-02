@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { useLanguage } from '@/context/language-context'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { useSelector } from 'react-redux'
@@ -46,6 +47,8 @@ interface PurchaseListProps {
 
 export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseListProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const canViewCreatedBy = useCanViewCreatedBy()
   const { hasExplicitPermission } = usePermissions()
   const canCreate = hasExplicitPermission('createPurchases')
@@ -111,6 +114,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
           logo: orgData?.logo?.url,
           isTrial: orgData?.subscription?.isTrial,
           invoiceNote: branchData?.invoiceNote,
+          currencyMeta,
         }
 
         const format = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)]
@@ -302,7 +306,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
                         {getPurchasePaymentType(purchase)}
                       </Badge>
                     </TableCell>
-                    <TableCell>Rs{purchase.totalAmount?.toFixed(2) || '0.00'}</TableCell>
+                    <TableCell>{formatMoney(purchase.totalAmount || 0)}</TableCell>
                     {/* <TableCell>
                       <Badge variant={purchase.status ? 'default' : 'secondary'}>
                         {purchase.status ? t('Completed') : t('Pending')}
@@ -528,6 +532,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
 
 function PurchaseDetails({ purchase }: { purchase: any }) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   
   // Debug log to see the actual data structure
   console.log('Purchase data:', purchase)
@@ -642,14 +647,14 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
                     </div>
                   </TableCell>
                   <TableCell>{item.quantity || 0} {item.unit || 'pcs'}</TableCell>
-                  <TableCell>Rs{Number(price).toFixed(2)}</TableCell>
+                  <TableCell>{formatMoney(Number(price))}</TableCell>
                   <TableCell>
                     {discountAmount > 0 && (
-                      <div className="text-xs text-muted-foreground line-through">Rs{gross.toFixed(2)}</div>
+                      <div className="text-xs text-muted-foreground line-through">{formatMoney(gross)}</div>
                     )}
-                    Rs{Number(total).toFixed(2)}
+                    {formatMoney(Number(total))}
                     {discountAmount > 0 && (
-                      <div className="text-xs text-green-600">-Rs{discountAmount.toFixed(2)}</div>
+                      <div className="text-xs text-green-600">-{formatMoney(discountAmount)}</div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -670,18 +675,18 @@ function PurchaseDetails({ purchase }: { purchase: any }) {
             <div>
               <Label>{t('Subtotal')}</Label>
               <p className="text-lg font-bold">
-                Rs{(Number(purchase.totalAmount || 0) + Number(purchase.discount || 0)).toFixed(2)}
+                {formatMoney(Number(purchase.totalAmount || 0) + Number(purchase.discount || 0))}
               </p>
             </div>
             <div>
               <Label>{t('Discount')}</Label>
-              <p className="text-lg font-bold text-green-600">-Rs{Number(purchase.discount || 0).toFixed(2)}</p>
+              <p className="text-lg font-bold text-green-600">-{formatMoney(Number(purchase.discount || 0))}</p>
             </div>
           </>
         )}
         <div>
           <Label>{t('Total Amount')}</Label>
-          <p className="text-lg font-bold text-green-600">Rs{purchase.totalAmount?.toFixed(2) || '0.00'}</p>
+          <p className="text-lg font-bold text-green-600">{formatMoney(purchase.totalAmount || 0)}</p>
         </div>
       </div>
 

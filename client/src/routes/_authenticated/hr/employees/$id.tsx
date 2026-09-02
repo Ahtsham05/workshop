@@ -7,9 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Briefcase, DollarSign, User, ReceiptText } from 'lucide-react';
 import { format } from 'date-fns';
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(amount || 0);
+import { formatMoneyWithMeta, useCurrencyMeta } from '@/lib/format-money';
 
 export const Route = createFileRoute('/_authenticated/hr/employees/$id')({
   component: EmployeeDetails,
@@ -27,9 +25,14 @@ function EmployeeDetails() {
     return <Outlet />;
   }
 
+  // useCurrencyMeta is placed here (after the early Outlet return above), matching this
+  // component's existing hook placement — a pre-existing Rules-of-Hooks violation that
+  // predates this change and is out of scope to fix here.
+  const currencyMeta = useCurrencyMeta();
   const { data: employee, isLoading } = useGetEmployeeQuery(id);
   const isExited = employee?.employmentStatus === 'Terminated' || employee?.employmentStatus === 'Resigned';
   const { data: settlement } = useGetEmployeeFinalSettlementQuery(id, { skip: !isExited });
+  const formatCurrency = (amount: number) => formatMoneyWithMeta(Number(amount) || 0, currencyMeta);
 
   if (isLoading) {
     return (
@@ -338,17 +341,17 @@ function EmployeeDetails() {
                 <div className="p-4 bg-blue-50 rounded-lg">
                   <p className="text-sm text-muted-foreground">{t('Basic Salary')}</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    Rs {employee.salary?.basicSalary?.toLocaleString() || '0'}
+                    {formatCurrency(employee.salary?.basicSalary || 0)}
                   </p>
                 </div>
                 <div className="p-4 bg-green-50 rounded-lg">
                   <p className="text-sm text-muted-foreground">{t('Total Allowances')}</p>
                   <p className="text-2xl font-bold text-green-600">
-                    Rs {typeof employee.salary?.allowances === 'number' 
-                      ? employee.salary.allowances.toLocaleString() 
-                      : employee.salary?.allowances 
-                        ? (Object.values(employee.salary.allowances as Record<string, number>).reduce((a, b) => a + b, 0)).toLocaleString()
-                        : '0'}
+                    {formatCurrency(typeof employee.salary?.allowances === 'number'
+                      ? employee.salary.allowances
+                      : employee.salary?.allowances
+                        ? Object.values(employee.salary.allowances as Record<string, number>).reduce((a, b) => a + b, 0)
+                        : 0)}
                   </p>
                 </div>
 

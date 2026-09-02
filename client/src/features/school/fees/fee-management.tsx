@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Plus, DollarSign, AlertCircle, Search, CreditCard, Clock, CheckCircle, TrendingDown } from 'lucide-react';
 import { useGetSchoolFeesQuery, useCreateSchoolFeeMutation, usePaySchoolFeeMutation, useGetOverdueFeesQuery, useGetSchoolClassesQuery, useGetStudentsQuery } from '@/stores/school.api';
 import { toast } from 'sonner';
+import { useFormatMoney } from '@/lib/format-money';
 
 const FEE_TYPES = ['tuition', 'admission', 'exam', 'transport', 'library', 'laboratory', 'sports', 'computer', 'miscellaneous', 'other'];
 const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'online', 'other'];
@@ -31,6 +32,7 @@ export default function FeeManagement() {
   const [selectedFee, setSelectedFee] = useState<any>(null);
   const [studentSearch, setStudentSearch] = useState('');
   const [debouncedStudentSearch, setDebouncedStudentSearch] = useState('');
+  const formatMoney = useFormatMoney();
 
   // Debounce student search input
   useEffect(() => {
@@ -119,7 +121,7 @@ export default function FeeManagement() {
                 <Clock className="h-5 w-5 text-yellow-600" />
               </div>
               <div>
-                <p className="text-xl font-bold">Rs. {feeSummary.totalPending.toLocaleString()}</p>
+                <p className="text-xl font-bold">{formatMoney(feeSummary.totalPending)}</p>
                 <p className="text-xs text-muted-foreground">Total Pending</p>
               </div>
             </div>
@@ -132,7 +134,7 @@ export default function FeeManagement() {
                 <CheckCircle className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-xl font-bold text-green-700">Rs. {feeSummary.totalCollected.toLocaleString()}</p>
+                <p className="text-xl font-bold text-green-700">{formatMoney(feeSummary.totalCollected)}</p>
                 <p className="text-xs text-muted-foreground">Collected (this page)</p>
               </div>
             </div>
@@ -193,8 +195,8 @@ export default function FeeManagement() {
                       </div>
                     </div>
                     <div className="text-right shrink-0 space-y-0.5">
-                      <p className="text-sm font-semibold">Rs. {(fee.netAmount || 0).toLocaleString()}</p>
-                      {fee.paidAmount > 0 && <p className="text-xs text-muted-foreground">Paid: Rs. {fee.paidAmount.toLocaleString()}</p>}
+                      <p className="text-sm font-semibold">{formatMoney(fee.netAmount || 0)}</p>
+                      {fee.paidAmount > 0 && <p className="text-xs text-muted-foreground">Paid: {formatMoney(fee.paidAmount)}</p>}
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-xs text-muted-foreground">Due {new Date(fee.dueDate).toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })}</p>
@@ -306,7 +308,7 @@ export default function FeeManagement() {
             {form.amount && (
               <div className="flex justify-between text-sm p-2 bg-muted/40 rounded">
                 <span>Net Amount:</span>
-                <span className="font-semibold">Rs. {(Number(form.amount) - Number(form.discount) + Number(form.fine)).toLocaleString()}</span>
+                <span className="font-semibold">{formatMoney(Number(form.amount) - Number(form.discount) + Number(form.fine))}</span>
               </div>
             )}
           </div>
@@ -328,8 +330,8 @@ export default function FeeManagement() {
               <p className="font-medium">{selectedFee.studentId?.firstName} {selectedFee.studentId?.lastName}</p>
               <p className="text-muted-foreground capitalize">{selectedFee.feeType} — {selectedFee.month} {selectedFee.year}</p>
               <div className="flex justify-between text-xs">
-                <span>Total: Rs. {(selectedFee.netAmount || 0).toLocaleString()}</span>
-                <span>Remaining: Rs. {((selectedFee.netAmount || 0) - (selectedFee.paidAmount || 0)).toLocaleString()}</span>
+                <span>Total: {formatMoney(selectedFee.netAmount || 0)}</span>
+                <span>Remaining: {formatMoney((selectedFee.netAmount || 0) - (selectedFee.paidAmount || 0))}</span>
               </div>
             </div>
           )}

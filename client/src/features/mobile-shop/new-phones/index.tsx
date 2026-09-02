@@ -48,8 +48,7 @@ import { isUsedPhonesBucketProduct } from '../old-phones/constants'
 import { BuyNewPhoneDialog } from './components/buy-new-phone-dialog'
 import { usePermissions } from '@/context/permission-context'
 import type { RootState } from '@/stores/store'
-
-const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
+import { useFormatMoney } from '@/lib/format-money'
 
 interface PhoneProductOption {
   id?: string
@@ -108,6 +107,8 @@ const makeInitialSellForm = (): SellFormState => ({
 })
 
 export default function NewPhonesPage() {
+  const formatMoney = useFormatMoney()
+  const fmtAmt = (n?: number) => formatMoney(n ?? 0)
   const { hasPermission } = usePermissions()
   const canBuy = hasPermission('buyNewPhones')
   const canSell = hasPermission('sellNewPhones')

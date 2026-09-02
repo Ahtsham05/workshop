@@ -53,6 +53,7 @@ import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } f
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { purchaseCatalogApi, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { BranchStockTrigger } from '@/components/branch-stock-trigger'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading.
@@ -206,6 +207,9 @@ export function InvoicePanel({
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const { showUrdu } = useUrduDisplay()
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
+  const currencySymbol = currencyMeta.symbol
   // Below sm (640px): items render as cards instead of the table (see the items list
   // below). Read via JS rather than CSS show/hide so only one variant ever mounts — two
   // copies of the same row would double up every interactive control (Popover triggers,
@@ -454,6 +458,7 @@ export function InvoicePanel({
         })(),
         printInUrdu: getInvoicePrintInUrdu(),
         printAsQuotation: invoiceData.type === 'quotation',
+        currencyMeta,
         invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
       }, invoiceData, loadedCustomer)
 
@@ -550,6 +555,7 @@ export function InvoicePanel({
         })(),
         printInUrdu: getInvoicePrintInUrdu(),
         printAsQuotation: invoiceData.type === 'quotation',
+        currencyMeta,
         invoiceDate: invoiceData.invoiceDate || invoice.invoiceDate,
       }, invoiceData, loadedCustomer)
 
@@ -1834,6 +1840,7 @@ export function InvoicePanel({
               invoiceDate: savedInvoicePayload.invoiceDate,
               printInUrdu: getInvoicePrintInUrdu(),
               printAsQuotation: savedInvoicePayload.type === 'quotation',
+              currencyMeta,
             }, savedInvoicePayload, customer)
             const wpPhone = printData.customerPhone?.trim() || printData.customerWhatsapp?.trim() || ''
             if (!wpPhone) {
@@ -2240,7 +2247,7 @@ export function InvoicePanel({
                                                 )}
                                               </div>
                                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <span>Rs{Number(catalogItem.price || 0).toFixed(2)}</span>
+                                                <span>{formatMoney(Number(catalogItem.price || 0))}</span>
                                                 <span
                                                   className={catalogItem.stockQuantity <= 0 ? 'text-red-600 font-medium' : catalogItem.stockQuantity <= 5 ? 'text-red-500 font-medium' : catalogItem.stockQuantity <= 20 ? 'text-amber-500' : 'text-green-600'}
                                                 >
@@ -2261,7 +2268,7 @@ export function InvoicePanel({
                                                     )}
                                                     title="Purchase cost"
                                                   >
-                                                    Cost: Rs{Number(catalogItem.cost || 0).toFixed(2)}
+                                                    Cost: {formatMoney(Number(catalogItem.cost || 0))}
                                                   </span>
                                                 )}
                                                 {catalogItem.trackBatch && catalogItem.batches && catalogItem.batches.length > 0 && (
@@ -2589,7 +2596,7 @@ export function InvoicePanel({
                         <span className='text-xs text-muted-foreground'>—</span>
                       ) : (
                         <div className='flex w-full items-center rounded-lg border bg-background overflow-hidden'>
-                          <span className='px-1.5 h-8 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none xl:px-2 xl:h-9'>Rs</span>
+                          <span className='px-1.5 h-8 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none xl:px-2 xl:h-9'>{currencySymbol}</span>
                           <Input
                             ref={(el) => { priceInputRefs.current[item.id] = el }}
                             type="text"
@@ -2622,10 +2629,10 @@ export function InvoicePanel({
                           <button
                             type="button"
                             onClick={() => updateItemDiscount(item.id, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' })}
-                            title='Click to switch between Rs and % discount'
+                            title={`Click to switch between ${currencySymbol} and % discount`}
                             className='px-1.5 h-8 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors xl:px-2 xl:h-9'
                           >
-                            {item.discountType === 'percentage' ? '%' : 'Rs'}
+                            {item.discountType === 'percentage' ? '%' : currencySymbol}
                           </button>
                         </div>
                       )
@@ -2636,11 +2643,11 @@ export function InvoicePanel({
                       ) : (
                         <div>
                           {(item.discountAmount || 0) > 0 && (
-                            <p className='text-[10px] text-muted-foreground line-through leading-none'>Rs{(item.quantity * item.unitPrice).toFixed(2)}</p>
+                            <p className='text-[10px] text-muted-foreground line-through leading-none'>{formatMoney(item.quantity * item.unitPrice)}</p>
                           )}
-                          <p className='font-bold text-sm'>Rs{item.subtotal.toFixed(2)}</p>
+                          <p className='font-bold text-sm'>{formatMoney(item.subtotal)}</p>
                           {showProfitDetails && (
-                            <p className='text-xs text-green-600'>+Rs{item.profit.toFixed(2)}</p>
+                            <p className='text-xs text-green-600'>+{formatMoney(item.profit)}</p>
                           )}
                         </div>
                       )
@@ -2702,7 +2709,7 @@ export function InvoicePanel({
       <div className='flex flex-col gap-0.5'>
         <span className='text-[10px] text-muted-foreground leading-none'>Unit Price</span>
         <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-          <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
+          <span className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-r font-medium select-none'>{currencySymbol}</span>
           <Input
             ref={(el) => { priceInputRefs.current[item.id] = el }}
             type="text"
@@ -2735,10 +2742,10 @@ export function InvoicePanel({
           <button
             type="button"
             onClick={() => updateItemDiscount(item.id, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' })}
-            title='Click to switch between Rs and % discount'
+            title={`Click to switch between  and % discount`}
             className='px-2 h-7 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
           >
-            {item.discountType === 'percentage' ? '%' : 'Rs'}
+            {item.discountType === 'percentage' ? '%' : currencySymbol}
           </button>
         </div>
       </div>
@@ -2746,14 +2753,14 @@ export function InvoicePanel({
     const totalDisplayCard = !hasProduct ? null : (
       <div className='flex flex-col items-end gap-0 ml-auto shrink-0'>
         {(item.discountAmount || 0) > 0 && (
-          <span className='text-[10px] text-muted-foreground line-through leading-none'>Rs{(item.quantity * item.unitPrice).toFixed(2)}</span>
+          <span className='text-[10px] text-muted-foreground line-through leading-none'>{formatMoney(item.quantity * item.unitPrice)}</span>
         )}
         <div className='flex items-center gap-1.5'>
           <span className='text-muted-foreground/60 text-sm select-none'>=</span>
-          <p className='font-bold text-sm'>Rs{item.subtotal.toFixed(2)}</p>
+          <p className='font-bold text-sm'>{formatMoney(item.subtotal)}</p>
         </div>
         {showProfitDetails && (
-          <p className='text-xs text-green-600'>+Rs{item.profit.toFixed(2)}</p>
+          <p className='text-xs text-green-600'>+{formatMoney(item.profit)}</p>
         )}
       </div>
     )
@@ -3447,10 +3454,10 @@ export function InvoicePanel({
         <div className='hidden grid-cols-5 gap-2 sm:grid'>
           {[
             { label: t('items') || 'Items', value: String(invoice.items.filter((i) => i.productId && i.name).length) },
-            { label: t('subtotal'), value: `Rs${invoice.subtotal.toFixed(2)}` },
-            { label: t('discount'), value: `Rs${(invoice.discount + invoice.items.reduce((sum, i) => sum + (i.discountAmount || 0), 0)).toFixed(2)}` },
-            { label: t('tax'), value: `Rs${invoice.tax.toFixed(2)}` },
-            { label: t('total_amount') || t('total'), value: `Rs${invoice.total.toFixed(2)}`, highlight: true },
+            { label: t('subtotal'), value: `${formatMoney(invoice.subtotal)}` },
+            { label: t('discount'), value: `${formatMoney(invoice.discount + invoice.items.reduce((sum, i) => sum + (i.discountAmount || 0), 0))}` },
+            { label: t('tax'), value: `${formatMoney(invoice.tax)}` },
+            { label: t('total_amount') || t('total'), value: `${formatMoney(invoice.total)}`, highlight: true },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -3519,7 +3526,7 @@ export function InvoicePanel({
                   <ArrowLeftRight className="h-4 w-4" />
                   <span className="hidden sm:inline">{t('Switch All Discounts to')}</span>
                   <span className="sm:hidden">{t('Switch to')}</span>
-                  {' '}{invoice.discountType === 'percentage' ? 'Rs' : '%'}
+                  {' '}{invoice.discountType === 'percentage' ? currencySymbol : '%'}
                 </Button>
               )}
               {canCreateProduct ? (
@@ -3665,7 +3672,7 @@ export function InvoicePanel({
                   <Percent className='h-4 w-4' />
                   {t('Apply Discount')}
                   {invoice.discount > 0 && (
-                    <Badge variant='secondary' className='ml-1 tabular-nums'>-Rs{invoice.discount.toFixed(2)}</Badge>
+                    <Badge variant='secondary' className='ml-1 tabular-nums'>-{formatMoney(invoice.discount)}</Badge>
                   )}
                 </Button>
               </PopoverTrigger>
@@ -3685,10 +3692,10 @@ export function InvoicePanel({
                   <button
                     type='button'
                     onClick={() => updateDiscount({ type: invoice.discountType === 'percentage' ? 'fixed' : 'percentage' })}
-                    title='Click to switch between Rs and % discount'
+                    title={`Click to switch between  and % discount`}
                     className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
                   >
-                    {invoice.discountType === 'percentage' ? '%' : 'Rs'}
+                    {invoice.discountType === 'percentage' ? '%' : currencySymbol}
                   </button>
                 </div>
               </PopoverContent>
@@ -3748,21 +3755,21 @@ export function InvoicePanel({
         <CardContent className='space-y-2 pt-0'>
           <div className='flex justify-between gap-6'>
             <span className='text-muted-foreground'>{t('subtotal')}:</span>
-            <span className='tabular-nums font-medium'>Rs{invoice.subtotal.toFixed(2)}</span>
+            <span className='tabular-nums font-medium'>{formatMoney(invoice.subtotal)}</span>
           </div>
           {(() => {
             const itemDiscountTotal = invoice.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
             return itemDiscountTotal > 0 ? (
               <div className='flex justify-between gap-6 text-sm text-green-600'>
                 <span>{t('Item Discounts')}:</span>
-                <span className='tabular-nums'>-Rs{itemDiscountTotal.toFixed(2)}</span>
+                <span className='tabular-nums'>-{formatMoney(itemDiscountTotal)}</span>
               </div>
             ) : null
           })()}
           {invoice.discount > 0 && (
             <div className='flex justify-between gap-6 text-red-600'>
               <span>{t('discount')}:</span>
-              <span className='tabular-nums'>-Rs{invoice.discount.toFixed(2)}</span>
+              <span className='tabular-nums'>-{formatMoney(invoice.discount)}</span>
             </div>
           )}
           {invoice.tax > 0 && (
@@ -3770,13 +3777,13 @@ export function InvoicePanel({
               <span className='text-muted-foreground'>
                 {t('tax')} ({taxRate}%):
               </span>
-              <span className='tabular-nums'>Rs{invoice.tax.toFixed(2)}</span>
+              <span className='tabular-nums'>{formatMoney(invoice.tax)}</span>
             </div>
           )}
           <Separator />
           <div className='flex justify-between gap-6 font-bold text-lg'>
             <span>{t('total')}:</span>
-            <span className='tabular-nums'>Rs{invoice.total.toFixed(2)}</span>
+            <span className='tabular-nums'>{formatMoney(invoice.total)}</span>
           </div>
           {(() => {
             const itemDiscountTotal = invoice.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
@@ -3784,7 +3791,7 @@ export function InvoicePanel({
             return totalSaved > 0 ? (
               <div className='flex justify-between gap-6 text-xs font-medium text-green-600'>
                 <span>{t('You Saved')}:</span>
-                <span className='tabular-nums'>Rs{totalSaved.toFixed(2)}</span>
+                <span className='tabular-nums'>{formatMoney(totalSaved)}</span>
               </div>
             ) : null
           })()}
@@ -3794,7 +3801,7 @@ export function InvoicePanel({
             <span className='text-green-600'>{t('total_profit')}:</span>
             <div className='flex items-center gap-2'>
               <span className='text-green-600 font-medium'>
-                Rs{invoice.totalProfit.toFixed(2)}
+                {formatMoney(invoice.totalProfit)}
               </span>
               <Button
                 size="sm"
@@ -3927,7 +3934,7 @@ export function InvoicePanel({
                   Cash Received
                 </h4>
                 <div>
-                  <Label className='text-xs text-muted-foreground'>Amount Given by Customer (Rs)</Label>
+                  <Label className='text-xs text-muted-foreground'>Amount Given by Customer ({currencySymbol})</Label>
                   <Input
                     type="text"
                     inputMode="decimal"
@@ -3943,24 +3950,24 @@ export function InvoicePanel({
                   <div className='space-y-2 pt-2 border-t border-emerald-200 dark:border-emerald-700'>
                     <div className='flex justify-between text-sm'>
                       <span className='text-muted-foreground'>Total Bill:</span>
-                      <span className='font-semibold'>Rs{invoice.total.toFixed(2)}</span>
+                      <span className='font-semibold'>{formatMoney(invoice.total)}</span>
                     </div>
                     <div className='flex justify-between text-sm'>
                       <span className='text-muted-foreground'>Amount Received:</span>
-                      <span className='font-semibold text-emerald-700'>Rs{parseFloat(cashReceivedInput).toFixed(2)}</span>
+                      <span className='font-semibold text-emerald-700'>{formatMoney(parseFloat(cashReceivedInput))}</span>
                     </div>
                     {parseFloat(cashReceivedInput) >= invoice.total ? (
                       <div className='flex justify-between items-center p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700'>
                         <span className='font-bold text-emerald-800 dark:text-emerald-200'>Change to Return:</span>
                         <span className='font-bold text-xl text-emerald-700 dark:text-emerald-300'>
-                          Rs{(parseFloat(cashReceivedInput) - invoice.total).toFixed(2)}
+                          {formatMoney(parseFloat(cashReceivedInput) - invoice.total)}
                         </span>
                       </div>
                     ) : (
                       <div className='flex justify-between items-center p-2.5 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700'>
                         <span className='font-bold text-red-800 dark:text-red-200'>Amount Short:</span>
                         <span className='font-bold text-xl text-red-600 dark:text-red-400'>
-                          Rs{(invoice.total - parseFloat(cashReceivedInput)).toFixed(2)}
+                          {formatMoney(invoice.total - parseFloat(cashReceivedInput))}
                         </span>
                       </div>
                     )}
@@ -3985,25 +3992,25 @@ export function InvoicePanel({
                       {loadingBalance ? (
                         <span className="text-xs">Loading...</span>
                       ) : (
-                        `Rs${Math.abs(customerBalance).toFixed(2)} ${customerBalance > 0 ? '(Dr)' : customerBalance < 0 ? '(Cr)' : ''}`
+                        `${formatMoney(Math.abs(customerBalance))} ${customerBalance > 0 ? '(Dr)' : customerBalance < 0 ? '(Cr)' : ''}`
                       )}
                     </span>
                   </div>
                   <div className='flex justify-between items-center text-sm'>
                     <span className="font-medium">{t('Current Amount')}:</span>
-                    <span className="font-bold text-red-600">Rs{invoice.total.toFixed(2)} (Dr)</span>
+                    <span className="font-bold text-red-600">{formatMoney(invoice.total)} (Dr)</span>
                   </div>
                   {totalPaidNow > 0 && (
                     <div className='flex justify-between items-center text-sm'>
                       <span className="font-medium">{t('Paid Now')}:</span>
-                      <span className="font-bold text-green-600">-Rs{totalPaidNow.toFixed(2)} (Cr)</span>
+                      <span className="font-bold text-green-600">-{formatMoney(totalPaidNow)} (Cr)</span>
                     </div>
                   )}
                   <Separator />
                   <div className='flex justify-between items-center'>
                     <span className="font-bold">{t('Net Balance')}:</span>
                     <span className={`font-bold text-lg ${(customerBalance + invoice.total - totalPaidNow) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      Rs{Math.abs(customerBalance + invoice.total - totalPaidNow).toFixed(2)} {(customerBalance + invoice.total - totalPaidNow) > 0 ? '(Receivable)' : '(Payable)'}
+                      {formatMoney(Math.abs(customerBalance + invoice.total - totalPaidNow))} {(customerBalance + invoice.total - totalPaidNow) > 0 ? '(Receivable)' : '(Payable)'}
                     </span>
                   </div>
                 </div>
@@ -4230,7 +4237,7 @@ export function InvoicePanel({
               <span className='text-xs text-muted-foreground'>
                 {invoice.items.filter((i) => i.productId && i.name).length} {t('invoice_items')}
               </span>
-              <span className='text-lg font-bold tabular-nums'>Rs{invoice.total.toFixed(2)}</span>
+              <span className='text-lg font-bold tabular-nums'>{formatMoney(invoice.total)}</span>
             </div>
             {bar}
           </div>

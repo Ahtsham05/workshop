@@ -46,6 +46,7 @@ import { useCustomers } from '../context/users-context'
 import type { Customer } from '../data/schema'
 import { CustomerListPagination } from './customer-list-pagination'
 import { formatCustomerBalanceDisplay } from '../utils/customer-list-view'
+import { useCurrencyMeta } from '@/lib/format-money'
 
 type Props = {
   customers: Customer[]
@@ -142,6 +143,7 @@ function CustomerCardMenu({ customer }: { customer: Customer }) {
 
 export function CustomerCardGrid({ customers, loading, pagination }: Props) {
   const { t } = useLanguage()
+  const currencyMeta = useCurrencyMeta()
   const navigate = useNavigate()
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -235,7 +237,7 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
             {customers.map((customer) => {
               const customerId = resolveCustomerId(customer)
               const whatsapp = customer.whatsapp || customer.phone
-              const balanceDisplay = formatCustomerBalanceDisplay(Number(customer.balance ?? 0), t)
+              const balanceDisplay = formatCustomerBalanceDisplay(Number(customer.balance ?? 0), t, currencyMeta)
 
               return (
                 <EntityCardLayout

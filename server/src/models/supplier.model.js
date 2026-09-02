@@ -37,6 +37,21 @@ const SupplierSchema = new mongoose.Schema({
   phone: { type: String },
   whatsapp: { type: String },
   address: { type: String },
+  // Structured address for tax-jurisdiction resolution, added alongside the pre-existing
+  // free-text `address` above rather than replacing it, same pattern as customer.model.js.
+  billingAddress: {
+    line1: { type: String, trim: true },
+    line2: { type: String, trim: true },
+    city: { type: String, trim: true },
+    state: { type: String, trim: true },
+    postalCode: { type: String, trim: true },
+    countryCode: { type: String, trim: true, uppercase: true },
+  },
+  // Supplier had no tax registration field at all until now (Customer already has one) —
+  // needed so purchase input-tax can display/validate a supplier's registration number.
+  taxNumber: { type: String, trim: true },
+  // ISO currency code override for this supplier; null = organization's baseCurrency.
+  preferredCurrency: { type: String, trim: true, uppercase: true, default: null },
   balance: { type: Number, default: 0 },
   // Auto-created subsidiary account under Accounts Payable (double-entry).
   accountHeadId: {

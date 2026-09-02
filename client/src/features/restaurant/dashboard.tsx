@@ -12,6 +12,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 const statTones = {
   sky: {
@@ -40,6 +41,7 @@ type StatTone = keyof typeof statTones
 
 export default function RestaurantDashboardPage() {
   const { data: stats, isLoading } = useGetRestaurantStatsQuery()
+  const formatMoney = useFormatMoney()
 
   return (
     <RestaurantShell
@@ -56,14 +58,7 @@ export default function RestaurantDashboardPage() {
         />
         <StatCard
           title='Revenue today'
-          value={
-            stats != null
-              ? stats.todayRevenue.toLocaleString(undefined, {
-                  style: 'currency',
-                  currency: 'PKR',
-                })
-              : undefined
-          }
+          value={stats != null ? formatMoney(stats.todayRevenue) : undefined}
           loading={isLoading}
           tone='emerald'
           icon={<Banknote className='h-6 w-6' strokeWidth={2.25} />}

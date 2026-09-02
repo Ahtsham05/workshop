@@ -45,6 +45,7 @@ import {
 import { openAgentBillsBatchPrint, openAgentBillPrintWindow } from './agent-bill-receipt-utils'
 import { getBusinessToday } from '@/lib/business-timezone'
 import { usePermissions } from '@/context/permission-context'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,9 @@ interface AgentBillDialogProps {
 }
 
 export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialogProps) {
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
+  const currencySymbol = currencyMeta.symbol
   const { hasPermission } = usePermissions()
   const canManage = hasPermission('manageBillPayments')
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
@@ -204,9 +208,10 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
           phone: branchData?.phone,
           email: branchData?.email,
         },
+        currencyMeta,
       })
     },
-    [companyName, collectionDate, dueDate, resolvedPaymentMethod, resolvedWalletType, orgData, branchData],
+    [companyName, collectionDate, dueDate, resolvedPaymentMethod, resolvedWalletType, orgData, branchData, currencyMeta],
   )
 
   const reset = () => {
@@ -269,6 +274,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
             phone: branchData?.phone,
             email: branchData?.email,
           },
+          currencyMeta,
         })
         onOpenChange(false)
       } else {
@@ -301,6 +307,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
             phone: branchData?.phone,
             email: branchData?.email,
           },
+          currencyMeta,
         })
 
         reset()
@@ -409,12 +416,12 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
                   <TableHead className='min-w-[170px]'>Customer Name *</TableHead>
                   <TableHead className='min-w-[145px]'>Reference #</TableHead>
                   <TableHead className='min-w-[135px]'>Mobile No</TableHead>
-                  <TableHead className='min-w-[110px] text-right'>Current Bill (Rs.)</TableHead>
-                  <TableHead className='min-w-[110px] text-right'>Current Overdue (Rs.)</TableHead>
-                  <TableHead className='min-w-[110px] text-right'>Previous Bill (Rs.)</TableHead>
-                  <TableHead className='min-w-[110px] text-right'>Previous Overdue (Rs.)</TableHead>
-                  <TableHead className='min-w-[90px] text-right'>Profit (Rs.)</TableHead>
-                  <TableHead className='min-w-[105px] text-right bg-muted font-semibold'>Total (Rs.)</TableHead>
+                  <TableHead className='min-w-[110px] text-right'>Current Bill ({currencySymbol})</TableHead>
+                  <TableHead className='min-w-[110px] text-right'>Current Overdue ({currencySymbol})</TableHead>
+                  <TableHead className='min-w-[110px] text-right'>Previous Bill ({currencySymbol})</TableHead>
+                  <TableHead className='min-w-[110px] text-right'>Previous Overdue ({currencySymbol})</TableHead>
+                  <TableHead className='min-w-[90px] text-right'>Profit ({currencySymbol})</TableHead>
+                  <TableHead className='min-w-[105px] text-right bg-muted font-semibold'>Total ({currencySymbol})</TableHead>
                   <TableHead className='w-20 text-center'>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -566,34 +573,34 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
             <div className='flex justify-between'>
               <span className='text-muted-foreground'>Cash in hand / {isWallet ? resolvedWalletType : paymentMethodOption} (current bill):</span>
               <span className='font-medium text-green-700'>
-                Rs. {rows.reduce((s, r) => s + parseNum(r.currentBillAmount), 0).toLocaleString()}
+                {formatMoney(rows.reduce((s, r) => s + parseNum(r.currentBillAmount), 0))}
               </span>
             </div>
             <div className='flex justify-between'>
               <span className='text-muted-foreground'>Current Overdue → Expense (on due date):</span>
               <span className='font-medium text-orange-600'>
-                Rs. {rows.reduce((s, r) => s + parseNum(r.overdueAmount), 0).toLocaleString()}
+                {formatMoney(rows.reduce((s, r) => s + parseNum(r.overdueAmount), 0))}
               </span>
             </div>
             <div className='flex justify-between'>
               <span className='text-muted-foreground'>My Wallet / Accounts (previous bill):</span>
               <span className='font-medium text-blue-700'>
-                Rs. {rows.reduce((s, r) => s + parseNum(r.previousBillAmount), 0).toLocaleString()}
+                {formatMoney(rows.reduce((s, r) => s + parseNum(r.previousBillAmount), 0))}
               </span>
             </div>
             <div className='flex justify-between'>
               <span className='text-muted-foreground'>Previous Overdue → Expense (instant):</span>
               <span className='font-medium text-red-600'>
-                Rs. {rows.reduce((s, r) => s + parseNum(r.previousOverdueAmount), 0).toLocaleString()}
+                {formatMoney(rows.reduce((s, r) => s + parseNum(r.previousOverdueAmount), 0))}
               </span>
             </div>
             <div className='flex justify-between'>
               <span className='text-muted-foreground'>Total Profit:</span>
-              <span className='font-medium text-purple-700'>Rs. {grandProfit.toLocaleString()}</span>
+              <span className='font-medium text-purple-700'>{formatMoney(grandProfit)}</span>
             </div>
             <div className='flex justify-between border-t pt-1 font-semibold text-base'>
               <span>Grand Total:</span>
-              <span>Rs. {grandTotal.toLocaleString()}</span>
+              <span>{formatMoney(grandTotal)}</span>
             </div>
           </div>
         </div>

@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useLanguage } from '@/context/language-context'
+import { useFormatMoney } from '@/lib/format-money'
 import { useConvertQuotationMutation } from '@/stores/invoice.api'
 
 type QuotationInvoice = {
@@ -64,6 +65,7 @@ export function QuotationConvertDialog({
   onConverted,
 }: QuotationConvertDialogProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const [targetType, setTargetType] = useState<'cash' | 'credit'>('cash')
   const [paidAmount, setPaidAmount] = useState('')
   const [dueDate, setDueDate] = useState('')
@@ -160,7 +162,7 @@ export function QuotationConvertDialog({
           </div>
           <div>
             <p className='text-sm text-muted-foreground'>{t('total')}</p>
-            <p className='text-xl font-bold text-emerald-700'>Rs {total.toLocaleString('en-PK', { minimumFractionDigits: 2 })}</p>
+            <p className='text-xl font-bold text-emerald-700'>{formatMoney(total)}</p>
           </div>
         </div>
 

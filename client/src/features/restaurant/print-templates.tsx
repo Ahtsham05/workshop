@@ -1,8 +1,6 @@
 import { forwardRef } from 'react'
 import type { RestaurantOrder, RestaurantTable } from '@/stores/restaurant.api'
-
-const formatMoney = (n: number) =>
-  n.toLocaleString(undefined, { style: 'currency', currency: 'PKR' })
+import { useFormatMoney } from '@/lib/format-money'
 
 export const KitchenTicket = forwardRef<
   HTMLDivElement,
@@ -46,6 +44,7 @@ export const CustomerReceipt = forwardRef<
   HTMLDivElement,
   { order: RestaurantOrder; venueName?: string; branchName?: string; invoiceNote?: string }
 >(({ order, venueName, branchName, invoiceNote }, ref) => {
+  const formatMoney = useFormatMoney()
   return (
     <div ref={ref} className='bg-white p-6 text-black text-sm' style={{ width: '72mm' }}>
       <div className='text-center font-bold'>{venueName || 'Receipt'}</div>
@@ -120,6 +119,7 @@ export const EndOfDaySummary = forwardRef<
   HTMLDivElement,
   { date: string; totalOrders: number; revenue: number; venueName: string; invoiceNote?: string }
 >(({ date, totalOrders, revenue, venueName, invoiceNote }, ref) => {
+  const formatMoney = useFormatMoney()
   return (
     <div ref={ref} className='bg-white p-8 text-black' style={{ width: 'A4' }}>
       <h2 className='text-xl font-bold'>{venueName}</h2>

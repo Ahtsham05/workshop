@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { EmployeeLedger, Employee, Customer, Wallet } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { formatMoney } = require('../utils/money');
 const cashBookService = require('./cashBook.service');
 const expenseService = require('./expense.service');
 const expenseCategoryService = require('./expenseCategory.service');
@@ -399,12 +400,12 @@ const payEmployee = async (paymentBody) => {
   if (numericAmount > outstandingPayable) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
-      `Amount exceeds payable salary of Rs ${outstandingPayable}. Use the Advance button to pay extra.`
+      `Amount exceeds payable salary of ${formatMoney(outstandingPayable)}. Use the Advance button to pay extra.`
     );
   }
 
   if (recoveryAmount > outstandingAdvance) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `Advance recovery exceeds outstanding advance of Rs ${outstandingAdvance}`);
+    throw new ApiError(httpStatus.BAD_REQUEST, `Advance recovery exceeds outstanding advance of ${formatMoney(outstandingAdvance)}`);
   }
 
   const employeeDoc = await Employee.findById(employee);

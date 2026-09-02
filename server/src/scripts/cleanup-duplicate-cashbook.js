@@ -35,8 +35,7 @@ const {
   LoadPurchase,
   LoadTransaction,
 } = require('../models');
-
-const fmt = (n) => Number(n || 0).toFixed(2);
+const { formatMoney } = require('../utils/money');
 
 // ---- Step 1: parent re-syncs ----
 // We import the parent services lazily so this script keeps working even if any
@@ -158,7 +157,7 @@ const cleanupLedger = async ({ Model, ledgerName, branchFilter, apply }) => {
     }
   }
   console.log(
-    `[${ledgerName}] duplicate cashbook rows: ${deletedTotal}  totalling Rs ${fmt(amountTotal)} ${
+    `[${ledgerName}] duplicate cashbook rows: ${deletedTotal}  totalling ${formatMoney(amountTotal)} ${
       apply ? '(DELETED)' : '(dry-run — pass --apply to delete)'
     }`
   );
@@ -196,10 +195,10 @@ const run = async () => {
   });
 
   console.log('\n=== Summary ===');
-  console.log(`  CustomerLedger duplicate rows: ${customer.deleted}  (Rs ${fmt(customer.amount)})`);
-  console.log(`  SupplierLedger duplicate rows: ${supplier.deleted}  (Rs ${fmt(supplier.amount)})`);
+  console.log(`  CustomerLedger duplicate rows: ${customer.deleted}  (${formatMoney(customer.amount)})`);
+  console.log(`  SupplierLedger duplicate rows: ${supplier.deleted}  (${formatMoney(supplier.amount)})`);
   console.log(
-    `  Total                        : ${customer.deleted + supplier.deleted}  (Rs ${fmt(
+    `  Total                        : ${customer.deleted + supplier.deleted}  (${formatMoney(
       customer.amount + supplier.amount
     )})`
   );

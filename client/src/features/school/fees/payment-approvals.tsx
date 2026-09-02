@@ -18,6 +18,7 @@ import {
   useApproveFeePaymentRequestMutation,
   useRejectFeePaymentRequestMutation,
 } from '@/stores/school.api';
+import { useFormatMoney } from '@/lib/format-money';
 
 const STATUS_TABS = [
   { key: 'pending', label: 'Pending', icon: Hourglass },
@@ -49,6 +50,7 @@ export default function PaymentApprovals() {
   const params = status === 'all' ? { limit: 100, sortBy: 'createdAt:desc' } : { status, limit: 100, sortBy: 'createdAt:desc' };
   const { data, isFetching } = useGetFeePaymentRequestsQuery(params);
   const requests = data?.results || [];
+  const formatMoney = useFormatMoney();
 
   const [approve, { isLoading: approving }] = useApproveFeePaymentRequestMutation();
   const [reject, { isLoading: rejecting }] = useRejectFeePaymentRequestMutation();
@@ -145,7 +147,7 @@ export default function PaymentApprovals() {
                           {voucherLabel(r)}
                         </td>
                         <td className="py-2 px-3 text-right font-semibold whitespace-nowrap">
-                          Rs. {(r.amount || 0).toLocaleString()}
+                          {formatMoney(r.amount || 0)}
                         </td>
                         <td className="py-2 px-3 hidden lg:table-cell text-xs text-muted-foreground">
                           {r.transactionRef && <p>Ref: {r.transactionRef}</p>}
@@ -207,7 +209,7 @@ export default function PaymentApprovals() {
               <div className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-2">
                   <div><p className="text-xs text-muted-foreground">Student</p><p className="font-medium">{student.firstName} {student.lastName || ''}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Amount</p><p className="font-bold">Rs. {(detail.amount || 0).toLocaleString()}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Amount</p><p className="font-bold">{formatMoney(detail.amount || 0)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Submitted</p><p>{formatDate(detail.createdAt)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Status</p>
                     <span className={`px-2 py-0.5 rounded text-xs font-semibold capitalize ${STATUS_BADGE[detail.status] || ''}`}>{detail.status}</span>
@@ -219,7 +221,7 @@ export default function PaymentApprovals() {
                     {summary.map((v: any, i: number) => (
                       <div key={i} className="flex justify-between">
                         <span>{v.period || v.voucherNumber}</span>
-                        <span>Rs. {(v.amount || 0).toLocaleString()}</span>
+                        <span>{formatMoney(v.amount || 0)}</span>
                       </div>
                     ))}
                   </div>

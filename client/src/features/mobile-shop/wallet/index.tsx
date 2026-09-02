@@ -5,6 +5,7 @@ import { RootState } from '@/stores/store'
 import { usePermissions } from '@/context/permission-context'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { isMobileShopBusiness } from '@/lib/business-types'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -64,12 +65,6 @@ const formatWalletDate = (dateValue?: string) => {
   return format(parsedDate, 'MMM dd, yyyy')
 }
 
-const formatWalletBalance = (value?: number) => {
-  const numericValue = Number(value)
-  const safeValue = Number.isFinite(numericValue) ? numericValue : 0
-  return safeValue.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
 type WalletRecord = {
   id: string
   type: string
@@ -97,6 +92,8 @@ const ACCOUNT_TYPE_BADGE_CLASS: Record<BankAccountType, string> = {
 }
 
 export default function WalletPage() {
+  const formatMoney = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageWallet')
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -287,7 +284,7 @@ export default function WalletPage() {
                 </div>
               )}
               <div className='space-y-2'>
-                <Label htmlFor='balance'>Opening Balance (Rs)</Label>
+                <Label htmlFor='balance'>Opening Balance ({currencySymbol})</Label>
                 <Input
                   id='balance'
                   min='0'
@@ -433,7 +430,7 @@ export default function WalletPage() {
                           </TableCell>
                         )}
                         <TableCell className='text-green-600 font-semibold whitespace-nowrap'>
-                          Rs {formatWalletBalance(wallet.balance)}
+                          {formatMoney(wallet.balance)}
                         </TableCell>
                         {isMobileShop && (
                           <>

@@ -4,6 +4,7 @@ const { paymentVoucherService, auditLogService } = require('../services');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
+const { formatMoney } = require('../utils/money');
 
 const createVoucher = catchAsync(async (req, res) => {
   const voucher = await paymentVoucherService.createVoucher({ ...req.body, ...getBranchContext(req) }, req.user.id);
@@ -12,7 +13,7 @@ const createVoucher = catchAsync(async (req, res) => {
     action: 'create',
     module: 'PaymentVoucher',
     entityId: voucher._id,
-    entityName: `${voucher.voucherNumber} — Rs ${voucher.totalAmount}`,
+    entityName: `${voucher.voucherNumber} — ${formatMoney(voucher.totalAmount)}`,
     after: voucher.toObject ? voucher.toObject() : voucher,
     fields: ['bankAccountId', 'lines', 'totalAmount'],
   });
@@ -60,7 +61,7 @@ const deleteVoucher = catchAsync(async (req, res) => {
     action: 'delete',
     module: 'PaymentVoucher',
     entityId: req.params.paymentVoucherId,
-    entityName: voucher ? `${voucher.voucherNumber} — Rs ${voucher.totalAmount}` : undefined,
+    entityName: voucher ? `${voucher.voucherNumber} — ${formatMoney(voucher.totalAmount)}` : undefined,
   });
   res.status(httpStatus.NO_CONTENT).send();
 });

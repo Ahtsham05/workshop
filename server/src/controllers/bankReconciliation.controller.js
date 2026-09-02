@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const { bankReconciliationService, auditLogService } = require('../services');
 const { getBranchContext } = require('../utils/branchFilter');
+const { formatMoney } = require('../utils/money');
 
 const getSummary = catchAsync(async (req, res) => {
   const summary = await bankReconciliationService.getSummary({
@@ -46,7 +47,7 @@ const confirmReconciliation = catchAsync(async (req, res) => {
     action: 'create',
     module: 'BankReconciliationSession',
     entityId: session._id,
-    entityName: `${session.bankAccountName} — Rs ${session.statementClosingBalance} (${session.matchedCount} matched)`,
+    entityName: `${session.bankAccountName} — ${formatMoney(session.statementClosingBalance)} (${session.matchedCount} matched)`,
     after: session.toObject ? session.toObject() : session,
   });
   res.status(httpStatus.CREATED).send(session);

@@ -26,14 +26,12 @@ import { toast } from 'sonner'
 import { useGetPartnerProfitShareReportQuery } from '@/stores/reports.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useCurrencyMeta, useFormatMoney } from '@/lib/format-money'
 
 interface PartnerProfitShareReportProps {
   startDate: string
   endDate: string
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
 
 const PARTNER_TYPE_LABEL: Record<string, string> = {
   business_partner: 'Business Partner',
@@ -42,8 +40,10 @@ const PARTNER_TYPE_LABEL: Record<string, string> = {
 
 export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }, PartnerProfitShareReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
     const { data, isFetching: isLoading } = useGetPartnerProfitShareReportQuery({ startDate, endDate })
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+    const currencySymbol = useCurrencyMeta().symbol
 
     const toggleExpanded = (partnerId: string) => {
       setExpandedIds((prev) => {
@@ -64,12 +64,12 @@ export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }
           const wb = XLSX.utils.book_new()
 
           const summaryRows = [
-            { Metric: 'Total Profit Share Earned (Rs.)', Value: data.summary.totalEarned },
-            { Metric: 'Total Profit Share Reversed (Rs.)', Value: data.summary.totalReversed },
-            { Metric: 'Net Profit Share (Rs.)', Value: data.summary.netShare },
-            { Metric: 'Total Profit Share Paid (Rs.)', Value: data.summary.totalPaid },
-            { Metric: 'Total Outstanding / Payable (Rs.)', Value: data.summary.totalOutstanding },
-            { Metric: 'Total Profit Base (Rs.)', Value: data.summary.totalProfitBase },
+            { Metric: `Total Profit Share Earned (${currencySymbol})`, Value: data.summary.totalEarned },
+            { Metric: `Total Profit Share Reversed (${currencySymbol})`, Value: data.summary.totalReversed },
+            { Metric: `Net Profit Share (${currencySymbol})`, Value: data.summary.netShare },
+            { Metric: `Total Profit Share Paid (${currencySymbol})`, Value: data.summary.totalPaid },
+            { Metric: `Total Outstanding / Payable (${currencySymbol})`, Value: data.summary.totalOutstanding },
+            { Metric: `Total Profit Base (${currencySymbol})`, Value: data.summary.totalProfitBase },
             { Metric: 'Sale Count', Value: data.summary.totalSaleCount },
             { Metric: 'Active Partners', Value: data.summary.activePartnersCount },
           ]
@@ -80,11 +80,11 @@ export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }
               Partner: p.name,
               Type: PARTNER_TYPE_LABEL[p.partnerType] || p.partnerType,
               'Sale Count': p.saleCount,
-              'Profit Base (Rs.)': p.profitBase,
-              'Earned (Rs.)': p.earned,
-              'Reversed (Rs.)': p.reversed,
-              'Paid (Rs.)': p.paid,
-              'Current Balance (Rs.)': p.currentBalance,
+              [`Profit Base (${currencySymbol})`]: p.profitBase,
+              [`Earned (${currencySymbol})`]: p.earned,
+              [`Reversed (${currencySymbol})`]: p.reversed,
+              [`Paid (${currencySymbol})`]: p.paid,
+              [`Current Balance (${currencySymbol})`]: p.currentBalance,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(partnerRows), 'By Partner')
 
@@ -95,9 +95,9 @@ export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }
                 Date: format(new Date(e.date), 'yyyy-MM-dd'),
                 Type: e.transactionType === 'share_earned' ? 'Earned' : 'Reversed',
                 Product: e.productName || 'Org / Branch-wide',
-                'Profit Base (Rs.)': e.saleProfit,
-                Rate: e.shareType === 'fixed_per_unit' ? `Rs ${e.rate ?? 0}/unit` : `${e.rate ?? 0}%`,
-                'Share (Rs.)': e.transactionType === 'share_earned' ? e.amount : -e.amount,
+                [`Profit Base (${currencySymbol})`]: e.saleProfit,
+                Rate: e.shareType === 'fixed_per_unit' ? `${currencySymbol} ${e.rate ?? 0}/unit` : `${e.rate ?? 0}%`,
+                [`Share (${currencySymbol})`]: e.transactionType === 'share_earned' ? e.amount : -e.amount,
               }))
             )
             if (entryRows.length) {
@@ -109,8 +109,8 @@ export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }
             const productRows = data.byProduct.map((p) => ({
               Product: p.name,
               'Sale Count': p.count,
-              'Profit Base (Rs.)': p.saleProfit,
-              'Partner Share (Rs.)': p.earned,
+              [`Profit Base (${currencySymbol})`]: p.saleProfit,
+              [`Partner Share (${currencySymbol})`]: p.earned,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(productRows), 'By Product')
           }
@@ -118,7 +118,7 @@ export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }
           if (data.trend.length) {
             const trendRows = data.trend.map((r) => ({
               Date: r.date,
-              'Profit Share Earned (Rs.)': r.earned,
+              [`Profit Share Earned (${currencySymbol})`]: r.earned,
               'Sale Count': r.count,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trendRows), 'Daily Trend')
@@ -342,7 +342,7 @@ export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }
                                         </TableCell>
                                         <TableCell className='text-right'>{fmt(e.saleProfit)}</TableCell>
                                         <TableCell className='text-right text-muted-foreground'>
-                                          {e.shareType === 'fixed_per_unit' ? `Rs ${e.rate ?? 0}/unit` : `${e.rate ?? 0}%`}
+                                          {e.shareType === 'fixed_per_unit' ? `${currencySymbol} ${e.rate ?? 0}/unit` : `${e.rate ?? 0}%`}
                                         </TableCell>
                                         <TableCell
                                           className={cn(

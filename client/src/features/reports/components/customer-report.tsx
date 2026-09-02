@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface CustomerReportProps {
   startDate: string
@@ -50,10 +51,9 @@ export const CustomerReport = forwardRef<{ exportToExcel: () => void }, Customer
       },
     }))
 
-  if (isLoading) return <Skeleton className='h-[400px] w-full' />
+  const formatCurrency = useFormatMoney()
 
-  const formatCurrency = (value: number) => 
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+  if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
   return (
     <div className='space-y-6'>

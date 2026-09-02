@@ -12,6 +12,7 @@ import type { RootState } from '@/stores/store'
 import { PAPER_SIZE_OPTIONS, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import { INVOICE_TEMPLATE_OPTIONS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { generateA4InvoiceHTML, type PrintInvoiceData } from '@/features/invoice/utils/print-utils'
+import { useCurrencyMeta } from '@/lib/format-money'
 
 const ORIENTATION_OPTIONS: Array<{ value: PrintOrientation; label: string; description: string; icon: typeof RectangleVertical }> = [
   { value: 'portrait', label: 'Portrait', description: 'Taller than it is wide', icon: RectangleVertical },
@@ -65,6 +66,7 @@ function toPreviewOnlyHtml(html: string): string {
 }
 
 export default function PrintingSettings() {
+  const currencyMeta = useCurrencyMeta()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branchData, isLoading } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
   const [updateBranch, { isLoading: saving }] = useUpdateBranchMutation()
@@ -82,12 +84,13 @@ export default function PrintingSettings() {
   }, [branchData?.printSettings?.paperSize, branchData?.printSettings?.template, branchData?.printSettings?.printOrientation])
 
   const previewHtmlByTemplate = useMemo(() => {
+    const sampleData: PrintInvoiceData = { ...SAMPLE_INVOICE_DATA, currencyMeta }
     const map: Partial<Record<InvoiceTemplate, string>> = {}
     for (const option of INVOICE_TEMPLATE_OPTIONS) {
-      map[option.value] = toPreviewOnlyHtml(generateA4InvoiceHTML(SAMPLE_INVOICE_DATA, 'a4', option.value))
+      map[option.value] = toPreviewOnlyHtml(generateA4InvoiceHTML(sampleData, 'a4', option.value))
     }
     return map
-  }, [])
+  }, [currencyMeta])
 
   const handleSave = async () => {
     if (!activeBranchId) return

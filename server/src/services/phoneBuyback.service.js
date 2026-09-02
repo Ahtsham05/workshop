@@ -7,6 +7,7 @@ const walletEntryService = require('./walletEntry.service');
 const inventorySyncService = require('./inventorySync.service');
 const invoiceService = require('./invoice.service');
 const { matchesEitherImei } = require('./imei.service');
+const { formatMoney } = require('../utils/money');
 
 const USED_PHONES_PRODUCT_NAME = 'Used Phones';
 
@@ -61,7 +62,7 @@ const postBuybackToCustomerLedger = async (buyback) => {
       credit: buyback.agreedPrice,
       balance: currentBalance,
       paymentMethod: resolveLedgerPaymentMethod(buyback.paymentMethod, buyback.walletType),
-      notes: `Paid in full: Rs${Number(buyback.agreedPrice).toFixed(2)}`,
+      notes: `Paid in full: ${formatMoney(Number(buyback.agreedPrice))}`,
       createdBy: buyback.createdBy,
     });
   } catch (error) {

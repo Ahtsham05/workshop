@@ -49,14 +49,12 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface ServiceReportProps {
   startDate: string
   endDate: string
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
 
 const PAYMENT_COLORS: Record<string, string> = {
   cash:      '#22c55e',
@@ -77,6 +75,7 @@ const paymentLabel: Record<string, string> = {
 
 export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
     const { data, isFetching: isLoading } = useGetServiceReportQuery({ startDate, endDate })
     const [fetchDetail, { data: detailData, isFetching: detailLoading }] =
       useLazyGetServiceReportQuery()

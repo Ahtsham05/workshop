@@ -16,6 +16,7 @@ import { normalizeBusinessType } from '@/lib/business-types'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { ReportBreakdownRow } from './report-breakdown-row'
+import { useFormatMoney } from '@/lib/format-money'
 import {
   reportKpiGridClass,
   reportKpiLabelClass,
@@ -67,8 +68,7 @@ export const ProfitLossReport = forwardRef<{ exportToExcel: () => void }, Profit
 
     const { data, isFetching: isLoading } = useGetProfitLossFullReportQuery(dates)
 
-    const fmt = (v: number) =>
-      new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
+    const fmt = useFormatMoney()
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {

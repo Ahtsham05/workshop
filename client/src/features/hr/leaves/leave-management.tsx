@@ -60,6 +60,7 @@ import { toast } from 'sonner';
 import { endOfMonth, format, startOfMonth } from 'date-fns';
 import { getEntityId } from '@/lib/entity-id';
 import { usePermissions } from '@/context/permission-context';
+import { useFormatMoney } from '@/lib/format-money';
 
 export default function LeaveManagement() {
   const { t } = useLanguage();
@@ -301,8 +302,7 @@ export default function LeaveManagement() {
     return leaveTypes.find(type => type.value === value)?.label || value;
   };
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(amount || 0);
+  const formatCurrency = useFormatMoney();
 
   const leaveDayStats = useMemo(() => {
     const leaves = allLeavesData?.results || [];

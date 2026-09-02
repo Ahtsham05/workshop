@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 type BucketKey = 'current' | 'days1to30' | 'days31to60' | 'days61to90' | 'days90plus'
 
@@ -112,10 +113,9 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
     })
   }
 
-  if (isLoading) return <Skeleton className='h-[400px] w-full' />
+  const formatCurrency = useFormatMoney()
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value || 0)
+  if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
   const summary = data?.summary
   const rows: AgingReportCustomer[] = data?.data || []

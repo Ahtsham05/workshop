@@ -37,6 +37,23 @@ const CustomerSchema = new mongoose.Schema({
   phone: { type: String },
   whatsapp: { type: String },
   address: { type: String },
+  // Structured address for tax-jurisdiction resolution, added alongside the pre-existing
+  // free-text `address` above rather than replacing it (that field stays the display/search
+  // value used everywhere today — see invoice/print templates).
+  billingAddress: {
+    line1: { type: String, trim: true },
+    line2: { type: String, trim: true },
+    city: { type: String, trim: true },
+    state: { type: String, trim: true },
+    postalCode: { type: String, trim: true },
+    countryCode: { type: String, trim: true, uppercase: true },
+  },
+  // Quick fast-path flag checked at tax-calculation time. The audit trail (reason,
+  // certificate, effective dates) lives on TaxExemption records, not here — see
+  // taxExemption.model.js.
+  taxExempt: { type: Boolean, default: false },
+  // ISO currency code override for this customer; null = organization's baseCurrency.
+  preferredCurrency: { type: String, trim: true, uppercase: true, default: null },
   balance: { type: Number, default: 0 },
   customerType: {
     type: String,

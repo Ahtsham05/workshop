@@ -16,6 +16,7 @@ import { InvoiceDetailDialog } from '@/components/invoice-detail-dialog';
 import { PartnerPaymentDialog } from './partner-payment-dialog';
 import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
+import { useFormatMoney } from '@/lib/format-money';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
@@ -56,6 +57,7 @@ const TRANSACTION_TYPE_STYLES: Record<string, string> = {
 
 export function PartnerLedgerTab() {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [entryToVoid, setEntryToVoid] = useState<PartnerProfitShareLedgerEntry | null>(null);
@@ -128,7 +130,7 @@ export function PartnerLedgerTab() {
               <div className="flex items-center gap-2 rounded-lg border px-4 py-2">
                 <Wallet className="w-4 h-4 text-primary" />
                 <span className="text-sm text-muted-foreground">{t('current_balance') || 'Current Balance'}:</span>
-                <span className="font-semibold text-lg">Rs {balanceData.balance.toFixed(2)}</span>
+                <span className="font-semibold text-lg">{formatMoney(balanceData.balance)}</span>
               </div>
             )}
             {selectedPartnerId && balanceData && balanceData.balance > 0 && (
@@ -193,17 +195,17 @@ export function PartnerLedgerTab() {
                       <TableCell className="text-right text-sm text-muted-foreground">
                         {entry.rate !== undefined
                           ? entry.shareType === 'fixed_per_unit'
-                            ? `Rs ${entry.rate}/unit`
+                            ? `${formatMoney(entry.rate)}/unit`
                             : `${entry.rate}%`
                           : '—'}
                       </TableCell>
                       <TableCell className="text-right text-green-700">
-                        {entry.credit > 0 ? `Rs ${entry.credit.toFixed(2)}` : '—'}
+                        {entry.credit > 0 ? formatMoney(entry.credit) : '—'}
                       </TableCell>
                       <TableCell className="text-right text-red-700">
-                        {entry.debit > 0 ? `Rs ${entry.debit.toFixed(2)}` : '—'}
+                        {entry.debit > 0 ? formatMoney(entry.debit) : '—'}
                       </TableCell>
-                      <TableCell className="text-right font-medium">Rs {entry.balance.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatMoney(entry.balance)}</TableCell>
                       <TableCell className="text-right">
                         {entry.transactionType === 'share_payment' && (
                           <Can permission="managePartnerPayments">
@@ -255,7 +257,7 @@ export function PartnerLedgerTab() {
             <AlertDialogTitle>{t('void_payment') || 'Void Payment'}</AlertDialogTitle>
             <AlertDialogDescription>
               {t('void_partner_payment_confirmation') ||
-                `Are you sure you want to void this Rs ${entryToVoid?.debit.toFixed(2)} payment? The amount will be added back to the partner's balance.`}
+                `Are you sure you want to void this ${entryToVoid ? formatMoney(entryToVoid.debit) : ''} payment? The amount will be added back to the partner's balance.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

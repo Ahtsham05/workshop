@@ -1,4 +1,6 @@
 import type { PriceComparisonEntry } from '@/stores/purchase.api'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 export type PriceChangeDirection = 'increase' | 'decrease' | 'none'
 export type PriceChangeSeverity = 'none' | 'minor' | 'moderate' | 'significant'
@@ -62,7 +64,7 @@ export interface FormattedPriceChange {
  * available in the indicator's tooltip. The Summary card's price-change list uses this
  * same compact text too, so it stays consistent between the two places it appears.
  */
-export function formatPriceChange(change: PriceChangeResult): FormattedPriceChange {
+export function formatPriceChange(change: PriceChangeResult, meta: CurrencyOption = FALLBACK_CURRENCY): FormattedPriceChange {
   const pct = change.percentageChange !== null ? ` (${change.percentageChange > 0 ? '+' : ''}${change.percentageChange.toFixed(2)}%)` : ''
 
   if (change.direction === 'none') {
@@ -70,13 +72,13 @@ export function formatPriceChange(change: PriceChangeResult): FormattedPriceChan
   }
   if (change.direction === 'increase') {
     return {
-      text: `+Rs${change.difference.toFixed(2)}${pct}`,
+      text: `+${formatMoneyWithMeta(change.difference, meta)}${pct}`,
       icon: 'up',
       tone: change.severity === 'significant' ? 'warning' : 'bad',
     }
   }
   return {
-    text: `-Rs${Math.abs(change.difference).toFixed(2)}${pct}`,
+    text: `-${formatMoneyWithMeta(Math.abs(change.difference), meta)}${pct}`,
     icon: 'down',
     tone: 'good',
   }

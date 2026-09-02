@@ -49,6 +49,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 type CartLine = {
   productId: string
@@ -63,9 +64,6 @@ type OrdersPanelFilter = 'table' | 'delivery'
 function isActiveCounterStatus(status: string): boolean {
   return ['open', 'in_progress', 'ready', 'served', 'out_for_delivery'].includes(status)
 }
-
-const fmt = (n: number) =>
-  n.toLocaleString(undefined, { style: 'currency', currency: 'PKR' })
 
 /** Digits only — used to match CRM phone & saved delivery tickets */
 function extractDigitsFromLabel(s: string): string {
@@ -109,6 +107,7 @@ function canMarkPaid(order: RestaurantOrder): boolean {
 }
 
 export default function RestaurantPosPage() {
+  const fmt = useFormatMoney()
   const dispatch = useDispatch<AppDispatch>()
   const { data: org } = useGetMyOrganizationQuery()
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
@@ -1294,6 +1293,7 @@ function PosOrderRow({
   onPaidDeliveredCash: () => void
   onPaidDeliveredCard: () => void
 }) {
+  const fmt = useFormatMoney()
   const isDelivery = order.serviceMode === 'delivery'
   const outForDelivery = order.status === 'out_for_delivery'
 

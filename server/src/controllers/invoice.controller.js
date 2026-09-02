@@ -5,7 +5,7 @@ const catchAsync = require('../utils/catchAsync');
 const { invoiceService, auditLogService } = require('../services');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
-const TRACKED_INVOICE_FIELDS = ['status', 'total', 'paidAmount', 'balance', 'discount', 'items'];
+const TRACKED_INVOICE_FIELDS = ['status', 'total', 'paidAmount', 'balance', 'discount', 'items', 'tax', 'currency'];
 
 const createInvoice = catchAsync(async (req, res) => {
   const invoice = await invoiceService.createInvoice({ ...req.body, ...getBranchContext(req) }, req.user.id);

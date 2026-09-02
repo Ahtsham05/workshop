@@ -1,4 +1,5 @@
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { useFormatMoney } from '@/lib/format-money'
 
 const data = [
   {
@@ -52,6 +53,7 @@ const data = [
 ]
 
 export function Overview() {
+  const formatMoney = useFormatMoney()
   return (
     <ResponsiveContainer width='100%' height={350}>
       <BarChart data={data}>
@@ -67,7 +69,7 @@ export function Overview() {
           fontSize={12}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => `Rs.${value}`}
+          tickFormatter={(value) => formatMoney(value)}
         />
         <Bar
           dataKey='total'

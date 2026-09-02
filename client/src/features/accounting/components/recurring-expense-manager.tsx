@@ -41,6 +41,7 @@ import {
 } from '@/stores/recurringExpense.api'
 import { useGetPendingExpensesQuery, usePayExpenseMutation } from '@/stores/expense.api'
 import { getBusinessToday, formatBusinessDate } from '@/lib/business-timezone'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Sunday' },
@@ -68,7 +69,6 @@ const monthlyEst = (r: RecurringExpenseRecord) => {
   return r.amount
 }
 
-const fmt = (n: number) => `Rs. ${Math.round(n).toLocaleString('en-PK')}`
 // The backend computes recurring-expense day boundaries in the business timezone
 // (Asia/Karachi) — format with the same helper so the displayed day always
 // matches what the server considers "today", regardless of viewer's browser TZ.
@@ -76,6 +76,7 @@ const fmtDate = (d?: string | null) => (d ? formatBusinessDate(d) : '—')
 
 /** Show daily / monthly equivalent as a hint below the amount field */
 function AmountHint({ amount, frequency }: { amount: string; frequency: RecurringFrequency }) {
+  const fmt = useFormatMoney()
   const n = parseFloat(amount)
   if (!n || isNaN(n)) return null
   if (frequency === 'monthly') {
@@ -131,6 +132,8 @@ const emptyForm = (): FormState => ({
 })
 
 export function RecurringExpenseManager() {
+  const fmt = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageExpenses')
 
@@ -507,7 +510,7 @@ export function RecurringExpenseManager() {
             {/* Amount + hint */}
             <div>
               <Label>
-                Amount (Rs.) *
+                Amount ({currencySymbol}) *
                 {form.frequency === 'daily' && <span className='text-muted-foreground font-normal ml-1'>— per day</span>}
                 {form.frequency === 'weekly' && <span className='text-muted-foreground font-normal ml-1'>— per week</span>}
                 {form.frequency === 'monthly' && <span className='text-muted-foreground font-normal ml-1'>— per month</span>}
@@ -670,6 +673,7 @@ function PayRuleDialogBody({
   isPayingAll: boolean
   onPayAll: () => void
 }) {
+  const fmt = useFormatMoney()
   const { data, isLoading } = useGetPendingExpensesQuery({ referenceId: rule.id })
   const [payExpense, { isLoading: isPayingSingle }] = usePayExpenseMutation()
   const [payingId, setPayingId] = useState<string | null>(null)

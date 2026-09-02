@@ -21,6 +21,7 @@ import {
   type DashboardDateRange,
 } from '@/lib/dashboard-date-range'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useFormatMoney, useCurrencySymbolPrefix } from '@/lib/format-money'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package, TrendingUp, Users, Building2, Wallet } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
@@ -47,9 +48,13 @@ import { Navigate } from '@tanstack/react-router'
 const DASHBOARD_CARD_GRID =
   'grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 mb-6'
 
-const formatSalesProfitSubtext = (salesProfit: number | undefined, t: (key: string) => string) =>
+const formatSalesProfitSubtext = (
+  salesProfit: number | undefined,
+  t: (key: string) => string,
+  formatMoney: (amount: number) => string,
+) =>
   salesProfit != null
-    ? `${t('Profit')}: Rs ${salesProfit.toLocaleString()}`
+    ? `${t('Profit')}: ${formatMoney(salesProfit)}`
     : undefined
 
 export default function Dashboard() {
@@ -83,7 +88,9 @@ export default function Dashboard() {
   // Individual cards that require a paid feature are further gated inside the section.
   const showMobileCards = isMobileShopBusiness(businessType)
   const showCashBookFeatures = isCashBookBusiness(businessType)
-  const salesProfitSubtext = formatSalesProfitSubtext(stats?.salesProfit, t)
+  const formatMoney = useFormatMoney()
+  const currencyPrefix = useCurrencySymbolPrefix()
+  const salesProfitSubtext = formatSalesProfitSubtext(stats?.salesProfit, t, formatMoney)
   // Only paid expenses reduce profit — an unpaid (e.g. pending recurring) expense
   // hasn't left the bank yet. Falls back to totalExpenses for older API responses
   // that don't yet split paid vs pending.
@@ -171,7 +178,7 @@ export default function Dashboard() {
                 title={t('Cash in Hand')}
                 value={stats?.cashInHand || 0}
                 icon={<DollarSign className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={t('Available cash after expenses')}
                 isLoading={statsLoading}
                 tone='emerald'
@@ -181,7 +188,7 @@ export default function Dashboard() {
                 title={t('Bank Accounts Balance')}
                 value={stats?.walletBalance || 0}
                 icon={<WalletCards className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={t('Total balance across all bank accounts')}
                 isLoading={statsLoading}
                 tone='cyan'
@@ -191,10 +198,10 @@ export default function Dashboard() {
                 title={t('Load Sold')}
                 value={stats?.totalLoadSold || 0}
                 icon={<Smartphone className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={
                   stats?.totalLoadSoldProfit
-                    ? `${t('Profit')}: Rs ${(stats?.totalLoadSoldProfit || 0).toLocaleString()}`
+                    ? `${t('Profit')}: ${formatMoney((stats?.totalLoadSoldProfit || 0))}`
                     : t('Mobile load transactions')
                 }
                 isLoading={statsLoading}
@@ -205,10 +212,10 @@ export default function Dashboard() {
                 title={t('Load Purchased')}
                 value={stats?.totalLoadPurchased || 0}
                 icon={<ShoppingBag className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={
                   stats?.totalLoadPurchaseProfit
-                    ? `${t('Profit')}: Rs ${(stats?.totalLoadPurchaseProfit || 0).toLocaleString()}`
+                    ? `${t('Profit')}: ${formatMoney((stats?.totalLoadPurchaseProfit || 0))}`
                     : t('Load bought from distributors')
                 }
                 isLoading={statsLoading}
@@ -219,10 +226,10 @@ export default function Dashboard() {
                 title={t('Repair Income')}
                 value={stats?.totalRepairIncome || 0}
                 icon={<Wrench className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={
                   stats?.totalRepairProfit
-                    ? `${t('Profit')}: Rs ${(stats?.totalRepairProfit || 0).toLocaleString()}`
+                    ? `${t('Profit')}: ${formatMoney((stats?.totalRepairProfit || 0))}`
                     : t('Repair charges collected')
                 }
                 isLoading={statsLoading}
@@ -233,10 +240,10 @@ export default function Dashboard() {
                 title={t('Bill Collection')}
                 value={stats?.totalBillCollection || 0}
                 icon={<Receipt className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={
                   stats?.billPaymentProfit
-                    ? `${t('Profit')}: Rs ${(stats?.billPaymentProfit || 0).toLocaleString()}`
+                    ? `${t('Profit')}: ${formatMoney((stats?.billPaymentProfit || 0))}`
                     : t('Total utility bills collected')
                 }
                 isLoading={statsLoading}
@@ -273,10 +280,10 @@ export default function Dashboard() {
                 title={t('Sim Sale')}
                 value={stats?.totalSimSale || 0}
                 icon={<IdCard className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={
                   stats?.simSaleCount
-                    ? `${t('Profit')}: Rs ${(stats?.totalSimSaleProfit || 0).toLocaleString()} · ${stats.simSaleCount} ${t('sales')}`
+                    ? `${t('Profit')}: ${formatMoney((stats?.totalSimSaleProfit || 0))} · ${stats.simSaleCount} ${t('sales')}`
                     : t('SIM sales in selected period')
                 }
                 isLoading={statsLoading}
@@ -287,10 +294,10 @@ export default function Dashboard() {
                 title={t('Services')}
                 value={stats?.totalServiceIncome || 0}
                 icon={<Briefcase className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={
                   stats?.serviceInvoiceCount
-                    ? `${t('Profit')}: Rs ${(stats?.totalServiceProfit || stats?.totalServiceIncome || 0).toLocaleString()} · ${stats.serviceInvoiceCount} ${t('invoices in selected period')}`
+                    ? `${t('Profit')}: ${formatMoney((stats?.totalServiceProfit || stats?.totalServiceIncome || 0))} · ${stats.serviceInvoiceCount} ${t('invoices in selected period')}`
                     : t('Service charges collected')
                 }
                 isLoading={statsLoading}
@@ -301,8 +308,8 @@ export default function Dashboard() {
                 title={t('Total Cost')}
                 value={totalCost}
                 icon={<Package className='h-4 w-4' />}
-                valuePrefix='Rs '
-                description={`${t('Inventory')}: Rs ${inventorySaleCost.toLocaleString()} · ${t('Sim Sale')}: Rs ${simSaleCost.toLocaleString()} · ${t('Repair')}: Rs ${repairCost.toLocaleString()}`}
+                valuePrefix={currencyPrefix}
+                description={`${t('Inventory')}: ${formatMoney(inventorySaleCost)} · ${t('Sim Sale')}: ${formatMoney(simSaleCost)} · ${t('Repair')}: ${formatMoney(repairCost)}`}
                 isLoading={statsLoading}
                 tone='orange'
               />
@@ -313,7 +320,7 @@ export default function Dashboard() {
               title={t('Cash in Hand')}
               value={stats?.cashInHand || 0}
               icon={<DollarSign className='h-4 w-4' />}
-              valuePrefix='Rs '
+              valuePrefix={currencyPrefix}
               description={t('Available cash after expenses')}
               isLoading={statsLoading}
               tone='emerald'
@@ -324,7 +331,7 @@ export default function Dashboard() {
             title='Total Receivable'
             value={stats?.totalReceivable || 0}
             icon={<Users className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={`${stats?.receivableCount || 0} ${t('customers')} · ${t('customers_ledger')}`}
             isLoading={statsLoading}
             tone='cyan'
@@ -334,7 +341,7 @@ export default function Dashboard() {
             title='Total Payable'
             value={stats?.totalPayable || 0}
             icon={<Building2 className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={`${stats?.payableCount || 0} ${t('suppliers')} · ${t('suppliers_ledger')}`}
             isLoading={statsLoading}
             tone='amber'
@@ -344,7 +351,7 @@ export default function Dashboard() {
             title='My Wallet'
             value={stats?.myWalletExpense || 0}
             icon={<Wallet className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={
               stats?.myWalletExpenseCount
                 ? `${stats.myWalletExpenseCount} ${t('entries')} · ${t('total_money_out_expense')}`
@@ -360,7 +367,7 @@ export default function Dashboard() {
             icon={<Target className='h-4 w-4' />}
             description={
               openPipelineValue > 0
-                ? `Rs ${openPipelineValue.toLocaleString()} ${t('open pipeline')} · ${leadStats?.conversionRate ?? 0}% ${t('conversion')}`
+                ? `${formatMoney(openPipelineValue)} ${t('open pipeline')} · ${leadStats?.conversionRate ?? 0}% ${t('conversion')}`
                 : t('Track and convert leads through your sales pipeline')
             }
             isLoading={leadStatsLoading}
@@ -383,10 +390,10 @@ export default function Dashboard() {
                 title={t('Send')}
                 value={stats?.totalCashSend || 0}
                 icon={<ArrowUpRight className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={
                   stats?.cashSendCount
-                    ? `${t('Profit')}: Rs ${(stats?.totalCashSendProfit || 0).toLocaleString()} · ${stats.cashSendCount} ${t('transactions')}`
+                    ? `${t('Profit')}: ${formatMoney((stats?.totalCashSendProfit || 0))} · ${stats.cashSendCount} ${t('transactions')}`
                     : t('Cash sent to customer accounts')
                 }
                 isLoading={statsLoading}
@@ -397,10 +404,10 @@ export default function Dashboard() {
                 title={t('Received')}
                 value={stats?.totalCashReceived || 0}
                 icon={<ArrowDownLeft className='h-4 w-4' />}
-                valuePrefix='Rs '
+                valuePrefix={currencyPrefix}
                 description={
                   stats?.cashReceivedCount
-                    ? `${t('Profit')}: Rs ${(stats?.totalCashReceivedProfit || 0).toLocaleString()} · ${stats.cashReceivedCount} ${t('transactions')}`
+                    ? `${t('Profit')}: ${formatMoney((stats?.totalCashReceivedProfit || 0))} · ${stats.cashReceivedCount} ${t('transactions')}`
                     : t('Cash received from customers')
                 }
                 isLoading={statsLoading}
@@ -414,7 +421,7 @@ export default function Dashboard() {
             value={stats?.totalRevenue || 0}
             change={stats?.totalRevenueChange}
             icon={<DollarSign className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={salesProfitSubtext || comparisonLabel}
             isLoading={statsLoading}
             tone='emerald'
@@ -434,7 +441,7 @@ export default function Dashboard() {
             title={t('Sales Returns')}
             value={stats?.totalSalesReturns || 0}
             icon={<RefreshCcw className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={t('Total amount refunded to customers')}
             isLoading={statsLoading}
             tone='rose'
@@ -444,7 +451,7 @@ export default function Dashboard() {
             title={t('Net Sales')}
             value={stats?.netSales || 0}
             icon={<ShoppingCart className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={
               showMobileCards
                 ? t('Sales + Sim Sale + Services + Repair, after returns')
@@ -458,7 +465,7 @@ export default function Dashboard() {
             title={t('total_purchases')}
             value={stats?.totalPurchases || 0}
             icon={<Package className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={t('total_purchase_amount_period')}
             isLoading={statsLoading}
             tone='orange'
@@ -468,7 +475,7 @@ export default function Dashboard() {
             title={t('Purchase Returns')}
             value={stats?.totalPurchaseReturns || 0}
             icon={<RefreshCcw className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={t('Total amount recovered from suppliers')}
             isLoading={statsLoading}
             tone='cyan'
@@ -478,7 +485,7 @@ export default function Dashboard() {
             title={t('Net Purchases')}
             value={stats?.netPurchase || 0}
             icon={<Package className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={t('Total purchases minus returns')}
             isLoading={statsLoading}
             tone='orange'
@@ -488,7 +495,7 @@ export default function Dashboard() {
             title={t('Inventory Value')}
             value={stats?.totalInventoryValue || 0}
             icon={<Package className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={t('Total stock value')}
             isLoading={statsLoading}
             tone='violet'
@@ -507,8 +514,8 @@ export default function Dashboard() {
             title={t('Pending Invoices')}
             value={stats?.pendingInvoices || 0}
             icon={<FileText className='h-4 w-4' />}
-            valuePrefix='Rs '
-            description={`${t('Total')}: Rs ${(stats?.pendingInvoicesAmount || 0).toLocaleString()}`}
+            valuePrefix={currencyPrefix}
+            description={`${t('Total')}: ${formatMoney((stats?.pendingInvoicesAmount || 0))}`}
             isLoading={statsLoading}
             tone='indigo'
             link={{ to: '/invoice', search: { view: 'list', type: 'pending' } }}
@@ -517,7 +524,7 @@ export default function Dashboard() {
             title={t('total_profit')}
             value={stats?.totalProfit || 0}
             icon={<TrendingUp className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={t('Sum of all profit sources in selected period')}
             isLoading={statsLoading}
             tone={(stats?.totalProfit || 0) >= 0 ? 'emerald' : 'rose'}
@@ -527,10 +534,10 @@ export default function Dashboard() {
             title={t('total_expenses')}
             value={stats?.totalExpenses || 0}
             icon={<Receipt className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={
               totalPendingExpenses > 0
-                ? `${t('Paid')}: Rs ${totalPaidExpenses.toLocaleString()} · ${t('Pending')}: Rs ${totalPendingExpenses.toLocaleString()}`
+                ? `${t('Paid')}: ${formatMoney(totalPaidExpenses)} · ${t('Pending')}: ${formatMoney(totalPendingExpenses)}`
                 : t('Operating expenses in selected period')
             }
             isLoading={statsLoading}
@@ -541,7 +548,7 @@ export default function Dashboard() {
             title={t('net_profit_after_expense')}
             value={netProfitAfterExpense}
             icon={<TrendingUp className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={t('total_profit_minus_expenses')}
             isLoading={statsLoading}
             tone={netProfitAfterExpense >= 0 ? 'emerald' : 'rose'}
@@ -551,10 +558,10 @@ export default function Dashboard() {
             title={t('net_profit_after_all_expenses')}
             value={netProfitAfterAllExpenses}
             icon={<TrendingUp className='h-4 w-4' />}
-            valuePrefix='Rs '
+            valuePrefix={currencyPrefix}
             description={
               totalPendingExpenses > 0
-                ? `${t('total_profit_minus_paid_and_pending_expenses')} (${t('Pending')}: Rs ${totalPendingExpenses.toLocaleString()})`
+                ? `${t('total_profit_minus_paid_and_pending_expenses')} (${t('Pending')}: ${formatMoney(totalPendingExpenses)})`
                 : t('total_profit_minus_paid_and_pending_expenses')
             }
             isLoading={statsLoading}

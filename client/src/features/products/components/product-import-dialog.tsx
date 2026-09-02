@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useFormatMoney } from '@/lib/format-money'
 import {
   Dialog,
   DialogContent,
@@ -81,6 +82,7 @@ const IMPORT_BATCH_SIZE = 500
 
 export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImportDialogProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const [file, setFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
   const [parsedData, setParsedData] = useState<ImportProduct[]>([])
@@ -590,7 +592,7 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
                       <div key={index} className="text-xs border-b pb-1">
                         <div className="font-medium">{product.name}{product.nameUrdu && <span className="text-muted-foreground mr-2 font-normal"> · <span dir="rtl">{product.nameUrdu}</span></span>}</div>
                         <div className="text-muted-foreground">
-                          Price: Rs{product.price} | Cost: Rs{product.cost} | Stock: {product.stockQuantity}
+                          Price: {formatMoney(product.price)} | Cost: {formatMoney(product.cost)} | Stock: {product.stockQuantity}
                           {product.barcode && ` | Barcode: ${product.barcode}`}
                         </div>
                       </div>

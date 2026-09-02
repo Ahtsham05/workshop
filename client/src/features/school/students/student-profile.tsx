@@ -13,6 +13,7 @@ import { useGetStudentQuery, useGetStudentFeesQuery, useUpdateStudentMutation, u
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
 import AdmissionFormPrint from './admission-form-print';
+import { useFormatMoney } from '@/lib/format-money';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
@@ -44,6 +45,7 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
   });
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState('');
+  const formatMoney = useFormatMoney();
 
   const populateForm = () => {
     if (!student) return;
@@ -405,10 +407,10 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
           <CardHeader><CardTitle>Fee Structure</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div><span className="text-sm text-muted-foreground">Monthly Fee</span><p className="font-medium">Rs. {student.feeStructure.monthlyFee || 0}</p></div>
-              <div><span className="text-sm text-muted-foreground">Transport Fee</span><p className="font-medium">Rs. {student.feeStructure.transportFee || 0}</p></div>
-              <div><span className="text-sm text-muted-foreground">Admission Fee</span><p className="font-medium">Rs. {student.feeStructure.admissionFee || 0}</p></div>
-              <div><span className="text-sm text-muted-foreground">Discount</span><p className="font-medium">Rs. {student.feeStructure.discount || 0}</p></div>
+              <div><span className="text-sm text-muted-foreground">Monthly Fee</span><p className="font-medium">{formatMoney(student.feeStructure.monthlyFee || 0)}</p></div>
+              <div><span className="text-sm text-muted-foreground">Transport Fee</span><p className="font-medium">{formatMoney(student.feeStructure.transportFee || 0)}</p></div>
+              <div><span className="text-sm text-muted-foreground">Admission Fee</span><p className="font-medium">{formatMoney(student.feeStructure.admissionFee || 0)}</p></div>
+              <div><span className="text-sm text-muted-foreground">Discount</span><p className="font-medium">{formatMoney(student.feeStructure.discount || 0)}</p></div>
             </div>
           </CardContent>
         </Card>
@@ -426,7 +428,7 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
                     <p className="text-sm text-muted-foreground">Due: {new Date(fee.dueDate).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold">Rs. {fee.netAmount}</p>
+                    <p className="font-bold">{formatMoney(fee.netAmount)}</p>
                     <Badge className={fee.status === 'paid' ? 'bg-green-100 text-green-700' : fee.status === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}>
                       {fee.status}
                     </Badge>

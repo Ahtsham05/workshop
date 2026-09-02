@@ -11,6 +11,7 @@ import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
 import { buildDashboardDateRange, dashboardRangeQueryParams } from '@/lib/dashboard-date-range'
 import { toneIconWrapClass, type StatCardTone } from '@/lib/stat-card-tones'
 import { formatMoney } from '../lib/format'
+import { useCurrencyMeta } from '@/lib/format-money'
 
 /** A compact, purpose-built stat tile for this narrow sidebar — the full dashboard StatCard
  *  (large icon, badge, progress bar) is right for a page-width grid but too tall stacked 4-up
@@ -74,6 +75,7 @@ function OverviewTile({
 /** Reuses the real Dashboard's own stats endpoint — same numbers the user sees on the Dashboard
  *  page, so this never drifts into its own, possibly-inconsistent source of truth. */
 function BusinessOverviewContent() {
+  const currencyMeta = useCurrencyMeta()
   const range = buildDashboardDateRange('month')
   const { data: stats, isLoading } = useGetDashboardStatsQuery(dashboardRangeQueryParams(range))
 
@@ -91,7 +93,7 @@ function BusinessOverviewContent() {
       <CardContent className='grid grid-cols-2 gap-2 px-4'>
         <OverviewTile
           title='Total Sales'
-          value={formatMoney(stats?.totalRevenue)}
+          value={formatMoney(stats?.totalRevenue, currencyMeta)}
           change={stats?.totalRevenueChange}
           icon={<DollarSign />}
           tone='emerald'
@@ -99,7 +101,7 @@ function BusinessOverviewContent() {
         />
         <OverviewTile
           title='Total Profit'
-          value={formatMoney(stats?.totalProfit)}
+          value={formatMoney(stats?.totalProfit, currencyMeta)}
           icon={<TrendingUp />}
           tone='violet'
           isLoading={isLoading}

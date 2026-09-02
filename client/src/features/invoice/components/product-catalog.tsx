@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { ProductHistoryDialog } from './product-history-dialog'
 import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
+import { useFormatMoney } from '@/lib/format-money'
 import { usePermissions } from '@/context/permission-context'
 import { useUrduDisplay } from '@/context/urdu-display-context'
 import { ColorDot } from '@/components/color-swatch-picker'
@@ -53,6 +54,7 @@ export function ProductCatalog({
   selectedCustomerName
 }: ProductCatalogProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { showUrdu } = useUrduDisplay()
   const { hasPermission } = usePermissions()
   const canViewCost = hasPermission('viewProducts')
@@ -441,7 +443,7 @@ export function ProductCatalog({
                             )}
                           >
                             <span key={`price-${product._id}`} className='font-medium text-foreground text-sm'>
-                              Rs{formatDisplayPrice(product, 'price')}
+                              {formatDisplayPrice(product, 'price', formatMoney)}
                             </span>
                             <span key={`stock-${product._id}`}>Stock: {getDisplayStock(product)}</span>
                             {!showImages && product.barcode && (
@@ -458,7 +460,7 @@ export function ProductCatalog({
                                 }`}
                                 title="Purchase cost"
                               >
-                                Cost: Rs{formatDisplayPrice(product, 'cost')}
+                                Cost: {formatDisplayPrice(product, 'cost', formatMoney)}
                               </span>
                             </div>
                           )}

@@ -34,6 +34,7 @@ import {
   useCreateParentPortalPaymentRequestMutation,
 } from '@/stores/school.api';
 import StudentAvatar from '../components/student-avatar';
+import { useFormatMoney } from '@/lib/format-money';
 
 const REQ_STATUS: Record<string, { label: string; color: string; icon: any }> = {
   pending: { label: 'Awaiting approval', color: 'bg-amber-100 text-amber-700', icon: Hourglass },
@@ -79,6 +80,7 @@ type AttRange = 'today' | 'week' | 'month' | 'all';
 
 export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'parent' | 'student' }) {
   const isStudent = variant === 'student';
+  const formatMoney = useFormatMoney();
   const [selectedChild, setSelectedChild] = useState('');
   const [selectedExam, setSelectedExam] = useState('all');
   const [attRange, setAttRange] = useState<AttRange>('month');
@@ -304,7 +306,7 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
         <QuickStat
           icon={<CreditCard className="h-5 w-5 text-amber-500" />}
           label="Pending Fees"
-          value={`Rs. ${pendingFees.toLocaleString()}`}
+          value={formatMoney(pendingFees)}
           sub={pendingFees <= 0 ? 'All Clear' : 'Due'}
           ok={pendingFees <= 0}
         />
@@ -476,17 +478,17 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
                             {items.map((it, j) => (
                               <div key={j} className="flex justify-between text-xs text-muted-foreground">
                                 <span>{it.name}</span>
-                                <span>Rs. {(it.amount || 0).toLocaleString()}</span>
+                                <span>{formatMoney(it.amount || 0)}</span>
                               </div>
                             ))}
                             {f.discount > 0 && (
                               <div className="flex justify-between text-xs text-green-600">
-                                <span>Discount</span><span>- Rs. {f.discount.toLocaleString()}</span>
+                                <span>Discount</span><span>- {formatMoney(f.discount)}</span>
                               </div>
                             )}
                             {f.fine > 0 && (
                               <div className="flex justify-between text-xs text-red-600">
-                                <span>Fine</span><span>+ Rs. {f.fine.toLocaleString()}</span>
+                                <span>Fine</span><span>+ {formatMoney(f.fine)}</span>
                               </div>
                             )}
                           </div>
@@ -495,8 +497,8 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
                         <div className="mt-2 border-t pt-2 flex justify-between text-sm font-semibold">
                           <span>Payable</span>
                           <span>
-                            Rs. {(f.amount || 0).toLocaleString()}
-                            {f.paidAmount > 0 && <span className="text-green-600 font-normal text-xs"> (Paid Rs. {f.paidAmount.toLocaleString()})</span>}
+                            {formatMoney(f.amount || 0)}
+                            {f.paidAmount > 0 && <span className="text-green-600 font-normal text-xs"> (Paid {formatMoney(f.paidAmount)})</span>}
                           </span>
                         </div>
 
@@ -514,7 +516,7 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
 
                   <div className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-3 font-bold">
                     <span>Total Outstanding</span>
-                    <span>Rs. {pendingFees.toLocaleString()}</span>
+                    <span>{formatMoney(pendingFees)}</span>
                   </div>
                 </div>
               )}
@@ -533,7 +535,7 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
                     <div key={r.id || r._id} className="border rounded-lg p-3 flex items-start justify-between gap-3 flex-wrap">
                       <div className="min-w-0">
                         <p className="font-semibold text-sm">
-                          Rs. {(r.amount || 0).toLocaleString()}
+                          {formatMoney(r.amount || 0)}
                           <span className="text-muted-foreground font-normal"> · {(r.voucherSummary || []).length} voucher(s)</span>
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -563,7 +565,7 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
               <div className="mx-auto max-w-2xl bg-white border shadow-lg rounded-xl px-4 py-3 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold">{selectedList.length} voucher(s) selected</p>
-                  <p className="text-xs text-muted-foreground">Total Rs. {selectedTotal.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Total {formatMoney(selectedTotal)}</p>
                 </div>
                 <Button className="gap-1.5" onClick={() => setPayOpen(true)}>
                   <Wallet className="h-4 w-4" /> Pay Now
@@ -787,6 +789,7 @@ function PaymentDialog({
   onSuccess: () => void;
 }) {
   const [createRequest, { isLoading }] = useCreateParentPortalPaymentRequestMutation();
+  const formatMoney = useFormatMoney();
   const [bankAccountId, setBankAccountId] = useState('');
   const [senderName, setSenderName] = useState('');
   const [transactionRef, setTransactionRef] = useState('');
@@ -831,11 +834,11 @@ function PaymentDialog({
             {vouchers.map((v) => (
               <div key={v.id} className="flex justify-between text-sm">
                 <span>{formatPeriod(v)}{v.voucherNumber ? ` · #${v.voucherNumber}` : ''}</span>
-                <span>Rs. {Math.max(0, (v.amount || 0) - (v.paidAmount || 0)).toLocaleString()}</span>
+                <span>{formatMoney(Math.max(0, (v.amount || 0) - (v.paidAmount || 0)))}</span>
               </div>
             ))}
             <div className="flex justify-between font-bold border-t mt-1 pt-1 text-sm">
-              <span>Total</span><span>Rs. {total.toLocaleString()}</span>
+              <span>Total</span><span>{formatMoney(total)}</span>
             </div>
           </div>
 

@@ -118,7 +118,9 @@ export function buildInvoicePayload({
     splitWalletType: splitPaymentMethod === 'wallet' ? (splitWalletType || '') : undefined,
     splitPaidAmount: splitAmount,
     subtotal,
-    tax: 0,
+    // Tax is now resolved server-side from each item's product tax category via the
+    // central Tax Calculator (see invoice.service.js) — the server ignores/overwrites
+    // whatever is sent here, so this simply isn't sent rather than sending a stale 0.
     discountType,
     discountValue,
     discount,

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Users, GraduationCap, BookOpen, Calendar, DollarSign, Clock, UserPlus, ClipboardCheck, ArrowRight, CheckCircle2, XCircle, Timer, Umbrella, CalendarMinus, LayoutList, Layers, UserCheck, TrendingUp, AlertCircle, Banknote, Wallet, FileText } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { useGetSchoolDashboardQuery, useGetSchoolAccountingDashboardQuery, useGetStudentsQuery } from '@/stores/school.api';
+import { useFormatMoney } from '@/lib/format-money';
 
 type NavigateOptions = Parameters<ReturnType<typeof useNavigate>>[0];
 
@@ -17,6 +18,7 @@ const QUICK_ACTIONS = [
 ];
 
 export default function SchoolDashboard() {
+  const formatMoney = useFormatMoney();
   const navigate = useNavigate();
   const [classStrengthOpen, setClassStrengthOpen] = useState(false);
   const { data: stats, isLoading } = useGetSchoolDashboardQuery({});
@@ -220,7 +222,7 @@ export default function SchoolDashboard() {
                   <p className="text-xs text-muted-foreground">Collected Today</p>
                   {isLoading ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : (
                     <>
-                      <p className="text-lg font-bold text-teal-600">PKR {(stats?.todayCollection?.amount || 0).toLocaleString()}</p>
+                      <p className="text-lg font-bold text-teal-600">{formatMoney(stats?.todayCollection?.amount || 0)}</p>
                       {(stats?.todayCollection?.count || 0) > 0 && <p className="text-[10px] text-muted-foreground">{stats.todayCollection.count} payment{stats.todayCollection.count !== 1 ? 's' : ''}</p>}
                     </>
                   )}
@@ -237,7 +239,7 @@ export default function SchoolDashboard() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Total Expected</p>
-                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold">PKR {(fc?.totalExpected || 0).toLocaleString()}</p>}
+                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold">{formatMoney(fc?.totalExpected || 0)}</p>}
                 </div>
               </div>
             </CardContent>
@@ -251,7 +253,7 @@ export default function SchoolDashboard() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Collected</p>
-                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold text-green-600">PKR {(fc?.totalCollected || 0).toLocaleString()}</p>}
+                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold text-green-600">{formatMoney(fc?.totalCollected || 0)}</p>}
                 </div>
               </div>
             </CardContent>
@@ -265,7 +267,7 @@ export default function SchoolDashboard() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Pending</p>
-                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold text-red-500">PKR {(fc?.totalPending || 0).toLocaleString()}</p>}
+                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold text-red-500">{formatMoney(fc?.totalPending || 0)}</p>}
                 </div>
               </div>
             </CardContent>
@@ -326,7 +328,7 @@ export default function SchoolDashboard() {
                   <p className="text-xs text-muted-foreground">Total Payable</p>
                   {isLoading ? <div className="h-6 w-24 bg-muted animate-pulse rounded mt-0.5" /> : (
                     <>
-                      <p className="text-lg font-bold">PKR {(stats?.payroll?.totalPayable || 0).toLocaleString()}</p>
+                      <p className="text-lg font-bold">{formatMoney(stats?.payroll?.totalPayable || 0)}</p>
                       {(stats?.payroll?.totalRecords || 0) > 0 && (
                         <p className="text-[10px] text-muted-foreground">{stats.payroll.totalRecords} record{stats.payroll.totalRecords !== 1 ? 's' : ''}</p>
                       )}
@@ -347,7 +349,7 @@ export default function SchoolDashboard() {
                   <p className="text-xs text-muted-foreground">Paid</p>
                   {isLoading ? <div className="h-6 w-24 bg-muted animate-pulse rounded mt-0.5" /> : (
                     <>
-                      <p className="text-lg font-bold text-green-600">PKR {(stats?.payroll?.totalPaid || 0).toLocaleString()}</p>
+                      <p className="text-lg font-bold text-green-600">{formatMoney(stats?.payroll?.totalPaid || 0)}</p>
                       {(stats?.payroll?.paid || 0) > 0 && (
                         <p className="text-[10px] text-muted-foreground">{stats.payroll.paid} teacher{stats.payroll.paid !== 1 ? 's' : ''}</p>
                       )}
@@ -368,7 +370,7 @@ export default function SchoolDashboard() {
                   <p className="text-xs text-muted-foreground">Pending</p>
                   {isLoading ? <div className="h-6 w-24 bg-muted animate-pulse rounded mt-0.5" /> : (
                     <>
-                      <p className="text-lg font-bold text-amber-600">PKR {(stats?.payroll?.totalPending || 0).toLocaleString()}</p>
+                      <p className="text-lg font-bold text-amber-600">{formatMoney(stats?.payroll?.totalPending || 0)}</p>
                       {(stats?.payroll?.draft || 0) > 0 && (
                         <p className="text-[10px] text-muted-foreground">{stats.payroll.draft} draft{stats.payroll.draft !== 1 ? 's' : ''}</p>
                       )}

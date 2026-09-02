@@ -1,4 +1,6 @@
 import type { AgentBillRecord } from '@/stores/mobile-shop.api'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 interface AgentBillReceiptOptions {
   orgName?: string
@@ -10,6 +12,8 @@ interface AgentBillReceiptOptions {
     invoiceNote?: string
   }
   logo?: string
+  /** Organization's configured currency (symbol/decimals) — omit to fall back to PKR. */
+  currencyMeta?: CurrencyOption
 }
 
 export function generateAgentBillReceiptHTML(
@@ -17,7 +21,7 @@ export function generateAgentBillReceiptHTML(
   options: AgentBillReceiptOptions = {},
 ): string {
   const companyName = options.branchDetails?.name || options.orgName || 'Bill Collection'
-  const fmt = (n: number) => `Rs. ${n.toLocaleString('en-PK')}`
+  const fmt = (n: number) => formatMoneyWithMeta(n, options.currencyMeta ?? FALLBACK_CURRENCY)
   const fmtDate = (d?: string) =>
     d ? new Date(d).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 

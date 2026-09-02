@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
+import { useFormatMoney } from '@/lib/format-money';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -86,8 +87,7 @@ export function EmployeePayrollMonthlySummary({ employeeId, year, onYearChange }
     return t('No Record');
   };
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(amount || 0);
+  const formatCurrency = useFormatMoney();
 
   if (!employeeId) return null;
 

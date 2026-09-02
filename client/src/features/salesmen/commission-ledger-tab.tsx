@@ -24,6 +24,7 @@ import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones';
 import { cn } from '@/lib/utils';
+import { useFormatMoney } from '@/lib/format-money';
 import { format, startOfMonth } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
@@ -50,10 +51,9 @@ const TRANSACTION_TYPE_STYLES: Record<string, string> = {
 
 const ALL_TRANSACTION_TYPES = ['commission_earned', 'commission_reversed', 'commission_payment', 'adjustment'];
 
-const formatRs = (amount: number) => `Rs ${amount.toFixed(2)}`;
-
 export function CommissionLedgerTab() {
   const { t } = useLanguage();
+  const formatRs = useFormatMoney();
   const [selectedSalesmanId, setSelectedSalesmanId] = useState('');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [entryToVoid, setEntryToVoid] = useState<CommissionLedgerEntry | null>(null);
@@ -281,7 +281,7 @@ export function CommissionLedgerTab() {
               <div className="flex items-center gap-2 rounded-lg border px-4 py-2">
                 <Wallet className="w-4 h-4 text-primary" />
                 <span className="text-sm text-muted-foreground">{t('current_balance') || 'Current Balance'}:</span>
-                <span className="font-semibold text-lg">Rs {balanceData.balance.toFixed(2)}</span>
+                <span className="font-semibold text-lg">{formatRs(balanceData.balance)}</span>
               </div>
             )}
             {selectedSalesmanId && balanceData && balanceData.balance > 0 && (
@@ -346,12 +346,12 @@ export function CommissionLedgerTab() {
                         {entry.rate !== undefined ? `${entry.rate}%` : '—'}
                       </TableCell>
                       <TableCell className="text-right text-green-700">
-                        {entry.credit > 0 ? `Rs ${entry.credit.toFixed(2)}` : '—'}
+                        {entry.credit > 0 ? formatRs(entry.credit) : '—'}
                       </TableCell>
                       <TableCell className="text-right text-red-700">
-                        {entry.debit > 0 ? `Rs ${entry.debit.toFixed(2)}` : '—'}
+                        {entry.debit > 0 ? formatRs(entry.debit) : '—'}
                       </TableCell>
-                      <TableCell className="text-right font-medium">Rs {entry.balance.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatRs(entry.balance)}</TableCell>
                       <TableCell className="text-right">
                         {entry.transactionType === 'commission_payment' && (
                           <Can permission="manageCommissionPayments">
@@ -405,7 +405,7 @@ export function CommissionLedgerTab() {
             <AlertDialogTitle>{t('void_payment') || 'Void Payment'}</AlertDialogTitle>
             <AlertDialogDescription>
               {t('void_payment_confirmation') ||
-                `Are you sure you want to void this Rs ${entryToVoid?.debit.toFixed(2)} commission payment? The amount will be added back to the salesman's balance.`}
+                `Are you sure you want to void this ${formatRs(entryToVoid?.debit ?? 0)} commission payment? The amount will be added back to the salesman's balance.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

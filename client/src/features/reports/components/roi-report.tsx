@@ -29,6 +29,7 @@ import { normalizeBusinessType } from '@/lib/business-types'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { ReportBreakdownRow } from './report-breakdown-row'
+import { useFormatMoney } from '@/lib/format-money'
 import {
   reportBreakdownGridClass,
   reportChartHeight,
@@ -144,8 +145,7 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
       },
     }))
 
-    const fmt = (v: number) =>
-      new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
+    const fmt = useFormatMoney()
 
     const isPositiveRoi = (roiData?.roi ?? 0) >= 0
     const isPositiveProfit = (roiData?.profit ?? 0) >= 0

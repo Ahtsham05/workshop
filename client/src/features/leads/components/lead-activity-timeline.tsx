@@ -4,6 +4,7 @@ import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import type { LeadTimelineEvent } from '@/stores/lead.api'
 import { STAGE_LABELS } from '../utils/stage-config'
+import { useFormatMoney } from '@/lib/format-money'
 
 const KIND_ICON: Record<LeadTimelineEvent['kind'], typeof ArrowRight> = {
   stage_change: GitCommitHorizontal,
@@ -35,7 +36,7 @@ function eventTitle(event: LeadTimelineEvent, t: (s: string) => string): string 
   return `${t('Quotation')} ${data?.invoiceNumber || ''}`.trim()
 }
 
-function eventSubtitle(event: LeadTimelineEvent): string | undefined {
+function eventSubtitle(event: LeadTimelineEvent, formatMoney: (amount: number) => string): string | undefined {
   if (event.kind === 'communication') {
     const data = event.data as { notes?: string } | undefined
     return data?.notes
@@ -45,7 +46,7 @@ function eventSubtitle(event: LeadTimelineEvent): string | undefined {
   }
   if (event.kind === 'quotation') {
     const data = event.data as { total?: number; status?: string } | undefined
-    return data?.total ? `Rs ${data.total} · ${data.status || ''}` : undefined
+    return data?.total ? `${formatMoney(data.total)} · ${data.status || ''}` : undefined
   }
   return undefined
 }
@@ -57,6 +58,7 @@ interface LeadActivityTimelineProps {
 
 export function LeadActivityTimeline({ events, isLoading }: LeadActivityTimelineProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
 
   if (isLoading) {
     return <p className="py-8 text-center text-sm text-muted-foreground">{t('Loading...')}</p>
@@ -69,7 +71,7 @@ export function LeadActivityTimeline({ events, isLoading }: LeadActivityTimeline
     <div className="space-y-4">
       {events.map((event, idx) => {
         const Icon = KIND_ICON[event.kind]
-        const subtitle = eventSubtitle(event)
+        const subtitle = eventSubtitle(event, formatMoney)
         return (
           <div key={idx} className="flex gap-3">
             <div className="flex flex-col items-center">

@@ -13,6 +13,7 @@ import { WalletBalanceStatement } from './wallet-balance-statement'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { isLoadWalletName, normalizeWalletTypeParam } from '@/features/mobile-shop/utils/wallet-utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 const normalizeWalletKey = (name: string) => normalizeWalletTypeParam(name).toLowerCase()
 
@@ -105,9 +106,9 @@ export const LoadReport = forwardRef<{ exportToExcel: () => void }, LoadReportPr
       },
     }))
 
-    if (isLoading) return <Skeleton className='h-[400px] w-full' />
+    const fmt = useFormatMoney()
 
-    const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
+    if (isLoading) return <Skeleton className='h-[400px] w-full' />
     const s = data?.summary
     const savingsMap = new Map<string, number>(loadPurchases.map(p => [p._id, p.totalPurchaseProfit ?? 0]))
 

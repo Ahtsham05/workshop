@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCurrencySymbolPrefix } from '@/lib/format-money'
 import {
   ArrowUpDown,
   Banknote,
@@ -68,6 +69,7 @@ const getStoredNoteSortDirection = (): SortDirection => {
 
 export default function CashRegisterPage() {
   const { t } = useLanguage()
+  const currencyPrefix = useCurrencySymbolPrefix()
   const { data, isLoading, refetch } = useGetCashRegisterQuery()
   const [saveRegister, { isLoading: saving }] = useSaveCashRegisterMutation()
   const [clearRegister, { isLoading: clearing }] = useClearCashRegisterMutation()
@@ -234,7 +236,7 @@ export default function CashRegisterPage() {
           title={t('Physical Cash')}
           value={physicalTotal}
           icon={<Wallet className='h-4 w-4' />}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           description={t('Total from your count')}
           tone='cyan'
         />
@@ -242,7 +244,7 @@ export default function CashRegisterPage() {
           title={t('Expected Cash')}
           value={expectedCash}
           icon={<Banknote className='h-4 w-4' />}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           description={t('Same as Cash Book cash in hand')}
           tone='slate'
         />
@@ -250,7 +252,7 @@ export default function CashRegisterPage() {
           title={t('Variance')}
           value={Math.abs(variance)}
           icon={<RefreshCw className='h-4 w-4' />}
-          valuePrefix={variance >= 0 ? '+Rs ' : '-Rs '}
+          valuePrefix={variance >= 0 ? `+${currencyPrefix}` : `-${currencyPrefix}`}
           description={
             variance === 0
               ? t('Matches system balance')

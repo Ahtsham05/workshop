@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { Insight, Invoice, Product, Customer, Branch } = require('../models');
 const productService = require('./product.service');
+const { formatMoney } = require('../utils/money');
 
 /* ────────────────────────────────────────────────────────────────────────
  * CONFIG — every "magic number" the engine uses lives here so behaviour
@@ -274,7 +275,7 @@ const buildTopSellingInsight = (topProducts) => {
     priority: 'low',
     confidence: confidenceFromSampleSize(leader.orders),
     title: `${leader.name} is your best seller`,
-    description: `${leader.name} sold ${leader.quantitySold} units (Rs${round2(leader.revenue)}) in the last ${CONFIG.SALES_WINDOW_DAYS} days — your #1 product by revenue.`,
+    description: `${leader.name} sold ${leader.quantitySold} units (${formatMoney(round2(leader.revenue))}) in the last ${CONFIG.SALES_WINDOW_DAYS} days — your #1 product by revenue.`,
     meta: { products: topProducts.slice(0, CONFIG.TOP_LIST_SIZE) },
   };
 };
@@ -303,8 +304,8 @@ const buildMonthlyGrowthInsight = (growthPercent, current, previous, noBaseline)
       ? 'Not enough history yet for a month-over-month comparison'
       : `Sales are ${direction} ${Math.abs(round2(growthPercent))}% vs last month`,
     description: noBaseline
-      ? `This month's revenue is Rs${round2(current)}, but last month has no recorded sales to compare against.`
-      : `This month's revenue is Rs${round2(current)} compared to Rs${round2(previous)} last month — a ${round2(growthPercent)}% change.`,
+      ? `This month's revenue is ${formatMoney(round2(current))}, but last month has no recorded sales to compare against.`
+      : `This month's revenue is ${formatMoney(round2(current))} compared to ${formatMoney(round2(previous))} last month — a ${round2(growthPercent)}% change.`,
     meta: { growthPercent: round2(growthPercent), currentMonthRevenue: round2(current), previousMonthRevenue: round2(previous), noBaseline },
   };
 };
@@ -318,7 +319,7 @@ const buildBestCategoryInsight = (categories) => {
     priority: 'low',
     confidence: 'medium',
     title: `"${leader.name}" is your top category`,
-    description: `"${leader.name}" generated Rs${round2(leader.revenue)} in the last ${CONFIG.SALES_WINDOW_DAYS} days, ahead of all other categories.`,
+    description: `"${leader.name}" generated ${formatMoney(round2(leader.revenue))} in the last ${CONFIG.SALES_WINDOW_DAYS} days, ahead of all other categories.`,
     meta: { categories: categories.slice(0, CONFIG.TOP_LIST_SIZE) },
   };
 };
@@ -380,7 +381,7 @@ const buildDeadStockInsight = (deadProducts) => {
     priority: tiedUpCapital > 10000 ? 'high' : 'medium',
     confidence: 'high',
     title: `${deadProducts.length} product(s) haven't sold in ${CONFIG.DEAD_STOCK_WINDOW_DAYS}+ days`,
-    description: `These products are tying up about Rs${round2(tiedUpCapital)} in unsold stock. Consider discounting or clearing them out.`,
+    description: `These products are tying up about ${formatMoney(round2(tiedUpCapital))} in unsold stock. Consider discounting or clearing them out.`,
     meta: { products: deadProducts.slice(0, CONFIG.TOP_LIST_SIZE), tiedUpCapital: round2(tiedUpCapital) },
   };
 };
@@ -396,7 +397,7 @@ const buildExpiringStockInsight = (expiringProducts) => {
     priority: expiringProducts.some((p) => p.daysUntilExpiry <= 7) ? 'high' : 'medium',
     confidence: 'high',
     title: `${expiringProducts.length} product(s) have batches expiring within 30 days`,
-    description: `About Rs${round2(atRiskValue)} in stock is tied to batches nearing expiry — sell through, discount, or write off before it's wasted.`,
+    description: `About ${formatMoney(round2(atRiskValue))} in stock is tied to batches nearing expiry — sell through, discount, or write off before it's wasted.`,
     meta: { products: expiringProducts.slice(0, CONFIG.TOP_LIST_SIZE), atRiskValue: round2(atRiskValue) },
   };
 };
@@ -412,7 +413,7 @@ const buildMarginInsight = (type, products, label) => {
     title: type === 'high_margin_product'
       ? `${leader.name} has your best profit margin`
       : `${leader.name} has a thin profit margin`,
-    description: `${leader.name} sells at a ${round2(leader.marginPercent)}% margin (Rs${round2(leader.unitProfit)} profit per unit). ${label}`,
+    description: `${leader.name} sells at a ${round2(leader.marginPercent)}% margin (${formatMoney(round2(leader.unitProfit))} profit per unit). ${label}`,
     meta: { products: products.slice(0, CONFIG.TOP_LIST_SIZE) },
   };
 };
@@ -427,7 +428,7 @@ const buildVipCustomerInsight = (vips, totalRevenue) => {
     priority: 'low',
     confidence: confidenceFromSampleSize(leader.totalOrders),
     title: `${leader.name} is your top customer`,
-    description: `${leader.name} has spent Rs${round2(leader.totalRevenue)} across ${leader.totalOrders} order(s) — ${round2(sharePct)}% of all customer revenue.`,
+    description: `${leader.name} has spent ${formatMoney(round2(leader.totalRevenue))} across ${leader.totalOrders} order(s) — ${round2(sharePct)}% of all customer revenue.`,
     meta: { customers: vips.slice(0, CONFIG.VIP_CUSTOMER_TOP_N) },
   };
 };
@@ -481,7 +482,7 @@ const buildSalesDropAlert = ({ scope, name, productId, growthPercent, current, p
   priority: growthPercent <= -30 ? 'high' : 'medium',
   confidence: 'medium',
   title: scope === 'store' ? 'Overall sales are dropping' : `${name} sales are dropping`,
-  description: `${scope === 'store' ? 'Store-wide revenue' : `${name} revenue`} fell ${Math.abs(round2(growthPercent))}% (Rs${round2(previous)} → Rs${round2(current)}).`,
+  description: `${scope === 'store' ? 'Store-wide revenue' : `${name} revenue`} fell ${Math.abs(round2(growthPercent))}% (${formatMoney(round2(previous))} → ${formatMoney(round2(current))}).`,
   meta: { scope, productId, name, growthPercent: round2(growthPercent), current: round2(current), previous: round2(previous) },
 });
 
@@ -521,7 +522,7 @@ const buildBranchTopPerformerInsight = (branches) => {
     priority: 'low',
     confidence: 'medium',
     title: `${leader.name} is your top-performing branch`,
-    description: `${leader.name} generated Rs${round2(leader.revenue)} this month, ahead of all other branches.`,
+    description: `${leader.name} generated ${formatMoney(round2(leader.revenue))} this month, ahead of all other branches.`,
     meta: { branches: branches.slice(0, CONFIG.TOP_LIST_SIZE) },
   };
 };
@@ -534,7 +535,7 @@ const buildBranchUnderperformerInsight = (branches, avgRevenue) => {
     priority: branches.some((b) => b.revenue <= avgRevenue * 0.25) ? 'high' : 'medium',
     confidence: 'medium',
     title: `${branches.length} branch(es) are underperforming this month`,
-    description: `These branches are generating well below the org-wide average of Rs${round2(avgRevenue)} per branch this month — worth investigating staffing, stock, or local demand.`,
+    description: `These branches are generating well below the org-wide average of ${formatMoney(round2(avgRevenue))} per branch this month — worth investigating staffing, stock, or local demand.`,
     meta: { branches: branches.slice(0, CONFIG.TOP_LIST_SIZE), avgRevenue: round2(avgRevenue) },
   };
 };

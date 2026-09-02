@@ -115,6 +115,7 @@ import {
   cashTxLabel,
   cashTxLabelLower,
 } from '@/features/mobile-shop/utils/cash-transaction-labels'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import {
   makeEnterChain,
   MOBILE_FORM_KEYBOARD_HINT,
@@ -146,17 +147,17 @@ type PurchaseFormState = {
 const roundMoney2 = (n: number) => Math.round((Number.isFinite(n) ? n : 0) * 100) / 100
 
 /** SMS/WhatsApp receipt lines for a load sale. */
-const buildLoadSaleSmsLines = (t: LoadTransactionRecord) => {
+const buildLoadSaleSmsLines = (t: LoadTransactionRecord, formatMoney: (amount: number) => string) => {
   const amount = Number(t.amount || 0)
   const received = Number(t.receivedAmount ?? amount)
   const remaining = Math.max(0, amount - received)
   return [
     { label: 'Mobile', value: t.mobileNumber === 'N/A' ? '' : t.mobileNumber },
-    { label: 'Amount', value: `Rs. ${amount.toLocaleString('en-PK')}` },
+    { label: 'Amount', value: formatMoney(amount) },
     ...(remaining > 0
       ? [
-          { label: 'Received', value: `Rs. ${received.toLocaleString('en-PK')}` },
-          { label: 'Remaining', value: `Rs. ${remaining.toLocaleString('en-PK')}` },
+          { label: 'Received', value: formatMoney(received) },
+          { label: 'Remaining', value: formatMoney(remaining) },
         ]
       : []),
   ]
@@ -356,12 +357,15 @@ function LoadManagementPage({
   initialCustomerId,
   initialSupplierId,
 }: LoadManagementPageProps) {
+  const formatMoney = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const isCashManagementMode = mode === 'cash-management'
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission(isCashManagementMode ? 'manageCashManagement' : 'manageLoadManagement')
   const navigate = useNavigate()
   const dispatch = useDispatch<any>()
   const { data: customerAccountTypes = [] } = useGetCustomerAccountTypesQuery()
+  const formatCurrency = useFormatMoney()
 
   const routerSearch = useRouterState({
     select: (state) => state.location.search,
@@ -750,7 +754,7 @@ function LoadManagementPage({
   const formatWalletSelectLabel = (walletId: string, fallbackType?: string) => {
     const wallet = wallets.find((w) => resolveWalletId(w) === walletId)
     if (wallet) {
-      return `${wallet.type} (Rs ${Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})`
+      return `${wallet.type} (${formatCurrency(Number(wallet.balance))})`
     }
     return fallbackType || ''
   }
@@ -1648,7 +1652,7 @@ function LoadManagementPage({
             <p className='text-xs text-muted-foreground'>Selected wallet</p>
             <p className='truncate font-semibold'>{navWallet.type}</p>
             <p className='text-sm text-green-600'>
-              Rs {Number(navWallet.balance ?? 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatMoney(Number(navWallet.balance ?? 0))}
             </p>
           </div>
           <Button type='button' variant='outline' size='sm' onClick={clearWalletSelection}>
@@ -1697,7 +1701,7 @@ function LoadManagementPage({
                             <div className='p-2 text-sm text-muted-foreground'>No load wallets available. Create one in Wallet Management.</div>
                           ) : pageWallets.filter((w) => resolveWalletId(w)).map((wallet) => (
                             <SelectItem key={resolveWalletId(wallet)} value={resolveWalletId(wallet)}>
-                              {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
+                              {wallet.type} ({formatMoney(Number(wallet.balance))})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1730,11 +1734,11 @@ function LoadManagementPage({
 
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
-                      <Label htmlFor='purchase-amount'>Amount (Rs) *</Label>
+                      <Label htmlFor='purchase-amount'>Amount ({currencySymbol}) *</Label>
                       <Input id='purchase-amount' type='number' min='0' step='0.01' value={purchaseForm.amount} onChange={(e) => handlePurchaseChange('amount', e.target.value)} {...purchaseEnter.enterProps('purchase-amount')} />
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='purchase-paid-amount'>Amount Paid Now (Rs) - Optional</Label>
+                      <Label htmlFor='purchase-paid-amount'>Amount Paid Now ({currencySymbol}) - Optional</Label>
                       <Input
                         id='purchase-paid-amount'
                         type='number'
@@ -1791,11 +1795,11 @@ function LoadManagementPage({
                       <Label htmlFor='purchase-commission'>Supplier Commission (%) - Optional</Label>
                       <Input id='purchase-commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 1, 1.5' value={purchaseForm.commissionRate} onChange={(e) => handlePurchaseChange('commissionRate', e.target.value)} {...purchaseEnter.enterProps('purchase-commission')} />
                       {purchaseProfit.commissionProfit > 0 && (
-                        <p className='text-xs text-green-600'>Commission Savings: Rs {purchaseProfit.commissionProfit.toFixed(2)}</p>
+                        <p className='text-xs text-green-600'>Commission Savings: {formatMoney(purchaseProfit.commissionProfit)}</p>
                       )}
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='purchase-extra'>Extra Discount (Rs) - Optional</Label>
+                      <Label htmlFor='purchase-extra'>Extra Discount ({currencySymbol}) - Optional</Label>
                       <Input id='purchase-extra' type='number' min='0' step='0.01' placeholder='e.g., 10, 20' value={purchaseForm.extraCharge} onChange={(e) => handlePurchaseChange('extraCharge', e.target.value)} {...purchaseEnter.enterProps('purchase-extra')} />
                     </div>
                   </div>
@@ -1805,7 +1809,7 @@ function LoadManagementPage({
                       <CardContent className='pt-4 pb-3'>
                         <div className='flex justify-between items-center'>
                           <span className='font-semibold text-blue-700'>Total Purchase Savings / Bonus:</span>
-                          <span className='text-xl font-bold text-blue-700'>Rs {purchaseProfit.total.toFixed(2)}</span>
+                          <span className='text-xl font-bold text-blue-700'>{formatMoney(purchaseProfit.total)}</span>
                         </div>
                       </CardContent>
                     </Card>
@@ -1816,11 +1820,11 @@ function LoadManagementPage({
                       <div className='grid gap-2 text-sm md:grid-cols-2'>
                         <div className='flex justify-between'>
                           <span className='text-muted-foreground'>Paid to Supplier</span>
-                          <span className='font-semibold text-red-600'>Rs {purchaseLedgerSummary.paidAmount.toFixed(2)}</span>
+                          <span className='font-semibold text-red-600'>{formatMoney(purchaseLedgerSummary.paidAmount)}</span>
                         </div>
                         <div className='flex justify-between'>
                           <span className='text-muted-foreground'>Remaining in Supplier Ledger</span>
-                          <span className='font-semibold text-orange-600'>Rs {purchaseLedgerSummary.remainingAmount.toFixed(2)}</span>
+                          <span className='font-semibold text-orange-600'>{formatMoney(purchaseLedgerSummary.remainingAmount)}</span>
                         </div>
                       </div>
                     </CardContent>
@@ -1886,11 +1890,11 @@ function LoadManagementPage({
                           <TableCell className='text-sm'>{format(new Date(p.date), 'MMM dd, yyyy')}</TableCell>
                           <TableCell>{p.walletType}</TableCell>
                           <TableCell className='font-medium'>{p.supplierName || '-'}</TableCell>
-                          <TableCell>Rs {Number(p.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
-                          <TableCell>Rs {Number((p as any).paidAmount || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
-                          <TableCell className='text-orange-600 font-semibold'>Rs {Math.max(0, Number(p.amount || 0) - Number((p as any).paidAmount || 0)).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
+                          <TableCell>{formatMoney(Number(p.amount))}</TableCell>
+                          <TableCell>{formatMoney(Number((p as any).paidAmount || 0))}</TableCell>
+                          <TableCell className='text-orange-600 font-semibold'>{formatMoney(Math.max(0, Number(p.amount || 0) - Number((p as any).paidAmount || 0)))}</TableCell>
                           <TableCell>{Number(p.commissionRate || 0).toFixed(2)}%</TableCell>
-                          <TableCell className='text-green-600 font-semibold'>Rs {Number(p.profit || 0).toFixed(2)}</TableCell>
+                          <TableCell className='text-green-600 font-semibold'>{formatMoney(Number(p.profit || 0))}</TableCell>
                           <TableCell className='text-sm capitalize'>{p.paymentMethod}</TableCell>
                           <TableCell>{(p as any).paymentWalletType || '—'}</TableCell>
                           <TableCell>
@@ -1954,17 +1958,17 @@ function LoadManagementPage({
                             <div className='p-2 text-sm text-muted-foreground'>No load wallets available.</div>
                           ) : pageWallets.filter((w) => resolveWalletId(w)).map((wallet) => (
                             <SelectItem key={resolveWalletId(wallet)} value={resolveWalletId(wallet)}>
-                              {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
+                              {wallet.type} ({formatMoney(Number(wallet.balance))})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='current-balance'>Current Balance (Rs) - Optional</Label>
+                      <Label htmlFor='current-balance'>Current Balance ({currencySymbol}) - Optional</Label>
                       <Input id='current-balance' type='number' min='0' step='0.01' placeholder='Enter current wallet balance' value={saleForm.currentBalance} onChange={(e) => handleSaleChange('currentBalance', e.target.value)} {...saleEnter.enterProps('current-balance')} />
                       {saleForm.walletId && (
-                        <p className='text-xs text-muted-foreground'>Wallet Balance: Rs {Number(wallets.find(w => resolveWalletId(w) === saleForm.walletId)?.balance ?? 0).toLocaleString('en-PK', { maximumFractionDigits: 2 })}</p>
+                        <p className='text-xs text-muted-foreground'>Wallet Balance: {formatMoney(Number(wallets.find(w => resolveWalletId(w) === saleForm.walletId)?.balance ?? 0))}</p>
                       )}
                     </div>
                   </div>
@@ -1991,11 +1995,11 @@ function LoadManagementPage({
 
                   <div className='grid gap-4 md:grid-cols-2'>
                     <div className='space-y-2'>
-                      <Label htmlFor='sale-amount'>Load Amount (Rs) *</Label>
+                      <Label htmlFor='sale-amount'>Load Amount ({currencySymbol}) *</Label>
                       <Input id='sale-amount' type='number' min='0' step='0.01' placeholder='e.g., 100, 500, 1000' value={saleForm.amount} onChange={(e) => handleSaleChange('amount', e.target.value)} {...saleEnter.enterProps('sale-amount')} />
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='sale-received-amount'>Amount Received (Rs) - Optional</Label>
+                      <Label htmlFor='sale-received-amount'>Amount Received ({currencySymbol}) - Optional</Label>
                       <Input
                         id='sale-received-amount'
                         type='number'
@@ -2026,7 +2030,7 @@ function LoadManagementPage({
                       <Input id='commission' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2, 2.5, 5' value={saleForm.commissionRate} onChange={(e) => handleSaleChange('commissionRate', e.target.value)} {...saleEnter.enterProps('commission')} />
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='extra'>Extra Charges (Rs) - Optional</Label>
+                      <Label htmlFor='extra'>Extra Charges ({currencySymbol}) - Optional</Label>
                       <Input id='extra' type='number' min='0' step='0.01' placeholder='e.g., 10, 20' value={saleForm.extraCharge} onChange={(e) => handleSaleChange('extraCharge', e.target.value)} {...saleEnter.enterProps('extra')} />
                     </div>
                   </div>
@@ -2098,11 +2102,11 @@ function LoadManagementPage({
                       <div className='grid gap-2 text-sm md:grid-cols-2'>
                         <div className='flex justify-between'>
                           <span className='text-muted-foreground'>Received from Customer</span>
-                          <span className='font-semibold text-green-600'>Rs {saleLedgerSummary.receivedAmount.toFixed(2)}</span>
+                          <span className='font-semibold text-green-600'>{formatMoney(saleLedgerSummary.receivedAmount)}</span>
                         </div>
                         <div className='flex justify-between'>
                           <span className='text-muted-foreground'>Remaining in Customer Ledger</span>
-                          <span className='font-semibold text-orange-600'>Rs {saleLedgerSummary.remainingAmount.toFixed(2)}</span>
+                          <span className='font-semibold text-orange-600'>{formatMoney(saleLedgerSummary.remainingAmount)}</span>
                         </div>
                       </div>
                     </CardContent>
@@ -2166,13 +2170,13 @@ function LoadManagementPage({
                           <TableCell className='font-medium'>
                             {t.customerName?.trim() || (t as any).customerId?.name || 'Walk-in Customer'}
                           </TableCell>
-                          <TableCell>Rs {Number(t.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
-                          <TableCell>Rs {Number((t as any).receivedAmount || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
-                          <TableCell className='text-orange-600 font-semibold'>Rs {Math.max(0, Number(t.amount || 0) - Number((t as any).receivedAmount || 0)).toLocaleString('en-PK', { maximumFractionDigits: 0 })}</TableCell>
+                          <TableCell>{formatMoney(Number(t.amount))}</TableCell>
+                          <TableCell>{formatMoney(Number((t as any).receivedAmount || 0))}</TableCell>
+                          <TableCell className='text-orange-600 font-semibold'>{formatMoney(Math.max(0, Number(t.amount || 0) - Number((t as any).receivedAmount || 0)))}</TableCell>
                           <TableCell className='text-sm'>{t.mobileNumber === 'N/A' ? '-' : t.mobileNumber}</TableCell>
                           <TableCell className='text-sm capitalize'>{t.paymentMethod || 'cash'}</TableCell>
                           <TableCell>{(t as any).paymentWalletType || '—'}</TableCell>
-                          <TableCell className='text-green-600 font-bold'>Rs {Number(t.profit || 0).toFixed(2)}</TableCell>
+                          <TableCell className='text-green-600 font-bold'>{formatMoney(Number(t.profit || 0))}</TableCell>
                           <TableCell className='text-sm text-muted-foreground'>{salesmanName((t as any).salesmanId)}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
@@ -2184,7 +2188,7 @@ function LoadManagementPage({
                                   branchName,
                                   name: t.customerName?.trim() || (t as any).customerId?.name,
                                   title: 'Load Sale Receipt',
-                                  lines: buildLoadSaleSmsLines(t),
+                                  lines: buildLoadSaleSmsLines(t, formatMoney),
                                 })}
                                 templateCategory='load_sale_receipt'
                                 templateParams={[
@@ -2201,7 +2205,7 @@ function LoadManagementPage({
                                   branchName,
                                   name: t.customerName?.trim() || (t as any).customerId?.name,
                                   title: 'Load Sale Receipt',
-                                  lines: buildLoadSaleSmsLines(t),
+                                  lines: buildLoadSaleSmsLines(t, formatMoney),
                                 })}
                               />
                               <Button size='icon' variant='ghost' className='h-8 w-8' onClick={() => handleEditTransaction(t)}><Pencil className='h-4 w-4' /></Button>
@@ -2321,7 +2325,7 @@ function LoadManagementPage({
                               <div className='p-2 text-sm text-muted-foreground'>No cash wallets available.</div>
                             ) : pageWallets.filter((w) => resolveWalletId(w)).map((wallet) => (
                               <SelectItem key={resolveWalletId(wallet)} value={resolveWalletId(wallet)}>
-                                {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
+                                {wallet.type} ({formatMoney(Number(wallet.balance))})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -2360,7 +2364,7 @@ function LoadManagementPage({
                           <thead>
                             <tr className='border-b'>
                               <th className='text-left p-2 w-8 text-muted-foreground font-medium'>#</th>
-                              <th className='text-left p-2 min-w-[130px] text-muted-foreground font-medium'>Amount (Rs) *</th>
+                              <th className='text-left p-2 min-w-[130px] text-muted-foreground font-medium'>Amount ({currencySymbol}) *</th>
                               <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Customer Name</th>
                               <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Account / Phone</th>
                               <th className='text-left p-2 min-w-[130px] text-muted-foreground font-medium'>Account Type</th>
@@ -2460,12 +2464,12 @@ function LoadManagementPage({
                               {bulkWithdrawalForm.transactionType === 'withdrawal' ? 'Total Received' : 'Total Sent'}
                             </p>
                             <p className={`text-xl font-bold ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'text-green-600' : 'text-red-600'}`}>
-                              {bulkWithdrawalForm.transactionType === 'withdrawal' ? '+' : '-'} Rs {bulkWithdrawalTotals.totalAmount.toLocaleString()}
+                              {bulkWithdrawalForm.transactionType === 'withdrawal' ? '+' : '-'} {formatMoney(bulkWithdrawalTotals.totalAmount)}
                             </p>
                           </div>
                           <div>
                             <p className='text-xs text-muted-foreground'>Your Total Profit</p>
-                            <p className='text-xl font-bold text-orange-700'>Rs {bulkWithdrawalTotals.totalProfit.toFixed(2)}</p>
+                            <p className='text-xl font-bold text-orange-700'>{formatMoney(bulkWithdrawalTotals.totalProfit)}</p>
                           </div>
                         </div>
                       </CardContent>
@@ -2533,14 +2537,14 @@ function LoadManagementPage({
                             <div className='p-2 text-sm text-muted-foreground'>No cash wallets available.</div>
                           ) : pageWallets.filter((w) => resolveWalletId(w)).map((wallet) => (
                             <SelectItem key={resolveWalletId(wallet)} value={resolveWalletId(wallet)}>
-                              {wallet.type} (Rs {Number(wallet.balance).toLocaleString('en-PK', { maximumFractionDigits: 0 })})
+                              {wallet.type} ({formatMoney(Number(wallet.balance))})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='withdrawal-amount'>Amount (Rs) *</Label>
+                      <Label htmlFor='withdrawal-amount'>Amount ({currencySymbol}) *</Label>
                       <Input id='withdrawal-amount' type='number' min='0' step='0.01' placeholder='e.g., 1000, 5000' value={withdrawalForm.amount} onChange={(e) => handleWithdrawalChange('amount', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-amount')} />
                     </div>
                   </div>
@@ -2630,7 +2634,7 @@ function LoadManagementPage({
                   {!isMyAccountSelected && (
                   <div className='space-y-2'>
                     <Label htmlFor='withdrawal-cash-amount'>
-                      {withdrawalForm.transactionType === 'withdrawal' ? 'Cash Paid (Rs)' : 'Cash Received (Rs)'} - Optional
+                      {withdrawalForm.transactionType === 'withdrawal' ? `Cash Paid ()` : `Cash Received ()`} - Optional
                     </Label>
                     <Input
                       id='withdrawal-cash-amount'
@@ -2659,17 +2663,17 @@ function LoadManagementPage({
                       {(Number(withdrawalForm.commissionRate) > 0 || Number(withdrawalForm.extraCharge) > 0) && (
                         <p className='text-xs text-muted-foreground'>
                           {Number(withdrawalForm.commissionRate) > 0 && (
-                            <>Commission Profit: Rs {withdrawalProfit.commissionProfit.toFixed(2)}</>
+                            <>Commission Profit: {formatMoney(withdrawalProfit.commissionProfit)}</>
                           )}
                           {Number(withdrawalForm.commissionRate) > 0 && Number(withdrawalForm.extraCharge) > 0 && ' · '}
                           {Number(withdrawalForm.extraCharge) > 0 && (
-                            <>Extra: Rs {Number(withdrawalForm.extraCharge).toFixed(2)}</>
+                            <>Extra: {formatMoney(Number(withdrawalForm.extraCharge))}</>
                           )}
                         </p>
                       )}
                     </div>
                     <div className='space-y-2'>
-                      <Label htmlFor='withdrawal-extra'>Extra Charges (Rs) - Optional</Label>
+                      <Label htmlFor='withdrawal-extra'>Extra Charges ({currencySymbol}) - Optional</Label>
                       <Input id='withdrawal-extra' type='number' min='0' step='0.01' placeholder='e.g., 5, 10' value={withdrawalForm.extraCharge} onChange={(e) => handleWithdrawalChange('extraCharge', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-extra')} />
                     </div>
                   </div>
@@ -2694,7 +2698,7 @@ function LoadManagementPage({
                             {withdrawalForm.transactionType === 'withdrawal' ? 'Amount Received into Wallet:' : 'Amount Sent from Wallet:'}
                           </span>
                           <span className={`font-semibold ${withdrawalForm.transactionType === 'withdrawal' ? 'text-green-600' : 'text-red-600'}`}>
-                            {withdrawalForm.transactionType === 'withdrawal' ? '+' : '-'} Rs {Number(withdrawalForm.amount || 0).toFixed(2)}
+                            {withdrawalForm.transactionType === 'withdrawal' ? '+' : '-'} {formatMoney(Number(withdrawalForm.amount || 0))}
                           </span>
                         </div>
                         <div className='flex justify-between items-center'>
@@ -2702,37 +2706,37 @@ function LoadManagementPage({
                             {withdrawalForm.transactionType === 'withdrawal' ? 'Cash Paid to Customer:' : 'Cash Received from Customer:'}
                           </span>
                           <span className={`font-semibold ${withdrawalForm.transactionType === 'withdrawal' ? 'text-red-600' : 'text-green-600'}`}>
-                            {withdrawalForm.transactionType === 'withdrawal' ? '-' : '+'} Rs {withdrawalProfit.normalizedCashAmount.toFixed(2)}
+                            {withdrawalForm.transactionType === 'withdrawal' ? '-' : '+'} {formatMoney(withdrawalProfit.normalizedCashAmount)}
                           </span>
                         </div>
                         <div className='flex justify-between items-center'>
                           <span className='text-muted-foreground'>
                             Remaining ({withdrawalForm.transactionType === 'withdrawal' ? 'Payable' : 'Receivable'}):
                           </span>
-                          <span className='text-orange-600 font-semibold'>Rs {withdrawalProfit.remainingAmount.toFixed(2)}</span>
+                          <span className='text-orange-600 font-semibold'>{formatMoney(withdrawalProfit.remainingAmount)}</span>
                         </div>
                         {withdrawalProfit.settlementProfit > 0 && (
                           <div className='flex justify-between items-center'>
                             <span className='text-muted-foreground'>Settlement Profit:</span>
-                            <span className='text-green-600 font-semibold'>+ Rs {withdrawalProfit.settlementProfit.toFixed(2)}</span>
+                            <span className='text-green-600 font-semibold'>+ {formatMoney(withdrawalProfit.settlementProfit)}</span>
                           </div>
                         )}
                         {withdrawalProfit.commissionProfit > 0 && (
                           <div className='flex justify-between items-center'>
                             <span className='text-muted-foreground'>Commission ({withdrawalForm.commissionRate}%):</span>
-                            <span className='text-green-600 font-semibold'>+ Rs {withdrawalProfit.commissionProfit.toFixed(2)}</span>
+                            <span className='text-green-600 font-semibold'>+ {formatMoney(withdrawalProfit.commissionProfit)}</span>
                           </div>
                         )}
                         {Number(withdrawalForm.extraCharge || 0) > 0 && (
                           <div className='flex justify-between items-center'>
                             <span className='text-muted-foreground'>Extra Charges:</span>
-                            <span className='text-green-600 font-semibold'>+ Rs {Number(withdrawalForm.extraCharge).toFixed(2)}</span>
+                            <span className='text-green-600 font-semibold'>+ {formatMoney(Number(withdrawalForm.extraCharge))}</span>
                           </div>
                         )}
                         {withdrawalProfit.totalProfit > 0 && (
                         <div className='border-t-2 border-orange-200 pt-3 flex justify-between items-center'>
                           <span className='text-lg font-bold'>Your Profit:</span>
-                          <span className='text-2xl font-bold text-orange-700'>Rs {withdrawalProfit.totalProfit.toFixed(2)}</span>
+                          <span className='text-2xl font-bold text-orange-700'>{formatMoney(withdrawalProfit.totalProfit)}</span>
                         </div>
                         )}
                       </div>
@@ -2830,7 +2834,7 @@ function LoadManagementPage({
                               <TableCell>My Personal Account</TableCell>
                               <TableCell>—</TableCell>
                               <TableCell className={isReceive ? 'text-green-600' : 'text-red-600'}>
-                                {isReceive ? '+' : '-'} Rs {Number(t.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
+                                {isReceive ? '+' : '-'} {formatMoney(Number(t.amount))}
                               </TableCell>
                               <TableCell>—</TableCell>
                               <TableCell>—</TableCell>
@@ -2870,16 +2874,16 @@ function LoadManagementPage({
                             {resolveAccountTypeLabel(w.customerAccountType, customerAccountTypes)}
                           </TableCell>
                           <TableCell className={w.transactionType === 'withdrawal' ? 'text-green-600' : 'text-red-600'}>
-                            {w.transactionType === 'withdrawal' ? '+' : '-'} Rs {Number(w.amount).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
+                            {w.transactionType === 'withdrawal' ? '+' : '-'} {formatMoney(Number(w.amount))}
                           </TableCell>
                           <TableCell className={w.transactionType === 'withdrawal' ? 'text-red-600' : 'text-green-600'}>
-                            {w.transactionType === 'withdrawal' ? '-' : '+'} Rs {Number((w as any).cashAmount || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
+                            {w.transactionType === 'withdrawal' ? '-' : '+'} {formatMoney(Number((w as any).cashAmount || 0))}
                           </TableCell>
                           <TableCell className='text-orange-600 font-semibold'>
-                            Rs {Math.max(0, Number(w.amount || 0) - Number((w as any).cashAmount || 0)).toLocaleString('en-PK', { maximumFractionDigits: 0 })}
+                            {formatMoney(Math.max(0, Number(w.amount || 0) - Number((w as any).cashAmount || 0)))}
                           </TableCell>
                           <TableCell>{Number(w.commissionRate || 0).toFixed(2)}%</TableCell>
-                          <TableCell className='text-orange-600 font-bold'>Rs {Number(w.profit || 0).toFixed(2)}</TableCell>
+                          <TableCell className='text-orange-600 font-bold'>{formatMoney(Number(w.profit || 0))}</TableCell>
                           <TableCell>
                             <div className='flex gap-1'>
                               <ListPrintButton onClick={() => setPreviewReceipt(buildCashWithdrawalReceipt(w))} />
@@ -2891,7 +2895,7 @@ function LoadManagementPage({
                                   name: w.customerName,
                                   title: `${w.transactionType === 'withdrawal' ? cashTxLabel('withdrawal') : cashTxLabel('deposit')} Receipt`,
                                   lines: [
-                                    { label: 'Amount', value: `Rs. ${Number(w.amount).toLocaleString('en-PK')}` },
+                                    { label: 'Amount', value: `${currencySymbol}. ${Number(w.amount).toLocaleString('en-PK')}` },
                                   ],
                                 })}
                                 templateCategory='cash_transaction_receipt'
@@ -2909,7 +2913,7 @@ function LoadManagementPage({
                                   name: w.customerName,
                                   title: `${w.transactionType === 'withdrawal' ? cashTxLabel('withdrawal') : cashTxLabel('deposit')} Receipt`,
                                   lines: [
-                                    { label: 'Amount', value: `Rs. ${Number(w.amount).toLocaleString('en-PK')}` },
+                                    { label: 'Amount', value: `${currencySymbol}. ${Number(w.amount).toLocaleString('en-PK')}` },
                                   ],
                                 })}
                               />

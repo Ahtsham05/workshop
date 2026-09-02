@@ -45,6 +45,7 @@ import {
   reportSectionTitleClass,
 } from '../utils/report-styles'
 import { buildReportPdf, downloadBlob } from '../utils/report-pdf'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface SalesPurchaseSummaryReportProps {
   startDate: string
@@ -109,8 +110,7 @@ export const SalesPurchaseSummaryReport = forwardRef<
     [visibleModules],
   )
 
-  const fmt = (value: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+  const fmt = useFormatMoney()
 
   const summary = data?.summary
   const monthly = data?.monthly ?? []

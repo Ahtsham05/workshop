@@ -1,7 +1,11 @@
-/** Every money amount in this app is Pakistani Rupees — see aiAssistant.service.js businessContext. */
-export function formatMoney(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return 'Rs 0'
-  return `Rs ${Math.round(value).toLocaleString()}`
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
+
+/** Formats using the org's configured currency when the caller passes `meta` (e.g. via
+ * `useCurrencyMeta()`); falls back to PKR for callers that haven't been threaded yet. */
+export function formatMoney(value: number | null | undefined, meta: CurrencyOption = FALLBACK_CURRENCY): string {
+  if (value == null || Number.isNaN(value)) return formatMoneyWithMeta(0, meta)
+  return formatMoneyWithMeta(value, meta)
 }
 
 export function formatNumber(value: number | null | undefined): string {

@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BarcodeSvg } from './components/barcode-svg'
 import { BarcodePrintSheet } from './components/barcode-print-sheet'
 import type { BarcodeItem, EntityTab } from './types'
+import { useFormatMoney } from '@/lib/format-money'
 
 const SEARCH_DEBOUNCE_MS = 400
 const LIMIT = 20
@@ -33,12 +34,12 @@ const MAX_SELECT_ALL = 2000
 
 type RawRecord = Record<string, unknown>
 
-function mapProduct(p: RawRecord): BarcodeItem {
+function mapProduct(p: RawRecord, formatMoney: (amount: number) => string): BarcodeItem {
   return {
     id: String(p.id ?? p._id),
     code: String(p.barcode || p.sku || p.id || p._id),
     title: String(p.name),
-    subtitle: `Rs${Number(p.price ?? 0).toLocaleString()} · Stock: ${Number(p.stockQuantity ?? 0)}`,
+    subtitle: `${formatMoney(Number(p.price ?? 0))} · Stock: ${Number(p.stockQuantity ?? 0)}`,
   }
 }
 
@@ -51,19 +52,20 @@ function mapCustomer(c: RawRecord): BarcodeItem {
   }
 }
 
-function mapInvoice(inv: RawRecord): BarcodeItem {
+function mapInvoice(inv: RawRecord, formatMoney: (amount: number) => string): BarcodeItem {
   return {
     id: String(inv.id ?? inv._id),
     code: String(inv.invoiceNumber),
     title: String(inv.invoiceNumber),
     subtitle: inv.customerName || inv.walkInCustomerName
-      ? `${inv.customerName || inv.walkInCustomerName} · Rs${Number(inv.total ?? 0).toLocaleString()}`
-      : `Rs${Number(inv.total ?? 0).toLocaleString()}`,
+      ? `${inv.customerName || inv.walkInCustomerName} · ${formatMoney(Number(inv.total ?? 0))}`
+      : formatMoney(Number(inv.total ?? 0)),
   }
 }
 
 export default function BarcodeGenerator() {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const dispatch = useDispatch<AppDispatch>()
 
   const [tab, setTab] = useState<EntityTab>('products')
@@ -126,7 +128,7 @@ export default function BarcodeGenerator() {
     request
       .then((res) => {
         const results: RawRecord[] = res.payload?.results || []
-        const mapped = tab === 'products' ? results.map(mapProduct) : results.map(mapCustomer)
+        const mapped = tab === 'products' ? results.map((p) => mapProduct(p, formatMoney)) : results.map(mapCustomer)
         setThunkItems(mapped)
         setThunkTotalPages(res.payload?.totalPages || 1)
         setThunkTotalResults(res.payload?.totalResults || mapped.length)
@@ -138,7 +140,7 @@ export default function BarcodeGenerator() {
         toast.error(t('Failed to load data'))
       })
       .finally(() => setThunkLoading(false))
-  }, [tab, page, debouncedSearch, dispatch, t])
+  }, [tab, page, debouncedSearch, dispatch, t, formatMoney])
 
   const invoiceParams = useMemo(() => {
     const q = debouncedSearch.trim()
@@ -153,8 +155,8 @@ export default function BarcodeGenerator() {
   const invoiceItems: BarcodeItem[] = useMemo(() => {
     if (tab !== 'invoices') return []
     const results: RawRecord[] = invoiceData?.results || []
-    return results.map(mapInvoice)
-  }, [tab, invoiceData])
+    return results.map((inv) => mapInvoice(inv, formatMoney))
+  }, [tab, invoiceData, formatMoney])
 
   const items = tab === 'invoices' ? invoiceItems : thunkItems
   const totalPages = tab === 'invoices' ? invoiceData?.totalPages || 1 : thunkTotalPages
@@ -193,7 +195,7 @@ export default function BarcodeGenerator() {
       let fetched: BarcodeItem[] = []
       if (tab === 'invoices') {
         const res = await triggerGetInvoices({ limit: totalResults, page: 1, ...(q ? { search: q } : {}) }).unwrap()
-        fetched = (res.results || []).map(mapInvoice)
+        fetched = (res.results || []).map((inv: RawRecord) => mapInvoice(inv, formatMoney))
       } else {
         const params = {
           page: 1,
@@ -206,7 +208,7 @@ export default function BarcodeGenerator() {
         const thunk = tab === 'products' ? fetchProducts(params) : fetchCustomers(params)
         const res = (await dispatch(thunk as never)) as unknown as { payload?: { results?: RawRecord[] } }
         const results = res.payload?.results || []
-        fetched = tab === 'products' ? results.map(mapProduct) : results.map(mapCustomer)
+        fetched = tab === 'products' ? results.map((p) => mapProduct(p, formatMoney)) : results.map(mapCustomer)
       }
       setSelected((prev) => {
         const next = new Map(prev[tab])
@@ -218,7 +220,7 @@ export default function BarcodeGenerator() {
     } finally {
       setSelectingAll(false)
     }
-  }, [tab, totalResults, debouncedSearch, dispatch, triggerGetInvoices, t])
+  }, [tab, totalResults, debouncedSearch, dispatch, triggerGetInvoices, t, formatMoney])
 
   const allOnPageSelected = items.length > 0 && items.every((item) => currentSelection.has(item.id))
   const allMatchingSelected = totalResults > 0 && currentSelection.size >= totalResults

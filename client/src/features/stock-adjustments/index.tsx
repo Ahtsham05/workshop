@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useFormatMoney, useCurrencySymbolPrefix } from '@/lib/format-money'
 import { toast } from 'sonner'
 import { useSearch } from '@tanstack/react-router'
 import {
@@ -51,6 +52,8 @@ const LIMIT = 15
 
 export default function StockAdjustments() {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
+  const currencyPrefix = useCurrencySymbolPrefix()
   const canViewCreatedBy = useCanViewCreatedBy()
   const search = useSearch({ strict: false }) as { productId?: string; productName?: string }
 
@@ -124,7 +127,7 @@ export default function StockAdjustments() {
         <StatCard
           title={t('Damage')}
           value={stats?.byType.damage.value ?? 0}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           icon={<AlertTriangle />}
           tone='rose'
           description={t('{{count}} report(s)').replace('{{count}}', String(stats?.byType.damage.count ?? 0))}
@@ -132,7 +135,7 @@ export default function StockAdjustments() {
         <StatCard
           title={t('Theft / Stolen')}
           value={stats?.byType.theft.value ?? 0}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           icon={<ShieldAlert />}
           tone='orange'
           description={t('{{count}} report(s)').replace('{{count}}', String(stats?.byType.theft.count ?? 0))}
@@ -140,7 +143,7 @@ export default function StockAdjustments() {
         <StatCard
           title={t('Expired / Lost')}
           value={(stats?.byType.expired.value ?? 0) + (stats?.byType.lost.value ?? 0)}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           icon={<TrendingDown />}
           tone='amber'
           description={t('{{count}} report(s)').replace(
@@ -151,7 +154,7 @@ export default function StockAdjustments() {
         <StatCard
           title={t('Total Shrinkage Value')}
           value={stats?.totalLossValue ?? 0}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           icon={<TrendingDown />}
           tone='indigo'
           description={t('Damage + theft + expired + lost')}
@@ -263,7 +266,7 @@ export default function StockAdjustments() {
                       {adj.previousQuantity} → {adj.newQuantity}
                     </TableCell>
                     <TableCell className='text-right text-sm whitespace-nowrap'>
-                      {adj.totalValue ? `Rs ${adj.totalValue.toLocaleString()}` : '—'}
+                      {adj.totalValue ? formatMoney(adj.totalValue) : '—'}
                     </TableCell>
                     {canViewCreatedBy && (
                       <TableCell>

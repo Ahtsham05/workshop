@@ -23,6 +23,7 @@ import { buildCustomerBalanceMessage, getCustomerBalanceTemplate } from '@/utils
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { CustomerListPagination } from '@/features/customers/components/customer-list-pagination'
 import { formatCustomerBalanceDisplay } from '@/features/customers/utils/customer-list-view'
+import { useCurrencyMeta } from '@/lib/format-money'
 import {
   getCustomerQuickActions,
   type CustomerLedgerEntryAction,
@@ -83,6 +84,7 @@ const ACTION_TONES: Record<string, 'blue' | 'violet' | 'orange' | 'emerald'> = {
 
 export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, pagination }: Props) {
   const { t } = useLanguage()
+  const currencyMeta = useCurrencyMeta()
   const navigate = useNavigate()
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -165,7 +167,7 @@ export function CustomerLedgerCardGrid({ customers, loading, onSelectCustomer, p
           <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {customers.map((customer) => {
               const whatsapp = customer.whatsapp || customer.phone
-              const balanceDisplay = formatCustomerBalanceDisplay(Number(customer.balance ?? 0), t)
+              const balanceDisplay = formatCustomerBalanceDisplay(Number(customer.balance ?? 0), t, currencyMeta)
 
               return (
                 <EntityCardLayout

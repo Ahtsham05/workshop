@@ -2,7 +2,7 @@ import { LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { format, isValid } from 'date-fns'
 import { useGetRevenueDataQuery } from '@/stores/dashboard.api'
 import { buildDashboardDateRange, dashboardRangeQueryParams, type DashboardDatePreset } from '@/lib/dashboard-date-range'
-import { formatMoney } from '../../lib/format'
+import { useFormatMoney } from '@/lib/format-money'
 
 function isPreset(value: unknown): value is DashboardDatePreset {
   return value === 'today' || value === 'week' || value === 'month' || value === 'custom'
@@ -15,6 +15,7 @@ function isPreset(value: unknown): value is DashboardDatePreset {
  * chart never disagrees with the numbers already shown above it.
  */
 export function ProfitTrendChart({ args }: { args: Record<string, unknown> }) {
+  const formatMoney = useFormatMoney()
   const period = isPreset(args.period) ? args.period : 'month'
   const range = buildDashboardDateRange(period, {
     startDate: typeof args.startDate === 'string' ? args.startDate : undefined,

@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLanguage } from '@/context/language-context';
+import { useFormatMoney } from '@/lib/format-money';
 import {
   buildMergedPaymentOptions,
   getWalletTypeFromOptionValue,
@@ -66,6 +67,7 @@ export function CommissionPaymentDialog({
   onSuccess,
 }: CommissionPaymentDialogProps) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !open });
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? [];
   // Paying a salesman is money-out — show wallet balances so staff can avoid
@@ -104,7 +106,7 @@ export function CommissionPaymentDialog({
 
   const onSubmit: SubmitHandler<PaymentFormValues> = async (data) => {
     if (data.amount > balance) {
-      form.setError('amount', { message: `Cannot exceed the outstanding balance of Rs ${balance.toFixed(2)}` });
+      form.setError('amount', { message: `Cannot exceed the outstanding balance of ${formatMoney(balance)}` });
       return;
     }
     try {
@@ -130,7 +132,7 @@ export function CommissionPaymentDialog({
         <DialogHeader>
           <DialogTitle>{t('pay_commission') || 'Pay Commission'}</DialogTitle>
           <DialogDescription>
-            {salesmanName} — {t('outstanding_balance') || 'Outstanding balance'}: Rs {balance.toFixed(2)}
+            {salesmanName} — {t('outstanding_balance') || 'Outstanding balance'}: {formatMoney(balance)}
           </DialogDescription>
         </DialogHeader>
 

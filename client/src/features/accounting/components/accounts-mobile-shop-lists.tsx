@@ -13,9 +13,7 @@ import { Button } from '@/components/ui/button'
 import { useGetCashWithdrawalsQuery, useGetLoadTransactionsQuery } from '@/stores/mobile-shop.api'
 import { useLanguage } from '@/context/language-context'
 import { ArrowRight } from 'lucide-react'
-
-const fmtMoney = (n: number) =>
-  `Rs ${Number(n || 0).toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+import { useFormatMoney } from '@/lib/format-money'
 
 const fmtRowDate = (d?: string) => {
   if (!d) return '—'
@@ -25,6 +23,7 @@ const fmtRowDate = (d?: string) => {
 
 export function AccountsMobileShopLists() {
   const { t } = useLanguage()
+  const fmtMoney = useFormatMoney()
   const listLimit = 10
 
   const { data: loadData, isLoading: loadLoading } = useGetLoadTransactionsQuery({

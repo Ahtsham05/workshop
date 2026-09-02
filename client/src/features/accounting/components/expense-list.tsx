@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api';
 import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell';
+import { useFormatMoney } from '@/lib/format-money';
 
 interface ExpenseListProps {
   onEdit: (expense: any) => void;
@@ -56,6 +57,7 @@ interface ExpenseListProps {
 }
 
 export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListProps) {
+  const formatMoney = useFormatMoney();
   const { t } = useLanguage();
   const { hasExplicitPermission } = usePermissions();
   const canManageExpenses = hasExplicitPermission('manageExpenses');
@@ -318,7 +320,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                       <TableCell>{expense.description}</TableCell>
                       <TableCell>{expense.vendor || '-'}</TableCell>
                       <TableCell className="font-semibold">
-                        Rs {expense.amount.toFixed(2)}
+                        {formatMoney(expense.amount)}
                       </TableCell>
                       <TableCell>{t(expense.paymentMethod)}</TableCell>
                       <TableCell>

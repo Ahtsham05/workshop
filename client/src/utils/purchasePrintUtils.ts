@@ -1,9 +1,11 @@
 // Purchase invoice print utilities - delegates to the central language system
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 import { getPurchaseItemDisplayName } from '@/features/purchase-invoice/utils/purchase-item-display'
 import { PAPER_FORMATS, withPrintOrientation, type PaperSize, type PrintOrientation, type SheetSize } from '@/features/invoice/utils/paper-format'
 import { INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 export type { PaperSize }
 export type { InvoiceTemplate }
@@ -25,6 +27,8 @@ type BranchPrintDetails = {
   logo?: string
   isTrial?: boolean
   invoiceNote?: string
+  /** Organization's configured currency (symbol/decimals) — omit to fall back to PKR. */
+  currencyMeta?: CurrencyOption
 }
 
 function resolvePurchasePrintLanguage(
@@ -80,7 +84,6 @@ const resolvePaidAmount = (purchase: any): number =>
   Number(purchase?.paidAmount || 0)
 
 const generateBarcodeText = (text: string): string => `*${text}*`
-const formatCurrency = (amount: number): string => `Rs${amount.toFixed(2)}`
 
 export function generatePurchaseInvoiceHTML(
   purchase: any,
@@ -91,6 +94,7 @@ export function generatePurchaseInvoiceHTML(
   printInUrdu?: boolean,
   thermalSize: 'thermal80' | 'thermal58' = 'thermal80',
 ): string {
+  const fmt = (amount: number) => formatMoneyWithMeta(amount, branchDetails?.currencyMeta ?? FALLBACK_CURRENCY)
   const format = PAPER_FORMATS[thermalSize]
   const items = purchase.items || []
   const totalAmount = resolveTotalAmount(purchase)
@@ -222,13 +226,13 @@ export function generatePurchaseInvoiceHTML(
   </div>
 
   <div class="totals-section">
-    ${overallDiscount > 0 ? `<div class="total-row"><span>${labels.discount}:</span><span>-${formatCurrency(overallDiscount)}</span></div>` : ''}
-    <div class="total-row total-final"><span>${labels.total}:</span><span>${formatCurrency(totalAmount)}</span></div>
+    ${overallDiscount > 0 ? `<div class="total-row"><span>${labels.discount}:</span><span>-${fmt(overallDiscount)}</span></div>` : ''}
+    <div class="total-row total-final"><span>${labels.total}:</span><span>${fmt(totalAmount)}</span></div>
   </div>
 
   <div class="payment-section">
-    <div class="total-row" style="margin-bottom: 3px;"><span>${labels.paid}:</span><span class="highlight">${formatCurrency(paidAmount)}</span></div>
-    ${balance > 0 ? `<div class="total-row" style="color: #000; font-weight: bold;"><span><strong>${labels.balance_due}:</strong></span><span><strong>${formatCurrency(balance)}</strong></span></div>` : `<div class="total-row" style="color: #000; font-weight: bold;"><span><strong>${labels.paid_in_full}</strong></span><span>✓</span></div>`}
+    <div class="total-row" style="margin-bottom: 3px;"><span>${labels.paid}:</span><span class="highlight">${fmt(paidAmount)}</span></div>
+    ${balance > 0 ? `<div class="total-row" style="color: #000; font-weight: bold;"><span><strong>${labels.balance_due}:</strong></span><span><strong>${fmt(balance)}</strong></span></div>` : `<div class="total-row" style="color: #000; font-weight: bold;"><span><strong>${labels.paid_in_full}</strong></span><span>✓</span></div>`}
   </div>
 
   <div class="barcode-section">
@@ -267,6 +271,7 @@ export function generatePurchaseInvoiceA4HTML(
   sheetSize: SheetSize = 'a4',
   template: InvoiceTemplate = 'standard',
 ): string {
+  const fmt = (amount: number) => formatMoneyWithMeta(amount, branchDetails?.currencyMeta ?? FALLBACK_CURRENCY)
   const format = PAPER_FORMATS[sheetSize]
   const items = purchase.items || []
   const totalAmount = resolveTotalAmount(purchase)
@@ -295,8 +300,8 @@ export function generatePurchaseInvoiceA4HTML(
       <td class="text-center"><strong>${index + 1}</strong></td>
       <td class="text-left"><strong>${getPurchaseItemDisplayName(item)}</strong>${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${new Date(item.expiryDate).toLocaleDateString()}` : ''}</small>` : ''}</td>
       <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
-      <td class="text-right"><strong>${formatCurrency(resolveUnitPrice(item))}</strong></td>
-      <td class="text-right"><strong>${formatCurrency(resolveLineTotal(item))}</strong></td>
+      <td class="text-right"><strong>${fmt(resolveUnitPrice(item))}</strong></td>
+      <td class="text-right"><strong>${fmt(resolveLineTotal(item))}</strong></td>
     </tr>
   `).join('')
 
@@ -411,16 +416,16 @@ export function generatePurchaseInvoiceA4HTML(
 
   <div class="totals-wrapper">
     <table class="totals-table">
-      <tr><td class="total-label">${labels.subtotal}:</td><td class="total-amount">${formatCurrency(itemsSubtotal)}</td></tr>
-      ${overallDiscount > 0 ? `<tr><td class="total-label">${labels.discount}:</td><td class="total-amount">-${formatCurrency(overallDiscount)}</td></tr>` : ''}
-      <tr class="final-total"><td class="total-label">${labels.total}:</td><td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(totalAmount)}</td></tr>
+      <tr><td class="total-label">${labels.subtotal}:</td><td class="total-amount">${fmt(itemsSubtotal)}</td></tr>
+      ${overallDiscount > 0 ? `<tr><td class="total-label">${labels.discount}:</td><td class="total-amount">-${fmt(overallDiscount)}</td></tr>` : ''}
+      <tr class="final-total"><td class="total-label">${labels.total}:</td><td class="total-amount" style="font-size: 16px; font-weight: bold;">${fmt(totalAmount)}</td></tr>
     </table>
   </div>
 
   <div class="totals-wrapper">
     <table class="totals-table">
-      <tr style="background: #e8f5e9;"><td class="total-label" style="background: #e8f5e9;">${labels.paid}:</td><td class="total-amount" style="background: #e8f5e9; font-size: 14px; font-weight: bold;">${formatCurrency(paidAmount)}</td></tr>
-      <tr><td class="total-label" style="font-weight: bold; color: #000;">${labels.balance_due}:</td><td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${formatCurrency(Math.max(balance, 0))}</td></tr>
+      <tr style="background: #e8f5e9;"><td class="total-label" style="background: #e8f5e9;">${labels.paid}:</td><td class="total-amount" style="background: #e8f5e9; font-size: 14px; font-weight: bold;">${fmt(paidAmount)}</td></tr>
+      <tr><td class="total-label" style="font-weight: bold; color: #000;">${labels.balance_due}:</td><td class="total-amount" style="font-size: 14px; font-weight: bold; color: #000;">${fmt(Math.max(balance, 0))}</td></tr>
     </table>
   </div>
 

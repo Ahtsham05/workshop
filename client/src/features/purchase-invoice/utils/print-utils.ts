@@ -1,4 +1,5 @@
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 
 export interface PrintInvoiceData {
@@ -39,7 +40,7 @@ export interface PrintInvoiceData {
 
 const generateBarcodeText = (text: string): string => `*${text}*`
 
-const formatCurrency = (amount: number): string => `Rs${amount.toFixed(2)}`
+const formatCurrency = (amount: number): string => formatMoneyWithMeta(amount, FALLBACK_CURRENCY)
 
 export const generateInvoiceHTML = (data: PrintInvoiceData): string => {
   const {

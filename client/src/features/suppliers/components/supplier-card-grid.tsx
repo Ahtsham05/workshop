@@ -37,6 +37,7 @@ import { getTextClasses } from '@/utils/urdu-text-utils'
 import { useSuppliers } from '../context/users-context'
 import type { Supplier } from '../data/schema'
 import { formatSupplierBalanceDisplay } from '../utils/supplier-list-view'
+import { useCurrencyMeta } from '@/lib/format-money'
 
 type Props = {
   suppliers: Supplier[]
@@ -125,6 +126,7 @@ function SupplierCardMenu({ supplier }: { supplier: Supplier }) {
 
 export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
   const { t } = useLanguage()
+  const currencyMeta = useCurrencyMeta()
   const navigate = useNavigate()
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -214,7 +216,7 @@ export function SupplierCardGrid({ suppliers, loading, pagination }: Props) {
             {suppliers.map((supplier) => {
               const supplierId = resolveSupplierId(supplier)
               const whatsapp = supplier.whatsapp || supplier.phone
-              const balanceDisplay = formatSupplierBalanceDisplay(Number(supplier.balance ?? 0), t)
+              const balanceDisplay = formatSupplierBalanceDisplay(Number(supplier.balance ?? 0), t, currencyMeta)
 
               return (
                 <EntityCardLayout

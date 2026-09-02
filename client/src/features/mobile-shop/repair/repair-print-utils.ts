@@ -2,6 +2,8 @@
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import { repairReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 import { BUSINESS_TIMEZONE } from '@/lib/business-timezone'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 export interface RepairReceiptData {
   customerName: string
@@ -27,9 +29,9 @@ export interface RepairReceiptData {
   language?: InvoiceLanguage
   isUrduOnly?: boolean
   userPreferredLanguage?: InvoiceLanguage
+  /** Organization's configured currency (symbol/decimals) — omit to fall back to PKR. */
+  currencyMeta?: CurrencyOption
 }
-
-const fmtAmt = (n: number) => `Rs${n.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 export function generateRepairReceiptHTML(data: RepairReceiptData): string {
   const {
@@ -37,6 +39,7 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
     issue, technician, status, charges, advanceAmount, paymentMethod, date,
     companyName = 'Mobile Shop', companyAddress, companyPhone, companyEmail,
   } = data
+  const fmtAmt = (n: number) => formatMoneyWithMeta(n, data.currencyMeta ?? FALLBACK_CURRENCY)
 
   const language = resolveInvoiceLanguage(data)
   const labels = repairReceiptLabels[language]

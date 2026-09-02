@@ -14,6 +14,7 @@ import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { AdjustmentTypeBadge } from '@/features/stock-adjustments/components/adjustment-type-badge'
 import { ADJUSTMENT_TYPE_ORDER, ADJUSTMENT_TYPE_META } from '@/features/stock-adjustments/lib/adjustment-types'
 import { expiryBadge } from '../utils/expiry-badge'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface StockAdjustmentReportProps {
   startDate: string
@@ -24,6 +25,7 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
     const { data, isFetching: isLoading } = useGetStockAdjustmentReportQuery({ startDate, endDate })
+    const fmt = useFormatMoney()
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -86,7 +88,6 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
 
     if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
-    const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
     const s = data?.summary
 
     return (

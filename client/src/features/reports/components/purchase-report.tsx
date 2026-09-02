@@ -28,6 +28,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
@@ -71,6 +72,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
     const [viewInvoice, setViewInvoice] = useState<PurchaseInvoiceDetail | null>(null)
     const [showProductsOnly, setShowProductsOnly] = useState(false)
+    const formatCurrency = useFormatMoney()
 
     const dailyData = useMemo<DailyRow[]>(() => {
       if (!data?.data) return []
@@ -217,9 +219,6 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
         </div>
       )
     }
-
-    const formatCurrency = (value: number) =>
-      new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
 
     const summary = data?.summary ?? {}
     const totalAmount = summary.totalPurchases || 0

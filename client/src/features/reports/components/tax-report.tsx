@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { kpiCardClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface TaxReportProps {
   startDate: string
@@ -18,6 +19,7 @@ export const TaxReport = forwardRef<{ exportToExcel: () => void }, TaxReportProp
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
     const { data, isFetching: isLoading } = useGetTaxReportQuery({ startDate, endDate })
+    const formatCurrency = useFormatMoney()
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -47,9 +49,6 @@ export const TaxReport = forwardRef<{ exportToExcel: () => void }, TaxReportProp
     }))
 
   if (isLoading) return <Skeleton className='h-[400px] w-full' />
-
-  const formatCurrency = (value: number) => 
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
 
   return (
     <div className='space-y-6'>

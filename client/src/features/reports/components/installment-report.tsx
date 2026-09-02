@@ -11,6 +11,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface InstallmentReportProps {
   startDate: string
@@ -91,6 +92,8 @@ export const InstallmentReport = forwardRef<{ exportToExcel: () => void }, Insta
       },
     }))
 
+    const fmt = useFormatMoney()
+
     if (isLoading) return <Skeleton className='h-[400px] w-full' />
     if (isError) {
       return (
@@ -99,8 +102,6 @@ export const InstallmentReport = forwardRef<{ exportToExcel: () => void }, Insta
         </div>
       )
     }
-
-    const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
     const ps = data ? data.planSummary : null
     const pmtS = data ? data.paymentSummary : null
 

@@ -1,4 +1,5 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { useFormatMoney } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -14,6 +15,7 @@ type Props = {
 }
 
 export function HeldCartsSheet({ open, onOpenChange, held, onResume, onDelete }: Props) {
+  const formatMoney = useFormatMoney()
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side='right' className='w-full sm:max-w-md'>
@@ -38,7 +40,7 @@ export function HeldCartsSheet({ open, onOpenChange, held, onResume, onDelete }:
                       <Badge variant='secondary'>{items.length} items</Badge>
                     </div>
                     <p className='mt-0.5 text-xs text-muted-foreground'>
-                      {new Date(record.savedAt).toLocaleString()} · Rs{total.toFixed(2)}
+                      {new Date(record.savedAt).toLocaleString()} · {formatMoney(total)}
                     </p>
                     <div className='mt-2 flex gap-2'>
                       <Button type='button' size='sm' className='h-7 flex-1 text-xs' onClick={() => onResume(record)}>

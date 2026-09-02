@@ -24,8 +24,8 @@ import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalog-helpers'
 import { isUsedPhonesBucketProduct } from '../../old-phones/constants'
 import type { RootState, AppDispatch } from '@/stores/store'
+import { useFormatMoney } from '@/lib/format-money'
 
-const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
 /** Real IMEIs are always 15 digits — strips anything a scanner/paste adds (spaces, dashes). */
 const sanitizeImei = (raw: string) => raw.replace(/\D/g, '').slice(0, 15)
 
@@ -113,6 +113,8 @@ export function BuyNewPhoneDialog({
 }) {
   const dispatch = useDispatch<AppDispatch>()
   const { hasPermission } = usePermissions()
+  const formatMoney = useFormatMoney()
+  const fmtAmt = (n?: number) => formatMoney(n ?? 0)
 
   const productsRedux = useSelector((s: RootState) => (s as unknown as { product?: { products?: PhoneProductOption[] } }).product?.products ?? [])
   const suppliersRedux = useSelector((s: RootState) => normalizeSuppliersList(s.supplier.data)) as SupplierOption[]

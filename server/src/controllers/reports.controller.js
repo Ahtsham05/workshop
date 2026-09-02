@@ -1796,19 +1796,40 @@ const getTaxReport = catchAsync(async (req, res) => {
 
   const baseMatch = { ...scope, invoiceDate: { $gte: start, $lte: end }, status: { $ne: 'cancelled' } };
 
-  const [taxData, summary] = await Promise.all([
+  // NOTE: the schema field is `tax` (not `taxAmount`) — this aggregation previously read
+  // a field that never existed on Invoice, so it always reported zero tax collected
+  // regardless of real invoice.tax values. Also breaks down by taxLines.taxCategoryName
+  // now that real category-level tax snapshots exist (see taxCalculator.service.js).
+  const [taxData, summary, taxByCategory] = await Promise.all([
     Invoice.aggregate([
       { $match: baseMatch },
-      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$invoiceDate' } }, totalSales: { $sum: '$total' }, totalTax: { $sum: { $ifNull: ['$taxAmount', 0] } }, invoiceCount: { $sum: 1 } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$invoiceDate' } }, totalSales: { $sum: '$total' }, totalTax: { $sum: { $ifNull: ['$tax', 0] } }, invoiceCount: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]),
     Invoice.aggregate([
       { $match: baseMatch },
-      { $group: { _id: null, totalTaxCollected: { $sum: { $ifNull: ['$taxAmount', 0] } }, totalSales: { $sum: '$total' }, invoiceCount: { $sum: 1 } } },
+      { $group: { _id: null, totalTaxCollected: { $sum: { $ifNull: ['$tax', 0] } }, totalSales: { $sum: '$total' }, invoiceCount: { $sum: 1 } } },
+    ]),
+    Invoice.aggregate([
+      { $match: { ...baseMatch, taxLines: { $exists: true, $ne: [] } } },
+      { $unwind: '$taxLines' },
+      {
+        $group: {
+          _id: '$taxLines.taxCategoryName',
+          taxableAmount: { $sum: '$taxLines.taxableAmount' },
+          taxAmount: { $sum: '$taxLines.taxAmount' },
+        },
+      },
+      { $sort: { taxAmount: -1 } },
     ]),
   ]);
 
-  res.status(httpStatus.OK).send({ data: taxData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
+  res.status(httpStatus.OK).send({
+    data: taxData,
+    summary: summary[0] || {},
+    taxByCategory,
+    period: { startDate: start, endDate: end },
+  });
 });
 
 /* ── ROI ─────────────────────────────────────────────────────────────────── */

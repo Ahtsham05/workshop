@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { formatBusinessDate } from '@/lib/business-timezone'
+import { useFormatMoney } from '@/lib/format-money'
 import {
   useGetUsedPhoneStatsQuery, useGetBuybacksQuery, type PhoneBuybackRecord,
 } from '@/stores/usedPhoneBuyback.api'
@@ -24,8 +25,6 @@ interface MobilePhoneReportProps {
   startDate: string
   endDate: string
 }
-
-const fmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
 
 interface PhoneProductOption {
   id?: string
@@ -59,6 +58,8 @@ const getImeiSummary = (b: PhoneBuybackRecord) =>
   typeof b.imeiRecordId === 'object' && b.imeiRecordId !== null ? b.imeiRecordId : null
 
 function UsedPhonesTab({ startDate, endDate }: MobilePhoneReportProps) {
+  const formatMoney = useFormatMoney()
+  const fmt = (n?: number) => formatMoney(n ?? 0)
   const { data: stats, isFetching: statsLoading } = useGetUsedPhoneStatsQuery({ dateFrom: startDate, dateTo: endDate })
   const { data, isFetching: isLoading } = useGetBuybacksQuery({ dateFrom: startDate, dateTo: endDate, limit: 50, sortBy: 'buybackDate:-1' })
   const rows = data?.results ?? []
@@ -185,6 +186,8 @@ function UsedPhonesTab({ startDate, endDate }: MobilePhoneReportProps) {
 }
 
 function NewPhonesTab({ startDate, endDate }: MobilePhoneReportProps) {
+  const formatMoney = useFormatMoney()
+  const fmt = (n?: number) => formatMoney(n ?? 0)
   const dispatch = useDispatch<AppDispatch>()
   const productsRedux = useSelector((s: RootState) => (s as unknown as { product?: { products?: PhoneProductOption[] } }).product?.products ?? [])
   useEffect(() => { dispatch(fetchAllProducts({}) as unknown as never) }, [dispatch])

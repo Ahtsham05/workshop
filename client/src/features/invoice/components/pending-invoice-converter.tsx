@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -94,6 +95,8 @@ interface PendingInvoiceConverterProps {
 
 export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceConverterProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const { showUrdu } = useUrduDisplay()
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -430,6 +433,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         invoiceNote: branchData?.invoiceNote,
         printInUrdu: getInvoicePrintInUrdu(),
         userPreferredLanguage: preferredLanguage as 'en' | 'ur',
+        currencyMeta,
   }, { customerId: selectedCustomerId }, selectedCustomer)
 
   const printInvoice = async (invoiceData: any, paperSize: PaperSize = defaultPaperSize) => {
@@ -770,7 +774,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                               <Badge variant="outline">{row.pendingCount}</Badge>
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              Rs {row.pendingTotal.toFixed(2)}
+                              {formatMoney(row.pendingTotal)}
                             </TableCell>
                             <TableCell
                               className={cn(
@@ -778,7 +782,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                 row.previousBalance > 0 ? 'text-red-600' : row.previousBalance < 0 ? 'text-green-600' : '',
                               )}
                             >
-                              Rs {Math.abs(row.previousBalance).toFixed(2)}
+                              {formatMoney(Math.abs(row.previousBalance))}
                             </TableCell>
                             <TableCell
                               className={cn(
@@ -786,7 +790,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                 row.currentBalance > 0 ? 'text-red-600' : row.currentBalance < 0 ? 'text-green-600' : '',
                               )}
                             >
-                              Rs {Math.abs(row.currentBalance).toFixed(2)}
+                              {formatMoney(Math.abs(row.currentBalance))}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                               {row.lastBillDate
@@ -827,13 +831,13 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                               {pendingSummaryTotals.pendingCount}
                             </TableCell>
                             <TableCell className="text-right font-semibold">
-                              Rs {pendingSummaryTotals.pendingTotal.toFixed(2)}
+                              {formatMoney(pendingSummaryTotals.pendingTotal)}
                             </TableCell>
                             <TableCell className="text-right font-semibold">
-                              Rs {Math.abs(pendingSummaryTotals.previousBalance).toFixed(2)}
+                              {formatMoney(Math.abs(pendingSummaryTotals.previousBalance))}
                             </TableCell>
                             <TableCell className="text-right font-semibold">
-                              Rs {Math.abs(pendingSummaryTotals.currentBalance).toFixed(2)}
+                              {formatMoney(Math.abs(pendingSummaryTotals.currentBalance))}
                             </TableCell>
                             <TableCell />
                             <TableCell />
@@ -1033,7 +1037,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            Rs {billGroup.totalAmount.toFixed(2)}
+                            {formatMoney(billGroup.totalAmount)}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
@@ -1133,7 +1137,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                             </div>
                           </TableCell>
                           <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell className="text-right">Rs {item.subtotal.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{formatMoney(item.subtotal)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1144,17 +1148,17 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>{t('subtotal')}</span>
-                      <span>Rs {totals.subtotal.toFixed(2)}</span>
+                      <span>{formatMoney(totals.subtotal)}</span>
                     </div>
                     <div className="flex justify-between font-medium">
                       <span>{t('total')}</span>
-                      <span>Rs {totals.total.toFixed(2)}</span>
+                      <span>{formatMoney(totals.total)}</span>
                     </div>
                     <Separator className="my-2" />
                     <div className="flex justify-between text-sm text-muted-foreground">
                       <span>Previous Balance</span>
                       <span className={customerBalance > 0 ? 'text-red-600' : customerBalance < 0 ? 'text-green-600' : ''}>
-                        {loadingBalance ? 'Loading...' : `Rs ${Math.abs(customerBalance).toFixed(2)}`}
+                        {loadingBalance ? 'Loading...' : formatMoney(Math.abs(customerBalance))}
                         {customerBalance > 0 && ' (Due)'}
                         {customerBalance < 0 && ' (Advance)'}
                       </span>
@@ -1162,7 +1166,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                     <div className="flex justify-between font-bold text-lg">
                       <span>New Balance</span>
                       <span className={totals.newBalance > 0 ? 'text-red-600' : totals.newBalance < 0 ? 'text-green-600' : ''}>
-                        Rs {Math.abs(totals.newBalance).toFixed(2)}
+                        {formatMoney(Math.abs(totals.newBalance))}
                         {totals.newBalance > 0 && ' (Due)'}
                         {totals.newBalance < 0 && ' (Advance)'}
                       </span>

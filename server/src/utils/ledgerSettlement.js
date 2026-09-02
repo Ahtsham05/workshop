@@ -1,5 +1,7 @@
 /** Ledger rules when a purchase/sale is settled in full on cash (or wallet) terms. */
 
+const { formatMoney } = require('./money');
+
 const AMOUNT_EPSILON = 0.001;
 
 const isFullySettledCashPurchase = ({ totalAmount, paidAmount, paymentType, invoiceType }) => {
@@ -82,7 +84,7 @@ const buildSupplierPurchaseLedgerEntries = ({
         description: `Purchase Invoice #${invoiceNumber}${billSuffix}${suffix}`,
         debit: total,
         credit: total,
-        notes: `Paid in full: Rs${total.toFixed(2)} · ${itemsCount} items${suffix ? ' (Updated)' : ''}`,
+        notes: `Paid in full: ${formatMoney(total)} · ${itemsCount} items${suffix ? ' (Updated)' : ''}`,
       },
     ];
   }
@@ -109,7 +111,7 @@ const buildSupplierPurchaseLedgerEntries = ({
       description: `Payment made for Purchase #${invoiceNumber}${paid < total - AMOUNT_EPSILON ? ' (Partial)' : ''}${billSuffix}${suffix}`,
       debit: paid,
       credit: 0,
-      notes: `Amount paid: Rs${paid.toFixed(2)}${balance > 0 ? `, Balance: Rs${Number(balance).toFixed(2)}` : ''}`,
+      notes: `Amount paid: ${formatMoney(paid)}${balance > 0 ? `, Balance: ${formatMoney(Number(balance))}` : ''}`,
     });
   }
 
@@ -159,7 +161,7 @@ const buildCustomerSaleLedgerEntries = ({
         description: saleDescription,
         debit: totalAmount,
         credit: totalAmount,
-        notes: notes || `Paid in full: Rs${totalAmount.toFixed(2)}`,
+        notes: notes || `Paid in full: ${formatMoney(totalAmount)}`,
       },
     ];
   }
@@ -187,7 +189,7 @@ const buildCustomerSaleLedgerEntries = ({
       description: `Payment received for Invoice #${invoiceNumber}${paid < totalAmount - AMOUNT_EPSILON ? ' (Partial)' : ''}${suffix}`,
       debit: 0,
       credit: paid,
-      notes: `Amount paid: Rs${paid.toFixed(2)}${balance > 0 ? `, Balance: Rs${Number(balance).toFixed(2)}` : ''}`,
+      notes: `Amount paid: ${formatMoney(paid)}${balance > 0 ? `, Balance: ${formatMoney(Number(balance))}` : ''}`,
     });
   }
 

@@ -32,6 +32,10 @@ const ProductSchema = new mongoose.Schema({
     barcode: { type: String, trim: true },
     price: { type: Number, required: true },
     cost: { type: Number, required: true },
+    // Drives automatic tax calculation on Invoice/Purchase lines for this product (see
+    // services/taxCalculator.service.js). null = falls back to the organization's
+    // defaultTaxCategoryId at calculation time — never duplicate a tax rate directly here.
+    taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
     stockQuantity: { type: Number, required: true },
     unit: { 
         type: String, 

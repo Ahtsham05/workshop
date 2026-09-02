@@ -43,6 +43,13 @@ export type PermissionKey =
   | 'viewBranches' | 'manageBranches'
   | 'viewStaff' | 'manageStaff'
   | 'viewSettings' | 'editSettings'
+  | 'viewBusinessProfile' | 'manageBusinessProfile'
+  | 'viewLocalizationSettings' | 'manageLocalizationSettings'
+  | 'viewTaxCategories' | 'createTaxCategories' | 'editTaxCategories' | 'deleteTaxCategories'
+  | 'viewTaxRates' | 'createTaxRates' | 'editTaxRates' | 'deleteTaxRates'
+  | 'viewTaxJurisdictions' | 'manageTaxJurisdictions'
+  | 'viewTaxExemptions' | 'createTaxExemptions' | 'editTaxExemptions' | 'deleteTaxExemptions'
+  | 'viewExchangeRates' | 'createExchangeRates' | 'editExchangeRates' | 'deleteExchangeRates'
   | 'viewDashboard'
   | 'viewPayments' | 'createPayments' | 'editPayments' | 'deletePayments'
   | 'viewAuditLogs' | 'viewCreatedBy'
@@ -124,6 +131,19 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'branches', label: 'Branch Management', permissions: ['viewBranches', 'manageBranches'] },
   { id: 'staff', label: 'Staff Management', permissions: ['viewStaff', 'manageStaff'] },
   { id: 'settings', label: 'Settings', permissions: ['viewSettings', 'editSettings'] },
+  {
+    id: 'tax_currency_settings',
+    label: 'Tax & Currency Settings',
+    permissions: [
+      'viewBusinessProfile', 'manageBusinessProfile',
+      'viewLocalizationSettings', 'manageLocalizationSettings',
+      'viewTaxCategories', 'createTaxCategories', 'editTaxCategories', 'deleteTaxCategories',
+      'viewTaxRates', 'createTaxRates', 'editTaxRates', 'deleteTaxRates',
+      'viewTaxJurisdictions', 'manageTaxJurisdictions',
+      'viewTaxExemptions', 'createTaxExemptions', 'editTaxExemptions', 'deleteTaxExemptions',
+      'viewExchangeRates', 'createExchangeRates', 'editExchangeRates', 'deleteExchangeRates',
+    ],
+  },
   { id: 'dashboard', label: 'Dashboard', permissions: ['viewDashboard'] },
   { id: 'payments', label: 'Payments', permissions: ['viewPayments', 'createPayments', 'editPayments', 'deletePayments'] },
   { id: 'audit_logs', label: 'Audit Logs', permissions: ['viewAuditLogs', 'viewCreatedBy'] },
@@ -155,7 +175,7 @@ export const PERMISSION_TAB_GROUPS = {
   reports_hr: [
     'reports', 'hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',
   ],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
+  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'tax_currency_settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
 } as const;
 
 export type PermissionTabId = keyof typeof PERMISSION_TAB_GROUPS;

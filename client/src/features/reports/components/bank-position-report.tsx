@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import {
@@ -41,9 +42,6 @@ interface BankPositionReportProps {
   startDate: string
   endDate: string
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
 
 const ACCOUNT_TYPE_LABELS: Record<BankAccountType | 'other', string> = {
   cash: 'Cash',
@@ -99,6 +97,8 @@ function AccountAttentionBadge({ account }: { account: BankPositionAccountRow })
 
 export const BankPositionReport = forwardRef<{ exportToExcel: () => void }, BankPositionReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
+    const currencyMeta = useCurrencyMeta()
     const user = useSelector((state: RootState) => state.auth.data?.user)
     const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
     const { data: positionData, isFetching: positionLoading } = useGetBankPositionReportQuery()
@@ -117,6 +117,7 @@ export const BankPositionReport = forwardRef<{ exportToExcel: () => void }, Bank
           name: org?.name || 'Logix Plus Solutions',
           address: org?.address,
           phone: org?.phone,
+          currencyMeta,
         })
       } catch {
         toast.error('Failed to load reconciliation report')

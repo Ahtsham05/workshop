@@ -16,6 +16,7 @@ import { AdjustmentTypeBadge } from '@/features/stock-adjustments/components/adj
 import { TransferStatusBadge } from '@/features/stock-transfer/components/transfer-status-badge'
 import { MovementTile } from './movement-tile'
 import { formatImeiEntries } from '@/stores/imei.api'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface ProductDetailDialogProps {
   productId: string | null
@@ -39,8 +40,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
     { skip: !productId }
   )
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+  const formatCurrency = useFormatMoney()
 
   if (!productId) return null
 

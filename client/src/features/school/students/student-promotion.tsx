@@ -13,6 +13,7 @@ import {
   useGetPromotionEligibilityQuery,
   usePromoteStudentsMutation,
 } from '@/stores/school.api';
+import { useFormatMoney } from '@/lib/format-money';
 import StudentAvatar from '../components/student-avatar';
 import { toast } from 'sonner';
 import {
@@ -25,9 +26,8 @@ import {
   Info,
 } from 'lucide-react';
 
-const PKR = (n: number) => `PKR ${n.toLocaleString('en-PK')}`;
-
 export default function StudentPromotion() {
+  const PKR = useFormatMoney();
   const [sourceClassId, setSourceClassId] = useState('');
   const [targetClassId, setTargetClassId] = useState('');
   const [targetSectionId, setTargetSectionId] = useState('');

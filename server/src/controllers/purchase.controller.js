@@ -8,7 +8,7 @@ const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter')
 const { uploadAttachmentToCloudinary } = require('../middlewares/attachmentUpload');
 const { deleteFromCloudinary } = require('../middlewares/upload');
 
-const TRACKED_PURCHASE_FIELDS = ['totalAmount', 'paidAmount', 'balance', 'status', 'items', 'vendorBillNumber'];
+const TRACKED_PURCHASE_FIELDS = ['totalAmount', 'paidAmount', 'balance', 'status', 'items', 'vendorBillNumber', 'tax', 'currency'];
 
 const createPurchase = catchAsync(async (req, res) => {
   // A manually-typed override (see invoiceNumber input in the New Purchase form) is kept

@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
 const { DEFAULT_UNIT } = require('../config/units');
+const { buildTaxLineSchema } = require('./schemas/taxLine.schema');
+const { TAX_SYSTEMS } = require('../config/countries');
 
 // Sub-schema for split payments
 const splitPaymentSchema = new mongoose.Schema({
@@ -42,6 +44,11 @@ const invoiceItemSchema = new mongoose.Schema({
     discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
     discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
     discountAmount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for this line
+    // Resolved at add-time from Product/ProductVariant.taxCategoryId (falling back to the
+    // organization default) — see services/taxCalculator.service.js. null on legacy items.
+    taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
+    taxableAmount: { type: Number, default: 0, min: 0 },
+    taxAmount: { type: Number, default: 0, min: 0 },
     isManualEntry: { type: Boolean, default: false },
     // IMEI/serial numbers sold for this line item, when product.trackImei is true. Mixed
     // (not [String]) because a dual-SIM unit's entry is { imei, imei2 } instead of a plain
@@ -97,7 +104,23 @@ const InvoiceSchema = new mongoose.Schema({
     
     // Financial calculations
     subtotal: { type: Number, required: true, min: 0 },
+    // Derived as sum(taxLines[].taxAmount) by taxCalculator.service.js — kept as a plain
+    // Number (not renamed/retyped) so every existing consumer (calculateTotals below,
+    // accountsSystem.service.js's Tax Payable posting, print templates) keeps working
+    // unchanged. null/0 on legacy invoices created before this field existed.
     tax: { type: Number, default: 0, min: 0 },
+    taxLines: [buildTaxLineSchema()],
+    taxSystem: { type: String, enum: TAX_SYSTEMS, default: 'NONE' },
+    taxInclusive: { type: Boolean, default: false },
+    // Multi-currency snapshot, filled at save time by exchangeRateService and never
+    // recalculated afterwards (see CLAUDE.md spec sections 6-7). null on legacy invoices —
+    // callers should treat a null `currency` as "this invoice predates multi-currency" and
+    // fall back to the organization's current baseCurrency for display.
+    currency: { type: String, trim: true, uppercase: true, default: null },
+    baseCurrency: { type: String, trim: true, uppercase: true, default: null },
+    exchangeRate: { type: Number, default: 1 },
+    exchangeRateDate: { type: Date, default: null },
+    baseCurrencyTotal: { type: Number, default: null },
     // Overall invoice-level discount (e.g. a customer discount on the whole bill),
     // applied on top of any per-item discounts. discount is the resolved Rs value;
     // total is already net of it. Mirrors purchase.model.js's overall discount fields.

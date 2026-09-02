@@ -10,6 +10,7 @@ import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '@/features/invoice
 import { PrintFormatButton } from '@/components/print-format-button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { useFormatMoney } from '@/lib/format-money';
 
 function resolveReceiptPartyName(lang: InvoiceLanguage, name: string, nameUrdu?: string): string {
   return lang === 'ur' && nameUrdu?.trim() ? nameUrdu.trim() : name;
@@ -143,9 +144,11 @@ export function PaymentReceipt({
   const printOrientation = useBranchPrintOrientation();
   const invoiceTemplate = useBranchInvoiceTemplate();
 
-  const formatCurrency = (amount: number) => {
-    return `Rs ${Math.abs(amount).toFixed(2)}`;
-  };
+  // Wrapped (not a bare useFormatMoney()) to preserve the original's Math.abs — this receipt
+  // always shows a positive amount, since direction (paid/received, payable/receivable) is
+  // already conveyed separately by labels/colors elsewhere on the receipt.
+  const _formatMoney = useFormatMoney();
+  const formatCurrency = (amount: number) => _formatMoney(Math.abs(amount));
 
   const formatDate = (dateString: string) => {
     try {

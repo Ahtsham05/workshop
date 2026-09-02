@@ -30,6 +30,7 @@ import {
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html';
+import { useFormatMoney, useCurrencyMeta, FALLBACK_CURRENCY } from '@/lib/format-money';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/stores/store';
 import { toast } from 'sonner';
@@ -198,6 +199,8 @@ export default function FeeVouchers() {
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
+  const formatMoney = useFormatMoney();
+  const { symbol: currencySymbol } = useCurrencyMeta();
 
   const [filters, setFilters] = useState({
     month: MONTHS[now.getMonth()],
@@ -482,7 +485,7 @@ export default function FeeVouchers() {
       const skipped = result.skipped ? ` · ${result.skipped} skipped (no fees)` : '';
       const dups = result.skippedDuplicates ? ` · ${result.skippedDuplicates} already had this month` : '';
       const autoApplied = result.autoAppliedCount
-        ? ` · ${result.autoAppliedCount} auto-paid from wallet (PKR ${(result.autoAppliedAmount || 0).toLocaleString()})`
+        ? ` · ${result.autoAppliedCount} auto-paid from wallet (${formatMoney(result.autoAppliedAmount || 0)})`
         : '';
       toast.success(`Generated ${result.generated} / ${result.total} vouchers${skipped}${dups}${autoApplied}`);
       setGenerateDialog(false);
@@ -517,8 +520,8 @@ export default function FeeVouchers() {
         const count = result?.vouchersPaid?.length ?? 0;
         const newCredit = result?.newCreditBalance ?? 0;
         const excessDeposited = Number(result?.excessDeposited ?? 0);
-        let msg = `PKR ${amountToPay.toLocaleString()} applied across ${count} voucher${count !== 1 ? 's' : ''}`;
-        if (newCredit > 0) msg += ` · PKR ${newCredit.toLocaleString()} saved to credit wallet`;
+        let msg = `${formatMoney(amountToPay)} applied across ${count} voucher${count !== 1 ? 's' : ''}`;
+        if (newCredit > 0) msg += ` · ${formatMoney(newCredit)} saved to credit wallet`;
         toast.success(msg);
 
         const ids = (result?.vouchersPaid || [])
@@ -594,7 +597,7 @@ export default function FeeVouchers() {
         paymentMethod: advanceForm.paymentMethod,
         remarks: advanceForm.remarks,
       }).unwrap();
-      toast.success(`PKR ${amountNum.toLocaleString()} added to credit wallet. New balance: PKR ${(result.creditBalance || 0).toLocaleString()}`);
+      toast.success(`${formatMoney(amountNum)} added to credit wallet. New balance: ${formatMoney(result.creditBalance || 0)}`);
       const studentRow = advanceStudent;
       const monthlyFee = estimateMonthlyFee(null, null, studentRow);
       const startAfter = { month: filters.month, year: Number(filters.year) };
@@ -684,7 +687,7 @@ export default function FeeVouchers() {
       const res = await bulkDeleteVouchers(payload).unwrap();
       let msg = `Deleted ${res.deletedVouchers} voucher${res.deletedVouchers !== 1 ? 's' : ''}`;
       if (res.clearedCreditAmount) {
-        msg += ` · Cleared PKR ${res.clearedCreditAmount.toLocaleString()} from wallet(s)`;
+        msg += ` · Cleared ${formatMoney(res.clearedCreditAmount)} from wallet(s)`;
       }
       toast.success(msg);
       setSelectedIds([]);
@@ -699,7 +702,7 @@ export default function FeeVouchers() {
         filters.classId !== 'all' ? { classId: filters.classId } : undefined,
       ).unwrap();
       if (res.clearedCreditAmount) {
-        toast.success(`Cleared PKR ${res.clearedCreditAmount.toLocaleString()} from ${res.resetStudents} wallet(s)`);
+        toast.success(`Cleared ${formatMoney(res.clearedCreditAmount)} from ${res.resetStudents} wallet(s)`);
       } else {
         toast.info('No orphan credit wallets to clear');
       }
@@ -714,7 +717,7 @@ export default function FeeVouchers() {
       buildPrintHTML(data, org?.name || 'School', branchData?.invoiceNote, {
         layout: printLayout,
         rowsPerPage,
-      })
+      }, currencySymbol)
     );
     win.document.close();
     win.focus();
@@ -770,7 +773,7 @@ export default function FeeVouchers() {
               <SelectItem value="6">Rows/Page: 6</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={handleReconcile} disabled={reconciling} title="Fix vouchers showing PKR 0">
+          <Button variant="outline" size="sm" onClick={handleReconcile} disabled={reconciling} title={`Fix vouchers showing ${currencySymbol} 0`}>
             {reconciling ? <RefreshCcw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wrench className="mr-1.5 h-3.5 w-3.5" />}
             Fix Amounts
           </Button>
@@ -810,14 +813,14 @@ export default function FeeVouchers() {
               <AlertDialogTrigger asChild>
                 <Button variant="outline" size="sm" className="text-amber-700 hover:text-amber-800" disabled={clearingWallets}>
                   <Wallet className="mr-1.5 h-3.5 w-3.5" />
-                  Clear Wallets (PKR {(receivable?.totalCreditBalance || 0).toLocaleString()})
+                  Clear Wallets ({formatMoney(receivable?.totalCreditBalance || 0)})
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Clear credit wallets?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will reset PKR {(receivable?.totalCreditBalance || 0).toLocaleString()} held in student credit wallets
+                    This will reset {formatMoney(receivable?.totalCreditBalance || 0)} held in student credit wallets
                     for students who have no fee vouchers left
                     {filters.classId !== 'all' ? ` in the selected class` : ''}.
                     Advance payment records will also be removed.
@@ -867,7 +870,7 @@ export default function FeeVouchers() {
         <div className="rounded-lg border bg-card px-3 py-2.5">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{filters.month} {filters.year} Receivable</p>
           <p className="text-base font-bold text-amber-600">
-            PKR {(receivable?.thisMonthReceivable || 0).toLocaleString()}
+            {formatMoney(receivable?.thisMonthReceivable || 0)}
           </p>
           <p className="text-[10px] text-muted-foreground">{receivable?.thisMonthVouchers || 0} voucher(s) pending</p>
         </div>
@@ -875,7 +878,7 @@ export default function FeeVouchers() {
         <div className="rounded-lg border bg-card px-3 py-2.5">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Previous Arrears</p>
           <p className={`text-base font-bold ${(receivable?.previousArrears || 0) > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
-            PKR {(receivable?.previousArrears || 0).toLocaleString()}
+            {formatMoney(receivable?.previousArrears || 0)}
           </p>
           <p className="text-[10px] text-muted-foreground">{receivable?.arrearsVouchers || 0} older month(s)</p>
         </div>
@@ -883,7 +886,7 @@ export default function FeeVouchers() {
         <div className="rounded-lg border bg-amber-50 border-amber-200 px-3 py-2.5">
           <p className="text-[10px] font-medium text-amber-700 uppercase tracking-wide mb-1">Total Receivable</p>
           <p className="text-base font-bold text-amber-700">
-            PKR {(receivable?.totalReceivable || 0).toLocaleString()}
+            {formatMoney(receivable?.totalReceivable || 0)}
           </p>
           <p className="text-[10px] text-amber-600">
             {filters.month} + {receivable?.arrearsVouchers || 0} arrear(s)
@@ -895,7 +898,7 @@ export default function FeeVouchers() {
             <CheckCircle2 className="h-3 w-3" /> {filters.month} Received
           </p>
           <p className="text-base font-bold text-blue-700">
-            PKR {(receivable?.totalReceivedThisMonth || 0).toLocaleString()}
+            {formatMoney(receivable?.totalReceivedThisMonth || 0)}
           </p>
           <p className="text-[10px] text-blue-600">{receivable?.paidVouchersThisMonth || 0} voucher(s) paid</p>
         </div>
@@ -905,10 +908,10 @@ export default function FeeVouchers() {
             <Wallet className="h-3 w-3" /> Advance Received
           </p>
           <p className="text-base font-bold text-emerald-700">
-            PKR {(receivable?.totalCreditBalance || 0).toLocaleString()}
+            {formatMoney(receivable?.totalCreditBalance || 0)}
           </p>
           <p className="text-[10px] text-emerald-600">held in credit wallet(s)</p>
-          <p className="text-[10px] text-blue-600">PKR {(receivable?.totalWalletAppliedThisMonth || 0).toLocaleString()} used from wallet this month</p>
+          <p className="text-[10px] text-blue-600">{formatMoney(receivable?.totalWalletAppliedThisMonth || 0)} used from wallet this month</p>
         </div>
       </div>
 
@@ -1077,7 +1080,7 @@ export default function FeeVouchers() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold">PKR {net.toLocaleString()}</p>
+                    <p className="text-sm font-semibold">{formatMoney(net)}</p>
                     {(v.paidAmount || 0) > 0 && v.status !== 'paid' && (
                       <p className="text-[10px] text-amber-600">Due: {(net - (v.paidAmount || 0)).toLocaleString()}</p>
                     )}
@@ -1089,7 +1092,7 @@ export default function FeeVouchers() {
                   <div className="text-right min-w-[90px]">
                     {bal.totalOutstanding > 0 ? (
                       <>
-                        <p className="text-sm font-bold text-red-600">PKR {bal.totalOutstanding.toLocaleString()}</p>
+                        <p className="text-sm font-bold text-red-600">{formatMoney(bal.totalOutstanding)}</p>
                         {(bal.previousArrears > 0 || (bal.futureMonthsOutstanding ?? 0) > 0) ? (
                           <p className="text-[10px] text-muted-foreground leading-tight">
                             <span className="text-amber-600">{filters.month}: {bal.thisMonthOutstanding.toLocaleString()}</span>
@@ -1263,7 +1266,7 @@ export default function FeeVouchers() {
                   <SelectContent>
                     {structures.map((s: any) => (
                       <SelectItem key={s.id} value={s.id}>
-                        {s.name} — PKR {(s.totalAmount || 0).toLocaleString()}
+                        {s.name} — {formatMoney(s.totalAmount || 0)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1346,7 +1349,7 @@ export default function FeeVouchers() {
                             <p className="text-[10px] text-emerald-600">Will be auto-applied oldest-first on payment</p>
                           </div>
                         </div>
-                        <p className="text-base font-bold text-emerald-700">PKR {studentSummary.creditBalance.toLocaleString()}</p>
+                        <p className="text-base font-bold text-emerald-700">{formatMoney(studentSummary.creditBalance)}</p>
                       </div>
                     )}
                     {/* Summary stats row */}
@@ -1354,21 +1357,21 @@ export default function FeeVouchers() {
                       <div className="px-3 py-2.5 text-center">
                         <p className="text-[10px] text-muted-foreground mb-0.5">Total Outstanding</p>
                         <p className={`text-sm font-bold ${studentSummary.totalPending > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                          PKR {(studentSummary.totalPending || 0).toLocaleString()}
+                          {formatMoney(studentSummary.totalPending || 0)}
                         </p>
                         <p className="text-[10px] text-muted-foreground">{studentSummary.pendingCount} month(s)</p>
                       </div>
                       <div className="px-3 py-2.5 text-center">
                         <p className="text-[10px] text-muted-foreground mb-0.5">Total Received</p>
                         <p className="text-sm font-bold text-emerald-600">
-                          PKR {(studentSummary.totalReceived || 0).toLocaleString()}
+                          {formatMoney(studentSummary.totalReceived || 0)}
                         </p>
                         <p className="text-[10px] text-muted-foreground">{studentSummary.paidCount} paid</p>
                       </div>
                       <div className="px-3 py-2.5 text-center">
                         <p className="text-[10px] text-muted-foreground mb-0.5">Total Billed</p>
                         <p className="text-sm font-bold">
-                          PKR {(studentSummary.totalBilled || 0).toLocaleString()}
+                          {formatMoney(studentSummary.totalBilled || 0)}
                         </p>
                         <p className="text-[10px] text-muted-foreground">{studentSummary.totalVouchers} voucher(s)</p>
                       </div>
@@ -1391,7 +1394,7 @@ export default function FeeVouchers() {
                                   <span className="font-medium">{pv.month} {pv.year}</span>
                                   <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-medium border ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
                                 </div>
-                                <span className="font-semibold text-red-600">PKR {pv.remaining.toLocaleString()}</span>
+                                <span className="font-semibold text-red-600">{formatMoney(pv.remaining)}</span>
                               </div>
                             );
                           })}
@@ -1412,7 +1415,7 @@ export default function FeeVouchers() {
                             )}
                           </p>
                         </div>
-                        <span className="text-sm font-bold text-emerald-700">PKR {(studentSummary.lastPaid.paidAmount || 0).toLocaleString()}</span>
+                        <span className="text-sm font-bold text-emerald-700">{formatMoney(studentSummary.lastPaid.paidAmount || 0)}</span>
                       </div>
                     )}
                     <div className="px-3 py-2 border-t">
@@ -1439,23 +1442,23 @@ export default function FeeVouchers() {
                     {selectedVoucher.feeItems.map((fi: any, i: number) => (
                       <div key={i} className="flex justify-between text-xs">
                         <span className="text-muted-foreground">{fi.name}</span>
-                        <span>PKR {(fi.amount || 0).toLocaleString()}</span>
+                        <span>{formatMoney(fi.amount || 0)}</span>
                       </div>
                     ))}
                     {(selectedVoucher.discount || 0) > 0 && (
                       <div className="flex justify-between text-xs text-emerald-600">
                         <span>Discount</span>
-                        <span>− PKR {selectedVoucher.discount.toLocaleString()}</span>
+                        <span>− {formatMoney(selectedVoucher.discount)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-xs font-semibold border-t pt-1 mt-1">
                       <span>Net Due</span>
-                      <span>PKR {svNet.toLocaleString()}</span>
+                      <span>{formatMoney(svNet)}</span>
                     </div>
                     {(selectedVoucher.paidAmount || 0) > 0 && (
                       <div className="flex justify-between text-xs font-semibold text-amber-600">
                         <span>Remaining</span>
-                        <span>PKR {remaining.toLocaleString()}</span>
+                        <span>{formatMoney(remaining)}</span>
                       </div>
                     )}
                   </div>
@@ -1464,7 +1467,7 @@ export default function FeeVouchers() {
 
               {/* ── Amount input ── */}
               <div className="space-y-1.5">
-                <Label>Amount Paying (PKR) <span className="text-destructive">*</span></Label>
+                <Label>Amount Paying ({currencySymbol}) <span className="text-destructive">*</span></Label>
                 <Input
                   type="number" min={1}
                   className="text-lg font-semibold h-11"
@@ -1477,14 +1480,14 @@ export default function FeeVouchers() {
                     className="text-xs px-2 py-1 rounded border hover:bg-muted transition-colors"
                     onClick={() => setPayForm({ ...payForm, amount: String(quickPayFull) })}
                   >
-                    Full — PKR {quickPayFull.toLocaleString()}
+                    Full — {formatMoney(quickPayFull)}
                   </button>
                   {remaining > 0 && (
                     <button
                       className="text-xs px-2 py-1 rounded border hover:bg-muted transition-colors"
                       onClick={() => setPayForm({ ...payForm, amount: String(Math.floor(remaining / 2)) })}
                     >
-                      Half — PKR {Math.floor(remaining / 2).toLocaleString()}
+                      Half — {formatMoney(Math.floor(remaining / 2))}
                     </button>
                   )}
                   {/* Use credit wallet shortcut */}
@@ -1505,7 +1508,7 @@ export default function FeeVouchers() {
                       onClick={() => setPayForm({ ...payForm, amount: String(Math.max(0, studentSummary.totalPending - (studentSummary.creditBalance || 0))) })}
                     >
                       <ChevronsUp className="h-3 w-3" />
-                      All Arrears — PKR {studentSummary.totalPending.toLocaleString()}
+                      All Arrears — {formatMoney(studentSummary.totalPending)}
                     </button>
                   )}
                 </div>
@@ -1557,7 +1560,7 @@ export default function FeeVouchers() {
             >
               {(paying || bulkPaying)
                 ? <><RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />Processing…</>
-                : <><CheckCircle2 className="mr-2 h-3.5 w-3.5" />Confirm PKR {Number(payForm.amount || 0).toLocaleString()}</>
+                : <><CheckCircle2 className="mr-2 h-3.5 w-3.5" />Confirm {formatMoney(Number(payForm.amount || 0))}</>
               }
             </Button>
           </DialogFooter>
@@ -1585,15 +1588,15 @@ export default function FeeVouchers() {
                 </div>
                 <div className="rounded border p-2">
                   <p className="text-[10px] text-muted-foreground">Total Billed</p>
-                  <p className="text-sm font-semibold">PKR {(studentLedger.summary?.totalBilled || 0).toLocaleString()}</p>
+                  <p className="text-sm font-semibold">{formatMoney(studentLedger.summary?.totalBilled || 0)}</p>
                 </div>
                 <div className="rounded border p-2">
                   <p className="text-[10px] text-muted-foreground">Total Paid/Credit</p>
-                  <p className="text-sm font-semibold text-emerald-700">PKR {(studentLedger.summary?.totalPaid || 0).toLocaleString()}</p>
+                  <p className="text-sm font-semibold text-emerald-700">{formatMoney(studentLedger.summary?.totalPaid || 0)}</p>
                 </div>
                 <div className="rounded border p-2">
                   <p className="text-[10px] text-muted-foreground">Outstanding</p>
-                  <p className="text-sm font-semibold text-red-600">PKR {(studentLedger.summary?.outstanding || 0).toLocaleString()}</p>
+                  <p className="text-sm font-semibold text-red-600">{formatMoney(studentLedger.summary?.outstanding || 0)}</p>
                 </div>
               </div>
 
@@ -1653,7 +1656,7 @@ export default function FeeVouchers() {
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label>Advance Amount (PKR) <span className="text-destructive">*</span></Label>
+              <Label>Advance Amount ({currencySymbol}) <span className="text-destructive">*</span></Label>
               <Input
                 type="number" min={1}
                 className="text-lg font-semibold h-11"
@@ -1696,7 +1699,7 @@ export default function FeeVouchers() {
             >
               {recordingAdvance
                 ? <><RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />Saving…</>
-                : <><ArrowUpCircle className="mr-2 h-3.5 w-3.5" />Add PKR {Number(advanceForm.amount || 0).toLocaleString()} to Wallet</>
+                : <><ArrowUpCircle className="mr-2 h-3.5 w-3.5" />Add {formatMoney(Number(advanceForm.amount || 0))} to Wallet</>
               }
             </Button>
           </DialogFooter>
@@ -1806,8 +1809,8 @@ export default function FeeVouchers() {
                     <p className="text-xs text-muted-foreground ml-6">
                       Today = day {admDate.getDate()} of {totalDays} · {remainingDays} days remaining ·{' '}
                       {nvForm.prorateFee
-                        ? <span className="text-blue-700 font-medium">Rs. {prorated.toLocaleString()} (prorated)</span>
-                        : <span>Rs. {mf.toLocaleString()} (full)</span>}
+                        ? <span className="text-blue-700 font-medium">{formatMoney(prorated)} (prorated)</span>
+                        : <span>{formatMoney(mf)} (full)</span>}
                     </p>
                   )}
                 </div>
@@ -1866,9 +1869,9 @@ export default function FeeVouchers() {
                 const net = Math.max(0, subtotal - disc);
                 return (
                   <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs space-y-0.5 border">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-medium">Rs. {subtotal.toLocaleString()}</span></div>
-                    {disc > 0 && <div className="flex justify-between text-emerald-600"><span>Discount</span><span>- Rs. {disc.toLocaleString()}</span></div>}
-                    <div className="flex justify-between font-semibold border-t pt-1 mt-1"><span>Net Amount</span><span>Rs. {net.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-medium">{formatMoney(subtotal)}</span></div>
+                    {disc > 0 && <div className="flex justify-between text-emerald-600"><span>Discount</span><span>- {formatMoney(disc)}</span></div>}
+                    <div className="flex justify-between font-semibold border-t pt-1 mt-1"><span>Net Amount</span><span>{formatMoney(net)}</span></div>
                   </div>
                 );
               })()}
@@ -1877,7 +1880,7 @@ export default function FeeVouchers() {
             {/* Discount & Remarks */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Discount (Rs.)</Label>
+                <Label>Discount ({currencySymbol})</Label>
                 <Input type="number" min="0" placeholder="0" value={nvForm.discount} onChange={(e) => setNvForm((f) => ({ ...f, discount: e.target.value }))} className="h-9" />
               </div>
               <div className="space-y-1.5">
@@ -1909,7 +1912,8 @@ function buildPrintHTML(
   vouchers: any[],
   schoolName: string,
   invoiceNote?: string,
-  settings?: { layout?: 'auto' | 'large' | 'medium' | 'compact'; rowsPerPage?: 'auto' | '2' | '3' | '4' | '5' | '6' }
+  settings?: { layout?: 'auto' | 'large' | 'medium' | 'compact'; rowsPerPage?: 'auto' | '2' | '3' | '4' | '5' | '6' },
+  currencySymbol: string = FALLBACK_CURRENCY.symbol
 ): string {
   const autoLayout = vouchers.length <= 2 ? 'large' : vouchers.length <= 4 ? 'medium' : 'compact';
   const layout = settings?.layout && settings.layout !== 'auto' ? settings.layout : autoLayout;
@@ -1923,9 +1927,9 @@ function buildPrintHTML(
 
   const rowHtml = (v: any, ri: number, total: number) => `
     <div class="row${ri < total - 1 ? ' has-cut' : ''}">
-      <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy', invoiceNote)}</div>
+      <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy', invoiceNote, currencySymbol)}</div>
       <div class="vcut"><span>✂</span></div>
-      <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy', invoiceNote)}</div>
+      <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy', invoiceNote, currencySymbol)}</div>
     </div>
   `;
 
@@ -2126,7 +2130,7 @@ ${pageHTML}
 </html>`;
 }
 
-function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceNote?: string): string {
+function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceNote?: string, currencySymbol: string = FALLBACK_CURRENCY.symbol): string {
   const feeItems: any[] = v.feeItems || [];
   const discount = v.discount || 0;
   const fine = v.fine || 0;
@@ -2241,7 +2245,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   </table>
   <table class="vc-total">
     <tr>
-      <td class="tlbl">Total Amount (Rs.):</td>
+      <td class="tlbl">Total Amount (${currencySymbol}):</td>
       <td class="tamt">${totalAmount.toLocaleString()}/-</td>
     </tr>
   </table>

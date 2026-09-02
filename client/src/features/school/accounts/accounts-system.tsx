@@ -51,6 +51,7 @@ import {
   useGetBudgetVsActualQuery,
 } from '@/stores/school.api';
 import { toast } from 'sonner';
+import { useCurrencyMeta, useFormatMoney } from '@/lib/format-money';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ─── Constants ────────────────────────────────────────────────────────────
@@ -77,10 +78,6 @@ const TABS: { key: TabKey; label: string; icon: any }[] = [
 ];
 
 const TAB_KEYS = TABS.map((t) => t.key);
-
-function fmt(n: number | undefined | null) {
-  return `PKR ${(n || 0).toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
 
 function fmtDate(d: string | undefined) {
   if (!d) return '-';
@@ -178,6 +175,8 @@ export default function AccountsSystem() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function DashboardTab() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const { data, isLoading } = useGetAccountsDashboardQuery({ year });
@@ -498,6 +497,8 @@ function ChartOfAccountsTab() {
 }
 
 function AccountTreeRow({ node, level, expanded, toggle, onEdit, onDelete }: { node: any; level: number; expanded: Set<string>; toggle: (id: string) => void; onEdit: (a: any) => void; onDelete: (id: string) => void }) {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const hasChildren = node.children && node.children.length > 0;
   const isOpen = expanded.has(node._id);
 
@@ -628,6 +629,8 @@ function AccountFormDialog({ open, onClose, accounts, initial, onSubmit }: { ope
 // ═══════════════════════════════════════════════════════════════════════════
 
 function JournalEntriesTab() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -785,6 +788,9 @@ function JournalEntriesTab() {
 }
 
 function JournalEntryFormDialog({ onClose }: { onClose: () => void }) {
+  const currencySymbol = useCurrencyMeta().symbol;
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const { data: accountsData } = useGetPostingAccountsQuery(undefined);
   const [createEntry, { isLoading }] = useCreateJournalEntryMutation();
   const accounts = accountsData?.data || [];
@@ -891,8 +897,8 @@ function JournalEntryFormDialog({ onClose }: { onClose: () => void }) {
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="w-[45%] py-3">Account</TableHead>
-                    <TableHead className="text-center py-3">Debit (PKR)</TableHead>
-                    <TableHead className="text-center py-3">Credit (PKR)</TableHead>
+                    <TableHead className="text-center py-3">Debit ({currencySymbol})</TableHead>
+                    <TableHead className="text-center py-3">Credit ({currencySymbol})</TableHead>
                     <TableHead className="py-3">Narration</TableHead>
                     <TableHead className="w-8 py-3" />
                   </TableRow>
@@ -1005,6 +1011,8 @@ function JournalEntryFormDialog({ onClose }: { onClose: () => void }) {
 }
 
 function JournalEntryViewDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const { data, isLoading } = useGetJournalEntryByIdQuery(id);
   const entry = data?.data;
 
@@ -1065,6 +1073,8 @@ function JournalEntryViewDialog({ id, onClose }: { id: string; onClose: () => vo
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BankAccountsTab() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const { data, isLoading } = useGetBankAccountsQuery(undefined);
   const [createBank] = useCreateBankAccountMutation();
   const [updateBank] = useUpdateBankAccountMutation();
@@ -1190,6 +1200,8 @@ function BankAccountFormDialog({ open, onClose, initial, onSubmit }: { open: boo
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BudgetsTab() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const fy = getCurrentFinancialYear();
   const [financialYear, setFinancialYear] = useState(fy);
   const { data, isLoading } = useGetBudgetsQuery({ financialYear });
@@ -1300,6 +1312,7 @@ function BudgetsTab() {
 }
 
 function BudgetFormDialog({ open, onClose, accounts, financialYear, onSubmit }: { open: boolean; onClose: () => void; accounts: any[]; financialYear: string; onSubmit: (data: any) => void }) {
+  const currencySymbol = useCurrencyMeta().symbol;
   const [accountHeadId, setAccountHeadId] = useState('');
   const [annualBudget, setAnnualBudget] = useState(0);
   const [notes, setNotes] = useState('');
@@ -1321,7 +1334,7 @@ function BudgetFormDialog({ open, onClose, accounts, financialYear, onSubmit }: 
               </SelectContent>
             </Select>
           </div>
-          <div><Label>Annual Budget (PKR)</Label><Input type="number" value={annualBudget || ''} onChange={(e) => setAnnualBudget(Number(e.target.value))} placeholder="0" /></div>
+          <div><Label>Annual Budget ({currencySymbol})</Label><Input type="number" value={annualBudget || ''} onChange={(e) => setAnnualBudget(Number(e.target.value))} placeholder="0" /></div>
           <div><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
         </div>
         <DialogFooter>
@@ -1369,6 +1382,8 @@ function StatementsTab() {
 }
 
 function TrialBalanceStatement() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const { data, isLoading } = useGetTrialBalanceQuery({ ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) });
@@ -1439,6 +1454,8 @@ function TrialBalanceStatement() {
 }
 
 function BalanceSheetStatement() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const [asOfDate, setAsOfDate] = useState('');
   const { data, isLoading } = useGetBalanceSheetQuery({ ...(asOfDate ? { asOfDate } : {}) });
   const bs = data?.data;
@@ -1516,6 +1533,8 @@ function BalanceSheetStatement() {
 }
 
 function IncomeStatementReport() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const now = new Date();
   const fy = getCurrentFinancialYear();
   const [startDate, setStartDate] = useState(`${fy.split('-')[0]}-07-01`);
@@ -1615,6 +1634,8 @@ function IncomeStatementReport() {
 }
 
 function CashFlowStatement() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const now = new Date();
   const fy = getCurrentFinancialYear();
   const [startDate, setStartDate] = useState(`${fy.split('-')[0]}-07-01`);
@@ -1787,6 +1808,8 @@ function CashFlowStatement() {
 }
 
 function GeneralLedgerStatement() {
+  const formatMoney = useFormatMoney();
+  const fmt = (n: number | undefined | null) => formatMoney(n || 0);
   const { data: accountsData } = useGetPostingAccountsQuery(undefined);
   const accounts = accountsData?.data || [];
   const [accountId, setAccountId] = useState('');

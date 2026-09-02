@@ -1,4 +1,6 @@
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
 import { isElectronApp } from '@/lib/sync/electron'
 import { a4Labels, receiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from './language'
@@ -89,6 +91,8 @@ export interface PrintInvoiceData {
   invoiceDate?: string
   /** When true, print title uses Quotation and number prefix INV- becomes QUO-. */
   printAsQuotation?: boolean
+  /** Organization's configured currency (symbol/decimals) — omit to fall back to PKR. */
+  currencyMeta?: CurrencyOption
 }
 
 /** INV-202605-000195 → QUO-202605-000195 when printing as quotation. */
@@ -160,8 +164,15 @@ export const generateBarcodeText = (text: string): string => {
   return `*${text}*`
 }
 
-export const formatCurrency = (amount: number): string => {
-  return `Rs${amount.toFixed(2)}`
+/**
+ * Centralized through formatMoneyWithMeta (client/src/lib/format-money.ts) rather than a
+ * standalone `Rs${amount.toFixed(2)}` — this print pipeline runs outside React (building a
+ * raw HTML string for a print window), so it can't use the useFormatMoney() hook. Callers
+ * that know the invoice's currency can pass `currencyMeta` explicitly; omitting it keeps
+ * the exact pre-existing behavior (Rs, 2 decimals) so every current call site is unaffected.
+ */
+export const formatCurrency = (amount: number, currencyMeta?: CurrencyOption): string => {
+  return formatMoneyWithMeta(amount, currencyMeta ?? FALLBACK_CURRENCY)
 }
 
 /** Single-line product title: Urdu script when `lang === 'ur'` (fallback EN). Appends IMEI(s) sold, if any. */
@@ -220,6 +231,7 @@ export const generateInvoiceHTML = (
     serviceCharge = 0,
     companyPhone,
   } = data
+  const fmt = (amount: number) => formatCurrency(amount, data.currencyMeta)
 
   const itemDiscountTotal = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
   const quotationPrint = isQuotationPrint(data)
@@ -708,16 +720,16 @@ export const generateInvoiceHTML = (
   <div class="totals-section">
     <div class="total-row">
       <span>${urduTexts.subtotal}:</span>
-      <span>${formatCurrency(subtotal)}</span>
+      <span>${fmt(subtotal)}</span>
     </div>
-    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span>-${formatCurrency(itemDiscountTotal)}</span></div>` : ''}
-    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${formatCurrency(discount)}</span></div>` : ''}
-    ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${formatCurrency(deliveryCharge)}</span></div>` : ''}
-    ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${formatCurrency(serviceCharge)}</span></div>` : ''}
-    ${tax > 0 ? `<div class="total-row"><span>${urduTexts.tax}:</span><span>${formatCurrency(tax)}</span></div>` : ''}
+    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span>-${fmt(itemDiscountTotal)}</span></div>` : ''}
+    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${fmt(discount)}</span></div>` : ''}
+    ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${fmt(deliveryCharge)}</span></div>` : ''}
+    ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${fmt(serviceCharge)}</span></div>` : ''}
+    ${tax > 0 ? `<div class="total-row"><span>${urduTexts.tax}:</span><span>${fmt(tax)}</span></div>` : ''}
     <div class="total-row total-final">
       <span>${urduTexts.total}:</span>
-      <span>${formatCurrency(total)}</span>
+      <span>${fmt(total)}</span>
     </div>
   </div>`
       }
@@ -725,18 +737,18 @@ export const generateInvoiceHTML = (
   <div class="totals-section">
     <div class="total-row total-final">
       <span>${urduTexts.total}:</span>
-      <span>${formatCurrency(total)}</span>
+      <span>${fmt(total)}</span>
     </div>
   </div>`
     }
     if (hasExtraCharges) {
       return `
   <div class="totals-section">
-    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span>-${formatCurrency(itemDiscountTotal)}</span></div>` : ''}
-    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${formatCurrency(discount)}</span></div>` : ''}
-    ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${formatCurrency(deliveryCharge)}</span></div>` : ''}
-    ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${formatCurrency(serviceCharge)}</span></div>` : ''}
-    ${tax > 0 ? `<div class="total-row"><span>${urduTexts.tax}:</span><span>${formatCurrency(tax)}</span></div>` : ''}
+    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span>-${fmt(itemDiscountTotal)}</span></div>` : ''}
+    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${fmt(discount)}</span></div>` : ''}
+    ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${fmt(deliveryCharge)}</span></div>` : ''}
+    ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${fmt(serviceCharge)}</span></div>` : ''}
+    ${tax > 0 ? `<div class="total-row"><span>${urduTexts.tax}:</span><span>${fmt(tax)}</span></div>` : ''}
   </div>`
     }
     return ''
@@ -747,34 +759,34 @@ export const generateInvoiceHTML = (
       ${(hasPrevious && customerId !== 'walk-in') ? `
       <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
         <span>${urduTexts.previous_balance}:</span>
-        <span style="font-weight: bold;">${formatCurrency(Math.abs(previousBalance))}</span>
+        <span style="font-weight: bold;">${fmt(Math.abs(previousBalance))}</span>
       </div>
       <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
         <span>${urduTexts.current_invoice}:</span>
-        <span style="font-weight: bold;">${formatCurrency(currentInvoice)}</span>
+        <span style="font-weight: bold;">${fmt(currentInvoice)}</span>
       </div>
       ${paid > 0 ? `
       <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
         <span>${urduTexts.paid}:</span>
-        <span style="font-weight: bold;">${formatCurrency(paid)}</span>
+        <span style="font-weight: bold;">${fmt(paid)}</span>
       </div>
       ` : ''}
       <div class="total-row" style="font-size: 14px; font-weight: bold; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; color: #000;">
         <span>${urduTexts.net_balance}:</span>
-        <span>${formatCurrency(balanceDue)}</span>
+        <span>${fmt(balanceDue)}</span>
       </div>
       ` : `
       <div class="total-row" style="font-size: 13px; font-weight: bold; margin-bottom: 3px;">
         <span>${urduTexts.current_invoice}:</span>
-        <span>${formatCurrency(currentInvoice)}</span>
+        <span>${fmt(currentInvoice)}</span>
       </div>
       <div class="total-row" style="font-size: 12px; margin-bottom: 3px;">
         <span>${urduTexts.paid}:</span>
-        <span>${formatCurrency(paid)}</span>
+        <span>${fmt(paid)}</span>
       </div>
       <div class="total-row" style="font-size: 14px; font-weight: bold; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; color: #000;">
         <span>${urduTexts.balance_due}:</span>
-        <span>${formatCurrency(balanceDue)}</span>
+        <span>${fmt(balanceDue)}</span>
       </div>
       `}
     </div>
@@ -841,6 +853,7 @@ export const generateA4InvoiceHTML = (
     serviceCharge = 0,
     companyPhone,
   } = data
+  const fmt = (amount: number) => formatCurrency(amount, data.currencyMeta)
 
   const itemDiscountTotal = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
   const quotationPrint = isQuotationPrint(data)
@@ -970,43 +983,43 @@ export const generateA4InvoiceHTML = (
       ${isQuoteStyleTotals(type) && subtotal > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.subtotal}:</td>
-        <td class="total-amount">${formatCurrency(subtotal)}</td>
+        <td class="total-amount">${fmt(subtotal)}</td>
       </tr>
       ` : ''}
       ${itemDiscountTotal > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.item_discounts}:</td>
-        <td class="total-amount">-${formatCurrency(itemDiscountTotal)}</td>
+        <td class="total-amount">-${fmt(itemDiscountTotal)}</td>
       </tr>
       ` : ''}
       ${discount > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.discount}:</td>
-        <td class="total-amount">-${formatCurrency(discount)}</td>
+        <td class="total-amount">-${fmt(discount)}</td>
       </tr>
       ` : ''}
       ${deliveryCharge > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.delivery_charge}:</td>
-        <td class="total-amount">${formatCurrency(deliveryCharge)}</td>
+        <td class="total-amount">${fmt(deliveryCharge)}</td>
       </tr>
       ` : ''}
       ${serviceCharge > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.service_charge}:</td>
-        <td class="total-amount">${formatCurrency(serviceCharge)}</td>
+        <td class="total-amount">${fmt(serviceCharge)}</td>
       </tr>
       ` : ''}
       ${tax > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.tax}:</td>
-        <td class="total-amount">${formatCurrency(tax)}</td>
+        <td class="total-amount">${fmt(tax)}</td>
       </tr>
       ` : ''}
       ${isQuoteStyleTotals(type) ? `
       <tr class="final-total">
         <td class="total-label">${urduTexts.total}:</td>
-        <td class="total-amount" style="font-size: 18px; font-weight: bold;">${formatCurrency(total)}</td>
+        <td class="total-amount" style="font-size: 18px; font-weight: bold;">${fmt(total)}</td>
       </tr>
       ` : ''}
     </table>
@@ -1024,28 +1037,28 @@ ${itemizedTotalsTable}
     <table class="totals-table">
       <tr>
         <td class="total-label" style="font-weight: bold;">${urduTexts.current_invoice}:</td>
-        <td class="total-amount" style="font-size: 18px; font-weight: bold;">${formatCurrency(total)}</td>
+        <td class="total-amount" style="font-size: 18px; font-weight: bold;">${fmt(total)}</td>
       </tr>
       ${(hasPrevious && customerId !== 'walk-in') ? `
       <tr>
         <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
         <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 16px;">
-          ${formatCurrency(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
+          ${fmt(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
         </td>
       </tr>
       <tr>
         <td class="total-label" style="font-weight: bold;">${urduTexts.total_amount}:</td>
-        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${formatCurrency(totalWithPrev)}</td>
+        <td class="total-amount" style="font-size: 16px; font-weight: bold;">${fmt(totalWithPrev)}</td>
       </tr>
       ` : ''}
       ${paid > 0 ? `
       <tr>
         <td class="total-label" style="background: #f5f5f5;">${urduTexts.amount_paid}:</td>
-        <td class="total-amount" style="background: #f5f5f5; color: #15803d; font-size: 16px; font-weight: bold;">${formatCurrency(paid)}</td>
+        <td class="total-amount" style="background: #f5f5f5; color: #15803d; font-size: 16px; font-weight: bold;">${fmt(paid)}</td>
       </tr>
       <tr style="border-top: 2px solid #000;">
         <td class="total-label" style="font-weight: bold; color: #000;">${urduTexts.balance_due}:</td>
-        <td class="total-amount" style="font-size: 18px; font-weight: bold; color: #000;">${formatCurrency(Math.abs(totalWithPrev - paid))}</td>
+        <td class="total-amount" style="font-size: 18px; font-weight: bold; color: #000;">${fmt(Math.abs(totalWithPrev - paid))}</td>
       </tr>
       ` : ''}
     </table>
@@ -1093,10 +1106,10 @@ ${itemizedTotalsTable}
           <td class="text-center"><strong>${index + 1}</strong></td>
           <td class="text-left"><strong>${formatPrintItemCell(item, language)}</strong></td>
           <td class="text-center"><strong>${item.quantity}</strong></td>
-          <td class="text-right"><strong>${formatCurrency(item.unitPrice)}</strong></td>
+          <td class="text-right"><strong>${fmt(item.unitPrice)}</strong></td>
           <td class="text-right">
-            ${item.discountAmount ? `<div style="font-size:10px;color:#888;text-decoration:line-through;">${formatCurrency(item.quantity * item.unitPrice)}</div>` : ''}
-            <strong>${formatCurrency(item.subtotal)}</strong>
+            ${item.discountAmount ? `<div style="font-size:10px;color:#888;text-decoration:line-through;">${fmt(item.quantity * item.unitPrice)}</div>` : ''}
+            <strong>${fmt(item.subtotal)}</strong>
           </td>
         </tr>`
               })
@@ -1105,9 +1118,9 @@ ${itemizedTotalsTable}
       const multiPageSummary =
         totalPages > 1
           ? `<div class="page-items-summary">
-            ${pi > 0 ? `<span>${urduTexts.previous_pages_items_total}: ${formatCurrency(prevPagesLineSum)}</span>` : ''}
-            <span>${urduTexts.this_page_items_total}: ${formatCurrency(pageLineSum)}</span>
-            <span>${urduTexts.running_items_total}: ${formatCurrency(runningItemsSum)}</span>
+            ${pi > 0 ? `<span>${urduTexts.previous_pages_items_total}: ${fmt(prevPagesLineSum)}</span>` : ''}
+            <span>${urduTexts.this_page_items_total}: ${fmt(pageLineSum)}</span>
+            <span>${urduTexts.running_items_total}: ${fmt(runningItemsSum)}</span>
             <span>${pageIndicator(pi + 1, totalPages)}</span>
           </div>`
           : ''

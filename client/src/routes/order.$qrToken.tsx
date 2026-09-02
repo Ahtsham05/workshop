@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
 
@@ -195,10 +196,7 @@ function GuestOrderPage() {
                       <div className='text-xs text-muted-foreground line-clamp-2'>{p.description}</div>
                     ) : null}
                     <div className='text-sm font-semibold mt-1'>
-                      {p.price.toLocaleString(undefined, {
-                        style: 'currency',
-                        currency: 'PKR',
-                      })}
+                      {formatMoneyWithMeta(p.price, FALLBACK_CURRENCY)}
                     </div>
                   </div>
                 </button>
@@ -216,10 +214,7 @@ function GuestOrderPage() {
                     {l.qty}× {l.product.name}
                   </span>
                   <span>
-                    {(l.qty * l.product.price).toLocaleString(undefined, {
-                      style: 'currency',
-                      currency: 'PKR',
-                    })}
+                    {formatMoneyWithMeta(l.qty * l.product.price, FALLBACK_CURRENCY)}
                   </span>
                 </div>
               ))}
@@ -227,10 +222,7 @@ function GuestOrderPage() {
             <div className='flex justify-between border-t pt-3 font-semibold'>
               <span>Total</span>
               <span>
-                {total.toLocaleString(undefined, {
-                  style: 'currency',
-                  currency: 'PKR',
-                })}
+                {formatMoneyWithMeta(total, FALLBACK_CURRENCY)}
               </span>
             </div>
             <Button className='w-full' size='lg' disabled={submitting} onClick={submit}>

@@ -15,10 +15,13 @@ import {
   useGetFeeCategoriesQuery,
 } from '@/stores/school.api';
 import { toast } from 'sonner';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 
 const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'online', 'other'];
 
 export default function FeeTransactions() {
+  const formatMoney = useFormatMoney();
+  const { symbol: currencySymbol } = useCurrencyMeta();
   const today = new Date();
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
   const [filters, setFilters] = useState({
@@ -94,7 +97,7 @@ export default function FeeTransactions() {
             <div className="rounded-full bg-green-100 p-2"><TrendingUp className="h-5 w-5 text-green-600" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Income</p>
-              <p className="text-xl font-bold text-green-600">PKR {incomeTotal.toLocaleString()}</p>
+              <p className="text-xl font-bold text-green-600">{formatMoney(incomeTotal)}</p>
             </div>
           </CardContent>
         </Card>
@@ -103,7 +106,7 @@ export default function FeeTransactions() {
             <div className="rounded-full bg-red-100 p-2"><TrendingDown className="h-5 w-5 text-red-600" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Expenses</p>
-              <p className="text-xl font-bold text-red-600">PKR {expenseTotal.toLocaleString()}</p>
+              <p className="text-xl font-bold text-red-600">{formatMoney(expenseTotal)}</p>
             </div>
           </CardContent>
         </Card>
@@ -115,7 +118,7 @@ export default function FeeTransactions() {
             <div>
               <p className="text-xs text-muted-foreground">Net Balance</p>
               <p className={`text-xl font-bold ${incomeTotal - expenseTotal >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                PKR {(incomeTotal - expenseTotal).toLocaleString()}
+                {formatMoney(incomeTotal - expenseTotal)}
               </p>
             </div>
           </CardContent>
@@ -179,7 +182,7 @@ export default function FeeTransactions() {
                     <Badge variant="outline" className="text-xs capitalize">{(t.paymentMethod || '').replace('_', ' ')}</Badge>
                   </td>
                   <td className={`px-4 py-2 text-right font-semibold ${t.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
-                    {t.type === 'INCOME' ? '+' : '-'} PKR {t.amount?.toLocaleString()}
+                    {t.type === 'INCOME' ? '+' : '-'} {formatMoney(t.amount ?? 0)}
                   </td>
                   <td className="px-4 py-2">
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(t.id)}>
@@ -230,7 +233,7 @@ export default function FeeTransactions() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Amount (PKR) <span className="text-destructive">*</span></Label>
+                <Label>Amount ({currencySymbol}) <span className="text-destructive">*</span></Label>
                 <Input type="number" min={1} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
               </div>
               <div className="space-y-1.5">

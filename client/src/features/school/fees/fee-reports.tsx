@@ -30,6 +30,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/stores/store';
 import { toast } from 'sonner';
+import { useFormatMoney } from '@/lib/format-money';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const PIE_COLORS = ['#10b981', '#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -251,6 +252,7 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
     { year, ...(classFilter !== 'all' ? { classId: classFilter } : {}) }
   );
   const { data: receivable } = useGetReceivableSummaryQuery({ month, year });
+  const formatMoney = useFormatMoney();
 
   // Build monthly chart data from yearly report
   const monthlyChartData = MONTHS.map((m) => {
@@ -324,15 +326,15 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg bg-purple-50 border border-purple-100 p-3">
                 <p className="text-[10px] font-medium text-purple-500 uppercase tracking-wide mb-1">Expected</p>
-                <p className="text-lg font-bold text-purple-700">PKR {monthExpected.toLocaleString()}</p>
+                <p className="text-lg font-bold text-purple-700">{formatMoney(monthExpected)}</p>
               </div>
               <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3">
                 <p className="text-[10px] font-medium text-emerald-500 uppercase tracking-wide mb-1">Collected</p>
-                <p className="text-lg font-bold text-emerald-700">PKR {monthCollected.toLocaleString()}</p>
+                <p className="text-lg font-bold text-emerald-700">{formatMoney(monthCollected)}</p>
               </div>
               <div className="rounded-lg bg-red-50 border border-red-100 p-3">
                 <p className="text-[10px] font-medium text-red-400 uppercase tracking-wide mb-1">Pending</p>
-                <p className="text-lg font-bold text-red-600">PKR {monthPending.toLocaleString()}</p>
+                <p className="text-lg font-bold text-red-600">{formatMoney(monthPending)}</p>
               </div>
             </div>
             {/* Collection rate bar */}
@@ -348,8 +350,8 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                 />
               </div>
               <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                <span>PKR {monthCollected.toLocaleString()} collected</span>
-                <span>PKR {monthPending.toLocaleString()} outstanding</span>
+                <span>{formatMoney(monthCollected)} collected</span>
+                <span>{formatMoney(monthPending)} outstanding</span>
               </div>
             </div>
             {/* Arrears & wallet row */}
@@ -359,14 +361,14 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                   <div className="w-2 h-2 rounded-full bg-amber-400" />
                   <div>
                     <p className="text-[10px] text-muted-foreground">Previous Arrears</p>
-                    <p className="text-sm font-semibold text-amber-600">PKR {(receivable.previousArrears || 0).toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-amber-600">{formatMoney((receivable.previousArrears || 0))}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-teal-400" />
                   <div>
                     <p className="text-[10px] text-muted-foreground">Advance Wallet</p>
-                    <p className="text-sm font-semibold text-teal-600">PKR {(receivable.totalCreditBalance || 0).toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-teal-600">{formatMoney((receivable.totalCreditBalance || 0))}</p>
                   </div>
                 </div>
               </div>
@@ -385,15 +387,15 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg bg-indigo-50 border border-indigo-100 p-3">
                 <p className="text-[10px] font-medium text-indigo-500 uppercase tracking-wide mb-1">Expected</p>
-                <p className="text-lg font-bold text-indigo-700">PKR {yearExpected.toLocaleString()}</p>
+                <p className="text-lg font-bold text-indigo-700">{formatMoney(yearExpected)}</p>
               </div>
               <div className="rounded-lg bg-green-50 border border-green-100 p-3">
                 <p className="text-[10px] font-medium text-green-500 uppercase tracking-wide mb-1">Collected</p>
-                <p className="text-lg font-bold text-green-700">PKR {yearCollected.toLocaleString()}</p>
+                <p className="text-lg font-bold text-green-700">{formatMoney(yearCollected)}</p>
               </div>
               <div className="rounded-lg bg-orange-50 border border-orange-100 p-3">
                 <p className="text-[10px] font-medium text-orange-400 uppercase tracking-wide mb-1">Pending</p>
-                <p className="text-lg font-bold text-orange-600">PKR {(yearExpected - yearCollected).toLocaleString()}</p>
+                <p className="text-lg font-bold text-orange-600">{formatMoney((yearExpected - yearCollected))}</p>
               </div>
             </div>
             <div>
@@ -442,7 +444,7 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" fontSize={11} tickLine={false} />
               <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+              <Tooltip formatter={(v: number) => formatMoney(v)} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="expected" fill="#c7d2fe" name="Expected" radius={[3, 3, 0, 0]} />
               <Bar dataKey="collected" fill="#10b981" name="Collected" radius={[3, 3, 0, 0]} />
@@ -474,9 +476,9 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                     {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />}
                     {MONTHS[i]}
                   </td>
-                  <td className="px-3 py-1.5 text-right text-purple-700">{row.expected > 0 ? `PKR ${row.expected.toLocaleString()}` : '-'}</td>
-                  <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">{row.collected > 0 ? `PKR ${row.collected.toLocaleString()}` : '-'}</td>
-                  <td className="px-3 py-1.5 text-right text-red-500">{row.pending > 0 ? `PKR ${row.pending.toLocaleString()}` : '-'}</td>
+                  <td className="px-3 py-1.5 text-right text-purple-700">{row.expected > 0 ? formatMoney(row.expected) : '-'}</td>
+                  <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">{row.collected > 0 ? formatMoney(row.collected) : '-'}</td>
+                  <td className="px-3 py-1.5 text-right text-red-500">{row.pending > 0 ? formatMoney(row.pending) : '-'}</td>
                   <td className="px-3 py-1.5 text-right">
                     {row.expected > 0 ? (
                       <span className={`font-semibold ${rate >= 80 ? 'text-emerald-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</span>
@@ -489,9 +491,9 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
           <tfoot>
             <tr className="bg-muted font-bold text-[11px]">
               <td className="px-3 py-2">Year Total</td>
-              <td className="px-3 py-2 text-right text-purple-700">PKR {yearExpected.toLocaleString()}</td>
-              <td className="px-3 py-2 text-right text-emerald-700">PKR {yearCollected.toLocaleString()}</td>
-              <td className="px-3 py-2 text-right text-red-700">PKR {(yearExpected - yearCollected).toLocaleString()}</td>
+              <td className="px-3 py-2 text-right text-purple-700">{formatMoney(yearExpected)}</td>
+              <td className="px-3 py-2 text-right text-emerald-700">{formatMoney(yearCollected)}</td>
+              <td className="px-3 py-2 text-right text-red-700">{formatMoney((yearExpected - yearCollected))}</td>
               <td className="px-3 py-2 text-right">{yearRate}%</td>
             </tr>
           </tfoot>
@@ -516,13 +518,13 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                 </h3>
                 <div className="flex items-center gap-4 text-xs">
                   <span className="flex items-center gap-1 text-purple-700 font-medium">
-                    Expected: PKR {cls.students.reduce((s: number, st: any) => s + (st.totalPaid || 0) + (st.totalPending || 0), 0).toLocaleString()}
+                    Expected: {formatMoney(cls.students.reduce((s: number, st: any) => s + (st.totalPaid || 0) + (st.totalPending || 0), 0))}
                   </span>
                   <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                    Paid: PKR {cls.classTotalPaid?.toLocaleString()}
+                    Paid: {formatMoney(cls.classTotalPaid)}
                   </span>
                   <span className="flex items-center gap-1 text-red-600 font-medium">
-                    Pending: PKR {cls.classTotalPending?.toLocaleString()}
+                    Pending: {formatMoney(cls.classTotalPending)}
                   </span>
                   {cls.classTotalPaid + cls.classTotalPending > 0 && (
                     <span className={`font-bold ${Math.round(cls.classTotalPaid / (cls.classTotalPaid + cls.classTotalPending) * 100) >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
@@ -617,6 +619,7 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
 
 function FinancialMonthlyReport({ year }: { year: number }) {
   const { data, isLoading } = useGetReportFinancialMonthlyQuery({ year });
+  const formatMoney = useFormatMoney();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: months, chartData } = data;
@@ -628,19 +631,19 @@ function FinancialMonthlyReport({ year }: { year: number }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
           <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Total Income {year}</p>
-          <p className="text-2xl font-bold text-emerald-700">PKR {(summary.income || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-emerald-700">{formatMoney((summary.income || 0))}</p>
           <p className="text-[11px] text-emerald-600 mt-1">{months.filter((m: any) => m.income > 0).length} active months</p>
         </div>
         <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
           <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Total Expense {year}</p>
-          <p className="text-2xl font-bold text-red-700">PKR {(summary.expense || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-red-700">{formatMoney((summary.expense || 0))}</p>
           <p className="text-[11px] text-red-600 mt-1">{months.filter((m: any) => m.expense > 0).length} active months</p>
         </div>
         <div className={`rounded-xl border-2 p-4 ${summary.profit >= 0 ? 'border-blue-100 bg-blue-50' : 'border-orange-100 bg-orange-50'}`}>
           <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 flex items-center gap-1 ${summary.profit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>
             <TrendingUp className="h-3 w-3" /> Net Profit {year}
           </p>
-          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>PKR {(summary.profit || 0).toLocaleString()}</p>
+          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatMoney((summary.profit || 0))}</p>
           <p className={`text-[11px] mt-1 ${summary.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Margin: {profitRate}%</p>
         </div>
       </div>
@@ -660,7 +663,7 @@ function FinancialMonthlyReport({ year }: { year: number }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" fontSize={11} tickLine={false} />
               <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+              <Tooltip formatter={(v: number) => formatMoney(v)} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="income" fill="#10b981" name="Income" radius={[3, 3, 0, 0]} />
               <Bar dataKey="expense" fill="#ef4444" name="Expense" radius={[3, 3, 0, 0]} />
@@ -689,10 +692,10 @@ function FinancialMonthlyReport({ year }: { year: number }) {
               return (
                 <tr key={m.month} className={`border-b hover:bg-muted/20 ${!hasData ? 'opacity-40' : ''}`}>
                   <td className="px-4 py-2 font-medium">{m.month}</td>
-                  <td className="px-4 py-2 text-right text-emerald-600 font-semibold">{m.income > 0 ? `PKR ${m.income.toLocaleString()}` : '-'}</td>
-                  <td className="px-4 py-2 text-right text-red-500">{m.expense > 0 ? `PKR ${m.expense.toLocaleString()}` : '-'}</td>
+                  <td className="px-4 py-2 text-right text-emerald-600 font-semibold">{m.income > 0 ? formatMoney(m.income) : '-'}</td>
+                  <td className="px-4 py-2 text-right text-red-500">{m.expense > 0 ? formatMoney(m.expense) : '-'}</td>
                   <td className="px-4 py-2 text-right">
-                    {hasData ? <span className={`font-bold ${m.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>PKR {m.profit.toLocaleString()}</span> : '-'}
+                    {hasData ? <span className={`font-bold ${m.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{formatMoney(m.profit)}</span> : '-'}
                   </td>
                   <td className="px-4 py-2 text-right">
                     {hasData ? <span className={`font-semibold ${margin >= 30 ? 'text-emerald-600' : margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{margin}%</span> : '-'}
@@ -705,9 +708,9 @@ function FinancialMonthlyReport({ year }: { year: number }) {
           <tfoot>
             <tr className="bg-muted font-bold text-[11px]">
               <td className="px-4 py-2.5">Year Total</td>
-              <td className="px-4 py-2.5 text-right text-emerald-700">PKR {(summary.income || 0).toLocaleString()}</td>
-              <td className="px-4 py-2.5 text-right text-red-600">PKR {(summary.expense || 0).toLocaleString()}</td>
-              <td className="px-4 py-2.5 text-right"><span className={summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}>PKR {(summary.profit || 0).toLocaleString()}</span></td>
+              <td className="px-4 py-2.5 text-right text-emerald-700">{formatMoney((summary.income || 0))}</td>
+              <td className="px-4 py-2.5 text-right text-red-600">{formatMoney((summary.expense || 0))}</td>
+              <td className="px-4 py-2.5 text-right"><span className={summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}>{formatMoney((summary.profit || 0))}</span></td>
               <td className="px-4 py-2.5 text-right"><span className={profitRate >= 0 ? 'text-blue-700' : 'text-orange-700'}>{profitRate}%</span></td>
               <td />
             </tr>
@@ -724,6 +727,7 @@ function FinancialMonthlyReport({ year }: { year: number }) {
 
 function FinancialDailyReport({ year, month }: { year: number; month: string }) {
   const { data, isLoading } = useGetReportFinancialDailyQuery({ year, month });
+  const formatMoney = useFormatMoney();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: days, chartData } = data;
@@ -736,7 +740,7 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
           <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1">Total Collected</p>
-          <p className="text-2xl font-bold text-emerald-700">PKR {(summary.totalCollected || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-emerald-700">{formatMoney((summary.totalCollected || 0))}</p>
           <p className="text-[11px] text-emerald-600 mt-1">{month} {year}</p>
         </div>
         <div className="rounded-xl border-2 border-blue-100 bg-blue-50 p-4">
@@ -746,7 +750,7 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
         </div>
         <div className="rounded-xl border-2 border-purple-100 bg-purple-50 p-4">
           <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-1">Daily Average</p>
-          <p className="text-2xl font-bold text-purple-700">PKR {avgDaily.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-purple-700">{formatMoney(avgDaily)}</p>
           <p className="text-[11px] text-purple-600 mt-1">per active day</p>
         </div>
         <div className="rounded-xl border-2 border-slate-100 bg-slate-50 p-4">
@@ -771,7 +775,7 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" fontSize={10} tickLine={false} />
               <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number, name: string) => [`PKR ${(v as number).toLocaleString()}`, name]} labelFormatter={(l) => `Day ${l}`} />
+              <Tooltip formatter={(v: number, name: string) => [formatMoney(v as number), name]} labelFormatter={(l) => `Day ${l}`} />
               <Bar dataKey="amount" fill="#10b981" name="Collected" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -796,7 +800,7 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
               <tr key={d.day} className="border-b hover:bg-muted/20">
                 <td className="px-4 py-2 font-medium text-slate-600">{d.day}</td>
                 <td className="px-4 py-2 text-muted-foreground">{d.date}</td>
-                <td className="px-4 py-2 text-right font-bold text-emerald-600">PKR {d.amount.toLocaleString()}</td>
+                <td className="px-4 py-2 text-right font-bold text-emerald-600">{formatMoney(d.amount)}</td>
                 <td className="px-4 py-2 text-right text-slate-600">{d.transactions}</td>
               </tr>
             ))}
@@ -804,7 +808,7 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
           <tfoot>
             <tr className="bg-muted font-bold text-[11px]">
               <td colSpan={2} className="px-4 py-2.5">Total ({summary.activeDays} days)</td>
-              <td className="px-4 py-2.5 text-right text-emerald-700">PKR {(summary.totalCollected || 0).toLocaleString()}</td>
+              <td className="px-4 py-2.5 text-right text-emerald-700">{formatMoney((summary.totalCollected || 0))}</td>
               <td className="px-4 py-2.5 text-right">{days.reduce((s: number, d: any) => s + (d.transactions || 0), 0)}</td>
             </tr>
           </tfoot>
@@ -820,6 +824,7 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
 
 function FinancialPnlReport({ year }: { year: number }) {
   const { data, isLoading } = useGetReportFinancialPnlQuery({ year });
+  const formatMoney = useFormatMoney();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: months, chartData } = data;
@@ -831,15 +836,15 @@ function FinancialPnlReport({ year }: { year: number }) {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
           <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Income</p>
-          <p className="text-2xl font-bold text-emerald-700">PKR {(summary.income || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-emerald-700">{formatMoney((summary.income || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
           <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Expense</p>
-          <p className="text-2xl font-bold text-red-700">PKR {(summary.expense || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-red-700">{formatMoney((summary.expense || 0))}</p>
         </div>
         <div className={`rounded-xl border-2 p-4 ${summary.profit >= 0 ? 'border-blue-100 bg-blue-50' : 'border-orange-100 bg-orange-50'}`}>
           <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${summary.profit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Net Profit / Loss</p>
-          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>PKR {(summary.profit || 0).toLocaleString()}</p>
+          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatMoney((summary.profit || 0))}</p>
         </div>
       </div>
 
@@ -852,15 +857,15 @@ function FinancialPnlReport({ year }: { year: number }) {
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="text-center">
               <p className="text-[10px] text-purple-500 font-semibold uppercase tracking-wide mb-1">Fee Expected</p>
-              <p className="text-xl font-bold text-purple-700">PKR {(summary.feeExpected || 0).toLocaleString()}</p>
+              <p className="text-xl font-bold text-purple-700">{formatMoney((summary.feeExpected || 0))}</p>
             </div>
             <div className="text-center">
               <p className="text-[10px] text-emerald-500 font-semibold uppercase tracking-wide mb-1">Fee Collected</p>
-              <p className="text-xl font-bold text-emerald-700">PKR {(summary.feeCollected || 0).toLocaleString()}</p>
+              <p className="text-xl font-bold text-emerald-700">{formatMoney((summary.feeCollected || 0))}</p>
             </div>
             <div className="text-center">
               <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wide mb-1">Fee Pending</p>
-              <p className="text-xl font-bold text-amber-600">PKR {(summary.feePending || 0).toLocaleString()}</p>
+              <p className="text-xl font-bold text-amber-600">{formatMoney((summary.feePending || 0))}</p>
             </div>
           </div>
           <div>
@@ -891,7 +896,7 @@ function FinancialPnlReport({ year }: { year: number }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" fontSize={11} tickLine={false} />
               <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+              <Tooltip formatter={(v: number) => formatMoney(v)} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} name="Income" />
               <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} name="Expense" />
@@ -923,12 +928,12 @@ function FinancialPnlReport({ year }: { year: number }) {
               return (
                 <tr key={m.month} className={`border-b hover:bg-muted/20 ${!hasData ? 'opacity-40' : ''}`}>
                   <td className="px-4 py-2 font-medium">{m.month}</td>
-                  <td className="px-4 py-2 text-right text-emerald-600 font-semibold">{m.income > 0 ? `PKR ${m.income.toLocaleString()}` : '-'}</td>
-                  <td className="px-4 py-2 text-right text-red-500">{m.expense > 0 ? `PKR ${m.expense.toLocaleString()}` : '-'}</td>
-                  <td className="px-4 py-2 text-right"><span className={`font-bold ${m.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{hasData ? `PKR ${m.profit.toLocaleString()}` : '-'}</span></td>
-                  <td className="px-4 py-2 text-right text-purple-600">{m.feeExpected > 0 ? `PKR ${m.feeExpected.toLocaleString()}` : '-'}</td>
-                  <td className="px-4 py-2 text-right text-teal-600 font-semibold">{m.feeCollected > 0 ? `PKR ${m.feeCollected.toLocaleString()}` : '-'}</td>
-                  <td className="px-4 py-2 text-right text-amber-600">{m.feePending > 0 ? `PKR ${m.feePending.toLocaleString()}` : '-'}</td>
+                  <td className="px-4 py-2 text-right text-emerald-600 font-semibold">{m.income > 0 ? formatMoney(m.income) : '-'}</td>
+                  <td className="px-4 py-2 text-right text-red-500">{m.expense > 0 ? formatMoney(m.expense) : '-'}</td>
+                  <td className="px-4 py-2 text-right"><span className={`font-bold ${m.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{hasData ? formatMoney(m.profit) : '-'}</span></td>
+                  <td className="px-4 py-2 text-right text-purple-600">{m.feeExpected > 0 ? formatMoney(m.feeExpected) : '-'}</td>
+                  <td className="px-4 py-2 text-right text-teal-600 font-semibold">{m.feeCollected > 0 ? formatMoney(m.feeCollected) : '-'}</td>
+                  <td className="px-4 py-2 text-right text-amber-600">{m.feePending > 0 ? formatMoney(m.feePending) : '-'}</td>
                   <td className="px-4 py-2 text-right">{m.feeExpected > 0 ? <span className={`font-semibold ${rate >= 80 ? 'text-emerald-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</span> : '-'}</td>
                 </tr>
               );
@@ -937,12 +942,12 @@ function FinancialPnlReport({ year }: { year: number }) {
           <tfoot>
             <tr className="bg-muted font-bold text-[11px]">
               <td className="px-4 py-2.5">Year Total</td>
-              <td className="px-4 py-2.5 text-right text-emerald-700">PKR {(summary.income || 0).toLocaleString()}</td>
-              <td className="px-4 py-2.5 text-right text-red-600">PKR {(summary.expense || 0).toLocaleString()}</td>
-              <td className="px-4 py-2.5 text-right"><span className={summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}>PKR {(summary.profit || 0).toLocaleString()}</span></td>
-              <td className="px-4 py-2.5 text-right text-purple-700">PKR {(summary.feeExpected || 0).toLocaleString()}</td>
-              <td className="px-4 py-2.5 text-right text-teal-700">PKR {(summary.feeCollected || 0).toLocaleString()}</td>
-              <td className="px-4 py-2.5 text-right text-amber-600">PKR {(summary.feePending || 0).toLocaleString()}</td>
+              <td className="px-4 py-2.5 text-right text-emerald-700">{formatMoney((summary.income || 0))}</td>
+              <td className="px-4 py-2.5 text-right text-red-600">{formatMoney((summary.expense || 0))}</td>
+              <td className="px-4 py-2.5 text-right"><span className={summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}>{formatMoney((summary.profit || 0))}</span></td>
+              <td className="px-4 py-2.5 text-right text-purple-700">{formatMoney((summary.feeExpected || 0))}</td>
+              <td className="px-4 py-2.5 text-right text-teal-700">{formatMoney((summary.feeCollected || 0))}</td>
+              <td className="px-4 py-2.5 text-right text-amber-600">{formatMoney((summary.feePending || 0))}</td>
               <td className="px-4 py-2.5 text-right"><span className={`${feeRate >= 80 ? 'text-emerald-700' : feeRate >= 50 ? 'text-amber-700' : 'text-red-700'}`}>{feeRate}%</span></td>
             </tr>
           </tfoot>
@@ -958,6 +963,7 @@ function FinancialPnlReport({ year }: { year: number }) {
 
 function FinancialCategoryReport() {
   const { data, isLoading } = useGetReportFinancialCategoriesQuery({});
+  const formatMoney = useFormatMoney();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: catData } = data;
@@ -970,17 +976,17 @@ function FinancialCategoryReport() {
       <div className="grid grid-cols-3 gap-4">
         <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
           <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Total Income</p>
-          <p className="text-2xl font-bold text-emerald-700">PKR {(summary.totalIncome || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-emerald-700">{formatMoney((summary.totalIncome || 0))}</p>
           <p className="text-[11px] text-emerald-600 mt-1">{income.length} categor{income.length === 1 ? 'y' : 'ies'}</p>
         </div>
         <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
           <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Total Expense</p>
-          <p className="text-2xl font-bold text-red-700">PKR {(summary.totalExpense || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-red-700">{formatMoney((summary.totalExpense || 0))}</p>
           <p className="text-[11px] text-red-600 mt-1">{expense.length} categor{expense.length === 1 ? 'y' : 'ies'}</p>
         </div>
         <div className={`rounded-xl border-2 p-4 ${summary.profit >= 0 ? 'border-blue-100 bg-blue-50' : 'border-orange-100 bg-orange-50'}`}>
           <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${summary.profit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Net Profit</p>
-          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>PKR {(summary.profit || 0).toLocaleString()}</p>
+          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatMoney((summary.profit || 0))}</p>
         </div>
       </div>
 
@@ -998,7 +1004,7 @@ function FinancialCategoryReport() {
                     <Pie data={income} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} fontSize={10}>
                       {income.map((_: any, i: number) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+                    <Tooltip formatter={(v: number) => formatMoney(v)} />
                   </RePieChart>
                 </ResponsiveContainer>
                 <div className="space-y-1 mt-2">
@@ -1009,7 +1015,7 @@ function FinancialCategoryReport() {
                         <span className="font-medium">{c.name}</span>
                         <span className="text-muted-foreground">({c.count} txn{c.count !== 1 ? 's' : ''})</span>
                       </div>
-                      <span className="font-bold text-emerald-600">PKR {c.total?.toLocaleString()}</span>
+                      <span className="font-bold text-emerald-600">{formatMoney(c.total)}</span>
                     </div>
                   ))}
                 </div>
@@ -1030,7 +1036,7 @@ function FinancialCategoryReport() {
                     <Pie data={expense} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} fontSize={10}>
                       {expense.map((_: any, i: number) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+                    <Tooltip formatter={(v: number) => formatMoney(v)} />
                   </RePieChart>
                 </ResponsiveContainer>
                 <div className="space-y-1 mt-2">
@@ -1041,7 +1047,7 @@ function FinancialCategoryReport() {
                         <span className="font-medium">{c.name}</span>
                         <span className="text-muted-foreground">({c.count} txn{c.count !== 1 ? 's' : ''})</span>
                       </div>
-                      <span className="font-bold text-red-600">PKR {c.total?.toLocaleString()}</span>
+                      <span className="font-bold text-red-600">{formatMoney(c.total)}</span>
                     </div>
                   ))}
                 </div>
@@ -1137,6 +1143,7 @@ function StudentListReport({ classId }: { classId?: string }) {
 
 function StudentFeeStatusReport({ year, month, classId }: { year: number; month: string; classId?: string }) {
   const { data, isLoading } = useGetReportStudentFeeStatusQuery({ year, month, ...(classId ? { classId } : {}) });
+  const formatMoney = useFormatMoney();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: students, chartData } = data;
@@ -1161,7 +1168,7 @@ function StudentFeeStatusReport({ year, month, classId }: { year: number; month:
         </div>
         <div className="rounded-xl border-2 border-purple-100 bg-purple-50 p-3 text-center">
           <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-1">Expected</p>
-          <p className="text-lg font-bold text-purple-700">PKR {(summary.totalExpected || 0).toLocaleString()}</p>
+          <p className="text-lg font-bold text-purple-700">{formatMoney((summary.totalExpected || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-teal-100 bg-teal-50 p-3 text-center">
           <p className="text-[10px] font-semibold text-teal-500 uppercase tracking-wide mb-1">Collection Rate</p>
@@ -1173,8 +1180,8 @@ function StudentFeeStatusReport({ year, month, classId }: { year: number; month:
       {(totalCollected + totalPending) > 0 && (
         <div className="rounded-lg border p-4">
           <div className="flex justify-between text-xs mb-2">
-            <span className="font-semibold text-emerald-600">Collected: PKR {totalCollected.toLocaleString()}</span>
-            <span className="font-semibold text-red-600">Pending: PKR {totalPending.toLocaleString()}</span>
+            <span className="font-semibold text-emerald-600">Collected: {formatMoney(totalCollected)}</span>
+            <span className="font-semibold text-red-600">Pending: {formatMoney(totalPending)}</span>
           </div>
           <div className="h-3 bg-red-100 rounded-full overflow-hidden">
             <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.round(totalCollected / (totalCollected + totalPending) * 100)}%` }} />
@@ -1220,9 +1227,9 @@ function StudentFeeStatusReport({ year, month, classId }: { year: number; month:
                       <p className="text-[10px] text-muted-foreground">{s.admissionNumber}</p>
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">{s.className}</td>
-                    <td className="px-3 py-1.5 text-right text-purple-600">PKR {s.netAmount?.toLocaleString()}</td>
-                    <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">PKR {s.paidAmount?.toLocaleString()}</td>
-                    <td className="px-3 py-1.5 text-right text-red-500">{s.pending > 0 ? `PKR ${s.pending?.toLocaleString()}` : '-'}</td>
+                    <td className="px-3 py-1.5 text-right text-purple-600">{formatMoney(s.netAmount)}</td>
+                    <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">{formatMoney(s.paidAmount)}</td>
+                    <td className="px-3 py-1.5 text-right text-red-500">{s.pending > 0 ? formatMoney(s.pending) : '-'}</td>
                     <td className="px-3 py-1.5 text-center"><StatusBadge status={s.status} /></td>
                   </tr>
                 ))}
@@ -1230,9 +1237,9 @@ function StudentFeeStatusReport({ year, month, classId }: { year: number; month:
               <tfoot>
                 <tr className="bg-muted font-bold text-[11px]">
                   <td colSpan={3} className="px-3 py-2">Total</td>
-                  <td className="px-3 py-2 text-right text-purple-700">PKR {(summary.totalExpected || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2 text-right text-emerald-700">PKR {totalCollected.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-right text-red-600">PKR {totalPending.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-purple-700">{formatMoney((summary.totalExpected || 0))}</td>
+                  <td className="px-3 py-2 text-right text-emerald-700">{formatMoney(totalCollected)}</td>
+                  <td className="px-3 py-2 text-right text-red-600">{formatMoney(totalPending)}</td>
                   <td />
                 </tr>
               </tfoot>
@@ -1358,6 +1365,7 @@ function StudentAttendanceReport({ year, month, classId }: { year: number; month
 
 function TeacherSalaryReport({ year }: { year: number }) {
   const { data, isLoading } = useGetReportTeacherSalaryQuery({ year });
+  const formatMoney = useFormatMoney();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: teachers, chartData } = data;
@@ -1372,15 +1380,15 @@ function TeacherSalaryReport({ year }: { year: number }) {
         </div>
         <div className="rounded-xl border-2 border-green-100 bg-green-50 p-4">
           <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wide mb-1">Total Paid — {year}</p>
-          <p className="text-2xl font-bold text-green-700">PKR {(summary.totalSalaryPaid || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-green-700">{formatMoney((summary.totalSalaryPaid || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-amber-100 bg-amber-50 p-4">
           <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide mb-1">Pending (Draft)</p>
-          <p className="text-2xl font-bold text-amber-700">PKR {(summary.totalPending || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-amber-700">{formatMoney((summary.totalPending || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-indigo-100 bg-indigo-50 p-4">
           <p className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wide mb-1">Total Payable</p>
-          <p className="text-2xl font-bold text-indigo-700">PKR {(summary.totalPayable || 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-indigo-700">{formatMoney((summary.totalPayable || 0))}</p>
         </div>
       </div>
 
@@ -1412,7 +1420,7 @@ function TeacherSalaryReport({ year }: { year: number }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" fontSize={11} tickLine={false} />
               <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+              <Tooltip formatter={(v: number) => formatMoney(v)} />
               <Legend />
               <Bar dataKey="paid" fill="#10b981" name="Paid" radius={[3, 3, 0, 0]} />
               <Bar dataKey="pending" fill="#f59e0b" name="Pending (Draft)" radius={[3, 3, 0, 0]} />
@@ -1455,10 +1463,10 @@ function TeacherSalaryReport({ year }: { year: number }) {
                   );
                 })}
                 <td className="px-3 py-2 text-right font-bold text-green-700">
-                  {t.totalPaid > 0 ? `PKR ${t.totalPaid.toLocaleString()}` : '-'}
+                  {t.totalPaid > 0 ? formatMoney(t.totalPaid) : '-'}
                 </td>
                 <td className="px-3 py-2 text-right font-bold text-amber-600">
-                  {(t.totalPending || 0) > 0 ? `PKR ${t.totalPending.toLocaleString()}` : '-'}
+                  {(t.totalPending || 0) > 0 ? formatMoney(t.totalPending) : '-'}
                 </td>
               </tr>
             ))}
@@ -1480,8 +1488,8 @@ function TeacherSalaryReport({ year }: { year: number }) {
                   </td>
                 );
               })}
-              <td className="px-3 py-2 text-right text-green-700">PKR {(summary.totalSalaryPaid || 0).toLocaleString()}</td>
-              <td className="px-3 py-2 text-right text-amber-600">PKR {(summary.totalPending || 0).toLocaleString()}</td>
+              <td className="px-3 py-2 text-right text-green-700">{formatMoney((summary.totalSalaryPaid || 0))}</td>
+              <td className="px-3 py-2 text-right text-amber-600">{formatMoney((summary.totalPending || 0))}</td>
             </tr>
           </tfoot>
         </table>
@@ -1552,6 +1560,7 @@ function TeacherWorkloadReport() {
 
 function VoucherReport({ year, month, status, classId }: { year: number; month: string; status?: string; classId?: string }) {
   const { data, isLoading } = useGetReportVouchersQuery({ year, month, ...(status ? { status } : {}), ...(classId ? { classId } : {}) });
+  const formatMoney = useFormatMoney();
   if (isLoading) return <Loading />;
   if (!data?.summary) return <EmptyState />;
   const vouchers: any[] = data.data || [];
@@ -1569,15 +1578,15 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
         </div>
         <div className="rounded-xl border-2 border-purple-100 bg-purple-50 p-4 text-center">
           <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-1">Total Amount</p>
-          <p className="text-xl font-bold text-purple-700">PKR {(summary.totalAmount || 0).toLocaleString()}</p>
+          <p className="text-xl font-bold text-purple-700">{formatMoney((summary.totalAmount || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4 text-center">
           <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1">Total Paid</p>
-          <p className="text-xl font-bold text-emerald-700">PKR {(summary.totalPaid || 0).toLocaleString()}</p>
+          <p className="text-xl font-bold text-emerald-700">{formatMoney((summary.totalPaid || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4 text-center">
           <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1">Total Pending</p>
-          <p className="text-xl font-bold text-red-700">PKR {(summary.totalPending || 0).toLocaleString()}</p>
+          <p className="text-xl font-bold text-red-700">{formatMoney((summary.totalPending || 0))}</p>
         </div>
       </div>
 
@@ -1660,9 +1669,9 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
                   {v.fatherName && <p className="text-[10px] text-muted-foreground">{v.fatherName}</p>}
                 </td>
                 <td className="px-3 py-1.5 text-muted-foreground">{v.className || '-'}</td>
-                <td className="px-3 py-1.5 text-right text-purple-600">PKR {v.netAmount?.toLocaleString()}</td>
-                <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">PKR {v.paidAmount?.toLocaleString()}</td>
-                <td className="px-3 py-1.5 text-right text-red-500">{v.pending > 0 ? `PKR ${v.pending?.toLocaleString()}` : '-'}</td>
+                <td className="px-3 py-1.5 text-right text-purple-600">{formatMoney(v.netAmount)}</td>
+                <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">{formatMoney(v.paidAmount)}</td>
+                <td className="px-3 py-1.5 text-right text-red-500">{v.pending > 0 ? formatMoney(v.pending) : '-'}</td>
                 <td className="px-3 py-1.5 text-center"><StatusBadge status={v.status} /></td>
               </tr>
             ))}
@@ -1670,9 +1679,9 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
           <tfoot>
             <tr className="bg-muted font-bold text-[11px]">
               <td colSpan={4} className="px-3 py-2.5">Total ({vouchers.length} vouchers)</td>
-              <td className="px-3 py-2.5 text-right text-purple-700">PKR {(summary.totalAmount || 0).toLocaleString()}</td>
-              <td className="px-3 py-2.5 text-right text-emerald-700">PKR {(summary.totalPaid || 0).toLocaleString()}</td>
-              <td className="px-3 py-2.5 text-right text-red-600">PKR {(summary.totalPending || 0).toLocaleString()}</td>
+              <td className="px-3 py-2.5 text-right text-purple-700">{formatMoney((summary.totalAmount || 0))}</td>
+              <td className="px-3 py-2.5 text-right text-emerald-700">{formatMoney((summary.totalPaid || 0))}</td>
+              <td className="px-3 py-2.5 text-right text-red-600">{formatMoney((summary.totalPending || 0))}</td>
               <td className="px-3 py-2.5 text-center">{collRate}%</td>
             </tr>
           </tfoot>
@@ -1688,6 +1697,7 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
 
 function AnalyticsTab({ year }: { year: number }) {
   const { data, isLoading } = useGetReportAnalyticsQuery({ year });
+  const formatMoney = useFormatMoney();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { incomeVsExpense, feeCollectionTrend, expenseBreakdown } = data.chartData;
@@ -1705,23 +1715,23 @@ function AnalyticsTab({ year }: { year: number }) {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4 text-center">
           <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1">Total Income ({year})</p>
-          <p className="text-xl font-bold text-emerald-700">PKR {totalIncome.toLocaleString()}</p>
+          <p className="text-xl font-bold text-emerald-700">{formatMoney(totalIncome)}</p>
         </div>
         <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4 text-center">
           <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1">Total Expense ({year})</p>
-          <p className="text-xl font-bold text-red-700">PKR {totalExpense.toLocaleString()}</p>
+          <p className="text-xl font-bold text-red-700">{formatMoney(totalExpense)}</p>
         </div>
         <div className={`rounded-xl border-2 p-4 text-center ${netProfit >= 0 ? 'border-blue-100 bg-blue-50' : 'border-orange-100 bg-orange-50'}`}>
           <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${netProfit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Net Profit / Loss</p>
-          <p className={`text-xl font-bold ${netProfit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>PKR {netProfit.toLocaleString()}</p>
+          <p className={`text-xl font-bold ${netProfit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatMoney(netProfit)}</p>
         </div>
         <div className="rounded-xl border-2 border-purple-100 bg-purple-50 p-4 text-center">
           <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-1">Fee Expected</p>
-          <p className="text-xl font-bold text-purple-700">PKR {totalExpected.toLocaleString()}</p>
+          <p className="text-xl font-bold text-purple-700">{formatMoney(totalExpected)}</p>
         </div>
         <div className="rounded-xl border-2 border-cyan-100 bg-cyan-50 p-4 text-center">
           <p className="text-[10px] font-semibold text-cyan-500 uppercase tracking-wide mb-1">Fee Collected</p>
-          <p className="text-xl font-bold text-cyan-700">PKR {totalCollected.toLocaleString()}</p>
+          <p className="text-xl font-bold text-cyan-700">{formatMoney(totalCollected)}</p>
         </div>
         <div className={`rounded-xl border-2 p-4 text-center ${collRate >= 80 ? 'border-emerald-100 bg-emerald-50' : collRate >= 50 ? 'border-amber-100 bg-amber-50' : 'border-red-100 bg-red-50'}`}>
           <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${collRate >= 80 ? 'text-emerald-500' : collRate >= 50 ? 'text-amber-500' : 'text-red-500'}`}>Collection Rate</p>
@@ -1749,7 +1759,7 @@ function AnalyticsTab({ year }: { year: number }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" fontSize={11} />
               <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+              <Tooltip formatter={(v: number) => formatMoney(v)} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="income" fill="#10b981" name="Income" radius={[3, 3, 0, 0]} />
               <Bar dataKey="expense" fill="#ef4444" name="Expense" radius={[3, 3, 0, 0]} />
@@ -1775,7 +1785,7 @@ function AnalyticsTab({ year }: { year: number }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" fontSize={11} />
               <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+              <Tooltip formatter={(v: number) => formatMoney(v)} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="expected" stroke="#8b5cf6" strokeWidth={2} name="Expected" dot={false} />
               <Line type="monotone" dataKey="collected" stroke="#10b981" strokeWidth={2} name="Collected" dot={false} />
@@ -1806,7 +1816,7 @@ function AnalyticsTab({ year }: { year: number }) {
                     label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} fontSize={10} labelLine>
                     {expenseBreakdown.map((_: any, i: number) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: number) => `PKR ${v.toLocaleString()}`} />
+                  <Tooltip formatter={(v: number) => formatMoney(v)} />
                 </RePieChart>
               </ResponsiveContainer>
               <div className="space-y-2 pt-2">
@@ -1814,13 +1824,13 @@ function AnalyticsTab({ year }: { year: number }) {
                   <div key={i} className="flex items-center gap-2 text-sm hover:bg-muted/20 rounded px-2 py-1.5">
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
                     <span className="flex-1">{e.name}</span>
-                    <span className="font-semibold text-red-600">PKR {e.total?.toLocaleString()}</span>
+                    <span className="font-semibold text-red-600">{formatMoney(e.total)}</span>
                     <span className="text-[10px] text-muted-foreground">({totalExpense > 0 ? Math.round((e.total / totalExpense) * 100) : 0}%)</span>
                   </div>
                 ))}
                 <div className="border-t pt-2 mt-2 flex justify-between font-bold text-sm px-2">
                   <span>Total</span>
-                  <span className="text-red-700">PKR {totalExpense.toLocaleString()}</span>
+                  <span className="text-red-700">{formatMoney(totalExpense)}</span>
                 </div>
               </div>
             </div>
@@ -1836,11 +1846,12 @@ function AnalyticsTab({ year }: { year: number }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function SummaryCard({ label, value, color, raw }: { label: string; value: any; color: string; raw?: boolean }) {
+  const formatMoney = useFormatMoney();
   return (
     <Card><CardContent className="pt-4 pb-3">
       <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
       <p className={`text-xl font-bold ${color}`}>
-        {raw ? value : `PKR ${(value || 0).toLocaleString()}`}
+        {raw ? value : formatMoney(value || 0)}
       </p>
     </CardContent></Card>
   );

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -126,6 +127,8 @@ export function PaymentPanel({
   onCharge,
   charging,
 }: Props) {
+  const formatMoney = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
   const { data: customersRaw } = useGetAllCustomersQuery(undefined)
@@ -357,7 +360,7 @@ export function PaymentPanel({
           {changeDue > 0 && (
             <span className='ml-auto inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400'>
               <Wallet className='h-3 w-3' />
-              Change Rs{changeDue.toFixed(0)}
+              Change {formatMoney(changeDue)}
             </span>
           )}
         </div>
@@ -367,13 +370,13 @@ export function PaymentPanel({
         <div className='flex items-center justify-between'>
           <SectionLabel>Discount</SectionLabel>
           <span className='text-xs text-muted-foreground'>
-            Subtotal <span className='font-medium text-foreground'>Rs{subtotal.toFixed(0)}</span>
+            Subtotal <span className='font-medium text-foreground'>{formatMoney(subtotal)}</span>
           </span>
         </div>
         {itemDiscountTotal > 0 && (
           <div className='flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400'>
             <span>Item Discounts</span>
-            <span className='font-medium'>-Rs{itemDiscountTotal.toFixed(0)}</span>
+            <span className='font-medium'>-{formatMoney(itemDiscountTotal)}</span>
           </div>
         )}
         <div className='flex items-center justify-between gap-2'>
@@ -391,15 +394,15 @@ export function PaymentPanel({
               <button
                 type='button'
                 onClick={() => onDiscountChange({ type: discountType === 'percentage' ? 'fixed' : 'percentage' })}
-                title='Click to switch between Rs and % discount'
+                title={`Click to switch between ${currencySymbol} and % discount`}
                 className='flex h-7 select-none items-center border-l bg-muted px-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground'
               >
-                {discountType === 'percentage' ? '%' : 'Rs'}
+                {discountType === 'percentage' ? '%' : currencySymbol}
               </button>
             </div>
           </div>
           {discount > 0 && (
-            <span className='text-xs font-medium text-emerald-600 dark:text-emerald-400'>-Rs{discount.toFixed(0)}</span>
+            <span className='text-xs font-medium text-emerald-600 dark:text-emerald-400'>-{formatMoney(discount)}</span>
           )}
         </div>
       </div>
@@ -416,7 +419,7 @@ export function PaymentPanel({
       <div className='flex items-center gap-2 border-t border-border/60 pt-3'>
         <div className='flex flex-1 flex-col justify-center rounded-lg border border-primary/15 bg-primary/10 px-3 py-2'>
           <span className='text-[10px] font-medium uppercase tracking-wide text-muted-foreground'>Total</span>
-          <span className='text-lg font-bold leading-tight tabular-nums text-primary'>Rs{total.toFixed(2)}</span>
+          <span className='text-lg font-bold leading-tight tabular-nums text-primary'>{formatMoney(total)}</span>
         </div>
         <Button
           type='button'

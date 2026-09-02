@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { toast } from 'sonner'
 import { useSelector } from 'react-redux'
 import { Link } from '@tanstack/react-router'
@@ -49,6 +50,9 @@ const MAX_RECENT_ITEMS = 10
 const EMPTY_CATALOG: PurchaseCatalogItem[] = []
 
 export default function FastBillingPage() {
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
+  const currencySymbol = currencyMeta.symbol
   const { hasExplicitPermission } = usePermissions()
   const canCreateInvoices = hasExplicitPermission('createInvoices')
   const { data: catalog = EMPTY_CATALOG } = useGetPurchasableCatalogQuery()
@@ -651,6 +655,7 @@ export default function FastBillingPage() {
           .join(', ') || undefined
       receiptData.companyPhone = branchData?.phone
       receiptData.companyLogo = orgData?.logo?.url
+      receiptData.currencyMeta = currencyMeta
 
       const paperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
       const invoiceTemplate = branchData?.printSettings?.template ?? 'standard'
@@ -753,7 +758,7 @@ export default function FastBillingPage() {
           {cart.length > 0 && (
             <div className='mr-1 hidden items-baseline gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/40 sm:flex'>
               <span className='text-xs text-muted-foreground'>{cart.length} items</span>
-              <span className='text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400'>Rs{total.toFixed(0)}</span>
+              <span className='text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400'>{formatMoney(total)}</span>
             </div>
           )}
           <Button variant='outline' size='sm' asChild>
@@ -840,12 +845,12 @@ export default function FastBillingPage() {
                     title='Switch every discount (all items + overall) to this unit at once'
                   >
                     <ArrowLeftRight className='h-3 w-3' />
-                    {discountType === 'percentage' ? 'Rs' : '%'}
+                    {discountType === 'percentage' ? currencySymbol : '%'}
                   </Button>
                 )}
                 {cart.length > 0 && (
                   <span className='text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400'>
-                    Rs{subtotal.toFixed(0)}
+                    {formatMoney(subtotal)}
                   </span>
                 )}
               </div>

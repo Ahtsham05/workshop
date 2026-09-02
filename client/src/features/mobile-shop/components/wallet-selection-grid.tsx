@@ -15,18 +15,13 @@ import {
   cashSendCommissionBadge,
 } from '@/features/mobile-shop/utils/cash-transaction-labels'
 import { resolveWalletId, type WalletLike } from '@/features/mobile-shop/utils/wallet-utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 const formatWalletDate = (dateValue?: string) => {
   if (!dateValue) return '-'
   const parsedDate = new Date(dateValue)
   if (!isValid(parsedDate)) return '-'
   return format(parsedDate, 'MMM dd, yyyy')
-}
-
-const formatWalletBalance = (value?: number) => {
-  const numericValue = Number(value)
-  const safeValue = Number.isFinite(numericValue) ? numericValue : 0
-  return safeValue.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export type WalletSelectionAction =
@@ -48,6 +43,7 @@ export function WalletSelectionGrid({
   isLoading,
   onWalletAction,
 }: WalletSelectionGridProps) {
+  const formatMoney = useFormatMoney()
   const isLoad = variant === 'load'
   const emptyLabel = isLoad
     ? 'No load wallets yet. Create one in Bank Accounts (include "Load" in the name).'
@@ -116,7 +112,7 @@ export function WalletSelectionGrid({
               <div>
                 <p className='mb-0.5 text-xs text-muted-foreground'>Balance</p>
                 <p className='text-2xl font-bold text-green-600'>
-                  Rs {formatWalletBalance(wallet.balance)}
+                  {formatMoney(wallet.balance ?? 0)}
                 </p>
               </div>
               <div className='flex flex-wrap gap-2 text-xs'>

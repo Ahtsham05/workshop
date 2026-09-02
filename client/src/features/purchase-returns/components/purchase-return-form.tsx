@@ -44,6 +44,7 @@ import {
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import type { AppDispatch, RootState } from '@/stores/store'
+import { useFormatMoney } from '@/lib/format-money'
 
 type FormMode = 'fromSalesReturn' | 'fromPurchase' | 'freeForm'
 
@@ -156,6 +157,7 @@ export default function PurchaseReturnForm({
   onSuccess,
   prefillSalesReturn,
 }: PurchaseReturnFormProps) {
+  const formatMoney = useFormatMoney()
   const dispatch = useDispatch<AppDispatch>()
 
   // ── Mode ─────────────────────────────────────────────────────────────────
@@ -516,7 +518,7 @@ export default function PurchaseReturnForm({
                               ? (sr.customerId as any)?.name
                               : 'Unknown Customer')}
                           {' — '}
-                          {sr.items.length} item(s) — PKR {sr.totalAmount.toLocaleString()}
+                          {sr.items.length} item(s) — {formatMoney(sr.totalAmount)}
                         </div>
                         <div className='text-xs text-muted-foreground'>
                           Reason: {sr.reason || '—'}
@@ -552,8 +554,7 @@ export default function PurchaseReturnForm({
                       : 'Unknown')}
                 </p>
                 <p className='text-sm'>
-                  {selectedSalesReturn.items.length} item(s) — PKR{' '}
-                  {selectedSalesReturn.totalAmount.toLocaleString()}
+                  {selectedSalesReturn.items.length} item(s) — {formatMoney(selectedSalesReturn.totalAmount)}
                 </p>
                 {selectedSalesReturn.reason && (
                   <p className='text-sm text-muted-foreground'>
@@ -619,7 +620,7 @@ export default function PurchaseReturnForm({
                           {p.supplier?.name || p.supplierName || 'Unknown Supplier'}
                         </span>
                         {' — '}
-                        <span>PKR {(p.totalAmount ?? p.total ?? 0).toLocaleString()}</span>
+                        <span>{formatMoney((p.totalAmount ?? p.total ?? 0))}</span>
                       </button>
                     ))}
                   </div>
@@ -642,8 +643,7 @@ export default function PurchaseReturnForm({
                       'Unknown Supplier'}
                   </p>
                   <p className='text-sm'>
-                    Total: PKR{' '}
-                    {(selectedPurchase.totalAmount ?? selectedPurchase.total ?? 0).toLocaleString()}
+                    Total: {formatMoney(selectedPurchase.totalAmount ?? selectedPurchase.total ?? 0)}
                   </p>
                 </div>
                 <Button
@@ -731,7 +731,7 @@ export default function PurchaseReturnForm({
                               <p className='truncate font-medium'>{p.name}</p>
                               {p.barcode && <p className='text-xs text-muted-foreground'>{p.barcode}</p>}
                               <p className='text-xs text-muted-foreground'>
-                                Stock: {p.stockQuantity ?? 0} · Cost: PKR {(p.cost ?? p.costPrice ?? 0).toLocaleString()}
+                                Stock: {p.stockQuantity ?? 0} · Cost: {formatMoney((p.cost ?? p.costPrice ?? 0))}
                               </p>
                             </div>
                             <Check className='h-4 w-4 opacity-0 group-data-[selected]:opacity-100' />
@@ -803,10 +803,10 @@ export default function PurchaseReturnForm({
                           onChange={(e) => updateCostPrice(index, Number(e.target.value))}
                         />
                       ) : (
-                        <span>PKR {item.costPrice.toLocaleString()}</span>
+                        <span>{formatMoney(item.costPrice)}</span>
                       )}
                     </TableCell>
-                    <TableCell>PKR {item.total.toLocaleString()}</TableCell>
+                    <TableCell>{formatMoney(item.total)}</TableCell>
                     <TableCell>
                       <Button
                         variant='ghost'
@@ -822,7 +822,7 @@ export default function PurchaseReturnForm({
               </TableBody>
             </Table>
             <div className='mt-4 text-right text-lg font-semibold'>
-              Total Return: PKR {totalAmount.toLocaleString()}
+              Total Return: {formatMoney(totalAmount)}
             </div>
           </CardContent>
         </Card>

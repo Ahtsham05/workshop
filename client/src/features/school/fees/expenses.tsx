@@ -56,6 +56,7 @@ import {
   useCreateFeeCategoryMutation,
 } from '@/stores/school.api';
 import { toast } from 'sonner';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -88,6 +89,8 @@ const emptyForm = () => ({
 });
 
 export default function Expenses() {
+  const formatMoney = useFormatMoney();
+  const { symbol: currencySymbol } = useCurrencyMeta();
   const todayStr = today();
   const foMonth = firstOfMonth();
 
@@ -271,7 +274,7 @@ export default function Expenses() {
               {isLoading ? (
                 <div className="h-7 w-24 bg-muted animate-pulse rounded mt-0.5" />
               ) : (
-                <p className="text-xl font-bold text-rose-600">PKR {todayTotal.toLocaleString()}</p>
+                <p className="text-xl font-bold text-rose-600">{formatMoney(todayTotal)}</p>
               )}
             </div>
           </CardContent>
@@ -286,7 +289,7 @@ export default function Expenses() {
               {isLoading ? (
                 <div className="h-7 w-24 bg-muted animate-pulse rounded mt-0.5" />
               ) : (
-                <p className="text-xl font-bold text-orange-600">PKR {monthTotal.toLocaleString()}</p>
+                <p className="text-xl font-bold text-orange-600">{formatMoney(monthTotal)}</p>
               )}
             </div>
           </CardContent>
@@ -436,7 +439,7 @@ export default function Expenses() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right pr-4 font-semibold text-red-600">
-                          PKR {(exp.amount || 0).toLocaleString()}
+                          {formatMoney(exp.amount || 0)}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
@@ -507,7 +510,7 @@ export default function Expenses() {
                         </div>
                         <div className="flex justify-between text-[10px] text-muted-foreground">
                           <span>{cat.count} txn{cat.count !== 1 ? 's' : ''}</span>
-                          <span className="font-medium text-foreground">PKR {cat.total.toLocaleString()}</span>
+                          <span className="font-medium text-foreground">{formatMoney(cat.total)}</span>
                         </div>
                         {idx < categoryBreakdown.length - 1 && <Separator className="mt-2" />}
                       </div>
@@ -515,7 +518,7 @@ export default function Expenses() {
                   })}
                   <div className="pt-2 border-t flex justify-between text-xs font-semibold">
                     <span>Total</span>
-                    <span className="text-red-600">PKR {monthTotal.toLocaleString()}</span>
+                    <span className="text-red-600">{formatMoney(monthTotal)}</span>
                   </div>
                 </>
               )}
@@ -558,7 +561,7 @@ export default function Expenses() {
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <Label>Amount (PKR) *</Label>
+                <Label>Amount ({currencySymbol}) *</Label>
                 <Input
                   type="number"
                   min="0"
@@ -656,7 +659,7 @@ export default function Expenses() {
             <AlertDialogTitle>Delete Expense?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently remove{' '}
-              <strong>PKR {(deleteTarget?.amount || 0).toLocaleString()}</strong>
+              <strong>{formatMoney(deleteTarget?.amount || 0)}</strong>
               {deleteTarget?.description ? ` — "${deleteTarget.description}"` : ''}.
               This action cannot be undone and will affect dashboard totals.
             </AlertDialogDescription>

@@ -42,6 +42,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { EntityFormSection } from '@/components/entity-form-section';
 import { toneColor, type StatCardTone } from '@/lib/stat-card-tones';
 import { cn } from '@/lib/utils';
+import { useFormatMoney } from '@/lib/format-money';
 import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
 import {
@@ -107,8 +108,6 @@ const MODULE_VISUALS: Record<CommissionModule, { icon: LucideIcon; tone: StatCar
  * not a real transaction; purely to make abstract percentages feel concrete while editing. */
 const PREVIEW_BASE_AMOUNT = 1000;
 
-const formatRs = (amount: number) => `Rs ${amount.toFixed(2)}`;
-
 interface SalesmanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -120,6 +119,7 @@ interface SalesmanDialogProps {
 
 export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, onSuccess }: SalesmanDialogProps) {
   const { t } = useLanguage();
+  const formatRs = useFormatMoney();
   const isEdit = !!profile;
   const [overrides, setOverrides] = useState<ModuleOverrides>({});
 

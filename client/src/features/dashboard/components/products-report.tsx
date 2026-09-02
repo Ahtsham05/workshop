@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useFormatMoney } from '@/lib/format-money'
 
 type ProductReportProps = {
   products: Array<{
@@ -32,6 +33,7 @@ type ProductReportProps = {
 
 export function ProductsReport({ products, isLoading }: ProductReportProps) {
   const { t } = useLanguage()
+  const formatCurrency = useFormatMoney()
 
   if (isLoading) {
     return (
@@ -49,8 +51,6 @@ export function ProductsReport({ products, isLoading }: ProductReportProps) {
       </Card>
     )
   }
-
-  const formatCurrency = (value: number) => `Rs ${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
 
   // Separate products by type
   const trackedProducts = products.filter(p => p.trackImei || p.trackSerial)

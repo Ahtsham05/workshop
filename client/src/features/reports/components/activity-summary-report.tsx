@@ -35,6 +35,7 @@ import { useGetActivitySummaryReportQuery, type ActivitySummaryEntry } from '@/s
 import { useLanguage } from '@/context/language-context'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface ActivitySummaryReportProps {
   startDate: string
@@ -305,8 +306,7 @@ export const ActivitySummaryReport = forwardRef<
     endDate,
   })
 
-  const fmt = (value: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+  const fmt = useFormatMoney()
 
   const allEntries = data?.entries ?? []
   const allByModule = data?.byModule ?? []

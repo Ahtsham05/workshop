@@ -35,6 +35,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { BilingualName } from '@/components/bilingual-name'
 import { getDisplayStock } from '@/lib/product-stock-display'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { useIsPhone } from '@/hooks/use-mobile'
 import { useIsNarrower } from '@/hooks/use-element-width'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
@@ -416,6 +417,9 @@ export default function PurchasePanel({
 }: PurchasePanelProps) {
   const { t } = useLanguage()
   const { showUrdu } = useUrduDisplay()
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
+  const currencySymbol = currencyMeta.symbol
   // Below sm (640px): items render as cards instead of the table (see the items list
   // below) — same isPhone gating InvoicePanel uses (see invoice-panel.tsx).
   const isPhone = useIsPhone()
@@ -784,8 +788,9 @@ export default function PurchasePanel({
       logo: orgData?.logo?.url,
       isTrial: orgData?.subscription?.isTrial,
       invoiceNote: branchData?.invoiceNote,
+      currencyMeta,
     }),
-    [orgData, branchData]
+    [orgData, branchData, currencyMeta]
   )
 
   // Print functionality
@@ -1463,7 +1468,7 @@ export default function PurchasePanel({
                                             </div>
                                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                               {catalogItem.barcode && <span>{catalogItem.barcode}</span>}
-                                              <span className="text-amber-600">Purchase Price: Rs{Number(catalogItem.cost || 0).toFixed(2)}</span>
+                                              <span className="text-amber-600">Purchase Price: {formatMoney(Number(catalogItem.cost || 0))}</span>
                                               <span className={catalogItem.stockQuantity <= 5 ? 'text-red-500 font-medium' : 'text-green-600'}>
                                                 Stock: {catalogItem.stockQuantity}
                                               </span>
@@ -1561,7 +1566,7 @@ export default function PurchasePanel({
                             <span className='text-xs text-muted-foreground'>{item.product.barcode}</span>
                           )}
                           {!compact && (
-                            <span className='text-xs text-muted-foreground'>Rs{item.purchasePrice} · {item.unit || item.product.unit || 'pcs'}</span>
+                            <span className='text-xs text-muted-foreground'>{formatMoney(item.purchasePrice)} · {item.unit || item.product.unit || 'pcs'}</span>
                           )}
                           {(() => {
                             const stock = getDisplayStock(item.product)
@@ -1775,7 +1780,7 @@ export default function PurchasePanel({
 
     const purchasePriceControl = (
       <div className='flex items-center rounded-lg border bg-background overflow-hidden w-fit'>
-        <span className='px-1.5 h-7 flex items-center text-[11px] text-muted-foreground bg-muted border-r font-medium select-none'>Rs</span>
+        <span className='px-1.5 h-7 flex items-center text-[11px] text-muted-foreground bg-muted border-r font-medium select-none'>{currencySymbol}</span>
         <Input
           ref={setItemFieldRef(index, 'purchasePrice')}
           type='text'
@@ -1797,7 +1802,7 @@ export default function PurchasePanel({
 
     const sellingPriceControl = (
       <div className='flex items-center rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 overflow-hidden w-fit'>
-        <span className='px-1.5 h-7 flex items-center text-[11px] text-blue-500 bg-blue-100/60 dark:bg-blue-900/30 border-r border-blue-200 dark:border-blue-800 font-medium select-none'>Rs</span>
+        <span className='px-1.5 h-7 flex items-center text-[11px] text-blue-500 bg-blue-100/60 dark:bg-blue-900/30 border-r border-blue-200 dark:border-blue-800 font-medium select-none'>{currencySymbol}</span>
         <Input
           ref={setItemFieldRef(index, 'sellingPrice')}
           type='text'
@@ -1839,10 +1844,10 @@ export default function PurchasePanel({
           onClick={() =>
             updateItemDiscount(productId, { type: item.discountType === 'percentage' ? 'fixed' : 'percentage' }, item.variantId)
           }
-          title='Click to switch between Rs and % discount'
+          title={`Click to switch between  and % discount`}
           className='px-1.5 h-7 flex items-center text-[11px] text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
         >
-          {item.discountType === 'percentage' ? '%' : 'Rs'}
+          {item.discountType === 'percentage' ? '%' : currencySymbol}
         </button>
       </div>
     )
@@ -1850,9 +1855,9 @@ export default function PurchasePanel({
     const totalDisplay = (
       <div className='flex flex-col items-end gap-0'>
         {itemDiscountAmount > 0 && (
-          <span className='text-[10px] text-muted-foreground line-through leading-none'>Rs{itemGross.toFixed(2)}</span>
+          <span className='text-[10px] text-muted-foreground line-through leading-none'>{formatMoney(itemGross)}</span>
         )}
-        <p className='font-bold text-sm tabular-nums'>Rs{itemNet.toFixed(2)}</p>
+        <p className='font-bold text-sm tabular-nums'>{formatMoney(itemNet)}</p>
       </div>
     )
 
@@ -2280,9 +2285,9 @@ export default function PurchasePanel({
         <div className='hidden grid-cols-4 gap-2 sm:grid'>
           {[
             { label: t('items') || 'Items', value: String(purchase.items.filter((i) => (i.product.id || (i.product as any)?._id) && i.product.name).length) },
-            { label: t('Subtotal'), value: `Rs${totals.subtotal.toFixed(2)}` },
-            { label: t('Discount'), value: `Rs${(totals.discount + totals.itemDiscountTotal).toFixed(2)}` },
-            { label: t('Total'), value: `Rs${totals.total.toFixed(2)}`, highlight: true },
+            { label: t('Subtotal'), value: `${formatMoney(totals.subtotal)}` },
+            { label: t('Discount'), value: `${formatMoney(totals.discount + totals.itemDiscountTotal)}` },
+            { label: t('Total'), value: `${formatMoney(totals.total)}`, highlight: true },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -2319,7 +2324,7 @@ export default function PurchasePanel({
                   <ArrowLeftRight className="h-4 w-4" />
                   <span className="hidden sm:inline">{t('Switch All Discounts to')}</span>
                   <span className="sm:hidden">{t('Switch to')}</span>
-                  {' '}{purchase.discountType === 'percentage' ? 'Rs' : '%'}
+                  {' '}{purchase.discountType === 'percentage' ? currencySymbol : '%'}
                 </Button>
               )}
               {canCreateProduct ? (
@@ -2487,7 +2492,7 @@ export default function PurchasePanel({
                   <Percent className='h-4 w-4' />
                   {t('Apply Discount')}
                   {totals.discount > 0 && (
-                    <Badge variant='secondary' className='ml-1 tabular-nums'>-Rs{totals.discount.toFixed(2)}</Badge>
+                    <Badge variant='secondary' className='ml-1 tabular-nums'>-{formatMoney(totals.discount)}</Badge>
                   )}
                 </Button>
               </PopoverTrigger>
@@ -2513,10 +2518,10 @@ export default function PurchasePanel({
                   <button
                     type='button'
                     onClick={() => setPurchase((prev) => ({ ...prev, discountType: prev.discountType === 'percentage' ? 'fixed' : 'percentage' }))}
-                    title='Click to switch between Rs and % discount'
+                    title={`Click to switch between  and % discount`}
                     className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
                   >
-                    {purchase.discountType === 'percentage' ? '%' : 'Rs'}
+                    {purchase.discountType === 'percentage' ? '%' : currencySymbol}
                   </button>
                 </div>
               </PopoverContent>
@@ -2545,29 +2550,29 @@ export default function PurchasePanel({
         <CardContent className='space-y-2 pt-0'>
           <div className='flex justify-between gap-6'>
             <span className='text-muted-foreground'>{t('Subtotal')}:</span>
-            <span className='tabular-nums font-medium'>Rs{totals.subtotal.toFixed(2)}</span>
+            <span className='tabular-nums font-medium'>{formatMoney(totals.subtotal)}</span>
           </div>
           {totals.itemDiscountTotal > 0 && (
             <div className='flex justify-between gap-6 text-sm text-green-600'>
               <span>{t('Item Discounts')}:</span>
-              <span className='tabular-nums'>-Rs{totals.itemDiscountTotal.toFixed(2)}</span>
+              <span className='tabular-nums'>-{formatMoney(totals.itemDiscountTotal)}</span>
             </div>
           )}
           {totals.discount > 0 && (
             <div className='flex justify-between gap-6 text-red-600'>
               <span>{t('Discount')}:</span>
-              <span className='tabular-nums'>-Rs{totals.discount.toFixed(2)}</span>
+              <span className='tabular-nums'>-{formatMoney(totals.discount)}</span>
             </div>
           )}
           <Separator />
           <div className='flex justify-between gap-6 font-bold text-lg'>
             <span>{t('Total')}:</span>
-            <span className='tabular-nums'>Rs{totals.total.toFixed(2)}</span>
+            <span className='tabular-nums'>{formatMoney(totals.total)}</span>
           </div>
           {(totals.itemDiscountTotal + totals.discount) > 0 && (
             <div className='flex justify-between gap-6 text-xs font-medium text-green-600'>
               <span>{t('You Saved')}:</span>
-              <span className='tabular-nums'>Rs{(totals.itemDiscountTotal + totals.discount).toFixed(2)}</span>
+              <span className='tabular-nums'>{formatMoney(totals.itemDiscountTotal + totals.discount)}</span>
             </div>
           )}
 
@@ -2607,7 +2612,7 @@ export default function PurchasePanel({
                 <p className='mb-1.5 px-1 text-xs font-semibold text-muted-foreground'>{t('Price changes vs last purchase')}</p>
                 <div className='max-h-56 space-y-0.5 overflow-y-auto'>
                   {significantPriceChanges.map((entry, i) => {
-                    const formatted = formatPriceChange(entry.change)
+                    const formatted = formatPriceChange(entry.change, currencyMeta)
                     return (
                       <div key={i} className='flex items-center justify-between gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/50'>
                         <span className='truncate'>{entry.name}</span>
@@ -2722,25 +2727,25 @@ export default function PurchasePanel({
                   {loadingBalance ? (
                     <span className="text-xs">Loading...</span>
                   ) : (
-                    `Rs${Math.abs(supplierBalance).toFixed(2)} ${supplierBalance > 0 ? '(Cr)' : supplierBalance < 0 ? '(Dr)' : ''}`
+                    `${formatMoney(Math.abs(supplierBalance))} ${supplierBalance > 0 ? '(Cr)' : supplierBalance < 0 ? '(Dr)' : ''}`
                   )}
                 </span>
               </div>
               <div className='flex justify-between items-center text-sm'>
                 <span className="font-medium">{t('Current Purchase')}:</span>
-                <span className="font-bold text-red-600">Rs{totals.total.toFixed(2)} (Cr)</span>
+                <span className="font-bold text-red-600">{formatMoney(totals.total)} (Cr)</span>
               </div>
               {totalPaidNow > 0 && (
                 <div className='flex justify-between items-center text-sm'>
                   <span className="font-medium">{t('Paid Now')}:</span>
-                  <span className="font-bold text-green-600">-Rs{totalPaidNow.toFixed(2)} (Dr)</span>
+                  <span className="font-bold text-green-600">-{formatMoney(totalPaidNow)} (Dr)</span>
                 </div>
               )}
               <Separator />
               <div className='flex justify-between items-center'>
                 <span className="font-bold">{t('Net Balance')}:</span>
                 <span className={`font-bold text-lg ${(supplierBalance + totals.total - totalPaidNow) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  Rs{Math.abs(supplierBalance + totals.total - totalPaidNow).toFixed(2)} {(supplierBalance + totals.total - totalPaidNow) > 0 ? '(Payable)' : '(Receivable)'}
+                  {formatMoney(Math.abs(supplierBalance + totals.total - totalPaidNow))} {(supplierBalance + totals.total - totalPaidNow) > 0 ? '(Payable)' : '(Receivable)'}
                 </span>
               </div>
             </div>
@@ -2864,7 +2869,7 @@ export default function PurchasePanel({
               <span className='text-xs text-muted-foreground'>
                 {purchase.items.filter((i) => (i.product.id || (i.product as any)?._id) && i.product.name).length} {t('Purchase Items')}
               </span>
-              <span className='text-lg font-bold tabular-nums'>Rs{totals.total.toFixed(2)}</span>
+              <span className='text-lg font-bold tabular-nums'>{formatMoney(totals.total)}</span>
             </div>
             {bar}
           </div>

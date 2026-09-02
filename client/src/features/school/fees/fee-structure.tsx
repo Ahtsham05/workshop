@@ -15,6 +15,7 @@ import {
   useDeleteFeeStructureMutation,
 } from '@/stores/school.api';
 import { toast } from 'sonner';
+import { useFormatMoney } from '@/lib/format-money';
 
 type FeeItem = { name: string; amount: number | string; categoryId?: string };
 const emptyForm = {
@@ -27,6 +28,7 @@ const emptyForm = {
 };
 
 export default function FeeStructures() {
+  const formatMoney = useFormatMoney();
   const [dialog, setDialog] = useState<'create' | 'edit' | null>(null);
   const [selected, setSelected] = useState<any>(null);
   const [form, setForm] = useState({ ...emptyForm });
@@ -132,13 +134,13 @@ export default function FeeStructures() {
                   {s.feeItems?.map((fi: any) => (
                     <div key={fi._id} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{fi.name}</span>
-                      <span className="font-medium">PKR {fi.amount?.toLocaleString()}</span>
+                      <span className="font-medium">{formatMoney(fi.amount ?? 0)}</span>
                     </div>
                   ))}
                 </div>
                 <div className="flex justify-between pt-2 border-t font-semibold text-sm">
                   <span>Total</span>
-                  <span className="text-primary">PKR {s.totalAmount?.toLocaleString()}</span>
+                  <span className="text-primary">{formatMoney(s.totalAmount ?? 0)}</span>
                 </div>
                 <div className="flex gap-2 pt-1 text-xs text-muted-foreground">
                   <span className="capitalize">{s.frequency}</span>
@@ -232,7 +234,7 @@ export default function FeeStructures() {
                 </div>
               ))}
               <div className="flex justify-end text-sm font-semibold">
-                Total: PKR {totalAmount.toLocaleString()}
+                Total: {formatMoney(totalAmount)}
               </div>
             </div>
           </div>

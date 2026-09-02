@@ -14,6 +14,7 @@ import {
   type BuybackGrade,
   type BuybackPtaStatus,
 } from '@/stores/usedPhoneBuyback.api'
+import { useFormatMoney } from '@/lib/format-money'
 
 const gradeBadgeClasses: Record<BuybackGrade, string> = {
   A: 'bg-green-100 text-green-700',
@@ -28,8 +29,6 @@ const ptaBadgeConfig: Record<BuybackPtaStatus, { label: string; color: string }>
   blocked: { label: 'Blocked', color: 'bg-red-100 text-red-700' },
   unknown: { label: 'Not Checked', color: 'bg-gray-100 text-gray-600' },
 }
-
-const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
 
 /** The list endpoint populates imeiRecordId — a bare id string until then. */
 const getImeiSummary = (b: PhoneBuybackRecord): BuybackImeiSummary | null =>
@@ -51,6 +50,8 @@ export function UsedPhoneSelectDialog({
   onOpenChange: (open: boolean) => void
   onSelect: (buyback: PhoneBuybackRecord) => void
 }) {
+  const formatMoney = useFormatMoney()
+  const fmtAmt = (n?: number) => formatMoney(n ?? 0)
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 300)
   const { data, isFetching } = useGetBuybacksQuery(

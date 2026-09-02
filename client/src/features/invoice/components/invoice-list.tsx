@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -121,6 +122,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   initialTypeFilter,
 }: InvoiceListProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const { hasExplicitPermission } = usePermissions()
   const canCreate = hasExplicitPermission('createInvoices')
   const canEdit = hasExplicitPermission('editInvoices')
@@ -370,6 +373,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         printAsQuotation: invoice.type === 'quotation',
         previousBalance,
         newBalance: previousBalance + invoiceTotal - invoicePaid,
+        currencyMeta,
       }, invoice)
 
       const customerIdStr = resolveCustomerIdString(invoice.customerId)
@@ -784,7 +788,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                     <TableCell>
                       {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy')}
                     </TableCell>
-                    <TableCell>Rs{invoice.total?.toFixed(2) || '0.00'}</TableCell>
+                    <TableCell>{formatMoney(invoice.total || 0)}</TableCell>
                     {/* <TableCell>
                       <Badge className={statusColors[invoice.status || 'draft']}>
                         {t(invoice.status || 'draft')}
@@ -1078,7 +1082,8 @@ function InvoiceDetails({
   getCustomerUrdu: (invoice: any) => string
 }) {
   const { t } = useLanguage()
-  
+  const formatMoney = useFormatMoney()
+
   return (
     <div className="space-y-4 pb-4">
       {/* Invoice Info */}
@@ -1155,7 +1160,7 @@ function InvoiceDetails({
                   <TableCell className="whitespace-nowrap">
                     {item.quantity} {item.unit || 'pcs'}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">Rs{item.unitPrice?.toFixed(2) || '0.00'}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatMoney(item.unitPrice || 0)}</TableCell>
                   <TableCell className="whitespace-nowrap text-right">
                     {(() => {
                       const gross = (item.quantity || 0) * (item.unitPrice || 0)
@@ -1164,11 +1169,11 @@ function InvoiceDetails({
                       return (
                         <>
                           {discountAmount > 0 && (
-                            <div className="text-xs text-muted-foreground line-through">Rs{gross.toFixed(2)}</div>
+                            <div className="text-xs text-muted-foreground line-through">{formatMoney(gross)}</div>
                           )}
-                          Rs{Number(net).toFixed(2)}
+                          {formatMoney(Number(net))}
                           {discountAmount > 0 && (
-                            <div className="text-xs text-green-600">-Rs{discountAmount.toFixed(2)}</div>
+                            <div className="text-xs text-green-600">-{formatMoney(discountAmount)}</div>
                           )}
                         </>
                       )
@@ -1186,28 +1191,28 @@ function InvoiceDetails({
       <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg text-sm">
         <div>
           <Label className="text-xs">{t('subtotal')}</Label>
-          <p className="font-bold">Rs{invoice.subtotal?.toFixed(2) || '0.00'}</p>
+          <p className="font-bold">{formatMoney(invoice.subtotal || 0)}</p>
         </div>
         <div>
           <Label className="text-xs">{t('tax')}</Label>
-          <p className="font-bold">Rs{invoice.tax?.toFixed(2) || '0.00'}</p>
+          <p className="font-bold">{formatMoney(invoice.tax || 0)}</p>
         </div>
         {(() => {
           const itemDiscountTotal = (invoice.items || []).reduce((sum: number, item: any) => sum + Number(item.discountAmount || 0), 0)
           return itemDiscountTotal > 0 ? (
             <div>
               <Label className="text-xs">{t('Item Discounts')}</Label>
-              <p className="font-bold text-green-600">-Rs{itemDiscountTotal.toFixed(2)}</p>
+              <p className="font-bold text-green-600">-{formatMoney(itemDiscountTotal)}</p>
             </div>
           ) : null
         })()}
         <div>
           <Label className="text-xs">{t('discount')}</Label>
-          <p className="font-bold text-red-600">-Rs{invoice.discount?.toFixed(2) || '0.00'}</p>
+          <p className="font-bold text-red-600">-{formatMoney(invoice.discount || 0)}</p>
         </div>
         <div>
           <Label className="text-xs">{t('total')} {t('amount')}</Label>
-          <p className="font-bold text-green-600">Rs{invoice.total?.toFixed(2) || '0.00'}</p>
+          <p className="font-bold text-green-600">{formatMoney(invoice.total || 0)}</p>
         </div>
         <div>
           <Label className="text-xs">{t('payment_method') || 'Payment Method'}</Label>
@@ -1220,13 +1225,13 @@ function InvoiceDetails({
         {invoice.paidAmount > 0 && (
           <div>
             <Label className="text-xs">{t('paid_amount')}</Label>
-            <p className="font-bold text-blue-600">Rs{invoice.paidAmount?.toFixed(2) || '0.00'}</p>
+            <p className="font-bold text-blue-600">{formatMoney(invoice.paidAmount || 0)}</p>
           </div>
         )}
         {invoice.balance > 0 && (
           <div>
             <Label className="text-xs">{t('balance')}</Label>
-            <p className="font-bold text-red-600">Rs{invoice.balance?.toFixed(2) || '0.00'}</p>
+            <p className="font-bold text-red-600">{formatMoney(invoice.balance || 0)}</p>
           </div>
         )}
       </div>

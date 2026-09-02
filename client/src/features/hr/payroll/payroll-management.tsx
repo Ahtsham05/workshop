@@ -81,6 +81,7 @@ import {
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options';
 import { usePermissions } from '@/context/permission-context';
+import { useFormatMoney } from '@/lib/format-money';
 
 const STATUS_COLORS: Record<string, string> = {
   Pending: '#f59e0b',
@@ -553,12 +554,7 @@ export default function PayrollManagement() {
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PK', {
-      style: 'currency',
-      currency: 'PKR',
-    }).format(amount);
-  };
+  const formatCurrency = useFormatMoney();
 
   const periodLabel = `${t(months[monthFilter - 1])} ${yearFilter}`;
 

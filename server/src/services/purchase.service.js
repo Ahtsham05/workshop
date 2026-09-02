@@ -29,6 +29,95 @@ const postPurchaseToAccounts = (purchase) => {
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
 const { resolvePurchaseInvoiceBalance } = require('../utils/purchaseBalance');
+const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
+const Money = require('../utils/money');
+
+/**
+ * Resolves input tax + currency snapshot for a purchase's line items — genuinely new
+ * territory, Purchase had no tax concept at all before this (see purchase-panel.tsx's old
+ * "purchases have no tax" comment, now superseded). Read-only lookups (Product/
+ * ProductVariant tax categories), safe to run outside any write transaction.
+ *
+ * `previousTax`/`baseTotalAmountOverride` exist so callers (both create and update) can
+ * derive a "pre-tax" totalAmount consistently: totalAmount on this model is otherwise
+ * fully client-trusted (no server-side subtotal recompute — a pre-existing, out-of-scope
+ * gap), so naively adding freshly-computed tax on top of an already-tax-inclusive stored
+ * totalAmount on a later update would double-count it. Subtracting out whatever tax was
+ * baked in previously (0 on create) before adding the new tax avoids that regardless of
+ * whether the caller resent a fresh totalAmount this time.
+ */
+const resolvePurchaseTaxAndCurrency = async ({
+  organizationId,
+  purchaseDate,
+  items,
+  discount,
+  currency,
+  existingCurrencySnapshot,
+  baseTotalAmount,
+  previousTax,
+}) => {
+  const productIds = [...new Set(items.filter((item) => item.product).map((item) => String(item.product)))];
+  const variantIds = [...new Set(items.filter((item) => item.variantId).map((item) => String(item.variantId)))];
+  const [productsForTax, variantsForTax] = await Promise.all([
+    productIds.length ? Product.find({ _id: { $in: productIds } }).select('taxCategoryId').lean() : Promise.resolve([]),
+    variantIds.length ? ProductVariant.find({ _id: { $in: variantIds } }).select('taxCategoryId').lean() : Promise.resolve([]),
+  ]);
+  const productTaxCategoryById = new Map(productsForTax.map((p) => [String(p._id), p.taxCategoryId ? String(p.taxCategoryId) : null]));
+  const variantTaxCategoryById = new Map(variantsForTax.map((v) => [String(v._id), v.taxCategoryId ? String(v.taxCategoryId) : null]));
+
+  const itemsForTaxCalc = items.map((item) => {
+    const lineTotal = item.total != null ? Number(item.total) : Number(item.quantity || 0) * Number(item.priceAtPurchase || 0);
+    const resolvedCategory =
+      item.taxCategoryId ||
+      (item.variantId ? variantTaxCategoryById.get(String(item.variantId)) : null) ||
+      (item.product ? productTaxCategoryById.get(String(item.product)) : null) ||
+      null;
+    return { subtotal: lineTotal, taxCategoryId: resolvedCategory };
+  });
+
+  const taxAndCurrency = await resolveTransactionTaxAndCurrency({
+    organizationId,
+    customerId: null,
+    asOfDate: purchaseDate || new Date(),
+    items: itemsForTaxCalc,
+    productTaxCategoryById: new Map(), // already resolved per-item above (incl. variant fallback)
+    overallDiscount: Number(discount || 0),
+    requestedCurrency: currency || null,
+    existingCurrencySnapshot: existingCurrencySnapshot || null,
+    fallbackTax: 0, // Purchase never had manual tax entry — 0 exactly matches prior behavior when taxSystem is unconfigured
+  });
+
+  const decimalPlaces = Money.getCurrencyMeta(taxAndCurrency.currency)?.decimalPlaces ?? Money.DEFAULT_DECIMAL_PLACES;
+  const itemsWithTax = items.map((item, index) => ({
+    ...item,
+    taxCategoryId: taxAndCurrency.items[index]?.taxCategoryId || null,
+    taxableAmount: taxAndCurrency.items[index]?.taxableAmount ?? 0,
+    taxAmount: taxAndCurrency.items[index]?.taxAmount ?? 0,
+  }));
+
+  const preTaxTotalAmount = Math.max(0, Number(baseTotalAmount || 0) - Number(previousTax || 0));
+  const totalAmount = Money.addMoney(preTaxTotalAmount, taxAndCurrency.tax, decimalPlaces);
+  const baseDecimalPlaces = taxAndCurrency.baseCurrency
+    ? Money.getCurrencyMeta(taxAndCurrency.baseCurrency)?.decimalPlaces ?? Money.DEFAULT_DECIMAL_PLACES
+    : Money.DEFAULT_DECIMAL_PLACES;
+  const baseCurrencyTotal = taxAndCurrency.baseCurrency
+    ? Money.convertMoney(totalAmount, taxAndCurrency.exchangeRate || 1, baseDecimalPlaces)
+    : totalAmount;
+
+  return {
+    items: itemsWithTax,
+    tax: taxAndCurrency.tax,
+    taxLines: taxAndCurrency.taxLines,
+    taxSystem: taxAndCurrency.taxSystem,
+    taxInclusive: taxAndCurrency.taxInclusive,
+    currency: taxAndCurrency.currency,
+    baseCurrency: taxAndCurrency.baseCurrency,
+    exchangeRate: taxAndCurrency.exchangeRate,
+    exchangeRateDate: taxAndCurrency.exchangeRateDate,
+    totalAmount,
+    baseCurrencyTotal,
+  };
+};
 
 const getOrganizationBusinessType = async (organizationId) => {
   if (!organizationId) {
@@ -394,13 +483,34 @@ const createPurchase = async (purchaseBody) => {
     getOrganizationBusinessType(purchaseBody.organizationId),
   ]);
 
+  const taxAndCurrency = await resolvePurchaseTaxAndCurrency({
+    organizationId: purchaseBody.organizationId,
+    purchaseDate: purchaseBody.purchaseDate,
+    items: purchaseBody.items || [],
+    discount: purchaseBody.discount,
+    currency: purchaseBody.currency,
+    baseTotalAmount: purchaseBody.totalAmount,
+    previousTax: 0,
+  });
+
   const normalizedBody = {
     ...purchaseBody,
+    items: taxAndCurrency.items,
     type: purchaseBody.type || 'cash',
     paymentMethod: purchaseBody.paymentMethod || 'cash',
+    tax: taxAndCurrency.tax,
+    taxLines: taxAndCurrency.taxLines,
+    taxSystem: taxAndCurrency.taxSystem,
+    taxInclusive: taxAndCurrency.taxInclusive,
+    currency: taxAndCurrency.currency,
+    baseCurrency: taxAndCurrency.baseCurrency,
+    exchangeRate: taxAndCurrency.exchangeRate,
+    exchangeRateDate: taxAndCurrency.exchangeRateDate,
+    totalAmount: taxAndCurrency.totalAmount,
+    baseCurrencyTotal: taxAndCurrency.baseCurrencyTotal,
     balance:
       purchaseBody.paidAmount !== undefined
-        ? resolvePurchaseInvoiceBalance(purchaseBody.totalAmount, purchaseBody.paidAmount)
+        ? resolvePurchaseInvoiceBalance(taxAndCurrency.totalAmount, purchaseBody.paidAmount)
         : purchaseBody.balance,
   };
   normalizedBody.paymentType = derivePurchasePaymentType(normalizedBody);
@@ -693,6 +803,65 @@ const updatePurchaseById = async (purchaseId, updateBody) => {
   const supplierDocForUpdate = supplierIdForUpdate ? await Supplier.findById(supplierIdForUpdate).select('name') : null;
   const updateSubtotal = resolvePurchaseSubtotal(updateBody.items || purchase.items);
   const updateDiscount = Number(updateBody.discount ?? purchase.discount ?? 0);
+
+  // Recompute tax/currency only when something that actually affects the taxable base or
+  // the stored total is part of this update — an edit that only touches e.g. `notes` or
+  // `paidAmount` must not re-trigger a tax recompute (paidAmount-only edits already get
+  // their balance re-resolved below against the EXISTING totalAmount, unchanged here).
+  const touchesAmounts = ['items', 'discount', 'discountValue', 'discountType', 'totalAmount', 'currency'].some(
+    (key) => updateBody[key] !== undefined
+  );
+  // Captured before any reassignment below — items were explicitly part of THIS update
+  // request only when the caller actually sent them.
+  const itemsWereExplicitlyProvided = updateBody.items !== undefined;
+  if (touchesAmounts) {
+    const itemsForTax = (updateBody.items || purchase.items).map((item) => (item.toObject ? item.toObject() : item));
+    const taxAndCurrency = await resolvePurchaseTaxAndCurrency({
+      organizationId: purchase.organizationId,
+      purchaseDate: purchase.purchaseDate,
+      items: itemsForTax,
+      discount: updateDiscount,
+      currency: updateBody.currency,
+      existingCurrencySnapshot: purchase.currency
+        ? {
+            currency: purchase.currency,
+            baseCurrency: purchase.baseCurrency,
+            exchangeRate: purchase.exchangeRate,
+            exchangeRateDate: purchase.exchangeRateDate,
+          }
+        : null,
+      baseTotalAmount: updateBody.totalAmount !== undefined ? updateBody.totalAmount : purchase.totalAmount,
+      previousTax: purchase.tax || 0,
+    });
+    if (itemsWereExplicitlyProvided) {
+      // A genuine item edit — updateBody.items must carry the tax-augmented items so the
+      // stock-adjustment/IMEI-resync loop below (which only runs off updateBody.items)
+      // still processes the real changes.
+      updateBody.items = taxAndCurrency.items;
+    } else {
+      // No item change in this request — write the recomputed per-item tax fields
+      // directly onto the existing subdocuments instead of populating updateBody.items,
+      // which would otherwise make the loop below treat this as an item edit and rerun
+      // stock/IMEI adjustment logic for a 0-quantity-delta no-op.
+      taxAndCurrency.items.forEach((itemWithTax, index) => {
+        const target = purchase.items[index];
+        if (!target) return;
+        target.taxCategoryId = itemWithTax.taxCategoryId || null;
+        target.taxableAmount = itemWithTax.taxableAmount || 0;
+        target.taxAmount = itemWithTax.taxAmount || 0;
+      });
+    }
+    updateBody.tax = taxAndCurrency.tax;
+    updateBody.taxLines = taxAndCurrency.taxLines;
+    updateBody.taxSystem = taxAndCurrency.taxSystem;
+    updateBody.taxInclusive = taxAndCurrency.taxInclusive;
+    updateBody.currency = taxAndCurrency.currency;
+    updateBody.baseCurrency = taxAndCurrency.baseCurrency;
+    updateBody.exchangeRate = taxAndCurrency.exchangeRate;
+    updateBody.exchangeRateDate = taxAndCurrency.exchangeRateDate;
+    updateBody.totalAmount = taxAndCurrency.totalAmount;
+    updateBody.baseCurrencyTotal = taxAndCurrency.baseCurrencyTotal;
+  }
 
   // Loop through the updated items and calculate the stock adjustments and price updates
   for (const updatedItem of updateBody.items || []) {

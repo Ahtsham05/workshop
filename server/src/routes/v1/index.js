@@ -77,6 +77,15 @@ const auditLogRoute = require('./auditLog.route');
 const aiAssistantRoute = require('./aiAssistant.route');
 const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
 
+// Localization / Currency / Tax engine Routes
+const taxCategoryRoute = require('./taxCategory.route');
+const taxRateRoute = require('./taxRate.route');
+const taxJurisdictionRoute = require('./taxJurisdiction.route');
+const taxExemptionRoute = require('./taxExemption.route');
+const exchangeRateRoute = require('./exchangeRate.route');
+const localizationRoute = require('./localization.route');
+const taxCalculatorRoute = require('./taxCalculator.route');
+
 // HR Routes
 const employeeRoute = require('./employee.route');
 const departmentRoute = require('./department.route');
@@ -647,6 +656,35 @@ const defaultRoutes = [
     path: '/',
     route: purchaseSuggestionsRoute,
   },
+  // Localization / Currency / Tax engine
+  {
+    path: '/tax-categories',
+    route: taxCategoryRoute,
+  },
+  {
+    path: '/tax-rates',
+    route: taxRateRoute,
+  },
+  {
+    path: '/tax-jurisdictions',
+    route: taxJurisdictionRoute,
+  },
+  {
+    path: '/tax-exemptions',
+    route: taxExemptionRoute,
+  },
+  {
+    path: '/exchange-rates',
+    route: exchangeRateRoute,
+  },
+  {
+    path: '/localization',
+    route: localizationRoute,
+  },
+  {
+    path: '/tax',
+    route: taxCalculatorRoute,
+  },
 ];
 
 const devRoutes = [
@@ -739,6 +777,13 @@ const protectedPaths = [
   '/restaurant',
   '/audit-logs',
   '/ai-assistant',
+  '/tax-categories',
+  '/tax-rates',
+  '/tax-jurisdictions',
+  '/tax-exemptions',
+  '/exchange-rates',
+  '/localization',
+  '/tax',
 ];
 
 // Apply trial guard + enforcement to protected routes

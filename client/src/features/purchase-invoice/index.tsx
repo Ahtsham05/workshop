@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
+import { useFormatMoney } from '@/lib/format-money';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AppDispatch, RootState } from '@/stores/store';
@@ -202,6 +203,7 @@ const PurchaseInvoicePage = () => {
   const prefillAppliedRef = useRef(false);
   const suppliersData = useSelector((state: RootState) => state.supplier.data);
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
   const { hasPermission, hasExplicitPermission } = usePermissions();
   // Default landing view is the fast-entry create form — but only for users who can
   // actually create a purchase; a view-only user should land on the list instead of a
@@ -411,10 +413,7 @@ const PurchaseInvoicePage = () => {
       const pid = it.product?.id || (it.product as { _id?: string })._id;
       return (pid && String(pid).trim()) || Boolean(it.product?.name?.trim());
     }).length;
-    const label = `${supName} · Rs ${purchaseLineTotal.toLocaleString('en-PK', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })} · ${lineCount}`;
+    const label = `${supName} · ${formatMoney(purchaseLineTotal)} · ${lineCount}`;
     const record: PurchaseHeldRecord = {
       id: newHoldId(),
       label,

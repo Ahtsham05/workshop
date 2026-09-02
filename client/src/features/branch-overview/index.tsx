@@ -18,6 +18,7 @@ import {
 import { useGetBranchOverviewSummaryQuery, type BranchOverviewRow } from '@/stores/branchOverview.api'
 import { setActiveBranch } from '@/stores/auth.slice'
 import { AppDispatch, RootState } from '@/stores/store'
+import { useFormatMoney, useCurrencySymbolPrefix } from '@/lib/format-money'
 
 export default function BranchOverviewPage() {
   const { t } = useLanguage()
@@ -27,6 +28,8 @@ export default function BranchOverviewPage() {
   const dateParams = dashboardRangeQueryParams(dateRange)
   const { data, isLoading, isFetching, refetch } = useGetBranchOverviewSummaryQuery(dateParams)
   const loading = isLoading || isFetching
+  const formatCurrency = useFormatMoney()
+  const currencyPrefix = useCurrencySymbolPrefix()
 
   const branches = data?.branches || []
   const totals = data?.totals
@@ -62,7 +65,7 @@ export default function BranchOverviewPage() {
           title={t('Total Revenue')}
           value={totals?.totalSales || 0}
           icon={<DollarSign className='h-4 w-4' />}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           description={t('Across all branches')}
           isLoading={loading}
           tone='emerald'
@@ -71,7 +74,7 @@ export default function BranchOverviewPage() {
           title={t('Net Profit')}
           value={totals?.netProfit || 0}
           icon={<TrendingUp className='h-4 w-4' />}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           description={t('Profit minus expenses, all branches')}
           isLoading={loading}
           tone='sky'
@@ -112,9 +115,9 @@ export default function BranchOverviewPage() {
                   fontSize={12}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(value) => `Rs${value}`}
+                  tickFormatter={(value) => formatCurrency(value)}
                 />
-                <Tooltip formatter={(value: number) => `Rs${Number(value).toLocaleString()}`} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                <Tooltip formatter={(value: number) => formatCurrency(Number(value))} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
                 <Legend />
                 <Bar dataKey='totalSales' fill='#3b82f6' radius={[8, 8, 0, 0]} name={t('Revenue')} />
                 <Bar dataKey='netProfit' fill='#10b981' radius={[8, 8, 0, 0]} name={t('Net Profit')} />
@@ -180,17 +183,17 @@ export default function BranchOverviewPage() {
                         </div>
                       </TableCell>
                       <TableCell className='text-right tabular-nums'>
-                        Rs {branch.totalSales.toLocaleString()}
+                        {formatCurrency(branch.totalSales)}
                         <span className='ml-1 text-xs text-muted-foreground'>({branch.revenueSharePct}%)</span>
                       </TableCell>
-                      <TableCell className='text-right tabular-nums'>Rs {branch.totalPurchases.toLocaleString()}</TableCell>
-                      <TableCell className='text-right tabular-nums'>Rs {branch.totalExpenses.toLocaleString()}</TableCell>
+                      <TableCell className='text-right tabular-nums'>{formatCurrency(branch.totalPurchases)}</TableCell>
+                      <TableCell className='text-right tabular-nums'>{formatCurrency(branch.totalExpenses)}</TableCell>
                       <TableCell
                         className={`text-right tabular-nums font-medium ${branch.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}
                       >
-                        Rs {branch.netProfit.toLocaleString()}
+                        {formatCurrency(branch.netProfit)}
                       </TableCell>
-                      <TableCell className='text-right tabular-nums'>Rs {branch.cashInHand.toLocaleString()}</TableCell>
+                      <TableCell className='text-right tabular-nums'>{formatCurrency(branch.cashInHand)}</TableCell>
                       <TableCell className='text-right tabular-nums'>{branch.invoiceCount}</TableCell>
                       <TableCell className='text-right tabular-nums'>{branch.staffCount}</TableCell>
                       <TableCell className='text-right tabular-nums'>{branch.customerCount}</TableCell>

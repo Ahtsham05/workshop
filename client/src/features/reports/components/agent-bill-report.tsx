@@ -41,6 +41,7 @@ import { toast } from 'sonner'
 import { useGetAgentBillReportQuery, useGetUtilityCompaniesQuery, type AgentBillRecord } from '@/stores/mobile-shop.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -50,9 +51,6 @@ interface AgentBillReportProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#84cc16']
 
@@ -73,6 +71,7 @@ const billPayable = (bill: AgentBillRecord) => {
 
 export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBillReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
     const { data: companiesData } = useGetUtilityCompaniesQuery({})
     const allCompanies = companiesData?.results ?? []
 

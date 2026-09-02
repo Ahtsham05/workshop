@@ -2,6 +2,7 @@ import { Trophy } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { SupplierRecommendation } from '@/stores/purchaseSuggestions.api'
+import { useCurrencyMeta } from '@/lib/format-money'
 import { formatMoney, formatNumber } from '../utils/format'
 
 const SCORE_ROWS: { key: keyof SupplierRecommendation; label: string }[] = [
@@ -25,6 +26,7 @@ const HISTORY_SCOPE_BADGE: Record<SupplierRecommendation['historyScope'], { labe
 }
 
 export function SupplierScoreBlock({ supplier, reason }: { supplier: SupplierRecommendation; reason?: string }) {
+  const currencyMeta = useCurrencyMeta()
   const scopeBadge = HISTORY_SCOPE_BADGE[supplier.historyScope]
 
   return (
@@ -50,7 +52,7 @@ export function SupplierScoreBlock({ supplier, reason }: { supplier: SupplierRec
       </div>
 
       <div className='mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground'>
-        {supplier.avgPrice !== null && <span>Avg price: <span className='font-medium text-foreground'>{formatMoney(supplier.avgPrice)}</span></span>}
+        {supplier.avgPrice !== null && <span>Avg price: <span className='font-medium text-foreground'>{formatMoney(supplier.avgPrice, currencyMeta)}</span></span>}
         {supplier.avgLeadTimeDays !== null && <span>Lead time: <span className='font-medium text-foreground'>{formatNumber(supplier.avgLeadTimeDays)}d</span></span>}
         {supplier.onTimeDeliveryRate !== null && <span>On-time: <span className='font-medium text-foreground'>{formatNumber(supplier.onTimeDeliveryRate)}%</span></span>}
       </div>

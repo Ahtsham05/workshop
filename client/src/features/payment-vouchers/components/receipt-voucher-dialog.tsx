@@ -30,6 +30,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { makeEnterChain, MOBILE_FORM_KEYBOARD_HINT, useCtrlEnterSubmit } from '@/lib/mobile-form-keyboard'
+import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 
 type CustomerLike = { id?: string; _id?: string; name: string; phone?: string; picture?: { url?: string; publicId?: string } }
@@ -97,6 +98,7 @@ interface ReceiptVoucherDialogProps {
 }
 
 export function ReceiptVoucherDialog({ open, onOpenChange, onCreated }: ReceiptVoucherDialogProps) {
+  const formatMoney = useFormatMoney()
   const dispatch = useDispatch<AppDispatch>()
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !open })
   const wallets = (walletsData?.results ?? []).filter((w) => w.isActive !== false)
@@ -242,7 +244,7 @@ export function ReceiptVoucherDialog({ open, onOpenChange, onCreated }: ReceiptV
                 <SelectContent>
                   {wallets.map((w) => (
                     <SelectItem key={w.id} value={w.id}>
-                      {w.type} (Rs {Number(w.balance || 0).toFixed(2)})
+                      {w.type} ({formatMoney(Number(w.balance || 0))})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -384,7 +386,7 @@ export function ReceiptVoucherDialog({ open, onOpenChange, onCreated }: ReceiptV
 
           <div className='flex shrink-0 items-center justify-end gap-2'>
             <span className='text-sm font-medium text-muted-foreground'>Total:</span>
-            <span className='text-lg font-bold'>Rs {totalAmount.toFixed(2)}</span>
+            <span className='text-lg font-bold'>{formatMoney(totalAmount)}</span>
           </div>
 
           <div className='shrink-0 space-y-2'>

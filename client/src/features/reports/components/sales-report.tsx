@@ -35,6 +35,7 @@ import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface SalesReportProps {
   startDate: string
@@ -396,8 +397,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
       },
     }), [data, mergedInvoices, mergedSummary, isMobileShop, t, language])
 
-    const formatCurrency = (value: number) =>
-      new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+    const formatCurrency = useFormatMoney()
 
     if (isLoading) {
       return (

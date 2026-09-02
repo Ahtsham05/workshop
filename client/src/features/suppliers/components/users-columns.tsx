@@ -1,4 +1,5 @@
 import { ColumnDef } from '@tanstack/react-table'
+import { useFormatMoney } from '@/lib/format-money'
 import { Checkbox } from '@/components/ui/checkbox'
 import LongText from '@/components/long-text'
 import { Supplier } from '../data/schema' // Changed from Customer to Supplier
@@ -17,6 +18,7 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
   const { t, language } = useLanguage()
   const isUrdu = language === 'ur'
   const branchName = useBranchName()
+  const formatMoney = useFormatMoney()
 
   const selectColumn: ColumnDef<Supplier> = {
     id: 'select',
@@ -109,7 +111,7 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
           : safe < 0
             ? 'text-green-600 tabular-nums'
             : 'text-muted-foreground tabular-nums'
-      return <div className={`font-medium ${cls}`}>Rs{Math.abs(safe).toFixed(2)}</div>
+      return <div className={`font-medium ${cls}`}>{formatMoney(Math.abs(safe))}</div>
     },
   }
 

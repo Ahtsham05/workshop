@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { createPortal } from 'react-dom'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
@@ -260,6 +261,8 @@ export default function PurchaseOrderPanel({
   stickyActionsContainer = null,
 }: Props) {
   const { showUrdu } = useUrduDisplay()
+  const formatMoney = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG } = useGetPurchasableCatalogQuery()
   const [draft, setDraft] = useState<PurchaseOrderDraft>(() =>
     buildInitialDraft(editing, purchasableCatalog, showProductCatalog)
@@ -917,9 +920,9 @@ export default function PurchaseOrderPanel({
           <div className='hidden grid-cols-4 gap-2 sm:grid'>
             {[
               { label: 'Items', value: String(draft.items.filter((i) => getProductId(i) && i.product.name).length) },
-              { label: 'Subtotal', value: `Rs${subtotal.toFixed(2)}` },
-              { label: 'Discount', value: `Rs${(discountAmount + itemDiscountTotal).toFixed(2)}` },
-              { label: 'Total', value: `Rs${totalAmount.toFixed(2)}`, highlight: true },
+              { label: 'Subtotal', value: formatMoney(subtotal) },
+              { label: 'Discount', value: formatMoney(discountAmount + itemDiscountTotal) },
+              { label: 'Total', value: formatMoney(totalAmount), highlight: true },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -953,7 +956,7 @@ export default function PurchaseOrderPanel({
                     <ArrowLeftRight className='h-4 w-4' />
                     <span className='hidden sm:inline'>Switch All Discounts to</span>
                     <span className='sm:hidden'>Switch to</span>
-                    {' '}{draft.discountType === 'percentage' ? 'Rs' : '%'}
+                    {' '}{draft.discountType === 'percentage' ? currencySymbol : '%'}
                   </Button>
                 )}
                 <Button size='sm' variant='outline' onClick={addNewRowAndOpenProduct} className='gap-1'>
@@ -1066,7 +1069,7 @@ export default function PurchaseOrderPanel({
                                             </div>
                                             <div className='flex items-center gap-2 text-xs text-muted-foreground'>
                                               {catalogItem.barcode && <span>{catalogItem.barcode}</span>}
-                                              <span className='text-amber-600'>Purchase Price: Rs{Number(catalogItem.cost || 0).toFixed(2)}</span>
+                                              <span className='text-amber-600'>Purchase Price: {formatMoney(Number(catalogItem.cost || 0))}</span>
                                               <span className={catalogItem.stockQuantity <= 5 ? 'font-medium text-red-500' : 'text-green-600'}>
                                                 Stock: {catalogItem.stockQuantity}
                                               </span>
@@ -1226,7 +1229,7 @@ export default function PurchaseOrderPanel({
                         <div className='flex flex-col gap-0.5'>
                           <span className='text-[10px] leading-tight text-muted-foreground'>Purchase Price</span>
                           <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
-                            <span className='flex h-7 items-center border-r bg-muted px-2 text-xs font-medium'>Rs</span>
+                            <span className='flex h-7 items-center border-r bg-muted px-2 text-xs font-medium'>{currencySymbol}</span>
                             <Input
                               ref={(el) => {
                                 costInputRefs.current[rk] = el
@@ -1281,10 +1284,10 @@ export default function PurchaseOrderPanel({
                                   item.variantId,
                                 )
                               }
-                              title='Click to switch between Rs and % discount'
+                              title={`Click to switch between ${currencySymbol} and % discount`}
                               className='flex h-7 items-center border-l bg-muted px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
                             >
-                              {item.discountType === 'percentage' ? '%' : 'Rs'}
+                              {item.discountType === 'percentage' ? '%' : currencySymbol}
                             </button>
                           </div>
                         </div>
@@ -1297,7 +1300,7 @@ export default function PurchaseOrderPanel({
                           <span className='text-[10px] font-medium leading-tight text-blue-600'>Sale Price</span>
                           <div className='flex items-center overflow-hidden rounded-lg border border-blue-200 bg-blue-50/50'>
                             <span className='flex h-7 items-center border-r border-blue-200 bg-blue-100/60 px-2 text-xs font-medium text-blue-600'>
-                              Rs
+                              {currencySymbol}
                             </span>
                             <Input
                               type='text'
@@ -1323,7 +1326,7 @@ export default function PurchaseOrderPanel({
                         <div className='ml-auto flex flex-col items-end gap-0'>
                           {itemDiscountAmount > 0 && (
                             <span className='text-[10px] leading-tight text-muted-foreground line-through'>
-                              Rs{itemGross.toFixed(2)}
+                              {formatMoney(itemGross)}
                             </span>
                           )}
                           <div className='flex items-center gap-1'>
@@ -1331,7 +1334,7 @@ export default function PurchaseOrderPanel({
                             <div className='flex flex-col items-end'>
                               <span className='text-[10px] leading-tight text-muted-foreground'>Total</span>
                               <p className='text-sm font-bold tabular-nums'>
-                                Rs{itemNet.toFixed(2)}
+                                {formatMoney(itemNet)}
                               </p>
                             </div>
                           </div>
@@ -1359,7 +1362,7 @@ export default function PurchaseOrderPanel({
                     <Percent className='h-4 w-4' />
                     Apply Discount
                     {discountAmount > 0 && (
-                      <Badge variant='secondary' className='ml-1 tabular-nums'>-Rs{discountAmount.toFixed(2)}</Badge>
+                      <Badge variant='secondary' className='ml-1 tabular-nums'>-{formatMoney(discountAmount)}</Badge>
                     )}
                   </Button>
                 </PopoverTrigger>
@@ -1384,10 +1387,10 @@ export default function PurchaseOrderPanel({
                     <button
                       type='button'
                       onClick={() => setDraft((p) => ({ ...p, discountType: p.discountType === 'percentage' ? 'fixed' : 'percentage' }))}
-                      title='Click to switch between Rs and % discount'
+                      title={`Click to switch between ${currencySymbol} and % discount`}
                       className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none cursor-pointer hover:bg-primary hover:text-primary-foreground active:scale-95 transition-colors'
                     >
-                      {draft.discountType === 'percentage' ? '%' : 'Rs'}
+                      {draft.discountType === 'percentage' ? '%' : currencySymbol}
                     </button>
                   </div>
                 </PopoverContent>
@@ -1412,18 +1415,18 @@ export default function PurchaseOrderPanel({
           <CardContent className='space-y-2 pt-0'>
             <div className='flex justify-between gap-6'>
               <span className='text-muted-foreground'>Subtotal</span>
-              <span className='tabular-nums font-medium'>Rs{grossSubtotal.toFixed(2)}</span>
+              <span className='tabular-nums font-medium'>{formatMoney(grossSubtotal)}</span>
             </div>
             {itemDiscountTotal > 0 && (
               <div className='flex justify-between gap-6 text-sm text-green-600'>
                 <span>Item Discounts</span>
-                <span className='tabular-nums'>-Rs{itemDiscountTotal.toFixed(2)}</span>
+                <span className='tabular-nums'>-{formatMoney(itemDiscountTotal)}</span>
               </div>
             )}
             {discountAmount > 0 && (
               <div className='flex justify-between gap-6 text-red-600'>
                 <span>Discount</span>
-                <span className='tabular-nums'>-Rs{discountAmount.toFixed(2)}</span>
+                <span className='tabular-nums'>-{formatMoney(discountAmount)}</span>
               </div>
             )}
             <div className='flex items-center justify-between gap-2 text-sm'>
@@ -1465,12 +1468,12 @@ export default function PurchaseOrderPanel({
             <Separator />
             <div className='flex justify-between text-lg font-bold'>
               <span>Total</span>
-              <span className='text-primary tabular-nums'>Rs{totalAmount.toFixed(2)}</span>
+              <span className='text-primary tabular-nums'>{formatMoney(totalAmount)}</span>
             </div>
             {(itemDiscountTotal + discountAmount) > 0 && (
               <div className='flex justify-between text-xs font-medium text-green-600'>
                 <span>You Saved</span>
-                <span className='tabular-nums'>Rs{(itemDiscountTotal + discountAmount).toFixed(2)}</span>
+                <span className='tabular-nums'>{formatMoney(itemDiscountTotal + discountAmount)}</span>
               </div>
             )}
 
@@ -1527,7 +1530,7 @@ export default function PurchaseOrderPanel({
               <span className='text-xs text-muted-foreground'>
                 {draft.items.filter((i) => getProductId(i) && i.product.name).length} items
               </span>
-              <span className='text-lg font-bold tabular-nums'>Rs{totalAmount.toFixed(2)}</span>
+              <span className='text-lg font-bold tabular-nums'>{formatMoney(totalAmount)}</span>
             </div>
             {bar}
           </div>

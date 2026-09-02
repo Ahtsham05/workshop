@@ -1,5 +1,6 @@
 const fs = require('fs');
 const puppeteer = require('puppeteer-core');
+const { formatMoney: formatMoneyWithMeta, FALLBACK_CURRENCY_META, getCurrencyMeta } = require('../../utils/money');
 
 // puppeteer-core ships no bundled Chromium — resolve an installed browser binary.
 // Set PUPPETEER_EXECUTABLE_PATH on deploy targets (e.g. Render) that don't ship Chrome.
@@ -38,11 +39,9 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function formatMoney(value) {
-  return Number(value || 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 function buildInvoiceHtml(invoice, customer, organization) {
+  const currencyMeta = getCurrencyMeta(organization?.baseCurrency) || FALLBACK_CURRENCY_META;
+  const formatMoney = (value) => formatMoneyWithMeta(value, currencyMeta);
   const itemRows = (invoice.items || [])
     .map((item) => {
       const gross = item.quantity * item.unitPrice;

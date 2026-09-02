@@ -1,6 +1,7 @@
 const config = require('../../../config/config');
 const { Student, SchoolAttendance, FeeVoucher, Mark, Exam, Diary, Timetable } = require('../../../models');
 const { normalizePhone } = require('../../../utils/whatsappPhone');
+const { formatMoney } = require('../../../utils/money');
 
 const INTENTS = ['attendance', 'fee_balance', 'result', 'homework', 'timetable', 'exam_date', 'verify', 'unknown'];
 
@@ -212,12 +213,12 @@ function formatReply(intent, data, language) {
 
   if (intent === 'fee_balance') {
     if (language === 'roman_ur' || language === 'pa') {
-      return `${data.studentName} di baqi fee Rs. ${data.totalDue} hai (${data.voucherCount} voucher).`;
+      return `${data.studentName} di baqi fee ${formatMoney(data.totalDue)} hai (${data.voucherCount} voucher).`;
     }
     if (language === 'ur') {
-      return `${data.studentName} کی باقی فیس Rs. ${data.totalDue} ہے۔`;
+      return `${data.studentName} کی باقی فیس ${formatMoney(data.totalDue)} ہے۔`;
     }
-    return `${data.studentName}'s outstanding fee balance is Rs. ${data.totalDue} (${data.voucherCount} voucher(s)).`;
+    return `${data.studentName}'s outstanding fee balance is ${formatMoney(data.totalDue)} (${data.voucherCount} voucher(s)).`;
   }
 
   if (intent === 'attendance') {

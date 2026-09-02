@@ -43,6 +43,7 @@ import {
 } from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { sendInvoiceReceiptWhatsApp } from '@/features/invoice/utils/send-invoice-whatsapp'
+import { useCurrencyMeta } from '@/lib/format-money'
 import { formatCurrency } from '../utils/stage-config'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -76,6 +77,7 @@ export function LeadQuotationDialog({ invoiceId, onOpenChange, leadName, leadPho
   const defaultPaperSize = useBranchPaperSize()
   const printOrientation = useBranchPrintOrientation()
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
+  const currencyMeta = useCurrencyMeta()
 
   const [printing, setPrinting] = useState(false)
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false)
@@ -119,6 +121,7 @@ export function LeadQuotationDialog({ invoiceId, onOpenChange, leadName, leadPho
       printAsQuotation: invoice.type === 'quotation',
       customerPhone: leadPhone,
       customerWhatsapp: whatsappNumber || undefined,
+      currencyMeta,
     }
   }
 

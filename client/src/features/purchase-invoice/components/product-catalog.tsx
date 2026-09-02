@@ -16,6 +16,7 @@ import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display'
+import { useFormatMoney } from '@/lib/format-money'
 // import { toast } from 'sonner'
 
 interface ProductCatalogProps {
@@ -40,6 +41,7 @@ export function ProductCatalog({
   onBarcodeSearch
 }: ProductCatalogProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([])
   const [isBarcodeMode, setIsBarcodeMode] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
@@ -333,9 +335,9 @@ export function ProductCatalog({
                             )}
                           >
                             <span className='font-medium text-foreground text-sm'>
-                              Rs{product.hasVariants
-                                ? formatDisplayPrice(product, 'price')
-                                : Number(product.price ?? (product as { salePrice?: number }).salePrice ?? 0).toFixed(2)}
+                              {product.hasVariants
+                                ? formatDisplayPrice(product, 'price', formatMoney)
+                                : formatMoney(Number(product.price ?? (product as { salePrice?: number }).salePrice ?? 0))}
                             </span>
                             <span>Stock: {getDisplayStock(product)}</span>
                             {!showImages && product.barcode && (

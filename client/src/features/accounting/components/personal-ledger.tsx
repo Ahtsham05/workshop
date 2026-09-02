@@ -61,6 +61,7 @@ import {
   useWalletLedgerCategoryCatalog,
 } from '../hooks/use-wallet-ledger-category-catalog';
 import { mergeWalletCategoriesForPicker } from '../utils/merge-wallet-categories';
+import { useFormatMoney } from '@/lib/format-money';
 
 interface LedgerEntry {
   _id?: string;
@@ -97,12 +98,6 @@ const TRANSACTION_TYPES = [
 ];
 
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Card', 'Cheque', 'Other'];
-
-const formatCurrency = (value: number) =>
-  `Rs ${Number(value || 0).toLocaleString('en-PK', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 
 const UNCATEGORIZED = 'Uncategorized';
 
@@ -460,6 +455,7 @@ function EntryForm({
 
 export function PersonalLedger() {
   const { t } = useLanguage();
+  const formatCurrency = useFormatMoney();
   const { hasExplicitPermission } = usePermissions();
   const canManage = hasExplicitPermission('managePersonalWallet');
   const dispatch = useDispatch();

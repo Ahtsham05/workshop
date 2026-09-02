@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { expiryBadge } from '@/features/reports/utils/expiry-badge'
 import { useLanguage } from '@/context/language-context'
+import { useFormatMoney } from '@/lib/format-money'
 
 const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-100 text-green-800',
@@ -32,11 +33,6 @@ const formatDate = (date: unknown) => {
   }
 }
 
-const formatCurrency = (amount: unknown) => {
-  const num = Number(amount)
-  return isNaN(num) ? '0.00' : num.toFixed(2)
-}
-
 const customerLabel = (invoice: any) => {
   if (invoice.customerId && typeof invoice.customerId === 'object') return invoice.customerId.name
   return invoice.customerName || invoice.walkInCustomerName || 'Walk-in Customer'
@@ -57,7 +53,12 @@ interface InvoiceDetailDialogProps {
  */
 export function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: InvoiceDetailDialogProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { data: invoice, isLoading, error } = useGetInvoiceByIdQuery(invoiceId, { skip: !invoiceId || !open })
+  const formatCurrency = (amount: unknown) => {
+    const num = Number(amount)
+    return formatMoney(isNaN(num) ? 0 : num)
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -107,12 +108,12 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: InvoiceDe
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">{t('paid') || 'Paid'}</p>
-                <p className="font-medium text-green-700">Rs {formatCurrency(invoice.paidAmount)}</p>
+                <p className="font-medium text-green-700">{formatCurrency(invoice.paidAmount)}</p>
               </div>
               {Number(invoice.balance || 0) > 0 && (
                 <div>
                   <p className="text-sm text-muted-foreground">{t('balance') || 'Balance'}</p>
-                  <p className="font-medium text-red-700">Rs {formatCurrency(invoice.balance)}</p>
+                  <p className="font-medium text-red-700">{formatCurrency(invoice.balance)}</p>
                 </div>
               )}
             </div>
@@ -149,16 +150,16 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: InvoiceDe
                             </TableCell>
                             <TableCell>{expiryBadge(item.batchId?.expiryDate)}</TableCell>
                             <TableCell>{item.quantity || 0}</TableCell>
-                            <TableCell>Rs {formatCurrency(item.unitPrice)}</TableCell>
+                            <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
                             <TableCell className="text-right">
                               {Number(item.discountAmount || 0) > 0 && (
                                 <div className="text-xs text-muted-foreground line-through">
-                                  Rs {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
+                                  {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
                                 </div>
                               )}
-                              Rs {formatCurrency(item.subtotal)}
+                              {formatCurrency(item.subtotal)}
                               {Number(item.discountAmount || 0) > 0 && (
-                                <div className="text-xs text-green-600">-Rs {formatCurrency(item.discountAmount)}</div>
+                                <div className="text-xs text-green-600">-{formatCurrency(item.discountAmount)}</div>
                               )}
                             </TableCell>
                           </TableRow>
@@ -180,23 +181,23 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: InvoiceDe
               <div className="w-full sm:w-64 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t('subtotal') || 'Subtotal'}</span>
-                  <span>Rs {formatCurrency(invoice.subtotal)}</span>
+                  <span>{formatCurrency(invoice.subtotal)}</span>
                 </div>
                 {Number(invoice.discount || 0) > 0 && (
                   <div className="flex justify-between text-green-600">
                     <span>{t('discount') || 'Discount'}</span>
-                    <span>-Rs {formatCurrency(invoice.discount)}</span>
+                    <span>-{formatCurrency(invoice.discount)}</span>
                   </div>
                 )}
                 {Number(invoice.tax || 0) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{t('tax') || 'Tax'}</span>
-                    <span>Rs {formatCurrency(invoice.tax)}</span>
+                    <span>{formatCurrency(invoice.tax)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-semibold text-base border-t pt-1">
                   <span>{t('total') || 'Total'}</span>
-                  <span>Rs {formatCurrency(invoice.total)}</span>
+                  <span>{formatCurrency(invoice.total)}</span>
                 </div>
               </div>
             </div>

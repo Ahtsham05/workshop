@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useFormatMoney } from '@/lib/format-money'
 // import { Badge } from '@/components/ui/badge'
 import { Users, TrendingUp, Phone } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
@@ -17,6 +18,7 @@ type Props = {
 
 export function TopCustomers({ dateRange }: Props) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { data: topCustomers, isLoading, isFetching } = useGetTopCustomersQuery({
     limit: 5,
     ...dashboardRangeQueryParams(dateRange),
@@ -77,7 +79,7 @@ export function TopCustomers({ dateRange }: Props) {
                   </div>
                 </div>
                 <div className='text-right'>
-                  <p className='text-sm font-semibold'>Rs{customer.totalAmount.toLocaleString()}</p>
+                  <p className='text-sm font-semibold'>{formatMoney(customer.totalAmount)}</p>
                   <p className='text-xs text-muted-foreground'>
                     {customer.totalPurchases} {t('purchases')}
                   </p>

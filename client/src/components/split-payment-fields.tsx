@@ -10,9 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { WalletLike } from '@/lib/wallet-payment-options'
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
+import { useFormatMoney } from '@/lib/format-money'
 
 export interface SplitPaymentValue {
   splitPaymentMethod?: 'cash' | 'wallet'
@@ -56,6 +54,7 @@ interface SplitPaymentFieldsProps {
  * paid" (see `paidAmount + splitPaidAmount` in invoice-panel.tsx / purchase-panel.tsx).
  */
 export function SplitPaymentFields({ primaryMethod, wallets, paidAmount, value, onChange, showBalance = true }: SplitPaymentFieldsProps) {
+  const fmt = useFormatMoney()
   const splitBucket: 'cash' | 'wallet' = primaryMethod === 'wallet' ? 'cash' : 'wallet'
   const isSplitting = Boolean(value.splitPaymentMethod)
   const splitAmount = Math.max(0, Number(value.splitPaidAmount || 0))

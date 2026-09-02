@@ -50,6 +50,7 @@ import {
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface ExpenseReportProps {
   startDate: string
@@ -67,11 +68,9 @@ const COLORS = [
   '#6366f1', '#94a3b8',
 ]
 
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', maximumFractionDigits: 0 }).format(v)
-
 export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseReportProps>(
   ({ startDate, endDate, mode = 'full', refreshTrigger = 0, onAddExpense, openCategoryRequest, onOpenCategoryHandled }, ref) => {
+    const fmt = useFormatMoney()
     const categoriesOnly = mode === 'categories'
     const { t } = useLanguage()
     const { data, isFetching: isLoading, refetch } = useGetExpenseReportQuery({ startDate, endDate })

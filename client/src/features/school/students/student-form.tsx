@@ -13,6 +13,7 @@ import { Camera, X, UserPlus, ArrowLeft, ArrowRight, Check, GraduationCap, Users
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
@@ -56,6 +57,8 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
   const [step, setStep] = useState(1);
   const [prorateFee, setProrateFee] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formatMoney = useFormatMoney();
+  const { symbol: currencySymbol } = useCurrencyMeta();
 
   // Admission result state
   const [admissionResult, setAdmissionResult] = useState<any>(null);
@@ -668,9 +671,9 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
                             return (
                               <div key={i} className="flex items-center gap-2 text-xs">
                                 <span className="text-muted-foreground">{s.firstName || `Student ${i+1}`}:</span>
-                                <span className="line-through text-muted-foreground">Rs. {mf.toLocaleString()}</span>
-                                <span className="font-semibold text-blue-700">→ Rs. {prorated.toLocaleString()}</span>
-                                <span className="text-emerald-600">(save Rs. {saved.toLocaleString()})</span>
+                                <span className="line-through text-muted-foreground">{formatMoney(mf)}</span>
+                                <span className="font-semibold text-blue-700">→ {formatMoney(prorated)}</span>
+                                <span className="text-emerald-600">(save {formatMoney(saved)})</span>
                               </div>
                             );
                           })}
@@ -711,7 +714,7 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
                         </p>
                       </div>
                       <div className="text-right text-sm">
-                        <p>Monthly: Rs. {student.monthlyFee || '0'}</p>
+                        <p>Monthly: {formatMoney(Number(student.monthlyFee) || 0)}</p>
                       </div>
                     </div>
                   );
@@ -820,7 +823,7 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
                           <tr className="border-b text-muted-foreground">
                             <th className="text-left py-2 font-medium">#</th>
                             <th className="text-left py-2 font-medium">Fee Item</th>
-                            <th className="text-right py-2 font-medium">Amount (Rs.)</th>
+                            <th className="text-right py-2 font-medium">Amount ({currencySymbol})</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -836,37 +839,37 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
                           <tr className="border-t">
                             <td colSpan={2} className="py-2 text-right font-medium">Subtotal</td>
                             <td className="py-2 text-right font-medium">
-                              Rs. {(v.totalAmount || 0).toLocaleString()}
+                              {formatMoney(v.totalAmount || 0)}
                             </td>
                           </tr>
                           {(v.discount || 0) > 0 && (
                             <tr className="text-green-600">
                               <td colSpan={2} className="py-1 text-right">Discount</td>
-                              <td className="py-1 text-right">- Rs. {(v.discount || 0).toLocaleString()}</td>
+                              <td className="py-1 text-right">- {formatMoney(v.discount || 0)}</td>
                             </tr>
                           )}
                           {(v.fine || 0) > 0 && (
                             <tr className="text-red-600">
                               <td colSpan={2} className="py-1 text-right">Fine</td>
-                              <td className="py-1 text-right">+ Rs. {(v.fine || 0).toLocaleString()}</td>
+                              <td className="py-1 text-right">+ {formatMoney(v.fine || 0)}</td>
                             </tr>
                           )}
                           <tr className="border-t-2 text-base">
                             <td colSpan={2} className="py-2 text-right font-bold">Net Amount</td>
                             <td className="py-2 text-right font-bold text-primary">
-                              Rs. {(v.netAmount || 0).toLocaleString()}
+                              {formatMoney(v.netAmount || 0)}
                             </td>
                           </tr>
                           {(v.paidAmount || 0) > 0 && (
                             <tr className="text-green-600">
                               <td colSpan={2} className="py-1 text-right font-medium">Paid</td>
-                              <td className="py-1 text-right font-medium">Rs. {(v.paidAmount || 0).toLocaleString()}</td>
+                              <td className="py-1 text-right font-medium">{formatMoney(v.paidAmount || 0)}</td>
                             </tr>
                           )}
                           {remaining > 0 && (
                             <tr className="text-orange-600">
                               <td colSpan={2} className="py-1 text-right font-medium">Remaining</td>
-                              <td className="py-1 text-right font-medium">Rs. {remaining.toLocaleString()}</td>
+                              <td className="py-1 text-right font-medium">{formatMoney(remaining)}</td>
                             </tr>
                           )}
                         </tfoot>
@@ -919,7 +922,7 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <Label>Payment Amount (Rs.) <span className="text-destructive">*</span></Label>
+              <Label>Payment Amount ({currencySymbol}) <span className="text-destructive">*</span></Label>
               <Input
                 type="number"
                 min={1}

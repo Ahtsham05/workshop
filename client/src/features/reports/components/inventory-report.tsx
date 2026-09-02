@@ -31,6 +31,7 @@ import { expiryBadge } from '../utils/expiry-badge'
 import { MovementTile } from './movement-tile'
 import { ColorDot } from '@/components/color-swatch-picker'
 import { FlagBadge } from '@/components/flag-badge'
+import { useFormatMoney } from '@/lib/format-money'
 
 const STOCK_STATUS_STYLES: Record<string, string> = {
   'Out of Stock':
@@ -157,10 +158,9 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
     },
   }))
 
-  if (isLoading) return <Skeleton className='h-[400px] w-full' />
+  const formatCurrency = useFormatMoney()
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+  if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
   const pagination = data?.pagination
 

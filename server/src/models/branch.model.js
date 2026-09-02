@@ -74,6 +74,25 @@ const branchSchema = mongoose.Schema(
       },
     },
     /**
+     * Optional per-branch tax overrides. Currency stays strictly org-level (see
+     * Organization.baseCurrency) to avoid fragmenting consolidated GL/reporting, which
+     * posts one ledger per organization, not per branch/currency — only jurisdiction and
+     * default tax category can be overridden per branch (e.g. a branch operating in a
+     * different US state than the org's default).
+     */
+    taxOverride: {
+      taxJurisdictionId: {
+        type: mongoose.SchemaTypes.ObjectId,
+        ref: 'TaxJurisdiction',
+        default: null,
+      },
+      defaultTaxCategoryId: {
+        type: mongoose.SchemaTypes.ObjectId,
+        ref: 'TaxCategory',
+        default: null,
+      },
+    },
+    /**
      * Fee-collection bank accounts shown to parents/students in the portal when
      * paying fees online. Each account is what a parent transfers fees to and
      * then uploads the payment proof against.

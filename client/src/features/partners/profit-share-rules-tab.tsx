@@ -18,6 +18,8 @@ import { ProfitShareRuleDialog } from './profit-share-rule-dialog';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
+import { formatMoneyWithMeta, FALLBACK_CURRENCY, useCurrencyMeta, useFormatMoney } from '@/lib/format-money';
+import type { CurrencyOption } from '@/stores/localization.api';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
@@ -55,12 +57,16 @@ function scopeLabel(rule: PartnerProfitShareRule): string {
   return 'Organization-wide';
 }
 
-function rateLabel(rule: PartnerProfitShareRule): string {
-  return rule.shareType === 'percentage_of_profit' ? `${rule.rate}% of profit` : `Rs ${rule.rate} / unit`;
+function rateLabel(rule: PartnerProfitShareRule, meta: CurrencyOption = FALLBACK_CURRENCY): string {
+  return rule.shareType === 'percentage_of_profit'
+    ? `${rule.rate}% of profit`
+    : `${formatMoneyWithMeta(rule.rate, meta)} / unit`;
 }
 
 export function ProfitShareRulesTab() {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
+  const currencyMeta = useCurrencyMeta();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<PartnerProfitShareRule | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -239,7 +245,7 @@ export function ProfitShareRulesTab() {
                       <Badge variant="outline">{t('product') || 'Product'}</Badge>
                       <span>{partnerNameById.get(r.partnerId) || r.partnerId}</span>
                       <span className="text-muted-foreground">
-                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `Rs ${r.rate}/unit`}
+                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `${formatMoney(r.rate)}/unit`}
                       </span>
                     </div>
                   ))}
@@ -248,7 +254,7 @@ export function ProfitShareRulesTab() {
                       <Badge variant="outline">{t('variant') || 'Variant'}</Badge>
                       <span>{partnerNameById.get(r.partnerId) || r.partnerId}</span>
                       <span className="text-muted-foreground">
-                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `Rs ${r.rate}/unit`}
+                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `${formatMoney(r.rate)}/unit`}
                       </span>
                     </div>
                   ))}
@@ -257,7 +263,7 @@ export function ProfitShareRulesTab() {
                       <Badge variant="outline">{t('batch') || 'Batch'}</Badge>
                       <span>{partnerNameById.get(r.partnerId) || r.partnerId}</span>
                       <span className="text-muted-foreground">
-                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `Rs ${r.rate}/unit`}
+                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `${formatMoney(r.rate)}/unit`}
                       </span>
                     </div>
                   ))}
@@ -266,7 +272,7 @@ export function ProfitShareRulesTab() {
                       <Badge variant="secondary">{r.scope === 'branch' ? t('branch') || 'Branch' : t('organization') || 'Organization'}</Badge>
                       <span>{partnerNameById.get(r.partnerId) || r.partnerId}</span>
                       <span className="text-muted-foreground">
-                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `Rs ${r.rate}/unit`}
+                        — {r.shareType === 'percentage_of_profit' ? `${r.rate}%` : `${formatMoney(r.rate)}/unit`}
                       </span>
                     </div>
                   ))}
@@ -326,7 +332,7 @@ export function ProfitShareRulesTab() {
                           {scopeLabel(rule)}
                         </div>
                       </TableCell>
-                      <TableCell>{rateLabel(rule)}</TableCell>
+                      <TableCell>{rateLabel(rule, currencyMeta)}</TableCell>
                       <TableCell>{format(new Date(rule.effectiveFrom), 'MMM dd, yyyy')}</TableCell>
                       <TableCell>{rule.effectiveTo ? format(new Date(rule.effectiveTo), 'MMM dd, yyyy') : '—'}</TableCell>
                       <TableCell>

@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface SimSaleReportProps {
   startDate: string
@@ -41,6 +42,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
     const [activeProduct, setActiveProduct] = useState<string | null>(null)
     const [detailData, setDetailData] = useState<any[]>([])
     const [detailLoading, setDetailLoading] = useState(false)
+    const fmt = useFormatMoney()
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -141,7 +143,6 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
       )
     }
 
-    const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
     const s = data ? data.summary : null
     const products = data?.byProduct || []
     const totalSaleAmount = s?.totalSaleAmount || 0

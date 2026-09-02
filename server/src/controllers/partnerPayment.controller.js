@@ -4,6 +4,7 @@ const { partnerPaymentService, auditLogService } = require('../services');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
+const { formatMoney } = require('../utils/money');
 
 const createPayment = catchAsync(async (req, res) => {
   const payment = await partnerPaymentService.createPayment(
@@ -15,7 +16,7 @@ const createPayment = catchAsync(async (req, res) => {
     action: 'create',
     module: 'PartnerPayment',
     entityId: payment._id,
-    entityName: `${payment.partnerName || ''} — Rs ${payment.amount}`,
+    entityName: `${payment.partnerName || ''} — ${formatMoney(payment.amount)}`,
     after: payment.toObject ? payment.toObject() : payment,
     fields: ['partnerId', 'amount', 'paymentMethod', 'walletType'],
   });
@@ -46,7 +47,7 @@ const deletePayment = catchAsync(async (req, res) => {
     action: 'delete',
     module: 'PartnerPayment',
     entityId: req.params.paymentId,
-    entityName: payment ? `${payment.partnerName || ''} — Rs ${payment.amount}` : undefined,
+    entityName: payment ? `${payment.partnerName || ''} — ${formatMoney(payment.amount)}` : undefined,
   });
   res.status(httpStatus.NO_CONTENT).send();
 });

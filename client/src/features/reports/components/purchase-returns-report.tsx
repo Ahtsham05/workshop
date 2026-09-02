@@ -14,6 +14,7 @@ import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface PurchaseReturnsReportProps {
   startDate: string
@@ -24,6 +25,7 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
   ({ startDate, endDate }, ref) => {
     const { t, language } = useLanguage()
     const { data, isFetching: isLoading } = useGetPurchaseReturnsReportQuery({ startDate, endDate })
+    const fmt = useFormatMoney()
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -79,7 +81,6 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
 
     if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
-    const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
     const s = data?.summary
 
     return (

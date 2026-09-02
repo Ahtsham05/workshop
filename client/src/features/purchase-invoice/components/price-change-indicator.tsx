@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { ArrowUp, ArrowDown, Equal, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PriceComparisonEntry } from '@/stores/purchase.api'
+import { useCurrencyMeta, useFormatMoney } from '@/lib/format-money'
 import { calculatePriceChange, formatPriceChange, resolvePriceComparisonBasis } from '../utils/price-comparison'
 
 const TONE_CLASSES: Record<string, string> = {
@@ -32,6 +33,8 @@ export function PriceChangeIndicator({
   currentPrice: number
   supplierName?: string
 }) {
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   let body: ReactNode = null
   let tone = 'neutral'
   let tooltip: string | undefined
@@ -42,7 +45,7 @@ export function PriceChangeIndicator({
   } else if (basis) {
     const change = calculatePriceChange(basis.previousPrice, currentPrice)
     if (change) {
-      const formatted = formatPriceChange(change)
+      const formatted = formatPriceChange(change, currencyMeta)
       const Icon =
         formatted.icon === 'up'
           ? change.severity === 'significant'
@@ -54,7 +57,7 @@ export function PriceChangeIndicator({
       tone = formatted.tone
       const severityNote =
         change.severity === 'significant' ? (change.direction === 'increase' ? 'Significant increase — ' : 'Notable decrease — ') : ''
-      tooltip = `${severityNote}${basis.label} (Rs${basis.previousPrice.toFixed(2)})`
+      tooltip = `${severityNote}${basis.label} (${formatMoney(basis.previousPrice)})`
       body = (
         <>
           <Icon className='h-2.5 w-2.5 shrink-0' />

@@ -39,6 +39,9 @@ const ProductVariantSchema = new mongoose.Schema({
     attributes: { type: Map, of: String, default: {} }, // { Size: "Large", Color: "Black" }
     price: { type: Number, required: true },
     cost: { type: Number, required: true },
+    // Same as Product.taxCategoryId — null falls back to the parent Product's category,
+    // then the organization default, at calculation time.
+    taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
     unit: {
         type: String,
         default: DEFAULT_UNIT,

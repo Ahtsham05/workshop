@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -130,6 +131,7 @@ interface SupplierLedgerDetailsProps {
 // Purchase dialog content component
 function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: string; supplierName: string }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!purchaseId) {
     return <div className="text-center py-8 text-gray-500">{t('No purchase selected')}</div>;
@@ -158,7 +160,7 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
 
   const formatCurrency = (amount: any) => {
     const num = Number(amount);
-    return isNaN(num) ? '0.00' : num.toFixed(2);
+    return formatMoney(isNaN(num) ? 0 : num);
   };
 
   return (
@@ -184,7 +186,7 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
         </div>
         <div>
           <p className="text-sm text-gray-500">{t('Total Amount')}</p>
-          <p className="font-medium text-lg">Rs{formatCurrency(purchaseData.totalAmount || purchaseData.total)}</p>
+          <p className="font-medium text-lg">{formatCurrency(purchaseData.totalAmount || purchaseData.total)}</p>
         </div>
         {purchaseData.attachments?.length > 0 && (
           <div>
@@ -223,8 +225,8 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
                   <TableCell className="font-mono text-xs text-muted-foreground">{item.batchNumber || '—'}</TableCell>
                   <TableCell>{expiryBadge(item.expiryDate)}</TableCell>
                   <TableCell>{item.quantity || 0}</TableCell>
-                  <TableCell>Rs{formatCurrency(item.unitPrice || item.price)}</TableCell>
-                  <TableCell className="text-right">Rs{formatCurrency(item.subtotal || item.total)}</TableCell>
+                  <TableCell>{formatCurrency(item.unitPrice || item.price)}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(item.subtotal || item.total)}</TableCell>
                 </TableRow>
                 )
               })
@@ -246,6 +248,7 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
 // referenceId on those rows points at an Invoice, not a Purchase.
 function InvoiceDialogContent({ invoiceId, supplierName }: { invoiceId?: string; supplierName: string }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!invoiceId) {
     return <div className="text-center py-8 text-gray-500">{t('No invoice selected')}</div>;
@@ -274,7 +277,7 @@ function InvoiceDialogContent({ invoiceId, supplierName }: { invoiceId?: string;
 
   const formatCurrency = (amount: any) => {
     const num = Number(amount);
-    return isNaN(num) ? '0.00' : num.toFixed(2);
+    return formatMoney(isNaN(num) ? 0 : num);
   };
 
   return (
@@ -294,9 +297,9 @@ function InvoiceDialogContent({ invoiceId, supplierName }: { invoiceId?: string;
         </div>
         <div>
           <p className="text-sm text-gray-500">{t('Total Amount')}</p>
-          <p className="font-medium text-lg">Rs{formatCurrency(invoiceData.total || invoiceData.totalAmount)}</p>
+          <p className="font-medium text-lg">{formatCurrency(invoiceData.total || invoiceData.totalAmount)}</p>
           {Number(invoiceData.discount || 0) > 0 && (
-            <p className="text-xs text-green-600">-Rs{formatCurrency(invoiceData.discount)} {t('discount')}</p>
+            <p className="text-xs text-green-600">-{formatCurrency(invoiceData.discount)} {t('discount')}</p>
           )}
         </div>
         <div>
@@ -336,16 +339,16 @@ function InvoiceDialogContent({ invoiceId, supplierName }: { invoiceId?: string;
                   <TableCell className="font-mono text-xs text-muted-foreground">{item.batchNumber || '—'}</TableCell>
                   <TableCell>{expiryBadge(item.batchId?.expiryDate)}</TableCell>
                   <TableCell>{item.quantity || 0}</TableCell>
-                  <TableCell>Rs{formatCurrency(item.unitPrice || item.price)}</TableCell>
+                  <TableCell>{formatCurrency(item.unitPrice || item.price)}</TableCell>
                   <TableCell className="text-right">
                     {Number(item.discountAmount || 0) > 0 && (
                       <div className="text-xs text-muted-foreground line-through">
-                        Rs{formatCurrency((item.quantity || 0) * (item.unitPrice || item.price || 0))}
+                        {formatCurrency((item.quantity || 0) * (item.unitPrice || item.price || 0))}
                       </div>
                     )}
-                    Rs{formatCurrency(item.subtotal || item.total)}
+                    {formatCurrency(item.subtotal || item.total)}
                     {Number(item.discountAmount || 0) > 0 && (
-                      <div className="text-xs text-green-600">-Rs{formatCurrency(item.discountAmount)}</div>
+                      <div className="text-xs text-green-600">-{formatCurrency(item.discountAmount)}</div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -372,6 +375,7 @@ function PurchaseReturnDialogContent({
   fallbackSupplierName: string;
 }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!purchaseReturnId) {
     return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
@@ -400,7 +404,7 @@ function PurchaseReturnDialogContent({
 
   const formatCurrency = (amount: unknown) => {
     const num = Number(amount);
-    return isNaN(num) ? '0.00' : num.toFixed(2);
+    return formatMoney(isNaN(num) ? 0 : num);
   };
 
   const supplierLabel =
@@ -440,7 +444,7 @@ function PurchaseReturnDialogContent({
         </div>
         <div>
           <p className="text-sm text-gray-500">{t('Total Amount')}</p>
-          <p className="font-medium text-lg">Rs{formatCurrency(pr.totalAmount)}</p>
+          <p className="font-medium text-lg">{formatCurrency(pr.totalAmount)}</p>
         </div>
         {purchaseLabel ? (
           <div>
@@ -495,8 +499,8 @@ function PurchaseReturnDialogContent({
                 <TableRow key={index}>
                   <TableCell className="max-w-[200px] truncate" title={item.name || '-'}>{item.name || '-'}</TableCell>
                   <TableCell>{item.quantity ?? 0}</TableCell>
-                  <TableCell>Rs{formatCurrency(item.costPrice)}</TableCell>
-                  <TableCell className="text-right">Rs{formatCurrency(item.total)}</TableCell>
+                  <TableCell>{formatCurrency(item.costPrice)}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
                 </TableRow>
               ))
             ) : (
@@ -522,6 +526,7 @@ function LoadPurchaseDetailDialogContent({
   fallbackSupplierName: string;
 }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!loadPurchaseId) {
     return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
@@ -541,7 +546,7 @@ function LoadPurchaseDetailDialogContent({
 
   const fmt = (n: unknown) => {
     const x = Number(n);
-    return Number.isFinite(x) ? x.toFixed(2) : '0.00';
+    return formatMoney(Number.isFinite(x) ? x : 0);
   };
   const fmtDate = (d: unknown) => {
     try {
@@ -587,11 +592,11 @@ function LoadPurchaseDetailDialogContent({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">{t('Amount')}</p>
-            <p className="font-medium">Rs{fmt(lp.amount)}</p>
+            <p className="font-medium">{fmt(lp.amount)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Paid')}</p>
-            <p className="font-medium">Rs{fmt(lp.paidAmount ?? 0)}</p>
+            <p className="font-medium">{fmt(lp.paidAmount ?? 0)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Commission rate')}</p>
@@ -599,11 +604,11 @@ function LoadPurchaseDetailDialogContent({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Extra charge')}</p>
-            <p className="font-medium">Rs{fmt(lp.extraCharge)}</p>
+            <p className="font-medium">{fmt(lp.extraCharge)}</p>
           </div>
           <div className="sm:col-span-2">
             <p className="text-xs text-muted-foreground">{t('Profit')}</p>
-            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Rs{fmt(lp.profit)}</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{fmt(lp.profit)}</p>
           </div>
         </div>
       </div>
@@ -643,6 +648,8 @@ function storeLedgerViewMode(mode: LedgerViewMode) {
 
 export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: SupplierLedgerDetailsProps) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
+  const currencyMeta = useCurrencyMeta();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
@@ -892,7 +899,6 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
     try {
       if (entry.transactionType === 'purchase_return') {
         const pr = await dispatch(returnsApi.endpoints.getPurchaseReturnById.initiate(id)).unwrap();
-        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
         const sup =
           (typeof pr.supplierId === 'object' && pr.supplierId != null && 'name' in pr.supplierId
             ? String((pr.supplierId as { name?: string }).name || '')
@@ -912,7 +918,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
         const itemLines =
           pr.items?.map((it) => ({
             label: `${it.name} × ${it.quantity}`,
-            value: fmtRs(it.total),
+            value: formatMoney(it.total),
           })) ?? [];
         printMobileShopReceipt(
           {
@@ -924,7 +930,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               ...(purchaseRef ? [{ label: 'Purchase', value: purchaseRef }] : []),
               ...(purchaseVendorBillNumber ? [{ label: 'Vendor Bill No', value: purchaseVendorBillNumber }] : []),
               ...itemLines,
-              { label: 'Total', value: fmtRs(pr.totalAmount) },
+              { label: 'Total', value: formatMoney(pr.totalAmount) },
               ...(pr.reason?.trim() ? [{ label: 'Reason', value: pr.reason }] : []),
             ],
           },
@@ -937,7 +943,6 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
 
       if (isLoadPurchaseLedgerRow(entry)) {
         const lp = await dispatch(mobileShopApi.endpoints.getLoadPurchaseById.initiate(id)).unwrap();
-        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
         printMobileShopReceipt(
           {
             title: 'Load purchase',
@@ -945,12 +950,12 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             issuedAt: new Date(lp.date).toLocaleString(),
             lines: [
               { label: 'Wallet', value: lp.walletType },
-              { label: 'Amount', value: fmtRs(lp.amount) },
-              { label: 'Paid', value: fmtRs(lp.paidAmount ?? 0) },
+              { label: 'Amount', value: formatMoney(lp.amount) },
+              { label: 'Paid', value: formatMoney(lp.paidAmount ?? 0) },
               ...(lp.supplierName ? [{ label: 'Supplier', value: lp.supplierName }] : []),
               { label: 'Commission %', value: `${Number(lp.commissionRate ?? 0).toFixed(2)}%` },
-              { label: 'Extra charge', value: fmtRs(lp.extraCharge) },
-              { label: 'Profit', value: fmtRs(lp.profit) },
+              { label: 'Extra charge', value: formatMoney(lp.extraCharge) },
+              { label: 'Profit', value: formatMoney(lp.profit) },
             ],
           },
           orgData,
@@ -973,6 +978,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
         logo: orgData?.logo?.url,
         isTrial: orgData?.subscription?.isTrial,
         invoiceNote: branchData?.invoiceNote,
+        currencyMeta,
       };
       const sheetSize = withPrintOrientation(resolveSheetSize(paperSize), printOrientation);
       const format = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)];
@@ -1092,6 +1098,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
         printInUrdu: getInvoicePrintInUrdu(),
         previousBalance,
         newBalance: previousBalance + invoiceTotal - invoicePaid,
+        currencyMeta,
       }, invoice, { phone: contactPhone, whatsapp: contactWhatsapp || contactPhone });
 
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
@@ -1520,7 +1527,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                 <div className="text-2xl font-bold text-gray-400">{t('Loading...')}</div>
               ) : currentBalance !== null ? (
                 <div className={`text-3xl font-bold ${getBalanceColor(currentBalance)}`}>
-                  Rs{Math.abs(currentBalance).toFixed(2)}
+                  {formatMoney(Math.abs(currentBalance))}
                   {currentBalance > 0 && (
                     <span className="text-sm text-red-600 ml-2">({t('Payable')})</span>
                   )}
@@ -1529,7 +1536,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                   )}
                 </div>
               ) : (
-                <div className="text-2xl font-bold text-gray-600">Rs0.00</div>
+                <div className="text-2xl font-bold text-gray-600">{formatMoney(0)}</div>
               )}
             </div>
 
@@ -1607,25 +1614,25 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Opening Balance')}</p>
               <p className={`mt-1 text-lg font-semibold tabular-nums ${getLedgerBalanceTone('supplier', openingBalance)}`}>
-                {formatLedgerBalanceLabel('supplier', openingBalance, t)}
+                {formatLedgerBalanceLabel('supplier', openingBalance, t, currencyMeta)}
               </p>
             </div>
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Debit')}</p>
               <p className="mt-1 text-lg font-semibold tabular-nums text-red-600">
-                Rs{periodSummary.periodDebit.toFixed(2)}
+                {formatMoney(periodSummary.periodDebit)}
               </p>
             </div>
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Credit')}</p>
               <p className="mt-1 text-lg font-semibold tabular-nums text-green-600">
-                Rs{periodSummary.periodCredit.toFixed(2)}
+                {formatMoney(periodSummary.periodCredit)}
               </p>
             </div>
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Closing Balance')}</p>
               <p className={`mt-1 text-lg font-semibold tabular-nums ${getLedgerBalanceTone('supplier', periodSummary.closingBalance)}`}>
-                {formatLedgerBalanceLabel('supplier', periodSummary.closingBalance, t)}
+                {formatLedgerBalanceLabel('supplier', periodSummary.closingBalance, t, currencyMeta)}
               </p>
             </div>
           </div>
@@ -1709,12 +1716,12 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                     </span>
                     {activeCategoryGroup.totalDebit > 0 && (
                       <Badge variant="outline" className="font-normal text-red-700 border-red-200">
-                        {t('Debit')}: Rs{activeCategoryGroup.totalDebit.toFixed(2)}
+                        {t('Debit')}: {formatMoney(activeCategoryGroup.totalDebit)}
                       </Badge>
                     )}
                     {activeCategoryGroup.totalCredit > 0 && (
                       <Badge variant="outline" className="font-normal text-green-700 border-green-200">
-                        {t('Credit')}: Rs{activeCategoryGroup.totalCredit.toFixed(2)}
+                        {t('Credit')}: {formatMoney(activeCategoryGroup.totalCredit)}
                       </Badge>
                     )}
                   </div>

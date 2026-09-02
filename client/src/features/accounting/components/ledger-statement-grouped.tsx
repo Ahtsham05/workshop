@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useFormatMoney } from '@/lib/format-money';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -39,6 +40,7 @@ function CategorySection({
   openingBalanceLabel?: string;
 } & Omit<Props, 'entries' | 'openingBalance' | 'showOpeningBalance'>) {
   const { t } = tableProps;
+  const formatMoney = useFormatMoney();
 
   return (
     <Card className='overflow-hidden shadow-sm'>
@@ -51,12 +53,12 @@ function CategorySection({
             </span>
             {group.totalDebit > 0 && (
               <Badge variant='outline' className='font-normal text-red-700 border-red-200'>
-                {t('Debit')}: Rs{group.totalDebit.toFixed(2)}
+                {t('Debit')}: {formatMoney(group.totalDebit)}
               </Badge>
             )}
             {group.totalCredit > 0 && (
               <Badge variant='outline' className='font-normal text-green-700 border-green-200'>
-                {t('Credit')}: Rs{group.totalCredit.toFixed(2)}
+                {t('Credit')}: {formatMoney(group.totalCredit)}
               </Badge>
             )}
           </div>

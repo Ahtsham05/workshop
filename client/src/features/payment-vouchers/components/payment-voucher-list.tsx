@@ -13,6 +13,7 @@ import {
   type PaymentVoucherRecord,
 } from '@/stores/paymentVoucher.api'
 import { useBranchPaperSize, useBranchPrintOrientation } from '@/features/invoice/utils/paper-format'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { printPaymentVoucher } from '../utils/print-payment-voucher'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -75,6 +76,8 @@ const ALL_ACCOUNTS = '__all__'
 const ALL_TYPES = '__all__'
 
 export function PaymentVoucherList() {
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const { hasExplicitPermission } = usePermissions()
   const canDelete = hasExplicitPermission('managePaymentVouchers')
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -114,6 +117,7 @@ export function PaymentVoucherList() {
         name: org?.name || 'Logix Plus Solutions',
         address: org?.address,
         phone: org?.phone,
+        currencyMeta,
       },
       paperSize,
       orientation,
@@ -211,7 +215,7 @@ export function PaymentVoucherList() {
                         </Badge>
                       </TableCell>
                       <TableCell className='text-right font-semibold text-red-600 whitespace-nowrap'>
-                        Rs {Number(voucher.totalAmount || 0).toFixed(2)}
+                        {formatMoney(Number(voucher.totalAmount || 0))}
                       </TableCell>
                       <TableCell>
                         <div className='flex items-center justify-end gap-1'>

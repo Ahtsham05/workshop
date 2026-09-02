@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 
 import { formatBusinessDate, formatBusinessDateTime } from '@/lib/business-timezone'
+import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import {
   Dialog,
@@ -43,12 +44,6 @@ const STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   completed: 'Completed',
   cancelled: 'Cancelled',
 }
-
-const formatMoney = (value: number) =>
-  Number(value || 0).toLocaleString('en-PK', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 
 function getReceiptInvoiceMeta(rcpt: any) {
   const purchase = rcpt?.purchase
@@ -90,6 +85,7 @@ interface Props {
 
 export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Props) {
   const branchName = useBranchName()
+  const formatMoney = useFormatMoney()
   if (!order) return null
 
   const orderedQty = order.items.reduce((s, i) => s + Number(i.quantity || 0), 0)
@@ -135,7 +131,7 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
               <div className='text-right'>
                 <p className='text-xs uppercase tracking-wide text-muted-foreground'>Order total</p>
                 <p className='text-2xl font-bold tabular-nums text-primary'>
-                  Rs {formatMoney(order.totalAmount)}
+                  {formatMoney(order.totalAmount)}
                 </p>
               </div>
             </div>
@@ -301,18 +297,18 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                                 </span>
                               </td>
                               <td className='px-3 py-3 text-right tabular-nums'>
-                                Rs {formatMoney(item.expectedPrice || 0)}
+                                {formatMoney(item.expectedPrice || 0)}
                               </td>
                               <td className='px-4 py-3 text-right tabular-nums font-semibold'>
                                 {itemDiscountAmount > 0 && (
                                   <div className='text-xs font-normal text-muted-foreground line-through'>
-                                    Rs {formatMoney(itemGross)}
+                                    {formatMoney(itemGross)}
                                   </div>
                                 )}
-                                Rs {formatMoney(item.total || 0)}
+                                {formatMoney(item.total || 0)}
                                 {itemDiscountAmount > 0 && (
                                   <div className='text-xs font-normal text-green-600'>
-                                    -Rs {formatMoney(itemDiscountAmount)}
+                                    -{formatMoney(itemDiscountAmount)}
                                   </div>
                                 )}
                               </td>
@@ -341,7 +337,7 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                             All invoices
                           </p>
                           <p className='font-semibold tabular-nums'>
-                            Rs {formatMoney(receiptTotals.invoiced)}
+                            {formatMoney(receiptTotals.invoiced)}
                           </p>
                         </div>
                         <div>
@@ -349,7 +345,7 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                             Total paid
                           </p>
                           <p className='font-semibold tabular-nums text-emerald-600'>
-                            Rs {formatMoney(receiptTotals.paid)}
+                            {formatMoney(receiptTotals.paid)}
                           </p>
                         </div>
                         <div>
@@ -362,7 +358,7 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                               receiptTotals.balance > 0 ? 'text-amber-600' : 'text-muted-foreground',
                             )}
                           >
-                            Rs {formatMoney(receiptTotals.balance)}
+                            {formatMoney(receiptTotals.balance)}
                           </p>
                         </div>
                       </div>
@@ -411,7 +407,7 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                               Invoice total
                             </p>
                             <p className='font-semibold tabular-nums'>
-                              Rs {formatMoney(invoiceMeta.totalAmount)}
+                              {formatMoney(invoiceMeta.totalAmount)}
                             </p>
                           </div>
                           <div>
@@ -419,7 +415,7 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                               Paid
                             </p>
                             <p className='font-semibold tabular-nums text-emerald-600'>
-                              Rs {formatMoney(invoiceMeta.paidAmount)}
+                              {formatMoney(invoiceMeta.paidAmount)}
                             </p>
                           </div>
                           <div>
@@ -432,7 +428,7 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                                 invoiceMeta.balance > 0 ? 'text-amber-600' : 'text-muted-foreground',
                               )}
                             >
-                              Rs {formatMoney(invoiceMeta.balance)}
+                              {formatMoney(invoiceMeta.balance)}
                             </p>
                           </div>
                         </div>
@@ -468,15 +464,15 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                                   {Number(line.receivedQuantity || 0)} {line.unit || 'pcs'}
                                 </span>
                                 <span className='shrink-0 tabular-nums text-muted-foreground'>
-                                  @ Rs {formatMoney(line.priceAtPurchase || 0)}
+                                  @ {formatMoney(line.priceAtPurchase || 0)}
                                 </span>
                                 <span className='shrink-0 text-right tabular-nums font-medium'>
                                   {lineDiscount > 0 && (
                                     <span className='block text-xs font-normal text-green-600'>
-                                      -Rs {formatMoney(lineDiscount)}
+                                      -{formatMoney(lineDiscount)}
                                     </span>
                                   )}
-                                  Rs {formatMoney(lineTotal)}
+                                  {formatMoney(lineTotal)}
                                 </span>
                               </div>
                             )
@@ -543,7 +539,7 @@ export default function PurchaseOrderDetailsDialog({ order, open, onClose }: Pro
                   <div className='flex items-center justify-between'>
                     <span className='font-semibold'>Total</span>
                     <span className='text-lg font-bold tabular-nums text-primary'>
-                      Rs {formatMoney(order.totalAmount)}
+                      {formatMoney(order.totalAmount)}
                     </span>
                   </div>
                 </CardContent>
@@ -625,11 +621,12 @@ function SummaryRow({
   value: number
   muted?: boolean
 }) {
+  const formatMoney = useFormatMoney()
   return (
     <div className='flex items-center justify-between text-sm'>
       <span className='text-muted-foreground'>{label}</span>
       <span className={cn('tabular-nums font-medium', muted && 'text-red-600')}>
-        Rs {formatMoney(value)}
+        {formatMoney(value)}
       </span>
     </div>
   )

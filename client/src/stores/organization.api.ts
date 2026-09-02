@@ -21,6 +21,9 @@ export interface SubscriptionUsage {
   usersUsed: number;
 }
 
+export type TaxSystem = 'NONE' | 'VAT' | 'SALES_TAX' | 'GST' | 'CUSTOM';
+export type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
+
 export interface Organization {
   id: string;
   name: string;
@@ -31,6 +34,8 @@ export interface Organization {
   address?: string;
   city?: string;
   country?: string;
+  /** ISO 3166-1 alpha-2 code — added alongside the legacy free-text `country` above. */
+  countryCode?: string;
   taxNumber?: string;
   website?: string;
   description?: string;
@@ -40,6 +45,25 @@ export interface Organization {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  // Localization / Currency / Tax settings
+  baseCurrency?: string | null;
+  enabledCurrencies?: string[];
+  taxSystem?: TaxSystem;
+  taxInclusivePricingDefault?: boolean;
+  defaultTaxCategoryId?: string | null;
+  locale?: string;
+  dateFormat?: DateFormat;
+}
+
+export interface UpdateOrganizationSettingsRequest {
+  countryCode?: string | null;
+  baseCurrency?: string | null;
+  enabledCurrencies?: string[];
+  taxSystem?: TaxSystem;
+  taxInclusivePricingDefault?: boolean;
+  defaultTaxCategoryId?: string | null;
+  locale?: string;
+  dateFormat?: DateFormat;
 }
 
 export interface SetupOrganizationRequest {
@@ -53,6 +77,7 @@ export interface SetupOrganizationRequest {
   address?: string;
   city?: string;
   country?: string;
+  countryCode?: string;
   taxNumber?: string;
   website?: string;
   description?: string;
@@ -76,6 +101,7 @@ export const organizationApi = createApi({
         if (body.address) formData.append('address', body.address);
         if (body.city) formData.append('city', body.city);
         if (body.country) formData.append('country', body.country);
+        if (body.countryCode) formData.append('countryCode', body.countryCode);
         if (body.taxNumber) formData.append('taxNumber', body.taxNumber);
         if (body.website) formData.append('website', body.website);
         if (body.description) formData.append('description', body.description);
@@ -108,6 +134,7 @@ export const organizationApi = createApi({
         if (body.address) formData.append('address', body.address);
         if (body.city) formData.append('city', body.city);
         if (body.country) formData.append('country', body.country);
+        if (body.countryCode) formData.append('countryCode', body.countryCode);
         if (body.taxNumber) formData.append('taxNumber', body.taxNumber);
         if (body.website) formData.append('website', body.website);
         if (body.description) formData.append('description', body.description);
@@ -122,6 +149,18 @@ export const organizationApi = createApi({
       },
       invalidatesTags: ['Organization'],
     }),
+    // Plain-JSON variant of updateOrganization for the Localization/Currency/Tax settings
+    // pages, which need to send a real array (enabledCurrencies) and booleans — FormData
+    // (used above for the Business Profile tab, which also uploads a logo file) can't
+    // represent those without lossy string-encoding tricks.
+    updateOrganizationSettings: builder.mutation<Organization, { orgId: string; body: UpdateOrganizationSettingsRequest }>({
+      query: ({ orgId, body }) => ({
+        url: `/organizations/${orgId}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['Organization'],
+    }),
     getSubscriptionUsage: builder.query<SubscriptionUsage, void>({
       query: () => '/payments/subscription/usage',
       providesTags: ['Organization'],
@@ -133,5 +172,6 @@ export const {
   useSetupOrganizationMutation,
   useGetMyOrganizationQuery,
   useUpdateOrganizationMutation,
+  useUpdateOrganizationSettingsMutation,
   useGetSubscriptionUsageQuery,
 } = organizationApi;

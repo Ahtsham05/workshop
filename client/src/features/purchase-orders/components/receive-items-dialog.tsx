@@ -3,6 +3,7 @@ import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { CalendarClock, Layers, Minus, Package, PackageCheck, Plus, Sparkles, X } from 'lucide-react'
+import { formatMoneyWithMeta, useCurrencyMeta } from '@/lib/format-money'
 
 import {
   Dialog,
@@ -81,12 +82,6 @@ interface Props {
   onClose: () => void
   onReceived: () => void
 }
-
-const formatMoney = (value: number) =>
-  Number(value || 0).toLocaleString('en-PK', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 
 function buildRowsFromOrder(order: PurchaseOrder): Row[] {
   return order.items.map((it: any) => {
@@ -334,6 +329,8 @@ function ReceiveRowBatchFields({ row, onChange }: { row: Row; onChange: (patch: 
 
 export default function ReceiveItemsDialog({ open, order, onClose, onReceived }: Props) {
   const { t } = useLanguage()
+  const currencyMeta = useCurrencyMeta()
+  const formatMoney = (value: number) => formatMoneyWithMeta(Number(value || 0), currencyMeta)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const preferredLanguage = useSelector(
     (state: RootState) => state.auth.data?.user?.preferredLanguage || 'en',
@@ -383,8 +380,9 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
       logo: orgData?.logo?.url,
       isTrial: orgData?.subscription?.isTrial,
       invoiceNote: branchData?.invoiceNote,
+      currencyMeta,
     }),
-    [branchData, orgData],
+    [branchData, orgData, currencyMeta],
   )
 
   const resolveSupplierName = useCallback((purchaseOrder: PurchaseOrder, purchase?: any) => {
@@ -610,7 +608,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
     // amount against that one wallet's own balance, not the combined receipt total.
     if (effectiveWalletType && effectiveWalletAmount > effectiveWalletBalance + 0.000001) {
       toast.error(
-        `Paid amount exceeds ${effectiveWalletType} balance (Rs ${formatMoney(effectiveWalletBalance)})`,
+        `Paid amount exceeds ${effectiveWalletType} balance (${formatMoney(effectiveWalletBalance)})`,
       )
       focusField(paidAmountRef.current)
       return
@@ -926,7 +924,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
 
                       <div className='flex items-center overflow-hidden rounded-md border bg-background'>
                         <span className='flex h-7 items-center border-r bg-muted px-1.5 text-[10px]'>
-                          Rs
+                          {currencyMeta.symbol}
                         </span>
                         <Input
                           ref={(el) => {
@@ -973,10 +971,10 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                               discountType: r.discountType === 'percentage' ? 'fixed' : 'percentage',
                             })
                           }
-                          title='Click to switch between Rs and % discount'
+                          title={`Click to switch between  and % discount`}
                           className='flex h-7 items-center border-l bg-muted px-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
                         >
-                          {r.discountType === 'percentage' ? '%' : 'Rs'}
+                          {r.discountType === 'percentage' ? '%' : currencyMeta.symbol}
                         </button>
                       </div>
 
@@ -984,7 +982,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
 
                       <div className='flex items-center overflow-hidden rounded-md border border-blue-200 bg-blue-50/50'>
                         <span className='flex h-7 items-center border-r border-blue-200 bg-blue-100/60 px-1.5 text-[10px] text-blue-600'>
-                          Rs
+                          {currencyMeta.symbol}
                         </span>
                         <Input
                           ref={(el) => {
@@ -1011,9 +1009,9 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
 
                       <div className='ml-auto flex shrink-0 flex-col items-end gap-0'>
                         {lineDiscountAmount > 0 && (
-                          <span className='text-[10px] leading-none text-muted-foreground line-through'>Rs{lineGross.toFixed(2)}</span>
+                          <span className='text-[10px] leading-none text-muted-foreground line-through'>{formatMoney(lineGross)}</span>
                         )}
-                        <p className='text-sm font-bold tabular-nums'>Rs{lineTotal.toFixed(2)}</p>
+                        <p className='text-sm font-bold tabular-nums'>{formatMoney(lineTotal)}</p>
                       </div>
                     </div>
                   ) : null}
@@ -1058,12 +1056,12 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
             <div className='space-y-1.5 rounded-md border bg-muted/40 p-3'>
               <div className='flex justify-between text-sm'>
                 <span className='text-muted-foreground'>Subtotal</span>
-                <span className='font-medium tabular-nums'>Rs {formatMoney(subtotal)}</span>
+                <span className='font-medium tabular-nums'>{formatMoney(subtotal)}</span>
               </div>
               {itemDiscountTotal > 0 && (
                 <div className='flex justify-between text-sm text-green-600'>
                   <span>Item discounts</span>
-                  <span className='tabular-nums'>-Rs {formatMoney(itemDiscountTotal)}</span>
+                  <span className='tabular-nums'>-{formatMoney(itemDiscountTotal)}</span>
                 </div>
               )}
               <div className='flex items-center justify-between gap-2 text-sm'>
@@ -1082,28 +1080,28 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                   <button
                     type='button'
                     onClick={() => setDiscountType((prev) => (prev === 'percentage' ? 'fixed' : 'percentage'))}
-                    title='Click to switch between Rs and % discount'
+                    title={`Click to switch between  and % discount`}
                     className='flex h-7 items-center border-l bg-muted px-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground active:scale-95'
                   >
-                    {discountType === 'percentage' ? '%' : 'Rs'}
+                    {discountType === 'percentage' ? '%' : currencyMeta.symbol}
                   </button>
                 </div>
               </div>
               {discountAmount > 0 && (
                 <div className='flex justify-between text-sm text-green-600'>
                   <span>Discount applied</span>
-                  <span className='tabular-nums'>-Rs {formatMoney(discountAmount)}</span>
+                  <span className='tabular-nums'>-{formatMoney(discountAmount)}</span>
                 </div>
               )}
               <Separator />
               <div className='flex justify-between text-sm'>
                 <span className='text-muted-foreground'>Receipt total</span>
-                <span className='font-medium tabular-nums'>Rs {formatMoney(total)}</span>
+                <span className='font-medium tabular-nums'>{formatMoney(total)}</span>
               </div>
               <div className='flex justify-between text-sm'>
                 <span className='text-muted-foreground'>Paid now</span>
                 <span className='font-medium tabular-nums'>
-                  Rs {formatMoney(totalPaidAmount)}
+                  {formatMoney(totalPaidAmount)}
                 </span>
               </div>
               {effectiveWalletType ? (
@@ -1115,7 +1113,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
                       effectiveWalletBalance < effectiveWalletAmount && 'text-red-600',
                     )}
                   >
-                    Rs {formatMoney(effectiveWalletBalance)}
+                    {formatMoney(effectiveWalletBalance)}
                   </span>
                 </div>
               ) : null}
@@ -1123,7 +1121,7 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
               <div className='flex justify-between'>
                 <span className='font-semibold'>Balance owed</span>
                 <span className='text-base font-bold tabular-nums text-primary'>
-                  Rs {formatMoney(balance)}
+                  {formatMoney(balance)}
                 </span>
               </div>
             </div>

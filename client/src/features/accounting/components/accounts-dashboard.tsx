@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useFormatMoney } from '@/lib/format-money';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -52,6 +53,7 @@ interface AccountsDashboardProps {
 
 export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
   const [stats, setStats] = useState<DashboardStats>({
     totalExpenses: 0,
     monthlyExpenses: 0,
@@ -198,7 +200,7 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
             <Receipt className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Rs {stats.monthlyExpenses.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatMoney(stats.monthlyExpenses)}</div>
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
               <TrendingUp className="h-3 w-3 text-red-500" />
               {monthLabel(selectedMonth)}
@@ -213,7 +215,7 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">Rs {stats.totalReceivables.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-green-600">{formatMoney(stats.totalReceivables)}</div>
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
               <ArrowUpRight className="h-3 w-3 text-green-500" />
               {t('From customers')}
@@ -228,7 +230,7 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">Rs {stats.totalPayables.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-red-600">{formatMoney(stats.totalPayables)}</div>
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
               <ArrowDownRight className="h-3 w-3 text-red-500" />
               {t('To suppliers')}
@@ -244,7 +246,7 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${netCashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              Rs {netCashFlow.toFixed(2)}
+              {formatMoney(netCashFlow)}
             </div>
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
               {netCashFlow >= 0 ? (
@@ -273,7 +275,7 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry) => `${entry.category}: Rs${entry.amount.toFixed(0)}`}
+                    label={(entry) => `${entry.category}: ${formatMoney(entry.amount)}`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="amount"
@@ -282,7 +284,7 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => `Rs ${value.toFixed(2)}`} />
+                  <Tooltip formatter={(value: number) => formatMoney(value)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -306,7 +308,7 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
-                  <Tooltip formatter={(value: number) => `Rs ${value.toFixed(2)}`} />
+                  <Tooltip formatter={(value: number) => formatMoney(value)} />
                   <Legend />
                   <Line type="monotone" dataKey="amount" stroke="#8884d8" activeDot={{ r: 8 }} />
                 </LineChart>

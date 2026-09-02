@@ -23,6 +23,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { Insight, InsightPriority } from '@/stores/insight.api'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 /** One icon per insight `type` — more specific and scannable than a generic category icon. */
 export const TYPE_ICON: Record<string, LucideIcon> = {
@@ -75,7 +77,8 @@ export const PRIORITY_THEME: Record<InsightPriority, { bg: string; text: string;
   },
 }
 
-export const formatMoney = (n: unknown) => `Rs${Math.round(Number(n) || 0).toLocaleString()}`
+export const formatMoney = (n: unknown, meta: CurrencyOption = FALLBACK_CURRENCY) =>
+  formatMoneyWithMeta(Math.round(Number(n) || 0), meta)
 export const formatNumber = (n: unknown) => (Number.isFinite(Number(n)) ? Math.round(Number(n) * 100) / 100 : n)
 
 /** "Positive" alert types where a high number is good news (growth) — affects tone (green, not red). */

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useFormatMoney, useCurrencySymbolPrefix, useCurrencyMeta } from '@/lib/format-money'
 import { ArrowDownCircle, ArrowUpCircle, NotebookText, Wallet, BookOpen, Pencil, Check, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,9 @@ import {
 } from '@/lib/business-timezone'
 
 export default function CashBookPage() {
+  const formatMoney = useFormatMoney()
+  const currencyPrefix = useCurrencySymbolPrefix()
+  const currencySymbol = useCurrencyMeta().symbol
   const today = useMemo(() => getBusinessToday(), [])
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
@@ -122,7 +126,7 @@ export default function CashBookPage() {
         <CardContent>
           {editingOpeningBalance ? (
             <div className='flex items-center gap-2'>
-              <span className='text-sm text-muted-foreground'>Rs</span>
+              <span className='text-sm text-muted-foreground'>{currencySymbol}</span>
               <Input
                 type='number'
                 min='0'
@@ -140,7 +144,7 @@ export default function CashBookPage() {
             </div>
           ) : (
             <p className='text-2xl font-semibold'>
-              Rs {(openingBalanceData?.amount ?? 0).toLocaleString()}
+              {formatMoney(openingBalanceData?.amount ?? 0)}
             </p>
           )}
           <p className='text-xs text-muted-foreground mt-1'>
@@ -188,7 +192,7 @@ export default function CashBookPage() {
           title='Opening Balance'
           value={summary?.openingBalance || 0}
           icon={<BookOpen className='h-4 w-4' />}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           description='Balance before selected period'
           tone='slate'
         />
@@ -196,7 +200,7 @@ export default function CashBookPage() {
           title='Total Income'
           value={summary?.totalIncome || 0}
           icon={<ArrowUpCircle className='h-4 w-4' />}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           description='Cash income in selected period'
           tone='emerald'
         />
@@ -204,7 +208,7 @@ export default function CashBookPage() {
           title='Total Expense'
           value={summary?.totalExpense || 0}
           icon={<ArrowDownCircle className='h-4 w-4' />}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           description='Cash book expense entries'
           tone='rose'
         />
@@ -212,7 +216,7 @@ export default function CashBookPage() {
           title='Cash in Hand'
           value={summary?.closingBalance || 0}
           icon={<Wallet className='h-4 w-4' />}
-          valuePrefix='Rs '
+          valuePrefix={currencyPrefix}
           description='Same as Track Cash expected balance'
           tone='cyan'
         />
@@ -246,12 +250,12 @@ export default function CashBookPage() {
                   <TableCell className='capitalize'>{entry.paymentMethod}</TableCell>
                   <TableCell>{entry.description || 'No description'}</TableCell>
                   <TableCell className='text-red-600'>
-                    {entry.type === 'expense' ? `Rs ${entry.amount.toLocaleString()}` : '-'}
+                    {entry.type === 'expense' ? formatMoney(entry.amount) : '-'}
                   </TableCell>
                   <TableCell className='text-green-600'>
-                    {entry.type === 'income' ? `Rs ${entry.amount.toLocaleString()}` : '-'}
+                    {entry.type === 'income' ? formatMoney(entry.amount) : '-'}
                   </TableCell>
-                  <TableCell className='text-right font-medium'>Rs {entry.balance.toLocaleString()}</TableCell>
+                  <TableCell className='text-right font-medium'>{formatMoney(entry.balance)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

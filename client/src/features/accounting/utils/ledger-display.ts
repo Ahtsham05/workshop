@@ -1,3 +1,6 @@
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money';
+import type { CurrencyOption } from '@/stores/localization.api';
+
 export type LedgerParty = 'customer' | 'supplier';
 
 /** Net effect on running balance for one row. */
@@ -23,13 +26,18 @@ export function isSettledCashRow(debit: number, credit: number): boolean {
   return d > 0 && c > 0 && Math.abs(d - c) < 0.001;
 }
 
-export function formatLedgerNetChange(party: LedgerParty, debit: number, credit: number): string {
+export function formatLedgerNetChange(
+  party: LedgerParty,
+  debit: number,
+  credit: number,
+  meta: CurrencyOption = FALLBACK_CURRENCY,
+): string {
   const net = ledgerNetChange(party, debit, credit);
   if (Math.abs(net) < 0.001) {
     return '—';
   }
   const sign = net > 0 ? '+' : '−';
-  return `${sign}Rs${Math.abs(net).toFixed(2)}`;
+  return `${sign}${formatMoneyWithMeta(Math.abs(net), meta)}`;
 }
 
 export function getLedgerBalanceTone(party: LedgerParty, balance: number): string {
@@ -48,8 +56,9 @@ export function formatLedgerBalanceLabel(
   party: LedgerParty,
   balance: number,
   t: (key: string) => string,
+  meta: CurrencyOption = FALLBACK_CURRENCY,
 ): string {
-  const amount = `Rs${Math.abs(balance).toFixed(2)}`;
+  const amount = formatMoneyWithMeta(Math.abs(balance), meta);
   if (Math.abs(balance) < 0.001) {
     return amount;
   }

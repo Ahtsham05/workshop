@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getEntityId } from '@/lib/entity-id';
+import { useFormatMoney } from '@/lib/format-money';
 import toast from 'react-hot-toast';
 
 const numericField = z.coerce.number().min(0);
@@ -173,6 +174,7 @@ export default function EmployeeForm({
   employees,
 }: EmployeeFormProps) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
@@ -633,7 +635,7 @@ export default function EmployeeForm({
             <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className="text-muted-foreground">{t('Net Salary')}:</span>
             <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-              Rs {netSalary.toLocaleString()}
+              {formatMoney(netSalary)}
             </span>
           </div>
 

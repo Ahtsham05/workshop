@@ -3,6 +3,7 @@ const { Product, Branch, Invoice, PurchaseOrder, SeasonalFactor, InventoryTransf
 const supplierScoringService = require('./supplierScoring.service');
 const productService = require('./product.service');
 const { matchKeyFor } = require('../utils/productMatchKey');
+const { formatMoney } = require('../utils/money');
 
 /* ────────────────────────────────────────────────────────────────────────
  * CONFIG — every tunable number the engine uses. Nothing below is a fixed
@@ -171,7 +172,7 @@ const classifyDeadStockAction = ({ daysSinceLastSale, stockValue, unitValue }) =
     return { action: 'liquidation', reason: `No sales in ${daysSinceLastSale}+ days — past the point a discount alone typically clears stock.` };
   }
   if (stockValue >= CONFIG.DEAD_STOCK_HIGH_VALUE_THRESHOLD) {
-    return { action: 'discount', reason: `Rs${round2(stockValue)} tied up in unsold stock — a price cut frees up capital faster than bundling.` };
+    return { action: 'discount', reason: `${formatMoney(round2(stockValue))} tied up in unsold stock — a price cut frees up capital faster than bundling.` };
   }
   if (unitValue <= CONFIG.DEAD_STOCK_BUNDLE_MAX_UNIT_VALUE) {
     return { action: 'bundle', reason: 'Low per-unit value — bundling with a fast-moving product is more effective than a standalone discount.' };
@@ -730,7 +731,7 @@ const buildInsightDocs = async ({ organizationId, branchId }) => {
       priority: tiedUp > CONFIG.DEAD_STOCK_HIGH_VALUE_THRESHOLD ? 'high' : 'medium',
       confidence: 'high',
       title: `${deadStock.length} product(s) are dead stock`,
-      description: `These products are tying up about Rs${round2(tiedUp)} in unsold stock.`,
+      description: `These products are tying up about ${formatMoney(round2(tiedUp))} in unsold stock.`,
       meta: { products: deadStockWithCost.slice(0, 10), tiedUpCapital: round2(tiedUp) },
     });
   }

@@ -1,6 +1,8 @@
 import type {
   BuybackAccessory, BuybackGrade, BuybackImeiSummary, BuybackPtaStatus, PhoneBuybackRecord,
 } from '@/stores/usedPhoneBuyback.api'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 // Shared between the Buy Phone dialog (grading a phone as it's bought) and the Old
 // Phones inventory/detail views (displaying that grading later) — kept in one place so
@@ -86,7 +88,7 @@ export const CHECKLIST_FIELDS: { key: keyof import('@/stores/usedPhoneBuyback.ap
   { key: 'charging', label: 'Charging' },
 ]
 
-export const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
+export const fmtAmt = (n?: number, meta: CurrencyOption = FALLBACK_CURRENCY) => formatMoneyWithMeta(n ?? 0, meta)
 
 /** The list/detail endpoints populate imeiRecordId; the raw create response won't be. */
 export const getImeiSummary = (b: PhoneBuybackRecord): BuybackImeiSummary | null =>

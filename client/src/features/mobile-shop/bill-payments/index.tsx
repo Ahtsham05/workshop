@@ -10,6 +10,7 @@ import {
   makeEnterChain,
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
@@ -241,6 +242,7 @@ interface OverallReportCardsProps {
 }
 
 function OverallReportCards({ dueStartDate, dueEndDate, dateFilterBy }: OverallReportCardsProps) {
+  const formatMoney = useFormatMoney()
   const { data: summary, isLoading } = useGetBillDueSummaryQuery({
     dueStartDate: dueStartDate || undefined,
     dueEndDate: dueEndDate || undefined,
@@ -249,8 +251,8 @@ function OverallReportCards({ dueStartDate, dueEndDate, dateFilterBy }: OverallR
 
   const cards = [
     { label: 'Total Bills', value: summary?.totalBills ?? 0, icon: FileText, cls: '', fmt: (v: number) => String(v) },
-    { label: 'Total Collection', value: summary?.totalReceived ?? 0, icon: Banknote, cls: '', fmt: (v: number) => `Rs. ${v.toLocaleString()}` },
-    { label: 'Service Profit', value: summary?.totalServiceCharges ?? 0, icon: TrendingUp, cls: 'text-green-600', fmt: (v: number) => `Rs. ${v.toLocaleString()}` },
+    { label: 'Total Collection', value: summary?.totalReceived ?? 0, icon: Banknote, cls: '', fmt: formatMoney },
+    { label: 'Service Profit', value: summary?.totalServiceCharges ?? 0, icon: TrendingUp, cls: 'text-green-600', fmt: formatMoney },
     { label: 'Due Today', value: summary?.dueTodayCount ?? 0, icon: Clock, cls: 'text-yellow-600', fmt: (v: number) => String(v) },
     { label: 'Overdue', value: summary?.overdueCount ?? 0, icon: AlertCircle, cls: 'text-red-500', fmt: (v: number) => String(v) },
   ]
@@ -295,6 +297,7 @@ function DueDateFilterPanel({
   onCustomChange,
   onDateFilterByChange,
 }: DueDateFilterProps) {
+  const formatMoney = useFormatMoney()
   const applyPreset = (p: DatePreset) => {
     const today = getBusinessToday()
     if (p === 'today') {
@@ -402,15 +405,15 @@ function DueDateFilterPanel({
             </div>
             <div>
               <span className='text-muted-foreground'>Total Due: </span>
-              <strong>Rs. {(summary?.totalBillAmount ?? 0).toLocaleString()}</strong>
+              <strong>{formatMoney(summary?.totalBillAmount ?? 0)}</strong>
             </div>
             <div>
               <span className='text-muted-foreground'>Your Profit: </span>
-              <strong className='text-green-600'>Rs. {(summary?.totalServiceCharges ?? 0).toLocaleString()}</strong>
+              <strong className='text-green-600'>{formatMoney(summary?.totalServiceCharges ?? 0)}</strong>
             </div>
             <div>
               <span className='text-muted-foreground'>Total to Collect: </span>
-              <strong>Rs. {(summary?.totalReceived ?? 0).toLocaleString()}</strong>
+              <strong>{formatMoney(summary?.totalReceived ?? 0)}</strong>
             </div>
           </div>
       </CardContent>
@@ -432,6 +435,7 @@ interface MarkPaidDialogProps {
 }
 
 function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
+  const formatMoney = useFormatMoney()
   const [paymentDate, setPaymentDate] = useState(getBusinessToday())
   const [actualBillAmount, setActualBillAmount] = useState('')
   const [payoutMethodOption, setPayoutMethodOption] = useState('cash')
@@ -536,9 +540,9 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
               <p><span className='text-muted-foreground'>Company: </span>{bill.companyName}</p>
               <p><span className='text-muted-foreground'>Ref #: </span><span className='font-mono'>{bill.referenceNumber}</span></p>
               <p><span className='text-muted-foreground'>Due Date: </span><strong>{formatBusinessDate(bill.dueDate)}</strong></p>
-              <p><span className='text-muted-foreground'>Original Bill Amount: </span><strong>Rs. {bill.billAmount.toLocaleString()}</strong></p>
-              <p><span className='text-muted-foreground'>Service Charge: </span><strong className='text-green-600'>Rs. {bill.serviceCharge.toLocaleString()}</strong></p>
-              <p><span className='text-muted-foreground'>Collected from Customer: </span><strong>Rs. {bill.totalReceived.toLocaleString()}</strong></p>
+              <p><span className='text-muted-foreground'>Original Bill Amount: </span><strong>{formatMoney(bill.billAmount)}</strong></p>
+              <p><span className='text-muted-foreground'>Service Charge: </span><strong className='text-green-600'>{formatMoney(bill.serviceCharge)}</strong></p>
+              <p><span className='text-muted-foreground'>Collected from Customer: </span><strong>{formatMoney(bill.totalReceived)}</strong></p>
             </div>
 
             {olderUnpaid.length > 0 && (
@@ -550,7 +554,7 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
                 <ul className='mt-1.5 space-y-0.5 text-xs'>
                   {olderUnpaid.map((b) => (
                     <li key={b.id}>
-                      Due {formatBusinessDate(b.dueDate)} — Rs. {(b.expectedLateAmount ?? b.billAmount).toLocaleString()} to the company
+                      Due {formatBusinessDate(b.dueDate)} — {formatMoney((b.expectedLateAmount ?? b.billAmount))} to the company
                     </li>
                   ))}
                 </ul>
@@ -573,19 +577,19 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
                     onChange={(e) => setActualBillAmount(e.target.value)}
                   />
                   <p className='text-xs text-muted-foreground mt-1'>
-                    Customer already paid Rs. {bill.totalReceived.toLocaleString()}. Enter the actual amount the utility company charges now.
+                    Customer already paid {formatMoney(bill.totalReceived)}. Enter the actual amount the utility company charges now.
                   </p>
                 </div>
                 {lateLoss > 0 && (
                   <div className='grid grid-cols-2 gap-2 text-sm'>
                     <div className='rounded bg-white/80 p-2'>
                       <p className='text-muted-foreground'>Late Payment Loss</p>
-                      <p className='font-semibold text-red-600'>Rs. {lateLoss.toLocaleString()}</p>
+                      <p className='font-semibold text-red-600'>{formatMoney(lateLoss)}</p>
                     </div>
                     <div className='rounded bg-white/80 p-2'>
                       <p className='text-muted-foreground'>Net Bill Profit</p>
                       <p className={`font-semibold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        Rs. {netProfit.toLocaleString()}
+                        {formatMoney(netProfit)}
                       </p>
                     </div>
                   </div>
@@ -630,6 +634,7 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
 // ─── Receipt Print Button ─────────────────────────────────────────────────────
 
 function PrintReceiptButton({ billId }: { billId: string }) {
+  const currencyMeta = useCurrencyMeta()
   const [trigger, setTrigger] = useState(false)
   const { data: receipt, isLoading } = useGetBillPaymentReceiptQuery(billId, { skip: !trigger })
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
@@ -649,6 +654,7 @@ function PrintReceiptButton({ billId }: { billId: string }) {
     userPreferredLanguage: preferredLanguage as 'en' | 'ur',
     isTrial: orgData?.subscription?.isTrial,
     logo: orgData?.logo?.url,
+    currencyMeta,
   }
 
   const handleClick = () => {
@@ -678,6 +684,9 @@ function PrintReceiptButton({ billId }: { billId: string }) {
 export const AGENT_BILL_EMAIL = 'bilalmulazim7086@gmail.com'
 
 export default function BillPaymentsPage() {
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
+  const currencySymbol = currencyMeta.symbol
   const routeSearch = useSearch({ from: '/_authenticated/mobile-shop/bill-payments' })
   const initialFilters = getInitialBillListFilters(routeSearch.filter)
 
@@ -700,6 +709,7 @@ export default function BillPaymentsPage() {
       invoiceNote: branchData?.invoiceNote,
     },
     logo: orgData?.logo?.url,
+    currencyMeta,
   }
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('bills')
@@ -1151,28 +1161,28 @@ export default function BillPaymentsPage() {
                           <TableCell className='font-medium'>{bill.customerName}</TableCell>
                           <TableCell>{bill.companyName}</TableCell>
                           <TableCell className='font-mono text-xs'>{bill.referenceNumber}</TableCell>
-                          <TableCell>Rs. {bill.billAmount.toLocaleString()}</TableCell>
-                          <TableCell className='text-green-600 font-medium'>Rs. {bill.serviceCharge.toLocaleString()}</TableCell>
+                          <TableCell>{formatMoney(bill.billAmount)}</TableCell>
+                          <TableCell className='text-green-600 font-medium'>{formatMoney(bill.serviceCharge)}</TableCell>
                           <TableCell className='font-semibold'>
-                            Rs. {bill.totalReceived.toLocaleString()}
+                            {formatMoney(bill.totalReceived)}
                           </TableCell>
                           <TableCell>
                             {bill.status === 'paid' ? (
-                              `Rs. ${(bill.actualBillAmount ?? bill.billAmount).toLocaleString()}`
+                              formatMoney((bill.actualBillAmount ?? bill.billAmount))
                             ) : bill.status === 'overdue' ? (
                               <span className='text-xs text-red-600'>
                                 {bill.expectedLateAmount
-                                  ? <>You will pay Rs. {bill.expectedLateAmount.toLocaleString()}</>
+                                  ? <>You will pay {formatMoney(bill.expectedLateAmount)}</>
                                   : 'Pay after due'}
                               </span>
                             ) : bill.expectedLateAmount ? (
                               <span className='text-xs text-amber-700'>
-                                Est. Rs. {bill.expectedLateAmount.toLocaleString()} if late
+                                Est. {formatMoney(bill.expectedLateAmount)} if late
                               </span>
                             ) : '—'}
                           </TableCell>
                           <TableCell className={bill.latePaymentLoss ? 'text-red-600 font-medium' : 'text-muted-foreground'}>
-                            {bill.latePaymentLoss ? `Rs. ${bill.latePaymentLoss.toLocaleString()}` : '—'}
+                            {bill.latePaymentLoss ? formatMoney(bill.latePaymentLoss) : '—'}
                           </TableCell>
                           <TableCell>
                             {bill.createdAt
@@ -1217,9 +1227,9 @@ export default function BillPaymentsPage() {
                                 title: `${bill.companyName} Bill Receipt`,
                                 lines: [
                                   { label: 'Reference #', value: bill.referenceNumber },
-                                  { label: 'Bill Amount', value: `Rs. ${bill.billAmount.toLocaleString()}` },
-                                  { label: 'Service Charge', value: `Rs. ${bill.serviceCharge.toLocaleString()}` },
-                                  { label: 'Total Paid', value: `Rs. ${bill.totalReceived.toLocaleString()}` },
+                                  { label: 'Bill Amount', value: formatMoney(bill.billAmount) },
+                                  { label: 'Service Charge', value: formatMoney(bill.serviceCharge) },
+                                  { label: 'Total Paid', value: formatMoney(bill.totalReceived) },
                                 ],
                               })}
                               templateCategory='bill_payment_receipt'
@@ -1239,9 +1249,9 @@ export default function BillPaymentsPage() {
                                 title: `${bill.companyName} Bill Receipt`,
                                 lines: [
                                   { label: 'Reference #', value: bill.referenceNumber },
-                                  { label: 'Bill Amount', value: `Rs. ${bill.billAmount.toLocaleString()}` },
-                                  { label: 'Service Charge', value: `Rs. ${bill.serviceCharge.toLocaleString()}` },
-                                  { label: 'Total Paid', value: `Rs. ${bill.totalReceived.toLocaleString()}` },
+                                  { label: 'Bill Amount', value: formatMoney(bill.billAmount) },
+                                  { label: 'Service Charge', value: formatMoney(bill.serviceCharge) },
+                                  { label: 'Total Paid', value: formatMoney(bill.totalReceived) },
                                 ],
                               })}
                             />
@@ -1341,12 +1351,12 @@ export default function BillPaymentsPage() {
                                 : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
-                              {bill.currentBillAmount > 0 ? `Rs. ${bill.currentBillAmount.toLocaleString('en-PK')}` : '—'}
+                              {bill.currentBillAmount > 0 ? formatMoney(bill.currentBillAmount) : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
                               {bill.overdueAmount > 0 ? (
                                 <span className={bill.overdueCharged ? 'text-red-600' : 'text-orange-500'}>
-                                  Rs. {bill.overdueAmount.toLocaleString('en-PK')}
+                                  {formatMoney(bill.overdueAmount)}
                                   {!bill.overdueCharged && (
                                     <span className='ml-1 text-xs text-muted-foreground'>(pending)</span>
                                   )}
@@ -1354,28 +1364,28 @@ export default function BillPaymentsPage() {
                               ) : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
-                              {bill.previousBillAmount > 0 ? `Rs. ${bill.previousBillAmount.toLocaleString('en-PK')}` : '—'}
+                              {bill.previousBillAmount > 0 ? formatMoney(bill.previousBillAmount) : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
                               {bill.previousOverdueAmount > 0 ? (
                                 <span className='text-red-600'>
-                                  Rs. {bill.previousOverdueAmount.toLocaleString('en-PK')}
+                                  {formatMoney(bill.previousOverdueAmount)}
                                 </span>
                               ) : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
-                              {bill.profit > 0 ? `Rs. ${bill.profit.toLocaleString('en-PK')}` : '—'}
+                              {bill.profit > 0 ? formatMoney(bill.profit) : '—'}
                             </TableCell>
                             <TableCell className='text-right font-semibold text-sm'>
                               {(() => {
                                 const base = bill.currentBillAmount + bill.previousBillAmount + bill.previousOverdueAmount
                                 const isOverdue = bill.overdueAmount > 0
                                 const duePassed = bill.dueDate ? new Date(bill.dueDate) < new Date() : false
-                                if (!isOverdue) return <span>Rs. {base.toLocaleString('en-PK')}</span>
+                                if (!isOverdue) return <span>{formatMoney(base)}</span>
                                 if (bill.overdueCharged) {
                                   return (
                                     <div>
-                                      <div>Rs. {bill.totalAmount.toLocaleString('en-PK')}</div>
+                                      <div>{formatMoney(bill.totalAmount)}</div>
                                       <div className='text-xs text-red-600 font-normal'>overdue charged</div>
                                     </div>
                                   )
@@ -1383,16 +1393,16 @@ export default function BillPaymentsPage() {
                                 if (duePassed) {
                                   return (
                                     <div>
-                                      <div className='text-red-700'>Rs. {bill.totalAmount.toLocaleString('en-PK')}</div>
+                                      <div className='text-red-700'>{formatMoney(bill.totalAmount)}</div>
                                       <div className='text-xs text-red-600 font-normal'>⚠️ pay now (incl. overdue)</div>
                                     </div>
                                   )
                                 }
                                 return (
                                   <div>
-                                    <div>Rs. {base.toLocaleString('en-PK')}</div>
+                                    <div>{formatMoney(base)}</div>
                                     <div className='text-xs text-orange-500 font-normal'>
-                                      after due: Rs. {bill.totalAmount.toLocaleString('en-PK')}
+                                      after due: {formatMoney(bill.totalAmount)}
                                     </div>
                                   </div>
                                 )
@@ -1484,8 +1494,8 @@ export default function BillPaymentsPage() {
                                   title: `${bill.companyName || 'Bill'} Receipt`,
                                   lines: [
                                     { label: 'Reference #', value: bill.referenceNumber },
-                                    { label: 'Current Bill', value: `Rs. ${bill.currentBillAmount.toLocaleString('en-PK')}` },
-                                    { label: 'Total', value: `Rs. ${bill.totalAmount.toLocaleString('en-PK')}` },
+                                    { label: 'Current Bill', value: formatMoney(bill.currentBillAmount) },
+                                    { label: 'Total', value: formatMoney(bill.totalAmount) },
                                   ],
                                 })}
                                 templateCategory='bill_payment_receipt'
@@ -1505,8 +1515,8 @@ export default function BillPaymentsPage() {
                                   title: `${bill.companyName || 'Bill'} Receipt`,
                                   lines: [
                                     { label: 'Reference #', value: bill.referenceNumber },
-                                    { label: 'Current Bill', value: `Rs. ${bill.currentBillAmount.toLocaleString('en-PK')}` },
-                                    { label: 'Total', value: `Rs. ${bill.totalAmount.toLocaleString('en-PK')}` },
+                                    { label: 'Current Bill', value: formatMoney(bill.currentBillAmount) },
+                                    { label: 'Total', value: formatMoney(bill.totalAmount) },
                                   ],
                                 })}
                               />
@@ -1598,7 +1608,7 @@ export default function BillPaymentsPage() {
                 </Select>
               </div>
               <div>
-                <Label>Service Charge per Bill (Rs.)</Label>
+                <Label>Service Charge per Bill ({currencySymbol})</Label>
                 <Input
                   type='number'
                   min='0'
@@ -1659,9 +1669,9 @@ export default function BillPaymentsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className='w-[40px]'>#</TableHead>
-                      <TableHead>Bill Amount (Rs.) *</TableHead>
+                      <TableHead>Bill Amount ({currencySymbol}) *</TableHead>
                       <TableHead title="The higher figure printed on the same bill for paying after the due date — captured now so Mark-as-Paid already knows it">
-                        After Due Date (Rs.)
+                        After Due Date ({currencySymbol})
                       </TableHead>
                       <TableHead>Customer Name</TableHead>
                       <TableHead className='min-w-[150px]'>Customer Phone</TableHead>
@@ -1762,24 +1772,24 @@ export default function BillPaymentsPage() {
                                     <div key={b.id} className='min-w-0 space-y-1'>
                                       <p className='break-words'>
                                         <strong>Row {i + 1}:</strong> Ref # {b.referenceNumber} — previously you
-                                        received <strong>Rs. {b.totalReceived.toLocaleString()}</strong> from the
+                                        received <strong>{formatMoney(b.totalReceived)}</strong> from the
                                         customer but haven't paid the company yet ({b.status === 'overdue' ? 'overdue since' : 'due'}{' '}
                                         <strong>{formatBusinessDate(b.dueDate)}</strong>; you'll owe{' '}
-                                        <strong>Rs. {oldOwed.toLocaleString()}</strong> for it).
+                                        <strong>{formatMoney(oldOwed)}</strong> for it).
                                       </p>
                                       {nowCollecting > 0 ? (
                                         <>
                                           <p className='break-words'>
-                                            Now you will collect <strong>Rs. {nowCollecting.toLocaleString()}</strong>{' '}
-                                            for this new bill (Rs. {newBillAmount.toLocaleString()} + Rs. {svcCharge.toLocaleString()}{' '}
+                                            Now you will collect <strong>{formatMoney(nowCollecting)}</strong>{' '}
+                                            for this new bill ({formatMoney(newBillAmount)} + {formatMoney(svcCharge)}{' '}
                                             service charge) — your profit on it is{' '}
-                                            <strong className='text-green-700'>Rs. {svcCharge.toLocaleString()}</strong>.
+                                            <strong className='text-green-700'>{formatMoney(svcCharge)}</strong>.
                                           </p>
                                           <p className='break-words'>
-                                            If you settle the old bill at the same time: Rs. {nowCollecting.toLocaleString()} −{' '}
-                                            Rs. {oldOwed.toLocaleString()} ={' '}
+                                            If you settle the old bill at the same time: {formatMoney(nowCollecting)} −{' '}
+                                            {formatMoney(oldOwed)} ={' '}
                                             <strong className={nowCollecting - oldOwed >= 0 ? 'text-green-700' : 'text-red-700'}>
-                                              Rs. {(nowCollecting - oldOwed).toLocaleString()}
+                                              {formatMoney((nowCollecting - oldOwed))}
                                             </strong>{' '}
                                             net in hand.
                                           </p>
@@ -1794,7 +1804,7 @@ export default function BillPaymentsPage() {
                                             disabled={isSettlingCombined}
                                             onClick={() => handleSettleCombined(row, b)}
                                           >
-                                            Settle Now — Collect Rs. {(nowCollecting - oldOwed).toLocaleString()} Only
+                                            Settle Now — Collect {formatMoney((nowCollecting - oldOwed))} Only
                                           </Button>
                                         )}
                                         {canManage && (
@@ -1834,17 +1844,17 @@ export default function BillPaymentsPage() {
             <div className='rounded-md bg-muted px-4 py-3 text-sm space-y-1'>
               <div className='flex justify-between'>
                 <span className='text-muted-foreground'>Bills Total:</span>
-                <strong>Rs. {billsTotal.toLocaleString()}</strong>
+                <strong>{formatMoney(billsTotal)}</strong>
               </div>
               <div className='flex justify-between'>
                 <span className='text-muted-foreground'>
-                  Service Charges ({form.bills.filter((b) => parseFloat(b.billAmount) > 0).length} × Rs. {svcCharge}):
+                  Service Charges ({form.bills.filter((b) => parseFloat(b.billAmount) > 0).length} × {formatMoney(svcCharge)}):
                 </span>
-                <strong className='text-green-600'>Rs. {totalServiceCharge.toLocaleString()}</strong>
+                <strong className='text-green-600'>{formatMoney(totalServiceCharge)}</strong>
               </div>
               <div className='flex justify-between border-t pt-1.5'>
                 <span className='font-semibold'>Total You Will Receive From Customer Now:</span>
-                <strong className='text-base'>Rs. {grandTotal.toLocaleString()}</strong>
+                <strong className='text-base'>{formatMoney(grandTotal)}</strong>
               </div>
             </div>
           </div>

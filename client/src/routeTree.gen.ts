@@ -83,15 +83,22 @@ import { Route as AuthenticatedSubscriptionPricingImport } from './routes/_authe
 import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authenticated/subscription/payment'
 import { Route as AuthenticatedSmsLogImport } from './routes/_authenticated/sms/log'
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
+import { Route as AuthenticatedSettingsTaxRatesImport } from './routes/_authenticated/settings/tax-rates'
+import { Route as AuthenticatedSettingsTaxExemptionsImport } from './routes/_authenticated/settings/tax-exemptions'
+import { Route as AuthenticatedSettingsTaxCategoriesImport } from './routes/_authenticated/settings/tax-categories'
 import { Route as AuthenticatedSettingsSyncConflictsImport } from './routes/_authenticated/settings/sync-conflicts'
 import { Route as AuthenticatedSettingsSyncImport } from './routes/_authenticated/settings/sync'
 import { Route as AuthenticatedSettingsSmsGatewayImport } from './routes/_authenticated/settings/sms-gateway'
 import { Route as AuthenticatedSettingsPrintingImport } from './routes/_authenticated/settings/printing'
 import { Route as AuthenticatedSettingsOfflineImport } from './routes/_authenticated/settings/offline'
 import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_authenticated/settings/notifications'
+import { Route as AuthenticatedSettingsLocalizationImport } from './routes/_authenticated/settings/localization'
 import { Route as AuthenticatedSettingsLocalDatabaseImport } from './routes/_authenticated/settings/local-database'
+import { Route as AuthenticatedSettingsExchangeRatesImport } from './routes/_authenticated/settings/exchange-rates'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
+import { Route as AuthenticatedSettingsCurrencyImport } from './routes/_authenticated/settings/currency'
 import { Route as AuthenticatedSettingsCacheImport } from './routes/_authenticated/settings/cache'
+import { Route as AuthenticatedSettingsBusinessProfileImport } from './routes/_authenticated/settings/business-profile'
 import { Route as AuthenticatedSettingsBackupImport } from './routes/_authenticated/settings/backup'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
@@ -646,6 +653,27 @@ const AuthenticatedSettingsWhatsappRoute =
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
+const AuthenticatedSettingsTaxRatesRoute =
+  AuthenticatedSettingsTaxRatesImport.update({
+    id: '/tax-rates',
+    path: '/tax-rates',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsTaxExemptionsRoute =
+  AuthenticatedSettingsTaxExemptionsImport.update({
+    id: '/tax-exemptions',
+    path: '/tax-exemptions',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsTaxCategoriesRoute =
+  AuthenticatedSettingsTaxCategoriesImport.update({
+    id: '/tax-categories',
+    path: '/tax-categories',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
 const AuthenticatedSettingsSyncConflictsRoute =
   AuthenticatedSettingsSyncConflictsImport.update({
     id: '/sync-conflicts',
@@ -687,10 +715,24 @@ const AuthenticatedSettingsNotificationsRoute =
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
+const AuthenticatedSettingsLocalizationRoute =
+  AuthenticatedSettingsLocalizationImport.update({
+    id: '/localization',
+    path: '/localization',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
 const AuthenticatedSettingsLocalDatabaseRoute =
   AuthenticatedSettingsLocalDatabaseImport.update({
     id: '/local-database',
     path: '/local-database',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsExchangeRatesRoute =
+  AuthenticatedSettingsExchangeRatesImport.update({
+    id: '/exchange-rates',
+    path: '/exchange-rates',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -701,6 +743,13 @@ const AuthenticatedSettingsDisplayRoute =
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
+const AuthenticatedSettingsCurrencyRoute =
+  AuthenticatedSettingsCurrencyImport.update({
+    id: '/currency',
+    path: '/currency',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
 const AuthenticatedSettingsCacheRoute = AuthenticatedSettingsCacheImport.update(
   {
     id: '/cache',
@@ -708,6 +757,13 @@ const AuthenticatedSettingsCacheRoute = AuthenticatedSettingsCacheImport.update(
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any,
 )
+
+const AuthenticatedSettingsBusinessProfileRoute =
+  AuthenticatedSettingsBusinessProfileImport.update({
+    id: '/business-profile',
+    path: '/business-profile',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 
 const AuthenticatedSettingsBackupRoute =
   AuthenticatedSettingsBackupImport.update({
@@ -1618,11 +1674,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsBackupImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/business-profile': {
+      id: '/_authenticated/settings/business-profile'
+      path: '/business-profile'
+      fullPath: '/settings/business-profile'
+      preLoaderRoute: typeof AuthenticatedSettingsBusinessProfileImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/cache': {
       id: '/_authenticated/settings/cache'
       path: '/cache'
       fullPath: '/settings/cache'
       preLoaderRoute: typeof AuthenticatedSettingsCacheImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/currency': {
+      id: '/_authenticated/settings/currency'
+      path: '/currency'
+      fullPath: '/settings/currency'
+      preLoaderRoute: typeof AuthenticatedSettingsCurrencyImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
     '/_authenticated/settings/display': {
@@ -1632,11 +1702,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsDisplayImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/exchange-rates': {
+      id: '/_authenticated/settings/exchange-rates'
+      path: '/exchange-rates'
+      fullPath: '/settings/exchange-rates'
+      preLoaderRoute: typeof AuthenticatedSettingsExchangeRatesImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/local-database': {
       id: '/_authenticated/settings/local-database'
       path: '/local-database'
       fullPath: '/settings/local-database'
       preLoaderRoute: typeof AuthenticatedSettingsLocalDatabaseImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/localization': {
+      id: '/_authenticated/settings/localization'
+      path: '/localization'
+      fullPath: '/settings/localization'
+      preLoaderRoute: typeof AuthenticatedSettingsLocalizationImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
     '/_authenticated/settings/notifications': {
@@ -1679,6 +1763,27 @@ declare module '@tanstack/react-router' {
       path: '/sync-conflicts'
       fullPath: '/settings/sync-conflicts'
       preLoaderRoute: typeof AuthenticatedSettingsSyncConflictsImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/tax-categories': {
+      id: '/_authenticated/settings/tax-categories'
+      path: '/tax-categories'
+      fullPath: '/settings/tax-categories'
+      preLoaderRoute: typeof AuthenticatedSettingsTaxCategoriesImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/tax-exemptions': {
+      id: '/_authenticated/settings/tax-exemptions'
+      path: '/tax-exemptions'
+      fullPath: '/settings/tax-exemptions'
+      preLoaderRoute: typeof AuthenticatedSettingsTaxExemptionsImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
+    '/_authenticated/settings/tax-rates': {
+      id: '/_authenticated/settings/tax-rates'
+      path: '/tax-rates'
+      fullPath: '/settings/tax-rates'
+      preLoaderRoute: typeof AuthenticatedSettingsTaxRatesImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
     '/_authenticated/settings/whatsapp': {
@@ -2355,15 +2460,22 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
   AuthenticatedSettingsBackupRoute: typeof AuthenticatedSettingsBackupRoute
+  AuthenticatedSettingsBusinessProfileRoute: typeof AuthenticatedSettingsBusinessProfileRoute
   AuthenticatedSettingsCacheRoute: typeof AuthenticatedSettingsCacheRoute
+  AuthenticatedSettingsCurrencyRoute: typeof AuthenticatedSettingsCurrencyRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
+  AuthenticatedSettingsExchangeRatesRoute: typeof AuthenticatedSettingsExchangeRatesRoute
   AuthenticatedSettingsLocalDatabaseRoute: typeof AuthenticatedSettingsLocalDatabaseRoute
+  AuthenticatedSettingsLocalizationRoute: typeof AuthenticatedSettingsLocalizationRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsOfflineRoute: typeof AuthenticatedSettingsOfflineRoute
   AuthenticatedSettingsPrintingRoute: typeof AuthenticatedSettingsPrintingRoute
   AuthenticatedSettingsSmsGatewayRoute: typeof AuthenticatedSettingsSmsGatewayRoute
   AuthenticatedSettingsSyncRoute: typeof AuthenticatedSettingsSyncRoute
   AuthenticatedSettingsSyncConflictsRoute: typeof AuthenticatedSettingsSyncConflictsRoute
+  AuthenticatedSettingsTaxCategoriesRoute: typeof AuthenticatedSettingsTaxCategoriesRoute
+  AuthenticatedSettingsTaxExemptionsRoute: typeof AuthenticatedSettingsTaxExemptionsRoute
+  AuthenticatedSettingsTaxRatesRoute: typeof AuthenticatedSettingsTaxRatesRoute
   AuthenticatedSettingsWhatsappRoute: typeof AuthenticatedSettingsWhatsappRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -2373,10 +2485,17 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
     AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
     AuthenticatedSettingsBackupRoute: AuthenticatedSettingsBackupRoute,
+    AuthenticatedSettingsBusinessProfileRoute:
+      AuthenticatedSettingsBusinessProfileRoute,
     AuthenticatedSettingsCacheRoute: AuthenticatedSettingsCacheRoute,
+    AuthenticatedSettingsCurrencyRoute: AuthenticatedSettingsCurrencyRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
+    AuthenticatedSettingsExchangeRatesRoute:
+      AuthenticatedSettingsExchangeRatesRoute,
     AuthenticatedSettingsLocalDatabaseRoute:
       AuthenticatedSettingsLocalDatabaseRoute,
+    AuthenticatedSettingsLocalizationRoute:
+      AuthenticatedSettingsLocalizationRoute,
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsOfflineRoute: AuthenticatedSettingsOfflineRoute,
@@ -2385,6 +2504,11 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsSyncRoute: AuthenticatedSettingsSyncRoute,
     AuthenticatedSettingsSyncConflictsRoute:
       AuthenticatedSettingsSyncConflictsRoute,
+    AuthenticatedSettingsTaxCategoriesRoute:
+      AuthenticatedSettingsTaxCategoriesRoute,
+    AuthenticatedSettingsTaxExemptionsRoute:
+      AuthenticatedSettingsTaxExemptionsRoute,
+    AuthenticatedSettingsTaxRatesRoute: AuthenticatedSettingsTaxRatesRoute,
     AuthenticatedSettingsWhatsappRoute: AuthenticatedSettingsWhatsappRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   }
@@ -2803,15 +2927,22 @@ export interface FileRoutesByFullPath {
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
+  '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
+  '/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
   '/settings/printing': typeof AuthenticatedSettingsPrintingRoute
   '/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
+  '/settings/tax-categories': typeof AuthenticatedSettingsTaxCategoriesRoute
+  '/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
+  '/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
@@ -2959,15 +3090,22 @@ export interface FileRoutesByTo {
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
+  '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
+  '/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/offline': typeof AuthenticatedSettingsOfflineRoute
   '/settings/printing': typeof AuthenticatedSettingsPrintingRoute
   '/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
+  '/settings/tax-categories': typeof AuthenticatedSettingsTaxCategoriesRoute
+  '/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
+  '/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
@@ -3119,15 +3257,22 @@ export interface FileRoutesById {
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/_authenticated/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/_authenticated/settings/cache': typeof AuthenticatedSettingsCacheRoute
+  '/_authenticated/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/_authenticated/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/_authenticated/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
+  '/_authenticated/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/settings/offline': typeof AuthenticatedSettingsOfflineRoute
   '/_authenticated/settings/printing': typeof AuthenticatedSettingsPrintingRoute
   '/_authenticated/settings/sms-gateway': typeof AuthenticatedSettingsSmsGatewayRoute
   '/_authenticated/settings/sync': typeof AuthenticatedSettingsSyncRoute
   '/_authenticated/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
+  '/_authenticated/settings/tax-categories': typeof AuthenticatedSettingsTaxCategoriesRoute
+  '/_authenticated/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
+  '/_authenticated/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/_authenticated/sms/log': typeof AuthenticatedSmsLogRoute
   '/_authenticated/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
@@ -3281,15 +3426,22 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/backup'
+    | '/settings/business-profile'
     | '/settings/cache'
+    | '/settings/currency'
     | '/settings/display'
+    | '/settings/exchange-rates'
     | '/settings/local-database'
+    | '/settings/localization'
     | '/settings/notifications'
     | '/settings/offline'
     | '/settings/printing'
     | '/settings/sms-gateway'
     | '/settings/sync'
     | '/settings/sync-conflicts'
+    | '/settings/tax-categories'
+    | '/settings/tax-exemptions'
+    | '/settings/tax-rates'
     | '/settings/whatsapp'
     | '/sms/log'
     | '/subscription/payment'
@@ -3436,15 +3588,22 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/backup'
+    | '/settings/business-profile'
     | '/settings/cache'
+    | '/settings/currency'
     | '/settings/display'
+    | '/settings/exchange-rates'
     | '/settings/local-database'
+    | '/settings/localization'
     | '/settings/notifications'
     | '/settings/offline'
     | '/settings/printing'
     | '/settings/sms-gateway'
     | '/settings/sync'
     | '/settings/sync-conflicts'
+    | '/settings/tax-categories'
+    | '/settings/tax-exemptions'
+    | '/settings/tax-rates'
     | '/settings/whatsapp'
     | '/sms/log'
     | '/subscription/payment'
@@ -3594,15 +3753,22 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/backup'
+    | '/_authenticated/settings/business-profile'
     | '/_authenticated/settings/cache'
+    | '/_authenticated/settings/currency'
     | '/_authenticated/settings/display'
+    | '/_authenticated/settings/exchange-rates'
     | '/_authenticated/settings/local-database'
+    | '/_authenticated/settings/localization'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/settings/offline'
     | '/_authenticated/settings/printing'
     | '/_authenticated/settings/sms-gateway'
     | '/_authenticated/settings/sync'
     | '/_authenticated/settings/sync-conflicts'
+    | '/_authenticated/settings/tax-categories'
+    | '/_authenticated/settings/tax-exemptions'
+    | '/_authenticated/settings/tax-rates'
     | '/_authenticated/settings/whatsapp'
     | '/_authenticated/sms/log'
     | '/_authenticated/subscription/payment'
@@ -3854,15 +4020,22 @@ export const routeTree = rootRoute
         "/_authenticated/settings/account",
         "/_authenticated/settings/appearance",
         "/_authenticated/settings/backup",
+        "/_authenticated/settings/business-profile",
         "/_authenticated/settings/cache",
+        "/_authenticated/settings/currency",
         "/_authenticated/settings/display",
+        "/_authenticated/settings/exchange-rates",
         "/_authenticated/settings/local-database",
+        "/_authenticated/settings/localization",
         "/_authenticated/settings/notifications",
         "/_authenticated/settings/offline",
         "/_authenticated/settings/printing",
         "/_authenticated/settings/sms-gateway",
         "/_authenticated/settings/sync",
         "/_authenticated/settings/sync-conflicts",
+        "/_authenticated/settings/tax-categories",
+        "/_authenticated/settings/tax-exemptions",
+        "/_authenticated/settings/tax-rates",
         "/_authenticated/settings/whatsapp",
         "/_authenticated/settings/"
       ]
@@ -4107,16 +4280,32 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/settings/backup.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/settings/business-profile": {
+      "filePath": "_authenticated/settings/business-profile.tsx",
+      "parent": "/_authenticated/settings"
+    },
     "/_authenticated/settings/cache": {
       "filePath": "_authenticated/settings/cache.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/currency": {
+      "filePath": "_authenticated/settings/currency.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/display": {
       "filePath": "_authenticated/settings/display.tsx",
       "parent": "/_authenticated/settings"
     },
+    "/_authenticated/settings/exchange-rates": {
+      "filePath": "_authenticated/settings/exchange-rates.tsx",
+      "parent": "/_authenticated/settings"
+    },
     "/_authenticated/settings/local-database": {
       "filePath": "_authenticated/settings/local-database.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/localization": {
+      "filePath": "_authenticated/settings/localization.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/notifications": {
@@ -4141,6 +4330,18 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/sync-conflicts": {
       "filePath": "_authenticated/settings/sync-conflicts.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/tax-categories": {
+      "filePath": "_authenticated/settings/tax-categories.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/tax-exemptions": {
+      "filePath": "_authenticated/settings/tax-exemptions.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/tax-rates": {
+      "filePath": "_authenticated/settings/tax-rates.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/whatsapp": {

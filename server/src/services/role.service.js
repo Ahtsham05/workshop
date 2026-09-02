@@ -257,6 +257,15 @@ const createDefaultRoles = async () => {
         viewPurchaseSuggestions: true,
         viewBarcodeGenerator: true,
         viewDashboard: true,
+        // Manager already views business Reports; extend that same view-only reach to the
+        // new Tax & Currency Settings group (view-only — Manager doesn't manage settings).
+        viewBusinessProfile: true,
+        viewLocalizationSettings: true,
+        viewTaxCategories: true,
+        viewTaxRates: true,
+        viewTaxJurisdictions: true,
+        viewTaxExemptions: true,
+        viewExchangeRates: true,
       },
       isSystemRole: true,
       isActive: true,
@@ -298,6 +307,15 @@ const createDefaultRoles = async () => {
         viewSmsLog: true,
         viewBarcodeGenerator: true,
         viewDashboard: true,
+        // Viewer is read-only across every module already (mirrors Manager's Reports access);
+        // extend the same view-only reach to the new Tax & Currency Settings group.
+        viewBusinessProfile: true,
+        viewLocalizationSettings: true,
+        viewTaxCategories: true,
+        viewTaxRates: true,
+        viewTaxJurisdictions: true,
+        viewTaxExemptions: true,
+        viewExchangeRates: true,
       },
       isSystemRole: true,
       isActive: true,

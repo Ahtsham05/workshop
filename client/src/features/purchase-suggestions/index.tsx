@@ -38,6 +38,7 @@ import { DemandTrendCard } from './components/demand-trend-card'
 import { TransferSuggestionCard } from './components/transfer-suggestion-card'
 import { SupplierSuggestionGroup, type SupplierGroup } from './components/supplier-suggestion-group'
 import { formatMoney } from './utils/format'
+import { useCurrencyMeta } from '@/lib/format-money'
 
 type TabKey = 'purchase' | 'stockout' | 'demand' | 'deadstock' | 'transfers'
 
@@ -162,6 +163,7 @@ function groupBySupplier(suggestions: PurchaseSuggestion[]): SupplierGroup[] {
 }
 
 export default function PurchaseSuggestionsPage() {
+  const currencyMeta = useCurrencyMeta()
   const navigate = useNavigate()
   const [activeTab, setActiveTabState] = useState<TabKey>('purchase')
   const setActiveTab = (tab: TabKey) => {
@@ -350,7 +352,7 @@ export default function PurchaseSuggestionsPage() {
         <SummaryTile
           icon={Wallet}
           label='Inventory Value'
-          value={dashboardStats.data ? formatMoney(dashboardStats.data.totalInventoryValue) : '—'}
+          value={dashboardStats.data ? formatMoney(dashboardStats.data.totalInventoryValue, currencyMeta) : '—'}
           gradient='from-blue-500/10 to-blue-500/0'
           iconWrap='bg-blue-500/15 text-blue-600 dark:text-blue-400'
           isLoading={dashboardStats.isLoading}

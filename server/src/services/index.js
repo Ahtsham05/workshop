@@ -119,3 +119,12 @@ module.exports.recurringExpenseService = require('./recurringExpense.service.js'
 module.exports.communicationLogService = require('./communicationLog.service.js');
 module.exports.reminderService = require('./reminder.service.js');
 module.exports.leadService = require('./lead.service.js');
+
+// Localization / Currency / Tax engine
+module.exports.localizationService = require('./localization.service.js');
+module.exports.exchangeRateService = require('./exchangeRate.service.js');
+module.exports.taxCalculatorService = require('./taxCalculator.service.js');
+module.exports.taxCategoryService = require('./taxCategory.service.js');
+module.exports.taxRateService = require('./taxRate.service.js');
+module.exports.taxJurisdictionService = require('./taxJurisdiction.service.js');
+module.exports.taxExemptionService = require('./taxExemption.service.js');

@@ -7,6 +7,7 @@ import { useLanguage } from '@/context/language-context';
 import { AlertTriangle, Package, Search, ArrowLeft, TrendingDown, Download } from 'lucide-react';
 import { Product } from '../data/schema';
 import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display';
+import { useFormatMoney } from '@/lib/format-money';
 import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product';
 import {
   Table,
@@ -32,6 +33,7 @@ interface LowStockDetailsProps {
 
 export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDetailsProps) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'out_of_stock' | 'critical' | 'low'>('all');
   const expiringByProduct = useExpiringBatchesByProduct();
@@ -244,8 +246,8 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
                           {getDisplayStock(product)} {product.unit || 'pcs'}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">Rs{formatDisplayPrice(product, 'price')}</TableCell>
-                      <TableCell className="text-right">Rs{formatDisplayPrice(product, 'cost')}</TableCell>
+                      <TableCell className="text-right">{formatDisplayPrice(product, 'price', formatMoney)}</TableCell>
+                      <TableCell className="text-right">{formatDisplayPrice(product, 'cost', formatMoney)}</TableCell>
                       <TableCell>{getStockBadge(getDisplayStock(product))}</TableCell>
                       <TableCell>
                         {expiry ? (

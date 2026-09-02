@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from 'react'
+import { useFormatMoney } from '@/lib/format-money'
 import { Input } from '@/components/ui/input'
 import { Package, ScanBarcode } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,7 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
   { catalog, onScanSubmit, onSelectSuggestion, className },
   ref,
 ) {
+  const formatMoney = useFormatMoney()
   const [value, setValue] = useState('')
   const [highlighted, setHighlighted] = useState(0)
   // Only set by explicit ArrowUp/ArrowDown — distinguishes a human browsing the dropdown
@@ -178,7 +180,7 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
                   <div className='min-w-0 flex-1'>
                     <p className='truncate text-sm font-medium leading-tight'>{item.name}</p>
                     <div className='mt-0.5 flex items-center gap-2 text-xs text-muted-foreground'>
-                      <span>Rs{item.price.toFixed(0)}</span>
+                      <span>{formatMoney(item.price)}</span>
                       <span
                         className={cn(
                           'font-medium',

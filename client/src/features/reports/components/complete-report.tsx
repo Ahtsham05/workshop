@@ -37,13 +37,13 @@ import { useGetBillPaymentReportQuery, useGetAgentBillReportQuery } from '@/stor
 import { AGENT_BILL_EMAIL } from '../../mobile-shop/bill-payments'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface CompleteReportProps {
   startDate: string
   endDate: string
 }
 
-const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v || 0)
 const fmtDate = (v: string | undefined) => (v ? format(new Date(v), 'dd MMM yyyy') : '—')
 
 function LockedNote({ label }: { label: string }) {
@@ -126,6 +126,7 @@ function buildLedgerCategoryBreakdown(entries: PersonalLedgerEntry[], flow: 'inc
 
 export const CompleteReport = forwardRef<{ exportToExcel: () => void }, CompleteReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
     const user = useSelector((state: RootState) => state.auth.data?.user)
     const { canAccess } = useFeatureAccess()
     const isAgentBillUser = user?.email === AGENT_BILL_EMAIL

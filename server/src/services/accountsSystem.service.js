@@ -27,6 +27,7 @@ const ACCOUNT_CODES = {
   ACCOUNTS_PAYABLE: '2101',
   CUSTOMER_ADVANCE: '2102',
   TAX_PAYABLE: '2105',
+  INPUT_TAX_RECOVERABLE: '1108',
   SALES_REVENUE: '4101',
   SERVICE_INCOME: '4102',
   REPAIR_INCOME: '4103',
@@ -157,6 +158,11 @@ const buildRetailTree = (base) => [
       { code: '1105', name: 'Mobile Wallet - EasyPaisa', isGroup: false, level: 2, mobileOnly: true },
       { code: '1106', name: 'Inventory', isGroup: false, level: 2 },
       { code: '1107', name: 'Other Receivables', isGroup: false, level: 2 },
+      // Input tax paid on purchases, recoverable against output (sales) tax collected —
+      // kept separate from Inventory so purchase tax is never silently capitalized into
+      // stock cost. See services/purchase.service.js's resolvePurchaseTaxAndCurrency and
+      // postPurchase below.
+      { code: '1108', name: 'Input Tax Recoverable', isGroup: false, level: 2 },
     ]},
     { code: '1200', name: 'Fixed Assets', level: 1, children: [
       { code: '1201', name: 'Furniture & Fixtures', isGroup: false, level: 2 },
@@ -312,6 +318,38 @@ const syncMobileShopAccounts = async (scope) => {
       createdBy: enriched.createdBy,
     });
   }
+};
+
+/**
+ * Self-heals the '1108' Input Tax Recoverable account onto an already-seeded (non-school)
+ * organization's Chart of Accounts — added after this account code existed, so orgs seeded
+ * before this change won't have it yet. Idempotent, mirrors syncMobileShopAccounts' pattern.
+ * Called lazily from postPurchase rather than on every request, since it's only needed
+ * once per organization.
+ */
+const ensureInputTaxRecoverableAccount = async (scope) => {
+  const enriched = await enrichScope(scope);
+  if (normalizeBusinessType(enriched.businessType) === 'school') return;
+
+  const filter = getTenantFilter(enriched);
+  const exists = await AccountHead.findOne({ ...filter, code: ACCOUNT_CODES.INPUT_TAX_RECOVERABLE });
+  if (exists) return;
+
+  const parent = await AccountHead.findOne({ ...filter, code: '1100' });
+  if (!parent) return;
+
+  await AccountHead.create({
+    ...filter,
+    code: ACCOUNT_CODES.INPUT_TAX_RECOVERABLE,
+    name: 'Input Tax Recoverable',
+    rootType: parent.rootType,
+    balanceType: parent.balanceType,
+    parentId: parent._id,
+    level: (parent.level || 0) + 1,
+    isGroup: false,
+    isSystem: true,
+    createdBy: enriched.createdBy,
+  });
 };
 
 /**
@@ -1955,7 +1993,8 @@ const postSaleCogs = async (scope, invoice) => {
 
 /**
  * Purchase → inventory in, cash/payable out.
- *   Dr Inventory (total)
+ *   Dr Inventory (total, net of any input tax)
+ *   Dr Input Tax Recoverable (input tax, when present)
  *       Cr Cash/Bank/Wallet (amount paid)
  *       Cr Accounts Payable (unpaid balance)
  */
@@ -1966,15 +2005,31 @@ const postPurchase = async (scope, purchase) => {
     if (total <= 0) return null;
     const paid = round2(purchase.paidAmount);
     const balance = round2(purchase.balance != null ? purchase.balance : total - paid);
+    // Input tax is recoverable, not part of stock cost — never capitalize it into
+    // Inventory (see resolvePurchaseTaxAndCurrency in purchase.service.js, which is the
+    // only place `purchase.tax` gets set; 0 for any org that hasn't configured a tax
+    // system, so this is a no-op split for every purchase exactly as before).
+    const tax = round2(purchase.tax || 0);
+    const inventoryPortion = round2(Math.max(0, total - tax));
 
-    const [invAcc, payAcc, apAcc] = await Promise.all([
+    if (tax > 0) await ensureInputTaxRecoverableAccount(scope);
+    const [invAcc, taxRecoverableAcc, payAcc, apAcc] = await Promise.all([
       findAccount(scope, ACCOUNT_CODES.INVENTORY),
+      tax > 0 ? findAccount(scope, ACCOUNT_CODES.INPUT_TAX_RECOVERABLE) : Promise.resolve(null),
       resolvePaymentAccount(scope, purchase.paymentType || purchase.paymentMethod, purchase.walletType),
       getSupplierPayableAccount(scope, purchase.supplier),
     ]);
     if (!invAcc) return null;
 
-    const lines = [{ accountId: invAcc._id, debit: total, credit: 0, description: 'Inventory purchased' }];
+    const lines = [{ accountId: invAcc._id, debit: inventoryPortion, credit: 0, description: 'Inventory purchased' }];
+    if (tax > 0 && taxRecoverableAcc) {
+      lines.push({ accountId: taxRecoverableAcc._id, debit: tax, credit: 0, description: 'Input tax recoverable' });
+    } else if (tax > 0) {
+      // Account couldn't be resolved/created — fall back to the pre-tax-engine behavior
+      // (capitalize the full amount into Inventory) rather than silently dropping the
+      // journal entry out of balance.
+      lines[0].debit = total;
+    }
     if (paid > 0 && payAcc) lines.push({ accountId: payAcc._id, debit: 0, credit: paid, description: 'Amount paid' });
     if (balance > 0 && apAcc) lines.push({ accountId: apAcc._id, debit: 0, credit: balance, description: 'On account (payable)' });
 

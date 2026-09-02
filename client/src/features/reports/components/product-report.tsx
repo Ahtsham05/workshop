@@ -26,6 +26,7 @@ import { ProductDetailDialog } from './product-detail-dialog'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import LongText from '@/components/long-text'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface ProductReportProps {
   startDate: string
@@ -189,8 +190,7 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
       },
     }))
 
-    const formatCurrency = (value: number) => 
-      new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+    const formatCurrency = useFormatMoney()
 
     const totalSoldRevenue = data?.data?.reduce((s, p) => s + (p.totalRevenue || 0), 0) ?? 0
     const totalSoldProfit = data?.data?.reduce((s, p) => s + (p.totalProfit || 0), 0) ?? 0
@@ -925,8 +925,7 @@ function ProductTransactionsTable({
   emptyLabel: string
 }) {
   const { t } = useLanguage()
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+  const formatCurrency = useFormatMoney()
 
   if (isLoading) return <Skeleton className='h-[160px] w-full' />
 

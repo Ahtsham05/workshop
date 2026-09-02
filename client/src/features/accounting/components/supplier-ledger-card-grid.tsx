@@ -14,6 +14,7 @@ import { buildSupplierBalanceMessage } from '@/utils/sms-messages'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { CustomerListPagination } from '@/features/customers/components/customer-list-pagination'
 import { formatSupplierBalanceDisplay } from '@/features/suppliers/utils/supplier-list-view'
+import { useCurrencyMeta } from '@/lib/format-money'
 import {
   getSupplierQuickActions,
   type SupplierLedgerEntryAction,
@@ -66,6 +67,7 @@ const ACTION_TONES: Record<string, 'blue' | 'violet' | 'orange' | 'emerald'> = {
 
 export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, pagination }: Props) {
   const { t } = useLanguage()
+  const currencyMeta = useCurrencyMeta()
   const navigate = useNavigate()
   const { hasPermission } = usePermissions()
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -144,7 +146,7 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
           <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {suppliers.map((supplier) => {
               const whatsapp = supplier.whatsapp || supplier.phone
-              const balanceDisplay = formatSupplierBalanceDisplay(Number(supplier.balance ?? 0), t)
+              const balanceDisplay = formatSupplierBalanceDisplay(Number(supplier.balance ?? 0), t, currencyMeta)
 
               return (
                 <EntityCardLayout

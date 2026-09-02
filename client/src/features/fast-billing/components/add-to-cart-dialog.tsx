@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +25,8 @@ const noSpinner =
   '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
 
 export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Props) {
+  const formatMoney = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const [quantity, setQuantity] = useState(1)
   const [unitPrice, setUnitPrice] = useState(0)
   const qtyRef = useRef<HTMLInputElement>(null)
@@ -78,7 +81,7 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
               <p className='truncate text-base font-semibold leading-tight'>{item.name}</p>
               <div className='mt-1 flex flex-wrap items-center gap-1.5'>
                 <span className='text-xs text-muted-foreground'>
-                  Rs{item.price} · {item.unit || 'pcs'}
+                  {formatMoney(item.price)} · {item.unit || 'pcs'}
                 </span>
                 <span
                   className={cn(
@@ -140,11 +143,11 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
 
           <div className='space-y-1.5'>
             <Label className='text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
-              Unit price (Rs)
+              Unit price ({currencySymbol})
             </Label>
             <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
               <span className='flex h-11 select-none items-center border-r bg-muted px-3 text-sm font-medium text-muted-foreground'>
-                Rs
+                {currencySymbol}
               </span>
               <Input
                 ref={priceRef}
@@ -168,7 +171,7 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
 
           <div className='flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2.5'>
             <span className='text-sm font-medium text-muted-foreground'>Subtotal</span>
-            <span className='text-xl font-bold tabular-nums'>Rs{subtotal.toFixed(2)}</span>
+            <span className='text-xl font-bold tabular-nums'>{formatMoney(subtotal)}</span>
           </div>
 
           <Button type='button' size='lg' className='h-12 w-full gap-2 text-base font-semibold' onClick={confirm}>

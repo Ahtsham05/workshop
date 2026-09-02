@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Receipt } from 'lucide-react';
 import type { LedgerStatementEntry } from '@/features/accounting/components/ledger-statement-table';
+import { useFormatMoney } from '@/lib/format-money';
 
 export interface LedgerCategoryGroup {
   category: { key: string; labelKey: string; sortOrder: number };
@@ -15,9 +16,6 @@ const COLORS = [
   '#6366f1', '#94a3b8',
 ];
 
-const fmt = (v: number) =>
-  `Rs ${Number(v || 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
 interface Props {
   groups: LedgerCategoryGroup[];
   totalActivity: number;
@@ -26,6 +24,7 @@ interface Props {
 }
 
 export function LedgerCategoryCards({ groups, totalActivity, t, onSelectCategory }: Props) {
+  const fmt = useFormatMoney();
   if (groups.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">

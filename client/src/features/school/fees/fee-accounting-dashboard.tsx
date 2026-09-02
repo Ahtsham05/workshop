@@ -6,10 +6,12 @@ import { TrendingUp, TrendingDown, Wallet, AlertCircle, CheckCircle, Clock, Bank
 import {
   useGetSchoolAccountingDashboardQuery,
 } from '@/stores/school.api';
+import { useFormatMoney } from '@/lib/format-money';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 export default function FeeAccountingDashboard() {
+  const formatMoney = useFormatMoney();
   const now = new Date();
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
   const [year, setYear] = useState(now.getFullYear());
@@ -58,7 +60,7 @@ export default function FeeAccountingDashboard() {
               <div>
                 <p className="text-[11px] text-muted-foreground leading-tight">Today's Income</p>
                 {isLoading ? <div className="h-6 w-16 bg-muted animate-pulse rounded mt-1" /> : (
-                  <p className="text-base font-bold text-teal-600 mt-0.5">PKR {(txnSummary.todayIncome || 0).toLocaleString()}</p>
+                  <p className="text-base font-bold text-teal-600 mt-0.5">{formatMoney(txnSummary.todayIncome || 0)}</p>
                 )}
               </div>
             </div>
@@ -72,7 +74,7 @@ export default function FeeAccountingDashboard() {
               <div>
                 <p className="text-[11px] text-muted-foreground leading-tight">Today's Expense</p>
                 {isLoading ? <div className="h-6 w-16 bg-muted animate-pulse rounded mt-1" /> : (
-                  <p className="text-base font-bold text-rose-600 mt-0.5">PKR {(txnSummary.todayExpense || 0).toLocaleString()}</p>
+                  <p className="text-base font-bold text-rose-600 mt-0.5">{formatMoney(txnSummary.todayExpense || 0)}</p>
                 )}
               </div>
             </div>
@@ -86,7 +88,7 @@ export default function FeeAccountingDashboard() {
               <div>
                 <p className="text-[11px] text-muted-foreground leading-tight">Month Income</p>
                 {isLoading ? <div className="h-6 w-16 bg-muted animate-pulse rounded mt-1" /> : (
-                  <p className="text-base font-bold text-green-600 mt-0.5">PKR {(fc.totalCollected || 0).toLocaleString()}</p>
+                  <p className="text-base font-bold text-green-600 mt-0.5">{formatMoney(fc.totalCollected || 0)}</p>
                 )}
               </div>
             </div>
@@ -100,7 +102,7 @@ export default function FeeAccountingDashboard() {
               <div>
                 <p className="text-[11px] text-muted-foreground leading-tight">Month Expense</p>
                 {isLoading ? <div className="h-6 w-16 bg-muted animate-pulse rounded mt-1" /> : (
-                  <p className="text-base font-bold text-red-600 mt-0.5">PKR {(txnSummary.expense || 0).toLocaleString()}</p>
+                  <p className="text-base font-bold text-red-600 mt-0.5">{formatMoney(txnSummary.expense || 0)}</p>
                 )}
               </div>
             </div>
@@ -120,7 +122,7 @@ export default function FeeAccountingDashboard() {
                     <p className="text-[11px] text-muted-foreground leading-tight">Net Profit</p>
                     {isLoading ? <div className="h-6 w-16 bg-muted animate-pulse rounded mt-1" /> : (
                       <p className={`text-base font-bold mt-0.5 ${netProfit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                        PKR {netProfit.toLocaleString()}
+                        {formatMoney(netProfit)}
                       </p>
                     )}
                   </div>
@@ -192,15 +194,15 @@ export default function FeeAccountingDashboard() {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total Expected</span>
-                  <span className="font-semibold">PKR {(fc.totalExpected || 0).toLocaleString()}</span>
+                  <span className="font-semibold">{formatMoney(fc.totalExpected || 0)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="flex items-center gap-1 text-green-600"><ArrowUpRight className="h-3.5 w-3.5" /> Collected</span>
-                  <span className="font-semibold text-green-600">PKR {(fc.totalCollected || 0).toLocaleString()}</span>
+                  <span className="font-semibold text-green-600">{formatMoney(fc.totalCollected || 0)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="flex items-center gap-1 text-red-500"><ArrowDownRight className="h-3.5 w-3.5" /> Pending</span>
-                  <span className="font-semibold text-red-500">PKR {(fc.totalPending || 0).toLocaleString()}</span>
+                  <span className="font-semibold text-red-500">{formatMoney(fc.totalPending || 0)}</span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
                   <div
@@ -236,7 +238,7 @@ export default function FeeAccountingDashboard() {
                       </p>
                     </div>
                     <Badge variant={t.type === 'INCOME' ? 'default' : 'destructive'} className="text-[10px] shrink-0">
-                      {t.type === 'INCOME' ? '+' : '-'}PKR {(t.amount || 0).toLocaleString()}
+                      {t.type === 'INCOME' ? '+' : '-'}{formatMoney(t.amount || 0)}
                     </Badge>
                   </div>
                 ))}
@@ -262,7 +264,7 @@ export default function FeeAccountingDashboard() {
                       <p className="text-xs text-muted-foreground">{s.admissionNumber || ''}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-orange-600 font-semibold">PKR {(s.totalPending || s.pendingAmount || 0).toLocaleString()}</p>
+                      <p className="text-orange-600 font-semibold">{formatMoney(s.totalPending || s.pendingAmount || 0)}</p>
                       <p className="text-xs text-muted-foreground">{s.voucherCount} voucher{s.voucherCount !== 1 ? 's' : ''}</p>
                     </div>
                   </div>

@@ -248,6 +248,19 @@ const PERMISSION_GROUPS = [
     permissions: ['viewSettings', 'editSettings'],
   },
   {
+    id: 'tax_currency_settings',
+    label: 'Tax & Currency Settings',
+    permissions: [
+      'viewBusinessProfile', 'manageBusinessProfile',
+      'viewLocalizationSettings', 'manageLocalizationSettings',
+      'viewTaxCategories', 'createTaxCategories', 'editTaxCategories', 'deleteTaxCategories',
+      'viewTaxRates', 'createTaxRates', 'editTaxRates', 'deleteTaxRates',
+      'viewTaxJurisdictions', 'manageTaxJurisdictions',
+      'viewTaxExemptions', 'createTaxExemptions', 'editTaxExemptions', 'deleteTaxExemptions',
+      'viewExchangeRates', 'createExchangeRates', 'editExchangeRates', 'deleteExchangeRates',
+    ],
+  },
+  {
     id: 'dashboard',
     label: 'Dashboard',
     permissions: ['viewDashboard'],
@@ -367,7 +380,7 @@ const PERMISSION_TAB_GROUPS = {
     'new_phones',
   ],
   reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
+  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'tax_currency_settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
 };
 
 const sanitizePermissions = (input = {}) => {

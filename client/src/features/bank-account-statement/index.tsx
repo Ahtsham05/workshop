@@ -25,9 +25,7 @@ import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { useGetWalletBalanceStatementQuery, type WalletBalanceDetailItem } from '@/stores/reports.api'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-timezone'
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
+import { useFormatMoney } from '@/lib/format-money'
 
 const formatDate = (value?: string) => {
   if (!value) return '-'
@@ -70,6 +68,7 @@ interface BankAccountStatementPageProps {
 }
 
 export default function BankAccountStatementPage({ initialWalletType }: BankAccountStatementPageProps) {
+  const fmt = useFormatMoney()
   const today = useMemo(() => getBusinessToday(), [])
   const { data: walletsData, isLoading: walletsLoading } = useGetWalletsQuery(undefined, {
     refetchOnFocus: true,

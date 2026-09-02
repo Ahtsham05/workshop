@@ -1,6 +1,8 @@
 import { invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import type { BillPaymentReceipt } from '@/stores/mobile-shop.api'
 import { billReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 interface BillReceiptOptions {
   orgName?: string
@@ -14,6 +16,8 @@ interface BillReceiptOptions {
   userPreferredLanguage?: InvoiceLanguage
   isTrial?: boolean
   logo?: string
+  /** Organization's configured currency (symbol/decimals) — omit to fall back to PKR. */
+  currencyMeta?: CurrencyOption
 }
 
 export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: BillReceiptOptions = {}): string {
@@ -24,7 +28,7 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
 
   const companyName = options.branchDetails?.name || options.orgName || 'Mobile Shop'
-  const fmt = (n: number) => `Rs ${n.toLocaleString()}`
+  const fmt = (n: number) => formatMoneyWithMeta(n, options.currencyMeta ?? FALLBACK_CURRENCY)
   const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString(locale) : '—')
   const fmtTime = (d?: string) => {
     if (!d) return ''

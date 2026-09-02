@@ -1,6 +1,8 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Printer, X } from 'lucide-react'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 export type MobileReceiptLine = {
   label: string
@@ -50,6 +52,6 @@ export function MobileReceiptOffer({
   )
 }
 
-export function fmtRs(n: number) {
-  return `Rs ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+export function fmtRs(n: number, meta: CurrencyOption = FALLBACK_CURRENCY) {
+  return formatMoneyWithMeta(Number(n), meta)
 }

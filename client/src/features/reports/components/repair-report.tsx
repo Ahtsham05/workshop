@@ -11,6 +11,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface RepairReportProps {
   startDate: string
@@ -35,6 +36,7 @@ export const RepairReport = forwardRef<{ exportToExcel: () => void }, RepairRepo
   ({ startDate, endDate }, ref) => {
     const { t } = useLanguage()
     const { data, isFetching: isLoading } = useGetRepairReportQuery({ startDate, endDate })
+    const fmt = useFormatMoney()
 
     useImperativeHandle(ref, () => ({
       exportToExcel: () => {
@@ -87,7 +89,6 @@ export const RepairReport = forwardRef<{ exportToExcel: () => void }, RepairRepo
 
     if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
-    const fmt = (v: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
     const s = data?.summary
 
     return (

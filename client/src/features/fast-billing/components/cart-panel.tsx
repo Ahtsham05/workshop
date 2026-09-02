@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -47,6 +48,8 @@ export function CartPanel({
   onUpdateAllocationQuantity,
   onAddBatchToSplit,
 }: Props) {
+  const formatMoney = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const [historyDialog, setHistoryDialog] = useState<{
     open: boolean
     productId: string
@@ -93,7 +96,7 @@ export function CartPanel({
                 <p className='truncate text-sm font-semibold leading-tight'>{line.name}</p>
                 <div className='mt-1 flex flex-wrap items-center gap-1.5'>
                   <span className='text-xs text-muted-foreground'>
-                    Rs{line.unitPrice} · {line.unit || 'pcs'}
+                    {formatMoney(line.unitPrice)} · {line.unit || 'pcs'}
                   </span>
                   <span
                     className={cn(
@@ -202,7 +205,7 @@ export function CartPanel({
 
                 <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
                   <span className='flex h-7 select-none items-center border-r bg-muted px-2 text-xs font-medium text-muted-foreground'>
-                    Rs
+                    {currencySymbol}
                   </span>
                   <Input
                     type='number'
@@ -235,19 +238,19 @@ export function CartPanel({
                     onClick={() =>
                       onItemDiscountChange(line.key, { type: line.discountType === 'percentage' ? 'fixed' : 'percentage' })
                     }
-                    title='Click to switch between Rs and % discount'
+                    title={`Click to switch between ${currencySymbol} and % discount`}
                     className='flex h-7 select-none items-center border-l bg-muted px-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground'
                   >
-                    {line.discountType === 'percentage' ? '%' : 'Rs'}
+                    {line.discountType === 'percentage' ? '%' : currencySymbol}
                   </button>
                 </div>
 
                 <span className='select-none text-sm text-muted-foreground/60'>=</span>
                 <div className='w-16 shrink-0 text-right'>
                   {lineDiscount > 0 && (
-                    <p className='text-[10px] leading-none text-muted-foreground line-through'>Rs{gross.toFixed(0)}</p>
+                    <p className='text-[10px] leading-none text-muted-foreground line-through'>{formatMoney(gross)}</p>
                   )}
-                  <span className='text-sm font-bold tabular-nums'>Rs{lineTotal.toFixed(0)}</span>
+                  <span className='text-sm font-bold tabular-nums'>{formatMoney(lineTotal)}</span>
                 </div>
 
                 {customer?.id && (

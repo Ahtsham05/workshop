@@ -12,8 +12,10 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
+import { useFormatMoney } from '@/lib/format-money'
 
 export default function RestaurantReportsPage() {
+  const formatMoney = useFormatMoney()
   const {
     data: orders = [],
     isLoading: ordersLoading,
@@ -213,8 +215,4 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className='font-medium'>{value}</span>
     </div>
   )
-}
-
-function formatMoney(n: number) {
-  return n.toLocaleString(undefined, { style: 'currency', currency: 'PKR' })
 }

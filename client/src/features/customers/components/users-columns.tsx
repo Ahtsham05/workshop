@@ -13,10 +13,12 @@ import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { buildCustomerBalanceMessage, getCustomerBalanceTemplate } from '@/utils/sms-messages'
 import { formatCustomerBalanceDisplay } from '../utils/customer-list-view'
+import { useCurrencyMeta } from '@/lib/format-money'
 
 export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: boolean) => void): ColumnDef<Customer>[] => {
   const { t } = useLanguage()
   const branchName = useBranchName()
+  const currencyMeta = useCurrencyMeta()
 
   return [
     {
@@ -60,7 +62,7 @@ export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: b
       accessorKey: 'balance',
       header: ({ column }) => <DataTableColumnHeader column={column} title='balance' />,
       cell: ({ row }) => {
-        const { label, amount, className } = formatCustomerBalanceDisplay(Number(row.original.balance ?? 0), t)
+        const { label, amount, className } = formatCustomerBalanceDisplay(Number(row.original.balance ?? 0), t, currencyMeta)
         return (
           <div className='flex items-center gap-2'>
             <span className={`font-medium tabular-nums ${className}`}>{amount}</span>

@@ -47,6 +47,7 @@ import {
 import { applySaleDraftStock, revertSaleDraftStock } from '@/lib/pos-hold-stock'
 import { calculateInvoiceLineValues, getProductUnitOptions, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
 import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/lib/discount'
+import { useFormatMoney } from '@/lib/format-money'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
@@ -265,6 +266,7 @@ export interface Category {
 export default function InvoicePage() {
   useCollapseSidebarOnMount()
   const { t } = useLanguage()
+  const formatCurrency = useFormatMoney()
   const { hasExplicitPermission } = usePermissions()
   const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
@@ -511,10 +513,7 @@ export default function InvoicePage() {
           customers.find((c) => c._id === invoice.customerId)?.name ||
           t('customer')
     const lineCount = invoice.items.filter((it) => it.productId || it.name?.trim()).length
-    const label = `${cust} · Rs ${Number(invoice.total ?? 0).toLocaleString('en-PK', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })} · ${lineCount}`
+    const label = `${cust} · ${formatCurrency(Number(invoice.total ?? 0))} · ${lineCount}`
     const record: SaleHeldRecord = {
       id: newHoldId(),
       label,
@@ -544,6 +543,7 @@ export default function InvoicePage() {
     showProductCatalog,
     t,
     resetSaleInvoiceForm,
+    formatCurrency,
   ])
 
   const resumeSaleHeld = useCallback(
@@ -1324,7 +1324,7 @@ export default function InvoicePage() {
     // Restore stock for current invoice items before creating new (only if not saved)
     if (!invoiceSaved && invoice.items.length > 0) {
       setProducts(prevProducts => {
-        let updatedProducts = [...prevProducts]
+        const updatedProducts = [...prevProducts]
         invoice.items.forEach(item => {
           const productIndex = updatedProducts.findIndex(p => (p._id || p.id) === item.productId)
           if (productIndex !== -1) {
@@ -1487,7 +1487,7 @@ export default function InvoicePage() {
     // Only restore stock if invoice was not saved (i.e., user canceled/navigated away)
     if (!invoiceSaved && invoice.items.length > 0) {
       setProducts(prevProducts => {
-        let updatedProducts = [...prevProducts]
+        const updatedProducts = [...prevProducts]
         invoice.items.forEach(item => {
           const productIndex = updatedProducts.findIndex(p => (p._id || p.id) === item.productId)
           if (productIndex !== -1) {

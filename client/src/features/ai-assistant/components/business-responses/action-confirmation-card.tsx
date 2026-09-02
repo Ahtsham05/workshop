@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { useConfirmActionMutation, useCancelActionMutation, type AiPendingAction } from '@/stores/aiAssistant.api'
 import { formatMoney } from '../../lib/format'
+import { useCurrencyMeta } from '@/lib/format-money'
 
 const CARD_TITLE: Record<AiPendingAction['kind'], string> = {
   create_invoice: 'Create Invoice',
@@ -40,6 +41,7 @@ export function ActionConfirmationCard({
   messageId: string
   action: AiPendingAction
 }) {
+  const currencyMeta = useCurrencyMeta()
   const [confirmAction, { isLoading: isConfirming }] = useConfirmActionMutation()
   const [cancelAction, { isLoading: isCancelling }] = useCancelActionMutation()
   const [localError, setLocalError] = useState<string | null>(null)
@@ -79,7 +81,7 @@ export function ActionConfirmationCard({
         {action.kind === 'create_invoice' ? (
           <>
             <p className='mt-1 text-sm text-foreground'>
-              {action.result?.invoiceNumber} — {formatMoney(action.preview.total)} for {action.preview.customerName}
+              {action.result?.invoiceNumber} — {formatMoney(action.preview.total, currencyMeta)} for {action.preview.customerName}
             </p>
             <Button asChild size='sm' variant='outline' className='mt-3 h-8 gap-1.5 text-xs'>
               {/* No per-invoice deep link exists in this app yet — invoices are only browsable via
@@ -93,8 +95,8 @@ export function ActionConfirmationCard({
           </>
         ) : (
           <p className='mt-1 text-sm text-foreground'>
-            {formatMoney(action.preview.amount)} from {action.preview.customerName} — new balance:{' '}
-            {formatMoney(action.result?.newBalance ?? 0)}
+            {formatMoney(action.preview.amount, currencyMeta)} from {action.preview.customerName} — new balance:{' '}
+            {formatMoney(action.result?.newBalance ?? 0, currencyMeta)}
           </p>
         )}
       </div>
@@ -141,18 +143,18 @@ export function ActionConfirmationCard({
             </div>
             <div className='flex justify-between gap-3 border-t pt-1.5'>
               <dt className='text-muted-foreground'>Total</dt>
-              <dd className='font-semibold tabular-nums'>{formatMoney(action.preview.total)}</dd>
+              <dd className='font-semibold tabular-nums'>{formatMoney(action.preview.total, currencyMeta)}</dd>
             </div>
           </>
         ) : (
           <>
             <div className='flex justify-between gap-3'>
               <dt className='text-muted-foreground'>Current balance</dt>
-              <dd className='font-medium tabular-nums'>{formatMoney(action.preview.customerBalance)}</dd>
+              <dd className='font-medium tabular-nums'>{formatMoney(action.preview.customerBalance, currencyMeta)}</dd>
             </div>
             <div className='flex justify-between gap-3 border-t pt-1.5'>
               <dt className='text-muted-foreground'>Amount received</dt>
-              <dd className='font-semibold tabular-nums'>{formatMoney(action.preview.amount)}</dd>
+              <dd className='font-semibold tabular-nums'>{formatMoney(action.preview.amount, currencyMeta)}</dd>
             </div>
           </>
         )}

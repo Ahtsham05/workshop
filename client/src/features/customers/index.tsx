@@ -37,8 +37,7 @@ import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { toneColor } from '@/lib/stat-card-tones'
 import type { Customer } from './data/schema'
-
-const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`
+import { useFormatMoney } from '@/lib/format-money'
 
 const SEARCH_DEBOUNCE_MS = 400
 const ALL_STATUS = 'all'
@@ -49,6 +48,7 @@ const CUSTOMERS_SORT_BY = 'isActive:desc,createdAt:desc'
 const SHOW_QUICK_ADD_CUSTOMER = false
 
 export default function Customers() {
+  const fmtAmt = useFormatMoney()
   const [customers, setCustomers] = useState([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
@@ -221,7 +221,7 @@ export default function Customers() {
           />
           <StatCard
             title={t('outstanding_balance')}
-            value={fmtAmt(stats?.outstandingBalance)}
+            value={fmtAmt(stats?.outstandingBalance ?? 0)}
             description={t('Receivable')}
             icon={<Wallet />}
             tone='amber'

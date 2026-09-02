@@ -4,7 +4,7 @@ import type { AiToolCall } from '@/stores/aiAssistant.api'
 import { BusinessStatCard } from './stat-card'
 import { RecordListCard, type BusinessListItem } from './record-list-card'
 import { ProfitSummaryCard } from './profit-summary-card'
-import { formatMoney } from '../../lib/format'
+import { useFormatMoney } from '@/lib/format-money'
 
 /**
  * Maps a known AI tool result to one of the two generic business-data cards. Unrecognized tool
@@ -12,7 +12,7 @@ import { formatMoney } from '../../lib/format'
  * own prose reply in the message bubble already answers the question either way, so this is a
  * pure enhancement, never a requirement for the chat to work.
  */
-function renderCard(toolCall: AiToolCall, key: string): ReactNode | null {
+function renderCard(toolCall: AiToolCall, key: string, formatMoney: (n: number) => string): ReactNode | null {
   const result = toolCall.result as Record<string, unknown> | null | undefined
   if (!result || typeof result !== 'object' || 'error' in result) return null
 
@@ -241,9 +241,10 @@ function renderCard(toolCall: AiToolCall, key: string): ReactNode | null {
 }
 
 export function BusinessResponse({ toolCalls }: { toolCalls: AiToolCall[] | undefined }) {
+  const formatMoney = useFormatMoney()
   if (!toolCalls || toolCalls.length === 0) return null
   const cards = toolCalls
-    .map((tc, i) => renderCard(tc, `${tc.name}-${i}`))
+    .map((tc, i) => renderCard(tc, `${tc.name}-${i}`, formatMoney))
     .filter((node): node is ReactNode => node !== null)
     .slice(0, 2)
 

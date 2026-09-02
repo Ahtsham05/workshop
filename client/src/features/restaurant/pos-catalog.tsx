@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Search, Package, Image as ImageIcon, List, UtensilsCrossed } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 export type PosProduct = {
   id?: string
@@ -73,6 +74,7 @@ export function PosMenuCatalog({
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
   const [showImages, setShowImages] = useState(true)
+  const formatMoney = useFormatMoney()
 
   const categorizedProducts = useMemo(
     () => (products?.length ? groupProductsByCategory(products) : []),
@@ -231,10 +233,7 @@ export function PosMenuCatalog({
                       const sq = product.stockQuantity
                       const disabled = sq !== undefined && sq <= 0
                       const imgUrl = resolvePosProductImageUrl(product)
-                      const priceStr = product.price.toLocaleString(undefined, {
-                        style: 'currency',
-                        currency: 'PKR',
-                      })
+                      const priceStr = formatMoney(product.price)
                       return (
                         <button
                           key={pid}

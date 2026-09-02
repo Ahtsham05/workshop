@@ -26,6 +26,7 @@ import { useGetDailySalesSummaryReportQuery, type DailySalesSummaryModule } from
 import { useBranchName } from '@/hooks/use-branch-name'
 import { toneIconWrapClass, type StatCardTone } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface DailySalesSummaryReportProps {
   startDate: string
@@ -49,9 +50,8 @@ const MODULE_STYLE: Record<string, { icon: ComponentType<{ className?: string }>
   loadPurchase: { icon: Truck, tone: 'rose' },
 }
 
-const fmt = (v: number) => `Rs ${Math.round(v || 0).toLocaleString('en-PK')}`
-
 function SummaryRow({ module: m }: { module: DailySalesSummaryModule }) {
+  const fmt = useFormatMoney()
   const style = MODULE_STYLE[m.key] ?? { icon: Package, tone: 'slate' as StatCardTone }
   const Icon = style.icon
   return (
@@ -73,6 +73,7 @@ function SummaryRow({ module: m }: { module: DailySalesSummaryModule }) {
 }
 
 function ModuleDetailCard({ module: m }: { module: DailySalesSummaryModule }) {
+  const fmt = useFormatMoney()
   const style = MODULE_STYLE[m.key] ?? { icon: Package, tone: 'slate' as StatCardTone }
   const Icon = style.icon
   return (
@@ -118,6 +119,7 @@ function ModuleDetailCard({ module: m }: { module: DailySalesSummaryModule }) {
  * counted, and Cash Sent/Received are shown for the day's wallet activity with their commission. */
 export const DailySalesSummaryReport = forwardRef<{ exportToExcel: () => void }, DailySalesSummaryReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
     const branchName = useBranchName()
     const { data, isFetching: isLoading } = useGetDailySalesSummaryReportQuery({ startDate, endDate })
 

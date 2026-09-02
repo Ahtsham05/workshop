@@ -153,3 +153,10 @@ module.exports.Reminder = require('./reminder.model');
 
 // CRM Leads
 module.exports.Lead = require('./lead.model');
+
+// Localization / Currency / Tax engine
+module.exports.ExchangeRate = require('./exchangeRate.model');
+module.exports.TaxCategory = require('./taxCategory.model');
+module.exports.TaxRate = require('./taxRate.model');
+module.exports.TaxJurisdiction = require('./taxJurisdiction.model');
+module.exports.TaxExemption = require('./taxExemption.model');

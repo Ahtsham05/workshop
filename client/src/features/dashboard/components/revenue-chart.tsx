@@ -8,6 +8,7 @@ import {
   formatDashboardRangeLabel,
   type DashboardDateRange,
 } from '@/lib/dashboard-date-range'
+import { useFormatMoney } from '@/lib/format-money'
 
 type Props = {
   dateRange: DashboardDateRange
@@ -15,6 +16,7 @@ type Props = {
 
 export function RevenueChart({ dateRange }: Props) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { data: revenueData, isLoading, isFetching } = useGetRevenueDataQuery(dashboardRangeQueryParams(dateRange))
   const loading = isLoading || isFetching
 
@@ -58,10 +60,10 @@ export function RevenueChart({ dateRange }: Props) {
               fontSize={12}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value) => `Rs${value}`}
+              tickFormatter={(value) => formatMoney(value)}
             />
-            <Tooltip 
-              formatter={(value: any) => `Rs${value.toLocaleString()}`}
+            <Tooltip
+              formatter={(value: any) => formatMoney(value)}
               contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
             />
             <Legend />

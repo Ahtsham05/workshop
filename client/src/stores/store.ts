@@ -65,6 +65,12 @@ import { expenseApi } from './expense.api';
 import { communicationLogApi } from './communicationLog.api';
 import { reminderApi } from './reminder.api';
 import { leadApi } from './lead.api';
+import { localizationApi } from './localization.api';
+import { taxCategoryApi } from './taxCategory.api';
+import { taxRateApi } from './taxRate.api';
+import { taxJurisdictionApi } from './taxJurisdiction.api';
+import { taxExemptionApi } from './taxExemption.api';
+import { exchangeRateApi } from './exchangeRate.api';
 
 export const store = configureStore({
   reducer: {
@@ -134,6 +140,12 @@ export const store = configureStore({
     [communicationLogApi.reducerPath]: communicationLogApi.reducer,
     [reminderApi.reducerPath]: reminderApi.reducer,
     [leadApi.reducerPath]: leadApi.reducer,
+    [localizationApi.reducerPath]: localizationApi.reducer,
+    [taxCategoryApi.reducerPath]: taxCategoryApi.reducer,
+    [taxRateApi.reducerPath]: taxRateApi.reducer,
+    [taxJurisdictionApi.reducerPath]: taxJurisdictionApi.reducer,
+    [taxExemptionApi.reducerPath]: taxExemptionApi.reducer,
+    [exchangeRateApi.reducerPath]: exchangeRateApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -196,6 +208,12 @@ export const store = configureStore({
       communicationLogApi.middleware,
       reminderApi.middleware,
       leadApi.middleware,
+      localizationApi.middleware,
+      taxCategoryApi.middleware,
+      taxRateApi.middleware,
+      taxJurisdictionApi.middleware,
+      taxExemptionApi.middleware,
+      exchangeRateApi.middleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;

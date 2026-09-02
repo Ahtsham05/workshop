@@ -1,3 +1,6 @@
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
+
 export type SupplierListViewMode = 'cards' | 'table'
 
 const VIEW_MODE_KEY = 'suppliers-list-view'
@@ -13,9 +16,13 @@ export function storeSupplierListViewMode(mode: SupplierListViewMode) {
 }
 
 /** Supplier ledger: positive = we owe (Payable), negative = they owe us (Receivable). */
-export function formatSupplierBalanceDisplay(balance: number, t: (key: string) => string) {
+export function formatSupplierBalanceDisplay(
+  balance: number,
+  t: (key: string) => string,
+  meta: CurrencyOption = FALLBACK_CURRENCY,
+) {
   const abs = Math.abs(Number(balance) || 0)
-  const amount = `Rs ${abs.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const amount = formatMoneyWithMeta(abs, meta)
 
   if (balance > 0) {
     return { label: t('Payable'), amount, className: 'text-red-600' as const }

@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Pencil, Trash2, FilePen, CalendarDays, X, BookOpen, ClipboardList, ChevronLeft, GraduationCap, Layers, Printer, Receipt, Loader2 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
+import { useFormatMoney } from '@/lib/format-money';
 import {
   useGetExamsQuery,
   useCreateExamMutation,
@@ -67,6 +68,7 @@ const EMPTY_BULK_FORM = {
 const getExamId = (e: any) => e.id || e._id;
 
 export default function ExamManagement() {
+  const formatMoney = useFormatMoney();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -718,7 +720,7 @@ export default function ExamManagement() {
                         </div>
                         {(e.examFeeAmount > 0) && (
                           <p className="text-[10px] text-muted-foreground text-center">
-                            Exam fee: Rs. {Number(e.examFeeAmount).toLocaleString()} — appears in student ledger when voucher is generated
+                            Exam fee: {formatMoney(Number(e.examFeeAmount))} — appears in student ledger when voucher is generated
                           </p>
                         )}
                       </div>

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { Supplier, PurchaseOrder, Purchase, PurchaseReturn, Product } = require('../models');
+const { formatMoney } = require('../utils/money');
 
 /**
  * Weights for the composite supplier score. Must sum to 1. Tunable without touching
@@ -274,7 +275,7 @@ const buildSupplierRecommendationReason = (best) => {
   const parts = [];
   if (best.onTimeDeliveryRate !== null) parts.push(`a ${round2(best.onTimeDeliveryRate)}% on-time delivery rate`);
   if (best.avgLeadTimeDays !== null) parts.push(`an average lead time of ${round2(best.avgLeadTimeDays)} day(s)`);
-  if (best.avgPrice !== null) parts.push(`competitive pricing (avg Rs${round2(best.avgPrice)}/unit)`);
+  if (best.avgPrice !== null) parts.push(`competitive pricing (avg ${formatMoney(round2(best.avgPrice))}/unit)`);
   if (best.returnRate !== null && best.returnRate > 0) parts.push(`a ${round2(best.returnRate)}% return rate`);
 
   const scopeNote =

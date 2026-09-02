@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/table'
 import { useGetInvoicesQuery } from '@/stores/invoice.api'
 import { useCreateSalesReturnMutation, type SalesReturnPayload } from '@/stores/returns.api'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface ReturnItem {
   productId: string
@@ -40,6 +41,7 @@ interface SalesReturnFormProps {
 }
 
 export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormProps) {
+  const formatMoney = useFormatMoney()
   const [invoiceSearch, setInvoiceSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
@@ -199,7 +201,7 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
                         {inv.customerName || inv.walkInCustomerName || inv.customer?.name || 'Walk-in'}
                       </span>
                       {' — '}
-                      <span>PKR {(inv.total ?? 0).toLocaleString()}</span>
+                      <span>{formatMoney((inv.total ?? 0))}</span>
                     </button>
                   ))}
                 </div>
@@ -215,7 +217,7 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
                     selectedInvoice.customer?.name ||
                     'Walk-in Customer'}
                 </p>
-                <p className='text-sm'>Total: PKR {(selectedInvoice.total ?? 0).toLocaleString()}</p>
+                <p className='text-sm'>Total: {formatMoney((selectedInvoice.total ?? 0))}</p>
               </div>
               <Button
                 variant='outline'
@@ -289,12 +291,12 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
                         />
                         {item.price !== item.originalPrice && (
                           <p className='text-xs text-muted-foreground'>
-                            Original: PKR {item.originalPrice.toLocaleString()}
+                            Original: {formatMoney(item.originalPrice)}
                           </p>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>PKR {item.total.toLocaleString()}</TableCell>
+                    <TableCell>{formatMoney(item.total)}</TableCell>
                     <TableCell>
                       <Button
                         variant='ghost'
@@ -312,11 +314,11 @@ export default function SalesReturnForm({ onBack, onSuccess }: SalesReturnFormPr
             <div className='mt-4 space-y-1 text-right'>
               {retainedAmount > 0 && (
                 <div className='text-sm text-green-600'>
-                  Retained as profit: PKR {retainedAmount.toLocaleString()}
+                  Retained as profit: {formatMoney(retainedAmount)}
                 </div>
               )}
               <div className='text-lg font-semibold'>
-                Total Return: PKR {totalAmount.toLocaleString()}
+                Total Return: {formatMoney(totalAmount)}
               </div>
             </div>
           </CardContent>

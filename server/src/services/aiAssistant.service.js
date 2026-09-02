@@ -4,6 +4,7 @@ const ApiError = require('../utils/ApiError');
 const geminiService = require('./aiAssistant/gemini.service');
 const invoiceService = require('./invoice.service');
 const customerLedgerService = require('./customerLedger.service');
+const { getCurrencyMeta } = require('../utils/money');
 
 const HISTORY_LIMIT = 20;
 
@@ -110,13 +111,14 @@ const sendMessage = async ({
     .limit(HISTORY_LIMIT);
   const history = recentMessages.reverse().map((m) => ({ role: m.role, content: m.content }));
 
-  const organization = await Organization.findById(organizationId).select('name businessType');
+  const organization = await Organization.findById(organizationId).select('name businessType baseCurrency');
   const businessContext = {
     businessName: organization?.name,
     businessType: organization?.businessType,
-    // The app has no per-organization currency setting — every screen in the product
-    // (dashboard, invoices, reports) hardcodes Pakistani Rupees, so the assistant must match.
-    currency: 'Rs',
+    // Reads the organization's actual configured currency (see Organization.baseCurrency)
+    // now that one exists; falls back to the app's original Rs/PKR-only behavior for any
+    // org that hasn't visited the Currency settings page yet.
+    currency: organization?.baseCurrency ? getCurrencyMeta(organization.baseCurrency)?.symbol || 'Rs' : 'Rs',
   };
 
   const ctx = { organizationId, branchId, permissions, isSystemAdmin, userId, conversationId };

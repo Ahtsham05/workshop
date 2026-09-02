@@ -16,6 +16,8 @@ import {
 } from '@/stores/school.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { RootState } from '@/stores/store';
+import { formatMoneyWithMeta, FALLBACK_CURRENCY, useCurrencyMeta } from '@/lib/format-money';
+import type { CurrencyOption } from '@/stores/localization.api';
 import StudentSearchPicker from '../components/student-search-picker';
 import { buildProgressReportPrintHtmlReady, openProgressReportPrint } from './progress-report-print-html';
 import { mapReportToPrintInput, parseCampusFromBranchName, type ProgressReportExamResult } from './progress-report-utils';
@@ -40,7 +42,7 @@ type FeeSummary = {
   unpaidCount: number;
 };
 
-function formatFeeDisplay(fees: FeeSummary) {
+function formatFeeDisplay(fees: FeeSummary, meta: CurrencyOption = FALLBACK_CURRENCY) {
   if (fees.voucherCount === 0) {
     return {
       headline: 'No fee records',
@@ -52,14 +54,14 @@ function formatFeeDisplay(fees: FeeSummary) {
   if (fees.balance <= 0) {
     return {
       headline: 'Cleared',
-      sub: `Paid Rs ${fees.totalPaid.toLocaleString()} of Rs ${fees.totalDue.toLocaleString()}`,
+      sub: `Paid ${formatMoneyWithMeta(fees.totalPaid, meta)} of ${formatMoneyWithMeta(fees.totalDue, meta)}`,
       badge: 'All clear',
       badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     };
   }
   return {
-    headline: `Rs ${fees.balance.toLocaleString()} pending`,
-    sub: `${fees.unpaidCount} unpaid voucher${fees.unpaidCount === 1 ? '' : 's'} · Due Rs ${fees.totalDue.toLocaleString()}, paid Rs ${fees.totalPaid.toLocaleString()}`,
+    headline: `${formatMoneyWithMeta(fees.balance, meta)} pending`,
+    sub: `${fees.unpaidCount} unpaid voucher${fees.unpaidCount === 1 ? '' : 's'} · Due ${formatMoneyWithMeta(fees.totalDue, meta)}, paid ${formatMoneyWithMeta(fees.totalPaid, meta)}`,
     badge: 'Fee pending',
     badgeClass: 'bg-amber-100 text-amber-900 border-amber-200',
   };
@@ -304,7 +306,8 @@ export default function ProgressReportPage() {
 }
 
 function FeeStatCard({ fees }: { fees: FeeSummary }) {
-  const f = formatFeeDisplay(fees);
+  const currencyMeta = useCurrencyMeta();
+  const f = formatFeeDisplay(fees, currencyMeta);
   const iconTone =
     fees.voucherCount === 0
       ? 'text-slate-400'

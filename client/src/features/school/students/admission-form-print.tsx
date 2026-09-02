@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useGetStudentAdmissionFormQuery } from '@/stores/school.api';
 import { Printer, Download, X } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { useFormatMoney } from '@/lib/format-money';
 
 interface Props {
   studentId: string;
@@ -22,10 +23,6 @@ function fmt(date?: string | Date | null): string {
   });
 }
 
-function currency(n: number): string {
-  return `Rs. ${n.toLocaleString('en-PK')}`;
-}
-
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
 }
@@ -39,6 +36,7 @@ function A4Sheet({
   data: ReturnType<typeof useGetStudentAdmissionFormQuery>['data'];
   printRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const currency = useFormatMoney();
   if (!data) return null;
 
   const { student, parent, academic, fees, school } = data as any;
@@ -315,6 +313,7 @@ const TD: React.CSSProperties = {
 };
 
 function FeeRow({ label, amount, stripe }: { label: string; amount: number; stripe?: boolean }) {
+  const currency = useFormatMoney();
   return (
     <tr style={{ background: stripe ? '#f9fafb' : 'white' }}>
       <td style={TD}>{label}</td>

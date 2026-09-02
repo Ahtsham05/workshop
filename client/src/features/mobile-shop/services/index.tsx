@@ -52,6 +52,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 type CatalogForm = {
   serviceName: string
@@ -83,8 +84,6 @@ function salesmanName(ref: { name?: string; email?: string } | string | null | u
 
 const fmtDate = (v?: string) => (v ? formatBusinessDateTime(v) : '-')
 
-const fmtAmt = (v?: number) => `Rs ${(v ?? 0).toLocaleString()}`
-
 const initialCatalogForm = (): CatalogForm => ({
   serviceName: '',
   price: '',
@@ -115,6 +114,9 @@ export default function ServicesPage({
   initialCustomerId?: string
   initialTab?: 'catalog' | 'invoices'
 }) {
+  const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
+  const fmtAmt = (v?: number) => formatMoney(v ?? 0)
   const [activeTab, setActiveTab] = useState<'catalog' | 'invoices'>(initialTab === 'invoices' ? 'invoices' : 'catalog')
   const [catalogForm, setCatalogForm] = useState<CatalogForm>(initialCatalogForm)
   const [invoiceForm, setInvoiceForm] = useState<InvoiceForm>(initialInvoiceForm)
@@ -359,7 +361,7 @@ export default function ServicesPage({
 
       const lineRows = (inv.items || []).map((item) => ({
         label: `${item.quantity}× ${item.serviceName}`,
-        value: fmtRs(item.total),
+        value: fmtRs(item.total, currencyMeta),
       }))
       setSavedReceipt({
         title: 'Service invoice',
@@ -369,8 +371,8 @@ export default function ServicesPage({
           { label: 'Customer', value: inv.customerName || '—' },
           { label: 'Phone', value: inv.customerPhone || '—' },
           ...lineRows,
-          { label: 'Subtotal', value: fmtRs(inv.subtotal) },
-          { label: 'Total', value: fmtRs(inv.totalAmount) },
+          { label: 'Subtotal', value: fmtRs(inv.subtotal, currencyMeta) },
+          { label: 'Total', value: fmtRs(inv.totalAmount, currencyMeta) },
           ...(inv.notes ? [{ label: 'Notes', value: inv.notes }] : []),
         ],
       })
@@ -903,7 +905,7 @@ export default function ServicesPage({
                                   title: `Service Invoice #${invoice.invoiceNumber}`,
                                   lines: [
                                     { label: 'Items', value: String(invoice.items?.length ?? 0) },
-                                    { label: 'Total Amount', value: fmtRs(invoice.totalAmount) },
+                                    { label: 'Total Amount', value: fmtRs(invoice.totalAmount, currencyMeta) },
                                   ],
                                 })}
                                 templateCategory='service_receipt'
@@ -922,7 +924,7 @@ export default function ServicesPage({
                                   title: `Service Invoice #${invoice.invoiceNumber}`,
                                   lines: [
                                     { label: 'Items', value: String(invoice.items?.length ?? 0) },
-                                    { label: 'Total Amount', value: fmtRs(invoice.totalAmount) },
+                                    { label: 'Total Amount', value: fmtRs(invoice.totalAmount, currencyMeta) },
                                   ],
                                 })}
                               />

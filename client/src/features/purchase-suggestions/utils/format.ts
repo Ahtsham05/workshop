@@ -1,4 +1,8 @@
-export const formatMoney = (n: unknown) => `Rs${Math.round(Number(n) || 0).toLocaleString()}`
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
+
+export const formatMoney = (n: unknown, meta: CurrencyOption = FALLBACK_CURRENCY) =>
+  formatMoneyWithMeta(Number(n) || 0, meta)
 export const formatNumber = (n: unknown): number => {
   const num = Number(n)
   return Number.isFinite(num) ? Math.round(num * 100) / 100 : 0

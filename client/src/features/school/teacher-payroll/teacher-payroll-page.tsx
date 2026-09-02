@@ -16,6 +16,7 @@ import {
   useDeleteTeacherPayrollMutation,
 } from '@/stores/school.api';
 import { toast } from 'sonner';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 
 const MONTHS = [
   { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
@@ -26,9 +27,9 @@ const MONTHS = [
 
 const now = new Date();
 
-const fmt = (n: number) => n?.toLocaleString('en-PK') ?? '0';
-
 export default function TeacherPayrollPage() {
+  const fmt = useFormatMoney();
+  const currencySymbol = useCurrencyMeta().symbol;
   const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -148,7 +149,7 @@ export default function TeacherPayrollPage() {
         </Card>
         <Card className="bg-purple-50 border-0">
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-purple-600">PKR {fmt(totalNetSalary)}</div>
+            <div className="text-2xl font-bold text-purple-600">{fmt(totalNetSalary)}</div>
             <div className="text-sm text-muted-foreground">Total Payable</div>
           </CardContent>
         </Card>
@@ -196,10 +197,10 @@ export default function TeacherPayrollPage() {
                           <div className="font-medium">{name}</div>
                           <div className="text-xs text-muted-foreground">{typeof teacher === 'object' ? teacher.employeeId : ''}</div>
                         </td>
-                        <td className="text-right py-3">PKR {fmt(p.basicSalary)}</td>
-                        <td className="text-right py-3 text-green-600">+PKR {fmt(p.totalAllowances)}</td>
-                        <td className="text-right py-3 text-red-600">-PKR {fmt(p.totalDeductions)}</td>
-                        <td className="text-right py-3 font-bold">PKR {fmt(p.netSalary)}</td>
+                        <td className="text-right py-3">{fmt(p.basicSalary)}</td>
+                        <td className="text-right py-3 text-green-600">+{fmt(p.totalAllowances)}</td>
+                        <td className="text-right py-3 text-red-600">-{fmt(p.totalDeductions)}</td>
+                        <td className="text-right py-3 font-bold">{fmt(p.netSalary)}</td>
                         <td className="text-center py-3">
                           <Badge className={p.status === 'paid' ? 'bg-green-100 text-green-700 border-0' : 'bg-yellow-100 text-yellow-700 border-0'}>
                             {p.status === 'paid' ? 'Paid' : 'Draft'}
@@ -267,7 +268,7 @@ export default function TeacherPayrollPage() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label>Basic Salary (PKR)</Label>
+              <Label>Basic Salary ({currencySymbol})</Label>
               <Input type="number" value={form.basicSalary} onChange={(e) => setForm((f) => ({ ...f, basicSalary: e.target.value }))} placeholder="Auto from teacher profile" />
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -312,14 +313,14 @@ export default function TeacherPayrollPage() {
                   ['Absent Days', detailPayroll.absentDays],
                   ['Late Days', detailPayroll.lateDays],
                   ['Leave Days', detailPayroll.leaveDays],
-                  ['Basic Salary', `PKR ${fmt(detailPayroll.basicSalary)}`],
-                  ['Transport', `PKR ${fmt(detailPayroll.allowances?.transport)}`],
-                  ['Medical', `PKR ${fmt(detailPayroll.allowances?.medical)}`],
-                  ['Bonus', `PKR ${fmt(detailPayroll.bonus)}`],
-                  ['Absent Deduction', `-PKR ${fmt(detailPayroll.deductions?.absent)}`],
-                  ['Tax', `-PKR ${fmt(detailPayroll.deductions?.tax)}`],
-                  ['Total Allowances', `PKR ${fmt(detailPayroll.totalAllowances)}`],
-                  ['Total Deductions', `-PKR ${fmt(detailPayroll.totalDeductions)}`],
+                  ['Basic Salary', fmt(detailPayroll.basicSalary)],
+                  ['Transport', fmt(detailPayroll.allowances?.transport)],
+                  ['Medical', fmt(detailPayroll.allowances?.medical)],
+                  ['Bonus', fmt(detailPayroll.bonus)],
+                  ['Absent Deduction', '-' + fmt(detailPayroll.deductions?.absent)],
+                  ['Tax', '-' + fmt(detailPayroll.deductions?.tax)],
+                  ['Total Allowances', fmt(detailPayroll.totalAllowances)],
+                  ['Total Deductions', '-' + fmt(detailPayroll.totalDeductions)],
                 ].map(([k, v]) => (
                   <div key={k as string} className="flex justify-between p-2 bg-muted/30 rounded">
                     <span className="text-muted-foreground">{k}</span>
@@ -329,7 +330,7 @@ export default function TeacherPayrollPage() {
               </div>
               <div className="flex justify-between p-3 bg-primary/10 rounded-lg font-bold">
                 <span>Net Salary</span>
-                <span className="text-green-600">PKR {fmt(detailPayroll.netSalary)}</span>
+                <span className="text-green-600">{fmt(detailPayroll.netSalary)}</span>
               </div>
               {detailPayroll.notes && <div className="text-muted-foreground text-xs">{detailPayroll.notes}</div>}
             </div>

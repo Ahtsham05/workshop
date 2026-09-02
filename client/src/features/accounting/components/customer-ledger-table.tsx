@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
+import { useFormatMoney } from '@/lib/format-money'
 import { Eye } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -36,7 +37,8 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
     return 'text-gray-600'
   }
 
-  const formatBalance = (balance: number) => Math.abs(balance).toFixed(2)
+  const formatMoney = useFormatMoney()
+  const formatBalance = (balance: number) => formatMoney(Math.abs(balance))
 
   return (
     <div className='space-y-4'>
@@ -76,7 +78,7 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                       />
                     </TableCell>
                     <TableCell className={getBalanceColor(customer.balance)}>
-                      Rs{formatBalance(customer.balance)}
+                      {formatBalance(customer.balance)}
                     </TableCell>
                     <TableCell>
                       {customer.balance > 0 ? (

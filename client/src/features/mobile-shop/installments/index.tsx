@@ -67,6 +67,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { useFormatMoney } from '@/lib/format-money'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -128,9 +129,6 @@ const initialPaymentForm = (): PaymentFormState => ({
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(v)
-
 const statusConfig = {
   active:    { label: 'Active',    color: 'bg-blue-100 text-blue-700',   icon: Clock },
   completed: { label: 'Completed', color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
@@ -149,6 +147,7 @@ const isDueSoon = (plan: InstallmentPlanRecord) =>
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function InstallmentsPage() {
+  const fmt = useFormatMoney()
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageInstallments')
   const dispatch = useDispatch<AppDispatch>()
@@ -924,7 +923,7 @@ export default function InstallmentsPage() {
                                     <p className='truncate font-medium'>{p.name}</p>
                                     <p className='text-xs text-muted-foreground'>
                                       {p.barcode ? `Barcode: ${p.barcode} · ` : ''}
-                                      Stock: {p.stockQuantity ?? 0} · Price: Rs {price.toLocaleString()}
+                                      Stock: {p.stockQuantity ?? 0} · Price: {fmt(price)}
                                     </p>
                                   </div>
                                   {isSelected && <Check className='h-4 w-4 text-primary flex-shrink-0' />}
@@ -975,7 +974,7 @@ export default function InstallmentsPage() {
                       <Input
                         readOnly
                         showVoiceInput={false}
-                        value={`Rs ${Math.max(0, (Number(planForm.totalAmount) || 0) - (Number(planForm.downPayment) || 0)).toLocaleString()}`}
+                        value={fmt(Math.max(0, (Number(planForm.totalAmount) || 0) - (Number(planForm.downPayment) || 0)))}
                         className='bg-muted font-medium'
                       />
                     </div>
@@ -1004,7 +1003,7 @@ export default function InstallmentsPage() {
                       />
                       {calculatedInstallmentAmount && planForm.installmentAmount !== calculatedInstallmentAmount && (
                         <button type='button' className='text-xs text-blue-600 hover:underline' onClick={() => handlePlanFormChange('installmentAmount', calculatedInstallmentAmount)}>
-                          Auto: Rs {Number(calculatedInstallmentAmount).toLocaleString()}
+                          Auto: {fmt(Number(calculatedInstallmentAmount))}
                         </button>
                       )}
                     </div>

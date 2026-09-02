@@ -25,14 +25,12 @@ import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { useGetWalletBalanceStatementQuery, type WalletBalanceDetailItem } from '@/stores/reports.api'
 import { filterCashWallets } from '@/features/mobile-shop/utils/wallet-utils'
 import { kpiCardClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface MyWalletReportProps {
   startDate: string
   endDate: string
 }
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
 
 // Receive vs Send is really just the sign of the account's own impact — deriving it from
 // walletImpact (rather than pattern-matching transactionType strings) means this keeps
@@ -55,6 +53,7 @@ const isCashWithdrawalItem = (item: WalletBalanceDetailItem) =>
 
 export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWalletReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
     const { data: walletsData, isFetching: walletsLoading } = useGetWalletsQuery(undefined, {
       refetchOnFocus: true,
       refetchOnReconnect: true,

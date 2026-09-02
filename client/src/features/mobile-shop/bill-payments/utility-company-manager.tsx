@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/table'
 import { Pencil, Trash2, Plus } from 'lucide-react'
 import { usePermissions } from '@/context/permission-context'
+import { useFormatMoney } from '@/lib/format-money'
 import {
   useGetUtilityCompaniesQuery,
   useCreateUtilityCompanyMutation,
@@ -61,6 +62,7 @@ const BILL_TYPE_LABELS: Record<string, string> = {
 }
 
 export function UtilityCompanyManager() {
+  const formatMoney = useFormatMoney()
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageBillPayments')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -161,7 +163,7 @@ export function UtilityCompanyManager() {
                 <TableRow key={company.id}>
                   <TableCell className='font-medium'>{company.name}</TableCell>
                   <TableCell>{BILL_TYPE_LABELS[company.billType] ?? company.billType}</TableCell>
-                  <TableCell>Rs. {company.defaultServiceCharge.toLocaleString()}</TableCell>
+                  <TableCell>{formatMoney(company.defaultServiceCharge)}</TableCell>
                   <TableCell>
                     <Badge variant={company.isActive ? 'default' : 'secondary'}>
                       {company.isActive ? 'Active' : 'Inactive'}

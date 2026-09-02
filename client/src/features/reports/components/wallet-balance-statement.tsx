@@ -23,6 +23,7 @@ import {
 import { Download, Wallet, TrendingUp, ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useGetWalletBalanceStatementQuery, type WalletBalanceStatement as WalletBalanceStatementData } from '@/stores/reports.api'
 import { kpiCardClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -36,13 +37,6 @@ interface WalletBalanceStatementProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', {
-    style: 'currency',
-    currency: 'PKR',
-    minimumFractionDigits: 0,
-  }).format(v)
 
 const formatCalendarDate = (dateStr: string) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
@@ -98,6 +92,7 @@ export function WalletBalanceStatement({
   onClose,
   loadOnly = false,
 }: WalletBalanceStatementProps) {
+  const fmt = useFormatMoney()
   const tableRef = useRef<HTMLDivElement>(null)
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const [viewMode, setViewMode] = useState<'summary' | 'number-wise'>('summary')

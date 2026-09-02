@@ -5,6 +5,9 @@
  * and Ledger Entry forms.
  */
 
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
+
 export const WALLET_OPTION_PREFIX = 'wallet:'
 
 export interface WalletLike {
@@ -22,10 +25,9 @@ export interface MergedPaymentOption {
   walletType?: string
 }
 
-const formatWalletLabel = (wallet: WalletLike, showBalance: boolean) => {
+const formatWalletLabel = (wallet: WalletLike, showBalance: boolean, meta: CurrencyOption = FALLBACK_CURRENCY) => {
   if (!showBalance) return wallet.type
-  const balance = Number(wallet.balance || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })
-  return `${wallet.type} (Rs ${balance})`
+  return `${wallet.type} (${formatMoneyWithMeta(Number(wallet.balance) || 0, meta)})`
 }
 
 /**

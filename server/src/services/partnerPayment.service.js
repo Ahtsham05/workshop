@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { PartnerPayment, Partner, Expense } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { formatMoney } = require('../utils/money');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
 const partnerProfitShareLedgerService = require('./partnerProfitShareLedger.service');
@@ -107,7 +108,7 @@ const createPayment = async (paymentBody, userId) => {
 
   const balance = await partnerProfitShareLedgerService.getCurrentBalance(paymentBody.partnerId, paymentBody.organizationId);
   if (amount > balance) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `Cannot pay more than the outstanding balance of Rs ${balance.toFixed(2)}`);
+    throw new ApiError(httpStatus.BAD_REQUEST, `Cannot pay more than the outstanding balance of ${formatMoney(balance)}`);
   }
 
   const partner = await Partner.findById(paymentBody.partnerId).select('name');

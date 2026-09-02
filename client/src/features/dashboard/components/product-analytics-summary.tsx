@@ -7,6 +7,7 @@ import {
   dashboardRangeQueryParams,
   type DashboardDateRange,
 } from '@/lib/dashboard-date-range'
+import { useFormatMoney } from '@/lib/format-money'
 
 type Props = {
   dateRange: DashboardDateRange
@@ -20,6 +21,7 @@ export function ProductAnalyticsSummary({ dateRange }: Props) {
   const { data: brands, isLoading: brandsLoading } = useGetProductsByBrandQuery({
     ...dashboardRangeQueryParams(dateRange),
   })
+  const formatCurrency = useFormatMoney()
 
   const loading = categoriesLoading || brandsLoading
 
@@ -39,8 +41,6 @@ export function ProductAnalyticsSummary({ dateRange }: Props) {
       </Card>
     )
   }
-
-  const formatCurrency = (value: number) => `Rs ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 
   const totalCategories = categories?.length || 0
   const totalBrands = brands?.length || 0

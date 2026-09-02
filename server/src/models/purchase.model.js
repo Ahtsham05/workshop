@@ -3,6 +3,8 @@ const { toJSON, paginate } = require('./plugins');
 const { boolean } = require('joi');
 const Product = require('./product.model');
 const { DEFAULT_UNIT } = require('../config/units');
+const { buildTaxLineSchema } = require('./schemas/taxLine.schema');
+const { TAX_SYSTEMS } = require('../config/countries');
 
 const PurchaseSchema = new mongoose.Schema({
   organizationId: {
@@ -52,6 +54,12 @@ const PurchaseSchema = new mongoose.Schema({
       discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
       discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
       discountAmount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for this line
+      // Input tax on this purchase line — new territory, purchases had no tax field at all
+      // before this. Resolved at add-time from Product/ProductVariant.taxCategoryId (falling
+      // back to the organization default) — see services/taxCalculator.service.js.
+      taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
+      taxableAmount: { type: Number, default: 0, min: 0 },
+      taxAmount: { type: Number, default: 0, min: 0 },
       total: { type: Number, required: true }, // (quantity * priceAtPurchase) - discountAmount
       // IMEI/serial numbers received for this line item, when product.trackImei is true.
       // Mixed (not [String]) because a dual-SIM phone's entry is { imei, imei2 } instead
@@ -84,6 +92,19 @@ const PurchaseSchema = new mongoose.Schema({
   discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
   discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
   discount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for the whole purchase
+  // Input tax recoverable on this purchase — see items[].taxAmount above for the per-line
+  // breakdown this is summed from. New field; purchases had no tax concept before this.
+  tax: { type: Number, default: 0, min: 0 },
+  taxLines: [buildTaxLineSchema()],
+  taxSystem: { type: String, enum: TAX_SYSTEMS, default: 'NONE' },
+  taxInclusive: { type: Boolean, default: false },
+  // Multi-currency snapshot, same shape/semantics as invoice.model.js — filled at save
+  // time and never recalculated afterwards.
+  currency: { type: String, trim: true, uppercase: true, default: null },
+  baseCurrency: { type: String, trim: true, uppercase: true, default: null },
+  exchangeRate: { type: Number, default: 1 },
+  exchangeRateDate: { type: Date, default: null },
+  baseCurrencyTotal: { type: Number, default: null },
   totalAmount: { type: Number, required: true },
   paidAmount: { type: Number, default: 0 }, // Amount paid at time of purchase — total across payment + split legs
   balance: { type: Number, default: 0 }, // Remaining balance (totalAmount - paidAmount) — negative means overpaid

@@ -26,17 +26,16 @@ import { toast } from 'sonner'
 import { useGetSalesmanCommissionReportQuery } from '@/stores/reports.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface SalesmanCommissionReportProps {
   startDate: string
   endDate: string
 }
 
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
-
 export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }, SalesmanCommissionReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
     const { data, isFetching: isLoading } = useGetSalesmanCommissionReportQuery({ startDate, endDate })
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 

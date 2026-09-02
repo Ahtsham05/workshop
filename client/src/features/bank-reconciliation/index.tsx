@@ -37,9 +37,7 @@ import {
 } from '@/stores/bankReconciliation.api'
 import { getBusinessToday } from '@/lib/business-timezone'
 import { StatementUploadDialog } from './components/statement-upload-dialog'
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 2 }).format(v)
+import { useFormatMoney } from '@/lib/format-money'
 
 const formatDate = (value?: string) => {
   if (!value) return '-'
@@ -58,6 +56,7 @@ interface BankReconciliationPageProps {
 }
 
 export default function BankReconciliationPage({ initialWalletType }: BankReconciliationPageProps) {
+  const fmt = useFormatMoney()
   const today = useMemo(() => getBusinessToday(), [])
   const { data: walletsData, isLoading: walletsLoading } = useGetWalletsQuery()
   // Depend on walletsData (a stable RTK Query reference), not `walletsData?.results ?? []`

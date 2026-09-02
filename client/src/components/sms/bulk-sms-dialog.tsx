@@ -15,6 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useSendSmsMutation, useSendBulkSmsMutation } from '@/stores/smsGateway.api'
 import { buildCustomerBalanceMessage, buildSupplierBalanceMessage } from '@/utils/sms-messages'
+import { useFormatMoney } from '@/lib/format-money'
 
 export type BulkSmsRecipient = {
   _id?: string
@@ -54,23 +55,25 @@ function buildPersonalizedMessage(r: BulkSmsRecipient, entityType: 'customer' | 
     : buildSupplierBalanceMessage({ branchName, name: r.name, balance: r.balance })
 }
 
-function applyTemplate(template: string, r: BulkSmsRecipient) {
+function applyTemplate(template: string, r: BulkSmsRecipient, formatMoney: (amount: number) => string) {
   return template
     .replace(/\{name\}/g, r.name)
-    .replace(/\{balance\}/g, `Rs ${Math.abs(r.balance ?? 0).toFixed(0)}`)
+    .replace(/\{balance\}/g, formatMoney(Math.abs(r.balance ?? 0)))
 }
 
 function BalancePill({ balance }: { balance?: number }) {
+  const formatCurrency = useFormatMoney()
   if (balance === undefined) return null
-  const abs = Math.abs(balance).toFixed(0)
+  const abs = Math.abs(balance)
   if (balance === 0)
-    return <span className='text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full'>Rs 0</span>
+    return <span className='text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full'>{formatCurrency(0)}</span>
   if (balance > 0)
-    return <span className='text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full'>Rs {abs}</span>
-  return <span className='text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full'>Rs {abs}</span>
+    return <span className='text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full'>{formatCurrency(abs)}</span>
+  return <span className='text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full'>{formatCurrency(abs)}</span>
 }
 
 export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, branchName }: Props) {
+  const formatMoney = useFormatMoney()
   const [step, setStep] = useState<Step>('select')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [messageMode, setMessageMode] = useState<MessageMode>('personalized')
@@ -381,7 +384,7 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
                       </Label>
                       <div className='rounded-lg border bg-muted/30 p-3'>
                         <pre className='text-sm whitespace-pre-wrap font-sans text-foreground leading-relaxed'>
-                          {applyTemplate(template, selectedList[0])}
+                          {applyTemplate(template, selectedList[0], formatMoney)}
                         </pre>
                       </div>
                     </div>

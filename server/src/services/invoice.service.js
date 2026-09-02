@@ -22,6 +22,18 @@ const { normalizeBusinessType } = require('../config/businessTypes');
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 const businessNotifications = require('./whatsapp/businessNotifications.service');
 const { computeDiscountAmount } = require('../utils/discount');
+const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
+const Money = require('../utils/money');
+
+/** Sets Invoice.baseCurrencyTotal from the already-computed `total` + currency snapshot. */
+const applyBaseCurrencyTotal = (invoice) => {
+  const baseDecimalPlaces = invoice.baseCurrency
+    ? Money.getCurrencyMeta(invoice.baseCurrency)?.decimalPlaces ?? Money.DEFAULT_DECIMAL_PLACES
+    : Money.DEFAULT_DECIMAL_PLACES;
+  invoice.baseCurrencyTotal = invoice.baseCurrency
+    ? Money.convertMoney(invoice.total, invoice.exchangeRate || 1, baseDecimalPlaces)
+    : invoice.total;
+};
 
 /**
  * Resolves a raw invoice item's discount fields + net subtotal/profit from its gross
@@ -457,21 +469,47 @@ const createInvoice = async (invoiceBody, userId) => {
     : Number(invoiceBody.discount || 0);
   const overallDiscount = computeDiscountAmount(netSubtotalSum, overallDiscountType, overallDiscountValue);
 
+  // Resolve tax (via the central TaxCalculatorService) and the multi-currency snapshot
+  // (via ExchangeRateService) — server-authoritative, never trusts a client-sent tax
+  // figure. See services/transactionTaxSnapshot.service.js.
+  const productTaxCategoryById = new Map(
+    productsList.map((product) => [String(product._id), product.taxCategoryId ? String(product.taxCategoryId) : null])
+  );
+  const taxAndCurrency = await resolveTransactionTaxAndCurrency({
+    organizationId: invoiceBody.organizationId,
+    customerId: invoiceBody.customerId && invoiceBody.customerId !== 'walk-in' ? invoiceBody.customerId : null,
+    asOfDate: invoiceBody.invoiceDate || new Date(),
+    items: validatedItems,
+    productTaxCategoryById,
+    overallDiscount,
+    requestedCurrency: invoiceBody.currency || null,
+    fallbackTax: Number(invoiceBody.tax || 0),
+  });
+
   // Create invoice
   const invoice = new Invoice({
     ...invoiceBody,
-    items: validatedItems,
+    items: taxAndCurrency.items,
     discountType: overallDiscountType,
     discountValue: overallDiscountValue,
     discount: overallDiscount,
     // '' from "no salesman selected" would fail the ObjectId cast — normalize to null.
     salesmanId: invoiceBody.salesmanId || null,
+    tax: taxAndCurrency.tax,
+    taxLines: taxAndCurrency.taxLines,
+    taxSystem: taxAndCurrency.taxSystem,
+    taxInclusive: taxAndCurrency.taxInclusive,
+    currency: taxAndCurrency.currency,
+    baseCurrency: taxAndCurrency.baseCurrency,
+    exchangeRate: taxAndCurrency.exchangeRate,
+    exchangeRateDate: taxAndCurrency.exchangeRateDate,
     createdBy: userId,
     updatedBy: userId
   });
 
   // Calculate totals
   invoice.calculateTotals();
+  applyBaseCurrencyTotal(invoice);
 
   // Auto-finalize cash invoices
   if (invoice.type === 'cash') {
@@ -1086,12 +1124,56 @@ const updateInvoiceById = async (invoiceId, updateBody, userId) => {
     updateBody.salesmanId = updateBody.salesmanId || null;
   }
 
+  // Recompute tax the same way createInvoice does, whenever items/discount/customer
+  // change — matches this function's existing "recalculate on every update" precedent for
+  // discount/total. The currency/exchange-rate SNAPSHOT is the one part that's genuinely
+  // preserved rather than re-resolved (see resolveTransactionTaxAndCurrency's
+  // existingCurrencySnapshot param) — an unrelated edit must never silently re-price an
+  // already-saved invoice just because today's FX rate has since moved.
+  const itemsForTax = updateBody.items || invoice.items.map((item) => (item.toObject ? item.toObject() : item));
+  const productIdsForTax = [...new Set(itemsForTax.filter((item) => item.productId).map((item) => String(item.productId)))];
+  const productsForTax = productIdsForTax.length
+    ? await Product.find({ _id: { $in: productIdsForTax } }).select('taxCategoryId').lean()
+    : [];
+  const productTaxCategoryById = new Map(
+    productsForTax.map((product) => [String(product._id), product.taxCategoryId ? String(product.taxCategoryId) : null])
+  );
+  const resolvedCustomerId = updateBody.customerId !== undefined ? updateBody.customerId : invoice.customerId;
+  const taxAndCurrency = await resolveTransactionTaxAndCurrency({
+    organizationId: invoice.organizationId,
+    customerId: resolvedCustomerId && resolvedCustomerId !== 'walk-in' ? resolvedCustomerId : null,
+    asOfDate: invoice.invoiceDate || new Date(),
+    items: itemsForTax,
+    productTaxCategoryById,
+    overallDiscount: updateBody.discount,
+    requestedCurrency: updateBody.currency || null,
+    existingCurrencySnapshot: invoice.currency
+      ? {
+          currency: invoice.currency,
+          baseCurrency: invoice.baseCurrency,
+          exchangeRate: invoice.exchangeRate,
+          exchangeRateDate: invoice.exchangeRateDate,
+        }
+      : null,
+    fallbackTax: updateBody.tax !== undefined ? Number(updateBody.tax) : invoice.tax,
+  });
+  updateBody.items = taxAndCurrency.items;
+  updateBody.tax = taxAndCurrency.tax;
+  updateBody.taxLines = taxAndCurrency.taxLines;
+  updateBody.taxSystem = taxAndCurrency.taxSystem;
+  updateBody.taxInclusive = taxAndCurrency.taxInclusive;
+  updateBody.currency = taxAndCurrency.currency;
+  updateBody.baseCurrency = taxAndCurrency.baseCurrency;
+  updateBody.exchangeRate = taxAndCurrency.exchangeRate;
+  updateBody.exchangeRateDate = taxAndCurrency.exchangeRateDate;
+
   Object.assign(invoice, updateBody);
   invoice.updatedBy = userId;
 
   // Recalculate totals on every update — a discount-only edit (no item changes) must
   // still re-resolve total/balance, not just item edits.
   invoice.calculateTotals();
+  applyBaseCurrencyTotal(invoice);
 
   if (invoice.type === 'cash' && !invoice.splitPaymentMethod) {
     // Skipped when a split payment leg is active — see the matching comment on

@@ -246,10 +246,6 @@ body {
   scrollbar-width: none; /* Firefox */
 }
 
-@utility faded-bottom {
-  @apply after:pointer-events-none after:absolute after:bottom-0 after:left-0 after:hidden after:h-32 after:w-full after:bg-[linear-gradient(180deg,_transparent_10%,_var(--background)_70%)] md:after:block;
-}
-
 /* WhatsApp-style chat bubble tails: a small triangular notch on the first
    bubble of a consecutive run, pointing toward the sender's side. */
 @utility chat-tail-out {

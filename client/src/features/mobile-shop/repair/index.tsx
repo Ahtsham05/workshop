@@ -74,6 +74,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { formatMoneyWithMeta, useCurrencyMeta } from '@/lib/format-money'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -151,11 +152,11 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   delivered: { label: 'Delivered', color: 'bg-purple-100 text-purple-800' },
 }
 
-const fmtAmt = (n?: number) => `Rs ${(n ?? 0).toLocaleString()}`
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function RepairPage() {
+  const currencyMeta = useCurrencyMeta()
+  const fmtAmt = (n?: number) => formatMoneyWithMeta(n ?? 0, currencyMeta)
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageRepairs')
   const [form, setForm] = useState<RepairFormState>(makeInitialForm)
@@ -472,6 +473,7 @@ export default function RepairPage() {
       isTrial: orgData?.subscription?.isTrial,
       invoiceNote: branchData?.invoiceNote,
       userPreferredLanguage: preferredLanguage as 'en' | 'ur',
+      currencyMeta,
     })
     openRepairPrintWindow(html)
   }

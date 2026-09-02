@@ -53,8 +53,9 @@ import { BuyUsedPhoneDialog } from './components/buy-used-phone-dialog'
 import { usePermissions } from '@/context/permission-context'
 import {
   GRADE_OPTIONS, gradeBadgeClasses, ACCESSORY_OPTIONS, ptaBadgeConfig, statusBadgeConfig,
-  CHECKLIST_FIELDS, fmtAmt, getImeiSummary, daysSince,
+  CHECKLIST_FIELDS, fmtAmt as fmtAmtBase, getImeiSummary, daysSince,
 } from './constants'
+import { useCurrencyMeta } from '@/lib/format-money'
 
 interface CustomerOption {
   id?: string
@@ -95,6 +96,8 @@ const makeInitialSellForm = (): SellFormState => ({
 })
 
 export default function OldPhonesPage() {
+  const currencyMeta = useCurrencyMeta()
+  const fmtAmt = (n?: number) => fmtAmtBase(n, currencyMeta)
   const { hasPermission } = usePermissions()
   const canBuy = hasPermission('buyUsedPhones')
   const canSell = hasPermission('sellUsedPhones')

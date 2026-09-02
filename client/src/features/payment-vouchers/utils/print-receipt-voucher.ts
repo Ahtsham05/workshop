@@ -1,7 +1,9 @@
 import { format } from 'date-fns'
 import { escapeHtml } from '@/lib/escape-html'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import { openPrintWindowForFormat, type PrintWindowContact } from '@/features/invoice/utils/print-utils'
 import { PAPER_FORMATS, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 const FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
 
@@ -33,9 +35,9 @@ interface PrintCompany {
   name: string
   address?: string
   phone?: string
+  /** Organization's configured currency (symbol/decimals) — omit to fall back to PKR. */
+  currencyMeta?: CurrencyOption
 }
-
-const formatCurrency = (amount: number) => `Rs ${Math.abs(amount).toFixed(2)}`
 
 const formatDate = (dateString: string) => {
   try {
@@ -46,6 +48,7 @@ const formatDate = (dateString: string) => {
 }
 
 const generateVoucherHTML = (voucher: PrintableReceiptVoucher, company: PrintCompany, paperSize: PaperSize, orientation: PrintOrientation) => {
+  const formatCurrency = (amount: number) => formatMoneyWithMeta(Math.abs(amount), company.currencyMeta ?? FALLBACK_CURRENCY)
   const resolvedFormat = withPrintOrientation(paperSize, orientation)
   const paperFormat = PAPER_FORMATS[resolvedFormat]
   const cardWidth = (paperFormat.bodyWidthPx ?? 380) + (paperFormat.family === 'thermal' ? 80 : 220)

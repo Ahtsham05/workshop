@@ -1,6 +1,7 @@
 const messagingService = require('./messaging.service');
 const { Student, Invoice, Customer, FeeVoucher } = require('../../models');
 const { normalizePhone } = require('../../utils/whatsappPhone');
+const { formatMoney } = require('../../utils/money');
 
 async function sendInvoicePdf({ organizationId, branchId, phone, pdfBase64, filename, caption, invoiceNumber, sentBy }) {
   // sendDocumentMessage (not sendDocument) so a send outside Meta's 24h customer-service
@@ -43,7 +44,7 @@ async function sendPaymentReminder({ organizationId, branchId, customerId, sentB
     balance: { $gt: 0 },
   });
   const totalDue = invoices.reduce((s, i) => s + (i.balance || 0), 0);
-  const text = `Payment Reminder: Dear ${customer.name}, your outstanding balance is Rs. ${totalDue}. Please clear at earliest convenience.`;
+  const text = `Payment Reminder: Dear ${customer.name}, your outstanding balance is ${formatMoney(totalDue)}. Please clear at earliest convenience.`;
   return messagingService.sendMessage({
     organizationId,
     branchId,
@@ -80,7 +81,7 @@ async function sendFeeReminder({ organizationId, branchId, voucherId, sentBy }) 
   const phone = normalizePhone(voucher.studentId.parent.phone);
   const amount = Math.max(0, (voucher.netAmount || voucher.totalAmount || 0) - (voucher.paidAmount || 0));
   const dueDate = voucher.dueDate ? new Date(voucher.dueDate).toDateString() : 'soon';
-  const text = `Fee Reminder: ${voucher.studentId.firstName}'s fee of Rs. ${amount} is due. Voucher #${voucher.voucherNumber || voucher._id}.`;
+  const text = `Fee Reminder: ${voucher.studentId.firstName}'s fee of ${formatMoney(amount)} is due. Voucher #${voucher.voucherNumber || voucher._id}.`;
   return messagingService.sendMessage({
     organizationId,
     branchId,
@@ -89,7 +90,7 @@ async function sendFeeReminder({ organizationId, branchId, voucherId, sentBy }) 
     source: 'fee',
     sentBy,
     templateCategory: 'fee',
-    templateParams: [voucher.studentId.firstName, `Rs. ${amount}`, dueDate],
+    templateParams: [voucher.studentId.firstName, formatMoney(amount), dueDate],
   });
 }
 

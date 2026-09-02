@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -141,6 +142,7 @@ interface CustomerLedgerDetailsProps {
 // Invoice dialog content component
 function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string; customerName: string }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!invoiceId) {
     return <div className="text-center py-8 text-gray-500">{t('No invoice selected')}</div>;
@@ -169,7 +171,7 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
 
   const formatCurrency = (amount: any) => {
     const num = Number(amount);
-    return isNaN(num) ? '0.00' : num.toFixed(2);
+    return formatMoney(isNaN(num) ? 0 : num);
   };
 
   return (
@@ -189,9 +191,9 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
         </div>
         <div>
           <p className="text-sm text-gray-500">{t('Total Amount')}</p>
-          <p className="font-medium text-lg">Rs{formatCurrency(invoiceData.total || invoiceData.totalAmount)}</p>
+          <p className="font-medium text-lg">{formatCurrency(invoiceData.total || invoiceData.totalAmount)}</p>
           {Number(invoiceData.discount || 0) > 0 && (
-            <p className="text-xs text-green-600">-Rs{formatCurrency(invoiceData.discount)} {t('discount')}</p>
+            <p className="text-xs text-green-600">-{formatCurrency(invoiceData.discount)} {t('discount')}</p>
           )}
         </div>
         <div>
@@ -231,16 +233,16 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
                   <TableCell className="font-mono text-xs text-muted-foreground">{item.batchNumber || '—'}</TableCell>
                   <TableCell>{expiryBadge(item.batchId?.expiryDate)}</TableCell>
                   <TableCell>{item.quantity || 0}</TableCell>
-                  <TableCell>Rs{formatCurrency(item.unitPrice || item.price)}</TableCell>
+                  <TableCell>{formatCurrency(item.unitPrice || item.price)}</TableCell>
                   <TableCell className="text-right">
                     {Number(item.discountAmount || 0) > 0 && (
                       <div className="text-xs text-muted-foreground line-through">
-                        Rs{formatCurrency((item.quantity || 0) * (item.unitPrice || item.price || 0))}
+                        {formatCurrency((item.quantity || 0) * (item.unitPrice || item.price || 0))}
                       </div>
                     )}
-                    Rs{formatCurrency(item.subtotal || item.total)}
+                    {formatCurrency(item.subtotal || item.total)}
                     {Number(item.discountAmount || 0) > 0 && (
-                      <div className="text-xs text-green-600">-Rs{formatCurrency(item.discountAmount)}</div>
+                      <div className="text-xs text-green-600">-{formatCurrency(item.discountAmount)}</div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -267,6 +269,7 @@ function SalesReturnDialogContent({
   fallbackCustomerName: string;
 }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!salesReturnId) {
     return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
@@ -295,7 +298,7 @@ function SalesReturnDialogContent({
 
   const formatCurrency = (amount: unknown) => {
     const num = Number(amount);
-    return isNaN(num) ? '0.00' : num.toFixed(2);
+    return formatMoney(isNaN(num) ? 0 : num);
   };
 
   const customerLabel =
@@ -329,7 +332,7 @@ function SalesReturnDialogContent({
         </div>
         <div>
           <p className="text-sm text-gray-500">{t('Total Amount')}</p>
-          <p className="font-medium text-lg">Rs{formatCurrency(sr.totalAmount)}</p>
+          <p className="font-medium text-lg">{formatCurrency(sr.totalAmount)}</p>
         </div>
         {invoiceLabel ? (
           <div>
@@ -370,8 +373,8 @@ function SalesReturnDialogContent({
                 <TableRow key={index}>
                   <TableCell className="max-w-[200px] truncate" title={item.name || '-'}>{item.name || '-'}</TableCell>
                   <TableCell>{item.quantity ?? 0}</TableCell>
-                  <TableCell>Rs{formatCurrency(item.price)}</TableCell>
-                  <TableCell className="text-right">Rs{formatCurrency(item.total)}</TableCell>
+                  <TableCell>{formatCurrency(item.price)}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
                 </TableRow>
               ))
             ) : (
@@ -397,6 +400,7 @@ function SimSaleDetailDialogContent({
   fallbackCustomerName: string;
 }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!simSaleId) {
     return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
@@ -416,7 +420,7 @@ function SimSaleDetailDialogContent({
 
   const fmt = (n: unknown) => {
     const x = Number(n);
-    return Number.isFinite(x) ? x.toFixed(2) : '0.00';
+    return formatMoney(Number.isFinite(x) ? x : 0);
   };
   const fmtDate = (d: unknown) => {
     try {
@@ -483,23 +487,23 @@ function SimSaleDetailDialogContent({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">{t('SIM amount')}</p>
-            <p className="font-medium">Rs{fmt(sale.simAmount)}</p>
+            <p className="font-medium">{fmt(sale.simAmount)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Load amount')}</p>
-            <p className="font-medium">Rs{fmt(sale.loadAmount)}</p>
+            <p className="font-medium">{fmt(sale.loadAmount)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Purchase amount')}</p>
-            <p className="font-medium">Rs{fmt(sale.purchaseAmount)}</p>
+            <p className="font-medium">{fmt(sale.purchaseAmount)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Commission')}</p>
-            <p className="font-medium">Rs{fmt(sale.commission)}</p>
+            <p className="font-medium">{fmt(sale.commission)}</p>
           </div>
           <div className="sm:col-span-2">
             <p className="text-xs text-muted-foreground">{t('Total amount')}</p>
-            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Rs{fmt(sale.saleAmount)}</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{fmt(sale.saleAmount)}</p>
           </div>
         </div>
       </div>
@@ -522,6 +526,7 @@ function LoadSaleDetailDialogContent({
   fallbackCustomerName: string;
 }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!transactionId) {
     return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
@@ -541,7 +546,7 @@ function LoadSaleDetailDialogContent({
 
   const fmt = (n: unknown) => {
     const x = Number(n);
-    return Number.isFinite(x) ? x.toFixed(2) : '0.00';
+    return formatMoney(Number.isFinite(x) ? x : 0);
   };
   const fmtDate = (d: unknown) => {
     try {
@@ -604,11 +609,11 @@ function LoadSaleDetailDialogContent({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">{t('Amount')}</p>
-            <p className="font-medium">Rs{fmt(tx.amount)}</p>
+            <p className="font-medium">{fmt(tx.amount)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Received')}</p>
-            <p className="font-medium">Rs{fmt(tx.receivedAmount ?? 0)}</p>
+            <p className="font-medium">{fmt(tx.receivedAmount ?? 0)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Commission rate')}</p>
@@ -616,11 +621,11 @@ function LoadSaleDetailDialogContent({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Extra charge')}</p>
-            <p className="font-medium">Rs{fmt(tx.extraCharge)}</p>
+            <p className="font-medium">{fmt(tx.extraCharge)}</p>
           </div>
           <div className="sm:col-span-2">
             <p className="text-xs text-muted-foreground">{t('Profit')}</p>
-            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Rs{fmt(tx.profit)}</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{fmt(tx.profit)}</p>
           </div>
         </div>
       </div>
@@ -636,6 +641,7 @@ function CashWithdrawalDetailDialogContent({
   fallbackCustomerName: string;
 }) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
 
   if (!withdrawalId) {
     return <div className="text-center py-8 text-gray-500">{t('No transaction selected')}</div>;
@@ -655,7 +661,7 @@ function CashWithdrawalDetailDialogContent({
 
   const fmt = (n: unknown) => {
     const x = Number(n);
-    return Number.isFinite(x) ? x.toFixed(2) : '0.00';
+    return formatMoney(Number.isFinite(x) ? x : 0);
   };
   const fmtDate = (d: unknown) => {
     try {
@@ -711,11 +717,11 @@ function CashWithdrawalDetailDialogContent({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">{t('Wallet amount')}</p>
-            <p className="font-medium">Rs{fmt(cw.amount)}</p>
+            <p className="font-medium">{fmt(cw.amount)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Cash amount')}</p>
-            <p className="font-medium">Rs{fmt(cw.cashAmount ?? 0)}</p>
+            <p className="font-medium">{fmt(cw.cashAmount ?? 0)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Commission rate')}</p>
@@ -723,11 +729,11 @@ function CashWithdrawalDetailDialogContent({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t('Extra charge')}</p>
-            <p className="font-medium">Rs{fmt(cw.extraCharge)}</p>
+            <p className="font-medium">{fmt(cw.extraCharge)}</p>
           </div>
           <div className="sm:col-span-2">
             <p className="text-xs text-muted-foreground">{t('Profit')}</p>
-            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Rs{fmt(cw.profit)}</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{fmt(cw.profit)}</p>
           </div>
         </div>
       </div>
@@ -774,6 +780,8 @@ function storeLedgerViewMode(mode: LedgerViewMode) {
 
 export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: CustomerLedgerDetailsProps) {
   const { t } = useLanguage();
+  const formatMoney = useFormatMoney();
+  const currencyMeta = useCurrencyMeta();
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
@@ -1133,7 +1141,6 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
     try {
       if (entry.transactionType === 'sales_return') {
         const sr = await dispatch(returnsApi.endpoints.getSalesReturnById.initiate(rid)).unwrap();
-        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
         const cust =
           sr.customerName ||
           (typeof sr.customerId === 'object' && sr.customerId != null && 'name' in sr.customerId
@@ -1150,7 +1157,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         const itemLines =
           sr.items?.map((it) => ({
             label: `${it.name} × ${it.quantity}`,
-            value: fmtRs(it.total),
+            value: formatMoney(it.total),
           })) ?? [];
         printMobileShopReceipt(
           {
@@ -1161,7 +1168,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               { label: 'Customer', value: cust },
               ...(invRef ? [{ label: 'Invoice', value: invRef }] : []),
               ...itemLines,
-              { label: 'Total', value: fmtRs(sr.totalAmount) },
+              { label: 'Total', value: formatMoney(sr.totalAmount) },
               ...(sr.reason?.trim() ? [{ label: 'Reason', value: sr.reason }] : []),
             ],
           },
@@ -1174,7 +1181,6 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
 
       if (isSimSaleLedgerRow(entry)) {
         const sale = await dispatch(mobileShopApi.endpoints.getSimSaleById.initiate(rid)).unwrap();
-        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
         printMobileShopReceipt(
           {
             title: 'SIM sale',
@@ -1187,10 +1193,10 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               { label: 'Mobile', value: sale.customerMobile || '—' },
               { label: 'CNIC', value: sale.customerCNIC?.trim() || '—' },
               { label: 'Location', value: sale.customerLocation?.trim() || '—' },
-              { label: 'SIM amount', value: fmtRs(sale.simAmount) },
-              { label: 'Load amount', value: fmtRs(sale.loadAmount) },
-              { label: 'Commission', value: fmtRs(sale.commission) },
-              { label: 'Total amount', value: fmtRs(sale.saleAmount) },
+              { label: 'SIM amount', value: formatMoney(sale.simAmount) },
+              { label: 'Load amount', value: formatMoney(sale.loadAmount) },
+              { label: 'Commission', value: formatMoney(sale.commission) },
+              { label: 'Total amount', value: formatMoney(sale.saleAmount) },
             ],
           },
           orgData,
@@ -1202,7 +1208,6 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
 
       if (isLoadSaleLedgerRow(entry)) {
         const tx = await dispatch(mobileShopApi.endpoints.getLoadTransactionById.initiate(rid)).unwrap();
-        const fmtRs = (n: number) => `Rs${Number(n ?? 0).toFixed(2)}`;
         const cust =
           tx.customerName ||
           (typeof tx.customerId === 'object' && tx.customerId && 'name' in (tx.customerId as object)
@@ -1220,11 +1225,11 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               { label: 'Wallet', value: tx.walletType },
               { label: 'Customer', value: cust || '—' },
               { label: 'Mobile', value: tx.mobileNumber || '—' },
-              { label: 'Amount', value: fmtRs(tx.amount) },
-              { label: 'Received', value: fmtRs(tx.receivedAmount ?? 0) },
+              { label: 'Amount', value: formatMoney(tx.amount) },
+              { label: 'Received', value: formatMoney(tx.receivedAmount ?? 0) },
               { label: 'Commission %', value: `${Number(tx.commissionRate ?? 0).toFixed(2)}%` },
-              { label: 'Extra charge', value: fmtRs(tx.extraCharge) },
-              { label: 'Profit', value: fmtRs(tx.profit) },
+              { label: 'Extra charge', value: formatMoney(tx.extraCharge) },
+              { label: 'Profit', value: formatMoney(tx.profit) },
             ],
           },
           orgData,
@@ -1307,6 +1312,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         printInUrdu: getInvoicePrintInUrdu(),
         previousBalance,
         newBalance: entry.balance,
+        currencyMeta,
       }, invoice, { phone: contactPhone, whatsapp: contactWhatsapp || contactPhone });
 
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
@@ -1804,7 +1810,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                 <div className="text-2xl font-bold text-gray-400">{t('Loading...')}</div>
               ) : currentBalance !== null ? (
                 <div className={`text-3xl font-bold ${getBalanceColor(currentBalance)}`}>
-                  Rs{Math.abs(currentBalance).toFixed(2)}
+                  {formatMoney(Math.abs(currentBalance))}
                   {currentBalance > 0 && (
                     <span className="text-sm text-red-600 ml-2">({t('Receivable')})</span>
                   )}
@@ -1813,7 +1819,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                   )}
                 </div>
               ) : (
-                <div className="text-2xl font-bold text-gray-600">Rs0.00</div>
+                <div className="text-2xl font-bold text-gray-600">{formatMoney(0)}</div>
               )}
             </div>
 
@@ -1891,25 +1897,25 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Opening Balance')}</p>
               <p className={`mt-1 text-lg font-semibold tabular-nums ${getLedgerBalanceTone('customer', openingBalance)}`}>
-                {formatLedgerBalanceLabel('customer', openingBalance, t)}
+                {formatLedgerBalanceLabel('customer', openingBalance, t, currencyMeta)}
               </p>
             </div>
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Debit')}</p>
               <p className="mt-1 text-lg font-semibold tabular-nums text-red-600">
-                Rs{periodSummary.periodDebit.toFixed(2)}
+                {formatMoney(periodSummary.periodDebit)}
               </p>
             </div>
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Credit')}</p>
               <p className="mt-1 text-lg font-semibold tabular-nums text-green-600">
-                Rs{periodSummary.periodCredit.toFixed(2)}
+                {formatMoney(periodSummary.periodCredit)}
               </p>
             </div>
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Closing Balance')}</p>
               <p className={`mt-1 text-lg font-semibold tabular-nums ${getLedgerBalanceTone('customer', periodSummary.closingBalance)}`}>
-                {formatLedgerBalanceLabel('customer', periodSummary.closingBalance, t)}
+                {formatLedgerBalanceLabel('customer', periodSummary.closingBalance, t, currencyMeta)}
               </p>
             </div>
           </div>
@@ -2007,12 +2013,12 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                     </span>
                     {activeCategoryGroup.totalDebit > 0 && (
                       <Badge variant="outline" className="font-normal text-red-700 border-red-200">
-                        {t('Debit')}: Rs{activeCategoryGroup.totalDebit.toFixed(2)}
+                        {t('Debit')}: {formatMoney(activeCategoryGroup.totalDebit)}
                       </Badge>
                     )}
                     {activeCategoryGroup.totalCredit > 0 && (
                       <Badge variant="outline" className="font-normal text-green-700 border-green-200">
-                        {t('Credit')}: Rs{activeCategoryGroup.totalCredit.toFixed(2)}
+                        {t('Credit')}: {formatMoney(activeCategoryGroup.totalCredit)}
                       </Badge>
                     )}
                   </div>

@@ -49,6 +49,7 @@ import { toast } from 'sonner'
 import { useGetBillPaymentReportQuery, useGetUtilityCompaniesQuery } from '@/stores/mobile-shop.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
+import { useFormatMoney } from '@/lib/format-money'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -58,9 +59,6 @@ interface BillPaymentReportProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(v)
 
 const BILL_TYPE_COLORS: Record<string, string> = {
   electricity: '#f59e0b',
@@ -92,6 +90,7 @@ const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0
 
 export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillPaymentReportProps>(
   ({ startDate, endDate }, ref) => {
+    const fmt = useFormatMoney()
     const [billTypeFilter, setBillTypeFilter] = useState<string>('all')
     const { data: companiesData } = useGetUtilityCompaniesQuery({})
     const allCompanies = companiesData?.results ?? []

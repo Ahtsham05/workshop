@@ -49,6 +49,7 @@ import { isCashBookBusiness } from '@/lib/business-types'
 import { useLanguage } from '@/context/language-context'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
@@ -242,8 +243,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
 
     const isLoading = salesLoading || purchaseLoading || activityLoading
 
-    const fmt = (value: number) =>
-      new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+    const fmt = useFormatMoney()
 
     // Real Sales/Purchase invoices (with actual item lists) plus every other module
     // reshaped into a synthetic single-line entry. Expenses are deliberately excluded

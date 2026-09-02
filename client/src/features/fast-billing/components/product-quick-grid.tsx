@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { LayoutGrid, List, Package, Plus, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { useFormatMoney } from '@/lib/format-money'
 
 type ViewMode = 'grid' | 'list'
 const VIEW_MODE_KEY = 'fastBillingCatalogViewMode'
@@ -43,6 +44,7 @@ type Props = {
 }
 
 export function ProductQuickGrid({ products, searchTerm, onSearchTermChange, onRequestAdd, className }: Props) {
+  const formatCurrency = useFormatMoney()
   const [localSearch, setLocalSearch] = useState(searchTerm)
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>(getInitialViewMode)
@@ -166,7 +168,7 @@ export function ProductQuickGrid({ products, searchTerm, onSearchTermChange, onR
             <div className='grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4'>
               {filtered.map((product) => {
                 const disabled = product.stockQuantity <= 0
-                const priceStr = product.price.toLocaleString(undefined, { style: 'currency', currency: 'PKR' })
+                const priceStr = formatCurrency(product.price)
                 return (
                   <button
                     key={product.id}
@@ -256,7 +258,7 @@ export function ProductQuickGrid({ products, searchTerm, onSearchTermChange, onR
                       >
                         {disabled ? 'Out' : product.stockQuantity}
                       </span>
-                      <span className='w-20 text-right font-semibold tabular-nums'>Rs{product.price.toFixed(0)}</span>
+                      <span className='w-20 text-right font-semibold tabular-nums'>{formatCurrency(product.price)}</span>
                       <Button
                         type='button'
                         size='icon'

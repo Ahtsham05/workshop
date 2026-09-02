@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatDistanceToNow } from 'date-fns'
+import { useFormatMoney } from '@/lib/format-money'
 import type { ComponentProps } from 'react'
 import { FileText, ShoppingCart, DollarSign, TrendingUp } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
@@ -20,6 +21,7 @@ type Props = {
 
 export function RecentActivities({ dateRange }: Props) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { data: activities, isLoading, isFetching } = useGetRecentActivitiesQuery({
     limit: 8,
     ...dashboardRangeQueryParams(dateRange),
@@ -144,7 +146,7 @@ export function RecentActivities({ dateRange }: Props) {
                 <div className='flex flex-col items-end gap-1'>
                   <div className='flex items-center gap-2'>
                     <span className='text-sm font-semibold'>
-                      Rs{(activity.amount ?? 0).toLocaleString()}
+                      {formatMoney(activity.amount ?? 0)}
                     </span>
                     <Badge
                       variant={getStatusVariant(activity.status)}
@@ -165,8 +167,8 @@ export function RecentActivities({ dateRange }: Props) {
                     activity.paidAmount != null &&
                     activity.balance != null && (
                       <p className='text-[11px] text-muted-foreground tabular-nums'>
-                        {t('Paid')}: Rs{activity.paidAmount.toLocaleString()} · {t('Balance')}: Rs
-                        {activity.balance.toLocaleString()}
+                        {t('Paid')}: {formatMoney(activity.paidAmount)} · {t('Balance')}:{' '}
+                        {formatMoney(activity.balance)}
                       </p>
                     )}
                 </div>

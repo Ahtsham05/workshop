@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { cn } from '@/lib/utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 type BucketKey = 'current' | 'days1to30' | 'days31to60' | 'days61to90' | 'days90plus'
 
@@ -71,6 +72,7 @@ export const SupplierAgingReport = forwardRef<{ exportToExcel: () => void }, {}>
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const queryAsOfDate = format(asOfDate, 'yyyy-MM-dd')
   const { data, isFetching: isLoading } = useGetSupplierAgingReportQuery({ asOfDate: queryAsOfDate })
+  const formatCurrency = useFormatMoney()
 
   useImperativeHandle(ref, () => ({
     exportToExcel: () => {
@@ -113,9 +115,6 @@ export const SupplierAgingReport = forwardRef<{ exportToExcel: () => void }, {}>
   }
 
   if (isLoading) return <Skeleton className='h-[400px] w-full' />
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value || 0)
 
   const summary = data?.summary
   const rows: SupplierAgingData[] = data?.data || []

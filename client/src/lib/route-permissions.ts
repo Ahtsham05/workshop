@@ -119,6 +119,13 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/settings/appearance', allowAllAuthenticated: true },
   { prefix: '/settings/language', allowAllAuthenticated: true },
   { prefix: '/settings/whatsapp', anyPermission: ['viewSettings', 'editSettings'] },
+  { prefix: '/settings/business-profile', anyPermission: ['viewBusinessProfile'] },
+  { prefix: '/settings/localization', anyPermission: ['viewLocalizationSettings'] },
+  { prefix: '/settings/currency', anyPermission: ['viewLocalizationSettings'] },
+  { prefix: '/settings/tax-categories', anyPermission: ['viewTaxCategories'] },
+  { prefix: '/settings/tax-rates', anyPermission: ['viewTaxRates'] },
+  { prefix: '/settings/tax-exemptions', anyPermission: ['viewTaxExemptions'] },
+  { prefix: '/settings/exchange-rates', anyPermission: ['viewExchangeRates'] },
   { prefix: '/settings', anyPermission: ['viewSettings'] },
 
   // Business modules

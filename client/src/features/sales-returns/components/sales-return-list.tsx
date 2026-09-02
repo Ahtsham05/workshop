@@ -44,6 +44,7 @@ import {
   type SalesReturn,
 } from '@/stores/returns.api'
 import { usePermissions } from '@/context/permission-context'
+import { useFormatMoney } from '@/lib/format-money'
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -63,6 +64,7 @@ interface SalesReturnListProps {
 }
 
 export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
+  const formatMoney = useFormatMoney()
   const { hasExplicitPermission } = usePermissions()
   const canCreate = hasExplicitPermission('createSalesReturns')
   const canDelete = hasExplicitPermission('deleteSalesReturns')
@@ -145,10 +147,7 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
           <CardContent className='pt-6'>
             <p className='text-sm text-muted-foreground'>Total Amount</p>
             <p className='text-2xl font-bold'>
-              PKR{' '}
-              {returns
-                .reduce((sum, r) => sum + r.totalAmount, 0)
-                .toLocaleString()}
+              {formatMoney(returns.reduce((sum, r) => sum + r.totalAmount, 0))}
             </p>
           </CardContent>
         </Card>
@@ -234,7 +233,7 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
                     </TableCell>
                     <TableCell>{ret.customerName || '—'}</TableCell>
                     <TableCell>{ret.items.reduce((s, i) => s + i.quantity, 0)}</TableCell>
-                    <TableCell>PKR {ret.totalAmount.toLocaleString()}</TableCell>
+                    <TableCell>{formatMoney(ret.totalAmount)}</TableCell>
                     <TableCell>
                       <Badge className={refundColors[ret.refundMethod] ?? ''}>
                         {ret.refundMethod}
@@ -387,14 +386,14 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
                     <TableRow key={i}>
                       <TableCell className='max-w-[220px] truncate' title={item.name}>{item.name}</TableCell>
                       <TableCell>{item.quantity}</TableCell>
-                      <TableCell>PKR {(item.price ?? 0).toLocaleString()}</TableCell>
-                      <TableCell>PKR {item.total.toLocaleString()}</TableCell>
+                      <TableCell>{formatMoney((item.price ?? 0))}</TableCell>
+                      <TableCell>{formatMoney(item.total)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
               <div className='text-right font-semibold'>
-                Total: PKR {selectedReturn.totalAmount.toLocaleString()}
+                Total: {formatMoney(selectedReturn.totalAmount)}
               </div>
             </div>
           )}

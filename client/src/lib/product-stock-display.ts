@@ -22,15 +22,26 @@ export function getDisplayStock(product: DisplayableProduct): number {
   return product.stockQuantity ?? 0
 }
 
-/** Single number when min===max (or no variants), else a "min–max" range string. */
-export function formatDisplayPrice(product: DisplayableProduct, field: 'price' | 'cost'): string {
+/**
+ * Single number when min===max (or no variants), else a "min–max" range string.
+ * `format` defaults to a bare `String(...)` (e.g. for CSV/Excel export cells, which want a
+ * plain number, not a currency-formatted one) — callers rendering this for on-screen
+ * display should pass `useFormatMoney()`'s returned function so both the single-value and
+ * range cases come out through the centralized currency formatter instead of a hardcoded
+ * "Rs" prefix wrapped around this function's return value.
+ */
+export function formatDisplayPrice(
+  product: DisplayableProduct,
+  field: 'price' | 'cost',
+  format: (amount: number) => string = String,
+): string {
   const range = product.hasVariants ? product.variantPriceRange : null
   if (range) {
     const min = field === 'price' ? range.minPrice : range.minCost
     const max = field === 'price' ? range.maxPrice : range.maxCost
-    return min === max ? String(min) : `${min}–${max}`
+    return min === max ? format(min) : `${format(min)}–${format(max)}`
   }
-  return String(product[field] ?? 0)
+  return format(product[field] ?? 0)
 }
 
 /** Lowest variant price/cost (or the legacy value) — for sort/disable comparisons

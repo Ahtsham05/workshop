@@ -15,6 +15,7 @@ import { useLanguage } from '@/context/language-context'
 import { useGetCustomerProductHistoryQuery } from '@/stores/invoice.api'
 import { Loader2 } from 'lucide-react'
 import { getTextClasses } from '@/utils/urdu-text-utils'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface ProductHistoryDialogProps {
   open: boolean
@@ -50,12 +51,7 @@ export function ProductHistoryDialog({
     }
   }, [open, customerId, productId, refetch])
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PK', {
-      style: 'currency',
-      currency: 'PKR',
-    }).format(amount)
-  }
+  const formatCurrency = useFormatMoney()
 
   const getPriceTrend = (lastPrice: number, currentPrice: number) => {
     if (lastPrice === currentPrice) {

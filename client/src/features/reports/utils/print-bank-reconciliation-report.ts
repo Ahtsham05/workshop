@@ -3,6 +3,8 @@ import { escapeHtml } from '@/lib/escape-html'
 import { openPrintWindowForFormat } from '@/features/invoice/utils/print-utils'
 import { PAPER_FORMATS } from '@/features/invoice/utils/paper-format'
 import type { BankReconciliationSessionEntry, BankReconciliationSessionRow } from '@/stores/reports.api'
+import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 const FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
 
@@ -10,9 +12,9 @@ interface PrintCompany {
   name: string
   address?: string
   phone?: string
+  /** Organization's configured currency (symbol/decimals) — omit to fall back to PKR. */
+  currencyMeta?: CurrencyOption
 }
-
-const fmt = (amount: number) => `Rs ${Math.abs(amount).toFixed(2)}`
 
 const fmtDate = (value: string | null) => {
   if (!value) return '-'
@@ -28,6 +30,7 @@ const generateReportHTML = (
   entries: BankReconciliationSessionEntry[],
   company: PrintCompany,
 ) => {
+  const fmt = (amount: number) => formatMoneyWithMeta(Math.abs(amount), company.currencyMeta ?? FALLBACK_CURRENCY)
   const paperFormat = PAPER_FORMATS.a4
   const isBalanced = Math.abs(session.difference) < 0.01
 

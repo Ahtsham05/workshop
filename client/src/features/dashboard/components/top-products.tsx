@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useFormatMoney } from '@/lib/format-money'
 import { Badge } from '@/components/ui/badge'
 import { Package, TrendingUp } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
@@ -16,6 +17,7 @@ type Props = {
 
 export function TopProducts({ dateRange }: Props) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { data: topProducts, isLoading, isFetching } = useGetTopProductsQuery({
     limit: 5,
     ...dashboardRangeQueryParams(dateRange),
@@ -78,7 +80,7 @@ export function TopProducts({ dateRange }: Props) {
                   </div>
                 </div>
                 <div className='text-right'>
-                  <p className='text-sm font-semibold'>Rs{product.totalRevenue.toLocaleString()}</p>
+                  <p className='text-sm font-semibold'>{formatMoney(product.totalRevenue)}</p>
                   <Badge 
                     variant='outline' 
                     className={`text-xs ${product.stockQuantity > 10 ? 'bg-green-50' : product.stockQuantity > 0 ? 'bg-yellow-50' : 'bg-red-50'}`}

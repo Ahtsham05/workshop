@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useFormatMoney } from '@/lib/format-money'
 import { formatBusinessDate } from '@/lib/business-timezone'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -96,6 +97,7 @@ export default function PurchaseOrderList({
   onReceive,
 }: Props) {
   const branchName = useBranchName()
+  const formatMoney = useFormatMoney()
   const { hasExplicitPermission } = usePermissions()
   const canCreate = hasExplicitPermission('createPurchaseOrders')
   const canEditAny = hasExplicitPermission('editPurchaseOrders')
@@ -264,7 +266,7 @@ export default function PurchaseOrderList({
         />
         <StatCard
           label='Open Value'
-          value={`Rs ${(stats?.openValue || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`}
+          value={formatMoney(stats?.openValue || 0)}
           accent='bg-indigo-100 text-indigo-700'
           icon={ClipboardList}
           active={isCardActive('open')}
@@ -402,7 +404,7 @@ export default function PurchaseOrderList({
                           </div>
                         </TableCell>
                         <TableCell className='text-right tabular-nums'>
-                          Rs {Number(po.totalAmount).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {formatMoney(Number(po.totalAmount))}
                         </TableCell>
                         <TableCell>
                           <Badge className={STATUS_STYLES[po.status]} variant='secondary'>

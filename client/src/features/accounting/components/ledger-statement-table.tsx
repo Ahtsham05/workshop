@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -54,6 +55,8 @@ export function LedgerStatementTable({
   renderReference,
   renderActions,
 }: Props) {
+  const formatMoney = useFormatMoney();
+  const currencyMeta = useCurrencyMeta();
   const pageDebit = entries.reduce((sum, e) => sum + (Number(e.debit) || 0), 0);
   const pageCredit = entries.reduce((sum, e) => sum + (Number(e.credit) || 0), 0);
   const closingBalance =
@@ -83,7 +86,7 @@ export function LedgerStatementTable({
                 {openingBalanceLabel || t('Balance brought forward')}
               </TableCell>
               <TableCell className={`text-right tabular-nums ${getLedgerBalanceTone(party, balanceBeforePage)}`}>
-                {formatLedgerBalanceLabel(party, balanceBeforePage, t)}
+                {formatLedgerBalanceLabel(party, balanceBeforePage, t, currencyMeta)}
               </TableCell>
               <TableCell />
             </TableRow>
@@ -122,13 +125,13 @@ export function LedgerStatementTable({
                   <span className='text-sm'>{formatInvoiceType(entry)}</span>
                 </TableCell>
                 <TableCell className='text-right tabular-nums text-red-600'>
-                  {entry.debit > 0 ? `Rs${entry.debit.toFixed(2)}` : '—'}
+                  {entry.debit > 0 ? formatMoney(entry.debit) : '—'}
                 </TableCell>
                 <TableCell className='text-right tabular-nums text-green-600'>
-                  {entry.credit > 0 ? `Rs${entry.credit.toFixed(2)}` : '—'}
+                  {entry.credit > 0 ? formatMoney(entry.credit) : '—'}
                 </TableCell>
                 <TableCell className={`text-right tabular-nums text-sm ${getLedgerBalanceTone(party, entry.balance)}`}>
-                  {formatLedgerBalanceLabel(party, entry.balance, t)}
+                  {formatLedgerBalanceLabel(party, entry.balance, t, currencyMeta)}
                 </TableCell>
                 <TableCell className='text-right whitespace-nowrap align-middle'>
                   {renderActions(entry)}
@@ -143,13 +146,13 @@ export function LedgerStatementTable({
                 {t('Page totals')}
               </TableCell>
               <TableCell className='text-right tabular-nums text-red-700'>
-                Rs{pageDebit.toFixed(2)}
+                {formatMoney(pageDebit)}
               </TableCell>
               <TableCell className='text-right tabular-nums text-green-700'>
-                Rs{pageCredit.toFixed(2)}
+                {formatMoney(pageCredit)}
               </TableCell>
               <TableCell className={`text-right tabular-nums ${getLedgerBalanceTone(party, closingBalance)}`}>
-                {formatLedgerBalanceLabel(party, closingBalance, t)}
+                {formatLedgerBalanceLabel(party, closingBalance, t, currencyMeta)}
               </TableCell>
               <TableCell />
             </TableRow>

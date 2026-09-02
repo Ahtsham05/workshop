@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useFormatMoney } from '@/lib/format-money'
 
 type Props = {
   dateRange: DashboardDateRange
@@ -29,6 +30,7 @@ export function CategoryProducts({ dateRange }: Props) {
   })
   const loading = isLoading || isFetching
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const formatCurrency = useFormatMoney()
 
   if (loading) {
     return (
@@ -47,8 +49,6 @@ export function CategoryProducts({ dateRange }: Props) {
       </Card>
     )
   }
-
-  const formatCurrency = (value: number) => `Rs ${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
 
   return (
     <>

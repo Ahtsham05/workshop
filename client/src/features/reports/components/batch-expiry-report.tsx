@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
+import { useFormatMoney } from '@/lib/format-money'
 
 type ExpiryFilter = 'all' | '30' | '60' | '90' | 'expired'
 
@@ -63,10 +64,9 @@ export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((
     },
   }))
 
-  if (isLoading) return <Skeleton className='h-[400px] w-full' />
+  const formatCurrency = useFormatMoney()
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR' }).format(value)
+  if (isLoading) return <Skeleton className='h-[400px] w-full' />
 
   return (
     <div className='space-y-6'>
