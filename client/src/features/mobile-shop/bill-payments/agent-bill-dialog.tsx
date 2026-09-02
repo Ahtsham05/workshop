@@ -104,6 +104,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
     [{ value: 'cash', label: 'Cash' }],
     activeWallets,
     false,
+    currencyMeta,
   )
 
   const { data: companiesData } = useGetUtilityCompaniesQuery({ isActive: true } as any)

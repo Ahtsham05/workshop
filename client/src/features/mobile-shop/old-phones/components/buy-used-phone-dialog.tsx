@@ -21,6 +21,7 @@ import {
   buildMergedPaymentOptions, getWalletTypeFromOptionValue, isWalletOptionValue, toWalletOptionValue,
 } from '@/lib/wallet-payment-options'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
+import { useCurrencyMeta } from '@/lib/format-money'
 import {
   useCreateBuybackMutation,
   type BuybackAccessory, type BuybackChecklist, type BuybackCondition, type BuybackGrade,
@@ -251,13 +252,14 @@ export function BuyUsedPhoneDialog({
   const [sellerIdCardBack, setSellerIdCardBack] = useState<BuybackPhoto | undefined>()
   const [conditionPhotos, setConditionPhotos] = useState<(BuybackPhoto | undefined)[]>([undefined, undefined, undefined, undefined])
 
+  const currencyMeta = useCurrencyMeta()
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   // No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
   // Bank Account/mobile wallet) is selectable by its own name via buildMergedPaymentOptions.
   const basePaymentMethods = [{ value: 'cash', label: 'Cash' }]
   // Buying a used phone is money-out — show wallet balances so staff can see what's available.
-  const paymentMethodOptions = buildMergedPaymentOptions(basePaymentMethods, wallets, true)
+  const paymentMethodOptions = buildMergedPaymentOptions(basePaymentMethods, wallets, true, currencyMeta)
 
   const [createBuyback, { isLoading: isSaving }] = useCreateBuybackMutation()
 

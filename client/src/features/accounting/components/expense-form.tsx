@@ -27,6 +27,7 @@ import {
   type ExpenseCategory,
 } from '@/stores/expenseCategory.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
+import { useCurrencyMeta } from '@/lib/format-money'
 import {
   buildMergedPaymentOptions,
   getWalletTypeFromOptionValue,
@@ -78,6 +79,7 @@ export function ExpenseForm({
   const { hasExplicitPermission } = usePermissions()
   const canManageExpenses = hasExplicitPermission('manageExpenses')
   const dispatch = useDispatch<AppDispatch>()
+  const currencyMeta = useCurrencyMeta()
   const [loading, setLoading] = useState(false)
   const [catOpen, setCatOpen] = useState(false)
   const [newCatName, setNewCatName] = useState('')
@@ -93,6 +95,7 @@ export function ExpenseForm({
     paymentMethods.map((m) => ({ value: m, label: t(m) })),
     wallets,
     true,
+    currencyMeta,
   )
   const [createCategory] = useCreateExpenseCategoryMutation()
   const [updateCategory] = useUpdateExpenseCategoryMutation()

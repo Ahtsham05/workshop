@@ -24,7 +24,7 @@ import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalog-helpers'
 import { isUsedPhonesBucketProduct } from '../../old-phones/constants'
 import type { RootState, AppDispatch } from '@/stores/store'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 /** Real IMEIs are always 15 digits — strips anything a scanner/paste adds (spaces, dashes). */
 const sanitizeImei = (raw: string) => raw.replace(/\D/g, '').slice(0, 15)
@@ -114,6 +114,7 @@ export function BuyNewPhoneDialog({
   const dispatch = useDispatch<AppDispatch>()
   const { hasPermission } = usePermissions()
   const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const fmtAmt = (n?: number) => formatMoney(n ?? 0)
 
   const productsRedux = useSelector((s: RootState) => (s as unknown as { product?: { products?: PhoneProductOption[] } }).product?.products ?? [])
@@ -151,7 +152,7 @@ export function BuyNewPhoneDialog({
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   // Buying new stock is money-out — show wallet balances so staff can see what's available.
-  const paymentMethodOptions = buildMergedPaymentOptions(BASE_PAYMENT_METHODS, wallets, true)
+  const paymentMethodOptions = buildMergedPaymentOptions(BASE_PAYMENT_METHODS, wallets, true, currencyMeta)
 
   const [createNewPhonePurchase, { isLoading: isSaving }] = useCreateNewPhonePurchaseMutation()
 

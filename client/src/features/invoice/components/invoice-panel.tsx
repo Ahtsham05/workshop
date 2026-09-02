@@ -244,8 +244,9 @@ export function InvoicePanel({
         [{ value: 'cash', label: t('cash') || 'Cash' }],
         wallets,
         false,
+        currencyMeta,
       ),
-    [wallets, t],
+    [wallets, t, currencyMeta],
   )
   // The split leg is an independent amount that adds to Paid Amount, not carved out of it —
   // see split-payment-fields.tsx. This is what's actually been paid so far.

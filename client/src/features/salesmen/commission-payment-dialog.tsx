@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLanguage } from '@/context/language-context';
-import { useFormatMoney } from '@/lib/format-money';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import {
   buildMergedPaymentOptions,
   getWalletTypeFromOptionValue,
@@ -68,6 +68,7 @@ export function CommissionPaymentDialog({
 }: CommissionPaymentDialogProps) {
   const { t } = useLanguage();
   const formatMoney = useFormatMoney();
+  const currencyMeta = useCurrencyMeta();
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !open });
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? [];
   // Paying a salesman is money-out — show wallet balances so staff can avoid
@@ -77,6 +78,7 @@ export function CommissionPaymentDialog({
     [{ value: 'cash', label: t('cash') || 'Cash' }],
     wallets,
     true,
+    currencyMeta,
   );
   const [createPayment, { isLoading }] = useCreateCommissionPaymentMutation();
 

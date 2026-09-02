@@ -650,8 +650,9 @@ export default function PurchasePanel({
         [{ value: 'cash', label: t('cash') || 'Cash' }],
         wallets,
         true,
+        currencyMeta,
       ),
-    [wallets, t],
+    [wallets, t, currencyMeta],
   )
 
   // Filter suppliers by name, Urdu name, or phone

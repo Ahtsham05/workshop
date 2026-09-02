@@ -436,6 +436,7 @@ interface MarkPaidDialogProps {
 
 function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
   const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const [paymentDate, setPaymentDate] = useState(getBusinessToday())
   const [actualBillAmount, setActualBillAmount] = useState('')
   const [payoutMethodOption, setPayoutMethodOption] = useState('cash')
@@ -452,6 +453,7 @@ function MarkPaidDialog({ bill, onClose }: MarkPaidDialogProps) {
     [{ value: 'cash', label: 'Cash' }],
     wallets,
     true,
+    currencyMeta,
   )
 
   useEffect(() => {
@@ -736,6 +738,7 @@ export default function BillPaymentsPage() {
     [{ value: 'cash', label: 'Cash' }],
     wallets,
     false,
+    currencyMeta,
   )
 
   // Due date filter state

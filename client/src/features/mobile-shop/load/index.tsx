@@ -358,7 +358,8 @@ function LoadManagementPage({
   initialSupplierId,
 }: LoadManagementPageProps) {
   const formatMoney = useFormatMoney()
-  const currencySymbol = useCurrencyMeta().symbol
+  const currencyMeta = useCurrencyMeta()
+  const currencySymbol = currencyMeta.symbol
   const isCashManagementMode = mode === 'cash-management'
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission(isCashManagementMode ? 'manageCashManagement' : 'manageLoadManagement')
@@ -794,12 +795,12 @@ function LoadManagementPage({
   // No generic 'Bank Transfer' placeholder — every real account (Cash in Hand or a named
   // Bank Account/mobile wallet) is selectable by its own name.
   const purchasePaymentMethodOptions = useMemo(
-    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, true),
-    [wallets],
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, true, currencyMeta),
+    [wallets, currencyMeta],
   )
   const salePaymentMethodOptions = useMemo(
-    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, false),
-    [wallets],
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, false, currencyMeta),
+    [wallets, currencyMeta],
   )
 
   const withdrawalProfit = useMemo(() => {

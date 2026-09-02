@@ -53,13 +53,14 @@ export function buildMergedPaymentOptions(
   baseMethods: { value: string; label: string }[],
   wallets: WalletLike[],
   showBalance: boolean,
+  currencyMeta: CurrencyOption = FALLBACK_CURRENCY,
 ): MergedPaymentOption[] {
   const activeWallets = wallets.filter((w) => w.isActive !== false)
   const cashWallet = activeWallets.find((w) => w.accountType === 'cash')
 
   const baseOptions = baseMethods.map((m) => {
     if (cashWallet && m.value.toLowerCase() === 'cash') {
-      return { ...m, label: formatWalletLabel(cashWallet, showBalance), isWallet: false }
+      return { ...m, label: formatWalletLabel(cashWallet, showBalance, currencyMeta), isWallet: false }
     }
     return { ...m, isWallet: false }
   })
@@ -68,7 +69,7 @@ export function buildMergedPaymentOptions(
     .filter((w) => w.accountType !== 'cash')
     .map((w) => ({
       value: `${WALLET_OPTION_PREFIX}${w.type}`,
-      label: formatWalletLabel(w, showBalance),
+      label: formatWalletLabel(w, showBalance, currencyMeta),
       isWallet: true,
       walletType: w.type,
     }))

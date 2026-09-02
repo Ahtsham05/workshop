@@ -153,7 +153,7 @@ export default function OldPhonesPage() {
   const { data: walletsData } = useGetWalletsQuery()
   const wallets = walletsData?.results?.filter((w) => w.isActive) ?? []
   // Selling is money-in — don't show wallet balances (see buildMergedPaymentOptions docs).
-  const sellPaymentMethodOptions = buildMergedPaymentOptions(SELL_BASE_PAYMENT_METHODS, wallets, false)
+  const sellPaymentMethodOptions = buildMergedPaymentOptions(SELL_BASE_PAYMENT_METHODS, wallets, false, currencyMeta)
 
   const { data: org } = useGetMyOrganizationQuery()
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)

@@ -81,7 +81,7 @@ import {
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options';
 import { usePermissions } from '@/context/permission-context';
-import { useFormatMoney } from '@/lib/format-money';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 
 const STATUS_COLORS: Record<string, string> = {
   Pending: '#f59e0b',
@@ -108,6 +108,7 @@ const loadPayAffectsBooksPreference = () => {
 
 export default function PayrollManagement() {
   const { t } = useLanguage();
+  const currencyMeta = useCurrencyMeta();
   const { hasExplicitPermission } = usePermissions();
   const canCreate = hasExplicitPermission('createPayroll');
   const canEdit = hasExplicitPermission('managePayroll');
@@ -154,6 +155,7 @@ export default function PayrollManagement() {
     [{ value: 'cash', label: t('Cash') || 'Cash' }],
     wallets,
     true,
+    currencyMeta,
   );
 
   const handlePayAffectsBooksChange = (checked: boolean) => {

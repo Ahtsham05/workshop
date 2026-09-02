@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const { SalesmanCommissionPayment, Expense, SalesmanProfile } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { formatMoney } = require('../utils/money');
+const { resolveOrganizationCurrencyMeta } = require('./localization.service');
 const cashBookService = require('./cashBook.service');
 const walletEntryService = require('./walletEntry.service');
 const salesmanCommissionLedgerService = require('./salesmanCommissionLedger.service');
@@ -109,7 +110,8 @@ const createPayment = async (paymentBody, userId) => {
 
   const balance = await salesmanCommissionLedgerService.getCurrentBalance(paymentBody.salesmanId, paymentBody.organizationId);
   if (amount > balance) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `Cannot pay more than the outstanding balance of ${formatMoney(balance)}`);
+    const currencyMeta = await resolveOrganizationCurrencyMeta(paymentBody.organizationId);
+    throw new ApiError(httpStatus.BAD_REQUEST, `Cannot pay more than the outstanding balance of ${formatMoney(balance, currencyMeta)}`);
   }
 
   const salesman = await SalesmanProfile.findById(paymentBody.salesmanId).select('name');

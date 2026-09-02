@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const { salesmanCommissionPaymentService, auditLogService } = require('../services');
+const { salesmanCommissionPaymentService, auditLogService, localizationService } = require('../services');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
@@ -11,12 +11,13 @@ const createPayment = catchAsync(async (req, res) => {
     { ...req.body, ...getBranchContext(req) },
     req.user.id
   );
+  const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
   await auditLogService.recordAuditLog({
     req,
     action: 'create',
     module: 'SalesmanCommissionPayment',
     entityId: payment._id,
-    entityName: `${payment.salesmanName || ''} — ${formatMoney(payment.amount)}`,
+    entityName: `${payment.salesmanName || ''} — ${formatMoney(payment.amount, currencyMeta)}`,
     after: payment.toObject ? payment.toObject() : payment,
     fields: ['salesmanId', 'amount', 'paymentMethod', 'walletType'],
   });
@@ -42,12 +43,17 @@ const getPayment = catchAsync(async (req, res) => {
 const deletePayment = catchAsync(async (req, res) => {
   const payment = await salesmanCommissionPaymentService.getPaymentById(req.params.paymentId);
   await salesmanCommissionPaymentService.deletePaymentById(req.params.paymentId);
+  let entityName;
+  if (payment) {
+    const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
+    entityName = `${payment.salesmanName || ''} — ${formatMoney(payment.amount, currencyMeta)}`;
+  }
   await auditLogService.recordAuditLog({
     req,
     action: 'delete',
     module: 'SalesmanCommissionPayment',
     entityId: req.params.paymentId,
-    entityName: payment ? `${payment.salesmanName || ''} — ${formatMoney(payment.amount)}` : undefined,
+    entityName,
   });
   res.status(httpStatus.NO_CONTENT).send();
 });

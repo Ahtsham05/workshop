@@ -206,9 +206,9 @@ export default function RepairPage() {
   // Bank Account/mobile wallet) is selectable by its own name.
   const baseRepairPaymentMethods = [{ value: 'cash', label: 'Cash' }]
   // Collecting from the customer is money-in — hide wallet balances.
-  const repairPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, false)
+  const repairPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, false, currencyMeta)
   // Buying repair parts/stock is money-out — show wallet balances.
-  const stockPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, true)
+  const stockPaymentMethodOptions = buildMergedPaymentOptions(baseRepairPaymentMethods, wallets, true, currencyMeta)
 
   const { data } = useGetRepairJobsQuery({
     page: repairPage,

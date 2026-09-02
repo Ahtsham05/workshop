@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const { bankReconciliationService, auditLogService } = require('../services');
+const { bankReconciliationService, auditLogService, localizationService } = require('../services');
 const { getBranchContext } = require('../utils/branchFilter');
 const { formatMoney } = require('../utils/money');
 
@@ -42,12 +42,13 @@ const confirmReconciliation = catchAsync(async (req, res) => {
     statementClosingBalance: req.body.statementClosingBalance,
     userId: req.user.id,
   });
+  const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
   await auditLogService.recordAuditLog({
     req,
     action: 'create',
     module: 'BankReconciliationSession',
     entityId: session._id,
-    entityName: `${session.bankAccountName} — ${formatMoney(session.statementClosingBalance)} (${session.matchedCount} matched)`,
+    entityName: `${session.bankAccountName} — ${formatMoney(session.statementClosingBalance, currencyMeta)} (${session.matchedCount} matched)`,
     after: session.toObject ? session.toObject() : session,
   });
   res.status(httpStatus.CREATED).send(session);

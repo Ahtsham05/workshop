@@ -1,7 +1,7 @@
 const config = require('../../../config/config');
 const { Student, SchoolAttendance, FeeVoucher, Mark, Exam, Diary, Timetable } = require('../../../models');
 const { normalizePhone } = require('../../../utils/whatsappPhone');
-const { formatMoney } = require('../../../utils/money');
+const { formatMoney, FALLBACK_CURRENCY_META } = require('../../../utils/money');
 
 const INTENTS = ['attendance', 'fee_balance', 'result', 'homework', 'timetable', 'exam_date', 'verify', 'unknown'];
 
@@ -200,7 +200,7 @@ async function resolve(intent, student) {
   }
 }
 
-function formatReply(intent, data, language) {
+function formatReply(intent, data, language, currencyMeta = FALLBACK_CURRENCY_META) {
   if (!data) {
     const msgs = {
       en: 'Sorry, I could not find that information.',
@@ -213,12 +213,12 @@ function formatReply(intent, data, language) {
 
   if (intent === 'fee_balance') {
     if (language === 'roman_ur' || language === 'pa') {
-      return `${data.studentName} di baqi fee ${formatMoney(data.totalDue)} hai (${data.voucherCount} voucher).`;
+      return `${data.studentName} di baqi fee ${formatMoney(data.totalDue, currencyMeta)} hai (${data.voucherCount} voucher).`;
     }
     if (language === 'ur') {
-      return `${data.studentName} کی باقی فیس ${formatMoney(data.totalDue)} ہے۔`;
+      return `${data.studentName} کی باقی فیس ${formatMoney(data.totalDue, currencyMeta)} ہے۔`;
     }
-    return `${data.studentName}'s outstanding fee balance is ${formatMoney(data.totalDue)} (${data.voucherCount} voucher(s)).`;
+    return `${data.studentName}'s outstanding fee balance is ${formatMoney(data.totalDue, currencyMeta)} (${data.voucherCount} voucher(s)).`;
   }
 
   if (intent === 'attendance') {

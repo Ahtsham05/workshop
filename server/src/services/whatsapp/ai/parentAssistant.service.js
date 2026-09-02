@@ -2,6 +2,7 @@ const messagingService = require('../messaging.service');
 const mediaService = require('../media.service');
 const voicePipeline = require('./voicePipeline.service');
 const queryResolver = require('./queryResolver.service');
+const localizationService = require('../../localization.service');
 const logger = require('../../../config/logger');
 
 async function handleInbound(connection, conversation, messageDoc) {
@@ -61,7 +62,8 @@ async function handleInbound(connection, conversation, messageDoc) {
 
   const student = students[0];
   const data = await queryResolver.resolve(intent, student);
-  let reply = queryResolver.formatReply(intent, data, language);
+  const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(conversation.organizationId);
+  let reply = queryResolver.formatReply(intent, data, language, currencyMeta);
 
   const geminiReply = await queryResolver.callGeminiReply(userText, data, language);
   if (geminiReply) reply = geminiReply;

@@ -20,6 +20,7 @@ import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 import { AppDispatch } from '@/stores/store';
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api';
+import { useCurrencyMeta } from '@/lib/format-money';
 import {
   buildMergedPaymentOptions,
   getWalletTypeFromOptionValue,
@@ -52,6 +53,7 @@ export function LedgerEntryForm({
 }: LedgerEntryFormProps) {
   const { t } = useLanguage();
   const dispatch = useDispatch<AppDispatch>();
+  const currencyMeta = useCurrencyMeta();
   const { data: walletsData } = useGetWalletsQuery();
   const wallets = walletsData?.results?.filter((wallet) => wallet.isActive) ?? [];
   const [loading, setLoading] = useState(false);
@@ -119,6 +121,7 @@ export function LedgerEntryForm({
     [{ value: 'Cash', label: t('Cash') }],
     wallets,
     showWalletBalance,
+    currencyMeta,
   );
 
   const transactionTypes = ledgerType === 'customer' ? customerTransactionTypes : supplierTransactionTypes;

@@ -48,7 +48,7 @@ import { isUsedPhonesBucketProduct } from '../old-phones/constants'
 import { BuyNewPhoneDialog } from './components/buy-new-phone-dialog'
 import { usePermissions } from '@/context/permission-context'
 import type { RootState } from '@/stores/store'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 interface PhoneProductOption {
   id?: string
@@ -108,6 +108,7 @@ const makeInitialSellForm = (): SellFormState => ({
 
 export default function NewPhonesPage() {
   const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const fmtAmt = (n?: number) => formatMoney(n ?? 0)
   const { hasPermission } = usePermissions()
   const canBuy = hasPermission('buyNewPhones')
@@ -189,7 +190,7 @@ export default function NewPhonesPage() {
     [customers],
   )
   // Selling is money-in — don't show wallet balances (see buildMergedPaymentOptions docs).
-  const sellPaymentMethodOptions = buildMergedPaymentOptions(SELL_BASE_PAYMENT_METHODS, wallets, false)
+  const sellPaymentMethodOptions = buildMergedPaymentOptions(SELL_BASE_PAYMENT_METHODS, wallets, false, currencyMeta)
 
   const [createNewPhoneSale, { isLoading: isSelling }] = useCreateNewPhoneSaleMutation()
 

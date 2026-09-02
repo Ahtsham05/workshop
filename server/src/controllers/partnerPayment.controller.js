@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const { partnerPaymentService, auditLogService } = require('../services');
+const { partnerPaymentService, auditLogService, localizationService } = require('../services');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
@@ -11,12 +11,13 @@ const createPayment = catchAsync(async (req, res) => {
     { ...req.body, ...getBranchContext(req) },
     req.user.id
   );
+  const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
   await auditLogService.recordAuditLog({
     req,
     action: 'create',
     module: 'PartnerPayment',
     entityId: payment._id,
-    entityName: `${payment.partnerName || ''} — ${formatMoney(payment.amount)}`,
+    entityName: `${payment.partnerName || ''} — ${formatMoney(payment.amount, currencyMeta)}`,
     after: payment.toObject ? payment.toObject() : payment,
     fields: ['partnerId', 'amount', 'paymentMethod', 'walletType'],
   });
@@ -42,12 +43,17 @@ const getPayment = catchAsync(async (req, res) => {
 const deletePayment = catchAsync(async (req, res) => {
   const payment = await partnerPaymentService.getPaymentById(req.params.paymentId);
   await partnerPaymentService.deletePaymentById(req.params.paymentId);
+  let entityName;
+  if (payment) {
+    const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
+    entityName = `${payment.partnerName || ''} — ${formatMoney(payment.amount, currencyMeta)}`;
+  }
   await auditLogService.recordAuditLog({
     req,
     action: 'delete',
     module: 'PartnerPayment',
     entityId: req.params.paymentId,
-    entityName: payment ? `${payment.partnerName || ''} — ${formatMoney(payment.amount)}` : undefined,
+    entityName,
   });
   res.status(httpStatus.NO_CONTENT).send();
 });

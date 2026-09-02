@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
+import type { CurrencyOption } from '@/stores/localization.api'
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
 
@@ -21,6 +22,7 @@ type MenuPayload = {
   venue: { name?: string; logo?: { url?: string }; branchName?: string }
   table: { id: string; label: string; floorName?: string }
   products: MenuProduct[]
+  currency?: CurrencyOption
 }
 
 export const Route = createFileRoute('/order/$qrToken')({
@@ -59,6 +61,8 @@ function GuestOrderPage() {
     () => cart.reduce((s, l) => s + l.qty * l.product.price, 0),
     [cart],
   )
+
+  const formatMoney = (n: number) => formatMoneyWithMeta(n, menu?.currency ?? FALLBACK_CURRENCY)
 
   const add = (p: MenuProduct) => {
     setCart((c) => {
@@ -196,7 +200,7 @@ function GuestOrderPage() {
                       <div className='text-xs text-muted-foreground line-clamp-2'>{p.description}</div>
                     ) : null}
                     <div className='text-sm font-semibold mt-1'>
-                      {formatMoneyWithMeta(p.price, FALLBACK_CURRENCY)}
+                      {formatMoney(p.price)}
                     </div>
                   </div>
                 </button>
@@ -214,7 +218,7 @@ function GuestOrderPage() {
                     {l.qty}× {l.product.name}
                   </span>
                   <span>
-                    {formatMoneyWithMeta(l.qty * l.product.price, FALLBACK_CURRENCY)}
+                    {formatMoney(l.qty * l.product.price)}
                   </span>
                 </div>
               ))}
@@ -222,7 +226,7 @@ function GuestOrderPage() {
             <div className='flex justify-between border-t pt-3 font-semibold'>
               <span>Total</span>
               <span>
-                {formatMoneyWithMeta(total, FALLBACK_CURRENCY)}
+                {formatMoney(total)}
               </span>
             </div>
             <Button className='w-full' size='lg' disabled={submitting} onClick={submit}>

@@ -128,7 +128,8 @@ export function PaymentPanel({
   charging,
 }: Props) {
   const formatMoney = useFormatMoney()
-  const currencySymbol = useCurrencyMeta().symbol
+  const currencyMeta = useCurrencyMeta()
+  const currencySymbol = currencyMeta.symbol
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
   const { data: customersRaw } = useGetAllCustomersQuery(undefined)
@@ -146,8 +147,8 @@ export function PaymentPanel({
   // same rationale as invoice-panel.tsx. No generic 'Card'/'Bank Transfer' placeholder —
   // every real Bank Account / mobile wallet is selectable by its own name.
   const paymentMethodOptions = useMemo(
-    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, false),
-    [wallets],
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, false, currencyMeta),
+    [wallets, currencyMeta],
   )
 
   const changeDue = saleType === 'cash' && !splitPaymentMethod ? Math.max(0, paidAmount - total) : 0

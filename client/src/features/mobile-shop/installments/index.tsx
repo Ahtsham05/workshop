@@ -67,7 +67,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -148,6 +148,7 @@ const isDueSoon = (plan: InstallmentPlanRecord) =>
 
 export default function InstallmentsPage() {
   const fmt = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageInstallments')
   const dispatch = useDispatch<AppDispatch>()
@@ -196,6 +197,7 @@ export default function InstallmentsPage() {
     [{ value: 'cash', label: 'Cash' }],
     wallets,
     false,
+    currencyMeta,
   )
   const [deletePaymentInfo, setDeletePaymentInfo] = useState<{ planId: string; paymentId: string } | null>(null)
 

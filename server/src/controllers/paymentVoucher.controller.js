@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
-const { paymentVoucherService, auditLogService } = require('../services');
+const { paymentVoucherService, auditLogService, localizationService } = require('../services');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
@@ -8,12 +8,13 @@ const { formatMoney } = require('../utils/money');
 
 const createVoucher = catchAsync(async (req, res) => {
   const voucher = await paymentVoucherService.createVoucher({ ...req.body, ...getBranchContext(req) }, req.user.id);
+  const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
   await auditLogService.recordAuditLog({
     req,
     action: 'create',
     module: 'PaymentVoucher',
     entityId: voucher._id,
-    entityName: `${voucher.voucherNumber} — ${formatMoney(voucher.totalAmount)}`,
+    entityName: `${voucher.voucherNumber} — ${formatMoney(voucher.totalAmount, currencyMeta)}`,
     after: voucher.toObject ? voucher.toObject() : voucher,
     fields: ['bankAccountId', 'lines', 'totalAmount'],
   });
@@ -56,12 +57,17 @@ const getVoucher = catchAsync(async (req, res) => {
 const deleteVoucher = catchAsync(async (req, res) => {
   const voucher = await paymentVoucherService.getVoucherById(req.params.paymentVoucherId);
   await paymentVoucherService.deleteVoucherById(req.params.paymentVoucherId);
+  let entityName;
+  if (voucher) {
+    const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
+    entityName = `${voucher.voucherNumber} — ${formatMoney(voucher.totalAmount, currencyMeta)}`;
+  }
   await auditLogService.recordAuditLog({
     req,
     action: 'delete',
     module: 'PaymentVoucher',
     entityId: req.params.paymentVoucherId,
-    entityName: voucher ? `${voucher.voucherNumber} — ${formatMoney(voucher.totalAmount)}` : undefined,
+    entityName,
   });
   res.status(httpStatus.NO_CONTENT).send();
 });

@@ -65,7 +65,7 @@ import {
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils'
 import { buildSimSaleReceipt } from '@/features/mobile-shop/utils/mobile-shop-receipt-builders'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import {
   makeEnterChain,
@@ -121,6 +121,7 @@ const makeEmptyForm = (): SimSaleFormState => ({
 
 export default function SimSalePage({ initialCustomerId }: { initialCustomerId?: string }) {
   const formatMoney = useFormatMoney()
+  const currencyMeta = useCurrencyMeta()
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageSimSales')
   const dispatch = useDispatch()
@@ -163,8 +164,8 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
   // named Bank Account/mobile wallet) is selectable by its own name, same convention as
   // every other module (see wallet-payment-options.ts).
   const simSalePaymentMethodOptions = useMemo(
-    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets.filter((w) => w.isActive), false),
-    [wallets],
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets.filter((w) => w.isActive), false, currencyMeta),
+    [wallets, currencyMeta],
   )
 
   const filteredSales = useMemo(() => {

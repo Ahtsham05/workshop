@@ -399,8 +399,8 @@ export default function ReceiveItemsDialog({ open, order, onClose, onReceived }:
   // account (bank or mobile wallet) is selectable here by its own name, same as Purchase
   // Invoice's payment method dropdown.
   const paymentMethodOptions = useMemo(
-    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, true),
-    [wallets],
+    () => buildMergedPaymentOptions([{ value: 'cash', label: 'Cash' }], wallets, true, currencyMeta),
+    [wallets, currencyMeta],
   )
   const selectedPaymentMethodValue =
     paymentMethod === 'wallet' && walletType ? toWalletOptionValue(walletType) : 'cash'
