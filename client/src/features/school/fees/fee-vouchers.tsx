@@ -36,6 +36,9 @@ import { RootState } from '@/stores/store';
 import { toast } from 'sonner';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+type MonthOption = { id: string; month: string; year: number; status: string; remaining: number; label: string };
+
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
   { value: 'bank_transfer', label: 'Bank Transfer' },
@@ -575,7 +578,7 @@ export default function FeeVouchers() {
           // Stamp each just-paid voucher with what THIS payment covered, so the
           // printed receipt can say exactly which month(s) it was received for —
           // instead of leaving it ambiguous alongside other listed arrears.
-          const paidByVoucherId = new Map(paidList.map((x: any) => [String(x.voucherId), x]));
+          const paidByVoucherId = new Map<string, any>(paidList.map((x: any) => [String(x.voucherId), x]));
           printRows = rawRows.map((r: any) => {
             const info = paidByVoucherId.get(String(r.id || r._id));
             return info
@@ -813,8 +816,8 @@ export default function FeeVouchers() {
 
   // Selectable months for the Pay dialog — the student's pending vouchers, always
   // including the one that was clicked (in case the summary hasn't loaded/refreshed yet).
-  const monthOptions = useMemo(() => {
-    const list = (studentSummary?.pendingVouchers || []).map((pv: any) => ({
+  const monthOptions: MonthOption[] = useMemo(() => {
+    const list: MonthOption[] = (studentSummary?.pendingVouchers || []).map((pv: any) => ({
       id: pv.id,
       month: pv.month,
       year: Number(pv.year),
