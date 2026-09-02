@@ -1272,11 +1272,18 @@ const bulkPayStudentVouchers = async (studentId, paymentData, scope = {}) => {
   const student = await Student.findOne({ _id: studentId, ...getTenantFilter(scope) });
   if (!student) throw new ApiError(httpStatus.NOT_FOUND, 'Student not found');
 
-  const pendingDocs = await FeeVoucher.find({
+  const pendingQuery = {
     ...getTenantFilter(scope),
     studentId,
     status: { $in: ['unpaid', 'partial', 'overdue'] },
-  });
+  };
+  // When the caller explicitly picked which month(s)/voucher(s) to collect for,
+  // restrict allocation to exactly those — never silently spill onto other months.
+  if (Array.isArray(paymentData.voucherIds) && paymentData.voucherIds.length) {
+    pendingQuery._id = { $in: paymentData.voucherIds };
+  }
+
+  const pendingDocs = await FeeVoucher.find(pendingQuery);
 
   // Sort oldest first
   pendingDocs.sort((a, b) => {

@@ -7,13 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Printer, Zap, DollarSign, Search, CheckCircle2, Clock, AlertTriangle, RefreshCcw, X, TrendingDown, History, CalendarCheck, Wrench, Wallet, ArrowUpCircle, ChevronsUp, PlusCircle, Trash2, Plus, Calculator } from 'lucide-react';
+import { Printer, Zap, DollarSign, Search, CheckCircle2, Clock, AlertTriangle, RefreshCcw, X, History, CalendarCheck, Wrench, Wallet, ArrowUpCircle, ChevronsUp, PlusCircle, Trash2, Plus, Calculator } from 'lucide-react';
 import {
   useGetFeeVouchersQuery,
   useGetSchoolClassesQuery,
   useGetFeeStructuresQuery,
   useBulkGenerateFeeVouchersMutation,
-  usePayFeeVoucherMutation,
   useGetFeeVouchersForPrintMutation,
   useGetStudentFeeSummaryQuery,
   useGetStudentFeeLedgerQuery,
@@ -224,6 +223,8 @@ export default function FeeVouchers() {
   const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [payForm, setPayForm] = useState({ amount: '', paymentMethod: 'cash', remarks: '' });
+  /** Which pending month(s)/voucher(s) the user has explicitly chosen to collect for in the Pay dialog */
+  const [selectedMonthIds, setSelectedMonthIds] = useState<string[]>([]);
   const [genForm, setGenForm] = useState({
     classId: '', feeStructureId: '',
     month: MONTHS[now.getMonth()], year: now.getFullYear(),
@@ -251,7 +252,6 @@ export default function FeeVouchers() {
 
   const { data: vouchersData, isLoading, isFetching } = useGetFeeVouchersQuery(voucherParams);
   const [bulkGenerate, { isLoading: generating }] = useBulkGenerateFeeVouchersMutation();
-  const [payVoucher, { isLoading: paying }] = usePayFeeVoucherMutation();
   const [bulkPay, { isLoading: bulkPaying }] = useBulkPayStudentFeeVouchersMutation();
   const [recordAdvance, { isLoading: recordingAdvance }] = useRecordStudentAdvancePaymentMutation();
   const [getForPrint, { isLoading: loadingPrint }] = useGetFeeVouchersForPrintMutation();
@@ -493,11 +493,13 @@ export default function FeeVouchers() {
     } catch (err: any) { toast.error(err?.data?.message || 'Generation failed'); }
   };
 
-  const openPay = (v: any, suggestedAmount?: number) => {
+  const openPay = (v: any) => {
     setSelectedVoucher(v);
     const remaining = Math.max(0, vNet(v) - (v.paidAmount || 0));
-    const initialAmount = suggestedAmount != null ? Math.max(0, suggestedAmount) : remaining;
-    setPayForm({ amount: String(initialAmount), paymentMethod: 'cash', remarks: '' });
+    // Default selection: just the clicked voucher's own month — explicit, no guessing.
+    // The user can add more months (or switch to "All Arrears") from the checklist below.
+    setSelectedMonthIds([v.id || v._id]);
+    setPayForm({ amount: String(remaining), paymentMethod: 'cash', remarks: '' });
     setPayDialog(true);
   };
 
@@ -505,75 +507,88 @@ export default function FeeVouchers() {
     if (!selectedVoucher || !payForm.amount || Number(payForm.amount) <= 0) {
       return toast.error('Enter a valid amount');
     }
+    if (!selectedMonthIds.length) {
+      return toast.error('Select which month(s) you are collecting fee for');
+    }
     const amountToPay = Number(payForm.amount);
-    const svNetAmount = svNet;
-    const currentRemaining = svNetAmount - (selectedVoucher.paidAmount || 0);
     try {
-      if (amountToPay > currentRemaining) {
-        // Amount spans multiple vouchers — use bulk distribution (oldest-first)
-        const result = await bulkPay({
-          studentId: summaryStudentId,
-          amount: amountToPay,
-          paymentMethod: payForm.paymentMethod,
-          remarks: payForm.remarks,
-        }).unwrap();
-        const count = result?.vouchersPaid?.length ?? 0;
-        const newCredit = result?.newCreditBalance ?? 0;
-        const excessDeposited = Number(result?.excessDeposited ?? 0);
-        let msg = `${formatMoney(amountToPay)} applied across ${count} voucher${count !== 1 ? 's' : ''}`;
-        if (newCredit > 0) msg += ` · ${formatMoney(newCredit)} saved to credit wallet`;
-        toast.success(msg);
+      // Always pay against the explicit month(s)/voucher(s) the user checked —
+      // never let the server silently guess which month an amount belongs to.
+      const result = await bulkPay({
+        studentId: summaryStudentId,
+        amount: amountToPay,
+        paymentMethod: payForm.paymentMethod,
+        remarks: payForm.remarks,
+        voucherIds: selectedMonthIds,
+      }).unwrap();
+      const paidList = result?.vouchersPaid || [];
+      const count = paidList.length;
+      const newCredit = result?.newCreditBalance ?? 0;
+      const excessDeposited = Number(result?.excessDeposited ?? 0);
+      const monthsLabel = paidList.map((x: any) => `${x.month} ${x.year}`).join(', ');
+      let msg = count
+        ? `${formatMoney(amountToPay)} received for ${monthsLabel}`
+        : `${formatMoney(amountToPay)} processed`;
+      if (newCredit > 0) msg += ` · ${formatMoney(newCredit)} saved to credit wallet`;
+      toast.success(msg);
 
-        const ids = (result?.vouchersPaid || [])
-          .map((x: any) => x?.voucherId)
-          .filter(Boolean)
-          .map((id: any) => (typeof id === 'string' ? id : id?.toString?.() ?? ''))
-          .filter(Boolean);
-        let printRows: any[] = [];
-        if (ids.length) {
-          try {
-            printRows = await getForPrint({ ids, includeArrears: true }).unwrap();
-          } catch {
-            toast.error('Payment saved but print preview failed to load');
-          }
+      const ids = paidList
+        .map((x: any) => x?.voucherId)
+        .filter(Boolean)
+        .map((id: any) => (typeof id === 'string' ? id : id?.toString?.() ?? ''))
+        .filter(Boolean);
+      let printRows: any[] = [];
+      if (ids.length) {
+        try {
+          const rawRows = await getForPrint({ ids, includeArrears: true }).unwrap();
+          // Stamp each just-paid voucher with what THIS payment covered, so the
+          // printed receipt can say exactly which month(s) it was received for —
+          // instead of leaving it ambiguous alongside other listed arrears.
+          const paidByVoucherId = new Map(paidList.map((x: any) => [String(x.voucherId), x]));
+          printRows = rawRows.map((r: any) => {
+            const info = paidByVoucherId.get(String(r.id || r._id));
+            return info
+              ? {
+                  ...r,
+                  paidThisTransaction: true,
+                  amountPaidNow: info.applied,
+                  paidMonthsCount: count,
+                  paidMonthsLabel: monthsLabel,
+                }
+              : r;
+          });
+        } catch {
+          toast.error('Payment saved but print preview failed to load');
         }
-        if (excessDeposited > 0) {
-          const studentRow = selectedVoucher?.studentId;
-          const monthlyFee = estimateMonthlyFee(selectedVoucher, studentSummary, studentRow);
-          const paidMonths = (result?.vouchersPaid || []).map((x: any) => ({
-            month: x.month,
-            year: Number(x.year),
-          }));
-          const latestPaid = maxMonthYearInList(paidMonths);
-          const startAfter = latestPaid ?? {
-            month: selectedVoucher.month,
-            year: Number(selectedVoucher.year),
-          };
-          printRows = [
-            ...printRows,
-            ...buildAdvanceProjectionVouchers(
-              {
-                studentId: studentRow,
-                classId: selectedVoucher.classId,
-                sectionId: selectedVoucher.sectionId,
-              },
-              startAfter.month,
-              startAfter.year,
-              excessDeposited,
-              monthlyFee,
-            ),
-          ];
-        }
-        if (printRows.length) openPrintWindow(printRows);
-      } else {
-        await payVoucher({
-          id: selectedVoucher.id,
-          amount: amountToPay,
-          paymentMethod: payForm.paymentMethod,
-          remarks: payForm.remarks,
-        }).unwrap();
-        toast.success('Payment recorded successfully');
       }
+      if (excessDeposited > 0) {
+        const studentRow = selectedVoucher?.studentId;
+        const monthlyFee = estimateMonthlyFee(selectedVoucher, studentSummary, studentRow);
+        const paidMonths = paidList.map((x: any) => ({
+          month: x.month,
+          year: Number(x.year),
+        }));
+        const latestPaid = maxMonthYearInList(paidMonths);
+        const startAfter = latestPaid ?? {
+          month: selectedVoucher.month,
+          year: Number(selectedVoucher.year),
+        };
+        printRows = [
+          ...printRows,
+          ...buildAdvanceProjectionVouchers(
+            {
+              studentId: studentRow,
+              classId: selectedVoucher.classId,
+              sectionId: selectedVoucher.sectionId,
+            },
+            startAfter.month,
+            startAfter.year,
+            excessDeposited,
+            monthlyFee,
+          ),
+        ];
+      }
+      if (printRows.length) openPrintWindow(printRows);
       setPayDialog(false);
     } catch (err: any) { toast.error(err?.data?.message || 'Payment failed'); }
   };
@@ -726,9 +741,49 @@ export default function FeeVouchers() {
 
   const svNet = selectedVoucher ? vNet(selectedVoucher) : 0;
   const remaining = selectedVoucher ? Math.max(0, svNet - (selectedVoucher.paidAmount || 0)) : 0;
-  const quickPayFull = Math.max(remaining, Number(studentSummary?.totalPending || 0));
-  const payPercent = svNet > 0
-    ? Math.min(100, Math.round((Number(payForm.amount) / svNet) * 100))
+
+  // Selectable months for the Pay dialog — the student's pending vouchers, always
+  // including the one that was clicked (in case the summary hasn't loaded/refreshed yet).
+  const monthOptions = useMemo(() => {
+    const list = (studentSummary?.pendingVouchers || []).map((pv: any) => ({
+      id: pv.id,
+      month: pv.month,
+      year: Number(pv.year),
+      status: pv.status,
+      remaining: Number(pv.remaining || 0),
+    }));
+    if (selectedVoucher) {
+      const svId = selectedVoucher.id || selectedVoucher._id;
+      if (!list.some((m) => m.id === svId)) {
+        list.push({ id: svId, month: selectedVoucher.month, year: Number(selectedVoucher.year), status: selectedVoucher.status, remaining });
+      }
+    }
+    return list.sort((a, b) => (a.year - b.year) || (MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month)));
+  }, [studentSummary, selectedVoucher, remaining]);
+
+  const selectedMonthsTotal = monthOptions
+    .filter((m) => selectedMonthIds.includes(m.id))
+    .reduce((s, m) => s + m.remaining, 0);
+
+  /** Update which months are checked AND auto-fill Amount Paying with their combined total. */
+  const applyMonthSelection = (ids: string[]) => {
+    setSelectedMonthIds(ids);
+    const total = monthOptions.filter((m) => ids.includes(m.id)).reduce((s, m) => s + m.remaining, 0);
+    setPayForm((f) => ({ ...f, amount: String(total) }));
+  };
+  const toggleMonthSelect = (id: string) => {
+    applyMonthSelection(
+      selectedMonthIds.includes(id) ? selectedMonthIds.filter((x) => x !== id) : [...selectedMonthIds, id]
+    );
+  };
+  const selectThisMonthOnly = () => {
+    if (selectedVoucher) applyMonthSelection([selectedVoucher.id || selectedVoucher._id]);
+  };
+  const selectAllArrearsMonths = () => applyMonthSelection(monthOptions.map((m) => m.id));
+
+  const quickPayFull = selectedMonthsTotal;
+  const payPercent = quickPayFull > 0
+    ? Math.min(100, Math.round((Number(payForm.amount) / quickPayFull) * 100))
     : 0;
 
   return (
@@ -1124,7 +1179,7 @@ export default function FeeVouchers() {
                   </div>
                   <div className="flex gap-1.5 justify-end">
                     {v.status !== 'cancelled' && bal.totalOutstanding > 0 && (
-                      <Button size="sm" className="h-7 text-xs px-2.5" onClick={() => openPay(v, bal.totalOutstanding)}>
+                      <Button size="sm" className="h-7 text-xs px-2.5" onClick={() => openPay(v)}>
                         <DollarSign className="h-3 w-3 mr-1" /> {v.status === 'paid' ? 'Collect Due' : 'Collect'}
                       </Button>
                     )}
@@ -1346,7 +1401,7 @@ export default function FeeVouchers() {
                           <Wallet className="h-4 w-4 text-emerald-600 shrink-0" />
                           <div>
                             <p className="text-xs font-semibold text-emerald-800">Credit Wallet Balance</p>
-                            <p className="text-[10px] text-emerald-600">Will be auto-applied oldest-first on payment</p>
+                            <p className="text-[10px] text-emerald-600">Will be auto-applied to the month(s) you select below</p>
                           </div>
                         </div>
                         <p className="text-base font-bold text-emerald-700">{formatMoney(studentSummary.creditBalance)}</p>
@@ -1377,30 +1432,7 @@ export default function FeeVouchers() {
                       </div>
                     </div>
 
-                    {/* Pending months breakdown */}
-                    {studentSummary.pendingVouchers?.length > 0 && (
-                      <div className="px-3 py-2 space-y-1">
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                          <TrendingDown className="h-3 w-3 text-red-500" /> Pending Months
-                        </p>
-                        <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                          {studentSummary.pendingVouchers.map((pv: any) => {
-                            const cfg = STATUS_CONFIG[pv.status] || STATUS_CONFIG.unpaid;
-                            const isCurrent = pv.id === (selectedVoucher.id || selectedVoucher._id);
-                            return (
-                              <div key={pv.id} className={`flex items-center justify-between text-xs rounded px-2 py-1 ${isCurrent ? 'bg-amber-50 border border-amber-200' : 'bg-muted/40'}`}>
-                                <div className="flex items-center gap-1.5">
-                                  {isCurrent && <span className="text-[9px] font-bold text-amber-600 uppercase">current</span>}
-                                  <span className="font-medium">{pv.month} {pv.year}</span>
-                                  <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-medium border ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
-                                </div>
-                                <span className="font-semibold text-red-600">{formatMoney(pv.remaining)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    {/* Pending months are now shown as an interactive checklist below (Select Month(s) to Collect) */}
 
                     {/* Last payment info */}
                     {studentSummary.lastPaid && (
@@ -1432,38 +1464,92 @@ export default function FeeVouchers() {
                 ) : null}
               </div>
 
-              {/* ── Current voucher details ── */}
-              <div className="rounded-lg border bg-muted/30 px-3 py-2.5 space-y-1.5">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  Collecting for: {selectedVoucher.month} {selectedVoucher.year} · {selectedVoucher.voucherNumber || 'No voucher #'}
-                </p>
-                {selectedVoucher.feeItems?.length > 0 && (
-                  <div className="space-y-0.5">
-                    {selectedVoucher.feeItems.map((fi: any, i: number) => (
-                      <div key={i} className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">{fi.name}</span>
-                        <span>{formatMoney(fi.amount || 0)}</span>
-                      </div>
-                    ))}
-                    {(selectedVoucher.discount || 0) > 0 && (
-                      <div className="flex justify-between text-xs text-emerald-600">
-                        <span>Discount</span>
-                        <span>− {formatMoney(selectedVoucher.discount)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-xs font-semibold border-t pt-1 mt-1">
-                      <span>Net Due</span>
-                      <span>{formatMoney(svNet)}</span>
-                    </div>
-                    {(selectedVoucher.paidAmount || 0) > 0 && (
-                      <div className="flex justify-between text-xs font-semibold text-amber-600">
-                        <span>Remaining</span>
-                        <span>{formatMoney(remaining)}</span>
-                      </div>
-                    )}
+              {/* ── Select month(s) to collect ── */}
+              <div className="rounded-lg border overflow-hidden">
+                <div className="bg-muted/60 px-3 py-2 flex items-center justify-between gap-2 border-b flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <CalendarCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Select Month(s) to Collect</span>
                   </div>
-                )}
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      className="text-[10px] font-medium px-2 py-1 rounded-full border hover:bg-muted transition-colors"
+                      onClick={selectThisMonthOnly}
+                    >
+                      This Month Only
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[10px] font-medium px-2 py-1 rounded-full border border-red-200 text-red-600 hover:bg-red-50 transition-colors flex items-center gap-1"
+                      onClick={selectAllArrearsMonths}
+                    >
+                      <ChevronsUp className="h-2.5 w-2.5" /> All Arrears
+                    </button>
+                  </div>
+                </div>
+                <div className="divide-y max-h-48 overflow-y-auto">
+                  {monthOptions.map((m) => {
+                    const cfg = STATUS_CONFIG[m.status] || STATUS_CONFIG.unpaid;
+                    const checked = selectedMonthIds.includes(m.id);
+                    return (
+                      <label
+                        key={m.id}
+                        className={`flex items-center justify-between gap-2 px-3 py-2 cursor-pointer transition-colors ${checked ? 'bg-emerald-50/70' : 'hover:bg-muted/40'}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Checkbox checked={checked} onCheckedChange={() => toggleMonthSelect(m.id)} />
+                          <span className="text-sm font-medium">{m.month} {m.year}</span>
+                          <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-medium border ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-red-600">{formatMoney(m.remaining)}</span>
+                      </label>
+                    );
+                  })}
+                  {monthOptions.length === 0 && (
+                    <p className="px-3 py-3 text-xs text-muted-foreground text-center">No pending months found</p>
+                  )}
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-t">
+                  <span className="text-xs text-muted-foreground">
+                    {selectedMonthIds.length} of {monthOptions.length} month{monthOptions.length !== 1 ? 's' : ''} selected
+                  </span>
+                  <span className="text-sm font-bold">{formatMoney(selectedMonthsTotal)}</span>
+                </div>
               </div>
+
+              {/* ── Itemized fee breakdown — only when the single clicked voucher is the sole selection ── */}
+              {selectedMonthIds.length === 1 &&
+                selectedMonthIds[0] === (selectedVoucher.id || selectedVoucher._id) &&
+                selectedVoucher.feeItems?.length > 0 && (
+                <div className="rounded-lg border bg-muted/30 px-3 py-2.5 space-y-0.5">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                    {selectedVoucher.voucherNumber || 'No voucher #'} · Fee Breakdown
+                  </p>
+                  {selectedVoucher.feeItems.map((fi: any, i: number) => (
+                    <div key={i} className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">{fi.name}</span>
+                      <span>{formatMoney(fi.amount || 0)}</span>
+                    </div>
+                  ))}
+                  {(selectedVoucher.discount || 0) > 0 && (
+                    <div className="flex justify-between text-xs text-emerald-600">
+                      <span>Discount</span>
+                      <span>− {formatMoney(selectedVoucher.discount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs font-semibold border-t pt-1 mt-1">
+                    <span>Net Due</span>
+                    <span>{formatMoney(svNet)}</span>
+                  </div>
+                  {(selectedVoucher.paidAmount || 0) > 0 && (
+                    <div className="flex justify-between text-xs font-semibold text-amber-600">
+                      <span>Remaining</span>
+                      <span>{formatMoney(remaining)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* ── Amount input ── */}
               <div className="space-y-1.5">
@@ -1482,16 +1568,16 @@ export default function FeeVouchers() {
                   >
                     Full — {formatMoney(quickPayFull)}
                   </button>
-                  {remaining > 0 && (
+                  {selectedMonthsTotal > 0 && (
                     <button
                       className="text-xs px-2 py-1 rounded border hover:bg-muted transition-colors"
-                      onClick={() => setPayForm({ ...payForm, amount: String(Math.floor(remaining / 2)) })}
+                      onClick={() => setPayForm({ ...payForm, amount: String(Math.floor(selectedMonthsTotal / 2)) })}
                     >
-                      Half — {formatMoney(Math.floor(remaining / 2))}
+                      Half — {formatMoney(Math.floor(selectedMonthsTotal / 2))}
                     </button>
                   )}
                   {/* Use credit wallet shortcut */}
-                  {studentSummary && studentSummary.creditBalance > 0 && remaining > 0 && (
+                  {studentSummary && studentSummary.creditBalance > 0 && selectedMonthsTotal > 0 && (
                     <button
                       className="text-xs px-2 py-1 rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center gap-1"
                       onClick={() => setPayForm({ ...payForm, amount: '0' })}
@@ -1501,18 +1587,8 @@ export default function FeeVouchers() {
                       Credit: +{studentSummary.creditBalance.toLocaleString()}
                     </button>
                   )}
-                  {/* Pay all outstanding shortcut */}
-                  {studentSummary && studentSummary.totalPending > remaining && (
-                    <button
-                      className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors flex items-center gap-1"
-                      onClick={() => setPayForm({ ...payForm, amount: String(Math.max(0, studentSummary.totalPending - (studentSummary.creditBalance || 0))) })}
-                    >
-                      <ChevronsUp className="h-3 w-3" />
-                      All Arrears — {formatMoney(studentSummary.totalPending)}
-                    </button>
-                  )}
                 </div>
-                {payForm.amount && Number(payForm.amount) > 0 && selectedVoucher.netAmount > 0 && (
+                {payForm.amount && Number(payForm.amount) > 0 && quickPayFull > 0 && (
                   <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                     <div
                       className="h-full rounded-full bg-emerald-500 transition-all"
@@ -1556,9 +1632,9 @@ export default function FeeVouchers() {
             <Button
               className="bg-emerald-600 hover:bg-emerald-700"
               onClick={handlePay}
-              disabled={paying || bulkPaying || !payForm.amount || Number(payForm.amount) <= 0}
+              disabled={bulkPaying || !payForm.amount || Number(payForm.amount) <= 0 || !selectedMonthIds.length}
             >
-              {(paying || bulkPaying)
+              {bulkPaying
                 ? <><RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />Processing…</>
                 : <><CheckCircle2 className="mr-2 h-3.5 w-3.5" />Confirm {formatMoney(Number(payForm.amount || 0))}</>
               }
@@ -2072,6 +2148,11 @@ function buildPrintHTML(
   .vc-total td { padding: 3.5px 5px; font-size: calc(9.2px * ${selectedSize.scale}); }
   .vc-total td.tlbl { width: 70%; font-weight: 600; }
   .vc-total td.tamt { text-align: right; font-weight: 800; font-size: calc(10.5px * ${selectedSize.scale}); }
+  /* Paid / Remaining breakdown rows (only rendered when something has been paid) */
+  .vc-total tr.paid-row td { font-weight: 600; }
+  .vc-total tr.paid-row td.paid-amt { font-weight: 800; }
+  .vc-total tr.due-row td, .vc-total tr.cleared-row td { border-top: 1px dashed #999; }
+  .vc-total tr.due-row td.due-amt { font-weight: 900; }
 
   /* ── PAID stamp (B&W) ─────────────────── */
   .paid-stamp {
@@ -2118,6 +2199,47 @@ function buildPrintHTML(
     word-break: break-word;
   }
 
+  /* ── "Payment Received" banner — states exactly which month(s) this receipt covers ── */
+  .vc-paid-banner {
+    text-align: center;
+    padding: 2px 4px 1.5px;
+    border-bottom: 1px dashed #000;
+    background: #f3f3f3;
+  }
+  .vc-paid-banner-title {
+    font-size: calc(9px * ${selectedSize.scale});
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .vc-paid-banner-detail {
+    display: block;
+    font-size: calc(8px * ${selectedSize.scale});
+    font-weight: 600;
+  }
+
+  /* ── Still-outstanding arrear rows shown for context (not part of this payment) ── */
+  .pending-row td { font-style: italic; color: #444; }
+  .pending-tag {
+    font-style: normal;
+    font-size: calc(6.5px * ${selectedSize.scale});
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    border: 1px solid #888;
+    border-radius: 3px;
+    padding: 0 3px;
+    margin-left: 3px;
+    white-space: nowrap;
+  }
+  .vc-arrears-note {
+    text-align: center;
+    font-size: calc(7px * ${selectedSize.scale});
+    font-style: italic;
+    color: #444;
+    padding: 2px 4px;
+    border-top: 1px dashed #aaa;
+  }
+
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     @page { size: A4 portrait; margin: 0; }
@@ -2158,15 +2280,21 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
       ];
 
   const itemRows = displayLineItems
-    .map(
-      (fi: any, i: number) =>
-        `<tr>
+    .map((fi: any, i: number) => {
+      const isPendingRow = !!fi.isPending;
+      const label = isPendingRow ? `${fi.name} <span class="pending-tag">NOT PAID TODAY</span>` : fi.name;
+      return `<tr${isPendingRow ? ' class="pending-row"' : ''}>
           <td class="sno">${i + 1}</td>
-          <td>${fi.name}</td>
+          <td>${label}</td>
           <td class="r">${(fi.amount || 0).toLocaleString()}/-</td>
-        </tr>`,
-    )
+        </tr>`;
+    })
     .join('');
+
+  // How much of the displayed total is arrears from OTHER months, not covered by this payment
+  const otherArrearsTotal = displayLineItems
+    .filter((fi: any) => fi.isPending)
+    .reduce((s: number, fi: any) => s + (fi.amount || 0), 0);
 
   const discountRow =
     discount > 0
@@ -2188,12 +2316,51 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   const lineItemsTotal = displayLineItems.reduce((s, fi) => s + (fi.amount || 0), 0);
   const totalAmount = Math.max(0, lineItemsTotal - discount + fine);
 
+  // Explicit banner stating which month(s) THIS payment covered — set only right after
+  // a fresh collection, so a printed receipt never leaves it ambiguous which month was paid.
+  const paidBanner = v.paidThisTransaction
+    ? `<div class="vc-paid-banner">
+        <span class="vc-paid-banner-title">✓ Payment Received${(v.paidMonthsCount || 1) > 1 ? ` — ${v.paidMonthsCount} Month(s)` : ''}</span>
+        <span class="vc-paid-banner-detail">For: ${v.paidMonthsLabel || `${v.month} ${v.year}`} &nbsp;|&nbsp; Amount: ${currencySymbol} ${Number(v.amountPaidNow || 0).toLocaleString()}/-</span>
+      </div>`
+    : '';
+
+  const arrearsNote = v.paidThisTransaction && otherArrearsTotal > 0
+    ? `<div class="vc-arrears-note">Also shows ${currencySymbol} ${otherArrearsTotal.toLocaleString()}/- in other outstanding month(s) — not part of this payment</div>`
+    : '';
+
+  // Paid Amount / Remaining Payable breakdown — shown whenever something has actually
+  // been paid (a fresh receipt, or a reprint of a partially/fully paid voucher).
+  // Remaining Payable = Total Amount (current voucher + any listed arrears) − what's paid.
+  const paidAmountDisplay = v.paidThisTransaction
+    ? Number(v.amountPaidNow || 0)
+    : Number(v.paidAmount || 0);
+  const remainingPayable = Math.max(0, totalAmount - paidAmountDisplay);
+  const totalsRows = paidAmountDisplay > 0
+    ? `<tr>
+        <td class="tlbl">Total Amount (${currencySymbol}):</td>
+        <td class="tamt">${totalAmount.toLocaleString()}/-</td>
+      </tr>
+      <tr class="paid-row">
+        <td class="tlbl">Paid Amount (${currencySymbol}):</td>
+        <td class="tamt paid-amt">${paidAmountDisplay.toLocaleString()}/-</td>
+      </tr>
+      <tr class="${remainingPayable > 0 ? 'due-row' : 'cleared-row'}">
+        <td class="tlbl">Remaining Payable (${currencySymbol}):</td>
+        <td class="tamt${remainingPayable > 0 ? ' due-amt' : ''}">${remainingPayable.toLocaleString()}/-</td>
+      </tr>`
+    : `<tr>
+        <td class="tlbl">Total Amount (${currencySymbol}):</td>
+        <td class="tamt">${totalAmount.toLocaleString()}/-</td>
+      </tr>`;
+
   return `<div class="vc">
   <div class="vc-head">
     <div class="vc-school">${schoolName}</div>
     <div class="vc-title">${v.isAdvanceProjection ? 'Advance Fee Receipt' : 'Fee Challan Voucher'}</div>
     <div class="vc-sub">${v.isAdvanceProjection ? '<span style="font-weight:600">Paid in advance</span> · ' : ''}Month: <b>${v.month || '—'} ${v.year || ''}</b> &nbsp;&nbsp; Session: <b>${session}</b></div>
   </div>
+  ${paidBanner}
   <table class="vc-info">
     <tr>
       <td class="lbl">Voucher#</td>
@@ -2244,11 +2411,9 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     </tbody>
   </table>
   <table class="vc-total">
-    <tr>
-      <td class="tlbl">Total Amount (${currencySymbol}):</td>
-      <td class="tamt">${totalAmount.toLocaleString()}/-</td>
-    </tr>
+    ${totalsRows}
   </table>
+  ${arrearsNote}
   <div class="vc-sigs">
     <span>Issued by: ___________</span>
     <span>Checked by: ___________</span>

@@ -118,6 +118,10 @@ const bulkPayStudentVouchers = {
     paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'cheque', 'online', 'other', 'credit_wallet'),
     categoryId: Joi.string().custom(objectId).allow(null, ''),
     remarks: Joi.string().allow('', null),
+    // Explicit set of voucher (month) ids the user selected to collect for.
+    // When provided, payment is applied ONLY to these vouchers (in chronological
+    // order among themselves) instead of every pending voucher oldest-first.
+    voucherIds: Joi.array().items(Joi.string().custom(objectId)).min(1),
   }),
 };
 
