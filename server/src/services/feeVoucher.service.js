@@ -1144,6 +1144,8 @@ const getStudentFeeLedger = async (studentId, scope = {}) => {
       debit: net,
       credit: 0,
       paymentMethod: '',
+      dueDate: v.dueDate || null,
+      paidDate: v.paidDate || null,
       meta: {
         dueDate: v.dueDate || null,
         remarks: v.remarks || '',
@@ -1166,6 +1168,8 @@ const getStudentFeeLedger = async (studentId, scope = {}) => {
       debit: 0,
       credit: t.amount || 0,
       paymentMethod: t.paymentMethod || '',
+      dueDate: v?.dueDate || null,
+      paidDate: t.date || t.createdAt,
       meta: {
         description: t.description || '',
       },
@@ -1187,6 +1191,8 @@ const getStudentFeeLedger = async (studentId, scope = {}) => {
         debit: 0,
         credit: v.paidAmount || 0,
         paymentMethod: v.paymentMethod || '',
+        dueDate: v.dueDate || null,
+        paidDate: v.paidDate || v.createdAt,
         meta: {
           remarks: v.remarks || '',
         },
@@ -1209,6 +1215,8 @@ const getStudentFeeLedger = async (studentId, scope = {}) => {
       debit: isCredit ? 0 : absAmount,
       credit: isCredit ? absAmount : 0,
       paymentMethod: w.paymentMethod || '',
+      dueDate: v?.dueDate || null,
+      paidDate: null,
       meta: {
         walletType: w.type,
         balanceAfter: w.balanceAfter,

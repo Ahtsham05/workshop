@@ -1838,19 +1838,27 @@ export default function FeeVouchers() {
                 </div>
               </div>
 
-              <div className="rounded border overflow-hidden">
-                <div className="grid grid-cols-[8rem_1fr_7rem_7rem_7rem] gap-2 px-3 py-2 bg-muted/50 text-[11px] font-medium text-muted-foreground border-b">
+              <div className="rounded border overflow-x-auto">
+                <div className="grid grid-cols-[7rem_6rem_6rem_1fr_6rem_6rem_6rem] gap-2 px-3 py-2 bg-muted/50 text-[11px] font-medium text-muted-foreground border-b min-w-[48rem]">
                   <span>Date</span>
+                  <span>Due Date</span>
+                  <span>Paid Date</span>
                   <span>Particular</span>
                   <span className="text-right">Debit</span>
                   <span className="text-right">Credit</span>
                   <span className="text-right">Balance</span>
                 </div>
-                <div className="max-h-[50vh] overflow-y-auto divide-y">
+                <div className="max-h-[50vh] overflow-y-auto divide-y min-w-[48rem]">
                   {(studentLedger.entries || []).map((e: any, idx: number) => (
-                    <div key={idx} className="grid grid-cols-[8rem_1fr_7rem_7rem_7rem] gap-2 px-3 py-2 text-xs items-start">
+                    <div key={idx} className="grid grid-cols-[7rem_6rem_6rem_1fr_6rem_6rem_6rem] gap-2 px-3 py-2 text-xs items-start">
                       <span className="text-muted-foreground">
                         {e.date ? new Date(e.date).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {e.dueDate ? new Date(e.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {e.paidDate ? new Date(e.paidDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                       </span>
                       <div>
                         <p className="font-medium">{e.label}</p>
@@ -2422,6 +2430,9 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   const dueDate = v.dueDate
     ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })
     : '—';
+  const paidDate = v.paidDate
+    ? new Date(v.paidDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
   const session = `${v.year || ''}–${(v.year || 0) + 1}`;
   const guardianPhone = v.studentId?.parent?.phone || '—';
   const fatherName = v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName || '—';
@@ -2554,7 +2565,10 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     </tr>
     <tr>
       <td class="lbl">Guardian #</td>
-      <td class="val" colspan="4">${guardianPhone}</td>
+      <td class="val">${guardianPhone}</td>
+      <td class="sep"></td>
+      <td class="lbl">Paid Date</td>
+      <td class="val">${paidAmountDisplay > 0 ? paidDate : '—'}</td>
     </tr>
   </table>
   <table class="vc-fee">
