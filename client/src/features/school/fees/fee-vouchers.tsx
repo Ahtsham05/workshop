@@ -29,7 +29,7 @@ import {
 } from '@/stores/school.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useGetBranchQuery } from '@/stores/branch.api';
-import { invoiceNoteToSafeHtml } from '@/lib/escape-html';
+import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html';
 import { useFormatMoney, useCurrencyMeta, FALLBACK_CURRENCY } from '@/lib/format-money';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/stores/store';
@@ -564,7 +564,6 @@ export default function FeeVouchers() {
         ? `${formatMoney(amountToPay)} received for ${monthsLabel}`
         : `${formatMoney(amountToPay)} processed`;
       if (newCredit > 0) msg += ` · ${formatMoney(newCredit)} saved to credit wallet`;
-      toast.success(msg);
 
       const ids = paidList
         .map((x: any) => x?.voucherId)
@@ -572,6 +571,7 @@ export default function FeeVouchers() {
         .map((id: any) => (typeof id === 'string' ? id : id?.toString?.() ?? ''))
         .filter(Boolean);
       let printRows: any[] = [];
+      let receiptData: any = null;
       if (ids.length) {
         try {
           const rawRows = await getForPrint({ ids, includeArrears: true }).unwrap();
@@ -591,10 +591,43 @@ export default function FeeVouchers() {
                 }
               : r;
           });
+
+          // Build the standalone Payment Received Voucher (receipt) — kept separate from
+          // the Fee Challan reprint above; offered via the "Print Receipt" toast action
+          // (and reprintable later from the Student Fee Ledger) rather than auto-printed.
+          const primary = rawRows[0];
+          receiptData = {
+            receiptNumber: `RCP-${Date.now()}`,
+            paidDate: primary?.paidDate || new Date().toISOString(),
+            studentName: `${primary?.studentId?.firstName || ''} ${primary?.studentId?.lastName || ''}`.trim(),
+            fatherName: primary?.studentId?.parent?.fatherName || primary?.studentId?.parent?.guardianName || '—',
+            admissionNumber: primary?.studentId?.admissionNumber || '—',
+            rollNumber: primary?.studentId?.rollNumber || '—',
+            studentUserId: primary?.studentId?.studentUserId || '—',
+            className: `${primary?.classId?.name || ''}${primary?.sectionId?.name ? ' / ' + primary.sectionId.name : ''}`,
+            paymentMethod: payForm.paymentMethod,
+            remarks: payForm.remarks,
+            items: paidList.map((x: any) => {
+              const match = rawRows.find((r: any) => String(r.id || r._id) === String(x.voucherId));
+              const label = match?.feeItems?.length === 1
+                ? feeItemLabel(match.feeItems[0].name, x.month, x.year)
+                : feeItemLabel('Fee', x.month, x.year);
+              return { label, amount: Number(x.applied || 0) };
+            }),
+            totalAmount: amountToPay,
+          };
         } catch {
           toast.error('Payment saved but print preview failed to load');
         }
       }
+
+      toast.success(
+        msg,
+        receiptData
+          ? { action: { label: 'Print Receipt', onClick: () => openReceiptPrintWindow(receiptData) }, duration: 8000 }
+          : undefined
+      );
+
       if (excessDeposited > 0) {
         const studentRow = selectedVoucher?.studentId;
         const monthlyFee = estimateMonthlyFee(selectedVoucher, studentSummary, studentRow);
@@ -702,26 +735,49 @@ export default function FeeVouchers() {
     setExpandedGroups((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
   };
 
-  const handlePrint = async (overrideVouchers?: any[], voucherId?: string | string[]) => {
+  /** `statusFilter` splits a bulk print into two independent actions — "Print Paid Vouchers"
+   * (receipts for what's already settled) vs. "Print Fee Vouchers" (bills still owed) — so
+   * a single batch never mixes settled and outstanding vouchers together. Per-voucher/group
+   * print buttons pass an explicit `voucherId` and skip this filter entirely. */
+  const handlePrint = async (
+    overrideVouchers?: any[],
+    voucherId?: string | string[],
+    statusFilter?: 'paid' | 'pending'
+  ) => {
     if (overrideVouchers) {
       openPrintWindow(overrideVouchers);
       return;
     }
     const includeArrears = printArrearsMode === 'with_arrears';
     const voucherIds = Array.isArray(voucherId) ? voucherId : voucherId ? [voucherId] : null;
-    const printableVouchers = voucherIds
+    const baseVouchers = voucherIds
       ? vouchers.filter((v: any) => voucherIds.includes(v.id))
       : selectedIds.length
         ? vouchers.filter((v: any) => selectedIds.includes(v.id))
-        : vouchers.filter((v: any) => v.status !== 'paid');
+        : vouchers;
+    const printableVouchers =
+      statusFilter === 'paid'
+        ? baseVouchers.filter((v: any) => v.status === 'paid')
+        : statusFilter === 'pending'
+          ? baseVouchers.filter((v: any) => v.status !== 'paid')
+          : baseVouchers;
     const ids = printableVouchers.map((v: any) => v.id);
-    if (!ids.length) return toast.error('No vouchers to print');
+    if (!ids.length) {
+      return toast.error(
+        statusFilter === 'paid'
+          ? 'No paid vouchers to print'
+          : statusFilter === 'pending'
+            ? 'No pending fee vouchers to print'
+            : 'No vouchers to print'
+      );
+    }
     try {
       const data = await getForPrint({ ids, includeArrears }).unwrap();
-      if (!selectedIds.length && !voucherId) {
-        const skippedPaid = vouchers.length - printableVouchers.length;
-        if (skippedPaid > 0) {
-          toast.info(`Skipped ${skippedPaid} paid voucher${skippedPaid > 1 ? 's' : ''} in Print All`);
+      if (statusFilter && !voucherIds) {
+        const skipped = baseVouchers.length - printableVouchers.length;
+        if (skipped > 0) {
+          const skippedLabel = statusFilter === 'paid' ? 'unpaid' : 'paid';
+          toast.info(`Skipped ${skipped} ${skippedLabel} voucher${skipped > 1 ? 's' : ''}`);
         }
       }
       openPrintWindow(data);
@@ -802,6 +858,17 @@ export default function FeeVouchers() {
     setTimeout(() => { win.print(); }, 600);
   };
 
+  /** Prints a "Payment Received Voucher" receipt for a single collection — separate
+   * from the Fee Challan above, triggered manually (not auto-fired on every payment). */
+  const openReceiptPrintWindow = (payment: any) => {
+    const win = window.open('', '_blank');
+    if (!win) return toast.error('Allow pop-ups to print');
+    win.document.write(buildReceiptPrintHTML(payment, org?.name || 'School', currencySymbol));
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 600);
+  };
+
   const svNet = selectedVoucher ? vNet(selectedVoucher) : 0;
   const remaining = selectedVoucher ? Math.max(0, svNet - (selectedVoucher.paidAmount || 0)) : 0;
 
@@ -862,6 +929,12 @@ export default function FeeVouchers() {
     ? Math.min(100, Math.round((Number(payForm.amount) / quickPayFull) * 100))
     : 0;
 
+  // Counts behind the two separate print buttons — respects the current row selection
+  // (if any) so the button labels always match what a click will actually print.
+  const printScopeVouchers = selectedIds.length ? vouchers.filter((v: any) => selectedIds.includes(v.id)) : vouchers;
+  const paidPrintCount = printScopeVouchers.filter((v: any) => v.status === 'paid').length;
+  const pendingPrintCount = printScopeVouchers.filter((v: any) => v.status !== 'paid').length;
+
   return (
     <div className="h-full w-full p-4 space-y-4">
       {/* Header */}
@@ -879,10 +952,28 @@ export default function FeeVouchers() {
             </SelectContent>
           </Select>
           {(selectedIds.length > 0 || vouchers.length > 0) && (
-            <Button variant="outline" size="sm" onClick={() => handlePrint()} disabled={loadingPrint}>
-              <Printer className="mr-1.5 h-3.5 w-3.5" />
-              {selectedIds.length > 0 ? `Print (${selectedIds.length})` : 'Print All'}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePrint(undefined, undefined, 'pending')}
+                disabled={loadingPrint || pendingPrintCount === 0}
+                title="Print unpaid / partially-paid fee vouchers only"
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Print Fee Vouchers ({pendingPrintCount})
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePrint(undefined, undefined, 'paid')}
+                disabled={loadingPrint || paidPrintCount === 0}
+                title="Print already-paid vouchers only (receipts)"
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Print Paid Vouchers ({paidPrintCount})
+              </Button>
+            </>
           )}
           <Select value={printLayout} onValueChange={(v: any) => setPrintLayout(v)}>
             <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Print Size" /></SelectTrigger>
@@ -1289,9 +1380,24 @@ export default function FeeVouchers() {
                       >
                         <ArrowUpCircle className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => handlePrint(undefined, groupIds)}>
-                        <Printer className="h-3 w-3" />
-                      </Button>
+                      {group.some((g: any) => g.status !== 'paid') && (
+                        <Button
+                          size="icon" variant="outline" className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-200"
+                          title="Print fee voucher(s) — unpaid/partial"
+                          onClick={() => handlePrint(undefined, groupIds, 'pending')}
+                        >
+                          <Printer className="h-3 w-3" />
+                        </Button>
+                      )}
+                      {group.some((g: any) => g.status === 'paid') && (
+                        <Button
+                          size="icon" variant="outline" className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                          title="Print paid voucher(s) — receipt"
+                          onClick={() => handlePrint(undefined, groupIds, 'paid')}
+                        >
+                          <Printer className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -1839,7 +1945,7 @@ export default function FeeVouchers() {
               </div>
 
               <div className="rounded border overflow-x-auto">
-                <div className="grid grid-cols-[7rem_6rem_6rem_1fr_6rem_6rem_6rem] gap-2 px-3 py-2 bg-muted/50 text-[11px] font-medium text-muted-foreground border-b min-w-[48rem]">
+                <div className="grid grid-cols-[7rem_6rem_6rem_1fr_6rem_6rem_6rem_2rem] gap-2 px-3 py-2 bg-muted/50 text-[11px] font-medium text-muted-foreground border-b min-w-[50rem]">
                   <span>Date</span>
                   <span>Due Date</span>
                   <span>Paid Date</span>
@@ -1847,10 +1953,11 @@ export default function FeeVouchers() {
                   <span className="text-right">Debit</span>
                   <span className="text-right">Credit</span>
                   <span className="text-right">Balance</span>
+                  <span></span>
                 </div>
-                <div className="max-h-[50vh] overflow-y-auto divide-y min-w-[48rem]">
+                <div className="max-h-[50vh] overflow-y-auto divide-y min-w-[50rem]">
                   {(studentLedger.entries || []).map((e: any, idx: number) => (
-                    <div key={idx} className="grid grid-cols-[7rem_6rem_6rem_1fr_6rem_6rem_6rem] gap-2 px-3 py-2 text-xs items-start">
+                    <div key={idx} className="grid grid-cols-[7rem_6rem_6rem_1fr_6rem_6rem_6rem_2rem] gap-2 px-3 py-2 text-xs items-start">
                       <span className="text-muted-foreground">
                         {e.date ? new Date(e.date).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                       </span>
@@ -1870,6 +1977,32 @@ export default function FeeVouchers() {
                       <span className="text-right text-red-600">{(e.debit || 0) > 0 ? (e.debit || 0).toLocaleString() : '—'}</span>
                       <span className="text-right text-emerald-700">{(e.credit || 0) > 0 ? (e.credit || 0).toLocaleString() : '—'}</span>
                       <span className="text-right font-semibold">{(e.runningBalance || 0).toLocaleString()}</span>
+                      <span className="flex justify-end">
+                        {e.type === 'voucher_payment' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            title="Print Payment Receipt"
+                            onClick={() => openReceiptPrintWindow({
+                              receiptNumber: `RCP-${e.voucherNumber || 'ADV'}-${new Date(e.paidDate || e.date).getTime()}`,
+                              paidDate: e.paidDate || e.date,
+                              studentName: studentLedger.student?.name || '—',
+                              fatherName: studentLedger.student?.fatherName || '—',
+                              admissionNumber: studentLedger.student?.admissionNumber || '—',
+                              rollNumber: studentLedger.student?.rollNumber || '—',
+                              studentUserId: studentLedger.student?.studentUserId || '—',
+                              className: studentLedger.student?.className || '—',
+                              paymentMethod: e.paymentMethod || '—',
+                              remarks: e.meta?.description || e.meta?.remarks || '',
+                              items: [{ label: e.label, amount: e.credit || 0 }],
+                              totalAmount: e.credit || 0,
+                            })}
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -2153,49 +2286,9 @@ export default function FeeVouchers() {
   );
 }
 
-// ── Professional Print HTML (auto-pack max vouchers per page) ─────────────────────
-function buildPrintHTML(
-  vouchers: any[],
-  schoolName: string,
-  invoiceNote?: string,
-  settings?: { layout?: 'auto' | 'large' | 'medium' | 'compact'; rowsPerPage?: 'auto' | '2' | '3' | '4' | '5' | '6' },
-  currencySymbol: string = FALLBACK_CURRENCY.symbol
-): string {
-  const autoLayout = vouchers.length <= 2 ? 'large' : vouchers.length <= 4 ? 'medium' : 'compact';
-  const layout = settings?.layout && settings.layout !== 'auto' ? settings.layout : autoLayout;
-  const rowsPerPage = settings?.rowsPerPage && settings.rowsPerPage !== 'auto' ? Number(settings.rowsPerPage) : 0;
-  const sizeMap = {
-    large: { baseFont: 10, schoolFont: 14, rowGap: 3.8, scale: 1.08 },
-    medium: { baseFont: 9, schoolFont: 13, rowGap: 2.8, scale: 1.03 },
-    compact: { baseFont: 8.5, schoolFont: 12, rowGap: 1.8, scale: 0.98 },
-  } as const;
-  const selectedSize = sizeMap[layout];
-
-  const rowHtml = (v: any, ri: number, total: number) => `
-    <div class="row${ri < total - 1 ? ' has-cut' : ''}">
-      <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy', invoiceNote, currencySymbol)}</div>
-      <div class="vcut"><span>✂</span></div>
-      <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy', invoiceNote, currencySymbol)}</div>
-    </div>
-  `;
-
-  let pageHTML = '';
-  if (rowsPerPage > 0) {
-    for (let i = 0; i < vouchers.length; i += rowsPerPage) {
-      const chunk = vouchers.slice(i, i + rowsPerPage);
-      pageHTML += `<div class="sheet forced-page">${chunk.map((v, idx) => rowHtml(v, idx, chunk.length)).join('')}</div>`;
-    }
-  } else {
-    const rows = vouchers.map((v, ri) => rowHtml(v, ri, vouchers.length)).join('');
-    pageHTML = `<div class="sheet">${rows}</div>`;
-  }
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Fee Vouchers — ${schoolName}</title>
-<style>
+// ── Shared voucher-card CSS (used by the Fee Challan print and the Payment Receipt print) ──
+function voucherPrintCSS(selectedSize: { baseFont: number; schoolFont: number; rowGap: number; scale: number }): string {
+  return `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; background: #fff; color: #000; font-size: ${selectedSize.baseFont}px; }
 
@@ -2401,6 +2494,20 @@ function buildPrintHTML(
     margin-left: 3px;
     white-space: nowrap;
   }
+
+  /* ── Rows that are settled/received — the visual opposite of a pending row ── */
+  .received-row td { font-weight: 600; }
+  .received-tag {
+    font-style: normal;
+    font-size: calc(6.5px * ${selectedSize.scale});
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    border: 1.5px solid #000;
+    border-radius: 3px;
+    padding: 0 3px;
+    margin-left: 3px;
+    white-space: nowrap;
+  }
   .vc-arrears-note {
     text-align: center;
     font-size: calc(7px * ${selectedSize.scale});
@@ -2413,8 +2520,52 @@ function buildPrintHTML(
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     @page { size: A4 portrait; margin: 0; }
+  }`;
+}
+
+// ── Professional Print HTML (auto-pack max vouchers per page) ─────────────────────
+function buildPrintHTML(
+  vouchers: any[],
+  schoolName: string,
+  invoiceNote?: string,
+  settings?: { layout?: 'auto' | 'large' | 'medium' | 'compact'; rowsPerPage?: 'auto' | '2' | '3' | '4' | '5' | '6' },
+  currencySymbol: string = FALLBACK_CURRENCY.symbol
+): string {
+  const autoLayout = vouchers.length <= 2 ? 'large' : vouchers.length <= 4 ? 'medium' : 'compact';
+  const layout = settings?.layout && settings.layout !== 'auto' ? settings.layout : autoLayout;
+  const rowsPerPage = settings?.rowsPerPage && settings.rowsPerPage !== 'auto' ? Number(settings.rowsPerPage) : 0;
+  const sizeMap = {
+    large: { baseFont: 10, schoolFont: 14, rowGap: 3.8, scale: 1.08 },
+    medium: { baseFont: 9, schoolFont: 13, rowGap: 2.8, scale: 1.03 },
+    compact: { baseFont: 8.5, schoolFont: 12, rowGap: 1.8, scale: 0.98 },
+  } as const;
+  const selectedSize = sizeMap[layout];
+
+  const rowHtml = (v: any, ri: number, total: number) => `
+    <div class="row${ri < total - 1 ? ' has-cut' : ''}">
+      <div class="half">${voucherCopyHTML(v, schoolName, 'Student Copy', invoiceNote, currencySymbol)}</div>
+      <div class="vcut"><span>✂</span></div>
+      <div class="half">${voucherCopyHTML(v, schoolName, 'Office Copy', invoiceNote, currencySymbol)}</div>
+    </div>
+  `;
+
+  let pageHTML = '';
+  if (rowsPerPage > 0) {
+    for (let i = 0; i < vouchers.length; i += rowsPerPage) {
+      const chunk = vouchers.slice(i, i + rowsPerPage);
+      pageHTML += `<div class="sheet forced-page">${chunk.map((v, idx) => rowHtml(v, idx, chunk.length)).join('')}</div>`;
+    }
+  } else {
+    const rows = vouchers.map((v, ri) => rowHtml(v, ri, vouchers.length)).join('');
+    pageHTML = `<div class="sheet">${rows}</div>`;
   }
-</style>
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fee Vouchers — ${schoolName}</title>
+<style>${voucherPrintCSS(selectedSize)}</style>
 </head>
 <body>
 ${pageHTML}
@@ -2455,8 +2606,31 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   const itemRows = displayLineItems
     .map((fi: any, i: number) => {
       const isPendingRow = !!fi.isPending;
-      const label = isPendingRow ? `${fi.name} <span class="pending-tag">NOT PAID TODAY</span>` : fi.name;
-      return `<tr${isPendingRow ? ' class="pending-row"' : ''}>
+      // Tag every line item so a print always makes clear, at a glance, which fee(s)
+      // this transaction just received vs. which are still owed — never leaving it to
+      // the reader to infer from the PAID stamp or totals alone.
+      let tagText = '';
+      let tagClass = '';
+      let rowClass = '';
+      if (isPendingRow) {
+        tagText = 'PENDING';
+        tagClass = 'pending-tag';
+        rowClass = ' class="pending-row"';
+      } else if (v.status === 'paid') {
+        tagText = v.paidThisTransaction ? 'RECEIVED' : 'PAID';
+        tagClass = 'received-tag';
+        rowClass = ' class="received-row"';
+      } else if (v.status === 'partial') {
+        tagText = 'PARTIAL';
+        tagClass = 'pending-tag';
+        rowClass = ' class="pending-row"';
+      } else if (v.status === 'unpaid' || v.status === 'overdue') {
+        tagText = 'PENDING';
+        tagClass = 'pending-tag';
+        rowClass = ' class="pending-row"';
+      }
+      const label = tagText ? `${fi.name} <span class="${tagClass}">${tagText}</span>` : fi.name;
+      return `<tr${rowClass}>
           <td class="sno">${i + 1}</td>
           <td>${label}</td>
           <td class="r">${(fi.amount || 0).toLocaleString()}/-</td>
@@ -2600,5 +2774,100 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
 </div>`;
 }
 
+// ── Payment Received Voucher (receipt) — printed on demand, separate from the Fee Challan ──
+function receiptCopyHTML(payment: any, schoolName: string, copyLabel: string, currencySymbol: string = FALLBACK_CURRENCY.symbol): string {
+  const paidOn = payment.paidDate
+    ? new Date(payment.paidDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
+  const items: { label: string; amount: number }[] = payment.items || [];
+  const itemRows = items
+    .map(
+      (it, i) => `<tr>
+          <td class="sno">${i + 1}</td>
+          <td>${it.label}</td>
+          <td class="r">${(it.amount || 0).toLocaleString()}/-</td>
+        </tr>`
+    )
+    .join('');
+
+  return `<div class="vc">
+  <div class="vc-head">
+    <div class="vc-school">${schoolName}</div>
+    <div class="vc-title">Payment Received Voucher</div>
+    <div class="vc-sub">Receipt #: <b>${payment.receiptNumber || '—'}</b> &nbsp;&nbsp; Date: <b>${paidOn}</b></div>
+  </div>
+  <table class="vc-info">
+    <tr>
+      <td class="lbl">Name</td>
+      <td class="val">${payment.studentName || '—'}</td>
+      <td class="sep"></td>
+      <td class="lbl">Father Name</td>
+      <td class="val">${payment.fatherName || '—'}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Adm #</td>
+      <td class="val">${payment.admissionNumber || '—'}</td>
+      <td class="sep"></td>
+      <td class="lbl">Roll No</td>
+      <td class="val">${payment.rollNumber || '—'}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Class</td>
+      <td class="val">${payment.className || '—'}</td>
+      <td class="sep"></td>
+      <td class="lbl">Method</td>
+      <td class="val">${payment.paymentMethod || '—'}</td>
+    </tr>
+  </table>
+  <table class="vc-fee">
+    <thead>
+      <tr>
+        <th style="width:18px;text-align:center">#</th>
+        <th>Description</th>
+        <th class="r" style="width:28%">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemRows}
+    </tbody>
+  </table>
+  <table class="vc-total">
+    <tr>
+      <td class="tlbl">Total Received (${currencySymbol}):</td>
+      <td class="tamt">${(payment.totalAmount || 0).toLocaleString()}/-</td>
+    </tr>
+  </table>
+  ${payment.remarks?.trim() ? `<div class="vc-note">Remarks: ${escapeHtml(payment.remarks.trim())}</div>` : ''}
+  <div class="vc-sigs">
+    <span>Received by: ___________</span>
+    <span>Signature: ___________</span>
+  </div>
+  <div class="vc-copy-label">${copyLabel}</div>
+</div>`;
+}
+
+function buildReceiptPrintHTML(payment: any, schoolName: string, currencySymbol: string = FALLBACK_CURRENCY.symbol): string {
+  const selectedSize = { baseFont: 10, schoolFont: 14, rowGap: 3.8, scale: 1.08 };
+  const rowHtml = `
+    <div class="row">
+      <div class="half">${receiptCopyHTML(payment, schoolName, 'Student Copy', currencySymbol)}</div>
+      <div class="vcut"><span>✂</span></div>
+      <div class="half">${receiptCopyHTML(payment, schoolName, 'Office Copy', currencySymbol)}</div>
+    </div>
+  `;
+  const pageHTML = `<div class="sheet">${rowHtml}</div>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Payment Receipt — ${schoolName}</title>
+<style>${voucherPrintCSS(selectedSize)}</style>
+</head>
+<body>
+${pageHTML}
+</body>
+</html>`;
+}
 
 

@@ -1095,7 +1095,9 @@ const getStudentFeeSummary = async (studentId, scope = {}) => {
  */
 const getStudentFeeLedger = async (studentId, scope = {}) => {
   const student = await Student.findOne({ _id: studentId, ...getTenantFilter(scope) })
-    .select('firstName lastName admissionNumber rollNumber creditBalance')
+    .select('firstName lastName admissionNumber rollNumber studentUserId creditBalance classId sectionId parent.fatherName parent.guardianName')
+    .populate('classId', 'name')
+    .populate('sectionId', 'name')
     .lean();
   if (!student) throw new ApiError(httpStatus.NOT_FOUND, 'Student not found');
 
@@ -1246,6 +1248,9 @@ const getStudentFeeLedger = async (studentId, scope = {}) => {
       name: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
       admissionNumber: student.admissionNumber || '',
       rollNumber: student.rollNumber || '',
+      studentUserId: student.studentUserId || '',
+      fatherName: student.parent?.fatherName || student.parent?.guardianName || '',
+      className: `${student.classId?.name || ''}${student.sectionId?.name ? ' / ' + student.sectionId.name : ''}`.trim(),
       creditBalance: student.creditBalance || 0,
     },
     summary: {
