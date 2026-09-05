@@ -18,13 +18,13 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { User } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { DndTableHeader } from '@/components/data-table/dnd-table-header'
+import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -32,6 +32,15 @@ declare module '@tanstack/react-table' {
     className: string
   }
 }
+
+// Persisted across sessions so a user's drag-to-reorder customization sticks around
+// instead of resetting on every reload.
+const COLUMN_ORDER_STORAGE_KEY = 'users-table-column-order'
+
+// 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
+// neither gets a drag handle nor takes part in reordering, everything else can move
+// freely between them.
+const LOCKED_COLUMN_IDS = ['select', 'actions']
 
 interface DataTableProps {
   columns: ColumnDef<User>[]
@@ -41,6 +50,10 @@ interface DataTableProps {
 export function UsersTable({ columns, data }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnOrder, setColumnOrder] = usePersistedColumnOrder(
+    COLUMN_ORDER_STORAGE_KEY,
+    columns.map(getColumnId)
+  )
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
 
@@ -50,6 +63,7 @@ export function UsersTable({ columns, data }: DataTableProps) {
     state: {
       sorting,
       columnVisibility,
+      columnOrder,
       rowSelection,
       columnFilters,
     },
@@ -58,6 +72,7 @@ export function UsersTable({ columns, data }: DataTableProps) {
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -71,28 +86,12 @@ export function UsersTable({ columns, data }: DataTableProps) {
       <DataTableToolbar table={table} />
       <div className='rounded-md border'>
         <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className='group/row'>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      className={header.column.columnDef.meta?.className ?? ''}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
+          <DndTableHeader
+            table={table}
+            columnOrder={columnOrder}
+            onColumnOrderChange={setColumnOrder}
+            lockedColumnIds={LOCKED_COLUMN_IDS}
+          />
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (

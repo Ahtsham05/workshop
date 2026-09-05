@@ -18,8 +18,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table'
 
@@ -28,6 +26,8 @@ import { SubCategory } from '@/stores/subCategory.slice'
 import { useSubCategoryColumns } from './subcategories-columns'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { DndTableHeader } from '@/components/data-table/dnd-table-header'
+import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { FolderTree } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,15 @@ declare module '@tanstack/react-table' {
     className: string
   }
 }
+
+// Persisted across sessions so a user's drag-to-reorder customization sticks around
+// instead of resetting on every reload.
+const COLUMN_ORDER_STORAGE_KEY = 'subcategories-table-column-order'
+
+// 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
+// neither gets a drag handle nor takes part in reordering, everything else can move
+// freely between them.
+const LOCKED_COLUMN_IDS = ['select', 'actions']
 
 interface SubCategoriesTableProps {
   subCategories: SubCategory[]
@@ -66,6 +75,10 @@ export function SubCategoriesTable({
   const [rowSelection, setRowSelection] = React.useState({})
   const { t, language } = useLanguage()
   const columns = useSubCategoryColumns()
+  const [columnOrder, setColumnOrder] = usePersistedColumnOrder(
+    COLUMN_ORDER_STORAGE_KEY,
+    columns.map(getColumnId)
+  )
 
   React.useEffect(() => {
     if (onSelectedRowsChange) {
@@ -91,10 +104,12 @@ export function SubCategoriesTable({
     getFacetedUniqueValues: getFacetedUniqueValues(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    onColumnOrderChange: setColumnOrder,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
+      columnOrder,
       rowSelection,
     },
   })
@@ -105,30 +120,14 @@ export function SubCategoriesTable({
       <TableLoadingOverlay loading={loading}>
         <div className="rounded-xl border shadow-sm">
         <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className='group/row bg-muted/40 hover:bg-muted/40'>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      className={`${header.column.columnDef.meta?.className ?? ''} ${
-                        language === 'ur' ? 'text-left' : 'text-left'
-                      }`}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
+          <DndTableHeader
+            table={table}
+            columnOrder={columnOrder}
+            onColumnOrderChange={setColumnOrder}
+            lockedColumnIds={LOCKED_COLUMN_IDS}
+            rowClassName='group/row bg-muted/40 hover:bg-muted/40'
+            extraHeaderClassName='text-left'
+          />
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (

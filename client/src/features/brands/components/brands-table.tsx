@@ -18,8 +18,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table'
 
@@ -27,6 +25,8 @@ import type { Brand } from '@/stores/brand.api'
 import { useBrandColumns } from './brands-columns'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
+import { DndTableHeader } from '@/components/data-table/dnd-table-header'
+import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 
 declare module '@tanstack/react-table' {
@@ -35,6 +35,15 @@ declare module '@tanstack/react-table' {
     className: string
   }
 }
+
+// Persisted across sessions so a user's drag-to-reorder customization sticks around
+// instead of resetting on every reload.
+const COLUMN_ORDER_STORAGE_KEY = 'brands-table-column-order'
+
+// 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
+// neither gets a drag handle nor takes part in reordering, everything else can move
+// freely between them.
+const LOCKED_COLUMN_IDS = ['select', 'actions']
 
 interface BrandsTableProps {
   brands: Brand[]
@@ -51,6 +60,10 @@ export function BrandsTable({ brands, paggination, loading, toolbarLeading, tool
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState({})
   const columns = useBrandColumns()
+  const [columnOrder, setColumnOrder] = usePersistedColumnOrder(
+    COLUMN_ORDER_STORAGE_KEY,
+    columns.map(getColumnId)
+  )
 
   React.useEffect(() => {
     if (onSelectedRowsChange) {
@@ -76,10 +89,12 @@ export function BrandsTable({ brands, paggination, loading, toolbarLeading, tool
     getFacetedUniqueValues: getFacetedUniqueValues(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    onColumnOrderChange: setColumnOrder,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
+      columnOrder,
       rowSelection,
     },
   })
@@ -90,23 +105,13 @@ export function BrandsTable({ brands, paggination, loading, toolbarLeading, tool
       <TableLoadingOverlay loading={loading}>
         <div className="rounded-md border">
           <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className='group/row'>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      className={`${header.column.columnDef.meta?.className ?? ''} text-left`}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
+            <DndTableHeader
+              table={table}
+              columnOrder={columnOrder}
+              onColumnOrderChange={setColumnOrder}
+              lockedColumnIds={LOCKED_COLUMN_IDS}
+              extraHeaderClassName='text-left'
+            />
             <TableBody>
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row) => (

@@ -19,14 +19,14 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { Supplier } from '../data/schema'  // Changed from Customer to Supplier
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableViewOptions } from './data-table-view-options'
 import { SupplierListToolbar } from './supplier-list-toolbar'
+import { DndTableHeader } from '@/components/data-table/dnd-table-header'
+import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
@@ -38,6 +38,15 @@ declare module '@tanstack/react-table' {
     className: string
   }
 }
+
+// Persisted across sessions so a user's drag-to-reorder customization sticks around
+// instead of resetting on every reload.
+const COLUMN_ORDER_STORAGE_KEY = 'suppliers-table-column-order'
+
+// 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
+// neither gets a drag handle nor takes part in reordering, everything else can move
+// freely between them.
+const LOCKED_COLUMN_IDS = ['select', 'actions']
 
 interface DataTableProps {
   columns: ColumnDef<Supplier>[]
@@ -73,6 +82,10 @@ export function SupplierTable({
     email: false,
     address: false,
   })
+  const [columnOrder, setColumnOrder] = usePersistedColumnOrder(
+    COLUMN_ORDER_STORAGE_KEY,
+    columns.map(getColumnId)
+  )
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
@@ -104,6 +117,7 @@ export function SupplierTable({
     state: {
       sorting,
       columnVisibility,
+      columnOrder,
       rowSelection,
       columnFilters,
       // We're using server pagination, so don't set pagination state here
@@ -116,6 +130,7 @@ export function SupplierTable({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     // Don't use getPaginationRowModel as we're using server-side pagination
@@ -137,28 +152,12 @@ export function SupplierTable({
       <TableLoadingOverlay loading={loading}>
         <div className='rounded-md border'>
         <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className='group/row'>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      className={header.column.columnDef.meta?.className ?? ''}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
+          <DndTableHeader
+            table={table}
+            columnOrder={columnOrder}
+            onColumnOrderChange={setColumnOrder}
+            lockedColumnIds={LOCKED_COLUMN_IDS}
+          />
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => {

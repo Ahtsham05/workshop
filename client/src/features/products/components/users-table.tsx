@@ -2,9 +2,8 @@ import React, { useRef, useState } from 'react'
 import {
   ColumnDef,
   ColumnFiltersState,
-  ColumnOrderState,
-  Row,
   RowData,
+  Row,
   SortingState,
   VisibilityState,
   flexRender,
@@ -16,34 +15,18 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  arrayMove,
-  horizontalListSortingStrategy,
-  sortableKeyboardCoordinates,
-} from '@dnd-kit/sortable'
-import {
   Table,
   TableBody,
   TableCell,
   TableFooter,
-  TableHead,
-  TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Product } from '../data/schema'
 import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
-import { DraggableTableHead } from './draggable-table-head'
+import { DndTableHeader } from '@/components/data-table/dnd-table-header'
+import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
@@ -86,27 +69,6 @@ function loadColumnVisibility(): VisibilityState {
   return DEFAULT_COLUMN_VISIBILITY
 }
 
-function loadColumnOrder(defaultOrder: string[]): string[] {
-  try {
-    const raw = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY)
-    if (raw) {
-      const saved: string[] = JSON.parse(raw)
-      // Keep only ids that still exist (a column may have been removed/renamed since
-      // this was saved) and append any new columns that weren't part of the saved order.
-      const savedValid = saved.filter((id) => defaultOrder.includes(id))
-      const missing = defaultOrder.filter((id) => !savedValid.includes(id))
-      return [...savedValid, ...missing]
-    }
-  } catch {
-    // Corrupt JSON or storage blocked — fall back to the definition order.
-  }
-  return defaultOrder
-}
-
-function getColumnId(column: ColumnDef<Product>): string {
-  return (column as { id?: string; accessorKey?: string }).id ?? (column as { accessorKey?: string }).accessorKey ?? ''
-}
-
 interface DataTableProps {
   columns: ColumnDef<Product>[]
   data: Product[]
@@ -138,8 +100,9 @@ export function ProductTable({
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(loadColumnVisibility)
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(() =>
-    loadColumnOrder(columns.map(getColumnId))
+  const [columnOrder, setColumnOrder] = usePersistedColumnOrder(
+    COLUMN_ORDER_STORAGE_KEY,
+    columns.map(getColumnId)
   )
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
@@ -186,34 +149,6 @@ export function ProductTable({
     }
   }, [columnVisibility])
 
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(columnOrder))
-    } catch {
-      // Storage blocked — customization just won't persist.
-    }
-  }, [columnOrder])
-
-  const dndSensors = useSensors(
-    // A real drag now starts from anywhere on the header (see DraggableTableHead), so
-    // this threshold needs to be generous enough that an ordinary, slightly-imprecise
-    // click on the nested sort button never gets misread as a drag attempt.
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  )
-  const draggableColumnIds = columnOrder.filter((id) => !LOCKED_COLUMN_IDS.includes(id))
-
-  const handleColumnDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    setColumnOrder((prev) => {
-      const oldIndex = prev.indexOf(active.id as string)
-      const newIndex = prev.indexOf(over.id as string)
-      if (oldIndex === -1 || newIndex === -1) return prev
-      return arrayMove(prev, oldIndex, newIndex)
-    })
-  }
-
   // Get selected products whenever rowSelection changes
   React.useEffect(() => {
     if (onSelectedRowsChange) {
@@ -258,42 +193,13 @@ export function ProductTable({
       <TableLoadingOverlay loading={loading}>
         <div className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>
-          <TableHeader>
-            <DndContext
-              sensors={dndSensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleColumnDragEnd}
-            >
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className='group/row'>
-                  <SortableContext items={draggableColumnIds} strategy={horizontalListSortingStrategy}>
-                    {headerGroup.headers.map((header) => {
-                      const headerContent = header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())
-                      const className = `${header.column.columnDef.meta?.className ?? ''} ${
-                        language === 'ur' ? 'text-left' : 'text-left'
-                      }`
-
-                      if (LOCKED_COLUMN_IDS.includes(header.column.id)) {
-                        return (
-                          <TableHead key={header.id} colSpan={header.colSpan} className={className}>
-                            {headerContent}
-                          </TableHead>
-                        )
-                      }
-
-                      return (
-                        <DraggableTableHead key={header.id} id={header.column.id} colSpan={header.colSpan} className={className}>
-                          {headerContent}
-                        </DraggableTableHead>
-                      )
-                    })}
-                  </SortableContext>
-                </TableRow>
-              ))}
-            </DndContext>
-          </TableHeader>
+          <DndTableHeader
+            table={table}
+            columnOrder={columnOrder}
+            onColumnOrderChange={setColumnOrder}
+            lockedColumnIds={LOCKED_COLUMN_IDS}
+            extraHeaderClassName='text-left'
+          />
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => {
