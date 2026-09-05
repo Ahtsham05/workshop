@@ -10,6 +10,9 @@ interface DraggableTableHeadProps {
   className?: string
   colSpan?: number
   children: ReactNode
+  /** Rendered as an absolutely-positioned overlay pinned to the header's right edge —
+   *  typically a `ColumnResizeHandle`. Omitted for columns that opt out of resizing. */
+  resizeHandle?: ReactNode
 }
 
 /** A `TableHead` with a small grip handle that reorders its column when dragged. See
@@ -23,7 +26,7 @@ interface DraggableTableHeadProps {
  *  sort button could get swallowed as a drag attempt instead of opening its menu. A
  *  dedicated handle — hidden until hover so it doesn't clutter the header, but the only
  *  thing that responds to a drag gesture — avoids that conflict entirely. */
-export function DraggableTableHead({ id, className, colSpan, children }: DraggableTableHeadProps) {
+export function DraggableTableHead({ id, className, colSpan, children, resizeHandle }: DraggableTableHeadProps) {
   const { attributes, listeners, isDragging, setNodeRef, setActivatorNodeRef, transform, transition } =
     useSortable({ id })
 
@@ -36,7 +39,7 @@ export function DraggableTableHead({ id, className, colSpan, children }: Draggab
   }
 
   return (
-    <TableHead ref={setNodeRef} style={style} colSpan={colSpan} className={cn('group/head', className)}>
+    <TableHead ref={setNodeRef} style={style} colSpan={colSpan} className={cn('group/head relative', className)}>
       <div className='flex items-center gap-1'>
         <button
           type='button'
@@ -48,8 +51,9 @@ export function DraggableTableHead({ id, className, colSpan, children }: Draggab
         >
           <GripVertical className='h-3.5 w-3.5' />
         </button>
-        <div className='min-w-0 flex-1'>{children}</div>
+        <div className='min-w-0 flex-1 truncate'>{children}</div>
       </div>
+      {resizeHandle}
     </TableHead>
   )
 }

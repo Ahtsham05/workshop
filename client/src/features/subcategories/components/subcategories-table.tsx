@@ -28,6 +28,7 @@ import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
 import { DndTableHeader } from '@/components/data-table/dnd-table-header'
 import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
+import { DEFAULT_NARROW_COLUMN_SIZES, usePersistedColumnSizing } from '@/components/data-table/use-persisted-column-sizing'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { FolderTree } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -42,6 +43,7 @@ declare module '@tanstack/react-table' {
 // Persisted across sessions so a user's drag-to-reorder customization sticks around
 // instead of resetting on every reload.
 const COLUMN_ORDER_STORAGE_KEY = 'subcategories-table-column-order'
+const COLUMN_SIZING_STORAGE_KEY = 'subcategories-table-column-sizing'
 
 // 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
 // neither gets a drag handle nor takes part in reordering, everything else can move
@@ -79,6 +81,7 @@ export function SubCategoriesTable({
     COLUMN_ORDER_STORAGE_KEY,
     columns.map(getColumnId)
   )
+  const [columnSizing, setColumnSizing] = usePersistedColumnSizing(COLUMN_SIZING_STORAGE_KEY)
 
   React.useEffect(() => {
     if (onSelectedRowsChange) {
@@ -93,6 +96,7 @@ export function SubCategoriesTable({
   const table = useReactTable({
     data: subCategories,
     columns,
+    initialState: { columnSizing: DEFAULT_NARROW_COLUMN_SIZES },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     manualPagination: true,
@@ -105,11 +109,15 @@ export function SubCategoriesTable({
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
     onColumnOrderChange: setColumnOrder,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
+    onColumnSizingChange: setColumnSizing,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
       columnOrder,
+      columnSizing,
       rowSelection,
     },
   })
@@ -119,7 +127,7 @@ export function SubCategoriesTable({
       <DataTableToolbar table={table} leading={toolbarLeading} trailing={toolbarTrailing} />
       <TableLoadingOverlay loading={loading}>
         <div className="rounded-xl border shadow-sm">
-        <Table>
+        <Table className='table-fixed' style={{ minWidth: table.getTotalSize() }}>
           <DndTableHeader
             table={table}
             columnOrder={columnOrder}

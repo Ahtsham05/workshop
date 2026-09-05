@@ -1,5 +1,5 @@
 import { DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu'
-import { MixerHorizontalIcon } from '@radix-ui/react-icons'
+import { MixerHorizontalIcon, ResetIcon } from '@radix-ui/react-icons'
 import { Table } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import { useLanguage } from '@/context/language-context'
@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
@@ -66,6 +67,11 @@ export function DataTableViewOptions<TData>({
               </DropdownMenuCheckboxItem>
             )
           })}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className={cn(isUrdu && 'text-right')} onSelect={() => table.resetColumnSizing()}>
+          <ResetIcon className={cn('h-4 w-4', isUrdu ? 'ml-2' : 'mr-2')} />
+          {t('Reset column widths')}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

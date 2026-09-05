@@ -52,6 +52,7 @@ export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
 
   const nameColumn: ColumnDef<SubCategory> = {
     accessorKey: 'name',
+    size: 260,
     header: ({ column }) => {
       return (
         <Button
@@ -95,6 +96,7 @@ export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
   const categoryColumn: ColumnDef<SubCategory> = {
     id: 'category',
     accessorFn: (row) => (typeof row.category === 'object' ? row.category?.name : ''),
+    size: 200,
     header: t('parent_category'),
     cell: ({ row }) => {
       const category = row.original.category
@@ -116,6 +118,7 @@ export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
 
   const statusColumn: ColumnDef<SubCategory> = {
     id: 'status',
+    size: 130,
     header: t('status'),
     cell: ({ row }) => <SubCategoryActiveToggleCell subCategory={row.original} />,
     enableSorting: false,

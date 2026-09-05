@@ -17,6 +17,7 @@ import { flexRender, type ColumnOrderState, type Table as TanstackTable } from '
 import { TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { DraggableTableHead } from './draggable-table-head'
+import { ColumnResizeHandle } from './column-resize-handle'
 
 interface DndTableHeaderProps<TData> {
   table: TanstackTable<TData>
@@ -25,20 +26,30 @@ interface DndTableHeaderProps<TData> {
   /** Column ids that stay put and never get a drag handle — typically the leading
    *  bulk-select checkbox and trailing row-actions menu. */
   lockedColumnIds?: string[]
+  /** Column ids that never get a resize handle — the checkbox column by default; it has
+   *  nothing worth widening. Resizing is otherwise independent of `lockedColumnIds`: a
+   *  column can be reorder-locked (like 'actions') and still resizable. */
+  noResizeColumnIds?: string[]
   rowClassName?: string
   /** Appended to every header's className, alongside its column meta className. */
   extraHeaderClassName?: string
 }
 
 /** Drop-in replacement for a table's `<TableHeader>` block that makes every non-locked
- *  column header draggable to reorder, via dnd-kit. Pairs with `usePersistedColumnOrder`
- *  for the `columnOrder`/`onColumnOrderChange` state and with `columnOrder` wired into
- *  `useReactTable`'s state so the reordering actually reflects in `getVisibleCells()`. */
+ *  column header draggable to reorder (via dnd-kit) and every non-excluded column's
+ *  border draggable to resize (via tanstack-table's built-in column sizing). Pairs with
+ *  `usePersistedColumnOrder`/`usePersistedColumnSizing` for state, both of which need to
+ *  be wired into `useReactTable`'s state for the changes to actually reflect in
+ *  `getVisibleCells()` / `getSize()`. Also renders the `<colgroup>` that makes those sizes
+ *  stick — pair the caller's `<Table>` with `table-fixed` layout and an explicit
+ *  `style={{ width: table.getTotalSize() }}` so the browser honors it instead of
+ *  auto-sizing columns to content. */
 export function DndTableHeader<TData>({
   table,
   columnOrder,
   onColumnOrderChange,
   lockedColumnIds = ['select', 'actions'],
+  noResizeColumnIds = ['select'],
   rowClassName = 'group/row',
   extraHeaderClassName,
 }: DndTableHeaderProps<TData>) {
@@ -63,35 +74,55 @@ export function DndTableHeader<TData>({
   }
 
   return (
-    <TableHeader>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        {table.getHeaderGroups().map((headerGroup) => (
-          <TableRow key={headerGroup.id} className={rowClassName}>
-            <SortableContext items={draggableColumnIds} strategy={horizontalListSortingStrategy}>
-              {headerGroup.headers.map((header) => {
-                const headerContent = header.isPlaceholder
-                  ? null
-                  : flexRender(header.column.columnDef.header, header.getContext())
-                const className = cn(header.column.columnDef.meta?.className, extraHeaderClassName)
-
-                if (lockedColumnIds.includes(header.column.id)) {
-                  return (
-                    <TableHead key={header.id} colSpan={header.colSpan} className={className}>
-                      {headerContent}
-                    </TableHead>
-                  )
-                }
-
-                return (
-                  <DraggableTableHead key={header.id} id={header.column.id} colSpan={header.colSpan} className={className}>
-                    {headerContent}
-                  </DraggableTableHead>
-                )
-              })}
-            </SortableContext>
-          </TableRow>
+    <>
+      <colgroup>
+        {table.getVisibleLeafColumns().map((column) => (
+          <col key={column.id} style={{ width: column.getSize() }} />
         ))}
-      </DndContext>
-    </TableHeader>
+      </colgroup>
+      <TableHeader>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id} className={rowClassName}>
+              <SortableContext items={draggableColumnIds} strategy={horizontalListSortingStrategy}>
+                {headerGroup.headers.map((header) => {
+                  const headerContent = header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())
+                  const className = cn(header.column.columnDef.meta?.className, extraHeaderClassName)
+                  const resizeHandle = header.column.getCanResize() && !noResizeColumnIds.includes(header.column.id) ? (
+                    <ColumnResizeHandle
+                      onResizeStart={header.getResizeHandler()}
+                      isResizing={header.column.getIsResizing()}
+                    />
+                  ) : undefined
+
+                  if (lockedColumnIds.includes(header.column.id)) {
+                    return (
+                      <TableHead key={header.id} colSpan={header.colSpan} className={cn('relative', className)}>
+                        {headerContent}
+                        {resizeHandle}
+                      </TableHead>
+                    )
+                  }
+
+                  return (
+                    <DraggableTableHead
+                      key={header.id}
+                      id={header.column.id}
+                      colSpan={header.colSpan}
+                      className={className}
+                      resizeHandle={resizeHandle}
+                    >
+                      {headerContent}
+                    </DraggableTableHead>
+                  )
+                })}
+              </SortableContext>
+            </TableRow>
+          ))}
+        </DndContext>
+      </TableHeader>
+    </>
   )
 }

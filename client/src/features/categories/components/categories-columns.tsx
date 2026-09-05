@@ -54,6 +54,7 @@ export function useCategoryColumns(
 
   const nameColumn: ColumnDef<Category> = {
     accessorKey: 'name',
+    size: 280,
     header: ({ column }) => {
       return (
         <Button
@@ -131,6 +132,7 @@ export function useCategoryColumns(
 
   const statusColumn: ColumnDef<Category> = {
     id: 'status',
+    size: 130,
     header: t('status'),
     cell: ({ row }) => <CategoryActiveToggleCell category={row.original} />,
     enableSorting: false,

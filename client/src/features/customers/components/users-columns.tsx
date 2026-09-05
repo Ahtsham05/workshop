@@ -46,6 +46,7 @@ export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: b
     },
     {
       accessorKey: 'name',
+      size: 220,
       header: ({ column }) => <DataTableColumnHeader column={column} title='customer_name' />,
       cell: ({ row }) => (
         <ContactMediaNameCell
@@ -60,6 +61,7 @@ export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: b
     },
     {
       accessorKey: 'balance',
+      size: 160,
       header: ({ column }) => <DataTableColumnHeader column={column} title='balance' />,
       cell: ({ row }) => {
         const { label, amount, className } = formatCustomerBalanceDisplay(Number(row.original.balance ?? 0), t, currencyMeta)
@@ -73,17 +75,20 @@ export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: b
     },
     {
       accessorKey: 'email',
+      size: 190,
       header: ({ column }) => <DataTableColumnHeader column={column} title='email' />,
       cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('email')}</LongText>,
       enableHiding: true,
     },
     {
       accessorKey: 'phone',
+      size: 130,
       header: ({ column }) => <DataTableColumnHeader column={column} title='phone' />,
       cell: ({ row }) => <div>{row.getValue('phone')}</div>,
     },
     {
       accessorKey: 'whatsapp',
+      size: 180,
       header: ({ column }) => <DataTableColumnHeader column={column} title='whatsapp' />,
       cell: ({ row }) => {
         const whatsapp = row.getValue('whatsapp') as string
@@ -110,11 +115,13 @@ export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: b
     },
     {
       accessorKey: 'address',
+      size: 220,
       header: ({ column }) => <DataTableColumnHeader column={column} title='address' />,
       cell: ({ row }) => <div className={getTextClasses(row.getValue('address'), '')}>{row.getValue('address')}</div>,
     },
     {
       id: 'isActive',
+      size: 90,
       header: ({ column }) => <DataTableColumnHeader column={column} title='Active' />,
       cell: ({ row }) => (
         <div onClick={(e) => e.stopPropagation()}>

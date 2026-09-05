@@ -27,6 +27,7 @@ import { DataTableViewOptions } from './data-table-view-options'
 import { SupplierListToolbar } from './supplier-list-toolbar'
 import { DndTableHeader } from '@/components/data-table/dnd-table-header'
 import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
+import { DEFAULT_NARROW_COLUMN_SIZES, usePersistedColumnSizing } from '@/components/data-table/use-persisted-column-sizing'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
@@ -42,6 +43,7 @@ declare module '@tanstack/react-table' {
 // Persisted across sessions so a user's drag-to-reorder customization sticks around
 // instead of resetting on every reload.
 const COLUMN_ORDER_STORAGE_KEY = 'suppliers-table-column-order'
+const COLUMN_SIZING_STORAGE_KEY = 'suppliers-table-column-sizing'
 
 // 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
 // neither gets a drag handle nor takes part in reordering, everything else can move
@@ -86,6 +88,7 @@ export function SupplierTable({
     COLUMN_ORDER_STORAGE_KEY,
     columns.map(getColumnId)
   )
+  const [columnSizing, setColumnSizing] = usePersistedColumnSizing(COLUMN_SIZING_STORAGE_KEY)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
@@ -114,10 +117,12 @@ export function SupplierTable({
   const table = useReactTable({
     data,
     columns,
+    initialState: { columnSizing: DEFAULT_NARROW_COLUMN_SIZES },
     state: {
       sorting,
       columnVisibility,
       columnOrder,
+      columnSizing,
       rowSelection,
       columnFilters,
       // We're using server pagination, so don't set pagination state here
@@ -126,11 +131,14 @@ export function SupplierTable({
     manualPagination: true,
     pageCount: paggination.totalPage,
     enableRowSelection: true,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: setColumnOrder,
+    onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     // Don't use getPaginationRowModel as we're using server-side pagination
@@ -151,7 +159,7 @@ export function SupplierTable({
       />
       <TableLoadingOverlay loading={loading}>
         <div className='rounded-md border'>
-        <Table>
+        <Table className='table-fixed' style={{ minWidth: table.getTotalSize() }}>
           <DndTableHeader
             table={table}
             columnOrder={columnOrder}

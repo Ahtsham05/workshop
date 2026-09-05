@@ -49,6 +49,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   },
   {
     accessorKey: 'name',
+    size: 260,
     header: ({ column }) => <DataTableColumnHeader column={column} title='product_name' />,
     cell: ({ row }) => {
       const product = row.original
@@ -91,12 +92,14 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   },
     {
     accessorKey: 'description',
+    size: 220,
     header: ({ column }) => <DataTableColumnHeader column={column} title='description' />,
     cell: ({ row }) => <LongText className={getTextClasses(row.getValue('description'), 'max-w-36')}>{row.getValue('description')}</LongText>,
     enableHiding: true,
   },
   {
     accessorKey: 'categories',
+    size: 180,
     header: ({ column }) => <DataTableColumnHeader column={column} title='categories' />,
     cell: ({ row }) => {
       const product = row.original
@@ -132,6 +135,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   },
   {
     accessorKey: 'subCategories',
+    size: 180,
     header: ({ column }) => <DataTableColumnHeader column={column} title='sub categories' />,
     cell: ({ row }) => {
       const product = row.original
@@ -168,6 +172,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   {
     id: 'tags',
     accessorFn: (product) => (product.tags || []).join(', '),
+    size: 160,
     header: ({ column }) => <DataTableColumnHeader column={column} title='tags' />,
     cell: ({ row }) => {
       const tags = row.original.tags || []
@@ -190,6 +195,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   {
     id: 'shelfLocation',
     accessorKey: 'shelfLocation',
+    size: 150,
     header: ({ column }) => <DataTableColumnHeader column={column} title='shelf location' />,
     cell: ({ row }) => {
       const shelfLocation = row.original.shelfLocation
@@ -208,6 +214,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   {
     id: 'brand',
     accessorFn: (product) => (typeof product.brandId === 'object' && product.brandId ? product.brandId.name : ''),
+    size: 150,
     header: ({ column }) => <DataTableColumnHeader column={column} title='brand' />,
     cell: ({ row }) => {
       const brand = row.original.brandId
@@ -227,12 +234,14 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   },
   {
     accessorKey: 'barcode',
+    size: 150,
     header: ({ column }) => <DataTableColumnHeader column={column} title='barcode' />,
     cell: ({ row }) => <div>{row.getValue('barcode')}</div>,
     enableHiding: true,
   },
   {
     accessorKey: 'price',
+    size: 110,
     header: ({ column }) => <DataTableColumnHeader column={column} title='price' />,
     cell: ({ row }) => {
       const product = row.original
@@ -250,6 +259,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   },
   {
     accessorKey: 'cost',
+    size: 110,
     header: ({ column }) => <DataTableColumnHeader column={column} title='cost' />,
     cell: ({ row }) => {
       const product = row.original
@@ -267,6 +277,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   },
   {
     accessorKey: 'stockQuantity',
+    size: 140,
     header: ({ column }) => <DataTableColumnHeader column={column} title='stock_quantity' />,
     cell: ({ row }) => {
       const product = row.original
@@ -283,12 +294,14 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   },
   {
     id: 'stockValue',
+    size: 130,
     header: ({ column }) => <DataTableColumnHeader column={column} title='stock_value' />,
     cell: ({ row }) => <div className='tabular-nums'>{formatCurrency(getDisplayStockValue(row.original))}</div>,
     enableHiding: true,
   },
   {
     id: 'status',
+    size: 140,
     header: ({ column }) => <DataTableColumnHeader column={column} title='status' />,
     cell: ({ row }) => {
       const stock = getDisplayStock(row.original)
@@ -319,12 +332,14 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   },
   {
     id: 'isActive',
+    size: 90,
     header: ({ column }) => <DataTableColumnHeader column={column} title='Active' />,
     cell: ({ row }) => <ActiveToggleCell product={row.original} onToggled={onStatusChange} />,
     enableHiding: true,
   },
   {
     id: 'tracking',
+    size: 190,
     header: ({ column }) => <DataTableColumnHeader column={column} title='tracking' />,
     cell: ({ row }) => {
       const product = row.original

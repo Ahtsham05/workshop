@@ -23,10 +23,12 @@ import { DataTablePagination } from '../components/data-table-pagination'
 import { DataTableToolbar } from '../components/data-table-toolbar'
 import { DndTableHeader } from '@/components/data-table/dnd-table-header'
 import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
+import { DEFAULT_NARROW_COLUMN_SIZES, usePersistedColumnSizing } from '@/components/data-table/use-persisted-column-sizing'
 
 // Persisted across sessions so a user's drag-to-reorder customization sticks around
 // instead of resetting on every reload.
 const COLUMN_ORDER_STORAGE_KEY = 'tasks-table-column-order'
+const COLUMN_SIZING_STORAGE_KEY = 'tasks-table-column-sizing'
 
 // 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
 // neither gets a drag handle nor takes part in reordering, everything else can move
@@ -49,6 +51,7 @@ export function DataTable<TData, TValue>({
     COLUMN_ORDER_STORAGE_KEY,
     columns.map(getColumnId)
   )
+  const [columnSizing, setColumnSizing] = usePersistedColumnSizing(COLUMN_SIZING_STORAGE_KEY)
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   )
@@ -57,19 +60,24 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
+    initialState: { columnSizing: DEFAULT_NARROW_COLUMN_SIZES },
     state: {
       sorting,
       columnVisibility,
       columnOrder,
+      columnSizing,
       rowSelection,
       columnFilters,
     },
     enableRowSelection: true,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: setColumnOrder,
+    onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -82,7 +90,7 @@ export function DataTable<TData, TValue>({
     <div className='space-y-4'>
       <DataTableToolbar table={table} />
       <div className='rounded-md border'>
-        <Table>
+        <Table className='table-fixed' style={{ minWidth: table.getTotalSize() }}>
           <DndTableHeader
             table={table}
             columnOrder={columnOrder}

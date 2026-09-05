@@ -27,6 +27,7 @@ import { DataTablePagination } from './data-table-pagination'
 import { DataTableToolbar } from './data-table-toolbar'
 import { DndTableHeader } from '@/components/data-table/dnd-table-header'
 import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
+import { DEFAULT_NARROW_COLUMN_SIZES, usePersistedColumnSizing } from '@/components/data-table/use-persisted-column-sizing'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
@@ -45,6 +46,7 @@ declare module '@tanstack/react-table' {
 // Stock next to Name") sticks around instead of resetting on every reload.
 const COLUMN_VISIBILITY_STORAGE_KEY = 'products-table-column-visibility'
 const COLUMN_ORDER_STORAGE_KEY = 'products-table-column-order'
+const COLUMN_SIZING_STORAGE_KEY = 'products-table-column-sizing'
 
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
   description: false,
@@ -104,6 +106,7 @@ export function ProductTable({
     COLUMN_ORDER_STORAGE_KEY,
     columns.map(getColumnId)
   )
+  const [columnSizing, setColumnSizing] = usePersistedColumnSizing(COLUMN_SIZING_STORAGE_KEY)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
@@ -165,19 +168,24 @@ export function ProductTable({
   const table = useReactTable({
     data,
     columns,
+    initialState: { columnSizing: DEFAULT_NARROW_COLUMN_SIZES },
     state: {
       sorting,
       columnVisibility,
       columnOrder,
+      columnSizing,
       rowSelection,
       columnFilters,
     },
     enableRowSelection: true,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: setColumnOrder,
+    onColumnSizingChange: setColumnSizing,
     manualPagination: true,
     pageCount: paggination.totalPage,
     getCoreRowModel: getCoreRowModel(),
@@ -192,7 +200,7 @@ export function ProductTable({
       <DataTableToolbar table={table} leading={toolbarLeading} trailing={toolbarTrailing} />
       <TableLoadingOverlay loading={loading}>
         <div className='rounded-md border'>
-        <Table dir={language === 'ur' ? 'ltl' : 'ltr'}>
+        <Table dir={language === 'ur' ? 'ltl' : 'ltr'} className='table-fixed' style={{ minWidth: table.getTotalSize() }}>
           <DndTableHeader
             table={table}
             columnOrder={columnOrder}

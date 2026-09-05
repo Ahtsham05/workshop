@@ -46,6 +46,7 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
 
   const nameColumn: ColumnDef<Supplier> = {
     accessorKey: 'name',
+    size: 220,
     header: ({ column }) => <DataTableColumnHeader column={column} title='supplier_name' />,
     cell: ({ row }) => (
       <ContactMediaNameCell
@@ -61,6 +62,7 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
 
   const emailColumn: ColumnDef<Supplier> = {
     accessorKey: 'email',
+    size: 190,
     header: ({ column }) => <DataTableColumnHeader column={column} title='email' />,
     cell: ({ row }) => <LongText className='max-w-36'>{row.getValue('email')}</LongText>,
     enableHiding: true,
@@ -68,12 +70,14 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
 
   const phoneColumn: ColumnDef<Supplier> = {
     accessorKey: 'phone',
+    size: 130,
     header: ({ column }) => <DataTableColumnHeader column={column} title='phone' />,
     cell: ({ row }) => <div>{row.getValue('phone')}</div>,
   }
 
   const whatsappColumn: ColumnDef<Supplier> = {
     accessorKey: 'whatsapp',
+    size: 180,
     header: ({ column }) => <DataTableColumnHeader column={column} title='whatsapp' />,
     cell: ({ row }) => {
       const whatsapp = row.getValue('whatsapp') as string
@@ -100,6 +104,7 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
 
   const balanceColumn: ColumnDef<Supplier> = {
     accessorKey: 'balance',
+    size: 160,
     header: ({ column }) => <DataTableColumnHeader column={column} title='balance' />,
     cell: ({ row }) => {
       const raw = row.getValue('balance')
@@ -117,12 +122,14 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
 
   const addressColumn: ColumnDef<Supplier> = {
     accessorKey: 'address',
+    size: 220,
     header: ({ column }) => <DataTableColumnHeader column={column} title='address' />,
     cell: ({ row }) => <div className={getTextClasses(row.getValue('address'), '')}>{row.getValue('address')}</div>,
   }
 
   const isActiveColumn: ColumnDef<Supplier> = {
     id: 'isActive',
+    size: 90,
     header: ({ column }) => <DataTableColumnHeader column={column} title='Active' />,
     cell: ({ row }) => (
       <div onClick={(e) => e.stopPropagation()}>

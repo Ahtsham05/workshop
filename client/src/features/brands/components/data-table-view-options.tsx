@@ -1,11 +1,12 @@
 import { DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu'
-import { MixerHorizontalIcon } from '@radix-ui/react-icons'
+import { MixerHorizontalIcon, ResetIcon } from '@radix-ui/react-icons'
 import { Table } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
@@ -46,6 +47,11 @@ export function DataTableViewOptions<TData>({ table }: DataTableViewOptionsProps
               {columnLabels[column.id] || column.id}
             </DropdownMenuCheckboxItem>
           ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => table.resetColumnSizing()}>
+          <ResetIcon className='mr-2 h-4 w-4' />
+          Reset column widths
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

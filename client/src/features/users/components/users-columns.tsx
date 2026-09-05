@@ -41,6 +41,7 @@ export const columns: ColumnDef<User>[] = [
   },
   {
     accessorKey: 'username',
+    size: 160,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Username' />
     ),
@@ -58,6 +59,7 @@ export const columns: ColumnDef<User>[] = [
   },
   {
     id: 'fullName',
+    size: 160,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Name' />
     ),
@@ -70,6 +72,7 @@ export const columns: ColumnDef<User>[] = [
   },
   {
     accessorKey: 'email',
+    size: 190,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Email' />
     ),
@@ -79,6 +82,7 @@ export const columns: ColumnDef<User>[] = [
   },
   {
     accessorKey: 'phoneNumber',
+    size: 150,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Phone Number' />
     ),
@@ -87,6 +91,7 @@ export const columns: ColumnDef<User>[] = [
   },
   {
     accessorKey: 'status',
+    size: 120,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Status' />
     ),
@@ -109,6 +114,7 @@ export const columns: ColumnDef<User>[] = [
   },
   {
     accessorKey: 'role',
+    size: 150,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Role' />
     ),

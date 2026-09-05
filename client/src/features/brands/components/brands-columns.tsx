@@ -45,6 +45,7 @@ export function useBrandColumns(): ColumnDef<Brand>[] {
 
   const nameColumn: ColumnDef<Brand> = {
     accessorKey: 'name',
+    size: 240,
     header: ({ column }) => (
       <Button
         variant="ghost"
@@ -76,12 +77,14 @@ export function useBrandColumns(): ColumnDef<Brand>[] {
 
   const countryColumn: ColumnDef<Brand> = {
     accessorKey: 'country',
+    size: 140,
     header: 'Country',
     cell: ({ row }) => row.original.country || '—',
   }
 
   const statusColumn: ColumnDef<Brand> = {
     accessorKey: 'status',
+    size: 130,
     header: 'Status',
     cell: ({ row }) => <BrandActiveToggleCell brand={row.original} />,
   }
