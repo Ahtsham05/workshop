@@ -15,16 +15,21 @@ export function ImportBranchProductsBanner({ productCount, loading }: { productC
   const { t } = useLanguage()
   const { setOpen } = useUsers()
   const shouldCheck = !loading && productCount === 0
-  const { data: importable = [] } = useGetImportableMasterProductsQuery(undefined, { skip: !shouldCheck })
+  // Only needs the count, not the rows — limit: 1 so this stays a cheap existence-check
+  // even for an org catalog running into the thousands (see
+  // masterProduct.service.js#getImportableMasterProducts, which reports totalResults
+  // without having to fetch every matching document).
+  const { data } = useGetImportableMasterProductsQuery({ page: 1, limit: 1 }, { skip: !shouldCheck })
+  const totalResults = data?.totalResults ?? 0
 
-  if (!shouldCheck || importable.length === 0) return null
+  if (!shouldCheck || totalResults === 0) return null
 
   return (
     <Can permission='createProducts'>
       <div className='mb-4 flex items-center justify-between rounded-lg border border-dashed border-blue-300 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/30'>
         <div className='flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300'>
           <Building2 className='h-4 w-4 shrink-0' />
-          {t('products_found_at_other_branches', { count: String(importable.length) })}
+          {t('products_found_at_other_branches', { count: String(totalResults) })}
         </div>
         <Button size='sm' onClick={() => setOpen('import-master-products')}>
           {t('import_from_other_branches')}

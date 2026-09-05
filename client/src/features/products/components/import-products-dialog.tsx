@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { SimplePagination } from '@/components/ui/simple-pagination'
 import { Loader2, Package, Building2, ScanLine, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/context/language-context'
@@ -27,6 +28,13 @@ import {
 import { isRequestTimeoutError, getTimeoutErrorMessage } from '@/lib/api-timeout'
 
 const SEARCH_DEBOUNCE_MS = 300
+
+// The org catalog this list draws from can run into the thousands — fetching (and
+// rendering) all of them at once on every dialog open, the way this used to work, meant
+// shipping every field of every master product over the wire and mounting that many rows
+// in the DOM up front. A page at a time, searched server-side, keeps both bounded no
+// matter how large the catalog gets.
+const PAGE_SIZE = 500
 
 // Send the import as several small requests instead of one giant one. A single request
 // for 200+ products takes tens of seconds; if *anything* interrupts a request that long —
@@ -72,59 +80,85 @@ function FieldGroup({ label, children }: { label: string; children: ReactNode })
 
 export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportProductsDialogProps) {
   const { t } = useLanguage()
+  const [page, setPage] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
+
   // isLoading (first-ever fetch only), not isFetching (any fetch): the import mutation
   // invalidates this query after every chunk, so isFetching flips true repeatedly during
   // an import — gating the whole dialog body on it would blank out the list and search
   // box back to a spinner after every chunk instead of just letting it quietly shrink.
-  const { data: importable = [], isLoading: isLoadingImportable } = useGetImportableMasterProductsQuery(undefined, { skip: !open })
+  // Server-paginated + server-searched: a couple hundred to a few thousand importable
+  // products across an org's branches is common, and shipping every field of every one
+  // of them on every dialog open (then filtering/scrolling client-side) doesn't scale —
+  // see masterProduct.service.js#getImportableMasterProducts.
+  const { data, isLoading: isLoadingImportable } = useGetImportableMasterProductsQuery(
+    { search: debouncedSearch, page, limit: PAGE_SIZE },
+    { skip: !open },
+  )
+  const rows = useMemo(() => data?.results ?? [], [data])
+  const totalResults = data?.totalResults ?? 0
+  const totalPages = data?.totalPages ?? 0
   const [importMasterProducts] = useImportMasterProductsMutation()
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [overrides, setOverrides] = useState<Record<string, RowState>>({})
   const [serialDialogRowId, setSerialDialogRowId] = useState<string | null>(null)
-  const [searchInput, setSearchInput] = useState('')
-  const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
   // null when not importing; otherwise how many of the total selected items have gone
   // through so far, updated after each chunk completes.
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
   const isImporting = importProgress !== null
 
-  // Reset selection each time the dialog opens fresh, rather than carrying over a
-  // previous session's picks silently.
+  // A page only ever holds the rows currently on screen, but a selection can span pages
+  // (pick some on page 1, page over, pick more) — so every row ever seen gets kept here
+  // by id, and that's what handleImport and the field/detail rows below read from
+  // regardless of which page put it there.
+  const [rowCache, setRowCache] = useState<Record<string, ImportableMasterProduct>>({})
+  useEffect(() => {
+    if (!rows.length) return
+    setRowCache((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const row of rows) {
+        if (next[row.masterProductId] !== row) {
+          next[row.masterProductId] = row
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [rows])
+
+  // Reset everything each time the dialog opens fresh, rather than carrying over a
+  // previous session's picks or search silently.
   useEffect(() => {
     if (open) {
       setSelectedIds(new Set())
       setOverrides({})
       setSerialDialogRowId(null)
       setSearchInput('')
+      setPage(1)
+      setRowCache({})
     }
   }, [open])
 
-  // Prune selections against the current importable list whenever it changes — most
-  // importantly, right after a chunk of the import succeeds and this list's cache gets
-  // invalidated, shrinking it. Without this, a stale id lingers in selectedIds after its
-  // product is already imported, and the "N selected of M" counter can end up showing
-  // more selected than exist at all (e.g. "238 selected of 68").
+  // A new search term invalidates the current page number — without this, searching
+  // while sitting on page 5 would ask the server for page 5 of a much shorter result set.
   useEffect(() => {
-    const validIds = new Set(importable.map((r) => r.masterProductId))
-    setSelectedIds((prev) => {
-      if ([...prev].every((id) => validIds.has(id))) return prev
-      return new Set([...prev].filter((id) => validIds.has(id)))
-    })
-  }, [importable])
+    setPage(1)
+  }, [debouncedSearch])
 
-  // Matches name, Urdu name, barcode, category, and the branches that carry it — a
-  // shopkeeper searching "786" to find everything from that branch, or a category name,
-  // should work just as well as searching the product name itself.
-  const filtered = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase()
-    if (!q) return importable
-    return importable.filter((row) =>
-      [row.name, row.nameUrdu, row.barcode, row.category, ...row.carriedAtBranches]
-        .filter(Boolean)
-        .some((field) => field!.toLowerCase().includes(q)),
-    )
-  }, [importable, debouncedSearch])
+  // Importing everything on the last page shrinks totalPages out from under the current
+  // page number (the list refetches after every chunk) — clamp back rather than being
+  // left on a now-nonexistent page showing an empty list above a "3 / 2" pager.
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) setPage(totalPages)
+  }, [totalPages, page])
+
+  // Matching name, Urdu name, barcode, category, and the branches that carry it now
+  // happens server-side (see masterProduct.service.js#getImportableMasterProducts) — this
+  // page's rows have already been filtered and sorted by the time they get here.
+  const filtered = rows
 
   const valueFor = (row: ImportableMasterProduct): RowState =>
     overrides[row.masterProductId] ?? { price: row.suggestedPrice, cost: row.suggestedCost, stockQuantity: 0, batchNumber: '', imeis: [] }
@@ -150,8 +184,8 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
     })
   }
 
-  // "Select all" only ever acts on what's currently visible, so picks made under an
-  // earlier search term survive typing a new one — the same "select all in this view"
+  // "Select all" only ever acts on the current page, so picks made on an earlier page or
+  // search survive paging or typing a new term — the same "select all in this view"
   // convention as a mail client's list checkbox.
   const allSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.masterProductId))
   const toggleAll = () => {
@@ -183,12 +217,15 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
 
   const handleImport = async () => {
     if (isImporting) return
-    const rows = importable.filter((row) => selectedIds.has(row.masterProductId))
+    // selectedIds can carry ids picked on pages other than the one currently on screen,
+    // so this reads from rowCache (every row ever seen this session) rather than `rows`
+    // (just the current page).
+    const selectedRows = [...selectedIds].map((id) => rowCache[id]).filter((row): row is ImportableMasterProduct => !!row)
 
     // Fail fast client-side with a specific, per-product message — same requirement the
     // server enforces too (masterProduct.service.js#importMasterProducts), checked here
     // first so a mistake doesn't cost a round trip.
-    for (const row of rows) {
+    for (const row of selectedRows) {
       const v = valueFor(row)
       if (v.stockQuantity <= 0) continue
       if ((row.trackImei || row.trackSerial) && v.imeis.length !== v.stockQuantity) {
@@ -201,7 +238,7 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
       }
     }
 
-    const items = rows.map((row) => {
+    const items = selectedRows.map((row) => {
       const v = valueFor(row)
       return {
         masterProductId: row.masterProductId,
@@ -229,6 +266,14 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
         await importMasterProducts(chunk).unwrap()
         done += chunk.length
         setImportProgress({ done, total: items.length })
+        // Drop exactly the ids that just landed — precise, since we know exactly which
+        // ones we sent, unlike diffing against a re-fetched page which may not even
+        // include these ids' page. Keeps "N selected of M" from overcounting once these
+        // products are gone from the importable list for good (see
+        // masterProduct.service.js#importMasterProducts — already-imported ids are
+        // excluded from later /importable responses).
+        const justImported = new Set(chunk.map((item) => item.masterProductId))
+        setSelectedIds((prev) => new Set([...prev].filter((id) => !justImported.has(id))))
       }
       toast.success(t('products_imported_success', { count: String(items.length) }))
       onImported?.()
@@ -252,8 +297,11 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
     }
   }
 
-  const noProductsAtAll = !isLoadingImportable && importable.length === 0
-  const noSearchMatches = !isLoadingImportable && importable.length > 0 && filtered.length === 0
+  // A zero-result page reads as "nothing at all" when there's no active search, or "no
+  // matches for this search" when there is — the server doesn't need to tell the two
+  // apart separately since debouncedSearch already distinguishes them here.
+  const noProductsAtAll = !isLoadingImportable && totalResults === 0 && !debouncedSearch.trim()
+  const noSearchMatches = !isLoadingImportable && totalResults === 0 && !!debouncedSearch.trim()
 
   return (
     <Dialog
@@ -306,7 +354,7 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
                 />
               </div>
               <div className='shrink-0 text-xs text-muted-foreground'>
-                {t('n_selected_of_total', { selected: String(selectedCount), total: String(importable.length) })}
+                {t('n_selected_of_total', { selected: String(selectedCount), total: String(totalResults) })}
               </div>
             </div>
 
@@ -446,6 +494,12 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
                     )
                   })}
                 </div>
+              </div>
+            )}
+
+            {!noSearchMatches && totalPages > 1 && (
+              <div className='shrink-0 border-t px-6 py-2'>
+                <SimplePagination currentPage={page} totalPages={totalPages} totalResults={totalResults} limit={PAGE_SIZE} onPageChange={setPage} className='border-t-0 pt-0' />
               </div>
             )}
           </div>

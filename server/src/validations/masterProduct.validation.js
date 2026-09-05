@@ -7,10 +7,16 @@ const imeiEntry = Joi.alternatives().try(
   Joi.object().keys({
     imei: Joi.string().trim().required(),
     imei2: Joi.string().trim().allow('').optional(),
-  }),
+  })
 );
 
-const getImportableMasterProducts = {};
+const getImportableMasterProducts = {
+  query: Joi.object().keys({
+    search: Joi.string().allow(''),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(500),
+  }),
+};
 
 const importMasterProducts = {
   body: Joi.object().keys({
@@ -28,7 +34,7 @@ const importMasterProducts = {
           batchNumber: Joi.string().trim().allow(''),
           expiryDate: Joi.date(),
           imeis: Joi.array().items(imeiEntry),
-        }),
+        })
       )
       .min(1)
       .required(),

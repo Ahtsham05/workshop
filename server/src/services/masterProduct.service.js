@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Product, ProductVariant, Inventory, MasterProduct, MasterProductVariant, Branch } = require('../models');
+const { Product, ProductVariant, Inventory, MasterProduct, MasterProductVariant, Branch, Category, SubCategory } = require('../models');
 const { buildMatchQuery, escapeRegex } = require('../utils/productMatchKey');
 const ApiError = require('../utils/ApiError');
 const batchService = require('./batch.service');
@@ -304,8 +304,17 @@ const linkProductsToMasterProductsBulk = async (products) => {
  * caller's branch yet — the "N products found at your other branches" list. Returns
  * template fields + which branches carry it (names only, not their live stock — that
  * stays behind the viewBranches-gated branch-availability feature).
+ *
+ * Paginated + server-side searched: an org's full catalog can run into the thousands,
+ * and the naive "fetch every master, ship them all to the client, filter/scroll in the
+ * browser" version of this used to send every field (image, description, categories,
+ * tracking flags, ...) for every single one on every dialog open. The candidate-id and
+ * branch-name resolution below still has to scan every "elsewhere" Product (it's the
+ * only way to know what's importable at all), but that's a small lean projection — the
+ * expensive part, a full MasterProduct + its variant-tracking lookup, now only ever runs
+ * for the one page actually being displayed.
  */
-const getImportableMasterProducts = async ({ organizationId, branchId }) => {
+const getImportableMasterProducts = async ({ organizationId, branchId, search = '', page = 1, limit = 50 }) => {
   // Self-heal before reading: a Product only gets masterProductId set (a) at creation
   // time going forward, or (b) by manually running 002-backfill-master-products.js for
   // this org — which is opt-in and, in practice, has only ever been run for one pilot
@@ -339,7 +348,8 @@ const getImportableMasterProducts = async ({ organizationId, branchId }) => {
     masterProductId: { $nin: [null, ...linkedHereIds] },
   }).select('masterProductId branchId price cost').lean();
 
-  if (!elsewhereProducts.length) return [];
+  const emptyPage = { results: [], page, limit, totalPages: 0, totalResults: 0 };
+  if (!elsewhereProducts.length) return emptyPage;
 
   const branchIds = [...new Set(elsewhereProducts.map((p) => String(p.branchId)))];
   const branches = await Branch.find({ _id: { $in: branchIds } }).select('name').lean();
@@ -351,13 +361,40 @@ const getImportableMasterProducts = async ({ organizationId, branchId }) => {
     if (!byMaster.has(key)) byMaster.set(key, { branchNames: new Set(), samplePrice: p.price, sampleCost: p.cost });
     byMaster.get(key).branchNames.add(branchNameById.get(String(p.branchId)) || 'Unknown branch');
   }
+  const candidateIds = [...byMaster.keys()];
 
-  const masters = await MasterProduct.find({ _id: { $in: [...byMaster.keys()] } }).lean();
+  // Light projection over every candidate — just the fields search/sort need, not the
+  // full document (image, description, categories, tracking flags, ...). Cheap even at
+  // a few thousand candidates since each doc here is only a handful of short strings;
+  // the heavy fetch below only ever runs for the one page being returned.
+  const searchable = await MasterProduct.find({ _id: { $in: candidateIds } }).select('name nameUrdu barcode category').lean();
+
+  const q = search.trim().toLowerCase();
+  const matching = q
+    ? searchable.filter((m) => {
+        const entry = byMaster.get(String(m._id));
+        return [m.name, m.nameUrdu, m.barcode, m.category, ...entry.branchNames]
+          .filter(Boolean)
+          .some((field) => field.toLowerCase().includes(q));
+      })
+    : searchable;
+  matching.sort((a, b) => a.name.localeCompare(b.name));
+
+  const totalResults = matching.length;
+  const totalPages = Math.ceil(totalResults / limit);
+  const pageIds = matching.slice((page - 1) * limit, page * limit).map((m) => String(m._id));
+  if (!pageIds.length) return { results: [], page, limit, totalPages, totalResults };
+
+  const masters = await MasterProduct.find({ _id: { $in: pageIds } }).lean();
+  const masterById = new Map(masters.map((m) => [String(m._id), m]));
+  // $in doesn't preserve order — walk pageIds (already sorted by name) to keep it.
+  const orderedMasters = pageIds.map((id) => masterById.get(id)).filter(Boolean);
 
   // For a hasVariants master, opening-stock batch/serial entry only ever applies to the
   // single-real-variant case (see importMasterProducts) — fetch each such master's lone
-  // variant's tracking flags in one batched query so the client knows to prompt.
-  const variantMasterIds = masters.filter((m) => m.hasVariants).map((m) => m._id);
+  // variant's tracking flags in one batched query so the client knows to prompt. Scoped
+  // to this page's masters only, not every hasVariants master in the candidate set.
+  const variantMasterIds = orderedMasters.filter((m) => m.hasVariants).map((m) => m._id);
   const soleVariantTrackingByMaster = new Map();
   if (variantMasterIds.length) {
     const variantsByMaster = new Map();
@@ -374,35 +411,137 @@ const getImportableMasterProducts = async ({ organizationId, branchId }) => {
     }
   }
 
-  return masters
-    .map((m) => {
-      const entry = byMaster.get(String(m._id));
-      const soleVariant = soleVariantTrackingByMaster.get(String(m._id));
-      return {
-        masterProductId: String(m._id),
-        name: m.name,
-        nameUrdu: m.nameUrdu,
-        description: m.description,
-        barcode: m.barcode,
-        unit: m.unit,
-        category: m.category,
-        categories: m.categories,
-        brandId: m.brandId,
-        image: m.image,
-        // Real variants only ever use the generalized trackSerial flag, never trackImei
-        // (that's Product-level only, mobile-specific — see productVariant.model.js).
-        trackImei: m.hasVariants ? false : m.trackImei,
-        trackSerial: m.hasVariants ? !!soleVariant?.trackSerial : m.trackSerial,
-        trackBatch: m.hasVariants ? !!soleVariant?.trackBatch : m.trackBatch,
-        trackExpiry: m.hasVariants ? !!soleVariant?.trackExpiry : m.trackExpiry,
-        warrantyMonths: m.warrantyMonths,
-        hasVariants: m.hasVariants,
-        suggestedPrice: m.defaultPrice ?? entry.samplePrice ?? 0,
-        suggestedCost: m.defaultCost ?? entry.sampleCost ?? 0,
-        carriedAtBranches: [...entry.branchNames],
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const results = orderedMasters.map((m) => {
+    const entry = byMaster.get(String(m._id));
+    const soleVariant = soleVariantTrackingByMaster.get(String(m._id));
+    return {
+      masterProductId: String(m._id),
+      name: m.name,
+      nameUrdu: m.nameUrdu,
+      description: m.description,
+      barcode: m.barcode,
+      unit: m.unit,
+      category: m.category,
+      categories: m.categories,
+      brandId: m.brandId,
+      image: m.image,
+      // Real variants only ever use the generalized trackSerial flag, never trackImei
+      // (that's Product-level only, mobile-specific — see productVariant.model.js).
+      trackImei: m.hasVariants ? false : m.trackImei,
+      trackSerial: m.hasVariants ? !!soleVariant?.trackSerial : m.trackSerial,
+      trackBatch: m.hasVariants ? !!soleVariant?.trackBatch : m.trackBatch,
+      trackExpiry: m.hasVariants ? !!soleVariant?.trackExpiry : m.trackExpiry,
+      warrantyMonths: m.warrantyMonths,
+      hasVariants: m.hasVariants,
+      suggestedPrice: m.defaultPrice ?? entry.samplePrice ?? 0,
+      suggestedCost: m.defaultCost ?? entry.sampleCost ?? 0,
+      carriedAtBranches: [...entry.branchNames],
+    };
+  });
+
+  return { results, page, limit, totalPages, totalResults };
+};
+
+/**
+ * Resolves each master's category/sub-category name snapshots to real Category/
+ * SubCategory documents scoped to the *destination* branch — creating whichever don't
+ * already exist there, reusing by name (case-insensitive) whichever do. Without this,
+ * an imported Product's categories/subCategories arrays keep pointing at the `_id`s of
+ * whatever branch originally created the MasterProduct: those aren't real documents at
+ * this branch at all, so the product still shows a category badge (it's a denormalized
+ * name snapshot, so that much renders fine) while the Categories/Sub Categories admin
+ * pages — which query real documents scoped to this branch — show nothing for it.
+ *
+ * Same find-by-name-or-create shape as product.service.js#resolveImportCategories
+ * (1 read + 1 insertMany per collection, not a round trip per item), adapted for
+ * MasterProduct's category/subCategory *arrays* rather than one name per CSV row —
+ * every sub-category is filed under the master's first category, the same
+ * one-parent-category convention that function already applies.
+ */
+const resolveMasterImportCategories = async (masters, { organizationId, branchId, createdBy }) => {
+  const categoryNameByLower = new Map();
+  masters.forEach((m) => {
+    const name = m.categories?.[0]?.name?.trim();
+    if (name && !categoryNameByLower.has(name.toLowerCase())) categoryNameByLower.set(name.toLowerCase(), name);
+  });
+
+  const resolvedCategoryByMaster = new Map(); // masterId -> destination Category doc
+  const resolvedSubsByMaster = new Map(); // masterId -> destination SubCategory docs
+  // Most imports carry a category — but skip the collection-wide fetch entirely when
+  // none of this batch does, same short-circuit as resolveImportCategories.
+  if (categoryNameByLower.size === 0) return { resolvedCategoryByMaster, resolvedSubsByMaster };
+
+  const existingCategories = await Category.find({ organizationId, branchId }).select('_id name image').lean();
+  const categoryByLower = new Map(existingCategories.map((c) => [c.name.trim().toLowerCase(), c]));
+
+  const missingCategoryLowers = [...categoryNameByLower.keys()].filter((lower) => !categoryByLower.has(lower));
+  if (missingCategoryLowers.length) {
+    // Carries the image along too, taken from whichever master first has that category
+    // name — the origin branch's own Category document isn't necessarily reachable from
+    // here, but its image was already denormalized onto the master's snapshot.
+    const imageByLower = new Map();
+    masters.forEach((m) => {
+      const name = m.categories?.[0]?.name?.trim();
+      const lower = name?.toLowerCase();
+      if (lower && missingCategoryLowers.includes(lower) && !imageByLower.has(lower)) {
+        imageByLower.set(lower, m.categories[0].image);
+      }
+    });
+    const docs = missingCategoryLowers.map((lower) => ({
+      name: categoryNameByLower.get(lower),
+      image: imageByLower.get(lower) || undefined,
+      organizationId,
+      branchId,
+      createdBy,
+    }));
+    const inserted = await Category.insertMany(docs, { ordered: false });
+    inserted.forEach((c) => categoryByLower.set(c.name.trim().toLowerCase(), c));
+  }
+
+  const subOriginalByKey = new Map(); // `${categoryId}::${subNameLower}` -> { name, image }
+  masters.forEach((m) => {
+    const categoryName = m.categories?.[0]?.name?.trim();
+    if (!categoryName || !m.subCategories?.length) return;
+    const category = categoryByLower.get(categoryName.toLowerCase());
+    if (!category) return;
+    m.subCategories.forEach((sc) => {
+      const subName = sc.name?.trim();
+      if (!subName) return;
+      const key = `${category._id}::${subName.toLowerCase()}`;
+      if (!subOriginalByKey.has(key)) subOriginalByKey.set(key, { name: subName, image: sc.image });
+    });
+  });
+
+  const categoryIds = [...categoryByLower.values()].map((c) => c._id);
+  const existingSubCategories = categoryIds.length
+    ? await SubCategory.find({ organizationId, branchId, category: { $in: categoryIds } }).select('_id name category image').lean()
+    : [];
+  const subByKey = new Map(existingSubCategories.map((s) => [`${s.category}::${s.name.trim().toLowerCase()}`, s]));
+
+  const missingSubKeys = [...subOriginalByKey.keys()].filter((key) => !subByKey.has(key));
+  if (missingSubKeys.length) {
+    const docs = missingSubKeys.map((key) => {
+      const [categoryId] = key.split('::');
+      const { name, image } = subOriginalByKey.get(key);
+      return { name, image: image || undefined, category: categoryId, organizationId, branchId, createdBy };
+    });
+    const inserted = await SubCategory.insertMany(docs, { ordered: false });
+    inserted.forEach((s) => subByKey.set(`${s.category}::${s.name.trim().toLowerCase()}`, s));
+  }
+
+  masters.forEach((m) => {
+    const categoryName = m.categories?.[0]?.name?.trim();
+    if (!categoryName) return;
+    const category = categoryByLower.get(categoryName.toLowerCase());
+    if (!category) return;
+    resolvedCategoryByMaster.set(String(m._id), category);
+    const subs = (m.subCategories || [])
+      .map((sc) => (sc.name?.trim() ? subByKey.get(`${category._id}::${sc.name.trim().toLowerCase()}`) : null))
+      .filter(Boolean);
+    if (subs.length) resolvedSubsByMaster.set(String(m._id), subs);
+  });
+
+  return { resolvedCategoryByMaster, resolvedSubsByMaster };
 };
 
 /**
@@ -481,6 +620,15 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
     toImport.push({ item, master, masterVariants, stockQuantity });
   }
 
+  // Resolved once up front for every master actually being newly created (not the
+  // already-imported ones, which keep whatever categories they already have) — see
+  // resolveMasterImportCategories's docblock for why this can't just copy
+  // master.categories/subCategories as-is.
+  const { resolvedCategoryByMaster, resolvedSubsByMaster } = await resolveMasterImportCategories(
+    toImport.filter((entry) => !entry.existing).map((entry) => entry.master),
+    { organizationId, branchId, createdBy },
+  );
+
   // Each new product below goes through productService.createProduct's own Mongo
   // transaction (session start + insert + commit) — a real round trip to Atlas per item,
   // not an in-process op. Importing sequentially made 237 items take minutes, comfortably
@@ -497,6 +645,20 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
     const { item, master, masterVariants, stockQuantity } = entry;
     const price = item.price ?? master.defaultPrice ?? 0;
     const cost = item.cost ?? master.defaultCost ?? 0;
+
+    // Re-pointed at this branch's own Category/SubCategory documents (find-or-created
+    // above) rather than master.categories/subCategories as-is — those still carry
+    // whatever branch originally created the MasterProduct's _ids, which don't exist as
+    // real documents here. See resolveMasterImportCategories's docblock.
+    const resolvedCategory = resolvedCategoryByMaster.get(String(master._id));
+    const categories = resolvedCategory
+      ? [{ _id: resolvedCategory._id, name: resolvedCategory.name, ...(resolvedCategory.image ? { image: resolvedCategory.image } : {}) }]
+      : [];
+    const subCategories = (resolvedSubsByMaster.get(String(master._id)) || []).map((s) => ({
+      _id: s._id,
+      name: s.name,
+      ...(s.image ? { image: s.image } : {}),
+    }));
 
     // createProduct already handles the base Product create + the exact same
     // transactional opening-batch/opening-serial retrofit as turning tracking on via
@@ -521,9 +683,9 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
       expiryDate: item.expiryDate,
       imeis: item.imeis,
       warrantyMonths: master.warrantyMonths,
-      category: master.category,
-      categories: master.categories,
-      subCategories: master.subCategories,
+      category: resolvedCategory?.name || master.category,
+      categories,
+      subCategories,
       brandId: master.brandId,
       image: master.image,
       hasVariants: master.hasVariants,

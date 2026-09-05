@@ -50,6 +50,14 @@ export interface ImportableMasterProduct {
   carriedAtBranches: string[]
 }
 
+export interface ImportableMasterProductsResponse {
+  results: ImportableMasterProduct[]
+  page: number
+  limit: number
+  totalPages: number
+  totalResults: number
+}
+
 export interface ImportMasterProductItem {
   masterProductId: string
   price: number
@@ -67,8 +75,8 @@ export const masterProductApi = createApi({
   baseQuery: baseQueryWithAuth,
   tagTypes: ['ImportableMasterProducts'],
   endpoints: (builder) => ({
-    getImportableMasterProducts: builder.query<ImportableMasterProduct[], void>({
-      query: () => '/importable',
+    getImportableMasterProducts: builder.query<ImportableMasterProductsResponse, { search?: string; page?: number; limit?: number }>({
+      query: (params) => ({ url: '/importable', params }),
       providesTags: [{ type: 'ImportableMasterProducts', id: 'LIST' }],
     }),
     importMasterProducts: builder.mutation<unknown[], ImportMasterProductItem[]>({

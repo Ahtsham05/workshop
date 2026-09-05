@@ -11,9 +11,13 @@ const requireBranch = (req) => {
 
 const getImportableMasterProducts = catchAsync(async (req, res) => {
   requireBranch(req);
+  const { search, page, limit } = req.query;
   const rows = await masterProductService.getImportableMasterProducts({
     organizationId: req.organizationId,
     branchId: req.branchId,
+    search,
+    page,
+    limit,
   });
   res.send(rows);
 });
