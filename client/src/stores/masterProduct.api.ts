@@ -1,5 +1,6 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { createAppFetchBaseQuery } from './app-fetch-base-query'
+import { BATCH_API_TIMEOUT_MS } from '@/lib/api-timeout'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
@@ -75,6 +76,11 @@ export const masterProductApi = createApi({
         url: '/import',
         method: 'POST',
         body: { items },
+        // Creates each product server-side, not one insertMany — selecting many rows to
+        // import can genuinely take well over the default mutation timeout, so this
+        // needs the same longer allowance as an explicit /bulk endpoint (see
+        // masterProduct.service.js#importMasterProducts and lib/api-timeout.ts).
+        timeout: BATCH_API_TIMEOUT_MS,
       }),
       invalidatesTags: [{ type: 'ImportableMasterProducts', id: 'LIST' }],
     }),

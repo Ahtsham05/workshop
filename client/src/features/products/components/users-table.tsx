@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   ColumnDef,
   ColumnFiltersState,
   ColumnOrderState,
+  Row,
   RowData,
   SortingState,
   VisibilityState,
@@ -46,6 +47,8 @@ import { DraggableTableHead } from './draggable-table-head'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
+import { useFormatMoney } from '@/lib/format-money'
+import { onEnterAdvance, focusField } from '@/lib/invoice-form-keyboard'
 import type { ReactNode } from 'react'
 
 declare module '@tanstack/react-table' {
@@ -112,7 +115,7 @@ interface DataTableProps {
   onSelectedRowsChange?: (selectedRows: Product[]) => void
   inlineEditMode?: boolean
   editValues?: Record<string, { price?: number; cost?: number; stockQuantity?: number }>
-  onEditValueChange?: (productId: string, field: string, value: number) => void
+  onEditValueChange?: (productId: string, field: string, value: number | undefined) => void
   toolbarLeading?: ReactNode
   toolbarTrailing?: ReactNode
   /** Cumulative qty/value from every page before the current one — null/undefined
@@ -141,6 +144,38 @@ export function ProductTable({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [sorting, setSorting] = useState<SortingState>([])
   const { t, language } = useLanguage()
+  const formatCurrency = useFormatMoney()
+
+  // Enter advances field-to-field across the inline bulk-edit inputs (Sale Price →
+  // Purchase Price → Stock Quantity → next selected row's Sale Price) instead of doing
+  // nothing/submitting the page — same ref-map + onEnterAdvance/focusField pattern the
+  // Import-from-other-branches dialog uses for its own per-row fields.
+  const editFieldRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const editFieldKey = (productId: string, field: string) => `${productId}:${field}`
+  const focusNextEditField = (currentRow: Row<Product>, columnId: string) => {
+    const productId = currentRow.original._id || currentRow.original.id || ''
+    if (columnId === 'price') {
+      focusField(editFieldRefs.current[editFieldKey(productId, 'cost')])
+      return
+    }
+    if (columnId === 'cost') {
+      focusField(editFieldRefs.current[editFieldKey(productId, 'stockQuantity')])
+      return
+    }
+    // Last field in the row — skip ahead to the next SELECTED row (unselected rows have
+    // no editable fields at all) rather than stopping dead at the end of this one.
+    const rows = table.getRowModel().rows
+    const currentIndex = rows.findIndex((r) => r.id === currentRow.id)
+    for (let i = currentIndex + 1; i < rows.length; i++) {
+      if (!rows[i].getIsSelected()) continue
+      const nextId = rows[i].original._id || rows[i].original.id || ''
+      const el = editFieldRefs.current[editFieldKey(nextId, 'price')]
+      if (el) {
+        focusField(el)
+        return
+      }
+    }
+  }
 
   // Persist customizations so they survive a reload.
   React.useEffect(() => {
@@ -278,6 +313,15 @@ export function ProductTable({
                       
                       // Show inline editing for price, cost, stockQuantity when selected and in edit mode
                       if (inlineEditMode && isSelected && ['price', 'cost', 'stockQuantity'].includes(columnId)) {
+                        // Pre-filled with the product's current value rather than left blank —
+                        // a shopkeeper reviewing 200+ selected rows can then just glance and
+                        // move on for the ones that are already correct, and directly edit the
+                        // number (instead of first having to look up "Current: ..." below and
+                        // retype it) for the ones that aren't. Only actually touching the field
+                        // records a real edit (via onEditValueChange) — leaving it alone submits
+                        // no change for that product/field, same as before.
+                        const currentValue = (product[columnId as keyof Product] as number) ?? 0
+                        const placeholderKey = columnId === 'price' ? 'enter_new_price' : columnId === 'cost' ? 'enter_new_cost' : 'enter_new_quantity'
                         return (
                           <TableCell
                             key={cell.id}
@@ -286,21 +330,28 @@ export function ProductTable({
                             }`}
                           >
                             <Input
+                              ref={(el) => { editFieldRefs.current[editFieldKey(productId, columnId)] = el }}
                               type="number"
                               step={columnId === 'stockQuantity' ? '1' : '0.01'}
                               min="0"
-                              placeholder={`${t('enter_new')} ${t(columnId)}`}
-                              value={editValue[columnId as keyof typeof editValue] ?? ''}
+                              placeholder={t(placeholderKey)}
+                              value={editValue[columnId as keyof typeof editValue] ?? currentValue}
                               onChange={(e) => {
-                                const value = parseFloat(e.target.value) || 0
-                                onEditValueChange?.(productId, columnId, value)
+                                // Clearing the field reverts to "unedited" (shows the current
+                                // value again, submits no change) rather than coercing to 0 —
+                                // otherwise an accidental backspace-to-empty would silently zero
+                                // out a price on submit.
+                                const raw = e.target.value
+                                const value = raw === '' ? undefined : parseFloat(raw)
+                                onEditValueChange?.(productId, columnId, value === undefined || Number.isNaN(value) ? undefined : value)
                               }}
+                              onKeyDown={(e) => onEnterAdvance(e, () => focusNextEditField(row, columnId))}
                               className="h-8 text-xs"
                             />
                             <div className="text-xs text-muted-foreground mt-1">
-                              {t('current')}: {columnId === 'stockQuantity' 
+                              {t('current')}: {columnId === 'stockQuantity'
                                 ? (product[columnId as keyof Product] as number)?.toString() || '0'
-                                : `$${(product[columnId as keyof Product] as number)?.toFixed(2) || '0.00'}`
+                                : formatCurrency((product[columnId as keyof Product] as number) || 0)
                               }
                             </div>
                           </TableCell>
@@ -354,7 +405,7 @@ export function ProductTable({
                     if (column.id === 'stockValue') {
                       return (
                         <TableCell key={column.id} className='font-semibold tabular-nums'>
-                          {runningValue.toLocaleString()}
+                          {formatCurrency(runningValue)}
                         </TableCell>
                       )
                     }

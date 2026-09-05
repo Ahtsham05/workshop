@@ -32,6 +32,8 @@ import { toast } from 'sonner'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
+import { useFormatMoney } from '@/lib/format-money'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 
 const SEARCH_DEBOUNCE_MS = 400
@@ -57,6 +59,11 @@ export default function Products() {
   const [selectedProducts, setSelectedProducts] = useState<any[]>([])
   const [inlineEditMode, setInlineEditMode] = useState(false)
   const [editValues, setEditValues] = useState<Record<string, { price?: number; cost?: number; stockQuantity?: number }>>({})
+  // A prepared-but-not-yet-sent bulk update, held here while the confirmation dialog is
+  // open — separates "figure out what would change" from "actually commit it" so a
+  // 200+ row price/cost change always gets a review step before it's irreversible.
+  const [pendingBulkUpdate, setPendingBulkUpdate] = useState<{ id: string; price?: number; cost?: number; stockQuantity?: number }[] | null>(null)
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false)
   const [showLowStockDetails, setShowLowStockDetails] = useState(false)
   const [lowStockThreshold, setLowStockThreshold] = useState(10)
   const [categoryFilter, setCategoryFilter] = useState(NO_CATEGORY_FILTER)
@@ -72,6 +79,7 @@ export default function Products() {
 
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
+  const formatCurrency = useFormatMoney()
   // Re-sorts the current page (active-first/inactive-last) after a per-row Active
   // toggle — that switch flips instantly on its own but has no way to move the row
   // without this, see active-toggle-cell.tsx.
@@ -179,62 +187,86 @@ export default function Products() {
       })
   }, [isBreakdownMode, fetch, dispatch])
 
-  // Handle bulk product update with individual values
-  const handleBulkUpdate = useCallback(async () => {
-    try {
-      const hasUpdates = Object.values(editValues).some(values => 
-        values.price !== undefined || values.cost !== undefined || values.stockQuantity !== undefined
-      )
-      
-      if (!hasUpdates) {
-        toast.error(t('enter_at_least_one_value'))
-        return
-      }
+  // Prepares the bulk update and opens the confirmation dialog — the actual write only
+  // happens from confirmBulkUpdate below, once the user has seen exactly what's about to
+  // change. Editing prices/cost/stock for potentially hundreds of selected rows at once
+  // is exactly the kind of action that deserves a review step before it's irreversible.
+  const handleBulkUpdate = useCallback(() => {
+    const hasUpdates = Object.values(editValues).some(values =>
+      values.price !== undefined || values.cost !== undefined || values.stockQuantity !== undefined
+    )
 
-      // Prepare products array for bulk update API
-      const productsToUpdate = selectedProducts.map((product: any) => {
+    if (!hasUpdates) {
+      toast.error(t('enter_at_least_one_value'))
+      return
+    }
+
+    const productsToUpdate = selectedProducts
+      .map((product: any) => {
         const productId = product._id || product.id || ''
         const updates = editValues[productId] || {}
-        
+
         if (Object.keys(updates).length === 0) return null
-        
+
         return {
           id: productId,
           ...(updates.price !== undefined && { price: updates.price }),
           ...(updates.cost !== undefined && { cost: updates.cost }),
           ...(updates.stockQuantity !== undefined && { stockQuantity: updates.stockQuantity }),
         }
-      }).filter(Boolean) // Remove null entries
+      })
+      .filter((p): p is { id: string; price?: number; cost?: number; stockQuantity?: number } => p !== null)
 
-      if (productsToUpdate.length === 0) {
-        toast.error(t('no_changes_to_update'))
-        return
-      }
+    if (productsToUpdate.length === 0) {
+      toast.error(t('no_changes_to_update'))
+      return
+    }
 
-      console.log('Sending bulk update for products:', productsToUpdate)
+    setPendingBulkUpdate(productsToUpdate)
+  }, [editValues, selectedProducts, t])
 
-      // Call the bulk update API
-      const result = await dispatch(bulkUpdateProducts({ products: productsToUpdate }))
-      
+  // Which fields the pending update actually touches, across every row — shown as a
+  // quick summary in the confirmation dialog so "238 products" isn't the only thing the
+  // user has to go on before committing.
+  const pendingBulkUpdateFields = useMemo(() => {
+    if (!pendingBulkUpdate) return []
+    const fields = new Set<string>()
+    pendingBulkUpdate.forEach((p) => {
+      if (p.price !== undefined) fields.add(t('price'))
+      if (p.cost !== undefined) fields.add(t('cost'))
+      if (p.stockQuantity !== undefined) fields.add(t('stock_quantity'))
+    })
+    return [...fields]
+  }, [pendingBulkUpdate, t])
+
+  const confirmBulkUpdate = useCallback(async () => {
+    if (!pendingBulkUpdate) return
+    setIsBulkUpdating(true)
+    try {
+      const result = await dispatch(bulkUpdateProducts({ products: pendingBulkUpdate }))
+
       if (result.meta.requestStatus === 'fulfilled') {
-        // Reset edit mode and values
         setInlineEditMode(false)
         setEditValues({})
         setSelectedProducts([])
-        
-        // Refresh the products list
         setFetch(!fetch)
-        
-        toast.success(`${t('bulk_update_success')} ${productsToUpdate.length} products updated`)
+        // Same cross-slice cache invalidation handleBulkSetActive/BulkDeleteDialog use —
+        // Invoice/Purchase/POS pickers read prices/stock from purchaseCatalogApi's own
+        // RTK Query cache, which this plain bulkUpdateProducts thunk has no way to
+        // invalidate on its own, so they'd otherwise keep showing pre-update prices.
+        dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
+        toast.success(`${t('bulk_update_success')} ${pendingBulkUpdate.length} products updated`)
       } else {
         throw new Error(result.payload || 'Bulk update failed')
       }
-      
     } catch (error) {
       console.error('Bulk update error:', error)
       toast.error('Failed to update products')
+    } finally {
+      setIsBulkUpdating(false)
+      setPendingBulkUpdate(null)
     }
-  }, [editValues, selectedProducts, t, fetch, dispatch])
+  }, [pendingBulkUpdate, fetch, dispatch, t])
 
   // Activate/deactivate every selected row in one call — reuses the same bulk-update
   // endpoint the price/cost/stock bulk edit above already uses.
@@ -271,14 +303,18 @@ export default function Products() {
     setSelectedProducts(selectedRows)
   }, [])
 
-  const handleEditValueChange = useCallback((productId: string, field: string, value: number) => {
-    setEditValues(prev => ({
-      ...prev,
-      [productId]: {
-        ...prev[productId],
-        [field]: value
+  const handleEditValueChange = useCallback((productId: string, field: string, value: number | undefined) => {
+    setEditValues(prev => {
+      const productValues = { ...prev[productId] }
+      if (value === undefined) {
+        // Field was cleared back to empty — treat as "not edited" (falls back to
+        // showing/submitting the product's current value) rather than storing a stray 0.
+        delete productValues[field as keyof typeof productValues]
+      } else {
+        productValues[field as keyof typeof productValues] = value
       }
-    }))
+      return { ...prev, [productId]: productValues }
+    })
   }, [])
 
   const startInlineEdit = useCallback(() => {
@@ -466,12 +502,12 @@ export default function Products() {
                 <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
                   <Wallet className='h-4 w-4 text-muted-foreground' />
                   <span className='text-muted-foreground'>{t('total_value_of_stock')}:</span>
-                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalStockValue ?? 0).toLocaleString()}</span>
+                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : formatCurrency(productStats?.totalStockValue ?? 0)}</span>
                 </div>
                 <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
                   <CircleDollarSign className='h-4 w-4 text-muted-foreground' />
                   <span className='text-muted-foreground'>{t('Avg Purchase Price')}:</span>
-                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : avgPurchasePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : formatCurrency(avgPurchasePrice)}</span>
                 </div>
               </>
             )}
@@ -535,6 +571,29 @@ export default function Products() {
           )}
 
         <ProductDialogs setFetch={setFetch} />
+
+        <ConfirmDialog
+          open={!!pendingBulkUpdate}
+          onOpenChange={(next) => {
+            if (!isBulkUpdating) setPendingBulkUpdate(next ? pendingBulkUpdate : null)
+          }}
+          handleConfirm={confirmBulkUpdate}
+          isLoading={isBulkUpdating}
+          title={t('confirm_bulk_update_title', { count: String(pendingBulkUpdate?.length ?? 0) })}
+          desc={
+            <div className='space-y-3'>
+              <p>{t('confirm_bulk_update_desc', { count: String(pendingBulkUpdate?.length ?? 0) })}</p>
+              <div className='flex flex-wrap gap-1.5'>
+                {pendingBulkUpdateFields.map((field) => (
+                  <Badge key={field} variant='secondary' className='font-normal'>
+                    {field}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          }
+          confirmText={t('confirm_and_update')}
+        />
 
         <BulkDeleteDialog
           open={bulkDeleteOpen}

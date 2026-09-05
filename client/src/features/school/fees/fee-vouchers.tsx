@@ -2399,23 +2399,32 @@ function voucherPrintCSS(selectedSize: { baseFont: number; schoolFont: number; r
   }
   .vc-fee th.r, .vc-fee td.r { text-align: right; }
   .vc-fee td {
-    padding: 3px 5px;
-    font-size: calc(9px * ${selectedSize.scale});
+    padding: 2.5px 4px;
+    font-size: calc(8.3px * ${selectedSize.scale});
     border: 1px solid #ddd;
+    white-space: nowrap;
   }
-  .vc-fee td.sno { text-align: center; width: 18px; color: #555; font-size: calc(8px * ${selectedSize.scale}); }
-  .vc-fee td.r { font-weight: 600; width: 30%; }
+  .vc-fee td.sno { text-align: center; width: 14px; color: #555; font-size: calc(7.5px * ${selectedSize.scale}); }
+  .vc-fee td.r { font-weight: 600; }
+  .vc-fee td:nth-child(2) { white-space: normal; }
 
   /* ── Totals ───────────────────────────── */
   .vc-total { width: 100%; border-collapse: collapse; border-top: 2px solid #000; }
-  .vc-total td { padding: 3.5px 5px; font-size: calc(9.2px * ${selectedSize.scale}); }
-  .vc-total td.tlbl { width: 70%; font-weight: 600; }
-  .vc-total td.tamt { text-align: right; font-weight: 800; font-size: calc(10.5px * ${selectedSize.scale}); }
+  .vc-total td { padding: 5px; font-size: calc(10px * ${selectedSize.scale}); }
+  .vc-total td.tlbl { width: 60%; font-weight: 700; }
+  .vc-total td.tamt { text-align: right; font-weight: 800; font-size: calc(13px * ${selectedSize.scale}); }
   /* Paid / Remaining breakdown rows (only rendered when something has been paid) */
   .vc-total tr.paid-row td { font-weight: 600; }
   .vc-total tr.paid-row td.paid-amt { font-weight: 800; }
   .vc-total tr.due-row td, .vc-total tr.cleared-row td { border-top: 1px dashed #999; }
-  .vc-total tr.due-row td.due-amt { font-weight: 900; }
+  /* The one figure on the whole challan that matters most — still-owed amount —
+     gets a bold boxed callout so it can't be missed at a glance. */
+  .vc-total tr.due-row td.due-amt {
+    font-weight: 900;
+    font-size: calc(16px * ${selectedSize.scale});
+    border: 2px solid #000;
+    padding: 3px 10px;
+  }
 
   /* ── PAID stamp (B&W) ─────────────────── */
   .paid-stamp {
@@ -2429,15 +2438,31 @@ function voucherPrintCSS(selectedSize: { baseFont: number; schoolFont: number; r
     margin: 2px auto;
   }
 
-  /* ── Signature row ────────────────────── */
+  /* ── Signature row — real blank room for a pen signature or rubber stamp,
+     not just an inline underscore, so it prints usably at any size ── */
   .vc-sigs {
     display: flex;
     justify-content: space-between;
-    padding: 4px 5px 3px;
-    font-size: calc(7.8px * ${selectedSize.scale});
+    padding: 3px 5px 2px;
     border-top: 1px solid #aaa;
     margin-top: auto;
-    gap: 6px;
+    gap: 8px;
+  }
+  .vc-sig-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .vc-sig-space {
+    height: calc(20px * ${selectedSize.scale});
+    border-bottom: 1px solid #000;
+  }
+  .vc-sig-label {
+    font-size: calc(7.8px * ${selectedSize.scale});
+    padding-top: 1.5px;
+    white-space: nowrap;
   }
 
   /* ── Copy label ───────────────────────── */
@@ -2588,11 +2613,21 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   const guardianPhone = v.studentId?.parent?.phone || '—';
   const fatherName = v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName || '—';
   const otherPendingMonths: any[] = v.pendingDetails?.months || [];
+  const otherPaidMonths: any[] = v.paidHistoryDetails?.months || [];
 
-  const displayLineItems: { name: string; amount: number }[] = v.printLineItems?.length
+  const displayLineItems: { name: string; amount: number; isPending?: boolean; isPaidHistory?: boolean }[] = v.printLineItems?.length
     ? v.printLineItems
     : [
         ...feeItems.map((fi: any) => ({ name: feeItemLabel(fi.name, v.month, v.year), amount: fi.amount || 0 })),
+        ...otherPaidMonths.map((p: any) => ({
+          name: p.feeItems?.length === 1 && p.feeItems[0]?.name
+            ? feeItemLabel(p.feeItems[0].name, p.month, p.year)
+            : p.voucherType === 'exam'
+              ? feeItemLabel('Exam Fee', p.month, p.year)
+              : feeItemLabel('Paid Fee', p.month, p.year),
+          amount: Number(p.amount || 0),
+          isPaidHistory: true,
+        })),
         ...otherPendingMonths.map((p: any) => ({
           name: p.feeItems?.length === 1 && p.feeItems[0]?.name
             ? feeItemLabel(p.feeItems[0].name, p.month, p.year)
@@ -2600,40 +2635,78 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
               ? feeItemLabel('Exam Fee', p.month, p.year)
               : feeItemLabel('Pending Fee', p.month, p.year),
           amount: Number(p.remaining || 0),
+          isPending: true,
         })),
       ];
 
-  const itemRows = displayLineItems
-    .map((fi: any, i: number) => {
-      const isPendingRow = !!fi.isPending;
-      // Tag every line item so a print always makes clear, at a glance, which fee(s)
-      // this transaction just received vs. which are still owed — never leaving it to
-      // the reader to infer from the PAID stamp or totals alone.
-      let tagText = '';
-      let tagClass = '';
-      let rowClass = '';
-      if (isPendingRow) {
-        tagText = 'PENDING';
-        tagClass = 'pending-tag';
-        rowClass = ' class="pending-row"';
-      } else if (v.status === 'paid') {
-        tagText = v.paidThisTransaction ? 'RECEIVED' : 'PAID';
-        tagClass = 'received-tag';
-        rowClass = ' class="received-row"';
-      } else if (v.status === 'partial') {
-        tagText = 'PARTIAL';
-        tagClass = 'pending-tag';
-        rowClass = ' class="pending-row"';
-      } else if (v.status === 'unpaid' || v.status === 'overdue') {
-        tagText = 'PENDING';
-        tagClass = 'pending-tag';
-        rowClass = ' class="pending-row"';
-      }
-      const label = tagText ? `${fi.name} <span class="${tagClass}">${tagText}</span>` : fi.name;
-      return `<tr${rowClass}>
+  // The voucher itself has no per-item payment tracking, only a voucher-level
+  // paidAmount — so when it's partially paid, that amount is allocated across its
+  // own fee items in order (waterfall) purely for a plausible per-row Paid figure.
+  let currentPartialPool = v.status === 'partial' ? Number(v.paidAmount || 0) : 0;
+  const enrichedRows = displayLineItems.map((fi: any) => {
+    const isPendingRow = !!fi.isPending;
+    // Tag every line item so a print always makes clear, at a glance, which fee(s)
+    // this transaction just received vs. which are still owed — never leaving it to
+    // the reader to infer from the PAID stamp or totals alone.
+    let tagText = '';
+    let tagClass = '';
+    let rowClass = '';
+    if (isPendingRow) {
+      tagText = 'PENDING';
+      tagClass = 'pending-tag';
+      rowClass = ' class="pending-row"';
+    } else if (fi.isPaidHistory) {
+      tagText = 'PAID';
+      tagClass = 'received-tag';
+      rowClass = ' class="received-row"';
+    } else if (v.status === 'paid') {
+      tagText = v.paidThisTransaction ? 'RECEIVED' : 'PAID';
+      tagClass = 'received-tag';
+      rowClass = ' class="received-row"';
+    } else if (v.status === 'partial') {
+      tagText = 'PARTIAL';
+      tagClass = 'pending-tag';
+      rowClass = ' class="pending-row"';
+    } else if (v.status === 'unpaid' || v.status === 'overdue') {
+      tagText = 'PENDING';
+      tagClass = 'pending-tag';
+      rowClass = ' class="pending-row"';
+    }
+
+    // Paid Amount per row: pending rows always read 0 (nothing collected yet for
+    // that period), paid-history rows show the full amount settled, and a partially
+    // paid current voucher splits its paidAmount across its own items in order.
+    let paidAmt = 0;
+    if (isPendingRow) {
+      paidAmt = 0;
+    } else if (fi.isPaidHistory) {
+      paidAmt = fi.amount || 0;
+    } else if (v.status === 'paid') {
+      paidAmt = fi.amount || 0;
+    } else if (v.status === 'partial') {
+      paidAmt = Math.min(fi.amount || 0, Math.max(0, currentPartialPool));
+      currentPartialPool -= paidAmt;
+    }
+
+    return { ...fi, tagText, tagClass, rowClass, paidAmt };
+  });
+
+  // Fully settled rows always print above anything still owed (partially or fully
+  // pending) — a stable sort keeps each group's original chronological order intact.
+  const orderedRows = [...enrichedRows].sort((a, b) => {
+    const aOwes = (a.amount || 0) - (a.paidAmt || 0) > 0 ? 1 : 0;
+    const bOwes = (b.amount || 0) - (b.paidAmt || 0) > 0 ? 1 : 0;
+    return aOwes - bOwes;
+  });
+
+  const itemRows = orderedRows
+    .map((fi, i) => {
+      const label = fi.tagText ? `${fi.name} <span class="${fi.tagClass}">${fi.tagText}</span>` : fi.name;
+      return `<tr${fi.rowClass}>
           <td class="sno">${i + 1}</td>
           <td>${label}</td>
           <td class="r">${(fi.amount || 0).toLocaleString()}/-</td>
+          <td class="r">${fi.paidAmt > 0 ? fi.paidAmt.toLocaleString() + '/-' : '0/-'}</td>
         </tr>`;
     })
     .join('');
@@ -2645,23 +2718,29 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
 
   const discountRow =
     discount > 0
-      ? `<tr><td class="sno"></td><td>Scholarship / Discount</td><td class="r">(${discount.toLocaleString()}/-)</td></tr>`
+      ? `<tr><td class="sno"></td><td>Scholarship / Discount</td><td class="r">(${discount.toLocaleString()}/-)</td><td class="r">—</td></tr>`
       : '';
   const fineRow =
     fine > 0
-      ? `<tr><td class="sno"></td><td>Late Fine</td><td class="r">${fine.toLocaleString()}/-</td></tr>`
+      ? `<tr><td class="sno"></td><td>Late Fine</td><td class="r">${fine.toLocaleString()}/-</td><td class="r">—</td></tr>`
       : '';
 
   const paidStamp =
     v.status === 'paid'
-      ? `<tr><td colspan="3" style="text-align:center;padding:2px 0"><span class="paid-stamp">PAID</span></td></tr>`
+      ? `<tr><td colspan="4" style="text-align:center;padding:2px 0"><span class="paid-stamp">PAID</span></td></tr>`
       : '';
 
   const studentName = `${v.studentId?.firstName || ''} ${v.studentId?.lastName || ''}`.trim();
   const studentUserId = v.studentId?.studentUserId || '—';
   const rollNumber = v.studentId?.rollNumber || '—';
-  const lineItemsTotal = displayLineItems.reduce((s, fi) => s + (fi.amount || 0), 0);
-  const totalAmount = Math.max(0, lineItemsTotal - discount + fine);
+
+  // Bottom line is pending payments only — every row's still-owed portion (amount
+  // minus whatever's already been paid on it), never mixed with what's already
+  // settled, so this figure always matches "what should actually be collected now".
+  const totalPendingOnly = Math.max(
+    0,
+    enrichedRows.reduce((s, fi) => s + Math.max(0, (fi.amount || 0) - (fi.paidAmt || 0)), 0) - discount + fine
+  );
 
   // Explicit banner stating which month(s) THIS payment covered — set only right after
   // a fresh collection, so a printed receipt never leaves it ambiguous which month was paid.
@@ -2676,30 +2755,13 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     ? `<div class="vc-arrears-note">Also shows ${currencySymbol} ${otherArrearsTotal.toLocaleString()}/- in other outstanding month(s) — not part of this payment</div>`
     : '';
 
-  // Paid Amount / Remaining Payable breakdown — shown whenever something has actually
-  // been paid (a fresh receipt, or a reprint of a partially/fully paid voucher).
-  // Remaining Payable = Total Amount (current voucher + any listed arrears) − what's paid.
-  const paidAmountDisplay = v.paidThisTransaction
-    ? Number(v.amountPaidNow || 0)
-    : Number(v.paidAmount || 0);
-  const remainingPayable = Math.max(0, totalAmount - paidAmountDisplay);
-  const totalsRows = paidAmountDisplay > 0
-    ? `<tr>
-        <td class="tlbl">Total Amount (${currencySymbol}):</td>
-        <td class="tamt">${totalAmount.toLocaleString()}/-</td>
-      </tr>
-      <tr class="paid-row">
-        <td class="tlbl">Paid Amount (${currencySymbol}):</td>
-        <td class="tamt paid-amt">${paidAmountDisplay.toLocaleString()}/-</td>
-      </tr>
-      <tr class="${remainingPayable > 0 ? 'due-row' : 'cleared-row'}">
-        <td class="tlbl">Remaining Payable (${currencySymbol}):</td>
-        <td class="tamt${remainingPayable > 0 ? ' due-amt' : ''}">${remainingPayable.toLocaleString()}/-</td>
-      </tr>`
-    : `<tr>
-        <td class="tlbl">Total Amount (${currencySymbol}):</td>
-        <td class="tamt">${totalAmount.toLocaleString()}/-</td>
-      </tr>`;
+  // Paid Date only reflects money received against THIS voucher specifically.
+  const currentVoucherPaidAmount = Number(v.paidAmount || 0);
+
+  const totalsRows = `<tr class="${totalPendingOnly > 0 ? 'due-row' : 'cleared-row'}">
+      <td class="tlbl">Total Pending Amount (${currencySymbol}):</td>
+      <td class="tamt${totalPendingOnly > 0 ? ' due-amt' : ''}">${totalPendingOnly.toLocaleString()}/-</td>
+    </tr>`;
 
   return `<div class="vc">
   <div class="vc-head">
@@ -2742,15 +2804,16 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
       <td class="val">${guardianPhone}</td>
       <td class="sep"></td>
       <td class="lbl">Paid Date</td>
-      <td class="val">${paidAmountDisplay > 0 ? paidDate : '—'}</td>
+      <td class="val">${currentVoucherPaidAmount > 0 ? paidDate : '—'}</td>
     </tr>
   </table>
   <table class="vc-fee">
     <thead>
       <tr>
-        <th style="width:18px;text-align:center">#</th>
+        <th style="width:14px;text-align:center">#</th>
         <th>Description</th>
-        <th class="r" style="width:28%">Amount</th>
+        <th class="r" style="width:17%">Amount</th>
+        <th class="r" style="width:17%">Paid</th>
       </tr>
     </thead>
     <tbody>
@@ -2765,9 +2828,9 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   </table>
   ${arrearsNote}
   <div class="vc-sigs">
-    <span>Issued by: ___________</span>
-    <span>Checked by: ___________</span>
-    <span>Counter Signed by: ___________</span>
+    <div class="vc-sig-box"><div class="vc-sig-space"></div><span class="vc-sig-label">Issued by</span></div>
+    <div class="vc-sig-box"><div class="vc-sig-space"></div><span class="vc-sig-label">Checked by</span></div>
+    <div class="vc-sig-box"><div class="vc-sig-space"></div><span class="vc-sig-label">Counter Signed by</span></div>
   </div>
   ${invoiceNote?.trim() ? `<div class="vc-note">${invoiceNoteToSafeHtml(invoiceNote)}</div>` : ''}
   <div class="vc-copy-label">${copyLabel}</div>
@@ -2839,8 +2902,8 @@ function receiptCopyHTML(payment: any, schoolName: string, copyLabel: string, cu
   </table>
   ${payment.remarks?.trim() ? `<div class="vc-note">Remarks: ${escapeHtml(payment.remarks.trim())}</div>` : ''}
   <div class="vc-sigs">
-    <span>Received by: ___________</span>
-    <span>Signature: ___________</span>
+    <div class="vc-sig-box"><div class="vc-sig-space"></div><span class="vc-sig-label">Received by</span></div>
+    <div class="vc-sig-box"><div class="vc-sig-space"></div><span class="vc-sig-label">Signature</span></div>
   </div>
   <div class="vc-copy-label">${copyLabel}</div>
 </div>`;

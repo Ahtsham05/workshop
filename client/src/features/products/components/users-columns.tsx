@@ -17,11 +17,13 @@ import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-u
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
 import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product'
+import { useFormatMoney } from '@/lib/format-money'
 
 export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () => void): ColumnDef<Product>[] => {
   const { t } = useLanguage()
   const { showUrdu } = useUrduDisplay()
   const expiringByProduct = useExpiringBatchesByProduct()
+  const formatCurrency = useFormatMoney()
 
   return [
   {
@@ -238,12 +240,12 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
       if (range) {
         return (
           <div>
-            {range.minPrice === range.maxPrice ? range.minPrice : `${range.minPrice}–${range.maxPrice}`}
+            {range.minPrice === range.maxPrice ? formatCurrency(range.minPrice) : `${formatCurrency(range.minPrice)}–${formatCurrency(range.maxPrice)}`}
           </div>
         )
       }
       const value = Number(row.getValue('price') ?? 0)
-      return <div>{value}</div>
+      return <div>{formatCurrency(value)}</div>
     },
   },
   {
@@ -255,12 +257,12 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
       if (range) {
         return (
           <div>
-            {range.minCost === range.maxCost ? range.minCost : `${range.minCost}–${range.maxCost}`}
+            {range.minCost === range.maxCost ? formatCurrency(range.minCost) : `${formatCurrency(range.minCost)}–${formatCurrency(range.maxCost)}`}
           </div>
         )
       }
       const value = Number(row.getValue('cost') ?? 0)
-      return <div>{value}</div>
+      return <div>{formatCurrency(value)}</div>
     },
   },
   {
@@ -282,7 +284,7 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
   {
     id: 'stockValue',
     header: ({ column }) => <DataTableColumnHeader column={column} title='stock_value' />,
-    cell: ({ row }) => <div className='tabular-nums'>{getDisplayStockValue(row.original).toLocaleString()}</div>,
+    cell: ({ row }) => <div className='tabular-nums'>{formatCurrency(getDisplayStockValue(row.original))}</div>,
     enableHiding: true,
   },
   {

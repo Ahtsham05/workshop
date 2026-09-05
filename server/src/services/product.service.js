@@ -12,6 +12,7 @@ const { extractDuplicateFieldFromMessage, labelFor } = require('../utils/duplica
 const logger = require('../config/logger');
 
 let productIndexesEnsured = false;
+let ensureProductIndexesInFlight = null;
 
 /**
  * Migrate from the legacy globally-unique `barcode` index (pre org/branch-scoped SKU
@@ -30,43 +31,61 @@ let productIndexesEnsured = false;
  * to create a unique index over existing duplicates), and that failure surfaces to
  * whatever request happened to trigger this function as a wildly misleading
  * `SKU "" already exists` error for a product that never even set one.
+ *
+ * Concurrency note: every createProduct call awaits this first, and createProduct is now
+ * run several-at-once by masterProduct.service.js#importMasterProducts. The plain boolean
+ * flag below is only safe against *sequential* callers — two concurrent callers arriving
+ * before the first one finishes would otherwise both see productIndexesEnsured === false
+ * and both run dropIndex/syncIndexes against the same collection at once, which Mongo
+ * does not handle safely (an in-progress index build racing another index operation
+ * throws real errors) and was surfacing as a spurious import failure. Memoizing the
+ * in-flight promise makes every concurrent caller await the one real run instead.
  */
 const ensureProductIndexes = async () => {
   if (productIndexesEnsured) return;
+  if (ensureProductIndexesInFlight) return ensureProductIndexesInFlight;
 
-  const collection = mongoose.connection.collection('products');
-  try {
-    const indexes = await collection.indexes();
-    const legacyBarcodeIndex = indexes.find(
-      (idx) => idx.key?.barcode === 1 && Object.keys(idx.key).length === 1 && idx.unique
-    );
-    if (legacyBarcodeIndex) {
-      await collection.dropIndex(legacyBarcodeIndex.name);
+  ensureProductIndexesInFlight = (async () => {
+    const collection = mongoose.connection.collection('products');
+    try {
+      const indexes = await collection.indexes();
+      const legacyBarcodeIndex = indexes.find(
+        (idx) => idx.key?.barcode === 1 && Object.keys(idx.key).length === 1 && idx.unique
+      );
+      if (legacyBarcodeIndex) {
+        await collection.dropIndex(legacyBarcodeIndex.name);
+      }
+    } catch (err) {
+      if (err.codeName !== 'IndexNotFound') {
+        logger.warn(`[ensureProductIndexes] failed to drop legacy barcode index: ${err.message}`);
+      }
     }
-  } catch (err) {
-    if (err.codeName !== 'IndexNotFound') {
-      logger.warn(`[ensureProductIndexes] failed to drop legacy barcode index: ${err.message}`);
+
+    try {
+      await collection.updateMany({ sku: { $in: ['', null] } }, { $unset: { sku: '' } });
+      await collection.updateMany({ barcode: { $in: ['', null] } }, { $unset: { barcode: '' } });
+    } catch (err) {
+      logger.warn(`[ensureProductIndexes] failed to clean up empty sku/barcode values: ${err.message}`);
     }
-  }
+
+    try {
+      await Product.syncIndexes();
+      productIndexesEnsured = true;
+    } catch (err) {
+      // Don't let an index-build hiccup (e.g. a duplicate the cleanup above didn't
+      // anticipate) masquerade as *this* request's own product having a duplicate
+      // sku/barcode — that's an unrelated, pre-existing data problem, not something the
+      // person creating/editing a product right now did. Log it and let the write
+      // proceed under whatever indexes are currently actually live; `productIndexesEnsured`
+      // stays false, so the next write retries the sync.
+      logger.error(`[ensureProductIndexes] syncIndexes failed, will retry on next write: ${err.message}`);
+    }
+  })();
 
   try {
-    await collection.updateMany({ sku: { $in: ['', null] } }, { $unset: { sku: '' } });
-    await collection.updateMany({ barcode: { $in: ['', null] } }, { $unset: { barcode: '' } });
-  } catch (err) {
-    logger.warn(`[ensureProductIndexes] failed to clean up empty sku/barcode values: ${err.message}`);
-  }
-
-  try {
-    await Product.syncIndexes();
-    productIndexesEnsured = true;
-  } catch (err) {
-    // Don't let an index-build hiccup (e.g. a duplicate the cleanup above didn't
-    // anticipate) masquerade as *this* request's own product having a duplicate
-    // sku/barcode — that's an unrelated, pre-existing data problem, not something the
-    // person creating/editing a product right now did. Log it and let the write
-    // proceed under whatever indexes are currently actually live; `productIndexesEnsured`
-    // stays false, so the next write retries the sync.
-    logger.error(`[ensureProductIndexes] syncIndexes failed, will retry on next write: ${err.message}`);
+    await ensureProductIndexesInFlight;
+  } finally {
+    ensureProductIndexesInFlight = null;
   }
 };
 

@@ -306,6 +306,29 @@ const linkProductsToMasterProductsBulk = async (products) => {
  * stays behind the viewBranches-gated branch-availability feature).
  */
 const getImportableMasterProducts = async ({ organizationId, branchId }) => {
+  // Self-heal before reading: a Product only gets masterProductId set (a) at creation
+  // time going forward, or (b) by manually running 002-backfill-master-products.js for
+  // this org — which is opt-in and, in practice, has only ever been run for one pilot
+  // org. Every other org's pre-migration catalog sits with masterProductId: null
+  // forever, and this query would otherwise silently treat those as "doesn't exist
+  // anywhere else" with no error or count to hint anything's missing (see
+  // docs/architecture/master-product-migration.md). Link any still-pending products for
+  // this org now, on demand, so this feature is always complete regardless of whether
+  // that script was ever run. Cheap after the first call — once linked, a product never
+  // needs relinking, so this is a no-op query on every subsequent open.
+  const unlinked = await Product.find({ organizationId, masterProductId: null });
+  if (unlinked.length) {
+    const variantProducts = unlinked.filter((p) => p.hasVariants);
+    const simpleProducts = unlinked.filter((p) => !p.hasVariants);
+    // Bulk path only ever creates hasVariants:false masters (see its docblock) — fine
+    // for simple products, wrong for variant ones, so those go through the per-item
+    // path instead, which creates/matches MasterProductVariant rows correctly.
+    if (simpleProducts.length) await linkProductsToMasterProductsBulk(simpleProducts);
+    for (const product of variantProducts) {
+      await linkProductToMasterProduct(product);
+    }
+  }
+
   const linkedHereIds = await Product.find({ organizationId, branchId, masterProductId: { $ne: null } }).distinct('masterProductId');
 
   // $nin: [null, ...] excludes both unlinked products (masterProductId missing/null —
@@ -399,19 +422,44 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
   // product.service.js#updateProductById's transaction fix for the same "no partial
   // tracked state" reasoning). Skips masters that don't exist or are already imported
   // at this branch (idempotent), same as before.
+  //
+  // Batched into 3 queries total instead of up to 3 round trips PER item: with a couple
+  // hundred items in one import, a per-item findOne/findOne/find loop here was adding
+  // hundreds of sequential Atlas round trips *before* a single product got created — on
+  // top of the (now-parallelized) create loop below, that was enough on its own to blow
+  // through even the batch-sized client timeout. Same batch-then-resolve-in-memory shape
+  // as linkProductsToMasterProductsBulk above.
+  const masterIds = items.map((item) => item.masterProductId);
+  const masters = await MasterProduct.find({ _id: { $in: masterIds }, organizationId });
+  const masterById = new Map(masters.map((m) => [String(m._id), m]));
+
+  const existingProducts = await Product.find({ organizationId, branchId, masterProductId: { $in: masterIds } });
+  const existingByMasterId = new Map(existingProducts.map((p) => [String(p.masterProductId), p]));
+
+  const variantMasterIds = masters.filter((m) => m.hasVariants).map((m) => m._id);
+  const allMasterVariants = variantMasterIds.length
+    ? await MasterProductVariant.find({ masterProductId: { $in: variantMasterIds } })
+    : [];
+  const masterVariantsById = new Map();
+  for (const v of allMasterVariants) {
+    const key = String(v.masterProductId);
+    if (!masterVariantsById.has(key)) masterVariantsById.set(key, []);
+    masterVariantsById.get(key).push(v);
+  }
+
   const toImport = [];
   for (const item of items) {
-    const master = await MasterProduct.findOne({ _id: item.masterProductId, organizationId });
+    const master = masterById.get(String(item.masterProductId));
     if (!master) continue;
 
-    const existing = await Product.findOne({ organizationId, branchId, masterProductId: master._id });
+    const existing = existingByMasterId.get(String(master._id));
     if (existing) {
       toImport.push({ existing });
       continue;
     }
 
     const stockQuantity = Number(item.stockQuantity) || 0;
-    const masterVariants = master.hasVariants ? await MasterProductVariant.find({ masterProductId: master._id }) : [];
+    const masterVariants = master.hasVariants ? masterVariantsById.get(String(master._id)) || [] : [];
     // A single-variant product is effectively a simple product from the importer's
     // point of view — safe to apply the opening qty to that one variant. With more
     // than one, there's no way to know the per-variant split from one number, so
@@ -433,12 +481,19 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
     toImport.push({ item, master, masterVariants, stockQuantity });
   }
 
-  const results = [];
-  for (const entry of toImport) {
-    if (entry.existing) {
-      results.push(entry.existing);
-      continue;
-    }
+  // Each new product below goes through productService.createProduct's own Mongo
+  // transaction (session start + insert + commit) — a real round trip to Atlas per item,
+  // not an in-process op. Importing sequentially made 237 items take minutes, comfortably
+  // blowing through the client's request timeout even though nothing was actually wrong
+  // (see client/src/lib/api-timeout.ts). Running a bounded number of these transactions
+  // concurrently is safe here: imported products are barcode/sku-less by design (see this
+  // function's own docblock) and every match/create query above already ran up front, so
+  // there's no shared, order-dependent state for concurrent createProduct calls to race
+  // on — same reasoning as linkProductsToMasterProductsBulk's O(1)-round-trips rationale,
+  // just capped instead of a single unbounded batch since createProduct isn't insertMany.
+  const CONCURRENCY = 10;
+  const importEntry = async (entry) => {
+    if (entry.existing) return entry.existing;
     const { item, master, masterVariants, stockQuantity } = entry;
     const price = item.price ?? master.defaultPrice ?? 0;
     const cost = item.cost ?? master.defaultCost ?? 0;
@@ -545,7 +600,13 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
       }
     }
 
-    results.push(product);
+    return product;
+  };
+
+  const results = [];
+  for (let i = 0; i < toImport.length; i += CONCURRENCY) {
+    const chunk = toImport.slice(i, i + CONCURRENCY);
+    results.push(...(await Promise.all(chunk.map(importEntry))));
   }
 
   return results;

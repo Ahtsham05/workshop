@@ -1710,6 +1710,14 @@ const en: Record<string, string> = {
     "import_n_products": "Import {{count}} product(s)",
     "products_found_at_other_branches": "{{count}} product(s) found at your other branches",
     "opening_qty": "Opening Qty",
+    "no_products_match_search": "No products match your search.",
+    "n_selected_of_total": "{{selected}} selected of {{total}}",
+    "batch_serial_label": "Batch / Serial",
+    "importing_n_of_total": "Importing {{done}} of {{total}}…",
+    "products_import_partial": "Imported {{done}} of {{total}} before stopping. The rest are still selected — click Import again to continue (already-imported items are skipped automatically).",
+    "confirm_bulk_update_title": "Update {{count}} product(s)?",
+    "confirm_bulk_update_desc": "You're about to update the following for {{count}} product(s). This can't be undone automatically — review before continuing.",
+    "confirm_and_update": "Update products",
 }
 
 export default en

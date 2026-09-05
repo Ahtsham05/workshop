@@ -885,8 +885,10 @@ const deleteVoucherById = async (id, scope = {}) => {
 
 /**
  * Get vouchers for printing (populated with student, class, org details).
- * Rolls all other unpaid/partial vouchers (including exam fees) into printLineItems
- * so the printed challan shows every pending fee with its proper name and month.
+ * Rolls all other unpaid/partial vouchers (including exam fees), from any year, into
+ * printLineItems as PENDING rows, plus every already-settled voucher from THIS
+ * voucher's own year as PAID rows — so the printed challan reads as a full account
+ * recap: what's been paid this year, and everything still owed no matter how old.
  */
 const feeItemLabel = (name, month, year) => {
   const base = String(name || 'Fee').trim();
@@ -897,7 +899,7 @@ const feeItemLabel = (name, month, year) => {
   return `${base} (${period})`;
 };
 
-const pendingVoucherLabel = (p) => {
+const historyVoucherLabel = (p, fallbackPrefix) => {
   const items = p.feeItems || [];
   const period = p.month && p.year ? `${p.month} ${p.year}` : p.month || '';
   if (items.length === 1 && items[0]?.name) {
@@ -908,8 +910,11 @@ const pendingVoucherLabel = (p) => {
     return names.join(' + ');
   }
   if (p.voucherType === 'exam') return period ? `Exam Fee — ${period}` : 'Exam Fee';
-  return period ? `Pending Fee — ${period}` : 'Pending Fee';
+  return period ? `${fallbackPrefix} — ${period}` : fallbackPrefix;
 };
+
+const pendingVoucherLabel = (p) => historyVoucherLabel(p, 'Pending Fee');
+const paidVoucherLabel = (p) => historyVoucherLabel(p, 'Paid Fee');
 
 const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
   const { includeArrears = true } = options;
@@ -949,17 +954,34 @@ const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
 
   const studentObjectIds = studentIds.map((id) => new mongoose.Types.ObjectId(id));
 
-  const allPending = await FeeVoucher.find({
+  // One query covers both: outstanding dues (any month/year — arrears never expire)
+  // and this year's settled months (scoped per-voucher below to that voucher's own
+  // `year`, so a challan only recaps its own school year's payment history).
+  const allHistory = await FeeVoucher.find({
     ...getTenantFilter(scope),
     studentId: { $in: studentObjectIds },
-    status: { $in: ['unpaid', 'partial', 'overdue'] },
+    status: { $in: ['unpaid', 'partial', 'overdue', 'paid'] },
   })
-    .select('_id studentId month year netAmount feeItems discount fine paidAmount voucherType voucherNumber examId')
+    .select('_id studentId month year netAmount feeItems discount fine paidAmount status voucherType voucherNumber examId')
     .lean();
 
   const pendingByStudent = new Map();
-  allPending.forEach((p) => {
+  const paidByStudent = new Map();
+  allHistory.forEach((p) => {
     const sid = String(p.studentId);
+    if (p.status === 'paid') {
+      if (!paidByStudent.has(sid)) paidByStudent.set(sid, []);
+      paidByStudent.get(sid).push({
+        id: String(p._id),
+        month: p.month,
+        year: p.year,
+        amount: p.paidAmount || effectiveNet(p),
+        voucherType: p.voucherType,
+        voucherNumber: p.voucherNumber,
+        feeItems: p.feeItems || [],
+      });
+      return;
+    }
     const remaining = Math.max(0, effectiveNet(p) - (p.paidAmount || 0));
     if (remaining <= 0) return;
     if (!pendingByStudent.has(sid)) pendingByStudent.set(sid, []);
@@ -977,15 +999,33 @@ const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
   return vouchers.map((v) => {
     const currentId = String(v._id);
     const sid = String(v.studentId?._id || v.studentId || '');
+    // Arrears: every other outstanding voucher, regardless of year — dues don't
+    // expire just because the school year rolled over.
     const pendingList = (pendingByStudent.get(sid) || [])
       .filter((p) => p.id !== currentId)
       .sort((a, b) => voucherPeriodIndex(a.month, a.year) - voucherPeriodIndex(b.month, b.year));
     const pendingTotal = pendingList.reduce((sum, p) => sum + p.remaining, 0);
 
+    // Paid history: only months already settled within THIS voucher's own year, so
+    // the challan recaps "what's been paid this session" without dragging in every
+    // paid month the student has ever had.
+    const paidList = (paidByStudent.get(sid) || [])
+      .filter((p) => p.id !== currentId && p.year === v.year)
+      .sort((a, b) => voucherPeriodIndex(a.month, a.year) - voucherPeriodIndex(b.month, b.year));
+    const paidTotal = paidList.reduce((sum, p) => sum + p.amount, 0);
+
     const currentLineItems = (v.feeItems || []).map((fi) => ({
       name: feeItemLabel(fi.name, v.month, v.year),
       amount: fi.amount || 0,
     }));
+    const paidLineItems = includeArrears
+      ? paidList.map((p) => ({
+          name: paidVoucherLabel(p),
+          amount: p.amount,
+          isPaidHistory: true,
+          voucherType: p.voucherType,
+        }))
+      : [];
     const pendingLineItems = includeArrears
       ? pendingList.map((p) => ({
           name: pendingVoucherLabel(p),
@@ -997,7 +1037,7 @@ const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
 
     return {
       ...v,
-      printLineItems: [...currentLineItems, ...pendingLineItems],
+      printLineItems: [...currentLineItems, ...paidLineItems, ...pendingLineItems],
       pendingDetails: includeArrears
         ? {
             months: pendingList,
@@ -1008,6 +1048,17 @@ const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
             months: [],
             totalPending: 0,
             pendingCount: 0,
+          },
+      paidHistoryDetails: includeArrears
+        ? {
+            months: paidList,
+            totalPaid: paidTotal,
+            paidCount: paidList.length,
+          }
+        : {
+            months: [],
+            totalPaid: 0,
+            paidCount: 0,
           },
     };
   });
