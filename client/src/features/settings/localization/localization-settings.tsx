@@ -39,6 +39,7 @@ export default function LocalizationSettings() {
 
   const [countryCode, setCountryCode] = useState('')
   const [taxSystem, setTaxSystem] = useState<TaxSystem>('NONE')
+  const [taxInclusive, setTaxInclusive] = useState(false)
   const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
   const [locale, setLocale] = useState('en-US')
   const [defaultsAppliedNote, setDefaultsAppliedNote] = useState(false)
@@ -47,6 +48,7 @@ export default function LocalizationSettings() {
     if (!org) return
     setCountryCode(org.countryCode || '')
     setTaxSystem(org.taxSystem || 'NONE')
+    setTaxInclusive(!!org.taxInclusivePricingDefault)
     setDateFormat(org.dateFormat || 'DD/MM/YYYY')
     setLocale(org.locale || 'en-US')
   }, [org])
@@ -68,13 +70,17 @@ export default function LocalizationSettings() {
   const hasChanges =
     countryCode !== (org?.countryCode || '') ||
     taxSystem !== (org?.taxSystem || 'NONE') ||
+    taxInclusive !== !!org?.taxInclusivePricingDefault ||
     dateFormat !== (org?.dateFormat || 'DD/MM/YYYY') ||
     locale !== (org?.locale || 'en-US')
 
   const handleSave = async () => {
     if (!org) return
     try {
-      await updateSettings({ orgId: org.id, body: { countryCode, taxSystem, dateFormat, locale } }).unwrap()
+      await updateSettings({
+        orgId: org.id,
+        body: { countryCode, taxSystem, taxInclusivePricingDefault: taxInclusive, dateFormat, locale },
+      }).unwrap()
       toast.success('Localization settings updated')
       setDefaultsAppliedNote(false)
     } catch {
@@ -134,6 +140,41 @@ export default function LocalizationSettings() {
             ))}
           </RadioGroup>
         </EntityFormSection>
+
+        {taxSystem !== 'NONE' && (
+          <EntityFormSection title='Prices Include Tax?' description='Whether product prices are entered tax-exclusive (tax added on top) or tax-inclusive (tax already baked in).'>
+            <RadioGroup
+              value={taxInclusive ? 'INCLUSIVE' : 'EXCLUSIVE'}
+              onValueChange={(v) => setTaxInclusive(v === 'INCLUSIVE')}
+              className='grid gap-3 sm:grid-cols-2'
+            >
+              <Label
+                htmlFor='tax-pricing-exclusive'
+                className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  !taxInclusive ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                }`}
+              >
+                <RadioGroupItem value='EXCLUSIVE' id='tax-pricing-exclusive' className='mt-0.5' />
+                <div className='min-w-0'>
+                  <div className='text-sm font-medium'>Tax Exclusive</div>
+                  <div className='text-xs text-muted-foreground'>Tax is added to the product price (e.g. £100 + 20% VAT = £120 total).</div>
+                </div>
+              </Label>
+              <Label
+                htmlFor='tax-pricing-inclusive'
+                className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  taxInclusive ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                }`}
+              >
+                <RadioGroupItem value='INCLUSIVE' id='tax-pricing-inclusive' className='mt-0.5' />
+                <div className='min-w-0'>
+                  <div className='text-sm font-medium'>Tax Inclusive</div>
+                  <div className='text-xs text-muted-foreground'>The product price already includes tax (e.g. £120 shown includes £20 VAT).</div>
+                </div>
+              </Label>
+            </RadioGroup>
+          </EntityFormSection>
+        )}
 
         <EntityFormSection title='Date & Locale' description='How dates are displayed throughout the app.' icon={<Calendar />}>
           <RadioGroup value={dateFormat} onValueChange={(v) => setDateFormat(v as DateFormat)} className='grid gap-3 sm:grid-cols-3'>

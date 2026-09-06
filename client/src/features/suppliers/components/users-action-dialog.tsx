@@ -43,6 +43,7 @@ import {
   Mail,
   Wallet,
   MapPin,
+  Receipt,
 } from 'lucide-react'
 
 const imageRefSchema = z
@@ -66,6 +67,7 @@ const getFormSchema = (t: (key: string) => string) => z.object({
   picture: imageRefSchema,
   idCardFront: imageRefSchema,
   idCardBack: imageRefSchema,
+  taxNumber: z.string().optional(),
 })
 
 interface Props {
@@ -103,6 +105,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
           picture: undefined,
           idCardFront: undefined,
           idCardBack: undefined,
+          taxNumber: '',
         },
   })
 
@@ -360,6 +363,28 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                   </FormItem>
                 )}
               />
+              </EntityFormSection>
+
+              <EntityFormSection
+                icon={<Receipt />}
+                tone='amber'
+                className='p-3 sm:p-4'
+                title='Tax Information'
+                description="Shown on purchase invoices so this supplier's registration number is on record."
+              >
+                <FormField
+                  control={form.control}
+                  name='taxNumber'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5 max-w-xs'>
+                      <FormLabel>Tax Registration Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder='e.g. GB123456789' autoComplete='off' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </EntityFormSection>
 
               <EntityFormSection

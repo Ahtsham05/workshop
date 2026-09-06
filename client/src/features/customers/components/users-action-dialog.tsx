@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import SmartInput from '@/components/smart-input.tsx'
 import ImageUpload from '@/components/image-upload'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
@@ -43,6 +44,7 @@ import {
   Mail,
   Wallet,
   MapPin,
+  Receipt,
 } from 'lucide-react'
 
 const imageRefSchema = z
@@ -71,6 +73,7 @@ const formSchema = z.object({
   creditLimit: z.coerce.number().optional(),
   paymentTerms: z.enum(paymentTermsValues).optional().or(z.literal(NONE)),
   taxNumber: z.string().optional(),
+  taxExempt: z.boolean().optional(),
   notes: z.string().optional(),
 })
 
@@ -112,6 +115,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
           creditLimit: 0,
           paymentTerms: NONE,
           taxNumber: '',
+          taxExempt: false,
           notes: '',
         },
   })
@@ -380,6 +384,45 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
                   </FormItem>
                 )}
               />
+              </EntityFormSection>
+
+              <EntityFormSection
+                icon={<Receipt />}
+                tone='amber'
+                className='p-3 sm:p-4'
+                title='Tax Information'
+                description='Used on invoices and to determine whether this customer is charged tax.'
+              >
+                <div className='grid gap-4 sm:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='taxNumber'
+                    render={({ field }) => (
+                      <FormItem className='gap-1.5'>
+                        <FormLabel>Tax Registration Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder='e.g. GB123456789' autoComplete='off' {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='taxExempt'
+                    render={({ field }) => (
+                      <FormItem className='flex flex-row items-center justify-between gap-3 rounded-lg border p-3'>
+                        <div className='space-y-0.5'>
+                          <FormLabel>Tax Exempt</FormLabel>
+                          <p className='text-xs text-muted-foreground'>No tax is calculated on this customer's invoices.</p>
+                        </div>
+                        <FormControl>
+                          <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </EntityFormSection>
 
               <EntityFormSection

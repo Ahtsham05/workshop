@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { objectId } = require('./custom.validation');
 
 const unitConversionSchema = Joi.object().keys({
   fromUnit: Joi.string().required(),
@@ -74,6 +75,7 @@ const createProduct = {
     batchNumber: Joi.string().allow('').optional(),
     expiryDate: Joi.string().allow('').optional(),
     brandId: Joi.string().allow('', null).optional(),
+    taxCategoryId: Joi.string().custom(objectId).allow('', null).optional(),
     tags: Joi.array().items(Joi.string().trim().allow('')).optional(),
     color: Joi.string().trim().allow('', null).optional(),
     shelfLocation: Joi.string().trim().allow('').optional(),
@@ -175,6 +177,7 @@ const updateProduct = {
     batchNumber: Joi.string().allow('').optional(),
     expiryDate: Joi.string().allow('').optional(),
     brandId: Joi.string().allow('', null).optional(),
+    taxCategoryId: Joi.string().custom(objectId).allow('', null).optional(),
     tags: Joi.array().items(Joi.string().trim().allow('')).optional(),
     color: Joi.string().trim().allow('', null).optional(),
     shelfLocation: Joi.string().trim().allow('').optional(),

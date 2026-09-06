@@ -75,6 +75,8 @@ import type { VariantDraftRow } from './variants/generate-variant-combinations'
 import { generateBatchNumber } from './variants/generate-variant-combinations'
 import { useCreateProductVariantMutation } from '@/stores/productVariant.api'
 import { BrandSelector } from './brand-selector'
+import { SearchableSelect } from '@/components/ui/searchable-select'
+import { useGetTaxCategoriesQuery } from '@/stores/taxCategory.api'
 import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
 import { TagsInput } from '@/components/tags-input'
 import { ColorSwatchPicker } from '@/components/color-swatch-picker'
@@ -86,6 +88,7 @@ const formSchema = z.object({
   description: z.string(),
   sku: z.string().optional(),
   brandId: z.string().optional(),
+  taxCategoryId: z.string().optional(),
   barcode: z.string().optional(),
   hasVariants: z.boolean().optional(),
   trackImei: z.boolean().optional(),
@@ -199,6 +202,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showConversionRules = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
+  // Tax category only makes sense once the org has configured a real tax system — for
+  // taxSystem 'NONE' (the default) there's nothing to classify this product into.
+  const showTaxCategory = !!orgData?.taxSystem && orgData.taxSystem !== 'NONE'
+  const { data: taxCategoriesData } = useGetTaxCategoriesQuery({ status: 'active', limit: 100 }, { skip: !open || !showTaxCategory })
+  const taxCategoryOptions = (taxCategoriesData?.results || []).map((c) => ({
+    value: c._id,
+    label: c.name,
+    sublabel: c.isDefault ? 'Default' : undefined,
+  }))
   // IMEI tracking only makes sense for mobile phones — restrict it to mobile shop orgs.
   // Serial number tracking (TVs, laptops, appliances) applies to every business type.
   const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
@@ -220,6 +232,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         description: activeRow?.description || '',
         sku: activeRow?.sku || '',
         brandId: activeRow?.brandId || undefined,
+        taxCategoryId: activeRow?.taxCategoryId || undefined,
         barcode: activeRow?.barcode || '',
         hasVariants: activeRow?.hasVariants || false,
         trackImei: activeRow?.trackImei || false,
@@ -247,6 +260,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         description: '',
         sku: '',
         brandId: undefined,
+        taxCategoryId: undefined,
         barcode: '',
         hasVariants: false,
         trackImei: false,
@@ -281,6 +295,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         description: activeRow.description || '',
         sku: activeRow.sku || '',
         brandId: activeRow.brandId || undefined,
+        taxCategoryId: activeRow.taxCategoryId || undefined,
         barcode: activeRow.barcode || '',
         hasVariants: activeRow.hasVariants || false,
         trackImei: activeRow.trackImei || false,
@@ -309,6 +324,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         description: '',
         sku: '',
         brandId: undefined,
+        taxCategoryId: undefined,
         barcode: '',
         hasVariants: false,
         trackImei: false,
@@ -1346,6 +1362,28 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   </FormItem>
                 )}
               />
+              {showTaxCategory && (
+                <FormField
+                  control={form.control}
+                  name='taxCategoryId'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>Tax Category</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          options={taxCategoryOptions}
+                          value={field.value || ''}
+                          onValueChange={field.onChange}
+                          placeholder="Use organization default"
+                          searchPlaceholder='Search tax categories...'
+                          clearLabel='Use organization default'
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               </EntityFormSection>
 
               <EntityFormSection

@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { TaxCategory } = require('../models');
+const { TaxCategory, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -15,12 +15,26 @@ const clearOtherDefaults = async (organizationId, exceptId = null) => {
   await TaxCategory.updateMany(filter, { isDefault: false });
 };
 
+// taxCalculator.service.js resolves the org-wide fallback category by reading
+// Organization.defaultTaxCategoryId directly (a denormalized pointer, kept for a cheap
+// single-field read on every tax calculation instead of a TaxCategory query per line) — so
+// it must be kept in lockstep with TaxCategory.isDefault here, the only place that flag is
+// ever written, or the calculator silently falls back to "no category" (zero tax) even
+// though a default category exists.
+const syncOrganizationDefaultTaxCategoryId = async (organizationId, taxCategoryId) => {
+  await Organization.findByIdAndUpdate(organizationId, { defaultTaxCategoryId: taxCategoryId });
+};
+
 const createTaxCategory = async (categoryBody) => {
   if (categoryBody.isDefault) {
     await clearOtherDefaults(categoryBody.organizationId);
   }
   const category = new TaxCategory(categoryBody);
-  return category.save();
+  await category.save();
+  if (categoryBody.isDefault) {
+    await syncOrganizationDefaultTaxCategoryId(categoryBody.organizationId, category._id);
+  }
+  return category;
 };
 
 /**
@@ -41,11 +55,17 @@ const getTaxCategoryById = async (organizationId, id) => {
 
 const updateTaxCategoryById = async (organizationId, id, updateBody) => {
   const category = await getTaxCategoryById(organizationId, id);
+  const wasDefault = category.isDefault;
   if (updateBody.isDefault) {
     await clearOtherDefaults(organizationId, category._id);
   }
   Object.assign(category, updateBody);
   await category.save();
+  if (updateBody.isDefault) {
+    await syncOrganizationDefaultTaxCategoryId(organizationId, category._id);
+  } else if (wasDefault && updateBody.isDefault === false) {
+    await syncOrganizationDefaultTaxCategoryId(organizationId, null);
+  }
   return category;
 };
 
@@ -55,6 +75,12 @@ const softDeleteTaxCategoryById = async (organizationId, id) => {
   const category = await getTaxCategoryById(organizationId, id);
   category.status = 'inactive';
   await category.save();
+  if (category.isDefault) {
+    // An inactive category can no longer be the org-wide fallback — leaving the pointer in
+    // place would make every line with no explicit category silently resolve rates against
+    // a deactivated classification instead of the "no category" (zero tax) path.
+    await syncOrganizationDefaultTaxCategoryId(organizationId, null);
+  }
   return category;
 };
 

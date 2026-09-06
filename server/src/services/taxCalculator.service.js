@@ -1,4 +1,4 @@
-const { Organization, TaxCategory, TaxExemption } = require('../models');
+const { Organization, TaxCategory, TaxExemption, Customer } = require('../models');
 const Money = require('../utils/money');
 const internalTaxProvider = require('./providers/internalTaxProvider');
 
@@ -50,9 +50,25 @@ const calculateTax = async ({
     };
   }
 
+  // Organization.defaultTaxCategoryId is a denormalized copy of TaxCategory.isDefault (kept
+  // in sync by taxCategory.service.js on every create/update/soft-delete). Fall back to the
+  // live flag directly in case the pointer predates that sync (e.g. data seeded before this
+  // was wired up) — otherwise every line with no explicit category would silently resolve to
+  // "no category" and zero tax despite a default category existing.
+  let defaultTaxCategoryId = organization?.defaultTaxCategoryId ? String(organization.defaultTaxCategoryId) : null;
+  if (!defaultTaxCategoryId) {
+    const defaultCategory = await TaxCategory.findOne({ organizationId, isDefault: true, status: 'active' }).select('_id').lean();
+    defaultTaxCategoryId = defaultCategory ? String(defaultCategory._id) : null;
+  }
+
   let fullyExempt = false;
   const exemptCategoryIds = new Set();
   if (customerId) {
+    // Customer.taxExempt is documented (see taxExemption.model.js) as the quick boolean
+    // fast-path checked at calculation time, with the TaxExemption collection holding the
+    // auditable detail behind it — check both rather than only the detail records, so
+    // toggling "Tax Exempt" directly on a customer actually has an effect.
+    const customer = await Customer.findById(customerId).select('taxExempt').lean();
     const exemptions = await TaxExemption.find({
       organizationId,
       customerId,
@@ -60,7 +76,7 @@ const calculateTax = async ({
       validFrom: { $lte: asOfDate },
       $or: [{ validTo: null }, { validTo: { $gte: asOfDate } }],
     }).lean();
-    fullyExempt = exemptions.some((exemption) => !exemption.taxCategoryId);
+    fullyExempt = !!customer?.taxExempt || exemptions.some((exemption) => !exemption.taxCategoryId);
     exemptions
       .filter((exemption) => exemption.taxCategoryId)
       .forEach((exemption) => exemptCategoryIds.add(String(exemption.taxCategoryId)));
@@ -82,7 +98,7 @@ const calculateTax = async ({
 
   // eslint-disable-next-line no-restricted-syntax
   for (const line of lines) {
-    const taxCategoryId = line.taxCategoryId ? String(line.taxCategoryId) : organization?.defaultTaxCategoryId ? String(organization.defaultTaxCategoryId) : null;
+    const taxCategoryId = line.taxCategoryId ? String(line.taxCategoryId) : defaultTaxCategoryId;
 
     if (fullyExempt || !taxCategoryId || exemptCategoryIds.has(taxCategoryId)) {
       if (exemptCategoryIds.has(taxCategoryId)) exemptionApplied = true;

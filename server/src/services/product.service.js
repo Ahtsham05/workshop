@@ -260,6 +260,7 @@ const createProduct = async (productBody) => {
   // Product field either — it's only passed through to gate trackImei below.
   const { imeis, trackBatch, trackExpiry, batchNumber, expiryDate, businessType, ...productFields } = productBody;
   if (productFields.brandId === '') productFields.brandId = null; // ObjectId ref can't cast ''
+  if (productFields.taxCategoryId === '') productFields.taxCategoryId = null; // ObjectId ref can't cast ''
   if (productFields.trackImei) {
     await assertImeiAllowedForBusinessType({ organizationId: productFields.organizationId, businessType });
   }
@@ -601,6 +602,7 @@ const updateProductById = async (productId, updateBody) => {
   // Product field either — it's only passed through to gate trackImei below.
   const { imeis, trackBatch, trackExpiry, batchNumber, expiryDate, businessType, ...updateFields } = updateBody;
   if (updateFields.brandId === '') updateFields.brandId = null; // ObjectId ref can't cast ''
+  if (updateFields.taxCategoryId === '') updateFields.taxCategoryId = null; // ObjectId ref can't cast ''
   if (updateFields.trackImei) {
     await assertImeiAllowedForBusinessType({ organizationId: product.organizationId, businessType });
   }

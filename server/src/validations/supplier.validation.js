@@ -19,6 +19,7 @@ const createSupplier = {
     picture: cloudinaryImage,
     idCardFront: cloudinaryImage,
     idCardBack: cloudinaryImage,
+    taxNumber: Joi.string().allow('').optional(),
     isActive: Joi.boolean().optional(),
   }),
 };
@@ -59,6 +60,7 @@ const updateSupplier = {
     picture: nullableCloudinaryImage,
     idCardFront: nullableCloudinaryImage,
     idCardBack: nullableCloudinaryImage,
+    taxNumber: Joi.string().allow('').optional(),
     isActive: Joi.boolean().optional(),
   }),
 };
