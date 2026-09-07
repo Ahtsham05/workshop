@@ -113,7 +113,7 @@ function formatDayMonth(date?: string | Date | null): string {
  * document's own status/paidAmount — kept per-document so a merged multi-fund challan
  * (see mergeVoucherGroupForPrint) tags each fund by its own status, never a sibling's. */
 function buildOwnFundRows(doc: any): { name: string; amount: number; tagText: string; tagClass: string; rowClass: string; paidAmt: number; dateLabel?: string }[] {
-  const ownItems = (doc.feeItems || []).map((fi: any) => ({
+  const ownItems: { name: string; amount: number }[] = (doc.feeItems || []).map((fi: any) => ({
     name: feeItemLabel(fi.name, doc.month, doc.year),
     amount: fi.amount || 0,
   }));
