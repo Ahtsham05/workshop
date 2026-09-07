@@ -98,6 +98,82 @@ function feeItemLabel(name: string, month?: string, year?: number | string): str
   return `${base} (${period})`;
 }
 
+/** Short "12-Aug" style date for a paid-tag badge — day and month only, no year,
+ * since the challan header already states the session/year. */
+function formatDayMonth(date?: string | Date | null): string {
+  if (!date) return '';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  return `${day}-${month}`;
+}
+
+/** Tags one voucher document's OWN fee items (PAID / PARTIAL / PENDING) using that
+ * document's own status/paidAmount — kept per-document so a merged multi-fund challan
+ * (see mergeVoucherGroupForPrint) tags each fund by its own status, never a sibling's. */
+function buildOwnFundRows(doc: any): { name: string; amount: number; tagText: string; tagClass: string; rowClass: string; paidAmt: number; dateLabel?: string }[] {
+  const ownItems = (doc.feeItems || []).map((fi: any) => ({
+    name: feeItemLabel(fi.name, doc.month, doc.year),
+    amount: fi.amount || 0,
+  }));
+  const paidDateLabel = formatDayMonth(doc.paidDate);
+  let pool = doc.status === 'partial' ? Number(doc.paidAmount || 0) : 0;
+  return ownItems.map((fi) => {
+    if (doc.status === 'paid') {
+      return { ...fi, tagText: doc.paidThisTransaction ? 'RECEIVED' : 'PAID', tagClass: 'received-tag', rowClass: ' class="received-row"', paidAmt: fi.amount || 0, dateLabel: paidDateLabel };
+    }
+    if (doc.status === 'partial') {
+      const paidAmt = Math.min(fi.amount || 0, Math.max(0, pool));
+      pool -= paidAmt;
+      return { ...fi, tagText: 'PARTIAL', tagClass: 'pending-tag', rowClass: ' class="pending-row"', paidAmt, dateLabel: paidAmt > 0 ? paidDateLabel : undefined };
+    }
+    return { ...fi, tagText: 'PENDING', tagClass: 'pending-tag', rowClass: ' class="pending-row"', paidAmt: 0 };
+  });
+}
+
+/** Same student + same month/year vouchers from different funds (e.g. tuition +
+ * "Paper Fund") print as ONE combined challan rather than one per fund — each fund's
+ * own line keeps its own PAID/PENDING tag, and shared arrears (from the first member,
+ * already deduped server-side against the rest of this print batch) appear once. */
+function mergeVoucherGroupForPrint(group: any[]): any {
+  if (group.length <= 1) return group[0];
+  const base = group[0];
+  const netAmount = group.reduce((s, g) => s + (g.netAmount || 0), 0);
+  const paidAmount = group.reduce((s, g) => s + (g.paidAmount || 0), 0);
+  const discount = group.reduce((s, g) => s + (g.discount || 0), 0);
+  const fine = group.reduce((s, g) => s + (g.fine || 0), 0);
+  const allPaid = group.every((g) => g.status === 'paid');
+  const nonePaid = group.every((g) => (g.paidAmount || 0) <= 0);
+  const status = allPaid ? 'paid' : nonePaid ? (group.some((g) => g.status === 'overdue') ? 'overdue' : 'unpaid') : 'partial';
+  const dueDate = group.reduce((earliest: string | null, g) =>
+    !earliest || (g.dueDate && g.dueDate < earliest) ? g.dueDate : earliest, null as string | null);
+  const paidDates = group.map((g) => g.paidDate).filter(Boolean).sort();
+
+  return {
+    ...base,
+    feeItems: group.flatMap((g) => g.feeItems || []),
+    netAmount, paidAmount, discount, fine, status,
+    dueDate: dueDate || base.dueDate,
+    paidDate: paidDates.length ? paidDates[paidDates.length - 1] : undefined,
+    voucherNumber: group.map((g) => g.voucherNumber).filter(Boolean).join(' / '),
+    ownFundRows: group.flatMap((g) => buildOwnFundRows(g)),
+  };
+}
+
+/** Groups a flat print batch by student + month/year — mirrors the on-screen row
+ * grouping — then merges each group into a single challan (see above). */
+function groupPrintVouchers(list: any[]): any[] {
+  const map = new Map<string, any[]>();
+  list.forEach((v: any) => {
+    const sid = v.studentId?.id || v.studentId?._id || v.studentId;
+    const key = `${sid}_${v.month}_${v.year}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(v);
+  });
+  return Array.from(map.values()).map((group) => mergeVoucherGroupForPrint(group));
+}
+
 /** Best guess monthly fee for projecting advance receipts */
 function estimateMonthlyFee(voucher: any, studentSummary: any, studentRow?: any): number {
   const fromStructure = studentRow?.feeStructure?.monthlyFee;
@@ -845,10 +921,11 @@ export default function FeeVouchers() {
     }
   };
 
-  const openPrintWindow = (data: any[]) => {    const win = window.open('', '_blank');
+  const openPrintWindow = (data: any[]) => {
+    const win = window.open('', '_blank');
     if (!win) return toast.error('Allow pop-ups to print');
     win.document.write(
-      buildPrintHTML(data, org?.name || 'School', branchData?.invoiceNote, {
+      buildPrintHTML(groupPrintVouchers(data), org?.name || 'School', branchData?.invoiceNote, {
         layout: printLayout,
         rowsPerPage,
       }, currencySymbol)
@@ -2615,81 +2692,39 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   const otherPendingMonths: any[] = v.pendingDetails?.months || [];
   const otherPaidMonths: any[] = v.paidHistoryDetails?.months || [];
 
-  const displayLineItems: { name: string; amount: number; isPending?: boolean; isPaidHistory?: boolean }[] = v.printLineItems?.length
-    ? v.printLineItems
-    : [
-        ...feeItems.map((fi: any) => ({ name: feeItemLabel(fi.name, v.month, v.year), amount: fi.amount || 0 })),
-        ...otherPaidMonths.map((p: any) => ({
-          name: p.feeItems?.length === 1 && p.feeItems[0]?.name
-            ? feeItemLabel(p.feeItems[0].name, p.month, p.year)
-            : p.voucherType === 'exam'
-              ? feeItemLabel('Exam Fee', p.month, p.year)
-              : feeItemLabel('Paid Fee', p.month, p.year),
-          amount: Number(p.amount || 0),
-          isPaidHistory: true,
-        })),
-        ...otherPendingMonths.map((p: any) => ({
-          name: p.feeItems?.length === 1 && p.feeItems[0]?.name
-            ? feeItemLabel(p.feeItems[0].name, p.month, p.year)
-            : p.voucherType === 'exam'
-              ? feeItemLabel('Exam Fee', p.month, p.year)
-              : feeItemLabel('Pending Fee', p.month, p.year),
-          amount: Number(p.remaining || 0),
-          isPending: true,
-        })),
-      ];
+  // Own fund(s) — each tagged PAID/PARTIAL/PENDING by ITS OWN document's status, so a
+  // merged multi-fund challan (see mergeVoucherGroupForPrint) never borrows one fund's
+  // status for another. A single un-merged voucher just resolves its own row here.
+  const ownRows = v.ownFundRows?.length ? v.ownFundRows : buildOwnFundRows({ feeItems, status: v.status, paidAmount: v.paidAmount, paidThisTransaction: v.paidThisTransaction, month: v.month, year: v.year });
 
-  // The voucher itself has no per-item payment tracking, only a voucher-level
-  // paidAmount — so when it's partially paid, that amount is allocated across its
-  // own fee items in order (waterfall) purely for a plausible per-row Paid figure.
-  let currentPartialPool = v.status === 'partial' ? Number(v.paidAmount || 0) : 0;
-  const enrichedRows = displayLineItems.map((fi: any) => {
-    const isPendingRow = !!fi.isPending;
-    // Tag every line item so a print always makes clear, at a glance, which fee(s)
-    // this transaction just received vs. which are still owed — never leaving it to
-    // the reader to infer from the PAID stamp or totals alone.
-    let tagText = '';
-    let tagClass = '';
-    let rowClass = '';
-    if (isPendingRow) {
-      tagText = 'PENDING';
-      tagClass = 'pending-tag';
-      rowClass = ' class="pending-row"';
-    } else if (fi.isPaidHistory) {
-      tagText = 'PAID';
-      tagClass = 'received-tag';
-      rowClass = ' class="received-row"';
-    } else if (v.status === 'paid') {
-      tagText = v.paidThisTransaction ? 'RECEIVED' : 'PAID';
-      tagClass = 'received-tag';
-      rowClass = ' class="received-row"';
-    } else if (v.status === 'partial') {
-      tagText = 'PARTIAL';
-      tagClass = 'pending-tag';
-      rowClass = ' class="pending-row"';
-    } else if (v.status === 'unpaid' || v.status === 'overdue') {
-      tagText = 'PENDING';
-      tagClass = 'pending-tag';
-      rowClass = ' class="pending-row"';
-    }
+  // Arrears from OTHER months (already de-duplicated server-side against every voucher
+  // in this same print batch, so a fund's sibling being printed right here never
+  // reappears as a separate "pending"/"paid history" row).
+  const otherPaidRows = otherPaidMonths.map((p: any) => ({
+    name: p.feeItems?.length === 1 && p.feeItems[0]?.name
+      ? feeItemLabel(p.feeItems[0].name, p.month, p.year)
+      : p.voucherType === 'exam'
+        ? feeItemLabel('Exam Fee', p.month, p.year)
+        : feeItemLabel('Paid Fee', p.month, p.year),
+    amount: Number(p.amount || 0),
+    tagText: 'PAID', tagClass: 'received-tag', rowClass: ' class="received-row"',
+    paidAmt: Number(p.amount || 0),
+    dateLabel: formatDayMonth(p.paidDate),
+    isPaidHistory: true,
+  }));
+  const otherPendingRows = otherPendingMonths.map((p: any) => ({
+    name: p.feeItems?.length === 1 && p.feeItems[0]?.name
+      ? feeItemLabel(p.feeItems[0].name, p.month, p.year)
+      : p.voucherType === 'exam'
+        ? feeItemLabel('Exam Fee', p.month, p.year)
+        : feeItemLabel('Pending Fee', p.month, p.year),
+    amount: Number(p.remaining || 0),
+    tagText: 'PENDING', tagClass: 'pending-tag', rowClass: ' class="pending-row"',
+    paidAmt: 0,
+    isPending: true,
+  }));
 
-    // Paid Amount per row: pending rows always read 0 (nothing collected yet for
-    // that period), paid-history rows show the full amount settled, and a partially
-    // paid current voucher splits its paidAmount across its own items in order.
-    let paidAmt = 0;
-    if (isPendingRow) {
-      paidAmt = 0;
-    } else if (fi.isPaidHistory) {
-      paidAmt = fi.amount || 0;
-    } else if (v.status === 'paid') {
-      paidAmt = fi.amount || 0;
-    } else if (v.status === 'partial') {
-      paidAmt = Math.min(fi.amount || 0, Math.max(0, currentPartialPool));
-      currentPartialPool -= paidAmt;
-    }
-
-    return { ...fi, tagText, tagClass, rowClass, paidAmt };
-  });
+  const enrichedRows = [...ownRows, ...otherPaidRows, ...otherPendingRows];
 
   // Fully settled rows always print above anything still owed (partially or fully
   // pending) — a stable sort keeps each group's original chronological order intact.
@@ -2701,7 +2736,9 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
 
   const itemRows = orderedRows
     .map((fi, i) => {
-      const label = fi.tagText ? `${fi.name} <span class="${fi.tagClass}">${fi.tagText}</span>` : fi.name;
+      const label = fi.tagText
+        ? `${fi.name} <span class="${fi.tagClass}">${fi.tagText}${fi.dateLabel ? ` ${fi.dateLabel}` : ''}</span>`
+        : fi.name;
       return `<tr${fi.rowClass}>
           <td class="sno">${i + 1}</td>
           <td>${label}</td>
@@ -2712,9 +2749,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
     .join('');
 
   // How much of the displayed total is arrears from OTHER months, not covered by this payment
-  const otherArrearsTotal = displayLineItems
-    .filter((fi: any) => fi.isPending)
-    .reduce((s: number, fi: any) => s + (fi.amount || 0), 0);
+  const otherArrearsTotal = otherPendingRows.reduce((s: number, fi: any) => s + (fi.amount || 0), 0);
 
   const discountRow =
     discount > 0

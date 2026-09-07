@@ -962,7 +962,7 @@ const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
     studentId: { $in: studentObjectIds },
     status: { $in: ['unpaid', 'partial', 'overdue', 'paid'] },
   })
-    .select('_id studentId month year netAmount feeItems discount fine paidAmount status voucherType voucherNumber examId')
+    .select('_id studentId month year netAmount feeItems discount fine paidAmount paidDate status voucherType voucherNumber examId')
     .lean();
 
   const pendingByStudent = new Map();
@@ -976,6 +976,7 @@ const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
         month: p.month,
         year: p.year,
         amount: p.paidAmount || effectiveNet(p),
+        paidDate: p.paidDate,
         voucherType: p.voucherType,
         voucherNumber: p.voucherNumber,
         feeItems: p.feeItems || [],
@@ -996,21 +997,27 @@ const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
     });
   });
 
+  // Vouchers already in this same print batch get their own dedicated challan below —
+  // excluding them (not just the current one) from each other's arrears/history list
+  // stops a multi-fund batch (e.g. Monthly Fee + Exam Fee for the same student) from
+  // printing the same combined set of rows twice, once per sibling voucher.
+  const batchIds = new Set(ids.map(String));
+
   return vouchers.map((v) => {
     const currentId = String(v._id);
     const sid = String(v.studentId?._id || v.studentId || '');
-    // Arrears: every other outstanding voucher, regardless of year — dues don't
-    // expire just because the school year rolled over.
+    // Arrears: every other outstanding voucher not already in this print batch,
+    // regardless of year — dues don't expire just because the school year rolled over.
     const pendingList = (pendingByStudent.get(sid) || [])
-      .filter((p) => p.id !== currentId)
+      .filter((p) => p.id !== currentId && !batchIds.has(p.id))
       .sort((a, b) => voucherPeriodIndex(a.month, a.year) - voucherPeriodIndex(b.month, b.year));
     const pendingTotal = pendingList.reduce((sum, p) => sum + p.remaining, 0);
 
-    // Paid history: only months already settled within THIS voucher's own year, so
-    // the challan recaps "what's been paid this session" without dragging in every
-    // paid month the student has ever had.
+    // Paid history: only months already settled within THIS voucher's own year and not
+    // already in this print batch, so the challan recaps "what's been paid this session"
+    // without dragging in every paid month the student has ever had.
     const paidList = (paidByStudent.get(sid) || [])
-      .filter((p) => p.id !== currentId && p.year === v.year)
+      .filter((p) => p.id !== currentId && !batchIds.has(p.id) && p.year === v.year)
       .sort((a, b) => voucherPeriodIndex(a.month, a.year) - voucherPeriodIndex(b.month, b.year));
     const paidTotal = paidList.reduce((sum, p) => sum + p.amount, 0);
 
