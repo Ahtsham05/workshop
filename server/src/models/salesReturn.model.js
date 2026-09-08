@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
 const { DEFAULT_UNIT } = require('../config/units');
+const { buildTaxLineSchema } = require('./schemas/taxLine.schema');
 
 const salesReturnItemSchema = new mongoose.Schema(
   {
@@ -27,6 +28,11 @@ const salesReturnItemSchema = new mongoose.Schema(
     variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
     batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' },
     batchNumber: { type: String },
+    // Reversed tax for this line, prorated from the ORIGINAL invoice line's persisted
+    // tax snapshot (never recalculated at current rates) — see
+    // server/src/utils/taxReturnProration.js and salesReturn.service.js.
+    taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
+    taxAmount: { type: Number, default: 0, min: 0 },
   },
   { _id: false }
 );
@@ -63,6 +69,10 @@ const SalesReturnSchema = new mongoose.Schema(
     customerName: { type: String },
     items: [salesReturnItemSchema],
     totalAmount: { type: Number, required: true, min: 0 },
+    // Total reversed tax (sum of items[].taxAmount) — 0 for returns against an invoice
+    // that predates the tax engine or belongs to a taxSystem 'NONE' org.
+    taxAmount: { type: Number, default: 0, min: 0 },
+    taxLines: [buildTaxLineSchema()],
     refundMethod: {
       type: String,
       enum: ['cash', 'jazzcash', 'easypaisa', 'adjustment'],

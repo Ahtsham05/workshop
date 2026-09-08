@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
+const { buildTaxLineSchema } = require('./schemas/taxLine.schema');
+const { TAX_SYSTEMS } = require('../config/countries');
 
 const STATIONS = ['kitchen', 'bar', 'grill', 'dessert', 'other'];
 const LINE_STATUSES = ['pending', 'preparing', 'ready', 'served'];
@@ -13,6 +15,11 @@ const orderLineSchema = mongoose.Schema(
     notes: { type: String, trim: true },
     station: { type: String, enum: STATIONS, default: 'kitchen' },
     status: { type: String, enum: LINE_STATUSES, default: 'pending' },
+    // Server-resolved from the underlying Product (menu items ARE Products — no separate
+    // MenuItem model) via resolveRestaurantOrderTax — never trust a client-supplied value.
+    taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
+    taxableAmount: { type: Number, default: 0, min: 0 },
+    taxAmount: { type: Number, default: 0, min: 0 },
   },
   { _id: true }
 );
@@ -68,7 +75,13 @@ const restaurantOrderSchema = mongoose.Schema(
       default: 'open',
     },
     subtotal: { type: Number, default: 0 },
+    // Server-resolved via resolveRestaurantOrderTax when the org has a tax system
+    // configured; for taxSystem 'NONE' it's the client's manually-entered figure passed
+    // through unchanged, exactly as before — see restaurant.service.js.
     taxAmount: { type: Number, default: 0 },
+    taxLines: [buildTaxLineSchema()],
+    taxSystem: { type: String, enum: TAX_SYSTEMS, default: 'NONE' },
+    taxInclusive: { type: Boolean, default: false },
     discountAmount: { type: Number, default: 0 },
     serviceChargeAmount: { type: Number, default: 0 },
     total: { type: Number, default: 0 },

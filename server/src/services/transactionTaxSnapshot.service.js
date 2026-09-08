@@ -4,6 +4,47 @@ const taxCalculatorService = require('./taxCalculator.service');
 const exchangeRateService = require('./exchangeRate.service');
 
 /**
+ * Rolls a taxCalculator.service.js calculateTax() result's per-line rate components up
+ * into per-category totals — the shape persisted as header `taxLines[]` on Invoice/
+ * Purchase/PurchaseOrder/RestaurantOrder. Shared by resolveTransactionTaxAndCurrency below
+ * and by any caller (e.g. restaurant.service.js) that invokes calculateTax directly because
+ * it doesn't need this function's currency-snapshot/discount-proration wrapper.
+ *
+ * @param {Object} taxResult - return value of taxCalculatorService.calculateTax
+ * @param {Array<{taxCategoryId: string|null}>} calculatorLines - the lines passed into calculateTax (same order/index)
+ * @param {number} decimalPlaces
+ */
+const buildTaxLinesFromResult = (taxResult, calculatorLines, decimalPlaces) => {
+  const componentsByCategory = new Map();
+  taxResult.lines.forEach((lineResult, index) => {
+    const taxCategoryId = calculatorLines[index].taxCategoryId;
+    if (!taxCategoryId) return;
+    const categoryComponents = componentsByCategory.get(taxCategoryId) || new Map();
+    (lineResult.components || []).forEach((component) => {
+      const key = String(component.taxRateId);
+      const existing = categoryComponents.get(key) || {
+        taxRateId: component.taxRateId,
+        name: component.name,
+        ratePercent: component.ratePercent,
+        isCompound: component.isCompound,
+        amount: 0,
+      };
+      existing.amount = Money.addMoney(existing.amount, component.amount, decimalPlaces);
+      categoryComponents.set(key, existing);
+    });
+    componentsByCategory.set(taxCategoryId, categoryComponents);
+  });
+
+  return taxResult.taxBreakdownByCategory.map((bucket) => ({
+    taxCategoryId: bucket.taxCategoryId,
+    taxCategoryName: bucket.taxCategoryName,
+    taxableAmount: bucket.taxableAmount,
+    taxAmount: bucket.taxAmount,
+    components: Array.from((componentsByCategory.get(bucket.taxCategoryId) || new Map()).values()),
+  }));
+};
+
+/**
  * Shared by invoice.service.js and purchase.service.js — resolves per-item tax (via the
  * central TaxCalculatorService) and the multi-currency snapshot (via ExchangeRateService)
  * for a set of already-validated line items + an already-resolved overall discount.
@@ -105,33 +146,7 @@ const resolveTransactionTaxAndCurrency = async ({
   }));
 
   // Roll per-line components up into per-category totals for the header taxLines snapshot.
-  const componentsByCategory = new Map();
-  taxResult.lines.forEach((lineResult, index) => {
-    const taxCategoryId = calculatorLines[index].taxCategoryId;
-    if (!taxCategoryId) return;
-    const categoryComponents = componentsByCategory.get(taxCategoryId) || new Map();
-    (lineResult.components || []).forEach((component) => {
-      const key = String(component.taxRateId);
-      const existing = categoryComponents.get(key) || {
-        taxRateId: component.taxRateId,
-        name: component.name,
-        ratePercent: component.ratePercent,
-        isCompound: component.isCompound,
-        amount: 0,
-      };
-      existing.amount = Money.addMoney(existing.amount, component.amount, decimalPlaces);
-      categoryComponents.set(key, existing);
-    });
-    componentsByCategory.set(taxCategoryId, categoryComponents);
-  });
-
-  const taxLines = taxResult.taxBreakdownByCategory.map((bucket) => ({
-    taxCategoryId: bucket.taxCategoryId,
-    taxCategoryName: bucket.taxCategoryName,
-    taxableAmount: bucket.taxableAmount,
-    taxAmount: bucket.taxAmount,
-    components: Array.from((componentsByCategory.get(bucket.taxCategoryId) || new Map()).values()),
-  }));
+  const taxLines = buildTaxLinesFromResult(taxResult, calculatorLines, decimalPlaces);
 
   return {
     items: itemsWithTax,
@@ -143,4 +158,4 @@ const resolveTransactionTaxAndCurrency = async ({
   };
 };
 
-module.exports = { resolveTransactionTaxAndCurrency };
+module.exports = { resolveTransactionTaxAndCurrency, buildTaxLinesFromResult };

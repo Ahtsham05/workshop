@@ -12,6 +12,71 @@ const {
   Customer,
 } = require('../models');
 const ApiError = require('../utils/ApiError');
+const taxCalculatorService = require('./taxCalculator.service');
+const { buildTaxLinesFromResult } = require('./transactionTaxSnapshot.service');
+const Money = require('../utils/money');
+
+/**
+ * Resolves order-level tax via the shared tax engine (same taxCalculator.service.js
+ * Invoice/Purchase use), keyed off each line's Product.taxCategoryId — restaurant menu
+ * items ARE Product documents (no separate MenuItem model), so buildLinesFromProducts
+ * below already has everything needed with zero extra queries. Calls calculateTax()
+ * directly rather than the higher-level resolveTransactionTaxAndCurrency wrapper, since
+ * Restaurant has no currency-snapshot or header-discount-proration need (the discount
+ * here is a flat post-tax deduction, same as it's always been — see computeOrderTotals).
+ *
+ * Server-authoritative: once a real tax system is configured, `fallbackTax` (whatever the
+ * client sent) is used ONLY when taxSystem is 'NONE' — otherwise it's fully ignored, on
+ * every call site including the unauthenticated public QR-order path, so a customer can no
+ * longer set their own order's tax amount.
+ */
+const resolveRestaurantOrderTax = async ({ organizationId, lines, customerId, asOfDate, fallbackTax }) => {
+  const organization = await Organization.findById(organizationId)
+    .select('taxSystem taxInclusivePricingDefault baseCurrency')
+    .lean();
+  const taxSystem = organization?.taxSystem || 'NONE';
+
+  if (taxSystem === 'NONE') {
+    return {
+      lines: lines.map((line) => ({ ...line, taxCategoryId: null, taxableAmount: 0, taxAmount: 0 })),
+      taxAmount: Number(fallbackTax || 0),
+      taxLines: [],
+      taxSystem: 'NONE',
+      taxInclusive: false,
+    };
+  }
+
+  const decimalPlaces = Money.getCurrencyMeta(organization.baseCurrency)?.decimalPlaces ?? Money.DEFAULT_DECIMAL_PLACES;
+  const calculatorLines = lines.map((line, index) => ({
+    lineId: String(index),
+    amount: Number(line.quantity || 0) * Number(line.unitPrice || 0),
+    taxCategoryId: line.taxCategoryId || null,
+  }));
+
+  const taxResult = await taxCalculatorService.calculateTax({
+    organizationId,
+    customerId: customerId || null,
+    asOfDate: asOfDate || new Date(),
+    taxInclusive: !!organization.taxInclusivePricingDefault,
+    currencyDecimalPlaces: decimalPlaces,
+    lines: calculatorLines,
+  });
+
+  const linesWithTax = lines.map((line, index) => ({
+    ...line,
+    taxCategoryId: calculatorLines[index].taxCategoryId,
+    taxableAmount: taxResult.lines[index]?.taxableAmount ?? 0,
+    taxAmount: taxResult.lines[index]?.taxAmount ?? 0,
+  }));
+
+  return {
+    lines: linesWithTax,
+    taxAmount: taxResult.totalTax,
+    taxLines: buildTaxLinesFromResult(taxResult, calculatorLines, decimalPlaces),
+    taxSystem,
+    taxInclusive: !!organization.taxInclusivePricingDefault,
+  };
+};
 
 const generateOrderNumber = () => {
   const t = Date.now().toString(36).toUpperCase();
@@ -142,6 +207,7 @@ const buildLinesFromProducts = async (lineInputs, branchId) => {
       notes: input.notes,
       station: input.station || 'kitchen',
       status: 'pending',
+      taxCategoryId: product.taxCategoryId || null,
     });
   }
   return lines;
@@ -149,9 +215,8 @@ const buildLinesFromProducts = async (lineInputs, branchId) => {
 
 const createOrder = async (body, req) => {
   ensureBranch(req);
-  const lines = await buildLinesFromProducts(body.lines, req.branchId);
-  const { taxAmount = 0, discountAmount = 0, serviceChargeAmount = 0 } = body;
-  const { subtotal, total } = computeOrderTotals(lines, { taxAmount, discountAmount, serviceChargeAmount });
+  const rawLines = await buildLinesFromProducts(body.lines, req.branchId);
+  const { discountAmount = 0, serviceChargeAmount = 0 } = body;
 
   let tableLabel = body.tableLabel;
   let tableId = body.tableId;
@@ -161,6 +226,33 @@ const createOrder = async (body, req) => {
   if (serviceMode === 'delivery' || serviceMode === 'takeaway') {
     tableId = undefined;
   }
+
+  // Resolved before tax so a linked CRM customer's exemption (if any) is honored.
+  let resolvedCustomerId;
+  let deliveryPhoneField;
+  if (serviceMode === 'delivery') {
+    deliveryPhoneField = resolveDeliveryPhoneFromBody(body) || undefined;
+    if (body.customerId) {
+      const crm = await Customer.findOne({
+        _id: body.customerId,
+        branchId: req.branchId,
+      }).select('_id');
+      if (crm) resolvedCustomerId = crm._id;
+    }
+  }
+
+  const taxResolution = await resolveRestaurantOrderTax({
+    organizationId: req.organizationId,
+    lines: rawLines,
+    customerId: resolvedCustomerId,
+    fallbackTax: body.taxAmount,
+  });
+  const lines = taxResolution.lines;
+  const { subtotal, total } = computeOrderTotals(lines, {
+    taxAmount: taxResolution.taxAmount,
+    discountAmount,
+    serviceChargeAmount,
+  });
 
   if (tableId) {
     const table = await RestaurantTable.findOne({ _id: tableId, branchId: req.branchId }).populate('floorId');
@@ -180,19 +272,6 @@ const createOrder = async (body, req) => {
   const prepaidAt =
     prepaidAmount > 0 && prepaidMethod ? new Date() : undefined;
 
-  let resolvedCustomerId;
-  let deliveryPhoneField;
-  if (serviceMode === 'delivery') {
-    deliveryPhoneField = resolveDeliveryPhoneFromBody(body) || undefined;
-    if (body.customerId) {
-      const crm = await Customer.findOne({
-        _id: body.customerId,
-        branchId: req.branchId,
-      }).select('_id');
-      if (crm) resolvedCustomerId = crm._id;
-    }
-  }
-
   const order = await RestaurantOrder.create({
     organizationId: req.organizationId,
     branchId: req.branchId,
@@ -208,7 +287,10 @@ const createOrder = async (body, req) => {
     lines,
     status: lines.length ? 'in_progress' : 'open',
     subtotal,
-    taxAmount,
+    taxAmount: taxResolution.taxAmount,
+    taxLines: taxResolution.taxLines,
+    taxSystem: taxResolution.taxSystem,
+    taxInclusive: taxResolution.taxInclusive,
     discountAmount,
     serviceChargeAmount,
     total,
@@ -264,9 +346,33 @@ const updateOrder = async (orderId, body, req) => {
   if (['paid', 'cancelled'].includes(order.status)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot edit a closed order');
   }
-  const lines = await buildLinesFromProducts(body.lines, req.branchId);
-  const { taxAmount = 0, discountAmount = 0, serviceChargeAmount = 0 } = body;
-  const { subtotal, total } = computeOrderTotals(lines, { taxAmount, discountAmount, serviceChargeAmount });
+  const rawLines = await buildLinesFromProducts(body.lines, req.branchId);
+  const { discountAmount = 0, serviceChargeAmount = 0 } = body;
+
+  // Resolved before tax (below) so a linked CRM customer's exemption is honored — mirrors
+  // the delivery-mode customerId resolution that used to run after totals were computed.
+  let resolvedCustomerId = order.customerId;
+  if (order.serviceMode === 'delivery' && body.customerId !== undefined) {
+    if (!body.customerId) {
+      resolvedCustomerId = undefined;
+    } else {
+      const crm = await Customer.findOne({ _id: body.customerId, branchId: req.branchId }).select('_id');
+      resolvedCustomerId = crm ? crm._id : undefined;
+    }
+  }
+
+  const taxResolution = await resolveRestaurantOrderTax({
+    organizationId: req.organizationId,
+    lines: rawLines,
+    customerId: resolvedCustomerId,
+    fallbackTax: body.taxAmount,
+  });
+  const lines = taxResolution.lines;
+  const { subtotal, total } = computeOrderTotals(lines, {
+    taxAmount: taxResolution.taxAmount,
+    discountAmount,
+    serviceChargeAmount,
+  });
 
   const previousTableId = order.tableId ? String(order.tableId) : null;
 
@@ -292,7 +398,10 @@ const updateOrder = async (orderId, body, req) => {
   order.lines = lines;
   order.subtotal = subtotal;
   order.total = total;
-  order.taxAmount = taxAmount;
+  order.taxAmount = taxResolution.taxAmount;
+  order.taxLines = taxResolution.taxLines;
+  order.taxSystem = taxResolution.taxSystem;
+  order.taxInclusive = taxResolution.taxInclusive;
   order.discountAmount = discountAmount;
   order.serviceChargeAmount = serviceChargeAmount;
   order.tableId = tableId || undefined;
@@ -308,14 +417,7 @@ const updateOrder = async (orderId, body, req) => {
     };
     const dp = resolveDeliveryPhoneFromBody(mergedForPhone);
     if (dp) order.deliveryPhone = dp;
-    if (body.customerId !== undefined) {
-      if (!body.customerId) {
-        order.customerId = undefined;
-      } else {
-        const crm = await Customer.findOne({ _id: body.customerId, branchId: req.branchId }).select('_id');
-        order.customerId = crm ? crm._id : undefined;
-      }
-    }
+    order.customerId = resolvedCustomerId;
   }
 
   order.status = lines.length ? 'in_progress' : 'open';
@@ -525,9 +627,24 @@ const listProductsForBranch = async (branchId, { limit = 200 } = {}) => {
 
 const createPublicQrOrder = async (qrToken, body) => {
   const { table } = await getTableByQrToken(qrToken);
-  const lines = await buildLinesFromProducts(body.lines, table.branchId);
-  const { taxAmount = 0, discountAmount = 0, serviceChargeAmount = 0 } = body;
-  const { subtotal, total } = computeOrderTotals(lines, { taxAmount, discountAmount, serviceChargeAmount });
+  const rawLines = await buildLinesFromProducts(body.lines, table.branchId);
+  const { discountAmount = 0, serviceChargeAmount = 0 } = body;
+
+  // This is the unauthenticated QR-ordering endpoint — no session, no auth() middleware.
+  // Tax MUST be server-resolved here exactly like the authenticated paths above; a
+  // customer scanning the QR code must never be able to set their own order's tax amount
+  // (this is the specific fix for that gap — see resolveRestaurantOrderTax).
+  const taxResolution = await resolveRestaurantOrderTax({
+    organizationId: table.organizationId,
+    lines: rawLines,
+    fallbackTax: body.taxAmount,
+  });
+  const lines = taxResolution.lines;
+  const { subtotal, total } = computeOrderTotals(lines, {
+    taxAmount: taxResolution.taxAmount,
+    discountAmount,
+    serviceChargeAmount,
+  });
 
   const floorName = table.floorId?.name || 'Floor';
   const tableLabel = `${floorName} · ${table.label}`;
@@ -544,7 +661,10 @@ const createPublicQrOrder = async (qrToken, body) => {
     lines,
     status: 'in_progress',
     subtotal,
-    taxAmount,
+    taxAmount: taxResolution.taxAmount,
+    taxLines: taxResolution.taxLines,
+    taxSystem: taxResolution.taxSystem,
+    taxInclusive: taxResolution.taxInclusive,
     discountAmount,
     serviceChargeAmount,
     total,

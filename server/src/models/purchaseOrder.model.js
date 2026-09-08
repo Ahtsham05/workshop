@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
 const { DEFAULT_UNIT } = require('../config/units');
+const { buildTaxLineSchema } = require('./schemas/taxLine.schema');
+const { TAX_SYSTEMS } = require('../config/countries');
 
 const PURCHASE_ORDER_STATUSES = [
   'draft',       // freshly drafted, not yet sent to supplier
@@ -38,6 +40,12 @@ const PurchaseOrderItemSchema = new mongoose.Schema(
     discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
     discountAmount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for this line
     total: { type: Number, required: true, min: 0 }, // (expectedPrice * quantity) - discountAmount
+    // Server-resolved (line override > variant > product) via resolvePurchaseOrderTaxAndCurrency
+    // — never trust a client-supplied taxCategoryId/taxableAmount/taxAmount directly, mirrors
+    // Purchase's own item tax fields. See purchaseOrder.service.js.
+    taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
+    taxableAmount: { type: Number, default: 0, min: 0 },
+    taxAmount: { type: Number, default: 0, min: 0 },
     notes: { type: String, trim: true },
   },
   { _id: true }
@@ -108,7 +116,13 @@ const PurchaseOrderSchema = new mongoose.Schema(
     discountType: { type: String, enum: ['fixed', 'percentage'], default: 'fixed' },
     discountValue: { type: Number, default: 0, min: 0 }, // raw entered value (Rs or %)
     discount: { type: Number, default: 0, min: 0 }, // resolved Rs discount for the whole order
+    // tax is now server-resolved via the shared tax engine (resolvePurchaseOrderTaxAndCurrency)
+    // when the org has a taxSystem configured; for taxSystem 'NONE' it's the client's manual
+    // figure passed straight through, exactly as before — see purchaseOrder.service.js.
     tax: { type: Number, default: 0, min: 0 },
+    taxLines: [buildTaxLineSchema()],
+    taxSystem: { type: String, enum: TAX_SYSTEMS, default: 'NONE' },
+    taxInclusive: { type: Boolean, default: false },
     shippingCost: { type: Number, default: 0, min: 0 },
     totalAmount: { type: Number, required: true, default: 0 }, // subtotal - discount + tax + shippingCost
 

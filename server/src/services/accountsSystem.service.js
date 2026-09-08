@@ -2141,56 +2141,90 @@ const postExpenseAdHoc = async (scope, { amount, paymentMethod, walletType, expe
 
 /**
  * Sales return / refund.
- *   Dr Sales Revenue (contra)      Cr Cash/Bank (refund) or Accounts Receivable (adjustment)
+ *   Dr Sales Revenue (contra, net of tax)
+ *   Dr Tax Payable (contra, when the original sale had tax)
+ *       Cr Cash/Bank (refund) or Accounts Receivable (adjustment)
  */
 const postSalesReturn = async (scope, salesReturn) => {
   if (!salesReturn) return null;
   return repostForReference(scope, 'SalesReturn', salesReturn._id, 'SALES_RETURN', async () => {
     const amt = round2(salesReturn.totalAmount);
     if (amt <= 0) return null;
+    // Reversed tax, prorated from the original invoice's snapshot — see
+    // salesReturn.service.js / taxReturnProration.js. 0 for returns against an invoice
+    // that predates the tax engine or whose org has no tax system configured.
+    const tax = round2(salesReturn.taxAmount || 0);
+    const revenue = round2(Math.max(0, amt - tax));
     const isAdjustment = salesReturn.refundMethod === 'adjustment';
-    const [salesAcc, creditAcc] = await Promise.all([
+    const [salesAcc, taxAcc, creditAcc] = await Promise.all([
       findAccount(scope, ACCOUNT_CODES.SALES_REVENUE),
+      tax > 0 ? findAccount(scope, ACCOUNT_CODES.TAX_PAYABLE) : Promise.resolve(null),
       isAdjustment
         ? getCustomerReceivableAccount(scope, salesReturn.customerId)
         : resolvePaymentAccount(scope, salesReturn.refundMethod),
     ]);
     if (!salesAcc || !creditAcc) return null;
+
+    const lines = [{ accountId: salesAcc._id, debit: revenue, credit: 0, description: 'Sales return' }];
+    if (tax > 0 && taxAcc) {
+      lines.push({ accountId: taxAcc._id, debit: tax, credit: 0, description: 'Output tax reversed' });
+    } else if (tax > 0) {
+      // Account couldn't be resolved — fall back to the pre-split behavior (debit the
+      // full amount into Sales Revenue) rather than posting an out-of-balance entry.
+      lines[0].debit = amt;
+    }
+    lines.push({ accountId: creditAcc._id, debit: 0, credit: amt, description: isAdjustment ? 'Receivable reduced' : 'Refund paid' });
+
     return {
       date: salesReturn.createdAt || new Date(),
       narration: `Sales return ${salesReturn.returnNumber || ''}`.trim(),
-      lines: [
-        { accountId: salesAcc._id, debit: amt, credit: 0, description: 'Sales return' },
-        { accountId: creditAcc._id, debit: 0, credit: amt, description: isAdjustment ? 'Receivable reduced' : 'Refund paid' },
-      ],
+      lines,
     };
   });
 };
 
 /**
  * Purchase return.
- *   Dr Cash/Bank (refund) or Accounts Payable (adjustment)      Cr Inventory
+ *   Dr Cash/Bank (refund) or Accounts Payable (adjustment)
+ *       Cr Inventory (net of tax)
+ *       Cr Input Tax Recoverable (contra, when the original purchase had input tax)
  */
 const postPurchaseReturn = async (scope, purchaseReturn) => {
   if (!purchaseReturn) return null;
   return repostForReference(scope, 'PurchaseReturn', purchaseReturn._id, 'PURCHASE_RETURN', async () => {
     const amt = round2(purchaseReturn.totalAmount);
     if (amt <= 0) return null;
+    // Reversed Input Tax, prorated from the original purchase's snapshot — see
+    // purchaseReturn.service.js / taxReturnProration.js. 0 when this return has no linked
+    // Purchase, or the purchase predates the tax engine / its org has no tax system.
+    const tax = round2(purchaseReturn.taxAmount || 0);
+    const inventoryPortion = round2(Math.max(0, amt - tax));
     const isAdjustment = purchaseReturn.refundMethod === 'adjustment';
-    const [invAcc, debitAcc] = await Promise.all([
+
+    if (tax > 0) await ensureInputTaxRecoverableAccount(scope);
+    const [invAcc, taxRecoverableAcc, debitAcc] = await Promise.all([
       findAccount(scope, ACCOUNT_CODES.INVENTORY),
+      tax > 0 ? findAccount(scope, ACCOUNT_CODES.INPUT_TAX_RECOVERABLE) : Promise.resolve(null),
       isAdjustment
         ? getSupplierPayableAccount(scope, purchaseReturn.supplierId)
         : resolvePaymentAccount(scope, purchaseReturn.refundMethod),
     ]);
     if (!invAcc || !debitAcc) return null;
+
+    const lines = [{ accountId: debitAcc._id, debit: amt, credit: 0, description: isAdjustment ? 'Payable reduced' : 'Refund received' }];
+    if (tax > 0 && taxRecoverableAcc) {
+      lines.push({ accountId: invAcc._id, debit: 0, credit: inventoryPortion, description: 'Inventory returned' });
+      lines.push({ accountId: taxRecoverableAcc._id, debit: 0, credit: tax, description: 'Input tax recoverable reversed' });
+    } else {
+      // No tax to split (or the account couldn't be resolved) — full amount to Inventory,
+      // exactly the pre-tax-engine behavior, so the journal entry never falls out of balance.
+      lines.push({ accountId: invAcc._id, debit: 0, credit: amt, description: 'Inventory returned' });
+    }
+
     return {
       date: purchaseReturn.createdAt || new Date(),
       narration: `Purchase return ${purchaseReturn.returnNumber || ''}`.trim(),
-      lines: [
-        { accountId: debitAcc._id, debit: amt, credit: 0, description: isAdjustment ? 'Payable reduced' : 'Refund received' },
-        { accountId: invAcc._id, debit: 0, credit: amt, description: 'Inventory returned' },
-      ],
+      lines,
     };
   });
 };

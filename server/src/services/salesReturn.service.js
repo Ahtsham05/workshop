@@ -12,6 +12,8 @@ const salesmanCommissionLedgerService = require('./salesmanCommissionLedger.serv
 const partnerProfitShareLedgerService = require('./partnerProfitShareLedger.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+const { proportionLineTax, buildReturnTaxLines } = require('../utils/taxReturnProration');
+const Money = require('../utils/money');
 
 /**
  * Resolves exactly which batches — and, for serial/IMEI-tracked lines, which specific
@@ -176,11 +178,32 @@ const createSalesReturn = async (returnBody) => {
     // 2. Validate return quantities
     await validateReturnQuantities(invoice, normalizedItems);
 
+    // 2b. Reverse the ORIGINAL invoice's persisted tax snapshot, prorated by returned
+    // quantity — never recalculated at current rates (see taxReturnProration.js). A no-op
+    // (0 tax) when the invoice predates the tax engine or its org has no tax system
+    // configured, since invoiceLineItem.taxAmount is simply 0/undefined in that case.
+    const decimalPlaces = Money.getCurrencyMeta(invoice.currency)?.decimalPlaces ?? Money.DEFAULT_DECIMAL_PLACES;
+    const categoryNameById = new Map(
+      (invoice.taxLines || []).map((line) => [String(line.taxCategoryId), line.taxCategoryName])
+    );
+    let totalReturnTax = 0;
+    for (const normalizedItem of normalizedItems) {
+      const invoiceLineItem = invoiceItemsMap.get(normalizedItem.productId.toString());
+      const returnedQuantity = Number(normalizedItem.stockQuantity || normalizedItem.quantity || 0);
+      const prorated = proportionLineTax(invoiceLineItem, returnedQuantity, decimalPlaces);
+      normalizedItem.taxCategoryId = prorated.taxCategoryId;
+      normalizedItem.taxAmount = prorated.taxAmount;
+      totalReturnTax = Money.addMoney(totalReturnTax, prorated.taxAmount, decimalPlaces);
+    }
+    const returnTaxLines = buildReturnTaxLines(normalizedItems, categoryNameById);
+
     // 3. Persist the return document
     const [salesReturn] = await SalesReturn.create([
       {
         ...returnBody,
         items: normalizedItems,
+        taxAmount: totalReturnTax,
+        taxLines: returnTaxLines,
       },
     ], { session });
 

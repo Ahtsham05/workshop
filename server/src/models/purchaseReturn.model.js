@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
 const { DEFAULT_UNIT } = require('../config/units');
+const { buildTaxLineSchema } = require('./schemas/taxLine.schema');
 
 const purchaseReturnItemSchema = new mongoose.Schema(
   {
@@ -27,6 +28,13 @@ const purchaseReturnItemSchema = new mongoose.Schema(
     variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant' },
     batchNumber: { type: String },
     expiryDate: { type: Date },
+    // Reversed Input Tax, prorated from the ORIGINAL purchase line's persisted tax
+    // snapshot (never recalculated at current rates) — see
+    // server/src/utils/taxReturnProration.js and purchaseReturn.service.js. Stays 0 when
+    // this return has no linked Purchase (purchaseId null, forwarded from a Sales Return
+    // only) — there's no persisted input-tax snapshot to reverse against in that case.
+    taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
+    taxAmount: { type: Number, default: 0, min: 0 },
   },
   { _id: false }
 );
@@ -70,6 +78,9 @@ const PurchaseReturnSchema = new mongoose.Schema(
     },
     items: [purchaseReturnItemSchema],
     totalAmount: { type: Number, required: true, min: 0 },
+    // Total reversed Input Tax (sum of items[].taxAmount).
+    taxAmount: { type: Number, default: 0, min: 0 },
+    taxLines: [buildTaxLineSchema()],
     refundMethod: {
       type: String,
       enum: ['cash', 'bank', 'adjustment'],

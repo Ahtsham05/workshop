@@ -9,6 +9,8 @@ const inventoryService = require('./inventory.service');
 const batchService = require('./batch.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
+const { proportionLineTax, buildReturnTaxLines } = require('../utils/taxReturnProration');
+const Money = require('../utils/money');
 
 const getOrganizationBusinessType = async (organizationId) => {
   if (!organizationId) {
@@ -132,6 +134,15 @@ const createPurchaseReturn = async (returnBody) => {
         );
       }
 
+      // Reverse the ORIGINAL purchase line's persisted Input Tax, prorated by returned
+      // quantity — never recalculated at current rates (see taxReturnProration.js).
+      // `purchaseLineItem` is undefined when this return has no linked Purchase
+      // (forwarded only from a Sales Return) — proportionLineTax then correctly returns
+      // zero tax rather than fabricating a figure from an unrelated document.
+      const purchaseCurrencyMeta = purchase ? Money.getCurrencyMeta(purchase.currency) : null;
+      const returnDecimalPlaces = purchaseCurrencyMeta ? purchaseCurrencyMeta.decimalPlaces : Money.DEFAULT_DECIMAL_PLACES;
+      const proratedTax = proportionLineTax(purchaseLineItem, conversion.stockQuantity, returnDecimalPlaces);
+
       normalizedItems.push({
         ...item,
         unit: conversion.lineUnit,
@@ -143,6 +154,8 @@ const createPurchaseReturn = async (returnBody) => {
         variantId: item.variantId ?? purchaseLineItem?.variantId,
         batchNumber: item.batchNumber ?? purchaseLineItem?.batchNumber,
         expiryDate: item.expiryDate ?? purchaseLineItem?.expiryDate,
+        taxCategoryId: proratedTax.taxCategoryId,
+        taxAmount: proratedTax.taxAmount,
       });
     }
 
@@ -150,11 +163,22 @@ const createPurchaseReturn = async (returnBody) => {
       await validateReturnQuantities(purchase, normalizedItems);
     }
 
+    const categoryNameById = new Map(
+      (purchase?.taxLines || []).map((line) => [String(line.taxCategoryId), line.taxCategoryName])
+    );
+    const totalReturnTax = normalizedItems.reduce(
+      (sum, item) => Money.addMoney(sum, item.taxAmount || 0, Money.DEFAULT_DECIMAL_PLACES),
+      0
+    );
+    const returnTaxLines = buildReturnTaxLines(normalizedItems, categoryNameById);
+
     // 4. Persist the return document
     const [purchaseReturn] = await PurchaseReturn.create([
       {
         ...returnBody,
         items: normalizedItems,
+        taxAmount: totalReturnTax,
+        taxLines: returnTaxLines,
       },
     ], { session });
 

@@ -1,8 +1,9 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { PurchaseOrder } = require('../models');
+const { PurchaseOrder, Product, ProductVariant } = require('../models');
 const ApiError = require('../utils/ApiError');
 const purchaseService = require('./purchase.service');
+const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
 const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
 const { computeDiscountAmount } = require('../utils/discount');
 
@@ -110,14 +111,70 @@ const generateOrderNumber = async (organizationId) => {
 };
 
 /**
+ * Resolves input tax for a purchase order's line items via the shared tax engine —
+ * mirrors purchase.service.js's resolvePurchaseTaxAndCurrency, minus the currency-
+ * snapshot plumbing (PurchaseOrder has no currency fields of its own; multi-currency
+ * POs are out of scope). `fallbackTax` preserves the pre-existing "type a flat tax
+ * number by hand" behavior for orgs that haven't configured a tax system.
+ */
+const resolvePurchaseOrderTaxAndCurrency = async ({ organizationId, orderDate, items, discount, fallbackTax }) => {
+  const productIds = [...new Set(items.filter((item) => item.product).map((item) => String(item.product)))];
+  const variantIds = [...new Set(items.filter((item) => item.variantId).map((item) => String(item.variantId)))];
+  const [productsForTax, variantsForTax] = await Promise.all([
+    productIds.length ? Product.find({ _id: { $in: productIds } }).select('taxCategoryId').lean() : Promise.resolve([]),
+    variantIds.length ? ProductVariant.find({ _id: { $in: variantIds } }).select('taxCategoryId').lean() : Promise.resolve([]),
+  ]);
+  const productTaxCategoryById = new Map(productsForTax.map((p) => [String(p._id), p.taxCategoryId ? String(p.taxCategoryId) : null]));
+  const variantTaxCategoryById = new Map(variantsForTax.map((v) => [String(v._id), v.taxCategoryId ? String(v.taxCategoryId) : null]));
+
+  const itemsForTaxCalc = items.map((item) => {
+    const resolvedCategory =
+      item.taxCategoryId ||
+      (item.variantId ? variantTaxCategoryById.get(String(item.variantId)) : null) ||
+      (item.product ? productTaxCategoryById.get(String(item.product)) : null) ||
+      null;
+    return { subtotal: item.total, taxCategoryId: resolvedCategory };
+  });
+
+  const taxAndCurrency = await resolveTransactionTaxAndCurrency({
+    organizationId,
+    customerId: null,
+    asOfDate: orderDate || new Date(),
+    items: itemsForTaxCalc,
+    productTaxCategoryById: new Map(), // already resolved per-item above (incl. variant fallback)
+    overallDiscount: Number(discount || 0),
+    requestedCurrency: null,
+    existingCurrencySnapshot: null,
+    fallbackTax: Number(fallbackTax || 0),
+  });
+
+  const itemsWithTax = items.map((item, index) => ({
+    ...item,
+    taxCategoryId: taxAndCurrency.items[index]?.taxCategoryId || null,
+    taxableAmount: taxAndCurrency.items[index]?.taxableAmount ?? 0,
+    taxAmount: taxAndCurrency.items[index]?.taxAmount ?? 0,
+  }));
+
+  return {
+    items: itemsWithTax,
+    tax: taxAndCurrency.tax,
+    taxLines: taxAndCurrency.taxLines,
+    taxSystem: taxAndCurrency.taxSystem,
+    taxInclusive: taxAndCurrency.taxInclusive,
+  };
+};
+
+/**
  * Normalizes order items (resolving each line's discountAmount + net total) and the
- * overall order totals (subtotal, resolved discount, totalAmount) from raw input.
+ * overall order totals (subtotal, resolved discount, totalAmount, tax) from raw input.
  * This is the source of truth for what gets persisted — mirrors the Purchase
  * invoice's discount model exactly (see purchase.model.js's item/overall discount
  * fields) but is recomputed server-side rather than trusted from the client, same as
- * PurchaseOrder has always recalculated its own totals.
+ * PurchaseOrder has always recalculated its own totals. Tax is resolved via the shared
+ * engine (see resolvePurchaseOrderTaxAndCurrency) — never trust `body.tax` directly
+ * once the org has a real tax system configured.
  */
-const resolveOrderTotals = (body) => {
+const resolveOrderTotals = async (body) => {
   const rawItems = Array.isArray(body.items) ? body.items : [];
   const items = rawItems.map((item) => {
     const gross = Number(item.quantity || 0) * Number(item.expectedPrice || 0);
@@ -133,10 +190,28 @@ const resolveOrderTotals = (body) => {
 
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const discount = computeDiscountAmount(subtotal, body.discountType, body.discountValue);
-  const tax = Number(body.tax || 0);
   const shippingCost = Number(body.shippingCost || 0);
+
+  const taxAndCurrency = await resolvePurchaseOrderTaxAndCurrency({
+    organizationId: body.organizationId,
+    orderDate: body.orderDate,
+    items,
+    discount,
+    fallbackTax: body.tax,
+  });
+
+  const tax = taxAndCurrency.tax;
   const totalAmount = Math.max(0, subtotal - discount + tax + shippingCost);
-  return { items, subtotal, discount, totalAmount };
+  return {
+    items: taxAndCurrency.items,
+    subtotal,
+    discount,
+    totalAmount,
+    tax,
+    taxLines: taxAndCurrency.taxLines,
+    taxSystem: taxAndCurrency.taxSystem,
+    taxInclusive: taxAndCurrency.taxInclusive,
+  };
 };
 
 /**
@@ -145,7 +220,7 @@ const resolveOrderTotals = (body) => {
 const createPurchaseOrder = async (body) => {
   await ensurePurchaseOrderIndexes();
 
-  const totals = resolveOrderTotals(body);
+  const totals = await resolveOrderTotals(body);
 
   const items = totals.items.map((item) => ({
     ...item,
@@ -165,6 +240,10 @@ const createPurchaseOrder = async (body) => {
         discountType: body.discountType || 'fixed',
         discountValue: Number(body.discountValue || 0),
         discount: totals.discount,
+        tax: totals.tax,
+        taxLines: totals.taxLines,
+        taxSystem: totals.taxSystem,
+        taxInclusive: totals.taxInclusive,
         totalAmount: totals.totalAmount,
         status: body.status || 'draft',
       });
@@ -257,15 +336,24 @@ const updatePurchaseOrderById = async (orderId, updateBody) => {
   // a full item-list save.
   const totalsInputFields = ['items', 'discountType', 'discountValue', 'tax', 'shippingCost'];
   if (totalsInputFields.some((key) => Object.prototype.hasOwnProperty.call(updateBody, key))) {
-    const totals = resolveOrderTotals({
+    const totals = await resolveOrderTotals({
       items: updateBody.items || order.items,
       discountType: updateBody.discountType ?? order.discountType,
       discountValue: updateBody.discountValue ?? order.discountValue,
       tax: updateBody.tax ?? order.tax,
       shippingCost: updateBody.shippingCost ?? order.shippingCost,
+      // Never trust a client-supplied organizationId — always the order's own tenant.
+      organizationId: order.organizationId,
+      orderDate: updateBody.orderDate ?? order.orderDate,
     });
     updateBody.subtotal = totals.subtotal;
     updateBody.discount = totals.discount;
+    // Server-resolved — overwrites whatever `tax` the client sent in updateBody, exactly
+    // like create; the tax engine (or the taxSystem 'NONE' fallback) is authoritative.
+    updateBody.tax = totals.tax;
+    updateBody.taxLines = totals.taxLines;
+    updateBody.taxSystem = totals.taxSystem;
+    updateBody.taxInclusive = totals.taxInclusive;
     updateBody.totalAmount = totals.totalAmount;
     if (updateBody.items) {
       updateBody.items = totals.items.map((item) => {

@@ -67,6 +67,9 @@ const createOrder = {
     source: Joi.string().valid('pos', 'qr', 'walk_in', 'phone'),
     customerName: Joi.string().allow(''),
     guestCount: Joi.number().integer().min(1),
+    // Informational only once the org has a tax system configured — server always
+    // recomputes tax authoritatively via resolveRestaurantOrderTax; used verbatim only
+    // when taxSystem is 'NONE' (backward-compat for orgs that haven't configured tax).
     taxAmount: Joi.number().min(0),
     discountAmount: Joi.number().min(0),
     serviceChargeAmount: Joi.number().min(0),
@@ -114,6 +117,9 @@ const patchOrder = {
   body: Joi.object().keys({
     lines: Joi.array().items(lineInput).min(1).required(),
     tableId: Joi.string().allow(null, ''),
+    // Informational only once the org has a tax system configured — server always
+    // recomputes tax authoritatively via resolveRestaurantOrderTax; used verbatim only
+    // when taxSystem is 'NONE' (backward-compat for orgs that haven't configured tax).
     taxAmount: Joi.number().min(0),
     discountAmount: Joi.number().min(0),
     serviceChargeAmount: Joi.number().min(0),
@@ -191,6 +197,9 @@ const publicCreateOrder = {
     lines: Joi.array().items(lineInput).min(1).required(),
     customerName: Joi.string().allow(''),
     guestCount: Joi.number().integer().min(1),
+    // Informational only once the org has a tax system configured — server always
+    // recomputes tax authoritatively via resolveRestaurantOrderTax; used verbatim only
+    // when taxSystem is 'NONE' (backward-compat for orgs that haven't configured tax).
     taxAmount: Joi.number().min(0),
     discountAmount: Joi.number().min(0),
     serviceChargeAmount: Joi.number().min(0),
