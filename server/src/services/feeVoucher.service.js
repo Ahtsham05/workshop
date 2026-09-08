@@ -1744,17 +1744,25 @@ const getYearlyFeeReport = async (scope, year, classId) => {
     studentMap[s._id.toString()] = s;
   }
 
-  // Group vouchers by class → student → month
+  // Group vouchers by class → student → month, combining every voucher for
+  // that student/month (e.g. a monthly "Tuition Fee" voucher plus a "Paper
+  // Fund" voucher) instead of letting the later one overwrite the earlier one
   const classMap = {};
   for (const v of vouchers) {
     const cid = v.classId.toString();
     const sid = v.studentId.toString();
     if (!classMap[cid]) classMap[cid] = {};
     if (!classMap[cid][sid]) classMap[cid][sid] = {};
-    classMap[cid][sid][v.month] = {
-      netAmount: effectiveNet(v),
-      paidAmount: v.paidAmount || 0,
-      status: v.status,
+    const monthBucket = classMap[cid][sid];
+    const existing = monthBucket[v.month];
+    const netAmount = (existing?.netAmount || 0) + effectiveNet(v);
+    const paidAmount = (existing?.paidAmount || 0) + (v.paidAmount || 0);
+    monthBucket[v.month] = {
+      netAmount,
+      paidAmount,
+      voucherCount: (existing?.voucherCount || 0) + 1,
+      status:
+        netAmount <= 0 || paidAmount >= netAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
     };
   }
 

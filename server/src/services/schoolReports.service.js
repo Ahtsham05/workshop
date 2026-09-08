@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const {
   FeeVoucher,
+  FeeStructure,
   SchoolTransaction,
   Student,
   StudentCreditLedger,
@@ -12,6 +13,24 @@ const {
   TeacherPayroll,
   FeeCategory,
 } = require('../models');
+
+const VOUCHER_TYPE_LABELS = {
+  monthly: 'Monthly Fee',
+  admission: 'Admission Fee',
+  exam: 'Exam Fee',
+  misc: 'Other Fee',
+};
+
+// A voucher's "fund name" for report breakdowns — prefers the originating fee
+// structure's name (e.g. "Paper Fund", "Monthly Tuition"), falling back to its
+// first fee item's name, then a generic label for its voucherType.
+const resolveFundName = (v, structureNameMap) => {
+  if (v.feeStructureId && structureNameMap[String(v.feeStructureId)]) {
+    return structureNameMap[String(v.feeStructureId)];
+  }
+  if (v.feeItems?.[0]?.name) return v.feeItems[0].name;
+  return VOUCHER_TYPE_LABELS[v.voucherType] || 'Fee';
+};
 
 // ── Tenant helpers ───────────────────────────────────────────────────────────
 const getTenantFilter = (scope = {}) => {
@@ -1011,7 +1030,7 @@ const getYearlyFeeReport = async (scope, year, classId) => {
 
   const [voucherRows, students, classes] = await Promise.all([
     FeeVoucher.find(match)
-      .select('studentId classId month netAmount paidAmount status')
+      .select('studentId classId month netAmount paidAmount status feeStructureId feeItems voucherType')
       .lean(),
     Student.find(studentFilter)
       .select('firstName lastName rollNumber admissionNumber parent classId feeStructure')
@@ -1019,17 +1038,46 @@ const getYearlyFeeReport = async (scope, year, classId) => {
     SchoolClass.find(classFilter).select('name order').sort({ order: 1, name: 1 }).lean(),
   ]);
 
-  // classId -> studentId -> month -> voucher
+  const structureIds = [...new Set(voucherRows.filter((v) => v.feeStructureId).map((v) => String(v.feeStructureId)))];
+  const structures = structureIds.length
+    ? await FeeStructure.find({ _id: { $in: structureIds } }).select('name').lean()
+    : [];
+  const structureNameMap = {};
+  structures.forEach((s) => { structureNameMap[String(s._id)] = s.name; });
+
+  // classId -> studentId -> month -> voucher (combined across every voucher
+  // for that student/month — a student can have several vouchers in the same
+  // month, e.g. a monthly "Tuition Fee" voucher plus a "Paper Fund" voucher,
+  // so amounts are summed rather than the later voucher overwriting the
+  // earlier one, and a `funds` breakdown is kept so the UI can show each
+  // fund's name and amount separately (e.g. on hover)
   const voucherMap = {};
   voucherRows.forEach((v) => {
     const cKey = String(v.classId);
     const sKey = String(v.studentId);
     if (!voucherMap[cKey]) voucherMap[cKey] = {};
     if (!voucherMap[cKey][sKey]) voucherMap[cKey][sKey] = {};
-    voucherMap[cKey][sKey][v.month] = {
-      netAmount: v.netAmount || 0,
-      paidAmount: v.paidAmount || 0,
-      status: v.status,
+    const monthBucket = voucherMap[cKey][sKey];
+    const existing = monthBucket[v.month];
+    const netAmount = (existing?.netAmount || 0) + (v.netAmount || 0);
+    const paidAmount = (existing?.paidAmount || 0) + (v.paidAmount || 0);
+    const voucherCount = (existing?.voucherCount || 0) + 1;
+    const funds = existing?.funds || [];
+    const fundName = resolveFundName(v, structureNameMap);
+    const existingFund = funds.find((f) => f.name === fundName);
+    if (existingFund) {
+      existingFund.netAmount += v.netAmount || 0;
+      existingFund.paidAmount += v.paidAmount || 0;
+    } else {
+      funds.push({ name: fundName, netAmount: v.netAmount || 0, paidAmount: v.paidAmount || 0 });
+    }
+    monthBucket[v.month] = {
+      netAmount,
+      paidAmount,
+      voucherCount,
+      funds,
+      status:
+        netAmount <= 0 || paidAmount >= netAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
     };
   });
 

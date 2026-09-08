@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip as HoverTooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   TrendingUp, TrendingDown, BarChart2, Printer, FileText, Download, FileSpreadsheet,
   BookOpen, GraduationCap, DollarSign, PieChart, Activity, Briefcase,
@@ -246,6 +247,56 @@ function SubTabBar({ items, active, onChange }: { items: { key: string; label: s
 // ═══════════════════════════════════════════════════════════════════════════
 // ─── Fee Collection Tab ───────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
+
+// One student/month cell. When the month combines more than one fund (e.g. a
+// monthly Tuition Fee voucher plus a Paper Fund voucher), the total is shown
+// with a hover breakdown naming each fund and its own paid/net amount instead
+// of just a single opaque number.
+function FeeMonthCell({ entry, isCurrent, formatMoney }: { entry: any; isCurrent: boolean; formatMoney: (n: number) => string }) {
+  const cellClass = `px-1 py-1.5 text-center ${isCurrent ? 'bg-blue-50/60' : ''}`;
+
+  if (!entry) {
+    return <td className={cellClass}><span className="text-muted-foreground/30">-</span></td>;
+  }
+
+  const net = entry.netAmount || 0;
+  const paid = entry.paidAmount || 0;
+  const funds = (entry.funds || []) as { name: string; netAmount: number; paidAmount: number }[];
+  const hasBreakdown = funds.length > 1;
+
+  const amount =
+    net === 0 && paid === 0
+      ? <span className="text-muted-foreground font-medium" title={hasBreakdown ? undefined : 'Zero fee'}>0</span>
+      : entry.status === 'paid'
+        ? <span className="text-emerald-600 font-semibold" title={hasBreakdown ? undefined : 'Paid'}>{paid.toLocaleString()}</span>
+        : paid > 0
+          ? <span className="text-blue-600 font-medium" title={hasBreakdown ? undefined : `Partial: ${paid}/${net}`}>{paid.toLocaleString()}<span className="text-[9px] text-muted-foreground">/{net.toLocaleString()}</span></span>
+          : <span className="text-red-500 font-semibold" title={hasBreakdown ? undefined : 'Due'}>{net.toLocaleString()}</span>;
+
+  if (!hasBreakdown) return <td className={cellClass}>{amount}</td>;
+
+  return (
+    <td className={cellClass}>
+      <HoverTooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2">
+            {amount}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-left">
+          <div className="space-y-1 min-w-[150px]">
+            {funds.map((f, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 text-[11px]">
+                <span className="font-medium">{f.name}</span>
+                <span>{formatMoney(f.paidAmount)} / {formatMoney(f.netAmount)}</span>
+              </div>
+            ))}
+          </div>
+        </TooltipContent>
+      </HoverTooltip>
+    </td>
+  );
+}
 
 function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, orgName }: any) {
   const { data: yearlyReport, isLoading } = useGetYearlyFeeReportQuery(
@@ -559,24 +610,9 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                         <td className="px-2 py-1.5 text-muted-foreground">{s.rollNumber || '-'}</td>
                         <td className="px-2 py-1.5 text-muted-foreground">{s.fatherName || '-'}</td>
                         <td className="px-2 py-1.5 text-muted-foreground">{s.phone || '-'}</td>
-                        {MONTHS.map((m) => {
-                          const e = s.months[m];
-                          const net = e?.netAmount || 0;
-                          const paid = e?.paidAmount || 0;
-                          return (
-                            <td key={m} className={`px-1 py-1.5 text-center ${m === month ? 'bg-blue-50/60' : ''}`}>
-                              {e ? (
-                                net === 0 && paid === 0
-                                  ? <span className="text-muted-foreground font-medium" title="Zero fee">0</span>
-                                  : e.status === 'paid'
-                                    ? <span className="text-emerald-600 font-semibold">{paid.toLocaleString()}</span>
-                                    : paid > 0
-                                      ? <span className="text-blue-600 font-medium" title={`Partial: ${paid}/${net}`}>{paid.toLocaleString()}<span className="text-[9px] text-muted-foreground">/{net.toLocaleString()}</span></span>
-                                      : <span className="text-red-500 font-semibold">{net.toLocaleString()}</span>
-                              ) : <span className="text-muted-foreground/30">-</span>}
-                            </td>
-                          );
-                        })}
+                        {MONTHS.map((m) => (
+                          <FeeMonthCell key={m} entry={s.months[m]} isCurrent={m === month} formatMoney={formatMoney} />
+                        ))}
                         <td className="px-2 py-1.5 text-right font-semibold text-emerald-600">{(s.totalPaid || 0).toLocaleString()}</td>
                         <td className="px-2 py-1.5 text-right font-semibold text-red-600">{s.totalPending > 0 ? s.totalPending.toLocaleString() : <span className="text-muted-foreground/40">-</span>}</td>
                       </tr>
