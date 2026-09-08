@@ -21,7 +21,8 @@ import { usePermissions } from '@/context/permission-context'
 import { CategoryActiveToggleCell } from './category-active-toggle-cell'
 
 export function useCategoryColumns(
-  subCategoriesByCategory: Record<string, Array<{ id: string; name: string }>> = {}
+  subCategoriesByCategory: Record<string, Array<{ id: string; name: string }>> = {},
+  onManageSubCategories?: (category: Category) => void
 ): ColumnDef<Category>[] {
   const { dispatch } = useCategories()
   const { t, language } = useLanguage()
@@ -153,6 +154,17 @@ export function useCategoryColumns(
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {onManageSubCategories && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onManageSubCategories(category)
+                }}
+              >
+                <FolderTree className="mr-2 h-4 w-4" />
+                {t('Manage sub-categories')}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => {
                 dispatch({ type: 'SET_CATEGORY', payload: category })

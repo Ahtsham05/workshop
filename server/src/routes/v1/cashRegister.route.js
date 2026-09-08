@@ -15,4 +15,8 @@ router.route('/clear').post(cashRegisterController.clearRegister);
 
 router.route('/history').get(validate(cashRegisterValidation.getHistory), cashRegisterController.getHistory);
 
+router
+  .route('/history/:id')
+  .delete(validate(cashRegisterValidation.deleteHistoryEntry), cashRegisterController.deleteHistoryEntry);
+
 module.exports = router;

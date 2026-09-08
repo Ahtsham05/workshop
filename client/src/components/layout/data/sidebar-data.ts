@@ -11,7 +11,6 @@ import {
   // IconUserCog,
   IconUsers,
   IconCategory,
-  IconListTree,
   IconShield,
   IconRefresh,
   IconCalendar,
@@ -98,7 +97,6 @@ export const sidebarData: SidebarData = {
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
             { title: 'Categories', url: '/categories', icon: IconCategory, permission: 'viewCategories' },
-            { title: 'Sub Categories', url: '/sub-categories', icon: IconListTree, permission: 'viewCategories' },
             { title: 'Brands', url: '/brands', icon: IconTag, permission: 'viewBrands' },
             { title: 'Products', url: '/products', icon: IconPackages, permission: 'viewProducts' },
             { title: 'Stock Transfer', url: '/stock-transfer', icon: IconTransfer, permission: 'viewProducts' },

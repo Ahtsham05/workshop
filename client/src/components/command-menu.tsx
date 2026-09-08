@@ -35,7 +35,6 @@ export function CommandMenu() {
       'Suppliers': t('suppliers'),
       'Customers': t('customers'),
       'Categories': t('categories'),
-      'Sub Categories': t('subcategories'),
       'Products': t('products'),
       'Reports': t('reports'),
       'General': t('general'),

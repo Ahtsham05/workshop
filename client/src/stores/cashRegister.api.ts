@@ -63,6 +63,10 @@ export const cashRegisterApi = createApi({
       }),
       providesTags: ['CashRegisterHistory'],
     }),
+    deleteCashRegisterHistory: builder.mutation<CashRegisterResponse, string>({
+      query: (id) => ({ url: `/cash-register/history/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['CashRegister', 'CashRegisterHistory'],
+    }),
   }),
 })
 
@@ -71,4 +75,5 @@ export const {
   useSaveCashRegisterMutation,
   useClearCashRegisterMutation,
   useGetCashRegisterHistoryQuery,
+  useDeleteCashRegisterHistoryMutation,
 } = cashRegisterApi

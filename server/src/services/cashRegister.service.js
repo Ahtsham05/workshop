@@ -1,3 +1,5 @@
+const httpStatus = require('http-status');
+const ApiError = require('../utils/ApiError');
 const CashRegisterState = require('../models/cashRegisterState.model');
 const CashRegisterSnapshot = require('../models/cashRegisterSnapshot.model');
 const cashBookService = require('./cashBook.service');
@@ -109,9 +111,60 @@ const queryHistory = async (filter, options) => {
   });
 };
 
+// Undoes what saveRegister did: removes the history row, and if it was the
+// count currently reflected as the live state, rewinds the live state to
+// whatever the next-most-recent remaining snapshot held (or to an empty,
+// never-counted state if none remain) — a full reverse of "create".
+const deleteSnapshot = async (organizationId, branchId, snapshotId) => {
+  const filter = buildScopeFilter(organizationId, branchId);
+  const snapshot = await CashRegisterSnapshot.findOne({ _id: snapshotId, ...filter });
+  if (!snapshot) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Cash count entry not found');
+  }
+
+  const latestSnapshot = await CashRegisterSnapshot.findOne(filter).sort({ createdAt: -1 });
+  const isCurrent = latestSnapshot && String(latestSnapshot._id) === String(snapshot._id);
+
+  await snapshot.deleteOne();
+
+  if (isCurrent) {
+    const previousSnapshot = await CashRegisterSnapshot.findOne(filter).sort({ createdAt: -1 });
+    if (previousSnapshot) {
+      await CashRegisterState.findOneAndUpdate(
+        filter,
+        {
+          ...filter,
+          counts: previousSnapshot.counts,
+          totalAmount: previousSnapshot.totalAmount,
+          notes: previousSnapshot.notes || '',
+          lastCountedAt: previousSnapshot.createdAt,
+          lastCountedBy: previousSnapshot.createdBy,
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      );
+    } else {
+      await CashRegisterState.findOneAndUpdate(
+        filter,
+        {
+          ...filter,
+          counts: PKR_DENOMINATIONS.map((d) => ({ value: d.value, kind: d.kind, quantity: 0 })),
+          totalAmount: 0,
+          notes: '',
+          lastCountedAt: null,
+          lastCountedBy: null,
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      );
+    }
+  }
+
+  return getRegister(organizationId, branchId);
+};
+
 module.exports = {
   getRegister,
   saveRegister,
   clearRegister,
   queryHistory,
+  deleteSnapshot,
 };

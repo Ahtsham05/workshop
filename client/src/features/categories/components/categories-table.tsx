@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table'
 
 import { useLanguage } from '@/context/language-context'
+import { cn } from '@/lib/utils'
 import { Category } from '@/stores/category.slice'
 import { useCategoryColumns } from './categories-columns'
 import { DataTablePagination } from './data-table-pagination'
@@ -56,15 +57,19 @@ interface CategoriesTableProps {
   toolbarTrailing?: ReactNode
   subCategoriesByCategory?: Record<string, Array<{ id: string; name: string }>>
   onSelectedRowsChange?: (selectedRows: Category[]) => void
+  /** Currently-selected row for the sub-categories detail pane (master-detail view) — distinct
+   *  from the checkbox `rowSelection` above, which drives bulk actions instead. */
+  selectedCategoryId?: string | null
+  onSelectCategory?: (category: Category) => void
 }
 
-export function CategoriesTable({ categories, paggination, loading, toolbarLeading, toolbarTrailing, subCategoriesByCategory, onSelectedRowsChange }: CategoriesTableProps) {
+export function CategoriesTable({ categories, paggination, loading, toolbarLeading, toolbarTrailing, subCategoriesByCategory, onSelectedRowsChange, selectedCategoryId, onSelectCategory }: CategoriesTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState({})
   const { t, language } = useLanguage()
-  const columns = useCategoryColumns(subCategoriesByCategory)
+  const columns = useCategoryColumns(subCategoriesByCategory, onSelectCategory)
   const [columnOrder, setColumnOrder] = usePersistedColumnOrder(
     COLUMN_ORDER_STORAGE_KEY,
     columns.map(getColumnId)
@@ -129,11 +134,20 @@ export function CategoriesTable({ categories, paggination, loading, toolbarLeadi
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
-                  className='group/row'
+                  onClick={onSelectCategory ? () => onSelectCategory(row.original) : undefined}
+                  className={cn(
+                    'group/row',
+                    onSelectCategory && 'cursor-pointer',
+                    onSelectCategory && selectedCategoryId === row.original.id && 'bg-primary/5 hover:bg-primary/5'
+                  )}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
+                      // Checkbox (bulk-select) and the row's own actions menu are separate
+                      // interactions from picking a row for the detail pane — don't let a
+                      // click there bubble up into onSelectCategory too.
+                      onClick={cell.column.id === 'select' || cell.column.id === 'actions' ? (e) => e.stopPropagation() : undefined}
                       className={`${cell.column.columnDef.meta?.className ?? ''} ${
                         language === 'ur' ? 'text-left' : 'text-left'
                       }`}

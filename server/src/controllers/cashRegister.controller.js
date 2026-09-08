@@ -44,9 +44,21 @@ const getHistory = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const deleteHistoryEntry = catchAsync(async (req, res) => {
+  const organizationId = req.organizationId || req.user?.organizationId;
+  const branchId = req.branchId;
+  const result = await cashRegisterService.deleteSnapshot(
+    organizationId,
+    branchId,
+    req.params.id,
+  );
+  res.send(result);
+});
+
 module.exports = {
   getRegister,
   saveRegister,
   clearRegister,
   getHistory,
+  deleteHistoryEntry,
 };

@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { X } from 'lucide-react'
 import { generateBatchNumber, type VariantDraftRow } from './generate-variant-combinations'
 import { focusField, onEnterAdvance } from '@/lib/invoice-form-keyboard'
+import { MarkupPercentInput } from '../markup-percent-input'
 
 interface Props {
   rows: VariantDraftRow[]
@@ -112,16 +113,24 @@ export function VariantManagementTable({ rows, onChange }: Props) {
                 />
               </TableCell>
               <TableCell>
-                <Input
-                  ref={setInputRef(row.key, 'price')}
-                  type='number'
-                  min={0}
-                  showVoiceInput={false}
-                  className='h-8 w-full'
-                  value={row.price}
-                  onChange={(e) => updateRow(row.key, { price: Number(e.target.value) || 0 })}
-                  onKeyDown={(e) => onEnterAdvance(e, () => advanceFrom(rowIndex, 'price'))}
-                />
+                <div className='space-y-1'>
+                  <Input
+                    ref={setInputRef(row.key, 'price')}
+                    type='number'
+                    min={0}
+                    showVoiceInput={false}
+                    className='h-8 w-full'
+                    value={row.price}
+                    onChange={(e) => updateRow(row.key, { price: Number(e.target.value) || 0 })}
+                    onKeyDown={(e) => onEnterAdvance(e, () => advanceFrom(rowIndex, 'price'))}
+                  />
+                  <MarkupPercentInput
+                    compact
+                    cost={row.cost || 0}
+                    price={row.price || 0}
+                    onPriceChange={(next) => updateRow(row.key, { price: next })}
+                  />
+                </div>
               </TableCell>
               <TableCell>
                 <Input

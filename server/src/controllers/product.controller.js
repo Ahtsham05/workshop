@@ -102,10 +102,40 @@ const applyCategoryFilter = (filter, categoryParam) => {
   }
 };
 
+/** Same shape as applyCategoryFilter, one level down — a Sub-Category _id from the
+ * Products page filter panel, matched against the `subCategories` array every modern
+ * product carries (see product.model.js). */
+const applySubCategoryFilter = (filter, subCategoryParam) => {
+  if (!subCategoryParam) return;
+  filter['subCategories._id'] = subCategoryParam;
+};
+
+const STOCK_QUANTITY_OPERATORS = { eq: '$eq', lt: '$lt', lte: '$lte', gt: '$gt', gte: '$gte' };
+
+/**
+ * Numeric quantity filter (`=`, `<`, `<=`, `>`, `>=`) from the Products page filter
+ * panel. Only ever applied when both the value and an operator are present.
+ *
+ * Filters `Product.stockQuantity` directly, which is accurate for simple products but
+ * NOT for `hasVariants` products — their real stock lives in per-variant `Inventory`
+ * rows, aggregated onto the response after this query runs (see
+ * attachVariantAggregates in product.service.js). A variant product will therefore be
+ * matched/excluded here by whatever stale/zero value sits in its own stockQuantity
+ * field, not its true aggregate stock.
+ */
+const applyStockQuantityFilter = (filter, valueParam, opParam) => {
+  const value = Number(valueParam);
+  const mongoOp = STOCK_QUANTITY_OPERATORS[opParam];
+  if (valueParam === undefined || Number.isNaN(value) || !mongoOp) return;
+  filter.stockQuantity = { [mongoOp]: value };
+};
+
 const getProducts = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['name', 'description', 'isActive']);
+  const filter = pick(req.query, ['name', 'description', 'isActive', 'brandId']);
   applyBranchFilter(filter, req);
   applyCategoryFilter(filter, req.query.category);
+  applySubCategoryFilter(filter, req.query.subCategory);
+  applyStockQuantityFilter(filter, req.query.stockQuantity, req.query.stockQuantityOp);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await productService.queryProducts(filter, options);
   res.send(result);

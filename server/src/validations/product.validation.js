@@ -93,6 +93,10 @@ const getProducts = {
   query: Joi.object().keys({
     name: Joi.string(),
     category: Joi.string(),
+    subCategory: Joi.string(),
+    brandId: Joi.string(),
+    stockQuantity: Joi.number(),
+    stockQuantityOp: Joi.string().valid('eq', 'lt', 'lte', 'gt', 'gte'),
     isActive: Joi.boolean(),
     sortBy: Joi.string(),
     limit: Joi.number(),

@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Trash2,
   Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,6 +22,16 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Table,
   TableBody,
@@ -50,6 +61,7 @@ import {
 } from '@/lib/mobile-form-keyboard'
 import {
   useClearCashRegisterMutation,
+  useDeleteCashRegisterHistoryMutation,
   useGetCashRegisterHistoryQuery,
   useGetCashRegisterQuery,
   useSaveCashRegisterMutation,
@@ -73,9 +85,11 @@ export default function CashRegisterPage() {
   const { data, isLoading, refetch } = useGetCashRegisterQuery()
   const [saveRegister, { isLoading: saving }] = useSaveCashRegisterMutation()
   const [clearRegister, { isLoading: clearing }] = useClearCashRegisterMutation()
+  const [deleteHistoryEntry, { isLoading: deleting }] = useDeleteCashRegisterHistoryMutation()
   const [historyPage, setHistoryPage] = useState(1)
   const [historyLimit, setHistoryLimit] = useState(10)
   const [viewSnapshot, setViewSnapshot] = useState<CashRegisterSnapshot | null>(null)
+  const [deleteSnapshot, setDeleteSnapshot] = useState<CashRegisterSnapshot | null>(null)
   const { data: history } = useGetCashRegisterHistoryQuery({
     page: historyPage,
     limit: historyLimit,
@@ -152,6 +166,20 @@ export default function CashRegisterPage() {
       toast.success(t('All counts cleared'))
     } catch (err: any) {
       toast.error(err?.data?.message || t('Failed to clear counts'))
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteSnapshot) return
+    const id = deleteSnapshot.id || deleteSnapshot._id
+    if (!id) return
+    try {
+      await deleteHistoryEntry(id).unwrap()
+      toast.success(t('Cash count entry deleted'))
+    } catch (err: any) {
+      toast.error(err?.data?.message || t('Failed to delete cash count entry'))
+    } finally {
+      setDeleteSnapshot(null)
     }
   }
 
@@ -436,16 +464,28 @@ export default function CashRegisterPage() {
                   </TableCell>
                   <TableCell className='max-w-[220px] truncate'>{snap.notes || '-'}</TableCell>
                   <TableCell className='text-right'>
-                    <Button
-                      type='button'
-                      variant='outline'
-                      size='sm'
-                      className='gap-1.5'
-                      onClick={() => setViewSnapshot(snap)}
-                    >
-                      <Eye className='h-4 w-4' />
-                      {t('view')}
-                    </Button>
+                    <div className='flex justify-end gap-2'>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        className='gap-1.5'
+                        onClick={() => setViewSnapshot(snap)}
+                      >
+                        <Eye className='h-4 w-4' />
+                        {t('view')}
+                      </Button>
+                      <Button
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        className='gap-1.5 text-red-600 hover:bg-red-50 hover:text-red-700'
+                        onClick={() => setDeleteSnapshot(snap)}
+                      >
+                        <Trash2 className='h-4 w-4' />
+                        {t('delete')}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
                 )
@@ -474,6 +514,35 @@ export default function CashRegisterPage() {
           if (!open) setViewSnapshot(null)
         }}
       />
+
+      <AlertDialog
+        open={deleteSnapshot != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteSnapshot(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('Delete this cash count?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {historyPage === 1 && history?.results?.[0]?.id === (deleteSnapshot?.id || deleteSnapshot?._id)
+                ? t('This is the most recent count. Deleting it will revert Physical Cash above back to your previous count, as if it was never saved. This action cannot be undone.')
+                : t('This will permanently remove this entry from Count History. This action cannot be undone.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>{t('Cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className='bg-red-600 hover:bg-red-700'
+            >
+              {deleting ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : null}
+              {t('Delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MobilePageShell>
   )
 }

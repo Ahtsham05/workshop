@@ -9,12 +9,15 @@ import { ImportBranchProductsBanner } from './components/import-branch-products-
 import { ProductStatCards } from './components/product-stat-cards'
 import { CategoryFilterCombobox, NO_CATEGORY_FILTER, ALL_CATEGORIES_BREAKDOWN, UNCATEGORIZED_CATEGORY } from './components/category-filter-combobox'
 import { CategoryBreakdown, type CategoryBreakdownRow } from './components/category-breakdown'
+import { ProductFiltersPanel, ALL_SUBCATEGORIES, ALL_BRANDS, NO_QUANTITY_OP, type QuantityFilter } from './components/product-filters-panel'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { fetchProducts, bulkUpdateProducts, fetchProductStats, fetchCategoryBreakdown } from '@/stores/product.slice'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import { fetchCategories } from '@/stores/category.slice'
+import { fetchAllSubCategories } from '@/stores/subCategory.slice'
+import { useGetAllBrandsQuery } from '@/stores/brand.api'
 import { Input } from '@/components/ui/input'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
@@ -59,6 +62,8 @@ export default function Products() {
   const [selectedProducts, setSelectedProducts] = useState<any[]>([])
   const [inlineEditMode, setInlineEditMode] = useState(false)
   const [editValues, setEditValues] = useState<Record<string, { price?: number; cost?: number; stockQuantity?: number }>>({})
+  const [bulkPercentOp, setBulkPercentOp] = useState<'increase' | 'decrease' | 'margin'>('increase')
+  const [bulkPercentValue, setBulkPercentValue] = useState('')
   // A prepared-but-not-yet-sent bulk update, held here while the confirmation dialog is
   // open — separates "figure out what would change" from "actually commit it" so a
   // 200+ row price/cost change always gets a review step before it's irreversible.
@@ -67,6 +72,9 @@ export default function Products() {
   const [showLowStockDetails, setShowLowStockDetails] = useState(false)
   const [lowStockThreshold, setLowStockThreshold] = useState(10)
   const [categoryFilter, setCategoryFilter] = useState(NO_CATEGORY_FILTER)
+  const [subCategoryFilter, setSubCategoryFilter] = useState(ALL_SUBCATEGORIES)
+  const [brandFilter, setBrandFilter] = useState(ALL_BRANDS)
+  const [quantityFilter, setQuantityFilter] = useState<QuantityFilter>({ op: NO_QUANTITY_OP, value: '' })
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -86,11 +94,34 @@ export default function Products() {
   const handleProductStatusChange = useCallback(() => setFetch((prev) => !prev), [])
   const columns = useProductColumns(lowStockThreshold, handleProductStatusChange) // Get columns with translations
   const { categories } = useSelector((state: RootState) => state.category)
+  const { subCategories } = useSelector((state: RootState) => state.subCategory)
+  const { data: brands = [] } = useGetAllBrandsQuery()
 
-  // Fetch categories once when products page loads
+  // Sub-Category filter options are scoped to the selected Category (when one is
+  // picked) — a sub-category from an unrelated category would never match anyway.
+  const filterableSubCategories = useMemo(() => {
+    if (!isSingleCategorySelected || categoryFilter === UNCATEGORIZED_CATEGORY) return subCategories
+    return subCategories.filter((sc) => {
+      const parentId = typeof sc.category === 'object' ? sc.category?.id : sc.category
+      return parentId === categoryFilter
+    })
+  }, [subCategories, isSingleCategorySelected, categoryFilter])
+
+  // Fetch categories/sub-categories once when products page loads
   useEffect(() => {
     dispatch(fetchCategories({ page: 1, limit: 100 }))
+    dispatch(fetchAllSubCategories({}))
   }, [dispatch])
+
+  // Switching (or clearing) the Category filter can leave a previously-selected
+  // Sub-Category filter pointing at a sub-category that's no longer in scope.
+  useEffect(() => {
+    if (subCategoryFilter === ALL_SUBCATEGORIES) return
+    if (!filterableSubCategories.some((sc) => sc.id === subCategoryFilter)) {
+      setSubCategoryFilter(ALL_SUBCATEGORIES)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryFilter])
 
   // Fetch ALL products for low stock alert (runs once on mount and when fetch changes)
   useEffect(() => {
@@ -129,7 +160,7 @@ export default function Products() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch, categoryFilter, statusFilter])
+  }, [debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter])
 
   // Fetch paginated products for table display — skipped in breakdown mode, which
   // shows the per-category rollup instead of the flat table.
@@ -137,12 +168,16 @@ export default function Products() {
     if (isBreakdownMode) return
     setLoading(true)
     const q = debouncedSearch.trim()
+    const hasQuantityFilter = quantityFilter.op !== NO_QUANTITY_OP && quantityFilter.value.trim() !== ''
     const params = {
       page: currentPage,
       limit: limit,
       sortBy: PRODUCTS_SORT_BY,
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.product } : {}),
       ...(isSingleCategorySelected ? { category: categoryFilter } : {}),
+      ...(subCategoryFilter !== ALL_SUBCATEGORIES ? { subCategory: subCategoryFilter } : {}),
+      ...(brandFilter !== ALL_BRANDS ? { brandId: brandFilter } : {}),
+      ...(hasQuantityFilter ? { stockQuantity: quantityFilter.value.trim(), stockQuantityOp: quantityFilter.op } : {}),
       ...(statusFilter !== ALL_STATUS ? { isActive: statusFilter === 'active' } : {}),
     };
 
@@ -167,7 +202,7 @@ export default function Products() {
         setLoading(false)
         toast.error('Failed to fetch products')
       })
-  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, statusFilter, dispatch, isBreakdownMode, isSingleCategorySelected])
+  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, dispatch, isBreakdownMode, isSingleCategorySelected])
 
   // Category-wise rollup for the "All Categories" breakdown view — fetched only while
   // that mode is active.
@@ -317,6 +352,50 @@ export default function Products() {
     })
   }, [])
 
+  // Bulk "fill" helper for the inline-edit price inputs above — computes each selected
+  // row's new price from ITS OWN current price/cost and writes it into the same
+  // editValues state the per-row inputs already edit, so it rides the existing
+  // preview/confirm/submit pipeline (handleBulkUpdate → confirmBulkUpdate) unchanged.
+  // Only ever touches `price` — cost and stockQuantity are left for the per-row inputs.
+  const applyBulkPercent = useCallback(() => {
+    const pct = parseFloat(bulkPercentValue)
+    if (Number.isNaN(pct)) {
+      toast.error(t('Enter a valid percentage'))
+      return
+    }
+    if (selectedProducts.length === 0) {
+      toast.error(t('no_products_selected'))
+      return
+    }
+    let skipped = 0
+    selectedProducts.forEach((product: any) => {
+      const productId = product._id || product.id || ''
+      const cost = Number(product.cost) || 0
+      let nextPrice: number
+      if (bulkPercentOp === 'margin') {
+        // Needs a real cost to compute a margin against — skip products without one
+        // rather than silently setting price to 0.
+        if (!cost) {
+          skipped++
+          return
+        }
+        nextPrice = cost * (1 + pct / 100)
+      } else {
+        const currentPrice = editValues[productId]?.price ?? (Number(product.price) || 0)
+        const sign = bulkPercentOp === 'decrease' ? -1 : 1
+        nextPrice = currentPrice * (1 + (sign * pct) / 100)
+      }
+      handleEditValueChange(productId, 'price', Math.max(0, Math.round(nextPrice * 100) / 100))
+    })
+    const applied = selectedProducts.length - skipped
+    if (skipped > 0) {
+      toast.error(`Skipped ${skipped} product(s) with no purchase cost set`)
+    }
+    if (applied > 0) {
+      toast.success(`Price recalculated for ${applied} product(s) — review below before saving`)
+    }
+  }, [bulkPercentOp, bulkPercentValue, selectedProducts, editValues, handleEditValueChange, t])
+
   const startInlineEdit = useCallback(() => {
     if (selectedProducts.length === 0) {
       toast.error(t('no_products_selected'))
@@ -440,6 +519,30 @@ export default function Products() {
               )}
               {inlineEditMode && (
                 <>
+                  <div className='flex items-center gap-1.5 rounded-md border bg-card px-2 py-1'>
+                    <Select value={bulkPercentOp} onValueChange={(v) => setBulkPercentOp(v as typeof bulkPercentOp)}>
+                      <SelectTrigger className='h-8 w-[190px] text-xs'>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='increase'>{t('Increase price by %')}</SelectItem>
+                        <SelectItem value='decrease'>{t('Decrease price by %')}</SelectItem>
+                        <SelectItem value='margin'>{t('Set margin % over cost')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type='number'
+                      step='0.1'
+                      placeholder='%'
+                      showVoiceInput={false}
+                      className='h-8 w-16 text-xs'
+                      value={bulkPercentValue}
+                      onChange={(e) => setBulkPercentValue(e.target.value)}
+                    />
+                    <Button type='button' size='sm' variant='outline' className='h-8' onClick={applyBulkPercent}>
+                      {t('Apply')} ({selectedProducts.length})
+                    </Button>
+                  </div>
                   <Button
                     onClick={handleBulkUpdate}
                     className='space-x-1'
@@ -547,6 +650,16 @@ export default function Products() {
                       <SelectItem value='inactive'>{t('Inactive')}</SelectItem>
                     </SelectContent>
                   </Select>
+                  <ProductFiltersPanel
+                    subCategories={filterableSubCategories}
+                    subCategoryFilter={subCategoryFilter}
+                    onSubCategoryChange={setSubCategoryFilter}
+                    brands={brands}
+                    brandFilter={brandFilter}
+                    onBrandChange={setBrandFilter}
+                    quantity={quantityFilter}
+                    onQuantityChange={setQuantityFilter}
+                  />
                   <AiScanButton />
                 </>
               }

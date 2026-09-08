@@ -81,6 +81,7 @@ import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
 import { TagsInput } from '@/components/tags-input'
 import { ColorSwatchPicker } from '@/components/color-swatch-picker'
 import { useGetDistinctProductTagsQuery } from '@/stores/product.api'
+import { MarkupPercentInput } from './markup-percent-input'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -613,6 +614,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   }
 
   const nameWatch = form.watch('name')
+  const costWatch = form.watch('cost')
+  const priceWatch = form.watch('price')
   const hasVariantsWatch = form.watch('hasVariants')
   const trackBatchWatch = form.watch('trackBatch')
   const trackExpiryWatch = form.watch('trackExpiry')
@@ -1402,27 +1405,6 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
               <div className='grid gap-4 sm:grid-cols-2'>
                 <FormField
                   control={form.control}
-                  name='price'
-                  render={({ field }) => (
-                    <FormItem className='gap-1.5'>
-                      <FormLabel>{t('price')} *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={t('price')}
-                          type='number'
-                          {...field}
-                          onChange={(e) => {
-                            setNumericValue('price', e.target.value)
-                            // field.onChange(e)
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
                   name='cost'
                   render={({ field }) => (
                     <FormItem className='gap-1.5'>
@@ -1442,7 +1424,35 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name='price'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('price')} *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={t('price')}
+                          type='number'
+                          {...field}
+                          onChange={(e) => {
+                            setNumericValue('price', e.target.value)
+                            // field.onChange(e)
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
+              )}
+              {!hasVariantsWatch && (
+                <MarkupPercentInput
+                  cost={costWatch || 0}
+                  price={priceWatch || 0}
+                  onPriceChange={(next) => setNumericValue('price', next)}
+                />
               )}
               <div className='grid gap-4 sm:grid-cols-2'>
                 {!hasVariantsWatch && (

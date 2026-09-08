@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { objectId } = require('./custom.validation');
 
 const denominationCount = Joi.object({
   value: Joi.number().positive().required(),
@@ -21,7 +22,14 @@ const getHistory = {
   }),
 };
 
+const deleteHistoryEntry = {
+  params: Joi.object({
+    id: Joi.string().custom(objectId).required(),
+  }),
+};
+
 module.exports = {
   saveRegister,
   getHistory,
+  deleteHistoryEntry,
 };

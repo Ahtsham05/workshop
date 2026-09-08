@@ -22,10 +22,14 @@ import { VoiceInputButton } from '@/components/ui/voice-input-button'
 interface Props {
   value?: string
   onChange: (brandId: string | undefined) => void
+  /** Fired once a brand is actually picked (selected or created) — lets a caller chain
+   *  focus to the next field, same convention as SearchableSelect's onSelected. */
+  onSelected?: () => void
+  'data-enter-field'?: string
 }
 
 /** Single-select brand combobox — search existing brands, create a new one inline, or clear. */
-export function BrandSelector({ value, onChange }: Props) {
+export function BrandSelector({ value, onChange, onSelected, 'data-enter-field': dataEnterField }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const { data: brands = [], isLoading } = useGetAllBrandsQuery()
@@ -39,6 +43,7 @@ export function BrandSelector({ value, onChange }: Props) {
     onChange(brand._id || brand.id)
     setOpen(false)
     setQuery('')
+    onSelected?.()
   }
 
   const handleCreate = async () => {
@@ -49,6 +54,7 @@ export function BrandSelector({ value, onChange }: Props) {
       onChange(created._id || created.id)
       setOpen(false)
       setQuery('')
+      onSelected?.()
     } catch (err: any) {
       toast.error(err?.data?.message || `Failed to create brand "${trimmedQuery}"`)
     }
@@ -57,7 +63,7 @@ export function BrandSelector({ value, onChange }: Props) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between">
+        <Button variant="outline" role="combobox" aria-expanded={open} data-enter-field={dataEnterField} className="w-full justify-between">
           <div className="flex flex-1 items-center gap-2">
             <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
             {selected ? (
