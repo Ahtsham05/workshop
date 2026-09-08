@@ -1,9 +1,29 @@
 const dotenv = require('dotenv');
 const path = require('path');
+const { URL } = require('url');
 const Joi = require('joi');
 
 const envPath = process.env.ENV_FILE || path.join(__dirname, '../../.env');
 dotenv.config({ path: envPath });
+
+/**
+ * Derives an isolated test database name by properly parsing the connection string and
+ * renaming just the path segment — NOT by blindly concatenating '-test' onto the whole
+ * URL, which corrupts trailing query params (?authSource=...&w=majority) instead of
+ * renaming the database. Defense-in-depth only: the actual Jest test suite (see
+ * tests/utils/setupTestDB.js) uses mongodb-memory-server and never reads this value at
+ * all, so this fix protects any OTHER tooling that might read config.mongoose.url in a
+ * test-like context, not the primary safety guarantee.
+ */
+const deriveTestMongoUrl = (url) => {
+  try {
+    const parsed = new URL(url);
+    parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}-test`;
+    return parsed.toString();
+  } catch (err) {
+    return `${url}-test`;
+  }
+};
 
 const envVarsSchema = Joi.object()
   .keys({
@@ -60,7 +80,7 @@ module.exports = {
   env: envVars.NODE_ENV,
   port: envVars.PORT,
   mongoose: {
-    url: envVars.MONGODB_URL + (envVars.NODE_ENV === 'test' ? '-test' : ''),
+    url: envVars.NODE_ENV === 'test' ? deriveTestMongoUrl(envVars.MONGODB_URL) : envVars.MONGODB_URL,
     options: {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
