@@ -2695,7 +2695,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   // Own fund(s) — each tagged PAID/PARTIAL/PENDING by ITS OWN document's status, so a
   // merged multi-fund challan (see mergeVoucherGroupForPrint) never borrows one fund's
   // status for another. A single un-merged voucher just resolves its own row here.
-  const ownRows = v.ownFundRows?.length ? v.ownFundRows : buildOwnFundRows({ feeItems, status: v.status, paidAmount: v.paidAmount, paidThisTransaction: v.paidThisTransaction, month: v.month, year: v.year });
+  const ownRows = v.ownFundRows?.length ? v.ownFundRows : buildOwnFundRows({ feeItems, status: v.status, paidAmount: v.paidAmount, paidDate: v.paidDate, paidThisTransaction: v.paidThisTransaction, month: v.month, year: v.year });
 
   // Arrears from OTHER months (already de-duplicated server-side against every voucher
   // in this same print batch, so a fund's sibling being printed right here never
