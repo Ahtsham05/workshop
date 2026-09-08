@@ -112,10 +112,12 @@ function formatDayMonth(date?: string | Date | null): string {
 /** Tags one voucher document's OWN fee items (PAID / PARTIAL / PENDING) using that
  * document's own status/paidAmount — kept per-document so a merged multi-fund challan
  * (see mergeVoucherGroupForPrint) tags each fund by its own status, never a sibling's. */
-function buildOwnFundRows(doc: any): { name: string; amount: number; tagText: string; tagClass: string; rowClass: string; paidAmt: number; dateLabel?: string }[] {
-  const ownItems: { name: string; amount: number }[] = (doc.feeItems || []).map((fi: any) => ({
+function buildOwnFundRows(doc: any): { name: string; amount: number; month: string; year: number; tagText: string; tagClass: string; rowClass: string; paidAmt: number; dateLabel?: string }[] {
+  const ownItems: { name: string; amount: number; month: string; year: number }[] = (doc.feeItems || []).map((fi: any) => ({
     name: feeItemLabel(fi.name, doc.month, doc.year),
     amount: fi.amount || 0,
+    month: doc.month,
+    year: doc.year,
   }));
   const paidDateLabel = formatDayMonth(doc.paidDate);
   let pool = doc.status === 'partial' ? Number(doc.paidAmount || 0) : 0;
@@ -2707,6 +2709,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
         ? feeItemLabel('Exam Fee', p.month, p.year)
         : feeItemLabel('Paid Fee', p.month, p.year),
     amount: Number(p.amount || 0),
+    month: p.month, year: p.year,
     tagText: 'PAID', tagClass: 'received-tag', rowClass: ' class="received-row"',
     paidAmt: Number(p.amount || 0),
     dateLabel: formatDayMonth(p.paidDate),
@@ -2719,6 +2722,7 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
         ? feeItemLabel('Exam Fee', p.month, p.year)
         : feeItemLabel('Pending Fee', p.month, p.year),
     amount: Number(p.remaining || 0),
+    month: p.month, year: p.year,
     tagText: 'PENDING', tagClass: 'pending-tag', rowClass: ' class="pending-row"',
     paidAmt: 0,
     isPending: true,
@@ -2726,13 +2730,10 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
 
   const enrichedRows = [...ownRows, ...otherPaidRows, ...otherPendingRows];
 
-  // Fully settled rows always print above anything still owed (partially or fully
-  // pending) — a stable sort keeps each group's original chronological order intact.
-  const orderedRows = [...enrichedRows].sort((a, b) => {
-    const aOwes = (a.amount || 0) - (a.paidAmt || 0) > 0 ? 1 : 0;
-    const bOwes = (b.amount || 0) - (b.paidAmt || 0) > 0 ? 1 : 0;
-    return aOwes - bOwes;
-  });
+  // Every row — paid, partial or pending, own fund or arrear — reads in the same
+  // month sequence a real fee history would (June, July, August, ...), rather than
+  // bucketing "this voucher's own charge" ahead of older settled months.
+  const orderedRows = [...enrichedRows].sort((a, b) => compareMonthYear(a, b));
 
   const itemRows = orderedRows
     .map((fi, i) => {
