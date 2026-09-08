@@ -10,6 +10,7 @@ import { Plus, Search, Pencil, Trash2, Users, Phone, Mail, GraduationCap, Calend
 import { useGetTeachersQuery, useCreateTeacherMutation, useUpdateTeacherMutation, useDeleteTeacherMutation, useGetSubjectsQuery } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useCurrencyMeta } from '@/lib/format-money';
 
 
 const GRADIENT_COLORS = [
@@ -29,6 +30,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 export default function TeacherList() {
+  const currencySymbol = useCurrencyMeta().symbol;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -364,11 +366,11 @@ export default function TeacherList() {
                 <p className="text-sm font-medium text-muted-foreground mb-2">Salary Info</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Basic Salary (PKR)</Label>
+                    <Label>Basic Salary ({currencySymbol})</Label>
                     <Input type="number" min="0" value={form.salary.basicSalary || ''} onChange={(e) => setForm(p => ({ ...p, salary: { ...p.salary, basicSalary: Number(e.target.value) } }))} placeholder="e.g. 30000" />
                   </div>
                   <div>
-                    <Label>Monthly Allowances (PKR)</Label>
+                    <Label>Monthly Allowances ({currencySymbol})</Label>
                     <Input type="number" min="0" value={form.salary.allowances || ''} onChange={(e) => setForm(p => ({ ...p, salary: { ...p.salary, allowances: Number(e.target.value) } }))} placeholder="e.g. 5000" />
                   </div>
                 </div>

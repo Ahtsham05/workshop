@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/table'
 import { Pencil, Trash2, Plus } from 'lucide-react'
 import { usePermissions } from '@/context/permission-context'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import {
   useGetUtilityCompaniesQuery,
   useCreateUtilityCompanyMutation,
@@ -63,6 +63,7 @@ const BILL_TYPE_LABELS: Record<string, string> = {
 
 export function UtilityCompanyManager() {
   const formatMoney = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageBillPayments')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -219,7 +220,7 @@ export function UtilityCompanyManager() {
               </Select>
             </div>
             <div>
-              <Label>Default Service Charge (Rs.) *</Label>
+              <Label>Default Service Charge ({currencySymbol}) *</Label>
               <Input
                 type='number'
                 min='0'

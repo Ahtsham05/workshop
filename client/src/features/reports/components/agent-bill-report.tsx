@@ -41,7 +41,7 @@ import { toast } from 'sonner'
 import { useGetAgentBillReportQuery, useGetUtilityCompaniesQuery, type AgentBillRecord } from '@/stores/mobile-shop.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +72,7 @@ const billPayable = (bill: AgentBillRecord) => {
 export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBillReportProps>(
   ({ startDate, endDate }, ref) => {
     const fmt = useFormatMoney()
+    const currencySymbol = useCurrencyMeta().symbol
     const { data: companiesData } = useGetUtilityCompaniesQuery({})
     const allCompanies = companiesData?.results ?? []
 
@@ -96,12 +97,12 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
 
           const summaryRows = [
             { Metric: 'Total Bills', Value: data.totalBills },
-            { Metric: 'Current Bill (Rs.)', Value: data.totalCurrentBill },
-            { Metric: 'Current Overdue (Rs.)', Value: data.totalOverdue },
-            { Metric: 'Previous Bill (Rs.)', Value: data.totalPreviousBill },
-            { Metric: 'Previous Overdue (Rs.)', Value: data.totalPreviousOverdue },
-            { Metric: 'Total Collection (Rs.)', Value: data.totalCollection },
-            { Metric: 'Total Profit (Rs.)', Value: data.totalProfit },
+            { Metric: `Current Bill (${currencySymbol})`, Value: data.totalCurrentBill },
+            { Metric: `Current Overdue (${currencySymbol})`, Value: data.totalOverdue },
+            { Metric: `Previous Bill (${currencySymbol})`, Value: data.totalPreviousBill },
+            { Metric: `Previous Overdue (${currencySymbol})`, Value: data.totalPreviousOverdue },
+            { Metric: `Total Collection (${currencySymbol})`, Value: data.totalCollection },
+            { Metric: `Total Profit (${currencySymbol})`, Value: data.totalProfit },
             { Metric: 'Pending Bills', Value: data.totalPending },
             { Metric: 'Bills Due Today', Value: data.totalDueToday },
             { Metric: 'Overdue Bills', Value: data.totalOverdueBills },
@@ -112,8 +113,8 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
             const trendRows = data.trend.map((r) => ({
               Date: r._id,
               Bills: r.billCount,
-              'Collection (Rs.)': r.totalCollection,
-              'Profit (Rs.)': r.totalProfit,
+              [`Collection (${currencySymbol})`]: r.totalCollection,
+              [`Profit (${currencySymbol})`]: r.totalProfit,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trendRows), 'Daily Trend')
           }
@@ -122,8 +123,8 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
             const coRows = data.byCompany.map((r) => ({
               Company: r._id,
               Bills: r.billCount,
-              'Collection (Rs.)': r.totalCollection,
-              'Profit (Rs.)': r.totalProfit,
+              [`Collection (${currencySymbol})`]: r.totalCollection,
+              [`Profit (${currencySymbol})`]: r.totalProfit,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(coRows), 'By Company')
           }
@@ -138,13 +139,13 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
                 Company: b.companyName || '',
                 'Collection Date': fmtDate(b.collectionDate),
                 'Due Date': fmtDate(b.dueDate),
-                'Current Bill (Rs.)': b.currentBillAmount,
-                'Current Overdue (Rs.)': b.overdueAmount,
-                'Previous Bill (Rs.)': b.previousBillAmount,
-                'Previous Overdue (Rs.)': b.previousOverdueAmount,
-                'Profit (Rs.)': b.profit,
-                'Amount to Pay (Rs.)': payable,
-                'Amount Paid (Rs.)': b.isPaid ? b.totalAmount : 0,
+                [`Current Bill (${currencySymbol})`]: b.currentBillAmount,
+                [`Current Overdue (${currencySymbol})`]: b.overdueAmount,
+                [`Previous Bill (${currencySymbol})`]: b.previousBillAmount,
+                [`Previous Overdue (${currencySymbol})`]: b.previousOverdueAmount,
+                [`Profit (${currencySymbol})`]: b.profit,
+                [`Amount to Pay (${currencySymbol})`]: payable,
+                [`Amount Paid (${currencySymbol})`]: b.isPaid ? b.totalAmount : 0,
                 Status: b.isPaid ? 'Paid' : 'Pending',
               }
             })

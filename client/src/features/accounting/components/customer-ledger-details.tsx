@@ -1743,6 +1743,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                         name: customer.name,
                         amount: selectedPayment.entry.credit,
                         remainingBalance: selectedPayment.currentBalance,
+                        currency: currencyMeta.symbol,
                       })}
                       templateCategory="payment_received"
                       templateParams={[
@@ -1762,6 +1763,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                         name: customer.name,
                         amount: selectedPayment.entry.credit,
                         remainingBalance: selectedPayment.currentBalance,
+                        currency: currencyMeta.symbol,
                       })}
                     />
                   </>
@@ -1785,7 +1787,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                   showLabel
                   size="sm"
                   variant="outline"
-                  message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: currentBalance ?? customer.balance })}
+                  message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: currentBalance ?? customer.balance, currency: currencyMeta.symbol })}
                   templateCategory="payment_reminder"
                   templateParams={[customer.name || 'there', Math.abs((currentBalance ?? customer.balance) ?? 0).toFixed(0)]}
                 />
@@ -1795,7 +1797,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                   showLabel
                   size="sm"
                   variant="outline"
-                  defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: currentBalance ?? customer.balance })}
+                  defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: currentBalance ?? customer.balance, currency: currencyMeta.symbol })}
                 />
               </>
             )}

@@ -46,7 +46,8 @@ import {
   type Lead,
   type LeadUserRef,
 } from '@/stores/lead.api'
-import { STAGE_COLUMN_STYLES, STAGE_LABELS, SOURCE_LABELS, formatCurrency } from '../utils/stage-config'
+import { STAGE_COLUMN_STYLES, STAGE_LABELS, SOURCE_LABELS } from '../utils/stage-config'
+import { useFormatMoney } from '@/lib/format-money'
 import { LeadActivityTimeline } from './lead-activity-timeline'
 import { LeadMutateDialog } from './lead-mutate-dialog'
 import { LeadConvertDialog } from './lead-convert-dialog'
@@ -74,6 +75,7 @@ interface LeadDetailSheetProps {
 
 export function LeadDetailSheet({ lead, onOpenChange }: LeadDetailSheetProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const navigate = useNavigate()
   const open = !!lead
   const id = lead?._id || lead?.id || ''
@@ -198,7 +200,7 @@ export function LeadDetailSheet({ lead, onOpenChange }: LeadDetailSheetProps) {
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div className="rounded-lg border bg-muted/30 p-2.5">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t('Estimated Value')}</p>
-                <p className="mt-0.5 font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{formatCurrency(lead.estimatedValue)}</p>
+                <p className="mt-0.5 font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{formatMoney(lead.estimatedValue)}</p>
               </div>
               <div className="rounded-lg border bg-muted/30 p-2.5">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t('Source')}</p>
@@ -265,7 +267,7 @@ export function LeadDetailSheet({ lead, onOpenChange }: LeadDetailSheetProps) {
                             {data?.invoiceNumber}
                           </span>
                           <span className="flex items-center gap-2">
-                            <span className="text-muted-foreground">{formatCurrency(data?.total || 0)}</span>
+                            <span className="text-muted-foreground">{formatMoney(data?.total || 0)}</span>
                             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                           </span>
                         </button>

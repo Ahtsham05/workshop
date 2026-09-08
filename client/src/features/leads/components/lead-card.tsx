@@ -4,7 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import type { Lead, LeadUserRef } from '@/stores/lead.api'
-import { SOURCE_LABELS, formatCurrency, formatTimeInStage } from '../utils/stage-config'
+import { SOURCE_LABELS, formatTimeInStage } from '../utils/stage-config'
+import { useFormatMoney } from '@/lib/format-money'
 
 function repName(assignedTo: Lead['assignedTo']): string {
   if (!assignedTo) return '—'
@@ -27,6 +28,7 @@ interface LeadCardProps {
 }
 
 export function LeadCard({ lead, onClick }: LeadCardProps) {
+  const formatMoney = useFormatMoney()
   const id = lead._id || lead.id
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
@@ -62,7 +64,7 @@ export function LeadCard({ lead, onClick }: LeadCardProps) {
           </div>
           {lead.estimatedValue > 0 && (
             <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(lead.estimatedValue)}
+              {formatMoney(lead.estimatedValue)}
             </span>
           )}
         </div>

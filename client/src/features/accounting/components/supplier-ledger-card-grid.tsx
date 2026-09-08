@@ -171,12 +171,12 @@ export function SupplierLedgerCardGrid({ suppliers, loading, onSelectSupplier, p
                           phone={supplier.phone}
                           whatsapp={supplier.whatsapp}
                           name={supplier.name}
-                          message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
+                          message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance, currency: currencyMeta.symbol })}
                         />
                         <SmsSendButton
                           phone={supplier.phone}
                           name={supplier.name}
-                          defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
+                          defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance, currency: currencyMeta.symbol })}
                         />
                       </div>
                     ) : undefined

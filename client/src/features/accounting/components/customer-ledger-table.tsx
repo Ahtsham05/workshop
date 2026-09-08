@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Eye } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,7 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
   }
 
   const formatMoney = useFormatMoney()
+  const { symbol: currencySymbol } = useCurrencyMeta()
   const formatBalance = (balance: number) => formatMoney(Math.abs(balance))
 
   return (
@@ -98,13 +99,13 @@ export function CustomerLedgerTable({ customers, loading, onSelectCustomer, pagi
                               phone={customer.phone}
                               whatsapp={customer.whatsapp}
                               name={customer.name}
-                              message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance })}
+                              message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance, currency: currencySymbol })}
                               {...getCustomerBalanceTemplate({ name: customer.name, balance: customer.balance })}
                             />
                             <SmsSendButton
                               phone={customer.phone}
                               name={customer.name}
-                              defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance })}
+                              defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance, currency: currencySymbol })}
                             />
                           </>
                         )}

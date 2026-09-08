@@ -109,10 +109,6 @@ export function isSkippedStageTransition(fromStage: LeadStage, toStage: LeadStag
   return toIdx - fromIdx > 1
 }
 
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value || 0)
-}
-
 export function formatTimeInStage(stageEnteredAt: string): string {
   const ms = Date.now() - new Date(stageEnteredAt).getTime()
   const days = Math.floor(ms / (1000 * 60 * 60 * 24))

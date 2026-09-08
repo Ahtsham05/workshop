@@ -1,5 +1,5 @@
 import { ColumnDef } from '@tanstack/react-table'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Checkbox } from '@/components/ui/checkbox'
 import LongText from '@/components/long-text'
 import { Supplier } from '../data/schema' // Changed from Customer to Supplier
@@ -19,6 +19,7 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
   const isUrdu = language === 'ur'
   const branchName = useBranchName()
   const formatMoney = useFormatMoney()
+  const { symbol: currencySymbol } = useCurrencyMeta()
 
   const selectColumn: ColumnDef<Supplier> = {
     id: 'select',
@@ -90,12 +91,12 @@ export function useSupplierColumns(onStatusChange?: (supplier: Supplier, next: b
             phone={phone}
             whatsapp={whatsapp}
             name={row.original.name}
-            message={buildSupplierBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+            message={buildSupplierBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance, currency: currencySymbol })}
           />
           <SmsSendButton
             phone={phone}
             name={row.original.name}
-            defaultMessage={buildSupplierBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+            defaultMessage={buildSupplierBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance, currency: currencySymbol })}
           />
         </div>
       )

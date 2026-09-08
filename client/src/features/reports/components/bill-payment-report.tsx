@@ -49,7 +49,7 @@ import { toast } from 'sonner'
 import { useGetBillPaymentReportQuery, useGetUtilityCompaniesQuery } from '@/stores/mobile-shop.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -91,6 +91,7 @@ const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0
 export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillPaymentReportProps>(
   ({ startDate, endDate }, ref) => {
     const fmt = useFormatMoney()
+    const currencySymbol = useCurrencyMeta().symbol
     const [billTypeFilter, setBillTypeFilter] = useState<string>('all')
     const { data: companiesData } = useGetUtilityCompaniesQuery({})
     const allCompanies = companiesData?.results ?? []
@@ -118,15 +119,15 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
           // Summary sheet
           const summaryRows = [
             { Metric: 'Total Bills Collected', Value: data.totalBills },
-            { Metric: 'Total Bill Amount (Rs.)', Value: data.totalBillAmount },
-            { Metric: 'Total Service Charges / Profit (Rs.)', Value: data.totalServiceCharges },
-            { Metric: 'Late Payment Loss (Rs.)', Value: data.totalLatePaymentLoss ?? 0 },
-            { Metric: 'Net Bill Profit (Rs.)', Value: data.totalNetBillProfit ?? data.totalServiceCharges },
-            { Metric: 'Total Paid to Utility (Rs.)', Value: data.totalActualBillAmount ?? data.totalBillAmount },
+            { Metric: `Total Bill Amount (${currencySymbol})`, Value: data.totalBillAmount },
+            { Metric: `Total Service Charges / Profit (${currencySymbol})`, Value: data.totalServiceCharges },
+            { Metric: `Late Payment Loss (${currencySymbol})`, Value: data.totalLatePaymentLoss ?? 0 },
+            { Metric: `Net Bill Profit (${currencySymbol})`, Value: data.totalNetBillProfit ?? data.totalServiceCharges },
+            { Metric: `Total Paid to Utility (${currencySymbol})`, Value: data.totalActualBillAmount ?? data.totalBillAmount },
             { Metric: 'Late Paid Bills', Value: data.latePaidCount ?? 0 },
-            { Metric: 'Total Collection (Rs.)', Value: data.totalCollection },
+            { Metric: `Total Collection (${currencySymbol})`, Value: data.totalCollection },
             { Metric: 'Pending Bills', Value: data.totalPending ?? 0 },
-            { Metric: 'Pending Amount (Rs.)', Value: data.totalPendingAmount ?? 0 },
+            { Metric: `Pending Amount (${currencySymbol})`, Value: data.totalPendingAmount ?? 0 },
             { Metric: 'Bills Due Today', Value: data.totalDueToday },
             { Metric: 'Overdue Bills', Value: data.totalOverdue },
           ]
@@ -137,9 +138,9 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             const trendRows = data.trend.map((r) => ({
               Date: r._id,
               'Bills Collected': r.billCount,
-              'Bill Amount (Rs.)': r.totalBillAmount,
-              'Service Charges (Rs.)': r.totalServiceCharges,
-              'Total Collection (Rs.)': r.totalCollection,
+              [`Bill Amount (${currencySymbol})`]: r.totalBillAmount,
+              [`Service Charges (${currencySymbol})`]: r.totalServiceCharges,
+              [`Total Collection (${currencySymbol})`]: r.totalCollection,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trendRows), 'Daily Trend')
           }
@@ -149,9 +150,9 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             const btRows = data.byBillType.map((r) => ({
               'Bill Type': BILL_TYPE_LABELS[r._id] || r._id,
               Bills: r.billCount,
-              'Bill Amount (Rs.)': r.totalBillAmount,
-              'Service Charges (Rs.)': r.totalServiceCharges,
-              'Total Collection (Rs.)': r.totalCollection,
+              [`Bill Amount (${currencySymbol})`]: r.totalBillAmount,
+              [`Service Charges (${currencySymbol})`]: r.totalServiceCharges,
+              [`Total Collection (${currencySymbol})`]: r.totalCollection,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(btRows), 'By Bill Type')
           }
@@ -161,9 +162,9 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
             const coRows = data.byCompany.map((r) => ({
               Company: r._id,
               Bills: r.billCount,
-              'Bill Amount (Rs.)': r.totalBillAmount,
-              'Service Charges (Rs.)': r.totalServiceCharges,
-              'Total Collection (Rs.)': r.totalCollection,
+              [`Bill Amount (${currencySymbol})`]: r.totalBillAmount,
+              [`Service Charges (${currencySymbol})`]: r.totalServiceCharges,
+              [`Total Collection (${currencySymbol})`]: r.totalCollection,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(coRows), 'By Company')
           }

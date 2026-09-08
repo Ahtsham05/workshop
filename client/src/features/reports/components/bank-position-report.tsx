@@ -139,11 +139,11 @@ export const BankPositionReport = forwardRef<{ exportToExcel: () => void }, Bank
             const rows = positionData.accounts.map((a) => ({
               'Bank Account': a.bankAccountName,
               Type: ACCOUNT_TYPE_LABELS[a.accountType],
-              'Current Balance (Rs.)': a.currentBalance,
+              [`Current Balance (${currencyMeta.symbol})`]: a.currentBalance,
               'Unreconciled Transactions': a.reconciliationApplicable ? a.unreconciledCount : 'N/A — reconciled via Track Cash',
               'Last Reconciled': a.reconciliationApplicable ? (a.lastReconciledAt ? format(new Date(a.lastReconciledAt), 'yyyy-MM-dd') : 'Never') : 'N/A',
-              'Last Statement Balance (Rs.)': a.reconciliationApplicable ? (a.lastReconciledBalance ?? '') : '',
-              'Last Difference (Rs.)': a.reconciliationApplicable ? (a.lastDifference ?? '') : '',
+              [`Last Statement Balance (${currencyMeta.symbol})`]: a.reconciliationApplicable ? (a.lastReconciledBalance ?? '') : '',
+              [`Last Difference (${currencyMeta.symbol})`]: a.reconciliationApplicable ? (a.lastDifference ?? '') : '',
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Bank & Cash Position')
           }
@@ -152,9 +152,9 @@ export const BankPositionReport = forwardRef<{ exportToExcel: () => void }, Bank
             const rows = sessionsData.results.map((s) => ({
               Date: format(new Date(s.statementEndDate), 'yyyy-MM-dd'),
               'Bank Account': s.bankAccountName,
-              'Statement Balance (Rs.)': s.statementClosingBalance,
-              'Book Balance (Rs.)': s.bookClosingBalance,
-              'Difference (Rs.)': s.difference,
+              [`Statement Balance (${currencyMeta.symbol})`]: s.statementClosingBalance,
+              [`Book Balance (${currencyMeta.symbol})`]: s.bookClosingBalance,
+              [`Difference (${currencyMeta.symbol})`]: s.difference,
               'Matched Entries': s.matchedCount,
               'Prepared By': s.createdBy?.name || '',
             }))

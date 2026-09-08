@@ -43,8 +43,7 @@ import {
 } from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { sendInvoiceReceiptWhatsApp } from '@/features/invoice/utils/send-invoice-whatsapp'
-import { useCurrencyMeta } from '@/lib/format-money'
-import { formatCurrency } from '../utils/stage-config'
+import { useCurrencyMeta, formatMoneyWithMeta } from '@/lib/format-money'
 
 const STATUS_BADGE: Record<string, string> = {
   draft: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
@@ -220,8 +219,8 @@ export function LeadQuotationDialog({ invoiceId, onOpenChange, leadName, leadPho
                     <TableRow key={index}>
                       <TableCell className="max-w-[240px] truncate" title={item.name}>{item.name}</TableCell>
                       <TableCell>{item.quantity}{item.unit ? ` ${item.unit}` : ''}</TableCell>
-                      <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(item.subtotal)}</TableCell>
+                      <TableCell>{formatMoneyWithMeta(item.unitPrice, currencyMeta)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatMoneyWithMeta(item.subtotal, currencyMeta)}</TableCell>
                     </TableRow>
                   ))}
                   {(!invoice.items || invoice.items.length === 0) && (
@@ -236,23 +235,23 @@ export function LeadQuotationDialog({ invoiceId, onOpenChange, leadName, leadPho
             <div className="ml-auto w-full max-w-xs space-y-1 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>{t('Subtotal')}</span>
-                <span>{formatCurrency(invoice.subtotal)}</span>
+                <span>{formatMoneyWithMeta(invoice.subtotal, currencyMeta)}</span>
               </div>
               {Number(invoice.discount || 0) > 0 && (
                 <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                   <span>{t('Discount')}</span>
-                  <span>-{formatCurrency(invoice.discount)}</span>
+                  <span>-{formatMoneyWithMeta(invoice.discount, currencyMeta)}</span>
                 </div>
               )}
               {Number(invoice.tax || 0) > 0 && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>{t('Tax')}</span>
-                  <span>{formatCurrency(invoice.tax)}</span>
+                  <span>{formatMoneyWithMeta(invoice.tax, currencyMeta)}</span>
                 </div>
               )}
               <div className="flex justify-between border-t pt-1 text-base font-semibold">
                 <span>{t('Total')}</span>
-                <span>{formatCurrency(invoice.total)}</span>
+                <span>{formatMoneyWithMeta(invoice.total, currencyMeta)}</span>
               </div>
             </div>
           </div>

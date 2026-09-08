@@ -20,6 +20,7 @@ import {
   useGetStudentsQuery,
 } from '@/stores/school.api';
 import { useEmbeddedWhatsAppSignup } from '@/hooks/use-embedded-whatsapp-signup';
+import { useCurrencyMeta } from '@/lib/format-money';
 import { Link } from '@tanstack/react-router';
 import { toast } from 'sonner';
 import {
@@ -58,6 +59,7 @@ function StateIndicator({ connected }: { connected: boolean }) {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function WhatsAppMessaging() {
+  const currencySymbol = useCurrencyMeta().symbol;
   const { data: status, refetch } = useGetWhatsAppStatusQuery(undefined, { refetchOnFocus: true });
   const isReady = Boolean(status?.connected ?? status?.state === 'READY');
 
@@ -79,7 +81,7 @@ export default function WhatsAppMessaging() {
   const [feeAlertClass, setFeeAlertClass] = useState<string>('all');
   const [feeStatus, setFeeStatus] = useState<string>('pending_overdue');
   const [feeAlertMsg, setFeeAlertMsg] = useState(
-    'Dear Parent, this is a reminder that the {feeType} fee of Rs. {amount} for {name} (Month: {month}/{year}) is {status}. Please clear the dues as soon as possible. Thank you.'
+    () => `Dear Parent, this is a reminder that the {feeType} fee of ${currencySymbol} {amount} for {name} (Month: {month}/{year}) is {status}. Please clear the dues as soon as possible. Thank you.`
   );
   const [sendFeeAlerts, { isLoading: sendingFeeAlerts }] = useSendWhatsAppFeeAlertsMutation();
 

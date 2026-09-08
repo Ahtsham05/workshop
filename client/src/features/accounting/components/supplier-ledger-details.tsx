@@ -1446,6 +1446,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                         name: supplier.name,
                         amount: selectedPayment.entry.debit,
                         remainingBalance: selectedPayment.currentBalance,
+                        currency: currencyMeta.symbol,
                       })}
                       templateCategory="payment_made"
                       templateParams={[
@@ -1465,6 +1466,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                         name: supplier.name,
                         amount: selectedPayment.entry.debit,
                         remainingBalance: selectedPayment.currentBalance,
+                        currency: currencyMeta.symbol,
                       })}
                     />
                   </>
@@ -1488,7 +1490,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                   showLabel
                   size="sm"
                   variant="outline"
-                  message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: currentBalance ?? supplier.balance })}
+                  message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: currentBalance ?? supplier.balance, currency: currencyMeta.symbol })}
                 />
                 <SmsSendButton
                   phone={supplier.phone}
@@ -1496,7 +1498,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                   showLabel
                   size="sm"
                   variant="outline"
-                  defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: currentBalance ?? supplier.balance })}
+                  defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: currentBalance ?? supplier.balance, currency: currencyMeta.symbol })}
                 />
               </>
             )}

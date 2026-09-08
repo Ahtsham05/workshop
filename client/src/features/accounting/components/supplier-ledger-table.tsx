@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Eye } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,7 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
   }
 
   const formatMoney = useFormatMoney()
+  const { symbol: currencySymbol } = useCurrencyMeta()
   const formatBalance = (balance: number) => formatMoney(Math.abs(balance))
 
   return (
@@ -98,12 +99,12 @@ export function SupplierLedgerTable({ suppliers, loading, onSelectSupplier, pagi
                               phone={supplier.phone}
                               whatsapp={supplier.whatsapp}
                               name={supplier.name}
-                              message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
+                              message={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance, currency: currencySymbol })}
                             />
                             <SmsSendButton
                               phone={supplier.phone}
                               name={supplier.name}
-                              defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance })}
+                              defaultMessage={buildSupplierBalanceMessage({ branchName, name: supplier.name, balance: supplier.balance, currency: currencySymbol })}
                             />
                           </>
                         )}

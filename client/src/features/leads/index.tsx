@@ -18,7 +18,8 @@ import { Can } from '@/context/permission-context'
 import { usePermissions } from '@/context/permission-context'
 import { useGetUsersQuery } from '@/stores/users.api'
 import { useGetLeadsQuery, LEADS_BOARD_QUERY_PARAMS, type LeadSource, type LeadUserRef } from '@/stores/lead.api'
-import { SOURCES, SOURCE_LABELS, STAGES, formatCurrency } from './utils/stage-config'
+import { SOURCES, SOURCE_LABELS, STAGES } from './utils/stage-config'
+import { useFormatMoney } from '@/lib/format-money'
 import { LeadKanbanBoard } from './components/lead-kanban-board'
 import { LeadDetailSheet } from './components/lead-detail-sheet'
 import { LeadMutateDialog } from './components/lead-mutate-dialog'
@@ -28,6 +29,7 @@ type ViewTab = 'board' | 'analytics'
 
 export default function LeadsPage() {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { hasPermission } = usePermissions()
   const canViewAll = hasPermission('viewAllLeads')
   const routeSearch = useSearch({ from: '/_authenticated/leads/' })
@@ -100,7 +102,7 @@ export default function LeadsPage() {
                 <Wallet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 <div className="leading-tight">
                   <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t('Open Pipeline')}</p>
-                  <p className="text-sm font-semibold tabular-nums">{formatCurrency(openPipelineValue)}</p>
+                  <p className="text-sm font-semibold tabular-nums">{formatMoney(openPipelineValue)}</p>
                 </div>
               </div>
             )}

@@ -3,6 +3,7 @@ import type { InvoiceLanguage } from './language'
 import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { resolveCustomerIdString } from './invoice-print-contact-bridge'
 import { buildInvoiceSmsMessage } from '@/utils/sms-messages'
+import { FALLBACK_CURRENCY } from '@/lib/format-money'
 
 /** Balance / amount due shown on the printed invoice (for PDF filename). */
 export function resolvePrintBalanceAmount(data: PrintInvoiceData): number {
@@ -233,6 +234,7 @@ export function buildPrintWindowActionsBlock(
     paidAmount: data.paidAmount != null ? Number(data.paidAmount) : undefined,
     previousBalance,
     newBalance,
+    currency: data.currencyMeta?.symbol || FALLBACK_CURRENCY.symbol,
   })
 
   const meta = {

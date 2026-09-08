@@ -15,7 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useSendSmsMutation, useSendBulkSmsMutation } from '@/stores/smsGateway.api'
 import { buildCustomerBalanceMessage, buildSupplierBalanceMessage } from '@/utils/sms-messages'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 export type BulkSmsRecipient = {
   _id?: string
@@ -49,10 +49,10 @@ const STEP_LABELS: Record<Step, string> = {
   done: 'Report',
 }
 
-function buildPersonalizedMessage(r: BulkSmsRecipient, entityType: 'customer' | 'supplier', branchName?: string) {
+function buildPersonalizedMessage(r: BulkSmsRecipient, entityType: 'customer' | 'supplier', branchName: string | undefined, currency: string) {
   return entityType === 'customer'
-    ? buildCustomerBalanceMessage({ branchName, name: r.name, balance: r.balance })
-    : buildSupplierBalanceMessage({ branchName, name: r.name, balance: r.balance })
+    ? buildCustomerBalanceMessage({ branchName, name: r.name, balance: r.balance, currency })
+    : buildSupplierBalanceMessage({ branchName, name: r.name, balance: r.balance, currency })
 }
 
 function applyTemplate(template: string, r: BulkSmsRecipient, formatMoney: (amount: number) => string) {
@@ -74,6 +74,7 @@ function BalancePill({ balance }: { balance?: number }) {
 
 export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, branchName }: Props) {
   const formatMoney = useFormatMoney()
+  const { symbol: currencySymbol } = useCurrencyMeta()
   const [step, setStep] = useState<Step>('select')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [messageMode, setMessageMode] = useState<MessageMode>('personalized')
@@ -152,7 +153,7 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
       let failed = 0
       for (const r of selectedList) {
         try {
-          await sendSms({ to: r.phone!, message: buildPersonalizedMessage(r, entityType, branchName), source: 'bulk' }).unwrap()
+          await sendSms({ to: r.phone!, message: buildPersonalizedMessage(r, entityType, branchName, currencySymbol), source: 'bulk' }).unwrap()
           sent++
           res.push({ name: r.name, phone: r.phone!, ok: true })
         } catch {
@@ -344,7 +345,7 @@ export function BulkSmsDialog({ open, onOpenChange, recipients, entityType, bran
                   <div className='rounded-lg border bg-muted/30 p-3.5'>
                     <pre className='text-sm whitespace-pre-wrap font-sans text-foreground leading-relaxed'>
                       {selectedList[0]
-                        ? buildPersonalizedMessage(selectedList[0], entityType, branchName)
+                        ? buildPersonalizedMessage(selectedList[0], entityType, branchName, currencySymbol)
                         : '—'}
                     </pre>
                   </div>

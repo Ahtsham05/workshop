@@ -26,7 +26,7 @@ import { toast } from 'sonner'
 import { useGetSalesmanCommissionReportQuery } from '@/stores/reports.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 interface SalesmanCommissionReportProps {
   startDate: string
@@ -36,6 +36,7 @@ interface SalesmanCommissionReportProps {
 export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }, SalesmanCommissionReportProps>(
   ({ startDate, endDate }, ref) => {
     const fmt = useFormatMoney()
+    const currencySymbol = useCurrencyMeta().symbol
     const { data, isFetching: isLoading } = useGetSalesmanCommissionReportQuery({ startDate, endDate })
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
@@ -58,12 +59,12 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
           const wb = XLSX.utils.book_new()
 
           const summaryRows = [
-            { Metric: 'Total Commission Earned (Rs.)', Value: data.summary.totalEarned },
-            { Metric: 'Total Commission Reversed (Rs.)', Value: data.summary.totalReversed },
-            { Metric: 'Net Commission (Rs.)', Value: data.summary.netCommission },
-            { Metric: 'Total Commission Paid (Rs.)', Value: data.summary.totalPaid },
-            { Metric: 'Total Outstanding / Payable (Rs.)', Value: data.summary.totalOutstanding },
-            { Metric: 'Total Sales Attributed (Rs.)', Value: data.summary.totalSalesAmount },
+            { Metric: `Total Commission Earned (${currencySymbol})`, Value: data.summary.totalEarned },
+            { Metric: `Total Commission Reversed (${currencySymbol})`, Value: data.summary.totalReversed },
+            { Metric: `Net Commission (${currencySymbol})`, Value: data.summary.netCommission },
+            { Metric: `Total Commission Paid (${currencySymbol})`, Value: data.summary.totalPaid },
+            { Metric: `Total Outstanding / Payable (${currencySymbol})`, Value: data.summary.totalOutstanding },
+            { Metric: `Total Sales Attributed (${currencySymbol})`, Value: data.summary.totalSalesAmount },
             { Metric: 'Sales Count', Value: data.summary.totalSalesCount },
             { Metric: 'Active Salesmen', Value: data.summary.activeSalesmenCount },
           ]
@@ -74,11 +75,11 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
               Salesman: s.name,
               Code: s.salesmanCode,
               'Sales Count': s.salesCount,
-              'Sales Amount (Rs.)': s.salesAmount,
-              'Commission Earned (Rs.)': s.earned,
-              'Commission Reversed (Rs.)': s.reversed,
-              'Commission Paid (Rs.)': s.paid,
-              'Current Balance (Rs.)': s.currentBalance,
+              [`Sales Amount (${currencySymbol})`]: s.salesAmount,
+              [`Commission Earned (${currencySymbol})`]: s.earned,
+              [`Commission Reversed (${currencySymbol})`]: s.reversed,
+              [`Commission Paid (${currencySymbol})`]: s.paid,
+              [`Current Balance (${currencySymbol})`]: s.currentBalance,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(salesmenRows), 'By Salesman')
 
@@ -88,9 +89,9 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
                 'Invoice / Return': inv.reference,
                 Date: format(new Date(inv.date), 'yyyy-MM-dd'),
                 Type: inv.transactionType === 'commission_earned' ? 'Earned' : 'Reversed',
-                'Sale Amount (Rs.)': inv.saleAmount,
+                [`Sale Amount (${currencySymbol})`]: inv.saleAmount,
                 'Rate (%)': inv.rate ?? '',
-                'Commission (Rs.)': inv.transactionType === 'commission_earned' ? inv.amount : -inv.amount,
+                [`Commission (${currencySymbol})`]: inv.transactionType === 'commission_earned' ? inv.amount : -inv.amount,
               }))
             )
             if (invoiceRows.length) {
@@ -101,7 +102,7 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
           if (data.trend.length) {
             const trendRows = data.trend.map((r) => ({
               Date: r.date,
-              'Commission Earned (Rs.)': r.earned,
+              [`Commission Earned (${currencySymbol})`]: r.earned,
               'Sales Count': r.count,
             }))
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trendRows), 'Daily Trend')

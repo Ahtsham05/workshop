@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Pencil, Trash2, FilePen, CalendarDays, X, BookOpen, ClipboardList, ChevronLeft, GraduationCap, Layers, Printer, Receipt, Loader2 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
-import { useFormatMoney } from '@/lib/format-money';
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import {
   useGetExamsQuery,
   useCreateExamMutation,
@@ -69,6 +69,7 @@ const getExamId = (e: any) => e.id || e._id;
 
 export default function ExamManagement() {
   const formatMoney = useFormatMoney();
+  const currencySymbol = useCurrencyMeta().symbol;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -338,7 +339,7 @@ export default function ExamManagement() {
   const handleBulkGenerateExamFees = async (exams: any[]) => {
     const withFee = exams.filter((e) => Number(e.examFeeAmount) > 0);
     if (!withFee.length) {
-      toast.error('No exam fee set on these exams. Edit and add Exam Fee (Rs.) first.');
+      toast.error(`No exam fee set on these exams. Edit and add Exam Fee (${currencySymbol}) first.`);
       return;
     }
     let created = 0;
@@ -840,7 +841,7 @@ export default function ExamManagement() {
                   <Input type="date" value={form.endDate} onChange={(e) => setForm(p => ({...p, endDate: e.target.value}))} min={form.startDate || undefined} />
                 </div>
                 <div>
-                  <Label>Exam Fee (Rs.)</Label>
+                  <Label>Exam Fee ({currencySymbol})</Label>
                   <Input
                     type="number"
                     min={0}

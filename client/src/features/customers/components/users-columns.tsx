@@ -101,13 +101,13 @@ export const useCustomerColumns = (onStatusChange?: (customer: Customer, next: b
               phone={phone}
               whatsapp={whatsapp}
               name={row.original.name}
-              message={buildCustomerBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+              message={buildCustomerBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance, currency: currencyMeta.symbol })}
               {...getCustomerBalanceTemplate({ name: row.original.name, balance: row.original.balance })}
             />
             <SmsSendButton
               phone={phone}
               name={row.original.name}
-              defaultMessage={buildCustomerBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance })}
+              defaultMessage={buildCustomerBalanceMessage({ branchName, name: row.original.name, balance: row.original.balance, currency: currencyMeta.symbol })}
             />
           </div>
         )

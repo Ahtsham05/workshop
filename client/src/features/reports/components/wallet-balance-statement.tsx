@@ -23,7 +23,7 @@ import {
 import { Download, Wallet, TrendingUp, ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useGetWalletBalanceStatementQuery, type WalletBalanceStatement as WalletBalanceStatementData } from '@/stores/reports.api'
 import { kpiCardClass } from '@/lib/stat-card-tones'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -93,6 +93,7 @@ export function WalletBalanceStatement({
   loadOnly = false,
 }: WalletBalanceStatementProps) {
   const fmt = useFormatMoney()
+  const currencySymbol = useCurrencyMeta().symbol
   const tableRef = useRef<HTMLDivElement>(null)
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
   const [viewMode, setViewMode] = useState<'summary' | 'number-wise'>('summary')
@@ -128,11 +129,11 @@ export function WalletBalanceStatement({
       // Daily rows
       const rows = data.rows.map((r) => ({
         Date: format(new Date(r.date), 'dd MMM yyyy'),
-        'Opening Balance (Rs.)': r.openingBalance,
-        'Sold (Rs.)': r.hasSales ? r.totalSold : '',
-        'Profit (Rs.)': r.hasSales ? r.totalProfit : '',
+        [`Opening Balance (${currencySymbol})`]: r.openingBalance,
+        [`Sold (${currencySymbol})`]: r.hasSales ? r.totalSold : '',
+        [`Profit (${currencySymbol})`]: r.hasSales ? r.totalProfit : '',
         Transactions: r.hasSales ? r.transactions : '',
-        'Closing Balance (Rs.)': r.closingBalance,
+        [`Closing Balance (${currencySymbol})`]: r.closingBalance,
         Note: r.hasSales ? '' : 'No Sale',
       }))
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Daily Statement')
@@ -144,11 +145,11 @@ export function WalletBalanceStatement({
           'Account / Number': item.accountNumber || '',
           Customer: item.customerName || '',
           Network: item.network || '',
-          'Amount (Rs.)': item.amount,
-          'Wallet Impact (Rs.)': item.walletImpact,
-          'Cash Amount (Rs.)': item.cashAmount,
-          'Extra Charge (Rs.)': item.extraCharge,
-          'Profit (Rs.)': item.profit,
+          [`Amount (${currencySymbol})`]: item.amount,
+          [`Wallet Impact (${currencySymbol})`]: item.walletImpact,
+          [`Cash Amount (${currencySymbol})`]: item.cashAmount,
+          [`Extra Charge (${currencySymbol})`]: item.extraCharge,
+          [`Profit (${currencySymbol})`]: item.profit,
           'Payment Method': item.paymentMethod || '',
           Notes: item.notes || '',
         }))

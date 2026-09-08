@@ -17,7 +17,8 @@ import { useLanguage } from '@/context/language-context'
 import { useGetLeadStatsQuery } from '@/stores/lead.api'
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { toneIconWrapClass } from '@/lib/stat-card-tones'
-import { STAGE_LABELS, SOURCE_LABELS, formatCurrency } from '../utils/stage-config'
+import { STAGE_LABELS, SOURCE_LABELS } from '../utils/stage-config'
+import { useFormatMoney } from '@/lib/format-money'
 
 // Same fixed cycled palette used by the Reports module's charts (see expense-report.tsx) —
 // kept identical so leads analytics reads as part of the same platform, not a bolt-on.
@@ -29,6 +30,7 @@ const COLORS = [
 
 export function LeadAnalyticsTab() {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { data, isLoading } = useGetLeadStatsQuery()
 
   if (isLoading || !data) {
@@ -149,7 +151,7 @@ export function LeadAnalyticsTab() {
                 className="flex items-center justify-between rounded-lg border bg-muted/30 p-3 text-sm transition-colors hover:bg-muted/60"
               >
                 <span className="text-muted-foreground">{s.name}</span>
-                <span className="font-semibold tabular-nums">{formatCurrency(s.value)}</span>
+                <span className="font-semibold tabular-nums">{formatMoney(s.value)}</span>
               </div>
             ))}
           </div>

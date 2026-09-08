@@ -3,7 +3,8 @@ import { Inbox } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import type { Lead, LeadStage } from '@/stores/lead.api'
-import { STAGE_COLUMN_STYLES, STAGE_ICONS, STAGE_LABELS, formatCurrency } from '../utils/stage-config'
+import { STAGE_COLUMN_STYLES, STAGE_ICONS, STAGE_LABELS } from '../utils/stage-config'
+import { useFormatMoney } from '@/lib/format-money'
 import { LeadCard } from './lead-card'
 
 interface LeadKanbanColumnProps {
@@ -14,6 +15,7 @@ interface LeadKanbanColumnProps {
 
 export function LeadKanbanColumn({ stage, leads, onCardClick }: LeadKanbanColumnProps) {
   const { t } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { setNodeRef, isOver } = useDroppable({ id: stage })
   const style = STAGE_COLUMN_STYLES[stage]
   const Icon = STAGE_ICONS[stage]
@@ -40,7 +42,7 @@ export function LeadKanbanColumn({ stage, leads, onCardClick }: LeadKanbanColumn
         </div>
         {totalValue > 0 && (
           <p className={cn('mt-1.5 pl-9 text-xs font-medium tabular-nums', style.accentText)}>
-            {formatCurrency(totalValue)}
+            {formatMoney(totalValue)}
           </p>
         )}
       </div>

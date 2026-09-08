@@ -2,7 +2,7 @@ type BalanceCtx = {
   branchName?: string | null
   name?: string
   balance?: number
-  currency?: string
+  currency: string
 }
 
 type PaymentCtx = {
@@ -10,14 +10,17 @@ type PaymentCtx = {
   name?: string
   amount?: number
   remainingBalance?: number
-  currency?: string
+  currency: string
 }
 
 function heading(branchName?: string | null) {
   return branchName ? `*${branchName}*\n` : ''
 }
 
-function fmt(amount?: number, currency = 'Rs') {
+// `currency` is required (no default) so every call site is forced to pass the org's real
+// configured currency symbol (via useCurrencyMeta()) instead of silently defaulting to "Rs"
+// regardless of what currency the organization actually uses.
+function fmt(amount: number | undefined, currency: string) {
   return `${currency} ${Math.abs(amount ?? 0).toFixed(0)}`
 }
 
@@ -94,7 +97,7 @@ type InvoiceSmsCtx = {
   paidAmount?: number
   previousBalance?: number
   newBalance?: number
-  currency?: string
+  currency: string
 }
 
 export function buildInvoiceSmsMessage({
@@ -105,7 +108,7 @@ export function buildInvoiceSmsMessage({
   paidAmount,
   previousBalance,
   newBalance,
-  currency = 'Rs',
+  currency,
 }: InvoiceSmsCtx) {
   const h = heading(branchName)
   const greeting = customerName ? `Dear ${customerName},\n` : ''

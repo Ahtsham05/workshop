@@ -263,13 +263,13 @@ export function CustomerCardGrid({ customers, loading, pagination }: Props) {
                           phone={customer.phone}
                           whatsapp={customer.whatsapp}
                           name={customer.name}
-                          message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance })}
+                          message={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance, currency: currencyMeta.symbol })}
                           {...getCustomerBalanceTemplate({ name: customer.name, balance: customer.balance })}
                         />
                         <SmsSendButton
                           phone={customer.phone}
                           name={customer.name}
-                          defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance })}
+                          defaultMessage={buildCustomerBalanceMessage({ branchName, name: customer.name, balance: customer.balance, currency: currencyMeta.symbol })}
                         />
                       </div>
                     ) : undefined
