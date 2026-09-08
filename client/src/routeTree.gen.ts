@@ -84,6 +84,7 @@ import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authe
 import { Route as AuthenticatedSmsLogImport } from './routes/_authenticated/sms/log'
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
 import { Route as AuthenticatedSettingsTaxRatesImport } from './routes/_authenticated/settings/tax-rates'
+import { Route as AuthenticatedSettingsTaxJurisdictionsImport } from './routes/_authenticated/settings/tax-jurisdictions'
 import { Route as AuthenticatedSettingsTaxExemptionsImport } from './routes/_authenticated/settings/tax-exemptions'
 import { Route as AuthenticatedSettingsTaxCategoriesImport } from './routes/_authenticated/settings/tax-categories'
 import { Route as AuthenticatedSettingsSyncConflictsImport } from './routes/_authenticated/settings/sync-conflicts'
@@ -657,6 +658,13 @@ const AuthenticatedSettingsTaxRatesRoute =
   AuthenticatedSettingsTaxRatesImport.update({
     id: '/tax-rates',
     path: '/tax-rates',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsTaxJurisdictionsRoute =
+  AuthenticatedSettingsTaxJurisdictionsImport.update({
+    id: '/tax-jurisdictions',
+    path: '/tax-jurisdictions',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -1779,6 +1787,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsTaxExemptionsImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/tax-jurisdictions': {
+      id: '/_authenticated/settings/tax-jurisdictions'
+      path: '/tax-jurisdictions'
+      fullPath: '/settings/tax-jurisdictions'
+      preLoaderRoute: typeof AuthenticatedSettingsTaxJurisdictionsImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/tax-rates': {
       id: '/_authenticated/settings/tax-rates'
       path: '/tax-rates'
@@ -2475,6 +2490,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsSyncConflictsRoute: typeof AuthenticatedSettingsSyncConflictsRoute
   AuthenticatedSettingsTaxCategoriesRoute: typeof AuthenticatedSettingsTaxCategoriesRoute
   AuthenticatedSettingsTaxExemptionsRoute: typeof AuthenticatedSettingsTaxExemptionsRoute
+  AuthenticatedSettingsTaxJurisdictionsRoute: typeof AuthenticatedSettingsTaxJurisdictionsRoute
   AuthenticatedSettingsTaxRatesRoute: typeof AuthenticatedSettingsTaxRatesRoute
   AuthenticatedSettingsWhatsappRoute: typeof AuthenticatedSettingsWhatsappRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
@@ -2508,6 +2524,8 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
       AuthenticatedSettingsTaxCategoriesRoute,
     AuthenticatedSettingsTaxExemptionsRoute:
       AuthenticatedSettingsTaxExemptionsRoute,
+    AuthenticatedSettingsTaxJurisdictionsRoute:
+      AuthenticatedSettingsTaxJurisdictionsRoute,
     AuthenticatedSettingsTaxRatesRoute: AuthenticatedSettingsTaxRatesRoute,
     AuthenticatedSettingsWhatsappRoute: AuthenticatedSettingsWhatsappRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
@@ -2942,6 +2960,7 @@ export interface FileRoutesByFullPath {
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/settings/tax-categories': typeof AuthenticatedSettingsTaxCategoriesRoute
   '/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
+  '/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
@@ -3105,6 +3124,7 @@ export interface FileRoutesByTo {
   '/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/settings/tax-categories': typeof AuthenticatedSettingsTaxCategoriesRoute
   '/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
+  '/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
@@ -3272,6 +3292,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/sync-conflicts': typeof AuthenticatedSettingsSyncConflictsRoute
   '/_authenticated/settings/tax-categories': typeof AuthenticatedSettingsTaxCategoriesRoute
   '/_authenticated/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
+  '/_authenticated/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/_authenticated/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/_authenticated/sms/log': typeof AuthenticatedSmsLogRoute
@@ -3441,6 +3462,7 @@ export interface FileRouteTypes {
     | '/settings/sync-conflicts'
     | '/settings/tax-categories'
     | '/settings/tax-exemptions'
+    | '/settings/tax-jurisdictions'
     | '/settings/tax-rates'
     | '/settings/whatsapp'
     | '/sms/log'
@@ -3603,6 +3625,7 @@ export interface FileRouteTypes {
     | '/settings/sync-conflicts'
     | '/settings/tax-categories'
     | '/settings/tax-exemptions'
+    | '/settings/tax-jurisdictions'
     | '/settings/tax-rates'
     | '/settings/whatsapp'
     | '/sms/log'
@@ -3768,6 +3791,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/sync-conflicts'
     | '/_authenticated/settings/tax-categories'
     | '/_authenticated/settings/tax-exemptions'
+    | '/_authenticated/settings/tax-jurisdictions'
     | '/_authenticated/settings/tax-rates'
     | '/_authenticated/settings/whatsapp'
     | '/_authenticated/sms/log'
@@ -4035,6 +4059,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/sync-conflicts",
         "/_authenticated/settings/tax-categories",
         "/_authenticated/settings/tax-exemptions",
+        "/_authenticated/settings/tax-jurisdictions",
         "/_authenticated/settings/tax-rates",
         "/_authenticated/settings/whatsapp",
         "/_authenticated/settings/"
@@ -4338,6 +4363,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/tax-exemptions": {
       "filePath": "_authenticated/settings/tax-exemptions.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/tax-jurisdictions": {
+      "filePath": "_authenticated/settings/tax-jurisdictions.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/tax-rates": {

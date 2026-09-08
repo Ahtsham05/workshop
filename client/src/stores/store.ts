@@ -70,6 +70,7 @@ import { taxCategoryApi } from './taxCategory.api';
 import { taxRateApi } from './taxRate.api';
 import { taxJurisdictionApi } from './taxJurisdiction.api';
 import { taxExemptionApi } from './taxExemption.api';
+import { taxCalculatorApi } from './taxCalculator.api';
 import { exchangeRateApi } from './exchangeRate.api';
 
 export const store = configureStore({
@@ -145,6 +146,7 @@ export const store = configureStore({
     [taxRateApi.reducerPath]: taxRateApi.reducer,
     [taxJurisdictionApi.reducerPath]: taxJurisdictionApi.reducer,
     [taxExemptionApi.reducerPath]: taxExemptionApi.reducer,
+    [taxCalculatorApi.reducerPath]: taxCalculatorApi.reducer,
     [exchangeRateApi.reducerPath]: exchangeRateApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
@@ -213,6 +215,7 @@ export const store = configureStore({
       taxRateApi.middleware,
       taxJurisdictionApi.middleware,
       taxExemptionApi.middleware,
+      taxCalculatorApi.middleware,
       exchangeRateApi.middleware,
     ),
 });

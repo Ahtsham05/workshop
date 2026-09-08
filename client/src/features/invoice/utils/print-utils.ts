@@ -20,6 +20,8 @@ import { ensureInvoiceSmsSendBridge } from './invoice-print-sms-bridge'
 import { PAPER_FORMATS, type PaperSize, type SheetSize, type PaperFormatKey } from './paper-format'
 import { INVOICE_TEMPLATE_ITEMS_PER_PAGE, INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from './invoice-template'
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
+import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
+import type { TaxLine } from '@/stores/taxCalculator.api'
 
 export type { PrintWindowContact }
 export type { PaperSize }
@@ -47,6 +49,9 @@ export interface PrintInvoiceData {
   type: 'cash' | 'credit' | 'pending' | 'quotation'
   subtotal: number
   tax: number
+  /** Per-category tax breakdown (mirrors server buildTaxLineSchema()) — omit for orgs with
+   *  no tax system configured, in which case `tax` alone renders as a single flat row. */
+  taxLines?: TaxLine[]
   discount: number
   total: number
   paidAmount: number
@@ -221,6 +226,7 @@ export const generateInvoiceHTML = (
     type,
     subtotal,
     tax,
+    taxLines,
     discount,
     total,
     paidAmount,
@@ -714,6 +720,12 @@ export const generateInvoiceHTML = (
   
   ${(() => {
     const hasExtraCharges = itemDiscountTotal > 0 || discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
+    const taxRowsHtml = buildTaxBreakdownHtml(
+      taxLines,
+      tax,
+      urduTexts.tax,
+      (label, amount, indent) => `<div class="total-row"${indent ? ' style="padding-left: 8px;"' : ''}><span>${label}:</span><span>${fmt(amount)}</span></div>`
+    )
     if (isQuoteStyleTotals(type)) {
       if (hasExtraCharges) {
         return `
@@ -726,7 +738,7 @@ export const generateInvoiceHTML = (
     ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${fmt(discount)}</span></div>` : ''}
     ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${fmt(deliveryCharge)}</span></div>` : ''}
     ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${fmt(serviceCharge)}</span></div>` : ''}
-    ${tax > 0 ? `<div class="total-row"><span>${urduTexts.tax}:</span><span>${fmt(tax)}</span></div>` : ''}
+    ${taxRowsHtml}
     <div class="total-row total-final">
       <span>${urduTexts.total}:</span>
       <span>${fmt(total)}</span>
@@ -748,7 +760,7 @@ export const generateInvoiceHTML = (
     ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${fmt(discount)}</span></div>` : ''}
     ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${fmt(deliveryCharge)}</span></div>` : ''}
     ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${fmt(serviceCharge)}</span></div>` : ''}
-    ${tax > 0 ? `<div class="total-row"><span>${urduTexts.tax}:</span><span>${fmt(tax)}</span></div>` : ''}
+    ${taxRowsHtml}
   </div>`
     }
     return ''
@@ -844,6 +856,7 @@ export const generateA4InvoiceHTML = (
     type,
     subtotal,
     tax,
+    taxLines,
     discount,
     total,
     paidAmount,
@@ -975,6 +988,17 @@ export const generateA4InvoiceHTML = (
 
   const hasExtraCharges = itemDiscountTotal > 0 || discount > 0 || deliveryCharge > 0 || serviceCharge > 0 || tax > 0
   const showItemizedTotalsTable = isQuoteStyleTotals(type) || hasExtraCharges
+  const taxRowsHtml = buildTaxBreakdownHtml(
+    taxLines,
+    tax,
+    urduTexts.tax,
+    (label, amount, indent) => `
+      <tr>
+        <td class="total-label"${indent ? ' style="padding-left: 12px;"' : ''}>${label}:</td>
+        <td class="total-amount">${fmt(amount)}</td>
+      </tr>
+      `
+  )
 
   const itemizedTotalsTable = showItemizedTotalsTable
     ? `
@@ -1010,12 +1034,7 @@ export const generateA4InvoiceHTML = (
         <td class="total-amount">${fmt(serviceCharge)}</td>
       </tr>
       ` : ''}
-      ${tax > 0 ? `
-      <tr>
-        <td class="total-label">${urduTexts.tax}:</td>
-        <td class="total-amount">${fmt(tax)}</td>
-      </tr>
-      ` : ''}
+      ${taxRowsHtml}
       ${isQuoteStyleTotals(type) ? `
       <tr class="final-total">
         <td class="total-label">${urduTexts.total}:</td>

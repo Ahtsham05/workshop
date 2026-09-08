@@ -2,6 +2,31 @@ const httpStatus = require('http-status');
 const { TaxJurisdiction } = require('../models');
 const ApiError = require('../utils/ApiError');
 
+/**
+ * Walks the parentJurisdictionId chain starting at `candidateParentId`, rejecting
+ * the assignment if it ever reaches `jurisdictionId` — i.e. if `jurisdictionId` is
+ * an ancestor of the proposed parent, assigning it would create a cycle. Only
+ * relevant on update (a brand-new jurisdiction can't already be part of a cycle,
+ * since nothing can point to an id that doesn't exist yet).
+ */
+const assertNoJurisdictionCycle = async (organizationId, jurisdictionId, candidateParentId) => {
+  if (String(candidateParentId) === String(jurisdictionId)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'A tax jurisdiction cannot be its own parent');
+  }
+  const visited = new Set();
+  let currentId = candidateParentId;
+  while (currentId) {
+    if (String(currentId) === String(jurisdictionId)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'This parent assignment would create a jurisdiction cycle');
+    }
+    if (visited.has(String(currentId))) break; // pre-existing cycle in data — stop, don't loop forever
+    visited.add(String(currentId));
+    // eslint-disable-next-line no-await-in-loop
+    const parent = await TaxJurisdiction.findOne({ _id: currentId, organizationId }).select('parentJurisdictionId');
+    currentId = parent ? parent.parentJurisdictionId : null;
+  }
+};
+
 const createTaxJurisdiction = async (jurisdictionBody) => {
   const jurisdiction = new TaxJurisdiction(jurisdictionBody);
   return jurisdiction.save();
@@ -25,6 +50,9 @@ const getTaxJurisdictionById = async (organizationId, id) => {
 
 const updateTaxJurisdictionById = async (organizationId, id, updateBody) => {
   const jurisdiction = await getTaxJurisdictionById(organizationId, id);
+  if (updateBody.parentJurisdictionId) {
+    await assertNoJurisdictionCycle(organizationId, id, updateBody.parentJurisdictionId);
+  }
   Object.assign(jurisdiction, updateBody);
   await jurisdiction.save();
   return jurisdiction;

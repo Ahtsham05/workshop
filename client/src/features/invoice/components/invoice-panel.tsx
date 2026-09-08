@@ -17,6 +17,7 @@ import {
   BatchAllocationEditor,
 } from '@/components/serial-batch-line-controls'
 import { UsedPhoneSelectDialog } from './used-phone-select-dialog'
+import { TaxBreakdownSummary } from './tax-breakdown-summary'
 import type { PhoneBuybackRecord } from '@/stores/usedPhoneBuyback.api'
 import { isUsedPhonesBucketProduct } from '@/features/mobile-shop/old-phones/constants'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
@@ -1756,6 +1757,7 @@ export function InvoicePanel({
               paidAmount: Number(savedInvoicePayload.paidAmount ?? 0),
               previousBalance: Number(savedInvoicePayload.previousBalance ?? 0),
               newBalance: Number(savedInvoicePayload.newBalance ?? 0),
+              currency: currencySymbol,
             })
             try {
               await sendSms({ to: phone, message: msg, source: 'invoice' }).unwrap()
@@ -3702,37 +3704,43 @@ export function InvoicePanel({
               </PopoverContent>
             </Popover>
 
-            <Popover open={addTaxOpen} onOpenChange={setAddTaxOpen}>
-              <PopoverTrigger asChild>
-                <Button type='button' variant='outline' size='sm' className='gap-1.5'>
-                  <Receipt className='h-4 w-4' />
-                  {t('Add Tax')}
-                  {taxRate > 0 && (
-                    <Badge variant='secondary' className='ml-1 tabular-nums'>{taxRate}%</Badge>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className='w-56 p-3' align='start'>
-                <Label className='mb-2 block text-xs'>{t('tax_rate')} (%)</Label>
-                <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
-                  <Input
-                    type='text'
-                    inputMode='decimal'
-                    showVoiceInput={false}
-                    value={taxRateInput}
-                    onChange={(e) => {
-                      const raw = e.target.value
-                      setTaxRateInput(raw)
-                      setTaxRate(Math.max(0, Math.min(100, parseFloat(raw) || 0)))
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    placeholder='0'
-                    className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
-                  />
-                  <span className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none'>%</span>
-                </div>
-              </PopoverContent>
-            </Popover>
+            {/* Manual tax-rate entry only makes sense when the org hasn't configured a real
+                tax system — once it has, tax is server-calculated from Tax Categories/Rates
+                (see TaxBreakdownSummary in the Summary card below) and this box would just
+                be a second, conflicting source of truth. */}
+            {(!orgData?.taxSystem || orgData.taxSystem === 'NONE') && (
+              <Popover open={addTaxOpen} onOpenChange={setAddTaxOpen}>
+                <PopoverTrigger asChild>
+                  <Button type='button' variant='outline' size='sm' className='gap-1.5'>
+                    <Receipt className='h-4 w-4' />
+                    {t('Add Tax')}
+                    {taxRate > 0 && (
+                      <Badge variant='secondary' className='ml-1 tabular-nums'>{taxRate}%</Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className='w-56 p-3' align='start'>
+                  <Label className='mb-2 block text-xs'>{t('tax_rate')} (%)</Label>
+                  <div className='flex items-center rounded-lg border bg-background overflow-hidden'>
+                    <Input
+                      type='text'
+                      inputMode='decimal'
+                      showVoiceInput={false}
+                      value={taxRateInput}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        setTaxRateInput(raw)
+                        setTaxRate(Math.max(0, Math.min(100, parseFloat(raw) || 0)))
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      placeholder='0'
+                      className='h-9 flex-1 border-0 text-right text-sm font-semibold focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]'
+                    />
+                    <span className='px-3 h-9 flex items-center text-xs text-muted-foreground bg-muted border-l font-medium select-none'>%</span>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -3773,13 +3781,17 @@ export function InvoicePanel({
               <span className='tabular-nums'>-{formatMoney(invoice.discount)}</span>
             </div>
           )}
-          {invoice.tax > 0 && (
-            <div className='flex justify-between gap-6'>
-              <span className='text-muted-foreground'>
-                {t('tax')} ({taxRate}%):
-              </span>
-              <span className='tabular-nums'>{formatMoney(invoice.tax)}</span>
-            </div>
+          {orgData?.taxSystem && orgData.taxSystem !== 'NONE' ? (
+            <TaxBreakdownSummary taxLines={invoice.taxLines || []} totalTax={invoice.tax} />
+          ) : (
+            invoice.tax > 0 && (
+              <div className='flex justify-between gap-6'>
+                <span className='text-muted-foreground'>
+                  {t('tax')} ({taxRate}%):
+                </span>
+                <span className='tabular-nums'>{formatMoney(invoice.tax)}</span>
+              </div>
+            )
           )}
           <Separator />
           <div className='flex justify-between gap-6 font-bold text-lg'>

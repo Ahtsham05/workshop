@@ -17,6 +17,7 @@ import {
   IconReceiptTax,
   IconShieldCheck,
   IconArrowsExchange,
+  IconMapPin,
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
 import SidebarNav from './components/sidebar-nav'
@@ -151,6 +152,12 @@ const sidebarNavItems: SettingsNavItem[] = [
     icon: <IconReceiptTax size={18} />,
     href: '/settings/tax-rates',
     anyPermission: ['viewTaxRates'],
+  },
+  {
+    title: 'Tax Jurisdictions',
+    icon: <IconMapPin size={18} />,
+    href: '/settings/tax-jurisdictions',
+    anyPermission: ['viewTaxJurisdictions'],
   },
   {
     title: 'Tax Exemptions',

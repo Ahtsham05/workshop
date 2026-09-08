@@ -412,6 +412,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         type: 'credit',
         subtotal: invoiceData.subtotal,
         tax: invoiceData.tax,
+        taxLines: invoiceData.taxLines || [],
         discount: invoiceData.discount || 0,
         total: invoiceData.total,
         paidAmount: invoiceData.paidAmount || 0,
@@ -809,13 +810,13 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                     phone={row.phone}
                                     whatsapp={row.whatsapp}
                                     name={row.name}
-                                    message={buildCustomerBalanceMessage({ branchName, name: row.name, balance: row.currentBalance })}
+                                    message={buildCustomerBalanceMessage({ branchName, name: row.name, balance: row.currentBalance, currency: currencyMeta.symbol })}
                                     {...getCustomerBalanceTemplate({ name: row.name, balance: row.currentBalance })}
                                   />
                                   <SmsSendButton
                                     phone={row.phone}
                                     name={row.name}
-                                    defaultMessage={buildCustomerBalanceMessage({ branchName, name: row.name, balance: row.currentBalance })}
+                                    defaultMessage={buildCustomerBalanceMessage({ branchName, name: row.name, balance: row.currentBalance, currency: currencyMeta.symbol })}
                                   />
                                 </div>
                               )}

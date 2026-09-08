@@ -48,6 +48,8 @@ import { applySaleDraftStock, revertSaleDraftStock } from '@/lib/pos-hold-stock'
 import { calculateInvoiceLineValues, getProductUnitOptions, resolveUnitConversion } from '@/lib/inventory-unit-conversions'
 import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { useFormatMoney } from '@/lib/format-money'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { usePreviewTaxMutation, type TaxLine } from '@/stores/taxCalculator.api'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
@@ -98,6 +100,13 @@ export interface InvoiceItem {
   // Real (non-default) variant this line item is for, when product.hasVariants —
   // see docs/architecture/universal-product-migration.md.
   variantId?: string
+  // Copied from Product.taxCategoryId at add-time, when set — lets the live tax preview
+  // (see the debounced effect below) resolve the same per-product category the server's
+  // resolveTransactionTaxAndCurrency uses at save time, instead of always previewing
+  // against the org default category. Omitted (falls back to org default) for manual
+  // entries or items added before this field existed — the SAVED invoice is unaffected
+  // either way, since the server always re-resolves the real category from the product.
+  taxCategoryId?: string | null
   // Picked batch to deplete. Only set when the variant tracks batch/expiry. When the
   // line is split across multiple batches (batchAllocations below has 2+ entries — a
   // single batch didn't have enough, so the earliest-expiry batches are drawn from in
@@ -168,6 +177,13 @@ export interface Invoice {
   status?: 'draft' | 'finalized' | 'paid' | 'cancelled' | 'refunded'
   subtotal: number
   tax: number
+  // Per-category tax breakdown (matches server buildTaxLineSchema()) — populated by the
+  // live preview while editing (see the debounced effect below) and overwritten with the
+  // real persisted snapshot once the server responds to create/update. Empty/absent for
+  // orgs with no tax system configured (taxSystem 'NONE') — `tax` alone still applies there.
+  taxLines?: TaxLine[]
+  taxSystem?: string
+  taxInclusive?: boolean
   // Overall invoice-level discount, applied on top of any per-item discounts. `discount`
   // is the resolved Rs value; discountType/discountValue is the raw entered unit + number.
   discountType?: DiscountType
@@ -252,6 +268,7 @@ export interface Product {
   // Internal-only discrepancy marker — surfaced in staff-facing pickers/lists, never on
   // customer-facing prints. See EntityFlag in @/components/flag-badge.
   flag?: { color: string; reason?: string; note?: string } | null
+  taxCategoryId?: string | null
 }
 
 export interface Category {
@@ -334,8 +351,13 @@ export default function InvoicePage() {
   /** Shared with Product Catalog — when true, purchase cost is readable in catalog and product picker */
   const [showProductCost, setShowProductCost] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [taxRate, setTaxRate] = useState(0) // Configurable tax rate
+  const [taxRate, setTaxRate] = useState(0) // Configurable tax rate — only meaningful for taxSystem 'NONE' orgs, see the live-preview effect below
   const [showProductCatalog, setShowProductCatalog] = useState(getInitialShowProductCatalog)
+  // Real tax system (VAT/SALES_TAX/GST/CUSTOM) replaces the manual tax-rate box above —
+  // orgData is also fetched independently by InvoicePanel (RTK Query dedupes the request).
+  const authUser = useSelector((state: RootState) => state.auth.data?.user)
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !authUser?.organizationId })
+  const [previewTax] = usePreviewTaxMutation()
   // Fast-invoicing mode (catalog hidden): DOM node in the page header for InvoicePanel's
   // Preview/Save Draft/Save & Print actions, rendered there via a portal so those buttons'
   // state/handlers stay defined in InvoicePanel itself. See the header JSX below.
@@ -806,6 +828,128 @@ export default function InvoicePage() {
     })
   }, [calculateTotals])
 
+  // Live tax preview for orgs with a real tax system configured (VAT/SALES_TAX/GST/CUSTOM).
+  // `calculateTotals` above stays untouched (and orgs with taxSystem 'NONE' keep using its
+  // manual taxRate% path exactly as before) — this effect only ever *patches* tax/total
+  // in after the fact, debounced, by calling the same server-authoritative tax engine
+  // (POST /tax/calculate, taxCalculator.service.js) the eventual save will use. A stale/
+  // in-flight preview can only cause a momentary display lag, never an incorrect saved
+  // value — the server always recomputes tax again for real on create/update.
+  const previewRequestIdRef = useRef(0)
+  // Guards against clobbering a historical invoice's already-persisted tax snapshot the
+  // instant it's opened for editing — never recalculate an old invoice using current tax
+  // rates just because the edit form mounted (see CLAUDE.md localization spec section 20).
+  // A fresh key is captured whenever a *different* invoice enters edit mode; the preview
+  // effect below stays inert (leaves the loaded tax/taxLines exactly as-is) until the
+  // items/discount/customer actually diverge from that baseline, at which point the user
+  // has made a real edit and a live recalculation is the correct thing to show.
+  const editBaselineKeyRef = useRef<string | null>(null)
+  const buildTaxRelevantKey = useCallback(
+    (items: InvoiceItem[], discountType?: DiscountType, discountValue?: number, customerId?: string) =>
+      JSON.stringify({
+        items: items.map((i) => [i.productId, i.variantId || '', i.quantity, i.unitPrice, i.subtotal, i.taxCategoryId || '']),
+        discountType,
+        discountValue,
+        customerId,
+      }),
+    []
+  )
+  useEffect(() => {
+    if (currentView === 'edit' && editingInvoice) {
+      editBaselineKeyRef.current = buildTaxRelevantKey(
+        editingInvoice.items || [],
+        editingInvoice.discountType,
+        editingInvoice.discountValue,
+        editingInvoice.customerId
+      )
+    } else {
+      editBaselineKeyRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, editingInvoice])
+
+  useEffect(() => {
+    const taxSystem = orgData?.taxSystem
+    if (!taxSystem || taxSystem === 'NONE') return undefined
+
+    if (
+      editBaselineKeyRef.current !== null &&
+      buildTaxRelevantKey(invoice.items, invoice.discountType, invoice.discountValue, invoice.customerId) === editBaselineKeyRef.current
+    ) {
+      return undefined
+    }
+
+    const items = invoice.items
+    const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0)
+    if (subtotal <= 0) {
+      previewRequestIdRef.current += 1
+      setInvoice(prev => {
+        if (prev.tax === 0 && (!prev.taxLines || prev.taxLines.length === 0)) return prev
+        const prevSubtotal = prev.items.reduce((sum, item) => sum + item.subtotal, 0)
+        const prevDiscount = computeDiscountAmount(prevSubtotal, prev.discountType || 'fixed', prev.discountValue || 0)
+        const taxableAmount = Math.max(0, prevSubtotal - prevDiscount) + (prev.deliveryCharge || 0) + (prev.serviceCharge || 0)
+        return { ...prev, tax: 0, total: taxableAmount, taxLines: [] }
+      })
+      return undefined
+    }
+
+    const discount = computeDiscountAmount(subtotal, invoice.discountType || 'fixed', invoice.discountValue || 0)
+    const lines = items.map((item, index) => {
+      const share = subtotal > 0 ? item.subtotal / subtotal : 0
+      const amount = Math.max(0, item.subtotal - discount * share)
+      return { lineId: String(index), amount, taxCategoryId: item.taxCategoryId || undefined }
+    })
+    const customerId = invoice.customerId && invoice.customerId !== 'walk-in' ? invoice.customerId : undefined
+
+    const requestId = ++previewRequestIdRef.current
+    const timeout = setTimeout(() => {
+      previewTax({
+        currency: orgData?.baseCurrency || 'PKR',
+        taxInclusive: !!orgData?.taxInclusivePricingDefault,
+        customerId,
+        lines,
+      })
+        .unwrap()
+        .then((result) => {
+          // Ignore a response for a since-superseded request (e.g. user kept typing).
+          if (previewRequestIdRef.current !== requestId) return
+          setInvoice(prev => {
+            const prevSubtotal = prev.items.reduce((sum, item) => sum + item.subtotal, 0)
+            const prevDiscount = computeDiscountAmount(prevSubtotal, prev.discountType || 'fixed', prev.discountValue || 0)
+            const taxableAmount = (prevSubtotal - prevDiscount) + (prev.deliveryCharge || 0) + (prev.serviceCharge || 0)
+            const total = taxableAmount + result.totalTax
+            return {
+              ...prev,
+              tax: result.totalTax,
+              total,
+              taxLines: result.taxBreakdownByCategory,
+              taxSystem,
+              taxInclusive: !!orgData?.taxInclusivePricingDefault,
+              paidAmount: (prev.type === 'cash' && !prev.splitPaymentMethod) ? total : prev.paidAmount,
+              balance: (prev.type === 'cash' && !prev.splitPaymentMethod) ? 0 : total - prev.paidAmount,
+            }
+          })
+        })
+        .catch(() => {
+          // Preview is best-effort display only — a failed preview leaves the last-known
+          // tax figure on screen rather than clearing it; save-time calculation is unaffected.
+        })
+    }, 400)
+
+    return () => clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    invoice.items,
+    invoice.discountType,
+    invoice.discountValue,
+    invoice.deliveryCharge,
+    invoice.serviceCharge,
+    invoice.customerId,
+    orgData?.taxSystem,
+    orgData?.baseCurrency,
+    orgData?.taxInclusivePricingDefault,
+  ])
+
   // Add product to invoice
   const addToInvoice = useCallback((product: Product, quantity: number = 1, variantId?: string) => {
     // Get the product ID - try different possible field names
@@ -933,6 +1077,7 @@ export default function InvoicePage() {
         variantId,
         batchId,
         batchNumber,
+        taxCategoryId: product.taxCategoryId ?? null,
         name: product.name,
         nameUrdu: product.nameUrdu,
         image: product.image,
@@ -1454,6 +1599,9 @@ export default function InvoicePage() {
       type: invoiceData.type || 'cash',
       subtotal: invoiceData.subtotal || 0,
       tax: invoiceData.tax || 0,
+      taxLines: invoiceData.taxLines || [],
+      taxSystem: invoiceData.taxSystem,
+      taxInclusive: invoiceData.taxInclusive,
       discountType: invoiceData.discountType || 'fixed',
       discountValue: invoiceData.discountValue || 0,
       discount: invoiceData.discount || 0,

@@ -86,6 +86,8 @@ import {
 } from '@/components/ui/tooltip'
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-preferences'
 import { formatImeiEntries } from '@/stores/imei.api'
+import { TaxBreakdownSummary } from './tax-breakdown-summary'
+import type { TaxLine } from '@/stores/taxCalculator.api'
 
 interface InvoiceListProps {
   onBack?: () => void
@@ -348,6 +350,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         type: invoice.type,
         subtotal: invoice.subtotal || 0,
         tax: invoice.tax || 0,
+        taxLines: invoice.taxLines || [],
         discount: invoice.discount || 0,
         total: invoice.total || 0,
         paidAmount: invoice.paidAmount || 0,
@@ -1197,6 +1200,21 @@ function InvoiceDetails({
           <Label className="text-xs">{t('tax')}</Label>
           <p className="font-bold">{formatMoney(invoice.tax || 0)}</p>
         </div>
+        {(() => {
+          // Only worth an extra breakdown row for a genuinely multi-component tax (e.g. US
+          // state+county+city stacking) — a single flat VAT/GST rate is already fully
+          // represented by the tile above, so don't repeat it.
+          if (!invoice.taxSystem || invoice.taxSystem === 'NONE') return null
+          const taxLines: TaxLine[] = invoice.taxLines || []
+          const totalComponents = taxLines.reduce((sum, line) => sum + (line.components?.length || 0), 0)
+          if (taxLines.length <= 1 && totalComponents <= 1) return null
+          return (
+            <div className="col-span-2">
+              <Label className="text-xs">{t('Tax Breakdown')}</Label>
+              <TaxBreakdownSummary taxLines={taxLines} totalTax={invoice.tax || 0} compact />
+            </div>
+          )
+        })()}
         {(() => {
           const itemDiscountTotal = (invoice.items || []).reduce((sum: number, item: any) => sum + Number(item.discountAmount || 0), 0)
           return itemDiscountTotal > 0 ? (

@@ -6,6 +6,7 @@ import { getPurchaseItemDisplayName } from '@/features/purchase-invoice/utils/pu
 import { PAPER_FORMATS, withPrintOrientation, type PaperSize, type PrintOrientation, type SheetSize } from '@/features/invoice/utils/paper-format'
 import { INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import type { CurrencyOption } from '@/stores/localization.api'
+import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
 
 export type { PaperSize }
 export type { InvoiceTemplate }
@@ -80,6 +81,8 @@ const resolvePaymentType = (purchase: any): string => {
 const resolveTotalAmount = (purchase: any): number =>
   Number(purchase?.totalAmount ?? purchase?.total ?? 0)
 
+const resolveTaxAmount = (purchase: any): number => Number(purchase?.tax || 0)
+
 const resolvePaidAmount = (purchase: any): number =>
   Number(purchase?.paidAmount || 0)
 
@@ -103,12 +106,19 @@ export function generatePurchaseInvoiceHTML(
   const paymentType = resolvePaymentType(purchase)
   const itemsSubtotal = items.reduce((sum: number, item: any) => sum + resolveLineTotal(item), 0)
   const overallDiscount = resolveOverallDiscount(purchase)
+  const tax = resolveTaxAmount(purchase)
 
   const language = resolvePurchasePrintLanguage(purchase, languageOverride, printInUrdu)
   const labels = purchaseReceiptLabels[language]
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
   const dir = language === 'ur' ? 'rtl' : 'ltr'
   const startAlign = language === 'ur' ? 'right' : 'left'
+  const taxRowsHtml = buildTaxBreakdownHtml(
+    purchase?.taxLines,
+    tax,
+    labels.tax,
+    (label, amount, indent) => `<div class="total-row"${indent ? ' style="padding-left: 8px;"' : ''}><span>${label}:</span><span>${fmt(amount)}</span></div>`
+  )
 
   const englishTitle = (branchDetails?.name ?? '').trim() || labels.not_available
   const urduTitle = (branchDetails?.nameUrdu ?? '').trim()
@@ -227,6 +237,7 @@ export function generatePurchaseInvoiceHTML(
 
   <div class="totals-section">
     ${overallDiscount > 0 ? `<div class="total-row"><span>${labels.discount}:</span><span>-${fmt(overallDiscount)}</span></div>` : ''}
+    ${taxRowsHtml}
     <div class="total-row total-final"><span>${labels.total}:</span><span>${fmt(totalAmount)}</span></div>
   </div>
 
@@ -280,6 +291,7 @@ export function generatePurchaseInvoiceA4HTML(
   const paymentType = resolvePaymentType(purchase)
   const itemsSubtotal = items.reduce((sum: number, item: any) => sum + resolveLineTotal(item), 0)
   const overallDiscount = resolveOverallDiscount(purchase)
+  const tax = resolveTaxAmount(purchase)
 
   const language = resolvePurchasePrintLanguage(purchase, languageOverride, printInUrdu)
   const labels = purchaseReceiptLabels[language]
@@ -287,6 +299,12 @@ export function generatePurchaseInvoiceA4HTML(
   const dir = language === 'ur' ? 'rtl' : 'ltr'
   const startAlign = language === 'ur' ? 'right' : 'left'
   const endAlign = language === 'ur' ? 'left' : 'right'
+  const taxRowsHtml = buildTaxBreakdownHtml(
+    purchase?.taxLines,
+    tax,
+    labels.tax,
+    (label, amount, indent) => `<tr><td class="total-label"${indent ? ' style="padding-left: 12px;"' : ''}>${label}:</td><td class="total-amount">${fmt(amount)}</td></tr>`
+  )
 
   const englishTitle = (branchDetails?.name ?? '').trim() || labels.not_available
   const urduTitle = (branchDetails?.nameUrdu ?? '').trim()
@@ -418,6 +436,7 @@ export function generatePurchaseInvoiceA4HTML(
     <table class="totals-table">
       <tr><td class="total-label">${labels.subtotal}:</td><td class="total-amount">${fmt(itemsSubtotal)}</td></tr>
       ${overallDiscount > 0 ? `<tr><td class="total-label">${labels.discount}:</td><td class="total-amount">-${fmt(overallDiscount)}</td></tr>` : ''}
+      ${taxRowsHtml}
       <tr class="final-total"><td class="total-label">${labels.total}:</td><td class="total-amount" style="font-size: 16px; font-weight: bold;">${fmt(totalAmount)}</td></tr>
     </table>
   </div>

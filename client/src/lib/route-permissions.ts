@@ -124,6 +124,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/settings/currency', anyPermission: ['viewLocalizationSettings'] },
   { prefix: '/settings/tax-categories', anyPermission: ['viewTaxCategories'] },
   { prefix: '/settings/tax-rates', anyPermission: ['viewTaxRates'] },
+  { prefix: '/settings/tax-jurisdictions', anyPermission: ['viewTaxJurisdictions'] },
   { prefix: '/settings/tax-exemptions', anyPermission: ['viewTaxExemptions'] },
   { prefix: '/settings/exchange-rates', anyPermission: ['viewExchangeRates'] },
   { prefix: '/settings', anyPermission: ['viewSettings'] },
