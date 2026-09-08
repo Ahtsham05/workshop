@@ -1,6 +1,19 @@
 const fs = require('fs');
-const puppeteer = require('puppeteer-core');
 const { formatMoney: formatMoneyWithMeta, FALLBACK_CURRENCY_META, getCurrencyMeta } = require('../../utils/money');
+
+// puppeteer-core ships ESM-only (no CommonJS build) as of v25 — a plain top-level
+// require('puppeteer-core') crashes this whole require chain (app.js -> routes -> ... ->
+// invoice.service.js -> here) with ERR_REQUIRE_ESM on any Node version without native
+// require(esm) support (Node 18, still common in dev). Loaded lazily via dynamic import()
+// instead, which works from CommonJS on every supported Node version, and only pays the
+// (cached) import cost the first time a PDF is actually generated.
+let puppeteerModulePromise = null;
+function getPuppeteerModule() {
+  if (!puppeteerModulePromise) {
+    puppeteerModulePromise = import('puppeteer-core');
+  }
+  return puppeteerModulePromise;
+}
 
 // puppeteer-core ships no bundled Chromium — resolve an installed browser binary.
 // Set PUPPETEER_EXECUTABLE_PATH on deploy targets (e.g. Render) that don't ship Chrome.
@@ -26,6 +39,7 @@ let sharedBrowser = null;
 
 async function getBrowser() {
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
+    const puppeteer = await getPuppeteerModule();
     sharedBrowser = await puppeteer.launch({
       headless: true,
       executablePath: resolveExecutablePath(),
