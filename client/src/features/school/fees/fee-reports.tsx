@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip as HoverTooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   TrendingUp, TrendingDown, BarChart2, Printer, FileText, Download, FileSpreadsheet,
   BookOpen, GraduationCap, DollarSign, PieChart, Activity, Briefcase,
@@ -248,52 +247,95 @@ function SubTabBar({ items, active, onChange }: { items: { key: string; label: s
 // ─── Fee Collection Tab ───────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 
-// One student/month cell. When the month combines more than one fund (e.g. a
-// monthly Tuition Fee voucher plus a Paper Fund voucher), the total is shown
-// with a hover breakdown naming each fund and its own paid/net amount instead
-// of just a single opaque number.
-function FeeMonthCell({ entry, isCurrent, formatMoney }: { entry: any; isCurrent: boolean; formatMoney: (n: number) => string }) {
+// One student/month cell. Extra funds (e.g. "Examination Fee") get their own
+// dedicated column elsewhere in the row, so this shows only the recurring
+// base fee's amount — excluding extraFundNames keeps it from being counted
+// (and shown) in two places at once.
+function FeeMonthCell({ entry, isCurrent, extraFundNames }: { entry: any; isCurrent: boolean; extraFundNames: string[] }) {
   const cellClass = `px-1 py-1.5 text-center ${isCurrent ? 'bg-blue-50/60' : ''}`;
 
   if (!entry) {
     return <td className={cellClass}><span className="text-muted-foreground/30">-</span></td>;
   }
 
-  const net = entry.netAmount || 0;
-  const paid = entry.paidAmount || 0;
-  const funds = (entry.funds || []) as { name: string; netAmount: number; paidAmount: number }[];
-  const hasBreakdown = funds.length > 1;
+  const { net, paid } = baseFundAmounts(entry, extraFundNames);
 
-  const amount =
-    net === 0 && paid === 0
-      ? <span className="text-muted-foreground font-medium" title={hasBreakdown ? undefined : 'Zero fee'}>0</span>
-      : entry.status === 'paid'
-        ? <span className="text-emerald-600 font-semibold" title={hasBreakdown ? undefined : 'Paid'}>{paid.toLocaleString()}</span>
-        : paid > 0
-          ? <span className="text-blue-600 font-medium" title={hasBreakdown ? undefined : `Partial: ${paid}/${net}`}>{paid.toLocaleString()}<span className="text-[9px] text-muted-foreground">/{net.toLocaleString()}</span></span>
-          : <span className="text-red-500 font-semibold" title={hasBreakdown ? undefined : 'Due'}>{net.toLocaleString()}</span>;
+  if (net === 0 && paid === 0) {
+    return <td className={cellClass}><span className="text-muted-foreground font-medium" title="Zero fee">0</span></td>;
+  }
 
-  if (!hasBreakdown) return <td className={cellClass}>{amount}</td>;
+  // Fully unpaid months render as a blank cell (per report requirement: only
+  // show an amount once something has actually been paid).
+  if (paid === 0) {
+    return <td className={cellClass}></td>;
+  }
 
   return (
     <td className={cellClass}>
-      <HoverTooltip>
-        <TooltipTrigger asChild>
-          <span className="cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2">
-            {amount}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="text-left">
-          <div className="space-y-1 min-w-[150px]">
-            {funds.map((f, i) => (
-              <div key={i} className="flex items-center justify-between gap-4 text-[11px]">
-                <span className="font-medium">{f.name}</span>
-                <span>{formatMoney(f.paidAmount)} / {formatMoney(f.netAmount)}</span>
-              </div>
-            ))}
-          </div>
-        </TooltipContent>
-      </HoverTooltip>
+      {paid >= net
+        ? <span className="text-emerald-600 font-semibold" title="Paid">{paid.toLocaleString()}</span>
+        : <span className="text-blue-600 font-medium" title={`Partial: ${paid}/${net}`}>{paid.toLocaleString()}<span className="text-[9px] text-muted-foreground">/{net.toLocaleString()}</span></span>}
+    </td>
+  );
+}
+
+// A class's students can be billed for extra, non-recurring funds alongside
+// their regular monthly fee (e.g. a one-off "Paper Fund" voucher). Each such
+// fund gets pulled out into its own year-wide column (see FundCell) instead
+// of being folded into that month's combined cell, so a student's Jan-Dec
+// cells (see FeeMonthCell/baseFundAmounts) show only the recurring fee and
+// never double up with a fund's dedicated column. The fund that appears in
+// the most student/month slots is treated as that recurring "base" fee.
+function getClassExtraFunds(cls: any): string[] {
+  const counts: Record<string, number> = {};
+  cls.students.forEach((s: any) => {
+    MONTHS.forEach((m) => {
+      (s.months[m]?.funds || []).forEach((f: { name: string }) => {
+        counts[f.name] = (counts[f.name] || 0) + 1;
+      });
+    });
+  });
+  const names = Object.keys(counts);
+  if (names.length <= 1) return [];
+  const baseFund = names.reduce((a, b) => (counts[b] > counts[a] ? b : a), names[0]);
+  return names.filter((n) => n !== baseFund);
+}
+
+// A month entry's net/paid amount with every extra fund's own share removed,
+// leaving just the recurring base fee (falls back to the entry's raw totals
+// when there's no per-fund breakdown or no extra funds to subtract).
+function baseFundAmounts(entry: any, extraFundNames: string[]): { net: number; paid: number } {
+  if (!entry?.funds?.length || extraFundNames.length === 0) {
+    return { net: entry?.netAmount || 0, paid: entry?.paidAmount || 0 };
+  }
+  return entry.funds.reduce(
+    (acc: { net: number; paid: number }, f: { name: string; netAmount: number; paidAmount: number }) =>
+      extraFundNames.includes(f.name)
+        ? acc
+        : { net: acc.net + (f.netAmount || 0), paid: acc.paid + (f.paidAmount || 0) },
+    { net: 0, paid: 0 },
+  );
+}
+
+// Sums a single named fund's paid/net amount for a student across the whole
+// year. Renders the amount only once something has been paid toward it.
+function studentFundTotal(student: any, fundName: string): { paid: number; net: number } {
+  let paid = 0, net = 0;
+  MONTHS.forEach((m) => {
+    const f = (student.months[m]?.funds || []).find((x: { name: string }) => x.name === fundName);
+    if (f) { paid += f.paidAmount || 0; net += f.netAmount || 0; }
+  });
+  return { paid, net };
+}
+
+function FundCell({ student, fundName }: { student: any; fundName: string }) {
+  const { paid, net } = studentFundTotal(student, fundName);
+  if (paid === 0) return <td className="px-1 py-1.5 text-center"></td>;
+  return (
+    <td className="px-1 py-1.5 text-center">
+      {paid < net
+        ? <span className="text-blue-600 font-medium" title={`Partial: ${paid}/${net}`}>{paid.toLocaleString()}<span className="text-[9px] text-muted-foreground">/{net.toLocaleString()}</span></span>
+        : <span className="text-emerald-600 font-semibold" title="Paid">{paid.toLocaleString()}</span>}
     </td>
   );
 }
@@ -346,12 +388,26 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
           <Button variant="outline" size="sm" onClick={() => {
             if (!yearlyReport?.length) return;
             const rows: any[] = [];
-            yearlyReport.forEach((cls: any) => cls.students.forEach((s: any) => {
-              const row: any = { Class: cls.className, Name: s.name, 'Roll#': s.rollNumber, Father: s.fatherName, Phone: s.phone };
-              MONTHS.forEach((m) => { const e = s.months[m]; row[m.slice(0, 3)] = e ? (e.status === 'paid' ? e.paidAmount : e.paidAmount > 0 ? `${e.paidAmount}/${e.netAmount}` : `Due: ${e.netAmount}`) : '-'; });
-              row.Paid = s.totalPaid; row.Pending = s.totalPending;
-              rows.push(row);
-            }));
+            yearlyReport.forEach((cls: any) => {
+              const extraFunds = getClassExtraFunds(cls);
+              cls.students.forEach((s: any) => {
+                const row: any = { Class: cls.className, Name: s.name, 'Roll#': s.rollNumber, Father: s.fatherName, Phone: s.phone };
+                const setMonth = (m: string) => {
+                  const e = s.months[m];
+                  if (!e) { row[m.slice(0, 3)] = '-'; return; }
+                  const { net, paid } = baseFundAmounts(e, extraFunds);
+                  row[m.slice(0, 3)] = net === 0 && paid === 0 ? 0 : paid === 0 ? '' : paid < net ? `${paid}/${net}` : paid;
+                };
+                setMonth(MONTHS[0]);
+                extraFunds.forEach((f) => {
+                  const { paid, net } = studentFundTotal(s, f);
+                  row[f] = paid === 0 ? '' : paid < net ? `${paid}/${net}` : paid;
+                });
+                MONTHS.slice(1).forEach(setMonth);
+                row.Paid = s.totalPaid; row.Pending = s.totalPending;
+                rows.push(row);
+              });
+            });
             exportToExcel(rows, 'Fee Collection', `Fee_Collection_${year}`);
           }} disabled={!yearlyReport?.length}>
             <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" /> Excel
@@ -554,9 +610,11 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
       {/* ── Class-wise Detail ── */}
       {isLoading ? <Loading /> : !yearlyReport?.length ? <EmptyState text={`No fee data for ${year}`} /> : (
         yearlyReport.map((cls: any) => {
-          // per-month expected for this class
+          const extraFunds = getClassExtraFunds(cls);
+          // per-month expected for this class — base recurring fee only, since
+          // each extra fund already totals its own "Expected" via its column.
           const clsMonthExpected = MONTHS.reduce((acc: Record<string, number>, m) => {
-            acc[m] = cls.students.reduce((s: number, st: any) => s + (st.months[m]?.netAmount || 0), 0);
+            acc[m] = cls.students.reduce((s: number, st: any) => s + baseFundAmounts(st.months[m], extraFunds).net, 0);
             return acc;
           }, {});
           return (
@@ -593,7 +651,15 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                       <th className="text-left px-2 py-2 font-semibold text-[11px] min-w-[60px]">Roll#</th>
                       <th className="text-left px-2 py-2 font-semibold text-[11px] min-w-[130px]">Father Name</th>
                       <th className="text-left px-2 py-2 font-semibold text-[11px] min-w-[100px]">Phone</th>
-                      {MONTHS.map((m) => (
+                      <th className={`text-center px-1 py-2 font-semibold text-[10px] min-w-[64px] ${MONTHS[0] === month ? 'bg-blue-50 text-blue-700' : ''}`}>
+                        {MONTHS[0].slice(0, 3)}
+                      </th>
+                      {extraFunds.map((f) => (
+                        <th key={f} className="text-center px-1 py-2 font-semibold text-[10px] min-w-[70px] text-indigo-700">
+                          {f}
+                        </th>
+                      ))}
+                      {MONTHS.slice(1).map((m) => (
                         <th key={m} className={`text-center px-1 py-2 font-semibold text-[10px] min-w-[64px] ${m === month ? 'bg-blue-50 text-blue-700' : ''}`}>
                           {m.slice(0, 3)}
                         </th>
@@ -610,8 +676,12 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                         <td className="px-2 py-1.5 text-muted-foreground">{s.rollNumber || '-'}</td>
                         <td className="px-2 py-1.5 text-muted-foreground">{s.fatherName || '-'}</td>
                         <td className="px-2 py-1.5 text-muted-foreground">{s.phone || '-'}</td>
-                        {MONTHS.map((m) => (
-                          <FeeMonthCell key={m} entry={s.months[m]} isCurrent={m === month} formatMoney={formatMoney} />
+                        <FeeMonthCell entry={s.months[MONTHS[0]]} isCurrent={MONTHS[0] === month} extraFundNames={extraFunds} />
+                        {extraFunds.map((f) => (
+                          <FundCell key={f} student={s} fundName={f} />
+                        ))}
+                        {MONTHS.slice(1).map((m) => (
+                          <FeeMonthCell key={m} entry={s.months[m]} isCurrent={m === month} extraFundNames={extraFunds} />
                         ))}
                         <td className="px-2 py-1.5 text-right font-semibold text-emerald-600">{(s.totalPaid || 0).toLocaleString()}</td>
                         <td className="px-2 py-1.5 text-right font-semibold text-red-600">{s.totalPending > 0 ? s.totalPending.toLocaleString() : <span className="text-muted-foreground/40">-</span>}</td>
@@ -621,20 +691,42 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                   <tfoot>
                     <tr className="bg-muted/60 font-bold text-[11px]">
                       <td colSpan={5} className="px-2 py-2 sticky left-0 bg-muted/60">Class Total</td>
-                      {MONTHS.map((m) => {
-                        const mPaid = cls.students.reduce((s: number, st: any) => s + (st.months[m]?.paidAmount || 0), 0);
-                        const mExp = clsMonthExpected[m] || 0;
+                      {(() => {
+                        const renderMonthTotal = (m: string) => {
+                          const mPaid = cls.students.reduce((s: number, st: any) => s + baseFundAmounts(st.months[m], extraFunds).paid, 0);
+                          const mExp = clsMonthExpected[m] || 0;
+                          return (
+                            <td key={m} className={`px-1 py-2 text-center ${m === month ? 'bg-blue-50' : ''}`}>
+                              {mExp > 0 ? (
+                                <div>
+                                  <div className={mPaid > 0 ? 'text-emerald-700' : 'text-muted-foreground/50'}>{mPaid > 0 ? mPaid.toLocaleString() : '-'}</div>
+                                  {mExp !== mPaid && <div className="text-[9px] text-purple-600">/{mExp.toLocaleString()}</div>}
+                                </div>
+                              ) : '-'}
+                            </td>
+                          );
+                        };
                         return (
-                          <td key={m} className={`px-1 py-2 text-center ${m === month ? 'bg-blue-50' : ''}`}>
-                            {mExp > 0 ? (
-                              <div>
-                                <div className={mPaid > 0 ? 'text-emerald-700' : 'text-muted-foreground/50'}>{mPaid > 0 ? mPaid.toLocaleString() : '-'}</div>
-                                {mExp !== mPaid && <div className="text-[9px] text-purple-600">/{mExp.toLocaleString()}</div>}
-                              </div>
-                            ) : '-'}
-                          </td>
+                          <>
+                            {renderMonthTotal(MONTHS[0])}
+                            {extraFunds.map((f) => {
+                              const fPaid = cls.students.reduce((s: number, st: any) => s + studentFundTotal(st, f).paid, 0);
+                              const fNet = cls.students.reduce((s: number, st: any) => s + studentFundTotal(st, f).net, 0);
+                              return (
+                                <td key={f} className="px-1 py-2 text-center">
+                                  {fPaid > 0 ? (
+                                    <div>
+                                      <div className="text-emerald-700">{fPaid.toLocaleString()}</div>
+                                      {fNet !== fPaid && <div className="text-[9px] text-purple-600">/{fNet.toLocaleString()}</div>}
+                                    </div>
+                                  ) : ''}
+                                </td>
+                              );
+                            })}
+                            {MONTHS.slice(1).map(renderMonthTotal)}
+                          </>
                         );
-                      })}
+                      })()}
                       <td className="px-2 py-2 text-right text-emerald-700">{cls.classTotalPaid?.toLocaleString()}</td>
                       <td className="px-2 py-2 text-right text-red-700">{cls.classTotalPending > 0 ? cls.classTotalPending.toLocaleString() : '-'}</td>
                     </tr>
@@ -1968,26 +2060,53 @@ function printFeeReport(reportData: any[], schoolName: string, year: number) {
   if (!win) { toast.error('Allow pop-ups to print'); return; }
 
   const classPages = reportData.map((cls: any) => {
+    const extraFunds = getClassExtraFunds(cls);
+    const monthCell = (entry: any) => {
+      if (!entry) return '<td class="mc">-</td>';
+      const { net, paid } = baseFundAmounts(entry, extraFunds);
+      if (net === 0 && paid === 0) return '<td class="mc">0</td>';
+      if (paid === 0) return '<td class="mc"></td>';
+      if (paid >= net) return `<td class="mc paid">${paid.toLocaleString()}</td>`;
+      return `<td class="mc partial">${paid.toLocaleString()}</td>`;
+    };
+    const fundCell = (s: any, f: string) => {
+      const { paid } = studentFundTotal(s, f);
+      return paid === 0 ? '<td class="mc"></td>' : `<td class="mc paid">${paid.toLocaleString()}</td>`;
+    };
+
     const rows = cls.students.map((s: any, idx: number) => {
-      const monthCells = MONTHS.map((m) => {
-        const entry = s.months[m];
-        if (!entry) return '<td class="mc">-</td>';
-        if (entry.status === 'paid') return `<td class="mc paid">${entry.paidAmount.toLocaleString()}</td>`;
-        if (entry.paidAmount > 0) return `<td class="mc partial">${entry.paidAmount.toLocaleString()}</td>`;
-        return `<td class="mc unpaid">${entry.netAmount.toLocaleString()}</td>`;
-      }).join('');
+      const monthCells = monthCell(s.months[MONTHS[0]])
+        + extraFunds.map((f) => fundCell(s, f)).join('')
+        + MONTHS.slice(1).map((m) => monthCell(s.months[m])).join('');
       return `<tr><td class="sno">${idx + 1}</td><td class="name">${s.name}</td><td>${s.rollNumber || '-'}</td><td>${s.fatherName || '-'}</td><td>${s.phone || '-'}</td>${monthCells}<td class="tot paid">${s.totalPaid.toLocaleString()}</td><td class="tot unpaid">${s.totalPending > 0 ? s.totalPending.toLocaleString() : '-'}</td></tr>`;
     }).join('');
 
-    const footerCells = MONTHS.map((m) => {
-      let t = 0; cls.students.forEach((s: any) => { if (s.months[m]) t += s.months[m].paidAmount; });
+    const monthFooterCell = (m: string) => {
+      const t = cls.students.reduce((s: number, st: any) => s + baseFundAmounts(st.months[m], extraFunds).paid, 0);
       return `<td class="mc ftot">${t > 0 ? t.toLocaleString() : '-'}</td>`;
-    }).join('');
+    };
+    const fundFooterCell = (f: string) => {
+      const t = cls.students.reduce((s: number, st: any) => s + studentFundTotal(st, f).paid, 0);
+      return `<td class="mc ftot">${t > 0 ? t.toLocaleString() : ''}</td>`;
+    };
+    const footerCells = monthFooterCell(MONTHS[0])
+      + extraFunds.map(fundFooterCell).join('')
+      + MONTHS.slice(1).map(monthFooterCell).join('');
 
-    return `<div class="page"><div class="header"><h1>${schoolName}</h1><h2>Fee Collection Report - ${year}</h2><h3>Class: ${cls.className} | Students: ${cls.totalStudents}</h3></div><table><thead><tr><th class="sno">#</th><th class="name">Student</th><th>Roll#</th><th>Father</th><th>Phone</th>${MONTHS.map((m) => `<th class="mh">${m.slice(0, 3)}</th>`).join('')}<th class="toth">Paid</th><th class="toth">Pending</th></tr></thead><tbody>${rows}</tbody><tfoot><tr class="frow"><td colspan="5" class="ftlabel">Total</td>${footerCells}<td class="ftot paid">${cls.classTotalPaid.toLocaleString()}</td><td class="ftot unpaid">${cls.classTotalPending.toLocaleString()}</td></tr></tfoot></table><div class="footer"><span>Printed: ${new Date().toLocaleDateString()}</span><span>${schoolName}</span></div></div>`;
+    const monthHeaders = `<th class="mh">${MONTHS[0].slice(0, 3)}</th>`
+      + extraFunds.map((f) => `<th class="mh">${f}</th>`).join('')
+      + MONTHS.slice(1).map((m) => `<th class="mh">${m.slice(0, 3)}</th>`).join('');
+
+    // The total row is a plain tbody row, not a <tfoot> — a real <tfoot> is
+    // repeated by the browser at the bottom of every printed page a table
+    // spans across, which would show the class total on every sheet instead
+    // of once at the end of that class's table.
+    const totalRow = `<tr class="frow"><td colspan="5" class="ftlabel">Total</td>${footerCells}<td class="ftot paid">${cls.classTotalPaid.toLocaleString()}</td><td class="ftot unpaid">${cls.classTotalPending.toLocaleString()}</td></tr>`;
+
+    return `<div class="page"><div class="header"><h1>${schoolName}</h1><h2>Fee Collection Report - ${year}</h2><h3>Class: ${cls.className} | Students: ${cls.totalStudents}</h3></div><table><thead><tr><th class="sno">#</th><th class="name">Student</th><th>Roll#</th><th>Father</th><th>Phone</th>${monthHeaders}<th class="toth">Paid</th><th class="toth">Pending</th></tr></thead><tbody>${rows}${totalRow}</tbody></table><div class="footer"><span>Printed: ${new Date().toLocaleDateString()}</span><span>${schoolName}</span></div></div>`;
   }).join('');
 
-  win.document.write(`<!DOCTYPE html><html><head><title>Fee Report</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:8px;color:#000;background:#fff}.page{width:297mm;padding:8mm 6mm;page-break-after:always}.page:last-child{page-break-after:auto}.header{text-align:center;margin-bottom:6px}.header h1{font-size:16px;font-weight:900;text-transform:uppercase}.header h2{font-size:11px;font-weight:700}.header h3{font-size:10px;color:#444}table{width:100%;border-collapse:collapse;margin-top:4px}th,td{border:1px solid #999;padding:3px 4px}thead tr{background:#e8e8e8}th{font-size:7.5px;font-weight:700;text-transform:uppercase}th.sno{width:20px;text-align:center}th.name{min-width:100px}th.mh{text-align:center;width:48px}th.toth{text-align:right;width:52px}td.sno{text-align:center;color:#555;font-size:7px}td.name{font-weight:600;white-space:nowrap}td.mc{text-align:center;font-size:7.5px}td.mc.paid{color:#047857;font-weight:700}td.mc.partial{color:#2563eb;font-weight:600}td.mc.unpaid{color:#dc2626;font-weight:700}td.tot{text-align:right;font-weight:700;font-size:8px}td.tot.paid{color:#047857}td.tot.unpaid{color:#dc2626}tfoot tr.frow{background:#f3f3f3}td.ftlabel{font-weight:800;font-size:8px}td.ftot{text-align:center;font-weight:800;font-size:8px}td.ftot.paid{color:#047857;text-align:right}td.ftot.unpaid{color:#dc2626;text-align:right}tbody tr:nth-child(even){background:#fafafa}.footer{display:flex;justify-content:space-between;margin-top:6px;font-size:7px;color:#888;border-top:1px solid #ccc;padding-top:3px}@media print{@page{size:A4 landscape;margin:5mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${classPages}</body></html>`);
+  win.document.write(`<!DOCTYPE html><html><head><title>Fee Report</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:8px;color:#000;background:#fff}.page{width:297mm;padding:8mm 6mm;page-break-after:always}.page:last-child{page-break-after:auto}.header{text-align:center;margin-bottom:6px}.header h1{font-size:16px;font-weight:900;text-transform:uppercase}.header h2{font-size:11px;font-weight:700}.header h3{font-size:10px;color:#444}table{width:100%;border-collapse:collapse;margin-top:4px}th,td{border:1px solid #999;padding:3px 4px}thead tr{background:#e8e8e8}th{font-size:7.5px;font-weight:700;text-transform:uppercase}th.sno{width:20px;text-align:center}th.name{min-width:100px}th.mh{text-align:center;width:48px}th.toth{text-align:right;width:52px}td.sno{text-align:center;color:#555;font-size:7px}td.name{font-weight:600;white-space:nowrap}td.mc{text-align:center;font-size:7.5px}td.mc.paid{color:#047857;font-weight:700}td.mc.partial{color:#2563eb;font-weight:600}td.mc.unpaid{color:#dc2626;font-weight:700}td.tot{text-align:right;font-weight:700;font-size:8px}td.tot.paid{color:#047857}td.tot.unpaid{color:#dc2626}td.ftlabel{font-weight:800;font-size:8px}td.ftot{text-align:center;font-weight:800;font-size:8px}td.ftot.paid{color:#047857;text-align:right}td.ftot.unpaid{color:#dc2626;text-align:right}tbody tr:nth-child(even){background:#fafafa}tbody tr.frow{background:#f3f3f3;break-inside:avoid}.footer{display:flex;justify-content:space-between;margin-top:6px;font-size:7px;color:#888;border-top:1px solid #ccc;padding-top:3px}@media print{@page{size:A4 landscape;margin:5mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${classPages}</body></html>`);
   win.document.close();
   win.focus();
   setTimeout(() => { win.print(); }, 600);
