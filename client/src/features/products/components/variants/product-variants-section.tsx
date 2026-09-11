@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Wand2 } from 'lucide-react'
 import { VariantAttributeSelector } from './variant-attribute-selector'
 import { VariantManagementTable } from './variant-management-table'
 import {
@@ -27,6 +29,7 @@ function skuPrefixFromName(name?: string): string {
  */
 export function ProductVariantsSection({ draftVariants, onDraftVariantsChange, productName }: Props) {
   const [selectedAttributes, setSelectedAttributes] = useState<SelectedAttribute[]>([])
+  const canGenerate = selectedAttributes.some((a) => a.values.length > 0)
 
   const handleGenerate = () => {
     const generated = generateVariantCombinations(selectedAttributes, skuPrefixFromName(productName))
@@ -41,22 +44,34 @@ export function ProductVariantsSection({ draftVariants, onDraftVariantsChange, p
     <div className='space-y-4'>
       <VariantAttributeSelector selected={selectedAttributes} onChange={setSelectedAttributes} />
 
-      <Button
-        type='button'
-        variant='outline'
-        size='sm'
-        disabled={selectedAttributes.every((a) => a.values.length === 0)}
-        onClick={handleGenerate}
-      >
-        Generate Variants
-      </Button>
+      <div className='flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-border/70 bg-muted/10 p-3'>
+        <p className='text-xs text-muted-foreground'>
+          {canGenerate
+            ? 'Builds one row below per combination of the values you picked above.'
+            : 'Pick at least one attribute value above, then generate a row for every combination.'}
+        </p>
+        <Button
+          type='button'
+          size='sm'
+          disabled={!canGenerate}
+          onClick={handleGenerate}
+          className='shrink-0 gap-1.5'
+        >
+          <Wand2 className='h-3.5 w-3.5' />
+          Generate Variants
+        </Button>
+      </div>
 
       {draftVariants.length > 0 && (
         <div className='space-y-2'>
-          <p className='text-sm font-medium'>
-            {draftVariants.length} variant{draftVariants.length === 1 ? '' : 's'} — fill in
-            SKU, barcode, pricing, and opening stock for each
-          </p>
+          <div className='flex items-center gap-2'>
+            <Badge variant='secondary' className='rounded-full px-2.5 font-semibold'>
+              {draftVariants.length}
+            </Badge>
+            <p className='text-sm font-medium'>
+              variant{draftVariants.length === 1 ? '' : 's'} — fill in SKU, barcode, pricing, and opening stock for each
+            </p>
+          </div>
           <VariantManagementTable rows={draftVariants} onChange={onDraftVariantsChange} />
         </div>
       )}

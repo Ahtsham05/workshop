@@ -35,6 +35,16 @@ const getOpeningStockImeis = catchAsync(async (req, res) => {
   res.send(records);
 });
 
+const getInStockImeis = catchAsync(async (req, res) => {
+  const { organizationId, branchId } = getBranchContext(req);
+  const records = await imeiService.getInStockImeisForProduct({
+    productId: req.query.productId,
+    organizationId,
+    branchId,
+  });
+  res.send(records);
+});
+
 const updateImei = catchAsync(async (req, res) => {
   const record = await imeiService.updateImei(req.params.imeiId, { ...req.body, updatedBy: req.user.id });
   res.send(record);
@@ -68,6 +78,7 @@ module.exports = {
   getImeis,
   getAvailableImeis,
   getOpeningStockImeis,
+  getInStockImeis,
   getImei,
   getStats,
   updateImei,

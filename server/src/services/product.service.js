@@ -501,7 +501,202 @@ const getCategoryBreakdown = async (filter) => {
  * @param {string} [options.fieldName] - Field name to search
  * @returns {Promise<QueryResult>}
  */
+// Columns the Products page can ask to sort by that can't be resolved by the shared
+// paginate.plugin.js's plain `.find().sort()` — `brand` needs a Brand doc's *name*
+// joined in (not the stored `brandId`), and `price`/`cost`/`stockQuantity`/`stockValue`
+// need to be VARIANT-AWARE: for a `hasVariants` product, the legacy Product.price/
+// cost/stockQuantity fields stay at stale/fallback values (often 0) — the real numbers
+// live on ProductVariant/Inventory and are what the table actually displays (via
+// getDisplayStock/getDisplayPriceValue, fed by attachVariantAggregates' variantStockTotal/
+// variantPriceRange below). Sorting by the raw fields would silently disagree with what's
+// on screen for any hasVariants product, so all of these route through
+// queryProductsWithComputedSort, which computes the same effective values inline. Every
+// other sortBy (the common case — no hasVariants products, or sorting by a field that's
+// never variant-specific like name/isActive/createdAt) keeps using the existing,
+// unmodified Product.paginate call.
+const COMPUTED_SORT_FIELDS = new Set(['stockValue', 'brand', 'price', 'cost', 'stockQuantity']);
+
+const parseSortFields = (sortBy) =>
+  String(sortBy || '')
+    .split(',')
+    .map((part) => part.split(':')[0].trim())
+    .filter(Boolean);
+
+/**
+ * Casts every ObjectId-bearing key `getProducts`'s filter can carry before an
+ * aggregate() $match — unlike .find()/paginate(), aggregate() skips Mongoose's
+ * automatic query casting, so a string id here would compare against the field's real
+ * ObjectId value and match nothing. Deliberately explicit about all five keys (not just
+ * the subset getProductStats happens to need) since this path can receive all of them
+ * at once from the Products page filter panel (category + subCategory + brand
+ * together) — missing any one silently zeroes results for that combination.
+ */
+const castComputedSortFilter = (filter) => {
+  const cast = { ...filter };
+  ['organizationId', 'branchId', 'brandId'].forEach((key) => {
+    if (cast[key] && mongoose.Types.ObjectId.isValid(cast[key])) {
+      cast[key] = new mongoose.Types.ObjectId(String(cast[key]));
+    }
+  });
+  ['categories._id', 'subCategories._id'].forEach((key) => {
+    if (cast[key] && mongoose.Types.ObjectId.isValid(cast[key])) {
+      cast[key] = new mongoose.Types.ObjectId(String(cast[key]));
+    }
+  });
+  return cast;
+};
+
+/**
+ * Same search behavior as paginate.plugin.js (`fieldName` comma-separated, regex
+ * `$or`), returned as its own $match stage instead of being spread into the main
+ * filter object — the plugin's `{...filter, $or: [...]}` approach silently overwrites
+ * any $or already on `filter` (e.g. applyCategoryFilter's "uncategorized" sentinel); a
+ * separate sequential $match stage ANDs the two instead of one clobbering the other.
+ */
+const buildComputedSortSearchMatch = (options) => {
+  if (!options.search || !options.fieldName) return null;
+  const raw = String(options.search).trim();
+  if (!raw) return null;
+  const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const fields = String(options.fieldName)
+    .split(',')
+    .map((f) => f.trim())
+    .filter(Boolean);
+  if (fields.length === 0) return null;
+  return { $or: fields.map((field) => ({ [field]: { $regex: escaped, $options: 'i' } })) };
+};
+
+// Field this app's sort keys map to once computed — 'price'/'cost'/'stockQuantity' sort
+// by their variant-aware EFFECTIVE value (see the $addFields below and
+// COMPUTED_SORT_FIELDS' comment), not the raw stored field, so they land in the exact
+// order the table's own columns display.
+const SORT_KEY_TO_MONGO_FIELD = {
+  brand: 'brandName',
+  price: 'effectivePrice',
+  cost: 'effectiveCost',
+  stockQuantity: 'effectiveStock',
+};
+
+/**
+ * Sort-by path for `stockValue`/`brand`/`price`/`cost`/`stockQuantity` — see
+ * COMPUTED_SORT_FIELDS above. Runs an aggregation purely to work out WHICH product ids
+ * belong on this page and in what order; it then re-fetches those as real Mongoose
+ * documents via Product.find(), so the response is built through the same
+ * populate/toJSON/attachVariantAggregates pipeline as the normal path and comes back
+ * byte-identical in shape.
+ *
+ * The `effectivePrice`/`effectiveCost`/`effectiveStock` $lookups below mirror
+ * attachVariantAggregates' own ProductVariant/Inventory aggregations exactly (same
+ * match/group shape, just scoped per-document instead of bulk-prefetched) — for a
+ * `hasVariants` product this is its lowest non-default variant's price/cost and its
+ * summed Inventory quantity, the SAME values getDisplayPriceValue/getDisplayStock
+ * resolve to for what the table actually shows. For a simple (non-variant) product it's
+ * just the product's own price/cost/stockQuantity, unchanged.
+ */
+const queryProductsWithComputedSort = async (filter, options) => {
+  const castFilter = castComputedSortFilter(filter);
+  const searchMatch = buildComputedSortSearchMatch(options);
+
+  const limit = options.limit && parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10;
+  const page = options.page && parseInt(options.page, 10) > 0 ? parseInt(options.page, 10) : 1;
+  const skip = (page - 1) * limit;
+
+  const sortStage = {};
+  String(options.sortBy || '')
+    .split(',')
+    .forEach((part) => {
+      const [field, order] = part.split(':').map((s) => s.trim());
+      if (!field) return;
+      const mongoKey = SORT_KEY_TO_MONGO_FIELD[field] || field;
+      sortStage[mongoKey] = order === 'desc' ? -1 : 1;
+    });
+  // Stable tiebreaker — without it, $skip/$limit pagination can duplicate or skip rows
+  // once several products tie on the sorted value.
+  sortStage._id = 1;
+
+  const pipeline = [
+    { $match: castFilter },
+    ...(searchMatch ? [{ $match: searchMatch }] : []),
+    { $lookup: { from: 'brands', localField: 'brandId', foreignField: '_id', as: '_brand' } },
+    {
+      $lookup: {
+        from: 'inventories',
+        let: { productId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$productId', '$$productId'] } } },
+          { $group: { _id: null, total: { $sum: '$quantity' } } },
+        ],
+        as: '_variantStock',
+      },
+    },
+    {
+      $lookup: {
+        from: 'productvariants',
+        let: { productId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ['$productId', '$$productId'] }, { $eq: ['$isDefault', false] }] } } },
+          { $group: { _id: null, minPrice: { $min: '$price' }, minCost: { $min: '$cost' } } },
+        ],
+        as: '_variantPriceRange',
+      },
+    },
+    {
+      $addFields: {
+        brandName: { $ifNull: [{ $arrayElemAt: ['$_brand.name', 0] }, ''] },
+        effectivePrice: {
+          $cond: [
+            '$hasVariants',
+            { $ifNull: [{ $arrayElemAt: ['$_variantPriceRange.minPrice', 0] }, 0] },
+            { $ifNull: ['$price', 0] },
+          ],
+        },
+        effectiveCost: {
+          $cond: [
+            '$hasVariants',
+            { $ifNull: [{ $arrayElemAt: ['$_variantPriceRange.minCost', 0] }, 0] },
+            { $ifNull: ['$cost', 0] },
+          ],
+        },
+        effectiveStock: {
+          $cond: [
+            '$hasVariants',
+            { $ifNull: [{ $arrayElemAt: ['$_variantStock.total', 0] }, 0] },
+            { $ifNull: ['$stockQuantity', 0] },
+          ],
+        },
+      },
+    },
+    { $addFields: { stockValue: { $multiply: ['$effectiveStock', '$effectiveCost'] } } },
+    { $sort: sortStage },
+    {
+      $facet: {
+        ids: [{ $skip: skip }, { $limit: limit }, { $project: { _id: 1 } }],
+        totalCount: [{ $count: 'count' }],
+      },
+    },
+  ];
+
+  const [agg] = await Product.aggregate(pipeline).allowDiskUse(true);
+  const orderedIds = (agg?.ids || []).map((d) => d._id);
+  const totalResults = agg?.totalCount?.[0]?.count ?? 0;
+
+  const docs = await Product.find({ _id: { $in: orderedIds } }).populate('brandId', 'name logo');
+  const byId = new Map(docs.map((doc) => [doc._id.toString(), doc]));
+  const results = orderedIds.map((id) => byId.get(id.toString())).filter(Boolean);
+
+  return {
+    results: await attachVariantAggregates(results),
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit),
+    totalResults,
+  };
+};
+
 const queryProducts = async (filter, options) => {
+  if (parseSortFields(options.sortBy).some((field) => COMPUTED_SORT_FIELDS.has(field))) {
+    return queryProductsWithComputedSort(filter, options);
+  }
   const populate = [].concat(options.populate || [], { path: 'brandId', select: 'name logo' });
   const products = await Product.paginate(filter, { ...options, populate });
   products.results = await attachVariantAggregates(products.results);

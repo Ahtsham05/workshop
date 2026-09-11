@@ -132,6 +132,12 @@ export const imeiApi = createApi({
       query: ({ productId }) => `/imeis/opening-stock?productId=${productId}`,
       providesTags: ['Imei'],
     }),
+    // Every currently in-stock unit of the product — opening stock AND purchase-received —
+    // for the product edit form's Serial Numbers / IMEI Numbers display and count.
+    getInStockImeis: builder.query<ImeiRecord[], { productId: string }>({
+      query: ({ productId }) => `/imeis/in-stock?productId=${productId}`,
+      providesTags: ['Imei'],
+    }),
     // Searchable, paginated IMEI list — powers the IMEI Tracking page
     getImeis: builder.query<ImeiListResponse, GetImeisParams | void>({
       query: (params: GetImeisParams = {}) => {
@@ -181,6 +187,7 @@ export const imeiApi = createApi({
 export const {
   useGetAvailableImeisQuery,
   useGetOpeningStockImeisQuery,
+  useGetInStockImeisQuery,
   useGetImeisQuery,
   useGetImeiByIdQuery,
   useGetImeiStatsQuery,

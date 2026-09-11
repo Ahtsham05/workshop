@@ -54,6 +54,7 @@ const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
   tags: false,
   shelfLocation: false,
   tracking: false,
+  createdAt: false,
 }
 
 // 'select' (bulk-select checkbox) always leads and 'actions' (row menu) always trails —
@@ -85,6 +86,16 @@ interface DataTableProps {
   /** Cumulative qty/value from every page before the current one — null/undefined
    *  hides the row (e.g. on page 1, or while it can't be reliably computed). */
   broughtForward?: { qty: number; value: number } | null
+  /** Controlled sorting state — pass this + `onSortingChange` together to have the
+   *  parent own sort state (e.g. to resolve it server-side across every page instead of
+   *  just the current one). Omit both to keep the table's own uncontrolled, client-side
+   *  sort (only reorders the rows in `data`), which is fine for a small, non-paginated
+   *  table like the dashboard's products report. */
+  sorting?: SortingState
+  onSortingChange?: (updater: SortingState | ((old: SortingState) => SortingState)) => void
+  /** When true, the table trusts `data`'s order as-is instead of re-sorting it
+   *  client-side — set this whenever `sorting`/`onSortingChange` are server-resolved. */
+  manualSorting?: boolean
 }
 
 export function ProductTable({
@@ -99,6 +110,9 @@ export function ProductTable({
   toolbarLeading,
   toolbarTrailing,
   broughtForward,
+  sorting: sortingProp,
+  onSortingChange: onSortingChangeProp,
+  manualSorting = false,
 }: DataTableProps) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(loadColumnVisibility)
@@ -108,7 +122,11 @@ export function ProductTable({
   )
   const [columnSizing, setColumnSizing] = usePersistedColumnSizing(COLUMN_SIZING_STORAGE_KEY)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-  const [sorting, setSorting] = useState<SortingState>([])
+  // Uncontrolled fallback for callers (e.g. the dashboard products report) that don't
+  // pass `sorting`/`onSortingChange` — see the DataTableProps doc comment above.
+  const [internalSorting, setInternalSorting] = useState<SortingState>([])
+  const sorting = sortingProp ?? internalSorting
+  const setSorting = onSortingChangeProp ?? setInternalSorting
   const { t, language } = useLanguage()
   const formatCurrency = useFormatMoney()
 
@@ -180,6 +198,12 @@ export function ProductTable({
     enableRowSelection: true,
     enableColumnResizing: true,
     columnResizeMode: 'onChange',
+    // Shift+click a column's Asc/Desc menu option (see data-table-column-header.tsx) to
+    // sort by multiple columns at once — the backend's sortBy already accepts a
+    // comma-separated list (see buildSortByParam in features/products/index.tsx), this
+    // just lets the table produce more than one SortingState entry. True is
+    // TanStack's own default; set explicitly now that multi-sort is actually exposed.
+    enableMultiSort: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -187,6 +211,7 @@ export function ProductTable({
     onColumnOrderChange: setColumnOrder,
     onColumnSizingChange: setColumnSizing,
     manualPagination: true,
+    manualSorting,
     pageCount: paggination.totalPage,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),

@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, X, Trash2 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Check, Layers, Plus, Tag, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { usePermissions } from '@/context/permission-context'
+import { toneColor, type StatCardTone } from '@/lib/stat-card-tones'
 import {
   useGetAllProductAttributesQuery,
   useCreateProductAttributeMutation,
@@ -21,6 +23,11 @@ interface Props {
   onChange: (selected: SelectedAttribute[]) => void
 }
 
+// Cycled per attribute (by its position in the org's attribute list) so Size, Color,
+// Volt etc. each keep a stable, distinct accent — makes multi-attribute products easy
+// to scan at a glance instead of every chip looking the same.
+const ATTRIBUTE_TONES: StatCardTone[] = ['violet', 'sky', 'emerald', 'amber', 'indigo', 'rose', 'cyan', 'orange']
+
 /** Pick which attributes (Size, Color, ...) apply to this product, and which values of each to use. */
 export function VariantAttributeSelector({ selected, onChange }: Props) {
   const { hasExplicitPermission } = usePermissions()
@@ -32,6 +39,11 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
   const [valueDraft, setValueDraft] = useState<Record<string, string>>({})
   const [newAttributeName, setNewAttributeName] = useState('')
   const [attributePendingDelete, setAttributePendingDelete] = useState<ProductAttribute | null>(null)
+
+  const toneFor = (name: string): StatCardTone => {
+    const index = attributes.findIndex((a) => a.name === name)
+    return ATTRIBUTE_TONES[Math.max(0, index) % ATTRIBUTE_TONES.length]
+  }
 
   const addNewAttribute = async () => {
     const name = newAttributeName.trim()
@@ -118,11 +130,21 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
   }
 
   if (isLoading) {
-    return <p className='text-sm text-muted-foreground'>Loading attributes…</p>
+    return (
+      <div className='space-y-2'>
+        <Skeleton className='h-4 w-20' />
+        <div className='flex gap-2'>
+          <Skeleton className='h-8 w-20 rounded-full' />
+          <Skeleton className='h-8 w-24 rounded-full' />
+          <Skeleton className='h-8 w-16 rounded-full' />
+        </div>
+      </div>
+    )
   }
 
   const newAttributeRow = !canManageAttributes ? null : (
-    <div className='flex items-center gap-2'>
+    <div className='flex items-center gap-1.5 rounded-lg border border-dashed border-border/70 bg-muted/20 p-1.5 focus-within:border-primary/50'>
+      <Plus className='ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground' />
       <Input
         placeholder='New attribute name, e.g. Size'
         value={newAttributeName}
@@ -134,16 +156,16 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
             addNewAttribute()
           }
         }}
-        className='h-8 max-w-xs'
+        className='h-7 max-w-[220px] flex-1 border-0 bg-transparent px-1 shadow-none focus-visible:ring-0'
       />
       <Button
         type='button'
         size='sm'
-        variant='outline'
+        variant='secondary'
         disabled={isCreatingAttribute || !newAttributeName.trim()}
         onClick={addNewAttribute}
+        className='h-7 shrink-0 px-2.5 text-xs'
       >
-        <Plus className='mr-1 h-3.5 w-3.5' />
         Add attribute
       </Button>
     </div>
@@ -151,106 +173,150 @@ export function VariantAttributeSelector({ selected, onChange }: Props) {
 
   if (attributes.length === 0) {
     return (
-      <div className='space-y-2'>
-        <p className='text-sm text-muted-foreground'>
+      <div className='space-y-3 rounded-xl border border-dashed border-border/70 bg-muted/10 px-6 py-8 text-center'>
+        <div className='mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'>
+          <Layers className='h-5 w-5' />
+        </div>
+        <p className='mx-auto max-w-sm text-sm text-muted-foreground'>
           No attributes defined yet for your organization. Create one below to start building
           variants (e.g. "Size", then add values like S/M/L once it's created).
         </p>
-        {newAttributeRow}
+        {newAttributeRow && <div className='mx-auto max-w-xs'>{newAttributeRow}</div>}
       </div>
     )
   }
 
   return (
     <div className='space-y-3'>
-      <div className='flex flex-wrap items-center gap-2'>
-        {attributes.map((attr) => (
-          <Badge
-            key={attr.id || attr._id}
-            variant={isAttributeSelected(attr.name) ? 'default' : 'outline'}
-            className='cursor-pointer select-none gap-1.5 px-3 py-1.5'
-            onClick={() => toggleAttribute(attr.name)}
-          >
-            {attr.name}
-            {canManageAttributes && (
-              <button
-                type='button'
-                title={`Delete "${attr.name}"`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setAttributePendingDelete(attr)
-                }}
-                className='rounded-full p-0.5 hover:bg-black/10'
+      <div className='space-y-2'>
+        <p className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'>Attributes</p>
+        <div className='flex flex-wrap items-center gap-2'>
+          {attributes.map((attr) => {
+            const isSelected = isAttributeSelected(attr.name)
+            const tone = toneFor(attr.name)
+            return (
+              <Badge
+                key={attr.id || attr._id}
+                variant='outline'
+                className={cn(
+                  'group cursor-pointer select-none gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all',
+                  isSelected ? 'border-transparent text-white shadow-sm' : 'border-border/70 bg-background hover:bg-muted'
+                )}
+                style={isSelected ? { backgroundColor: toneColor(tone) } : undefined}
+                onClick={() => toggleAttribute(attr.name)}
               >
-                <Trash2 className='h-3 w-3' />
-              </button>
-            )}
-          </Badge>
-        ))}
+                <Tag className='h-3 w-3' />
+                {attr.name}
+                {canManageAttributes && (
+                  <button
+                    type='button'
+                    title={`Delete "${attr.name}"`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAttributePendingDelete(attr)
+                    }}
+                    className={cn(
+                      'rounded-full p-0.5 opacity-0 transition-opacity group-hover:opacity-100',
+                      isSelected ? 'hover:bg-white/20' : 'hover:bg-muted-foreground/20'
+                    )}
+                  >
+                    <Trash2 className='h-3 w-3' />
+                  </button>
+                )}
+              </Badge>
+            )
+          })}
+        </div>
+        {newAttributeRow}
       </div>
-      {newAttributeRow}
 
       {selected.map((attr) => {
         const definition = attributes.find((a) => a.name === attr.name)
-        const availableValues = definition?.values || []
+        // Union with the product's own selection, not just the master list — a value
+        // just added via addCustomValue is selected immediately but only lands in the
+        // master list once its save round-trip resolves; this keeps it visible in the
+        // meantime instead of it briefly vanishing.
+        const availableValues = Array.from(new Set([...(definition?.values || []), ...attr.values]))
+        const tone = toneFor(attr.name)
         return (
-          <div key={attr.name} className='rounded-lg border border-border/60 p-3'>
-            <p className='mb-2 text-sm font-medium'>{attr.name} values</p>
-            <div className='mb-2 flex flex-wrap gap-3'>
-              {availableValues.map((value) => (
-                <div key={value} className='flex items-center gap-1.5 text-sm'>
-                  <label className='flex items-center gap-1.5'>
-                    <Checkbox
-                      checked={attr.values.includes(value)}
-                      onCheckedChange={() => toggleValue(attr.name, value)}
-                    />
-                    {value}
-                  </label>
-                  {canManageAttributes && (
-                    <button
-                      type='button'
-                      title={`Remove "${value}" from ${attr.name}`}
-                      onClick={() => definition && removeMasterValue(definition, value)}
-                      className='rounded-full p-0.5 text-muted-foreground hover:bg-muted-foreground/20'
-                    >
-                      <X className='h-3 w-3' />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {canManageAttributes && (
+          <div key={attr.name} className='overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm'>
+            <div className='flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2'>
               <div className='flex items-center gap-2'>
-                <Input
-                  placeholder={`Add a custom ${attr.name.toLowerCase()} value`}
-                  value={valueDraft[attr.name] || ''}
-                  showVoiceInput={false}
-                  onChange={(e) => setValueDraft((prev) => ({ ...prev, [attr.name]: e.target.value }))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addCustomValue(attr.name)
-                    }
-                  }}
-                  className='h-8 max-w-xs'
-                />
-                <Button type='button' size='sm' variant='outline' onClick={() => addCustomValue(attr.name)}>
-                  <Plus className='h-3.5 w-3.5' />
-                </Button>
+                <span className='h-2 w-2 shrink-0 rounded-full' style={{ backgroundColor: toneColor(tone) }} />
+                <p className='text-sm font-semibold'>{attr.name} values</p>
               </div>
-            )}
-            {attr.values.length > 0 && (
-              <div className='mt-2 flex flex-wrap gap-1.5'>
-                {attr.values.map((value) => (
-                  <Badge key={value} variant='secondary' className='gap-1 pr-1'>
-                    {value}
-                    <button type='button' onClick={() => toggleValue(attr.name, value)} className='ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20'>
-                      <X className='h-3 w-3' />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
+              <Badge variant='secondary' className='rounded-full font-normal'>
+                {attr.values.length} selected
+              </Badge>
+            </div>
+            <div className='space-y-2.5 p-3'>
+              {availableValues.length > 0 ? (
+                <div className='flex flex-wrap gap-1.5'>
+                  {availableValues.map((value) => {
+                    const isChecked = attr.values.includes(value)
+                    return (
+                      <Badge
+                        key={value}
+                        variant='outline'
+                        onClick={() => toggleValue(attr.name, value)}
+                        className={cn(
+                          'group cursor-pointer select-none gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-all',
+                          isChecked ? 'border-transparent text-white shadow-sm' : 'border-border/70 bg-background hover:bg-muted'
+                        )}
+                        style={isChecked ? { backgroundColor: toneColor(tone) } : undefined}
+                      >
+                        {isChecked && <Check className='h-3 w-3' />}
+                        {value}
+                        {canManageAttributes && (
+                          <button
+                            type='button'
+                            title={`Remove "${value}" from ${attr.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (definition) removeMasterValue(definition, value)
+                            }}
+                            className={cn(
+                              'rounded-full p-0.5 opacity-0 transition-opacity group-hover:opacity-100',
+                              isChecked ? 'hover:bg-white/20' : 'hover:bg-muted-foreground/20'
+                            )}
+                          >
+                            <X className='h-2.5 w-2.5' />
+                          </button>
+                        )}
+                      </Badge>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className='text-xs text-muted-foreground'>No values yet — add one below.</p>
+              )}
+              {canManageAttributes && (
+                <div className='flex items-center gap-1.5 rounded-lg border border-dashed border-border/70 bg-muted/20 p-1 focus-within:border-primary/50'>
+                  <Input
+                    placeholder={`Add a custom ${attr.name.toLowerCase()} value`}
+                    value={valueDraft[attr.name] || ''}
+                    showVoiceInput={false}
+                    onChange={(e) => setValueDraft((prev) => ({ ...prev, [attr.name]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addCustomValue(attr.name)
+                      }
+                    }}
+                    className='h-7 flex-1 border-0 bg-transparent px-1.5 text-xs shadow-none focus-visible:ring-0'
+                  />
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='secondary'
+                    className='h-7 shrink-0 px-2'
+                    onClick={() => addCustomValue(attr.name)}
+                  >
+                    <Plus className='h-3.5 w-3.5' />
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         )
       })}

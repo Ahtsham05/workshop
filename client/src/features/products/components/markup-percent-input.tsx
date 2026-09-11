@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import { Input } from '@/components/ui/input'
 import { Percent } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -11,6 +12,9 @@ interface MarkupPercentInputProps {
   className?: string
   /** Narrow layout for tight table cells (variant grid) — just the % input, no amount field. */
   compact?: boolean
+  /** Compact mode only — lets a caller (e.g. the variant table's Enter-to-advance chain) reach the underlying input. */
+  inputRef?: (el: HTMLInputElement | null) => void
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
 }
 
 // Native number-input spin buttons make a percent/amount field look like a stray
@@ -30,7 +34,7 @@ const noSpinner = '[appearance:textfield] [&::-webkit-outer-spin-button]:appeara
  * round-tripped value (e.g. "3" while typing "30"), while still freely refreshing
  * whichever margin field the user ISN'T currently typing in.
  */
-export function MarkupPercentInput({ cost, price, onPriceChange, className, compact }: MarkupPercentInputProps) {
+export function MarkupPercentInput({ cost, price, onPriceChange, className, compact, inputRef, onKeyDown }: MarkupPercentInputProps) {
   const [pct, setPct] = useState('')
   const [amount, setAmount] = useState('')
   const editingPctRef = useRef(false)
@@ -73,20 +77,28 @@ export function MarkupPercentInput({ cost, price, onPriceChange, className, comp
 
   const pctInput = (
     <Input
+      ref={inputRef}
       type='number'
       step='0.1'
-      placeholder={cost > 0 ? (compact ? 'Margin %' : '30') : '—'}
+      placeholder={cost > 0 ? (compact ? '0' : '30') : '—'}
       disabled={!cost || cost <= 0}
       value={pct}
       showVoiceInput={false}
       onChange={(e) => handlePctChange(e.target.value)}
       onBlur={() => { editingPctRef.current = false }}
-      className={cn('h-8 text-xs', noSpinner, compact ? 'w-full' : 'w-full pl-7')}
+      onKeyDown={onKeyDown}
+      className={cn('h-8 text-xs', noSpinner, compact ? 'w-full pl-5' : 'w-full pl-7')}
+      title='Margin %'
     />
   )
 
   if (compact) {
-    return <div className={className}>{pctInput}</div>
+    return (
+      <div className={cn('relative', className)}>
+        <Percent className='pointer-events-none absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground' />
+        {pctInput}
+      </div>
+    )
   }
 
   const amountInput = (

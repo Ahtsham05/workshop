@@ -109,6 +109,7 @@ const en: Record<string, string> = {
     "balance": "Balance",
     "total_products": "Total Products",
     "stock_value": "Stock Value",
+    "date_added": "Date Added",
     "total_sold_value": "Total Sales Value (Sold)",
     "total_cost_of_goods_sold": "Cost of Goods Sold",
     "cost_of_sold_items": "Cost of items sold in period",

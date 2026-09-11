@@ -11,6 +11,7 @@ router.use(auth(), branchScope());
 
 router.get('/available', validate(imeiValidation.getAvailableImeis), imeiController.getAvailableImeis);
 router.get('/opening-stock', validate(imeiValidation.getOpeningStockImeis), imeiController.getOpeningStockImeis);
+router.get('/in-stock', validate(imeiValidation.getInStockImeis), imeiController.getInStockImeis);
 router.get('/stats', imeiController.getStats);
 
 router.route('/').get(validate(imeiValidation.getImeis), imeiController.getImeis);

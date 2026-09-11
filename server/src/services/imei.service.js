@@ -64,6 +64,15 @@ const getOpeningStockImeisForProduct = async ({ productId, organizationId, branc
   return Imei.find({ productId, organizationId, branchId, purchaseId: null }).sort({ createdAt: -1 });
 };
 
+/** Used by the product edit form: every currently in-stock unit of the product, whether it
+ *  was entered as opening stock or received on a purchase invoice — so the editor's serial
+ *  list (and its count against Stock Quantity) reflects the product's real inventory instead
+ *  of only the opening-stock subset. Unlike getOpeningStockImeisForProduct, callers must not
+ *  treat this as the editable/submittable set — purchase-linked units are display-only here. */
+const getInStockImeisForProduct = async ({ productId, organizationId, branchId }) => {
+  return Imei.find({ productId, organizationId, branchId, status: 'in_stock' }).sort({ createdAt: -1 });
+};
+
 /** Each imeis[] entry is either a plain IMEI string, or a { imei, imei2 } pair for
  *  dual-SIM phones — normalized to a consistent shape before anything else runs. */
 const normalizeImeiEntry = (entry) => {
@@ -506,6 +515,7 @@ module.exports = {
   getImeisForPurchaseItem,
   getAvailableImeisForProduct,
   getOpeningStockImeisForProduct,
+  getInStockImeisForProduct,
   syncImeisForPurchaseItem,
   releaseImeisForPurchase,
   renameProductOnImeis,

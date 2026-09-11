@@ -80,6 +80,12 @@ const getOpeningStockImeis = {
   }),
 };
 
+const getInStockImeis = {
+  query: Joi.object().keys({
+    productId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 const updateImei = {
   params: Joi.object().keys({
     imeiId: Joi.string().custom(objectId).required(),
@@ -117,6 +123,7 @@ module.exports = {
   getImei,
   getAvailableImeis,
   getOpeningStockImeis,
+  getInStockImeis,
   updateImei,
   deleteImei,
   markLostOrStolen,

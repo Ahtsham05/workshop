@@ -33,7 +33,7 @@ import { useLanguage } from '@/context/language-context'
 import InlineBarcodeInput from '@/components/inline-barcode-input'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { Badge } from '@/components/ui/badge'
-import { X, Search, Check, Plus, Package, DollarSign, Barcode, Image as ImageIcon, Layers } from 'lucide-react'
+import { X, Search, Check, Plus, Package, DollarSign, Barcode, Image as ImageIcon, Layers, Lock } from 'lucide-react'
 import SmartInput from '@/components/smart-input.tsx'
 import {
   Command,
@@ -66,7 +66,8 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
 import { useUrduDisplay } from '@/context/urdu-display-context'
 import { EntityFormSection } from '@/components/entity-form-section'
-import { useGetOpeningStockImeisQuery, imeiApi } from '@/stores/imei.api'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useGetInStockImeisQuery, imeiApi } from '@/stores/imei.api'
 import { useGetProductQuery, productApi, useLazyLookupProductByCodeQuery } from '@/stores/product.api'
 import { ProductVariantsSection } from './variants/product-variants-section'
 import { VariantInventoryTable } from './variants/variant-inventory-table'
@@ -369,14 +370,23 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     form.setValue('trackBatch', !!freshProduct.trackBatch)
     form.setValue('trackExpiry', !!freshProduct.trackExpiry)
   }, [open, isEdit, freshProduct, form])
-  const { data: openingStockImeis } = useGetOpeningStockImeisQuery(
-    { productId: editingProductId },
+  // Everything currently in stock for this product — opening stock AND purchase-received —
+  // so the Serial Numbers / IMEI Numbers editor shows (and counts) the product's real
+  // inventory instead of only the units entered directly as opening stock.
+  const { data: inStockImeis } = useGetInStockImeisQuery(
+    { productId: editingProductId! },
     { skip: !open || !isEdit || !editingProductId },
   )
+  // Purchase-received units aren't editable here — the server's save-time sync only ever
+  // reconciles the purchaseId:null subset (see syncImeisForPurchaseItem) — so they're kept
+  // out of the form field and rendered read-only instead; only the opening-stock subset
+  // feeds the 'imeis' form field that actually gets submitted.
+  const purchasedImeis = (inStockImeis || []).filter((d) => !!d.purchaseId)
   useEffect(() => {
-    if (!open || !isEdit || !openingStockImeis) return
-    form.setValue('imeis', openingStockImeis.map((d) => (d.imei2 ? { imei: d.imei, imei2: d.imei2 } : d.imei)))
-  }, [open, isEdit, openingStockImeis, form])
+    if (!open || !isEdit || !inStockImeis) return
+    const openingStock = inStockImeis.filter((d) => !d.purchaseId)
+    form.setValue('imeis', openingStock.map((d) => (d.imei2 ? { imei: d.imei, imei2: d.imei2 } : d.imei)))
+  }, [open, isEdit, inStockImeis, form])
 
   useEffect(() => {
     if (!open || isEdit || !defaultName?.trim()) return
@@ -430,7 +440,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const onSubmit = async (values: productForm) => {
     if (values.trackImei || values.trackSerial) {
       const label = values.trackSerial ? 'serial' : 'IMEI'
-      const imeiCount = (values.imeis || []).length
+      // Purchase-received units count toward the total even though they aren't part of
+      // values.imeis (that field only carries the editable opening-stock subset — see
+      // the in-stock-IMEIs effect above).
+      const imeiCount = (values.imeis || []).length + purchasedImeis.length
       if (imeiCount !== values.stockQuantity) {
         toast.error(`Enter ${values.stockQuantity} ${label} number(s) — ${imeiCount} entered`)
         return
@@ -828,8 +841,13 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                       // Check both slots of every existing entry, not just its primary
                       // number — otherwise "112 / 12" already entered lets a second phone
                       // reuse "12" as its own primary IMEI undetected (they'd then be
-                      // treated as the same dual-SIM unit everywhere).
-                      const usedNumbers = new Set(imeis.flatMap((e) => [entryImei(e), entryImei2(e)].filter(Boolean)))
+                      // treated as the same dual-SIM unit everywhere). Also checked against
+                      // the read-only purchased units so a collision is caught here instead
+                      // of surfacing later as a save error.
+                      const usedNumbers = new Set([
+                        ...imeis.flatMap((e) => [entryImei(e), entryImei2(e)].filter(Boolean)),
+                        ...purchasedImeis.flatMap((r) => [r.imei, r.imei2].filter(Boolean)),
+                      ])
                       if (usedNumbers.has(cleaned) || (cleaned2 && usedNumbers.has(cleaned2))) {
                         toast.error(`This ${label} is already entered for another phone`)
                         return
@@ -868,7 +886,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         <FormControl>
                           <div className='space-y-2'>
                             <span className='text-xs font-medium text-amber-700'>
-                              {`${imeis.length}/${stockQuantity} entered`}
+                              {`${imeis.length + purchasedImeis.length}/${stockQuantity} entered`}
                             </span>
                             {isSerial ? (
                               <div className='flex items-center gap-2'>
@@ -910,8 +928,23 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                 </div>
                               </div>
                             )}
-                            {imeis.length > 0 && (
+                            {(imeis.length > 0 || purchasedImeis.length > 0) && (
                               <div className='flex flex-wrap gap-1.5'>
+                                {purchasedImeis.map((rec) => (
+                                  <Tooltip key={rec.id}>
+                                    <TooltipTrigger asChild>
+                                      <span className='inline-flex'>
+                                        <Badge variant='outline' className='gap-1 text-muted-foreground font-normal'>
+                                          <Lock className='h-3 w-3' />
+                                          {rec.imei2 ? `${rec.imei} · ${rec.imei2}` : rec.imei}
+                                        </Badge>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      Received via purchase — remove or edit it from that purchase invoice instead.
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ))}
                                 {imeis.map((entry, idx) => {
                                   const num = entryImei(entry)
                                   const num2 = entryImei2(entry)

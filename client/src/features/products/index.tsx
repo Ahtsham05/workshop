@@ -9,10 +9,11 @@ import { ImportBranchProductsBanner } from './components/import-branch-products-
 import { ProductStatCards } from './components/product-stat-cards'
 import { CategoryFilterCombobox, NO_CATEGORY_FILTER, ALL_CATEGORIES_BREAKDOWN, UNCATEGORIZED_CATEGORY } from './components/category-filter-combobox'
 import { CategoryBreakdown, type CategoryBreakdownRow } from './components/category-breakdown'
-import { ProductFiltersPanel, ALL_SUBCATEGORIES, ALL_BRANDS, NO_QUANTITY_OP, type QuantityFilter } from './components/product-filters-panel'
+import { ProductFiltersPanel, ALL_SUBCATEGORIES, ALL_BRANDS, NO_QUANTITY_OP, type QuantityFilter, type RangeFilter, type TrackingFilter } from './components/product-filters-panel'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import type { SortingState } from '@tanstack/react-table'
 import { fetchProducts, bulkUpdateProducts, fetchProductStats, fetchCategoryBreakdown } from '@/stores/product.slice'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import { fetchCategories } from '@/stores/category.slice'
@@ -43,6 +44,40 @@ const SEARCH_DEBOUNCE_MS = 400
 const ALL_STATUS = 'all'
 // Active products first, inactive last; newest-first within each group.
 const PRODUCTS_SORT_BY = 'isActive:desc,createdAt:desc'
+
+// Column ids the backend can sort by. `name`/`description`/`shelfLocation`/`barcode`/
+// `isActive`/`createdAt` map 1:1 onto a plain, indexable Product field (see
+// server/src/models/plugins/paginate.plugin.js's `field:asc|desc` format) and use the
+// fast, unmodified Product.paginate path. `brand`/`price`/`cost`/`stockQuantity`/
+// `stockValue` route through product.service.js#queryProductsWithComputedSort instead —
+// brand needs its name joined in (not the stored `brandId`), and the other four need to
+// be VARIANT-AWARE: for a `hasVariants` product, sorting by the raw Product field would
+// silently disagree with what the cell displays (variantPriceRange/variantStockTotal),
+// so that path resolves the same effective value the table shows. Columns left out of
+// this set entirely (categories, subCategories, tags, status, tracking) are arrays or
+// client-derived badges with no single sortable value — `enableSorting: false` on those
+// in users-columns.tsx keeps their header from offering a sort control that wouldn't do
+// anything once sorting is resolved server-side across the whole result set.
+const SERVER_SORTABLE_COLUMNS = new Set([
+  'name',
+  'description',
+  'shelfLocation',
+  'barcode',
+  'price',
+  'cost',
+  'stockQuantity',
+  'isActive',
+  'stockValue',
+  'brand',
+  'createdAt',
+])
+
+function buildSortByParam(sorting: SortingState): string {
+  const parts = sorting
+    .filter((s) => SERVER_SORTABLE_COLUMNS.has(s.id))
+    .map((s) => `${s.id}:${s.desc ? 'desc' : 'asc'}`)
+  return parts.length > 0 ? parts.join(',') : PRODUCTS_SORT_BY
+}
 
 export default function Products() {
   // Parse product list
@@ -78,11 +113,18 @@ export default function Products() {
   const [subCategoryFilter, setSubCategoryFilter] = useState(ALL_SUBCATEGORIES)
   const [brandFilter, setBrandFilter] = useState(ALL_BRANDS)
   const [quantityFilter, setQuantityFilter] = useState<QuantityFilter>({ op: NO_QUANTITY_OP, value: '' })
+  const [tagsFilter, setTagsFilter] = useState<string[]>([])
+  const [priceRange, setPriceRange] = useState<RangeFilter>({ min: '', max: '' })
+  const [costRange, setCostRange] = useState<RangeFilter>({ min: '', max: '' })
+  const [trackingFilter, setTrackingFilter] = useState<TrackingFilter>({ imei: false, serial: false })
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [categoryBreakdown, setCategoryBreakdown] = useState<CategoryBreakdownRow[]>([])
   const [loadingCategoryBreakdown, setLoadingCategoryBreakdown] = useState(false)
+  // Column-header sort — resolved server-side (see buildSortByParam) so it reorders the
+  // whole branch's product list, not just the ≤`limit` rows on the current page.
+  const [sorting, setSorting] = useState<SortingState>([])
 
   const isBreakdownMode = categoryFilter === ALL_CATEGORIES_BREAKDOWN
   // A real category id — not the "no filter" or "breakdown" sentinels.
@@ -179,7 +221,7 @@ export default function Products() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter])
+  }, [debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter])
 
   // Fetch paginated products for table display — skipped in breakdown mode, which
   // shows the per-category rollup instead of the flat table.
@@ -188,16 +230,27 @@ export default function Products() {
     setLoading(true)
     const q = debouncedSearch.trim()
     const hasQuantityFilter = quantityFilter.op !== NO_QUANTITY_OP && quantityFilter.value.trim() !== ''
+    const priceMin = priceRange.min.trim()
+    const priceMax = priceRange.max.trim()
+    const costMin = costRange.min.trim()
+    const costMax = costRange.max.trim()
     const params = {
       page: currentPage,
       limit: limit,
-      sortBy: PRODUCTS_SORT_BY,
+      sortBy: buildSortByParam(sorting),
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.product } : {}),
       ...(isSingleCategorySelected ? { category: categoryFilter } : {}),
       ...(subCategoryFilter !== ALL_SUBCATEGORIES ? { subCategory: subCategoryFilter } : {}),
       ...(brandFilter !== ALL_BRANDS ? { brandId: brandFilter } : {}),
       ...(hasQuantityFilter ? { stockQuantity: quantityFilter.value.trim(), stockQuantityOp: quantityFilter.op } : {}),
       ...(statusFilter !== ALL_STATUS ? { isActive: statusFilter === 'active' } : {}),
+      ...(tagsFilter.length > 0 ? { tags: tagsFilter.join(',') } : {}),
+      ...(priceMin ? { priceMin } : {}),
+      ...(priceMax ? { priceMax } : {}),
+      ...(costMin ? { costMin } : {}),
+      ...(costMax ? { costMax } : {}),
+      ...(trackingFilter.imei ? { trackImei: true } : {}),
+      ...(trackingFilter.serial ? { trackSerial: true } : {}),
     };
 
     dispatch(fetchProducts(params))
@@ -221,7 +274,7 @@ export default function Products() {
         setLoading(false)
         toast.error('Failed to fetch products')
       })
-  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, dispatch, isBreakdownMode, isSingleCategorySelected])
+  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, dispatch, isBreakdownMode, isSingleCategorySelected])
 
   // Category-wise rollup for the "All Categories" breakdown view — fetched only while
   // that mode is active.
@@ -659,6 +712,9 @@ export default function Products() {
               data={products}
               columns={columns}
               loading={loading}
+              sorting={sorting}
+              onSortingChange={setSorting}
+              manualSorting
               toolbarLeading={
                 <Input
                   autoFocus
@@ -690,6 +746,14 @@ export default function Products() {
                     onBrandChange={setBrandFilter}
                     quantity={quantityFilter}
                     onQuantityChange={setQuantityFilter}
+                    tags={tagsFilter}
+                    onTagsChange={setTagsFilter}
+                    priceRange={priceRange}
+                    onPriceRangeChange={setPriceRange}
+                    costRange={costRange}
+                    onCostRangeChange={setCostRange}
+                    tracking={trackingFilter}
+                    onTrackingChange={setTrackingFilter}
                   />
                   <AiScanButton />
                 </>

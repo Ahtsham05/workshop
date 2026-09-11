@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { useSetupOrganizationMutation, useLazyGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetCountriesQuery } from '@/stores/localization.api'
 import { setActiveBranch, setUser } from '@/stores/auth.slice'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
@@ -25,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Building2, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { BUSINESS_TYPE_OPTIONS } from '@/lib/business-types'
@@ -40,6 +42,7 @@ const formSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
+  countryCode: z.string().optional(),
   taxNumber: z.string().optional(),
   website: z.string().optional(),
   description: z.string().optional(),
@@ -55,6 +58,11 @@ export default function OnboardingPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [setupOrganization, { isLoading }] = useSetupOrganizationMutation()
   const [fetchMyOrganization] = useLazyGetMyOrganizationQuery()
+  const { data: countries } = useGetCountriesQuery()
+  const countryOptions = useMemo(
+    () => (countries || []).map((c) => ({ value: c.code, label: c.name })),
+    [countries]
+  )
   const authData = useSelector((state: RootState) => state.auth.data)
   // Guards the form behind a check for whether this account is already onboarded
   // server-side — the locally-cached `onboardingComplete` flag can go stale (e.g. a
@@ -119,6 +127,7 @@ export default function OnboardingPage() {
       address: '',
       city: '',
       country: '',
+      countryCode: '',
       taxNumber: '',
       website: '',
       description: '',
@@ -362,19 +371,21 @@ export default function OnboardingPage() {
                           </FormItem>
                         )}
                       />
-                      <FormField
-                        control={form.control}
-                        name="country"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Country</FormLabel>
-                            <FormControl>
-                              <Input placeholder="United States" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      <FormItem>
+                        <FormLabel>Country</FormLabel>
+                        <SearchableSelect
+                          options={countryOptions}
+                          value={form.watch('countryCode') || ''}
+                          onValueChange={(value) => {
+                            const selectedCountry = countries?.find((c) => c.code === value)
+                            form.setValue('countryCode', value, { shouldDirty: true })
+                            form.setValue('country', selectedCountry?.name || '', { shouldDirty: true })
+                          }}
+                          placeholder="Select country"
+                          searchPlaceholder="Search countries..."
+                        />
+                        <FormMessage />
+                      </FormItem>
                     </div>
                     <FormField
                       control={form.control}

@@ -158,7 +158,8 @@ const ProductSchema = new mongoose.Schema({
         default: null,
     },
 },{
-    timestamps: true
+    timestamps: true,
+    keepTimestampsInJSON: true,
 });
 
 // Pre-save middleware to handle empty barcode/sku values

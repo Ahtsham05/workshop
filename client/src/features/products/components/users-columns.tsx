@@ -16,6 +16,7 @@ import { useUrduDisplay } from '@/context/urdu-display-context'
 import { useProductDisplay } from '@/context/product-display-context'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
+import { formatDateSafe } from '@/lib/utils'
 import { getDisplayStockValue, getStockStatus } from '@/lib/product-stock-display'
 import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product'
 import { useFormatMoney } from '@/lib/format-money'
@@ -109,6 +110,9 @@ export const useProductColumns = (
   {
     accessorKey: 'categories',
     size: 180,
+    // No single backing field to sort by server-side (a product can have several) — see
+    // buildSortByParam in features/products/index.tsx.
+    enableSorting: false,
     header: ({ column }) => <DataTableColumnHeader column={column} title='categories' />,
     cell: ({ row }) => {
       const product = row.original
@@ -145,6 +149,7 @@ export const useProductColumns = (
   {
     accessorKey: 'subCategories',
     size: 180,
+    enableSorting: false,
     header: ({ column }) => <DataTableColumnHeader column={column} title='sub categories' />,
     cell: ({ row }) => {
       const product = row.original
@@ -182,6 +187,7 @@ export const useProductColumns = (
     id: 'tags',
     accessorFn: (product) => (product.tags || []).join(', '),
     size: 160,
+    enableSorting: false,
     header: ({ column }) => <DataTableColumnHeader column={column} title='tags' />,
     cell: ({ row }) => {
       const tags = row.original.tags || []
@@ -224,6 +230,8 @@ export const useProductColumns = (
     id: 'brand',
     accessorFn: (product) => (typeof product.brandId === 'object' && product.brandId ? product.brandId.name : ''),
     size: 150,
+    // brandId is a ref, so sorting it server-side needs the brand's name joined in — see
+    // product.service.js#queryProductsWithComputedSort.
     header: ({ column }) => <DataTableColumnHeader column={column} title='brand' />,
     cell: ({ row }) => {
       const brand = row.original.brandId
@@ -251,6 +259,9 @@ export const useProductColumns = (
   {
     accessorKey: 'price',
     size: 110,
+    // Sorted server-side via product.service.js#queryProductsWithComputedSort, which
+    // uses the same variantPriceRange.minPrice the range shown below comes from for a
+    // hasVariants product — sort order always matches what's displayed.
     header: ({ column }) => <DataTableColumnHeader column={column} title='price' />,
     cell: ({ row }) => {
       const product = row.original
@@ -269,6 +280,7 @@ export const useProductColumns = (
   {
     accessorKey: 'cost',
     size: 110,
+    // Same variant-aware sort as price above (variantPriceRange.minCost).
     header: ({ column }) => <DataTableColumnHeader column={column} title='cost' />,
     cell: ({ row }) => {
       const product = row.original
@@ -298,12 +310,19 @@ export const useProductColumns = (
         </Badge>
       )
     },
+    // Sorted server-side via product.service.js#queryProductsWithComputedSort, which
+    // resolves the same variant-aware value the cell above displays (variantStockTotal
+    // for hasVariants products, the raw field otherwise) — so the sort order always
+    // matches what's on screen, including for variant products.
     filterFn: (row, id, value) => value.includes(row.getValue(id)),
     enableSorting: true,
   },
   {
     id: 'stockValue',
     size: 130,
+    // Computed (effective stock × effective cost, both variant-aware) — resolved
+    // server-side via product.service.js#queryProductsWithComputedSort, the same place
+    // price/cost/stockQuantity sorting is resolved.
     header: ({ column }) => <DataTableColumnHeader column={column} title='stock_value' />,
     cell: ({ row }) => <div className='tabular-nums'>{formatCurrency(getDisplayStockValue(row.original))}</div>,
     enableHiding: true,
@@ -311,6 +330,9 @@ export const useProductColumns = (
   {
     id: 'status',
     size: 140,
+    // Derived from stockQuantity vs. the store's low/critical thresholds — no single
+    // backing field to sort by.
+    enableSorting: false,
     header: ({ column }) => <DataTableColumnHeader column={column} title='status' />,
     cell: ({ row }) => {
       const status = getStockStatus(row.original, lowStockThreshold, criticalStockThreshold)
@@ -349,6 +371,9 @@ export const useProductColumns = (
   {
     id: 'tracking',
     size: 190,
+    // Derived from trackImei/trackSerial/batch flags across variants — no single backing
+    // field to sort by.
+    enableSorting: false,
     header: ({ column }) => <DataTableColumnHeader column={column} title='tracking' />,
     cell: ({ row }) => {
       const product = row.original
@@ -400,6 +425,14 @@ export const useProductColumns = (
       if (badges.length === 0) return <span className='text-muted-foreground'>-</span>
       return <div className='flex flex-wrap gap-1'>{badges}</div>
     },
+    enableHiding: true,
+  },
+  {
+    accessorKey: 'createdAt',
+    id: 'createdAt',
+    size: 140,
+    header: ({ column }) => <DataTableColumnHeader column={column} title='date_added' />,
+    cell: ({ row }) => <div>{formatDateSafe(row.original.createdAt, 'MMM dd, yyyy')}</div>,
     enableHiding: true,
   },
 {

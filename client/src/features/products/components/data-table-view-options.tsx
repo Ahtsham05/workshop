@@ -41,6 +41,7 @@ export function DataTableViewOptions<TData>({
     'status': 'status',
     'isActive': 'Active',
     'tracking': 'tracking',
+    'createdAt': 'date_added',
     'actions': 'actions',
   }
 

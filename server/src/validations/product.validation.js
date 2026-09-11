@@ -115,6 +115,16 @@ const getProducts = {
     stockQuantity: Joi.number(),
     stockQuantityOp: Joi.string().valid('eq', 'lt', 'lte', 'gt', 'gte'),
     isActive: Joi.boolean(),
+    // Comma-separated, same convention as fieldName/sortBy below — not Joi.array(),
+    // since a lone `tags=a` query string stays a string under the default qs parser
+    // (only repeated keys get arrayed), and the frontend sends it comma-joined anyway.
+    tags: Joi.string(),
+    priceMin: Joi.number(),
+    priceMax: Joi.number(),
+    costMin: Joi.number(),
+    costMax: Joi.number(),
+    trackImei: Joi.boolean(),
+    trackSerial: Joi.boolean(),
     sortBy: Joi.string(),
     limit: Joi.number(),
     page: Joi.number(),

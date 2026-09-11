@@ -130,12 +130,47 @@ const applyStockQuantityFilter = (filter, valueParam, opParam) => {
   filter.stockQuantity = { [mongoOp]: value };
 };
 
+/** Matches ANY of the given tags (comma-separated from the Products page Tags filter). */
+const applyTagsFilter = (filter, tagsParam) => {
+  if (!tagsParam) return;
+  const tags = String(tagsParam)
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  if (tags.length > 0) {
+    filter.tags = { $in: tags };
+  }
+};
+
+/**
+ * Numeric min/max range (Price or Cost filter panel fields). Same caveat as
+ * applyStockQuantityFilter above: filters `Product.price`/`Product.cost` directly,
+ * which is accurate for simple products but NOT for `hasVariants` products — their real
+ * price/cost live in per-variant rows and only surface as `variantPriceRange` on the
+ * response, attached after this query runs (see attachVariantAggregates in
+ * product.service.js). A variant product is matched/excluded here by whatever
+ * legacy/fallback value sits in its own price/cost field, not its true variant range.
+ */
+const applyRangeFilter = (filter, field, minParam, maxParam) => {
+  const min = minParam !== undefined ? Number(minParam) : undefined;
+  const max = maxParam !== undefined ? Number(maxParam) : undefined;
+  const range = {};
+  if (min !== undefined && !Number.isNaN(min)) range.$gte = min;
+  if (max !== undefined && !Number.isNaN(max)) range.$lte = max;
+  if (Object.keys(range).length > 0) {
+    filter[field] = range;
+  }
+};
+
 const getProducts = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['name', 'description', 'isActive', 'brandId']);
+  const filter = pick(req.query, ['name', 'description', 'isActive', 'brandId', 'trackImei', 'trackSerial']);
   applyBranchFilter(filter, req);
   applyCategoryFilter(filter, req.query.category);
   applySubCategoryFilter(filter, req.query.subCategory);
   applyStockQuantityFilter(filter, req.query.stockQuantity, req.query.stockQuantityOp);
+  applyTagsFilter(filter, req.query.tags);
+  applyRangeFilter(filter, 'price', req.query.priceMin, req.query.priceMax);
+  applyRangeFilter(filter, 'cost', req.query.costMin, req.query.costMax);
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await productService.queryProducts(filter, options);
   res.send(result);
