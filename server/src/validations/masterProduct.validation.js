@@ -1,14 +1,5 @@
 const Joi = require('joi');
-
-// Each entry is either a plain IMEI/serial string, or a { imei, imei2 } pair for
-// dual-SIM phones — same shape as product.validation.js's imeiEntry.
-const imeiEntry = Joi.alternatives().try(
-  Joi.string().trim(),
-  Joi.object().keys({
-    imei: Joi.string().trim().required(),
-    imei2: Joi.string().trim().allow('').optional(),
-  })
-);
+const { imeiEntry } = require('./custom.validation');
 
 const getImportableMasterProducts = {
   query: Joi.object().keys({

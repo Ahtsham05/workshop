@@ -1325,6 +1325,7 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
   const warnings = [];
   const validDocs = [];
   const validMeta = [];
+  const trackedRows = []; // rows with trackImei/trackSerial/trackBatch/trackExpiry — created individually below, not via insertMany()
   const seenBarcodesInBatch = new Map(); // barcode -> row index that first claimed it
   const seenSkusInBatch = new Map(); // sku -> row index that first claimed it
 
@@ -1398,6 +1399,65 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
       const match = supplierByLower.get(row.supplierName.toLowerCase());
       if (match) supplier = match._id;
       else warnings.push({ index: row.index, name: row.name, message: `Supplier "${row.supplierName}" was not found — imported without a supplier` });
+    }
+
+    // Per-unit tracking (IMEI/serial/batch/expiry) can't go through insertMany() below —
+    // that path is a raw bulk write with no transaction, no IMEI sync, and no batch/
+    // variant setup. A row that turns any tracking on is instead queued for the
+    // transactional createProduct() path (see the tracked-row loop further down), the
+    // same one the single Add Product dialog and masterProduct.service.js#importMasterProducts
+    // already use. Requirements are validated up front — same rule importMasterProducts
+    // enforces (exact IMEI/serial count, a batch number once there's opening stock) — but
+    // reported as an ordinary per-row failure rather than thrown, matching this
+    // function's "no row sinks the batch" contract.
+    if (product.trackImei || product.trackSerial || product.trackBatch || product.trackExpiry) {
+      if ((product.trackImei || product.trackSerial) && stockQuantity.value > 0) {
+        const imeis = Array.isArray(product.imeis) ? product.imeis : [];
+        if (imeis.length !== stockQuantity.value) {
+          const label = product.trackSerial ? 'serial' : 'IMEI';
+          return fail(`Enter exactly ${stockQuantity.value} ${label} number(s) for "${row.name}" — ${imeis.length} entered`);
+        }
+      }
+      if ((product.trackBatch || product.trackExpiry) && stockQuantity.value > 0 && !String(product.batchNumber || '').trim()) {
+        return fail(`Enter a batch number for the opening stock of "${row.name}"`);
+      }
+
+      trackedRows.push({
+        index: row.index,
+        name: row.name,
+        barcode: row.barcode || null,
+        sku: row.sku || null,
+        productBody: {
+          name: row.name,
+          nameUrdu: toImportText(product.nameUrdu),
+          description: toImportText(product.description),
+          price: price.value,
+          cost: cost.value,
+          stockQuantity: stockQuantity.value,
+          unit,
+          category: categoryLegacy,
+          categories,
+          subCategories,
+          supplier,
+          lowStockThreshold: lowStockThreshold.value,
+          organizationId,
+          branchId,
+          createdBy,
+          businessType: branchContext.businessType,
+          isActive: false,
+          barcode: row.barcode || undefined,
+          sku: row.sku || undefined,
+          trackImei: !!product.trackImei,
+          trackSerial: !!product.trackSerial,
+          warrantyMonths: product.warrantyMonths,
+          imeis: product.imeis,
+          trackBatch: !!product.trackBatch,
+          trackExpiry: !!product.trackExpiry,
+          batchNumber: product.batchNumber,
+          expiryDate: product.expiryDate,
+        },
+      });
+      return;
     }
 
     const doc = {
@@ -1479,12 +1539,53 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
     }
   }
 
+  // Every product inserted via insertMany() above still needs Master Product Catalog
+  // linking below — captured before the tracked-row loop adds more to insertedProducts,
+  // since those are linked individually as part of createProduct() itself (see below).
+  const plainInsertedCount = insertedProducts.length;
+
+  // Tracked rows (trackImei/trackSerial/trackBatch/trackExpiry) are created one at a
+  // time via createProduct() — each one opens its own transaction for the product + IMEI
+  // sync + batch/variant setup, the exact path the single Add Product dialog uses.
+  // Run with bounded concurrency rather than sequentially (too slow for dozens of tracked
+  // rows in one import) or all at once (createProduct isn't insertMany — it's a real
+  // Atlas round trip per item) — same reasoning and constant as
+  // masterProduct.service.js#importMasterProducts.
+  const TRACKED_CREATE_CONCURRENCY = 10;
+  for (let i = 0; i < trackedRows.length; i += TRACKED_CREATE_CONCURRENCY) {
+    const chunk = trackedRows.slice(i, i + TRACKED_CREATE_CONCURRENCY);
+    const results = await Promise.allSettled(chunk.map((row) => createProduct(row.productBody)));
+    results.forEach((result, chunkIndex) => {
+      const row = chunk[chunkIndex];
+      if (result.status === 'fulfilled') {
+        insertedProducts.push(result.value);
+        return;
+      }
+      const raw = result.reason;
+      const errmsg = raw?.errmsg || raw?.message || '';
+      // Same duplicate-key message shape the insertMany path above produces — a tracked
+      // row can still collide on a field insertMany's up-front checks didn't cover here
+      // (e.g. name, which only has a DB-level unique index, not a pre-check in this
+      // function) or on a genuine race with a concurrent import.
+      const dupMatch = raw?.code === 11000 ? extractDuplicateFieldFromMessage(errmsg) : null;
+      const message = dupMatch
+        ? `Duplicate ${labelFor(dupMatch.field)} "${dupMatch.value}" — already used by another product`
+        : errmsg || 'Failed to import this product';
+      errors.push({ index: row.index, name: row.name, barcode: row.barcode, sku: row.sku, error: message });
+    });
+  }
+
   // Master Product Catalog migration: auto-link every newly imported product to the
   // shared org-level catalog. Batched — a small constant number of queries regardless
   // of how many products were just inserted (see
-  // masterProduct.service.js#linkProductsToMasterProductsBulk).
-  if (insertedProducts.length) {
-    await masterProductService.linkProductsToMasterProductsBulk(insertedProducts);
+  // masterProduct.service.js#linkProductsToMasterProductsBulk). Only the insertMany()
+  // products need this — a tracked-row product created via createProduct() above already
+  // got linked as part of that call (see createProduct's own
+  // masterProductService.linkProductToMasterProduct), so re-including it here would just
+  // be a redundant lookup for the same result.
+  const plainInsertedProducts = insertedProducts.slice(0, plainInsertedCount);
+  if (plainInsertedProducts.length) {
+    await masterProductService.linkProductsToMasterProductsBulk(plainInsertedProducts);
   }
 
   errors.sort((a, b) => a.index - b.index);

@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { objectId } = require('./custom.validation');
+const { objectId, imeiEntry } = require('./custom.validation');
 
 const unitConversionSchema = Joi.object().keys({
   fromUnit: Joi.string().required(),
@@ -32,15 +32,6 @@ const criticalNotAboveLow = (value, helpers) => {
   }
   return value;
 };
-
-// Each entry is either a plain IMEI string, or a { imei, imei2 } pair for dual-SIM phones.
-const imeiEntry = Joi.alternatives().try(
-  Joi.string().trim(),
-  Joi.object().keys({
-    imei: Joi.string().trim().required(),
-    imei2: Joi.string().trim().allow('').optional(),
-  }),
-);
 
 const createProduct = {
   body: Joi.object().keys({
@@ -315,6 +306,17 @@ const bulkAddProducts = {
         sku: Joi.any(),
         lowStockThreshold: Joi.any(),
         unitConversions: Joi.array().items(unitConversionSchema).optional(),
+        // Per-unit tracking, same shape as createProduct — a row that sets any of these
+        // is routed through the transactional createProduct() path instead of the fast
+        // insertMany() one (see product.service.js#bulkAddProducts).
+        trackImei: Joi.boolean().optional(),
+        trackSerial: Joi.boolean().optional(),
+        warrantyMonths: Joi.any(),
+        imeis: Joi.array().items(imeiEntry).optional(),
+        trackBatch: Joi.boolean().optional(),
+        trackExpiry: Joi.boolean().optional(),
+        batchNumber: Joi.any(),
+        expiryDate: Joi.any(),
       }).unknown(true)
     ).required().min(1)
   }),

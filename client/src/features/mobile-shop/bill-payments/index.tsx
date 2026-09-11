@@ -1163,7 +1163,7 @@ export default function BillPaymentsPage() {
                         <TableRow key={bill.id}>
                           <TableCell className='font-medium'>{bill.customerName}</TableCell>
                           <TableCell>{bill.companyName}</TableCell>
-                          <TableCell className='font-mono text-xs'>{bill.referenceNumber}</TableCell>
+                          <TableCell className='font-normal text-xs'>{bill.referenceNumber}</TableCell>
                           <TableCell>{formatMoney(bill.billAmount)}</TableCell>
                           <TableCell className='text-green-600 font-medium'>{formatMoney(bill.serviceCharge)}</TableCell>
                           <TableCell className='font-semibold'>
@@ -1332,7 +1332,7 @@ export default function BillPaymentsPage() {
                               {(agentBillPage - 1) * agentBillLimit + idx + 1}
                             </TableCell>
                             <TableCell className='font-medium'>{bill.customerName}</TableCell>
-                            <TableCell className='font-mono text-xs'>{bill.referenceNumber}</TableCell>
+                            <TableCell className='font-normal text-xs'>{bill.referenceNumber}</TableCell>
                             <TableCell className='text-sm'>{bill.mobileNo || '—'}</TableCell>
                             <TableCell className='text-sm'>{bill.companyName || '—'}</TableCell>
                             <TableCell className='text-sm'>

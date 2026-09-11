@@ -461,7 +461,13 @@ const bulkAddProducts = catchAsync(async (req, res) => {
   // "No products were inserted" — see product.service.js#bulkAddProducts.
   await resolveWriteBranchId(req);
 
-  const result = await productService.bulkAddProducts(products, getBranchContext(req));
+  // businessType is needed here (not just on the single-create path) because a tracked
+  // row (trackImei etc.) is routed through productService.createProduct(), whose IMEI
+  // gate checks it — see product.service.js#bulkAddProducts.
+  const result = await productService.bulkAddProducts(products, {
+    ...getBranchContext(req),
+    businessType: req.user.businessType,
+  });
 
   const failedCount = result.errors?.length || 0;
   const categoryNote = result.createdCategories?.length

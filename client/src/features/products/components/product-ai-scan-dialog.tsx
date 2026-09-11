@@ -37,19 +37,25 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { ProductAiScanRowTracking } from './product-ai-scan-row-tracking'
+import type { ImeiEntry } from '@/stores/masterProduct.api'
 
 interface BulkImportResult {
   insertedCount?: number
   errors?: Array<{ index: number; error?: string; name?: string; barcode?: string | null }>
 }
 
+// Includes booleans (trackImei etc.) and an IMEI/serial array alongside the plain
+// scalar fields every row already sent — see buildImportPayload.
+type ImportRowPayload = Record<string, string | number | boolean | ImeiEntry[]>
+
 interface ProductAiScanDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onImport: (products: Record<string, string | number>[]) => Promise<BulkImportResult | void>
+  onImport: (products: ImportRowPayload[]) => Promise<BulkImportResult | void>
 }
 
-interface ScannedProduct {
+export interface ScannedProduct {
   id: string
   name: string
   nameUrdu: string
@@ -60,6 +66,17 @@ interface ScannedProduct {
   unit: string
   category: string
   description: string
+  trackImei: boolean
+  trackSerial: boolean
+  trackBatch: boolean
+  trackExpiry: boolean
+  batchNumber: string
+  expiryDate: string
+  warrantyMonths: string
+  imeis: ImeiEntry[]
+  // Set locally after a partial-failure import response, to show exactly why this row
+  // didn't make it in — never sent back to the server.
+  importError?: string
 }
 
 const URDU_SCRIPT = /[\u0600-\u06FF\u0750-\u077F]/
@@ -104,7 +121,33 @@ function createEmptyRow(): ScannedProduct {
     unit: 'pcs',
     category: '',
     description: '',
+    trackImei: false,
+    trackSerial: false,
+    trackBatch: false,
+    trackExpiry: false,
+    batchNumber: '',
+    expiryDate: '',
+    warrantyMonths: '',
+    imeis: [],
   }
+}
+
+/**
+ * A row that's ready to submit (has a name) but whose tracking setup isn't — either the
+ * IMEI/serial count doesn't match its stock quantity, or batch/expiry tracking is on
+ * with no batch number yet. Same requirements the backend enforces (see
+ * product.service.js#bulkAddProducts), surfaced inline instead of only at submit time.
+ */
+function rowTrackingIssue(row: ScannedProduct): string | null {
+  if (!rowHasName(row)) return null
+  const stockQuantity = Number(row.stockQuantity) || 0
+  if ((row.trackImei || row.trackSerial) && stockQuantity > 0 && row.imeis.length !== stockQuantity) {
+    return `${row.imeis.length}/${stockQuantity} ${row.trackSerial ? 'serial numbers' : 'IMEIs'} entered`
+  }
+  if ((row.trackBatch || row.trackExpiry) && stockQuantity > 0 && !row.batchNumber.trim()) {
+    return 'Batch number required'
+  }
+  return null
 }
 
 function splitScannedNames(rawName: string, rawNameUrdu: string) {
@@ -136,6 +179,15 @@ function mapApiProduct(p: Record<string, unknown>, index: number): ScannedProduc
     unit: String(p.unit || 'pcs').trim() || 'pcs',
     category: String(p.category || '').trim(),
     description: String(p.description || '').trim(),
+    // AI vision extraction never infers per-unit tracking — always a manual decision.
+    trackImei: false,
+    trackSerial: false,
+    trackBatch: false,
+    trackExpiry: false,
+    batchNumber: '',
+    expiryDate: '',
+    warrantyMonths: '',
+    imeis: [],
   }
 }
 
@@ -254,7 +306,15 @@ export function ProductAiScanDialog({
 
   const updateRow = (id: string, field: keyof ScannedProduct, value: string) => {
     setRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)),
+      // Editing a field after a failed import attempt implies the user is fixing it —
+      // clear the stale server error rather than leaving it stuck next to new input.
+      prev.map((row) => (row.id === id ? { ...row, [field]: value, importError: undefined } : row)),
+    )
+  }
+
+  const updateRowTracking = (id: string, patch: Partial<ScannedProduct>) => {
+    setRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, ...patch, importError: undefined } : row)),
     )
   }
 
@@ -360,8 +420,13 @@ export function ProductAiScanDialog({
     return parsed
   }
 
-  const buildImportPayload = (): Record<string, string | number>[] | null => {
-    const valid: Record<string, string | number>[] = []
+  // Rows without a name are silently skipped (never a valid product), so the payload
+  // array sent to the server is a filtered-down subset of `rows` — rowIds tracks which
+  // original row produced which payload entry so a server-side per-row error (indexed
+  // into the payload array) can be mapped back to the right row afterwards.
+  const buildImportPayload = (): { payload: ImportRowPayload[]; rowIds: string[] } | null => {
+    const payload: ImportRowPayload[] = []
+    const rowIds: string[] = []
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
@@ -376,7 +441,13 @@ export function ProductAiScanDialog({
       const stockQuantity = parseRowNumber(row.stockQuantity, t('stock_quantity'), rowNum)
       if (stockQuantity === null) return null
 
-      const payload: Record<string, string | number> = {
+      const issue = rowTrackingIssue(row)
+      if (issue) {
+        toast.error(`${t('row')} ${rowNum}: ${issue}`)
+        return null
+      }
+
+      const rowPayload: ImportRowPayload = {
         name,
         price,
         cost,
@@ -385,49 +456,77 @@ export function ProductAiScanDialog({
         unit: row.unit.trim() || 'pcs',
       }
 
-      if (row.nameUrdu.trim()) payload.nameUrdu = row.nameUrdu.trim()
-      if (row.category.trim()) payload.category = row.category.trim()
-      if (row.description.trim()) payload.description = row.description.trim()
+      if (row.nameUrdu.trim()) rowPayload.nameUrdu = row.nameUrdu.trim()
+      if (row.category.trim()) rowPayload.category = row.category.trim()
+      if (row.description.trim()) rowPayload.description = row.description.trim()
 
-      valid.push(payload)
+      if (row.trackImei || row.trackSerial) {
+        rowPayload.trackImei = row.trackImei
+        rowPayload.trackSerial = row.trackSerial
+        if (row.imeis.length) rowPayload.imeis = row.imeis
+        const warrantyMonths = Number(row.warrantyMonths)
+        if (row.warrantyMonths.trim() && !Number.isNaN(warrantyMonths)) rowPayload.warrantyMonths = warrantyMonths
+      }
+      if (row.trackBatch || row.trackExpiry) {
+        rowPayload.trackBatch = row.trackBatch
+        rowPayload.trackExpiry = row.trackExpiry
+        if (row.batchNumber.trim()) rowPayload.batchNumber = row.batchNumber.trim()
+        if (row.trackExpiry && row.expiryDate.trim()) rowPayload.expiryDate = row.expiryDate.trim()
+      }
+
+      payload.push(rowPayload)
+      rowIds.push(row.id)
     }
 
-    if (valid.length === 0) {
+    if (payload.length === 0) {
       toast.error(t('no_products_to_import'))
       return null
     }
 
-    return valid
+    return { payload, rowIds }
   }
 
   const handleImport = useCallback(async () => {
-    const products = buildImportPayload()
-    if (!products) return
+    const built = buildImportPayload()
+    if (!built) return
+    const { payload, rowIds } = built
 
     try {
       setImporting(true)
-      const result = await onImport(products)
+      const result = await onImport(payload)
 
       // The bulk-import endpoint always resolves (even when every row failed
       // validation) so it can report exactly which rows failed and why, rather than
       // reject the whole request — so success/failure has to be read from the payload,
       // not just from whether the call threw.
       const failed = result?.errors || []
-      const inserted = result?.insertedCount ?? (products.length - failed.length)
+      const inserted = result?.insertedCount ?? (payload.length - failed.length)
+      const errorByRowId = new Map(failed.map((e) => [rowIds[e.index], e.error]))
 
       if (inserted === 0) {
+        // Every row failed — keep the dialog open (nothing was created) and annotate
+        // each row with its own server-reported reason instead of one generic toast.
+        setRows((prev) => prev.map((row) => (errorByRowId.has(row.id) ? { ...row, importError: errorByRowId.get(row.id) } : row)))
         toast.error(failed[0]?.error || t('import_failed_all_products'))
         return
       }
       if (failed.length > 0) {
+        // Partial success: drop the rows that made it in and keep only the ones that
+        // failed (annotated with why), so the user can fix and retry just those instead
+        // of losing track of which rows actually need attention.
+        setRows((prev) =>
+          prev
+            .filter((row) => !rowHasName(row) || errorByRowId.has(row.id))
+            .map((row) => (errorByRowId.has(row.id) ? { ...row, importError: errorByRowId.get(row.id) } : row)),
+        )
         toast.warning(t('products_imported_with_errors_message', {
           inserted,
-          total: products.length,
+          total: payload.length,
           failed: failed.length,
         }))
-      } else {
-        toast.success(`${t('import_successful')}: ${inserted} ${t('products_imported')}`)
+        return
       }
+      toast.success(`${t('import_successful')}: ${inserted} ${t('products_imported')}`)
       resetDialog()
       onOpenChange(false)
     } catch (error) {
@@ -439,6 +538,7 @@ export function ProductAiScanDialog({
   }, [rows, onImport, onOpenChange, resetDialog, t])
 
   const importCount = rows.filter(rowHasName).length
+  const rowsNeedingAttention = rows.filter((row) => !!rowTrackingIssue(row)).length
 
   return (
     <Dialog
@@ -560,6 +660,11 @@ export function ProductAiScanDialog({
                   <div>
                     <p className="text-sm font-medium">
                       {t('review_and_edit_products')}: {rows.length}
+                      {rowsNeedingAttention > 0 && (
+                        <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-500">
+                          · {rowsNeedingAttention} need{rowsNeedingAttention === 1 ? 's' : ''} attention
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {t('name_in_urdu_hint')} · {t('bulk_entry_enter_hint')}
@@ -572,9 +677,10 @@ export function ProductAiScanDialog({
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-card">
-                  <Table className="w-full min-w-[1100px] text-sm">
+                  <Table className="w-full min-w-[1350px] text-sm">
                     <TableHeader className="sticky top-0 z-10 bg-muted">
                       <TableRow>
+                        <TableHead className="w-10 px-2 py-2 text-center">#</TableHead>
                         <TableHead className="min-w-[140px] whitespace-nowrap px-2 py-2">
                           {t('product_name')} (English) *
                         </TableHead>
@@ -602,12 +708,27 @@ export function ProductAiScanDialog({
                         <TableHead className="min-w-[100px] whitespace-nowrap px-2 py-2">
                           {t('description')}
                         </TableHead>
+                        <TableHead className="min-w-[150px] whitespace-nowrap px-2 py-2">
+                          Tracking
+                        </TableHead>
                         <TableHead className="w-10 px-1 py-2" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rows.map((row, rowIndex) => (
+                      {rows.map((row, rowIndex) => {
+                        const issue = rowTrackingIssue(row)
+                        return (
                         <TableRow key={row.id} className="hover:bg-muted/30">
+                          <TableCell className="px-2 py-1 text-center align-middle">
+                            <div className="flex items-center justify-center gap-1">
+                              <span className="text-xs text-muted-foreground">{rowIndex + 1}</span>
+                              {issue && (
+                                <span title={issue}>
+                                  <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="px-2 py-1 align-middle">
                             <Input
                               value={row.name}
@@ -618,6 +739,9 @@ export function ProductAiScanDialog({
                               placeholder={t('product_name')}
                               className="h-8 text-sm"
                             />
+                            {row.importError && (
+                              <p className="mt-1 text-[10px] text-destructive">{row.importError}</p>
+                            )}
                           </TableCell>
                           <TableCell className="px-2 py-1 align-middle">
                             <div className="relative">
@@ -718,6 +842,12 @@ export function ProductAiScanDialog({
                               className="h-8 text-sm"
                             />
                           </TableCell>
+                          <TableCell className="px-2 py-1 align-middle">
+                            <ProductAiScanRowTracking
+                              row={row}
+                              onChange={(patch) => updateRowTracking(row.id, patch)}
+                            />
+                          </TableCell>
                           <TableCell className="px-1 py-1 align-middle">
                             <Button
                               type="button"
@@ -731,7 +861,8 @@ export function ProductAiScanDialog({
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -762,7 +893,11 @@ export function ProductAiScanDialog({
               {t('cancel')}
             </Button>
             {step === 'review' && (
-              <Button onClick={handleImport} disabled={importing || importCount === 0}>
+              <Button
+                onClick={handleImport}
+                disabled={importing || importCount === 0 || rowsNeedingAttention > 0}
+                title={rowsNeedingAttention > 0 ? `${rowsNeedingAttention} row(s) need attention before importing` : undefined}
+              >
                 {importing ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
