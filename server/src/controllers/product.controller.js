@@ -12,7 +12,7 @@ const { auditLogService } = require('../services');
 const { userHasAnyPermission } = require('../middlewares/permission');
 const { toDuplicateKeyApiError } = require('../utils/duplicateKeyError');
 
-const TRACKED_PRODUCT_FIELDS = ['name', 'price', 'cost', 'stockQuantity', 'lowStockThreshold', 'barcode'];
+const TRACKED_PRODUCT_FIELDS = ['name', 'price', 'cost', 'stockQuantity', 'lowStockThreshold', 'criticalStockThreshold', 'barcode'];
 
 // Purchase cost only belongs to roles that manage products or purchasing — a pure
 // sales/invoicing role can browse the catalog to build an invoice, but shouldn't be

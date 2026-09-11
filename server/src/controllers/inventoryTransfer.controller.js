@@ -15,6 +15,23 @@ const createTransfer = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(transfer);
 });
 
+const createBulkTransfer = catchAsync(async (req, res) => {
+  const { organizationId, branchId, createdBy } = getBranchContext(req);
+  const result = await inventoryTransferService.createBulkTransfer({
+    organizationId,
+    fromBranchId: branchId,
+    ...req.body,
+    createdBy,
+  });
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getTransferGroup = catchAsync(async (req, res) => {
+  const { organizationId } = getBranchContext(req);
+  const items = await inventoryTransferService.getTransferGroup(req.params.groupId, organizationId);
+  res.send(items);
+});
+
 const getTransfers = catchAsync(async (req, res) => {
   const { organizationId, branchId } = getBranchContext(req);
   const filter = pick(req.query, ['status', 'direction', 'fromBranchId', 'toBranchId', 'search']);
@@ -61,8 +78,10 @@ const cancelTransfer = catchAsync(async (req, res) => {
 
 module.exports = {
   createTransfer,
+  createBulkTransfer,
   getTransfers,
   getTransfer,
+  getTransferGroup,
   approveTransfer,
   completeTransfer,
   cancelTransfer,

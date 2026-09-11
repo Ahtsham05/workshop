@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useLanguage } from '@/context/language-context';
 import { AlertTriangle, Package, Search, ArrowLeft, TrendingDown, Download } from 'lucide-react';
 import { Product } from '../data/schema';
-import { getDisplayStock, formatDisplayPrice } from '@/lib/product-stock-display';
+import { getDisplayStock, formatDisplayPrice, getStockStatus } from '@/lib/product-stock-display';
 import { useFormatMoney } from '@/lib/format-money';
 import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product';
 import {
@@ -29,23 +29,25 @@ interface LowStockDetailsProps {
   products: Product[];
   onBack?: () => void;
   threshold?: number;
+  criticalThreshold?: number | null;
 }
 
-export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDetailsProps) {
+export function LowStockDetails({ products, onBack, threshold = 10, criticalThreshold = null }: LowStockDetailsProps) {
   const { t } = useLanguage();
   const formatMoney = useFormatMoney();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'out_of_stock' | 'critical' | 'low'>('all');
   const expiringByProduct = useExpiringBatchesByProduct();
 
-  // Calculate stock levels
+  // Calculate stock levels — each product's own threshold override applies here too
+  // (see getStockStatus), so this list matches the badges shown on the main table.
   const stockLevels = useMemo(() => {
-    const outOfStock = products.filter(p => getDisplayStock(p) === 0);
-    const critical = products.filter(p => getDisplayStock(p) > 0 && getDisplayStock(p) <= Math.floor(threshold / 2));
-    const low = products.filter(p => getDisplayStock(p) > Math.floor(threshold / 2) && getDisplayStock(p) <= threshold);
+    const outOfStock = products.filter(p => getStockStatus(p, threshold, criticalThreshold) === 'out_of_stock');
+    const critical = products.filter(p => getStockStatus(p, threshold, criticalThreshold) === 'critical_stock');
+    const low = products.filter(p => getStockStatus(p, threshold, criticalThreshold) === 'low_stock');
 
     return { outOfStock, critical, low };
-  }, [products, threshold]);
+  }, [products, threshold, criticalThreshold]);
 
   // Filter and search products
   const filteredProducts = useMemo(() => {
@@ -75,14 +77,21 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
     return filtered.sort((a, b) => getDisplayStock(a) - getDisplayStock(b));
   }, [stockLevels, filterType, search]);
 
-  const getStockBadge = (quantity: number) => {
-    if (quantity === 0) {
+  const getStockBadge = (product: Product) => {
+    const status = getStockStatus(product, threshold, criticalThreshold);
+    if (status === 'out_of_stock') {
       return <Badge variant="destructive">{t('out_of_stock')}</Badge>;
     }
-    if (quantity <= Math.floor(threshold / 2)) {
+    if (status === 'critical_stock') {
       return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">{t('critical')}</Badge>;
     }
     return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">{t('low_stock')}</Badge>;
+  };
+
+  const STATUS_LABELS: Record<string, string> = {
+    out_of_stock: 'Out of Stock',
+    critical_stock: 'Critical',
+    low_stock: 'Low Stock',
   };
 
   const exportToCSV = () => {
@@ -93,8 +102,7 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
       getDisplayStock(product),
       formatDisplayPrice(product, 'price'),
       formatDisplayPrice(product, 'cost'),
-      getDisplayStock(product) === 0 ? 'Out of Stock' :
-        getDisplayStock(product) <= Math.floor(threshold / 2) ? 'Critical' : 'Low Stock'
+      STATUS_LABELS[getStockStatus(product, threshold, criticalThreshold)]
     ]);
 
     const csvContent = [
@@ -150,7 +158,7 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-orange-600">{stockLevels.critical.length}</div>
-            <p className="text-xs text-gray-500 mt-1">{`${t('less_than')} ${Math.floor(threshold / 2)} ${t('units')}`}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('below_threshold')}</p>
           </CardContent>
         </Card>
 
@@ -239,8 +247,8 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
                       <TableCell className="text-gray-600">{product.barcode || '-'}</TableCell>
                       <TableCell className="text-right">
                         <span className={`font-semibold ${
-                          getDisplayStock(product) === 0 ? 'text-red-600' :
-                          getDisplayStock(product) <= Math.floor(threshold / 2) ? 'text-orange-600' :
+                          getStockStatus(product, threshold, criticalThreshold) === 'out_of_stock' ? 'text-red-600' :
+                          getStockStatus(product, threshold, criticalThreshold) === 'critical_stock' ? 'text-orange-600' :
                           'text-yellow-600'
                         }`}>
                           {getDisplayStock(product)} {product.unit || 'pcs'}
@@ -248,7 +256,7 @@ export function LowStockDetails({ products, onBack, threshold = 10 }: LowStockDe
                       </TableCell>
                       <TableCell className="text-right">{formatDisplayPrice(product, 'price', formatMoney)}</TableCell>
                       <TableCell className="text-right">{formatDisplayPrice(product, 'cost', formatMoney)}</TableCell>
-                      <TableCell>{getStockBadge(getDisplayStock(product))}</TableCell>
+                      <TableCell>{getStockBadge(product)}</TableCell>
                       <TableCell>
                         {expiry ? (
                           <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">

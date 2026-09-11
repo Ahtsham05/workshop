@@ -22,6 +22,46 @@ export function getDisplayStock(product: DisplayableProduct): number {
   return product.stockQuantity ?? 0
 }
 
+interface ThresholdableProduct {
+  lowStockThreshold?: number | null
+  criticalStockThreshold?: number | null
+}
+
+export type StockStatus = 'out_of_stock' | 'critical_stock' | 'low_stock' | 'in_stock'
+
+/**
+ * Resolves the low/critical thresholds that actually apply to this product: its own
+ * per-product override when set, else the store-wide defaults from the Low Stock Alert
+ * settings — and if the store-wide critical default was never set either, half of
+ * whichever low-stock value is in effect. Shared by every place that classifies stock
+ * status, so a per-product override set in one view (e.g. the row popover) — or a
+ * store-wide default changed in the Low Stock Alert settings — is reflected identically
+ * everywhere else (stat cards, the low-stock banner, the "View All" details page).
+ */
+export function getEffectiveStockThresholds(
+  product: ThresholdableProduct,
+  defaultLowStockThreshold: number,
+  defaultCriticalStockThreshold?: number | null,
+): { low: number; critical: number } {
+  const low = product.lowStockThreshold ?? defaultLowStockThreshold
+  const fallbackCritical = defaultCriticalStockThreshold ?? Math.floor(low / 2)
+  const critical = Math.min(product.criticalStockThreshold ?? fallbackCritical, low)
+  return { low, critical }
+}
+
+export function getStockStatus(
+  product: DisplayableProduct & ThresholdableProduct,
+  defaultLowStockThreshold: number,
+  defaultCriticalStockThreshold?: number | null,
+): StockStatus {
+  const stock = getDisplayStock(product)
+  if (stock === 0) return 'out_of_stock'
+  const { low, critical } = getEffectiveStockThresholds(product, defaultLowStockThreshold, defaultCriticalStockThreshold)
+  if (stock <= critical) return 'critical_stock'
+  if (stock <= low) return 'low_stock'
+  return 'in_stock'
+}
+
 /**
  * Single number when min===max (or no variants), else a "min–max" range string.
  * `format` defaults to a bare `String(...)` (e.g. for CSV/Excel export cells, which want a

@@ -24,6 +24,17 @@ const InventoryTransferSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+
+    // Ties together every line item submitted in the same "New Transfer" / "Bulk Transfer"
+    // request, so a multi-product transfer can be shown, printed, and (mostly) acted on as
+    // one document even though each product still lives in its own InventoryTransfer row —
+    // see inventoryTransfer.service.js#createBulkTransfer. Every transfer gets one now
+    // (including single-product ones, for a consistent "TRF-xxxx" number everywhere);
+    // historical rows created before this field existed fall back to using their own _id
+    // as the effective group key wherever transfers are listed/fetched by group.
+    groupId: { type: mongoose.Schema.Types.ObjectId, index: true },
+    transferNumber: { type: String, trim: true, index: true },
+
     fromBranchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',
@@ -85,6 +96,7 @@ const InventoryTransferSchema = new mongoose.Schema(
 
 InventoryTransferSchema.index({ organizationId: 1, status: 1, suggestedAt: -1 });
 InventoryTransferSchema.index({ organizationId: 1, fromBranchId: 1, toBranchId: 1 });
+InventoryTransferSchema.index({ organizationId: 1, groupId: 1 });
 
 InventoryTransferSchema.plugin(toJSON);
 InventoryTransferSchema.plugin(paginate);

@@ -18,6 +18,33 @@ const createTransfer = {
   }),
 };
 
+const createBulkTransfer = {
+  body: Joi.object().keys({
+    toBranchId: Joi.string().custom(objectId).required(),
+    items: Joi.array()
+      .min(1)
+      .max(200)
+      .items(
+        Joi.object().keys({
+          fromProductId: Joi.string().custom(objectId).required(),
+          fromVariantId: Joi.string().custom(objectId),
+          fromBatchId: Joi.string().custom(objectId),
+          quantity: Joi.number().integer().min(1),
+          imeis: Joi.array().items(Joi.string().trim()).min(1),
+        })
+      )
+      .required(),
+    reason: Joi.string().allow('').trim(),
+    notes: Joi.string().allow('').trim(),
+  }),
+};
+
+const getTransferGroup = {
+  params: Joi.object().keys({
+    groupId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 const getTransfers = {
   query: Joi.object().keys({
     status: Joi.string().valid('suggested', 'approved', 'in_transit', 'completed', 'cancelled'),
@@ -45,8 +72,10 @@ const transferIdParam = {
 
 module.exports = {
   createTransfer,
+  createBulkTransfer,
   getTransfers,
   getTransfer,
+  getTransferGroup,
   approveTransfer: transferIdParam,
   completeTransfer: transferIdParam,
   cancelTransfer: transferIdParam,

@@ -15,11 +15,15 @@ import { useLanguage } from '@/context/language-context'
 import { useUrduDisplay } from '@/context/urdu-display-context'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
-import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
+import { getDisplayStockValue, getStockStatus } from '@/lib/product-stock-display'
 import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product'
 import { useFormatMoney } from '@/lib/format-money'
 
-export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () => void): ColumnDef<Product>[] => {
+export const useProductColumns = (
+  lowStockThreshold = 10,
+  criticalStockThreshold: number | null = null,
+  onStatusChange?: () => void,
+): ColumnDef<Product>[] => {
   const { t } = useLanguage()
   const { showUrdu } = useUrduDisplay()
   const expiringByProduct = useExpiringBatchesByProduct()
@@ -304,18 +308,18 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
     size: 140,
     header: ({ column }) => <DataTableColumnHeader column={column} title='status' />,
     cell: ({ row }) => {
-      const stock = getDisplayStock(row.original)
-      if (stock === 0) {
+      const status = getStockStatus(row.original, lowStockThreshold, criticalStockThreshold)
+      if (status === 'out_of_stock') {
         return <Badge variant='destructive'>{t('out_of_stock')}</Badge>
       }
-      if (stock <= Math.floor(lowStockThreshold / 2)) {
+      if (status === 'critical_stock') {
         return (
           <Badge variant='outline' className='border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400'>
             {t('critical_stock')}
           </Badge>
         )
       }
-      if (stock <= lowStockThreshold) {
+      if (status === 'low_stock') {
         return (
           <Badge variant='outline' className='border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-400'>
             {t('low_stock')}
@@ -396,7 +400,14 @@ export const useProductColumns = (lowStockThreshold = 10, onStatusChange?: () =>
 {
   id: 'actions',
   header: () => t('actions'),
-  cell: DataTableRowActions,
+  cell: ({ row }) => (
+    <DataTableRowActions
+      row={row}
+      lowStockThreshold={lowStockThreshold}
+      criticalStockThreshold={criticalStockThreshold}
+      onThresholdChanged={onStatusChange}
+    />
+  ),
   enableHiding: false,
 }
 ]

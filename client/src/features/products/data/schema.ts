@@ -19,6 +19,10 @@ export const productSchema = z.object({
   price: z.number().min(0, { message: 'Sale price must be a positive number.' }), // product price as number
   cost: z.number().min(0, { message: 'Purchase price must be a positive number.' }), // product cost as number
   stockQuantity: z.number().min(0, { message: 'Stock quantity cannot be negative.' }), // stock quantity cannot be negative
+  // Per-product overrides for the Low Stock / Critical Stock badge — null/undefined means
+  // "inherit the store-wide default", see client/src/lib/product-stock-display.ts.
+  lowStockThreshold: z.number().nullable().optional(),
+  criticalStockThreshold: z.number().nullable().optional(),
   unit: z.string().optional(), // unit of measurement (pcs, kg, etc.)
   unitConversions: z.array(unitConversionSchema).optional(),
   image: z.object({

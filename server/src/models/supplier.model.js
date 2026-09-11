@@ -19,6 +19,10 @@ const SupplierSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  // Marks records created by the trial-account demo-data seeder (see
+  // demoData.service.js) so they can be told apart from real data and cleared via the
+  // self-service "Reset Demo Data" action without touching anything the user added.
+  isDemo: { type: Boolean, default: false, index: true },
   name: { type: String, required: true, trim: true },
   nameUrdu: { type: String, trim: true },
   picture: {

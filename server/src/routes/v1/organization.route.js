@@ -26,4 +26,9 @@ router.patch(
   organizationController.updateOrganization
 );
 
+// POST /v1/organizations/:orgId/demo-data/reset — wipe + reseed this trial org's sample
+// data. Same permission as the profile PATCH above; further gated to trial accounts only
+// in the controller.
+router.post('/:orgId/demo-data/reset', auth('manageBusinessProfile'), organizationController.resetDemoData);
+
 module.exports = router;

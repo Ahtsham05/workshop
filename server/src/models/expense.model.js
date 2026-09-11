@@ -73,6 +73,10 @@ const expenseSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  // Marks records created by the trial-account demo-data seeder (see
+  // demoData.service.js) so they can be told apart from real data and cleared via the
+  // self-service "Reset Demo Data" action without touching anything the user added.
+  isDemo: { type: Boolean, default: false, index: true },
   // Unpaid expenses (e.g. auto-generated recurring cycles) are recorded here
   // for visibility but deliberately don't touch the cash book / wallet /
   // accounts ledger until someone confirms payment via markExpenseAsPaid.

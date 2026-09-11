@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
-import { useSetupOrganizationMutation } from '@/stores/organization.api'
+import { useSetupOrganizationMutation, useLazyGetMyOrganizationQuery } from '@/stores/organization.api'
 import { setActiveBranch, setUser } from '@/stores/auth.slice'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
@@ -54,7 +54,59 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [setupOrganization, { isLoading }] = useSetupOrganizationMutation()
+  const [fetchMyOrganization] = useLazyGetMyOrganizationQuery()
   const authData = useSelector((state: RootState) => state.auth.data)
+  // Guards the form behind a check for whether this account is already onboarded
+  // server-side — the locally-cached `onboardingComplete` flag can go stale (e.g. a
+  // prior setup call that succeeded on the server but timed out on the client before
+  // the response came back), which used to leave people stuck re-submitting a form
+  // that the server would only reject. `null` = still checking, `true` = confirmed not
+  // onboarded yet (show the form).
+  const [readyToOnboard, setReadyToOnboard] = useState<boolean | null>(null)
+
+  function applyOnboardedUser(organization: { id: string; businessType: string }, branch?: { id?: string; _id?: string; name: string } | null) {
+    const existingUser = authData?.user || JSON.parse(localStorage.getItem('user') || '{}')
+    const updatedUser = {
+      ...existingUser,
+      onboardingComplete: true,
+      // Always force superAdmin, never fall back to whatever was cached — a fresh
+      // registration defaults to systemRole: 'staff' server-side (see
+      // server/src/models/user.model.js), and the org owner always becomes superAdmin
+      // once setup completes, so a `|| 'superAdmin'` fallback here would wrongly keep
+      // 'staff' (truthy) and get the user blocked by the route guard as under-permissioned.
+      systemRole: 'superAdmin',
+      organizationId: organization.id,
+      businessType: organization.businessType,
+    }
+    localStorage.setItem('user', JSON.stringify(updatedUser))
+    dispatch(setUser({ ...authData, user: updatedUser }))
+    if (branch) {
+      dispatch(setActiveBranch({ id: branch.id || branch._id || '', name: branch.name }))
+    }
+  }
+
+  // On mount, confirm with the server rather than trusting the locally-cached flag —
+  // if this account already has an organization, sync local state and leave instead of
+  // showing (and letting the user resubmit) a form the server will just reject.
+  useEffect(() => {
+    let cancelled = false
+    fetchMyOrganization()
+      .unwrap()
+      .then((organization) => {
+        if (cancelled || !organization) return
+        applyOnboardedUser(organization)
+        navigate({ to: '/', replace: true })
+      })
+      .catch(() => {
+        // No organization yet — this is the expected case for a genuinely new
+        // account, so just show the form.
+        if (!cancelled) setReadyToOnboard(true)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -86,31 +138,26 @@ export default function OnboardingPage() {
       const defaultBranchNameUrdu = nu ? `${nu} — مین برانچ` : ''
       const result = await setupOrganization({ ...data, defaultBranchNameUrdu, logoFile }).unwrap()
 
-      // Update user in localStorage and Redux store with onboardingComplete = true
-      const existingUser = authData?.user || JSON.parse(localStorage.getItem('user') || '{}')
-      const updatedUser = {
-        ...existingUser,
-        onboardingComplete: true,
-        systemRole: 'superAdmin',
-        organizationId: result.organization.id,
-        businessType: result.organization.businessType,
-      }
-      localStorage.setItem('user', JSON.stringify(updatedUser))
-
-      // Update Redux store so sidebar & permissions reflect immediately
-      dispatch(setUser({
-        ...authData,
-        user: updatedUser,
-      }))
-
-      // Set the default branch as active
-      if (result.branch) {
-        dispatch(setActiveBranch({ id: result.branch.id || result.branch._id, name: result.branch.name }))
-      }
-
+      applyOnboardedUser(result.organization, result.branch)
       toast.success('Company setup complete! Welcome aboard 🎉')
       navigate({ to: '/', replace: true })
     } catch (error: any) {
+      // The server already has this account marked onboarded (most likely: an earlier
+      // submit succeeded server-side but the response never made it back before the
+      // client's request timeout, leaving local state stale) — recover by fetching the
+      // real organization instead of leaving the user stuck on a form that will only
+      // ever be rejected.
+      if (error?.data?.message === 'Onboarding already completed') {
+        try {
+          const organization = await fetchMyOrganization().unwrap()
+          applyOnboardedUser(organization)
+          toast.success('Your company is already set up — taking you to the dashboard.')
+          navigate({ to: '/', replace: true })
+          return
+        } catch {
+          // Fall through to the generic error below.
+        }
+      }
       toast.error(error?.data?.message || 'Setup failed. Please try again.')
     }
   }
@@ -129,6 +176,14 @@ export default function OnboardingPage() {
 
     // Step 2 submit performs final onboarding submit
     await form.handleSubmit(onSubmit)(event)
+  }
+
+  if (readyToOnboard === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    )
   }
 
   return (

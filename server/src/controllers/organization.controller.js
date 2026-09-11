@@ -3,6 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
 const { organizationService, auditLogService } = require('../services');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
+const logger = require('../config/logger');
 
 const TRACKED_ORG_TAX_FIELDS = [
   'baseCurrency',
@@ -125,9 +126,38 @@ const updateOrganization = catchAsync(async (req, res) => {
   res.send(org);
 });
 
+/**
+ * POST /v1/organizations/:orgId/demo-data/reset
+ * Wipe and reseed this trial org's sample data (Products, Customers, Suppliers,
+ * Categories, Invoices, Purchases, Expenses tagged isDemo: true).
+ */
+const resetDemoData = catchAsync(async (req, res) => {
+  assertOwnOrganization(req);
+  const org = await organizationService.getOrganizationById(req.params.orgId);
+  if (!org) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
+  }
+  if (!org.subscription?.isTrial) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Demo data can only be reset on a trial account');
+  }
+  // Deliberately NOT awaited — clearing + reseeding runs dozens of invoice/purchase
+  // creations through the real service layer, which can take well over a minute. Same
+  // reasoning as the onboarding seed hook (organization.service.js#setupOrganization):
+  // respond right away and let it run in the background rather than risk the client's
+  // request timeout firing while the work is still in progress.
+  organizationService.resetDemoData(req.params.orgId).catch((err) => {
+    logger.error(`Failed to reset demo data for organization ${req.params.orgId}: ${err.message}`);
+  });
+  res.status(httpStatus.ACCEPTED).send({
+    success: true,
+    message: 'Demo data reset started. This can take a minute or two — refresh the page shortly to see the fresh data.',
+  });
+});
+
 module.exports = {
   setupOrganization,
   getMyOrganization,
   getOrganization,
   updateOrganization,
+  resetDemoData,
 };

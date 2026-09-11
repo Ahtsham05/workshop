@@ -165,13 +165,25 @@ export const organizationApi = createApi({
       query: () => '/payments/subscription/usage',
       providesTags: ['Organization'],
     }),
+    // Wipes and reseeds this trial org's sample data (Products, Customers, Suppliers,
+    // Categories, Invoices, Purchases, Expenses). The server responds immediately and
+    // runs the actual clear+reseed in the background (it can take a minute or two), so
+    // this resolves right away with just a status message, not the finished counts.
+    resetDemoData: builder.mutation<{ success: boolean; message: string }, string>({
+      query: (orgId) => ({
+        url: `/organizations/${orgId}/demo-data/reset`,
+        method: 'POST',
+      }),
+    }),
   }),
 });
 
 export const {
   useSetupOrganizationMutation,
   useGetMyOrganizationQuery,
+  useLazyGetMyOrganizationQuery,
   useUpdateOrganizationMutation,
   useUpdateOrganizationSettingsMutation,
   useGetSubscriptionUsageQuery,
+  useResetDemoDataMutation,
 } = organizationApi;

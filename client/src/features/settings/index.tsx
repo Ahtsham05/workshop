@@ -18,6 +18,7 @@ import {
   IconShieldCheck,
   IconArrowsExchange,
   IconMapPin,
+  IconFlask,
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
 import SidebarNav from './components/sidebar-nav'
@@ -25,13 +26,17 @@ import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { isElectronApp } from '@/lib/sync/electron'
 import { usePermissions } from '@/context/permission-context'
 import type { PermissionKey } from '@/lib/permission-registry'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 
 export default function Settings() {
   const { hasAnyPermission } = usePermissions()
+  const { data: organization } = useGetMyOrganizationQuery()
+  const isTrial = Boolean(organization?.subscription?.isTrial)
   const navItems = sidebarNavItems.filter((item) => {
     if (!WHATSAPP_UI_ENABLED && item.href === '/settings/whatsapp') return false
     if (item.desktopOnly && !isElectronApp()) return false
     if (item.anyPermission && !hasAnyPermission(...item.anyPermission)) return false
+    if (item.trialOnly && !isTrial) return false
     return true
   })
 
@@ -64,6 +69,7 @@ interface SettingsNavItem {
   href: string
   desktopOnly?: boolean
   anyPermission?: PermissionKey[]
+  trialOnly?: boolean
 }
 
 const sidebarNavItems: SettingsNavItem[] = [
@@ -170,5 +176,11 @@ const sidebarNavItems: SettingsNavItem[] = [
     icon: <IconArrowsExchange size={18} />,
     href: '/settings/exchange-rates',
     anyPermission: ['viewExchangeRates'],
+  },
+  {
+    title: 'Demo Data',
+    icon: <IconFlask size={18} />,
+    href: '/settings/demo-data',
+    trialOnly: true,
   },
 ]

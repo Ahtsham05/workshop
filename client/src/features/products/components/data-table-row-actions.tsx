@@ -2,9 +2,10 @@ import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { Row } from '@tanstack/react-table'
 import { useNavigate } from '@tanstack/react-router'
 import { IconEdit, IconTrash } from '@tabler/icons-react'
-import { ClipboardEdit, Flag } from 'lucide-react'
+import { ClipboardEdit, Flag, Gauge } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDispatch } from 'react-redux'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -15,8 +16,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { FlagPickerPopover } from '@/components/flag-badge'
+import { StockThresholdPopover } from './stock-threshold-popover'
 import { AppDispatch } from '@/stores/store'
-import { updateProductFlag } from '@/stores/product.slice'
+import { updateProduct, updateProductFlag } from '@/stores/product.slice'
 import { useUsers } from '../context/users-context'
 import { Product } from '../data/schema'
 import { useLanguage } from '@/context/language-context'
@@ -24,9 +26,16 @@ import { usePermissions } from '@/context/permission-context'
 
 interface DataTableRowActionsProps {
   row: Row<Product>
+  /** Store-wide Low/Critical Stock defaults (from the Low Stock Alert settings) — passed
+   *  down so the threshold popover can show them as a placeholder/hint. */
+  lowStockThreshold: number
+  criticalStockThreshold?: number | null
+  /** Re-fetches the list after a threshold change so the badge and stat cards update
+   *  immediately — same callback ActiveToggleCell uses after an Active-status flip. */
+  onThresholdChanged?: () => void
 }
 
-export function DataTableRowActions({ row }: DataTableRowActionsProps) {
+export function DataTableRowActions({ row, lowStockThreshold, criticalStockThreshold, onThresholdChanged }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow } = useUsers()
   const { t } = useLanguage()
   const { hasPermission } = usePermissions()
@@ -71,6 +80,37 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                 style={row.original.flag ? { color: row.original.flag.color, fill: row.original.flag.color } : undefined}
               />
               <span className='sr-only'>Flag for review</span>
+            </Button>
+          }
+        />
+      )}
+      {canEdit && (
+        <StockThresholdPopover
+          lowStockThreshold={row.original.lowStockThreshold}
+          criticalStockThreshold={row.original.criticalStockThreshold}
+          defaultLowStockThreshold={lowStockThreshold}
+          defaultCriticalStockThreshold={criticalStockThreshold}
+          onSave={async ({ lowStockThreshold: low, criticalStockThreshold: critical }) => {
+            try {
+              await dispatch(
+                updateProduct({ _id: productId, lowStockThreshold: low, criticalStockThreshold: critical })
+              ).unwrap()
+              toast.success('Stock alert levels updated')
+              onThresholdChanged?.()
+            } catch {
+              toast.error('Failed to update stock alert levels')
+            }
+          }}
+          trigger={
+            <Button variant='ghost' className='flex h-8 w-8 p-0'>
+              <Gauge
+                className={cn(
+                  'h-4 w-4',
+                  (row.original.lowStockThreshold != null || row.original.criticalStockThreshold != null) &&
+                    'text-primary'
+                )}
+              />
+              <span className='sr-only'>Set stock alert levels</span>
             </Button>
           }
         />

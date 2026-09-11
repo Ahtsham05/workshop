@@ -21,6 +21,10 @@ const ProductSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
     },
+    // Marks records created by the trial-account demo-data seeder (see
+    // demoData.service.js) so they can be told apart from real data and cleared via the
+    // self-service "Reset Demo Data" action without touching anything the user added.
+    isDemo: { type: Boolean, default: false, index: true },
     name: { type: String, required: true, trim: true },
     nameUrdu: { type: String, trim: true },
     description: { type: String },
@@ -37,7 +41,14 @@ const ProductSchema = new mongoose.Schema({
     // defaultTaxCategoryId at calculation time — never duplicate a tax rate directly here.
     taxCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxCategory', default: null },
     stockQuantity: { type: Number, required: true },
-    unit: { 
+    // Per-product stock-alert overrides for the Products list' status badge (Low Stock /
+    // Critical Stock). null = inherit the org-wide default configured in the Low Stock
+    // Alert settings (see client low-stock-alert.tsx); only a value set here overrides it
+    // for this product specifically — see client/src/lib/product-stock-display.ts for the
+    // resolution logic shared by every list/badge/report that shows stock status.
+    lowStockThreshold: { type: Number, min: 0, default: null },
+    criticalStockThreshold: { type: Number, min: 0, default: null },
+    unit: {
         type: String, 
         default: DEFAULT_UNIT,
         enum: Object.values(UNITS)

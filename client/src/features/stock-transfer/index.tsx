@@ -1,24 +1,26 @@
 import { useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
-import { ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine, Ban, Plus, Eye, Printer } from 'lucide-react'
+import { ArrowLeftRight, ArrowDownToLine, Ban, Plus, Layers, Eye, Printer } from 'lucide-react'
 import { formatDateSafe } from '@/lib/utils'
 
 import type { RootState } from '@/stores/store'
 import {
   useGetTransfersQuery,
-  useApproveTransferMutation,
+  useLazyGetTransferGroupQuery,
   useCompleteTransferMutation,
   useCancelTransferMutation,
-  type InventoryTransfer,
+  type GroupedTransferRow,
   type TransferStatus,
 } from '@/stores/inventoryTransfer.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import type { TransferSuggestion } from '@/stores/purchaseSuggestions.api'
 import { useLanguage } from '@/context/language-context'
 import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow } from './utils/print-utils'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SimplePagination } from '@/components/ui/simple-pagination'
@@ -26,16 +28,17 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 import { TransferStatusBadge } from './components/transfer-status-badge'
 import { CreateTransferDialog, type TransferPrefill } from './components/create-transfer-dialog'
+import { BulkTransferPanel } from './components/bulk-transfer-panel'
 import { SuggestedTransfersPanel } from './components/suggested-transfers-panel'
 import { TransferDetailsDialog } from './components/transfer-details-dialog'
 
 const LIMIT = 15
 
-function branchName(ref: InventoryTransfer['fromBranchId']): string {
+function branchName(ref: GroupedTransferRow['fromBranchId']): string {
   if (typeof ref === 'string') return ref
   return ref?.name || '—'
 }
-function branchId(ref: InventoryTransfer['fromBranchId']): string {
+function branchId(ref: GroupedTransferRow['fromBranchId']): string {
   return typeof ref === 'string' ? ref : ref?.id || ''
 }
 
@@ -45,12 +48,17 @@ export default function StockTransfer() {
   const user = useSelector((s: RootState) => s.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
 
+  const [view, setView] = useState<'list' | 'bulk'>('list')
   const [statusFilter, setStatusFilter] = useState<TransferStatus | 'all'>('all')
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all')
   const [page, setPage] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [prefill, setPrefill] = useState<TransferPrefill | null>(null)
-  const [detailsId, setDetailsId] = useState<string | null>(null)
+  const [detailsGroupId, setDetailsGroupId] = useState<string | null>(null)
+  // Seeds the bulk panel when it's opened from selected suggestions instead of manually —
+  // a suggestion group is already scoped to one destination branch, matching what a single
+  // bulk transfer submission can send to.
+  const [bulkSeed, setBulkSeed] = useState<{ toBranchId: string; suggestions: TransferSuggestion[] } | null>(null)
 
   const { data, isFetching } = useGetTransfersQuery({
     page,
@@ -59,11 +67,11 @@ export default function StockTransfer() {
     ...(directionFilter !== 'all' ? { direction: directionFilter } : {}),
   })
 
-  const [approveTransfer, { isLoading: approving }] = useApproveTransferMutation()
   const [completeTransfer, { isLoading: completing }] = useCompleteTransferMutation()
   const [cancelTransfer, { isLoading: cancelling }] = useCancelTransferMutation()
+  const [fetchGroup] = useLazyGetTransferGroupQuery()
 
-  const busy = approving || completing || cancelling
+  const busy = completing || cancelling
 
   const runAction = async (action: () => Promise<unknown>, successMsg: string) => {
     try {
@@ -77,9 +85,10 @@ export default function StockTransfer() {
 
   const transfers = data?.results || []
 
-  const handlePrint = (tr: InventoryTransfer) => {
+  const handlePrint = async (groupId: string) => {
     try {
-      const printData = buildTransferPrintData(tr, {
+      const items = await fetchGroup(groupId).unwrap()
+      const printData = buildTransferPrintData(items, {
         companyName: orgData?.name,
         companyAddress: [orgData?.address, orgData?.city].filter(Boolean).join(', '),
         companyPhone: orgData?.phone,
@@ -88,13 +97,32 @@ export default function StockTransfer() {
       })
       openTransferPrintWindow(generateTransferHTML(printData))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('Failed to open print window'))
+      const message = (err as { data?: { message?: string } })?.data?.message
+      toast.error(message || (err instanceof Error ? err.message : t('Failed to open print window')))
     }
   }
 
   const openCreateDialog = () => {
     setPrefill(null)
     setDialogOpen(true)
+  }
+
+  const closeBulkView = () => {
+    setView('list')
+    setBulkSeed(null)
+  }
+
+  if (view === 'bulk') {
+    return (
+      <div className='space-y-6 p-4 md:p-6'>
+        <BulkTransferPanel
+          onDone={closeBulkView}
+          onCancel={closeBulkView}
+          initialToBranchId={bulkSeed?.toBranchId}
+          initialSuggestions={bulkSeed?.suggestions}
+        />
+      </div>
+    )
   }
 
   return (
@@ -109,16 +137,22 @@ export default function StockTransfer() {
             </p>
           </div>
         </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className='mr-2 h-4 w-4' />
-          {t('New Transfer')}
-        </Button>
+        <div className='flex gap-2'>
+          <Button variant='outline' onClick={() => setView('bulk')}>
+            <Layers className='mr-2 h-4 w-4' />
+            {t('Bulk Transfer')}
+          </Button>
+          <Button onClick={openCreateDialog}>
+            <Plus className='mr-2 h-4 w-4' />
+            {t('New Transfer')}
+          </Button>
+        </div>
       </div>
 
       <SuggestedTransfersPanel
-        onUseSuggestion={(p) => {
-          setPrefill(p)
-          setDialogOpen(true)
+        onTransferSelected={(toBranchId, suggestions) => {
+          setBulkSeed({ toBranchId, suggestions })
+          setView('bulk')
         }}
       />
 
@@ -145,7 +179,6 @@ export default function StockTransfer() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>{t('All statuses')}</SelectItem>
-                <SelectItem value='suggested'>{t('Suggested')}</SelectItem>
                 <SelectItem value='in_transit'>{t('In transit')}</SelectItem>
                 <SelectItem value='completed'>{t('Completed')}</SelectItem>
                 <SelectItem value='cancelled'>{t('Cancelled')}</SelectItem>
@@ -165,6 +198,7 @@ export default function StockTransfer() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('Date')}</TableHead>
+                  <TableHead>{t('Transfer #')}</TableHead>
                   <TableHead>{t('Product')}</TableHead>
                   <TableHead>{t('From')}</TableHead>
                   <TableHead>{t('To')}</TableHead>
@@ -177,29 +211,40 @@ export default function StockTransfer() {
                 {transfers.map((tr) => {
                   const isSource = branchId(tr.fromBranchId) === activeBranchId
                   const isDest = branchId(tr.toBranchId) === activeBranchId
+                  const isSingle = tr.itemCount === 1 && !!tr.singleItemId
                   return (
-                    <TableRow key={tr.id}>
+                    <TableRow key={tr.groupId}>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
                         {formatDateSafe(tr.suggestedAt, 'MMM dd, yyyy hh:mm a')}
                       </TableCell>
-                      <TableCell className='font-medium max-w-[200px]' title={tr.productName}>
-                        <div className='truncate'>{tr.productName}</div>
-                        {tr.imeis && tr.imeis.length > 0 && (
-                          <div className='truncate text-xs font-normal text-muted-foreground' title={tr.imeis.join(', ')}>
-                            IMEI/Serial: {tr.imeis.join(', ')}
+                      <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
+                        {tr.transferNumber || '—'}
+                      </TableCell>
+                      <TableCell className='font-medium max-w-[220px]'>
+                        <div className='flex items-center gap-1.5'>
+                          <span className='truncate' title={tr.productNames.join(', ')}>{tr.productNames[0] || '—'}</span>
+                          {tr.itemCount > 1 && (
+                            <Badge variant='secondary' className='shrink-0 text-[10px]'>
+                              +{tr.itemCount - 1} {t('more')}
+                            </Badge>
+                          )}
+                        </div>
+                        {isSingle && tr.singleItemImeis && tr.singleItemImeis.length > 0 && (
+                          <div className='truncate text-xs font-normal text-muted-foreground' title={tr.singleItemImeis.join(', ')}>
+                            IMEI/Serial: {tr.singleItemImeis.join(', ')}
                           </div>
                         )}
                       </TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.fromBranchId)}</TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.toBranchId)}</TableCell>
-                      <TableCell className='text-right'>{tr.quantity}</TableCell>
+                      <TableCell className='text-right'>{tr.totalQuantity}</TableCell>
                       <TableCell><TransferStatusBadge status={tr.status} /></TableCell>
                       <TableCell className='text-right'>
                         <div className='flex justify-end gap-1.5'>
                           <Button
                             size='sm'
                             variant='ghost'
-                            onClick={() => setDetailsId(tr.id)}
+                            onClick={() => setDetailsGroupId(tr.groupId)}
                           >
                             <Eye className='mr-1 h-3.5 w-3.5' />
                             {t('View')}
@@ -207,39 +252,28 @@ export default function StockTransfer() {
                           <Button
                             size='sm'
                             variant='ghost'
-                            onClick={() => handlePrint(tr)}
+                            onClick={() => handlePrint(tr.groupId)}
                           >
                             <Printer className='mr-1 h-3.5 w-3.5' />
                             {t('Print')}
                           </Button>
-                          {tr.status === 'suggested' && isSource && (
-                            <Button
-                              size='sm'
-                              variant='outline'
-                              disabled={busy}
-                              onClick={() => runAction(() => approveTransfer(tr.id).unwrap(), 'Transfer approved and sent')}
-                            >
-                              <ArrowUpFromLine className='mr-1 h-3.5 w-3.5' />
-                              {t('Send')}
-                            </Button>
-                          )}
-                          {tr.status === 'in_transit' && isDest && (
+                          {isSingle && tr.status === 'in_transit' && isDest && (
                             <Button
                               size='sm'
                               disabled={busy}
-                              onClick={() => runAction(() => completeTransfer(tr.id).unwrap(), 'Stock received')}
+                              onClick={() => runAction(() => completeTransfer(tr.singleItemId!).unwrap(), 'Stock received')}
                             >
                               <ArrowDownToLine className='mr-1 h-3.5 w-3.5' />
                               {t('Receive')}
                             </Button>
                           )}
-                          {(tr.status === 'in_transit' || tr.status === 'suggested') && (isSource || isDest) && (
+                          {isSingle && tr.status === 'in_transit' && (isSource || isDest) && (
                             <Button
                               size='sm'
                               variant='ghost'
                               className='text-destructive hover:text-destructive'
                               disabled={busy}
-                              onClick={() => runAction(() => cancelTransfer(tr.id).unwrap(), 'Transfer cancelled')}
+                              onClick={() => runAction(() => cancelTransfer(tr.singleItemId!).unwrap(), 'Transfer cancelled')}
                             >
                               <Ban className='mr-1 h-3.5 w-3.5' />
                               {t('Cancel')}
@@ -252,7 +286,7 @@ export default function StockTransfer() {
                 })}
                 {transfers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className='text-center text-muted-foreground'>
+                    <TableCell colSpan={8} className='text-center text-muted-foreground'>
                       {t('No transfers found')}
                     </TableCell>
                   </TableRow>
@@ -272,7 +306,7 @@ export default function StockTransfer() {
       </Card>
 
       <CreateTransferDialog open={dialogOpen} onOpenChange={setDialogOpen} prefill={prefill} />
-      <TransferDetailsDialog transferId={detailsId} onClose={() => setDetailsId(null)} />
+      <TransferDetailsDialog groupId={detailsGroupId} onClose={() => setDetailsGroupId(null)} />
     </div>
   )
 }

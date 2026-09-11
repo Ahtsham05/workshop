@@ -40,6 +40,11 @@ export interface BatchSnapshot {
 export interface InventoryTransfer {
   id: string
   organizationId: string
+  // Ties this line item to every other product submitted in the same "New Transfer" /
+  // "Bulk Transfer" request — see getTransferGroup. Undefined only for rows created before
+  // this field existed; treat that as "its own group of one" (use `id` in its place).
+  groupId?: string
+  transferNumber?: string
   fromBranchId: BranchRef | string
   toBranchId: BranchRef | string
   fromProductId: string
@@ -72,6 +77,39 @@ export interface TransfersResponse {
   totalResults: number
 }
 
+/** One row in the transfer list — one product transfer, or a whole bulk transfer grouped
+ *  into a single row (the same way an invoice list shows one row per invoice, not one per
+ *  line item). See inventoryTransfer.service.js#queryTransfers. */
+export interface GroupedTransferRow {
+  groupId: string
+  transferNumber?: string
+  fromBranchId: BranchRef | string
+  toBranchId: BranchRef | string
+  itemCount: number
+  totalQuantity: number
+  productNames: string[]
+  // 'partial' is a display-only status this row shows when its line items span more than
+  // one real status (e.g. 2 of 3 products already received) — it's never stored as such.
+  status: TransferStatus | 'partial'
+  reason?: string
+  notes?: string
+  suggestedAt?: string
+  completedAt?: string
+  decidedBy?: { id: string; name: string } | string
+  // Present only when itemCount === 1 — lets the list row keep today's one-click
+  // Send/Receive/Cancel instead of requiring a trip through the detail dialog.
+  singleItemId?: string
+  singleItemImeis?: string[]
+}
+
+export interface GroupedTransfersResponse {
+  results: GroupedTransferRow[]
+  page: number
+  limit: number
+  totalPages: number
+  totalResults: number
+}
+
 export interface CreateTransferRequest {
   fromProductId: string
   fromVariantId?: string
@@ -83,6 +121,27 @@ export interface CreateTransferRequest {
   imeis?: string[]
   reason?: string
   notes?: string
+}
+
+export interface BulkTransferLineInput {
+  fromProductId: string
+  fromVariantId?: string
+  fromBatchId?: string
+  quantity?: number
+  imeis?: string[]
+}
+
+export interface CreateBulkTransferRequest {
+  toBranchId: string
+  items: BulkTransferLineInput[]
+  reason?: string
+  notes?: string
+}
+
+export interface CreateBulkTransferResponse {
+  groupId: string
+  transferNumber: string
+  items: InventoryTransfer[]
 }
 
 export interface GetTransfersParams {
@@ -101,7 +160,7 @@ export const inventoryTransferApi = createApi({
   baseQuery,
   tagTypes: ['InventoryTransfer'],
   endpoints: (builder) => ({
-    getTransfers: builder.query<TransfersResponse, GetTransfersParams | void>({
+    getTransfers: builder.query<GroupedTransfersResponse, GetTransfersParams | void>({
       query: (params) => ({ url: '/inventory-transfers', params: params ?? undefined }),
       providesTags: ['InventoryTransfer'],
     }),
@@ -109,8 +168,17 @@ export const inventoryTransferApi = createApi({
       query: (id) => `/inventory-transfers/${id}`,
       providesTags: (_r, _e, id) => [{ type: 'InventoryTransfer', id }],
     }),
+    getTransferGroup: builder.query<InventoryTransfer[], string>({
+      query: (groupId) => `/inventory-transfers/groups/${groupId}`,
+      providesTags: (_r, _e, groupId) => [{ type: 'InventoryTransfer', id: groupId }],
+    }),
     createTransfer: builder.mutation<InventoryTransfer, CreateTransferRequest>({
       query: (body) => ({ url: '/inventory-transfers', method: 'POST', body }),
+      invalidatesTags: ['InventoryTransfer'],
+      onQueryStarted: invalidateDownstreamCaches,
+    }),
+    createBulkTransfer: builder.mutation<CreateBulkTransferResponse, CreateBulkTransferRequest>({
+      query: (body) => ({ url: '/inventory-transfers/bulk', method: 'POST', body }),
       invalidatesTags: ['InventoryTransfer'],
       onQueryStarted: invalidateDownstreamCaches,
     }),
@@ -135,7 +203,10 @@ export const inventoryTransferApi = createApi({
 export const {
   useGetTransfersQuery,
   useGetTransferQuery,
+  useGetTransferGroupQuery,
+  useLazyGetTransferGroupQuery,
   useCreateTransferMutation,
+  useCreateBulkTransferMutation,
   useApproveTransferMutation,
   useCompleteTransferMutation,
   useCancelTransferMutation,

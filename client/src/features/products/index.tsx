@@ -34,7 +34,7 @@ import { Edit, Package, Boxes, Wallet, CircleDollarSign, Sparkles, Trash2 } from
 import { toast } from 'sonner'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
-import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
+import { getDisplayStock, getDisplayStockValue, getStockStatus } from '@/lib/product-stock-display'
 import { useFormatMoney } from '@/lib/format-money'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
@@ -71,6 +71,9 @@ export default function Products() {
   const [isBulkUpdating, setIsBulkUpdating] = useState(false)
   const [showLowStockDetails, setShowLowStockDetails] = useState(false)
   const [lowStockThreshold, setLowStockThreshold] = useState(10)
+  // null = no store-wide override, fall back to half of lowStockThreshold — see
+  // getEffectiveStockThresholds in lib/product-stock-display.ts.
+  const [criticalStockThreshold, setCriticalStockThreshold] = useState<number | null>(null)
   const [categoryFilter, setCategoryFilter] = useState(NO_CATEGORY_FILTER)
   const [subCategoryFilter, setSubCategoryFilter] = useState(ALL_SUBCATEGORIES)
   const [brandFilter, setBrandFilter] = useState(ALL_BRANDS)
@@ -92,7 +95,23 @@ export default function Products() {
   // toggle — that switch flips instantly on its own but has no way to move the row
   // without this, see active-toggle-cell.tsx.
   const handleProductStatusChange = useCallback(() => setFetch((prev) => !prev), [])
-  const columns = useProductColumns(lowStockThreshold, handleProductStatusChange) // Get columns with translations
+  const columns = useProductColumns(lowStockThreshold, criticalStockThreshold, handleProductStatusChange) // Get columns with translations
+
+  // Store-wide Low/Critical Stock defaults — saved from the Low Stock Alert banner's
+  // settings dialog, applied to every product with no threshold override of its own.
+  const handleThresholdsSave = useCallback(
+    ({ lowStockThreshold: low, criticalStockThreshold: critical }: { lowStockThreshold: number; criticalStockThreshold: number | null }) => {
+      setLowStockThreshold(low)
+      setCriticalStockThreshold(critical)
+      localStorage.setItem('lowStockThreshold', String(low))
+      if (critical == null) {
+        localStorage.removeItem('criticalStockThreshold')
+      } else {
+        localStorage.setItem('criticalStockThreshold', String(critical))
+      }
+    },
+    []
+  )
   const { categories } = useSelector((state: RootState) => state.category)
   const { subCategories } = useSelector((state: RootState) => state.subCategory)
   const { data: brands = [] } = useGetAllBrandsQuery()
@@ -423,31 +442,36 @@ export default function Products() {
     }
   }, [allProducts, currentPage, limit, debouncedSearch, loadingAllProducts])
 
-  // Out of Stock / Low Stock / Critical Stock counts for the header stat cards — same
-  // thresholds LowStockAlert uses internally (critical = at or below half the low-stock
-  // threshold), computed here too since the alert banner no longer exposes them.
+  // Out of Stock / Low Stock / Critical Stock counts for the header stat cards — uses
+  // each product's own threshold override when set (see getStockStatus), falling back to
+  // the store-wide default otherwise. Computed here since the alert banner no longer
+  // exposes these counts itself.
   const stockCounts = useMemo(() => {
     let outOfStock = 0
     let lowStock = 0
     let criticalStock = 0
     for (const product of allProducts) {
-      const stock = getDisplayStock(product)
-      if (stock === 0) outOfStock++
-      else if (stock <= Math.floor(lowStockThreshold / 2)) criticalStock++
-      else if (stock <= lowStockThreshold) lowStock++
+      const status = getStockStatus(product, lowStockThreshold, criticalStockThreshold)
+      if (status === 'out_of_stock') outOfStock++
+      else if (status === 'critical_stock') criticalStock++
+      else if (status === 'low_stock') lowStock++
     }
     return { outOfStock, lowStock, criticalStock }
-  }, [allProducts, lowStockThreshold])
+  }, [allProducts, lowStockThreshold, criticalStockThreshold])
 
   const avgPurchasePrice = productStats && productStats.totalStockQuantity > 0
     ? productStats.totalStockValue / productStats.totalStockQuantity
     : 0
 
-  // Load threshold from localStorage
+  // Load store-wide thresholds from localStorage
   useEffect(() => {
     const savedThreshold = localStorage.getItem('lowStockThreshold');
     if (savedThreshold) {
       setLowStockThreshold(parseInt(savedThreshold));
+    }
+    const savedCritical = localStorage.getItem('criticalStockThreshold');
+    if (savedCritical) {
+      setCriticalStockThreshold(parseInt(savedCritical));
     }
   }, []);
 
@@ -455,10 +479,11 @@ export default function Products() {
     return (
       <ProductsProvider>
         <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
-<LowStockDetails 
+<LowStockDetails
               products={allProducts}
               onBack={() => setShowLowStockDetails(false)}
               threshold={lowStockThreshold}
+              criticalThreshold={criticalStockThreshold}
             />
         </div>
       </ProductsProvider>
@@ -575,7 +600,13 @@ export default function Products() {
 {/* Out of stock / low stock banner */}
           <div className='mb-4'>
             <div onClick={() => !loadingAllProducts && setShowLowStockDetails(true)} className={loadingAllProducts ? '' : 'cursor-pointer'}>
-              <LowStockAlert products={allProducts} defaultThreshold={lowStockThreshold} loading={loadingAllProducts} />
+              <LowStockAlert
+                products={allProducts}
+                lowStockThreshold={lowStockThreshold}
+                criticalStockThreshold={criticalStockThreshold}
+                onThresholdsSave={handleThresholdsSave}
+                loading={loadingAllProducts}
+              />
             </div>
           </div>
 

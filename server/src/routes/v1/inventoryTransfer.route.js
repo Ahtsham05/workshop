@@ -18,6 +18,22 @@ router
   .get(auth('viewProducts'), validate(inventoryTransferValidation.getTransfers), inventoryTransferController.getTransfers);
 
 router
+  .route('/bulk')
+  .post(
+    auth('editProducts'),
+    validate(inventoryTransferValidation.createBulkTransfer),
+    inventoryTransferController.createBulkTransfer
+  );
+
+router
+  .route('/groups/:groupId')
+  .get(
+    auth('viewProducts'),
+    validate(inventoryTransferValidation.getTransferGroup),
+    inventoryTransferController.getTransferGroup
+  );
+
+router
   .route('/:transferId')
   .get(auth('viewProducts'), validate(inventoryTransferValidation.getTransfer), inventoryTransferController.getTransfer);
 

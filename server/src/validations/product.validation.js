@@ -18,6 +18,21 @@ const noBothImeiAndSerial = (value, helpers) => {
   return value;
 };
 
+// A per-product critical-stock override can't sit above its own low-stock override —
+// that would make "Critical Stock" trigger later than "Low Stock", inverting the labels.
+// Only checked when both are explicitly set on this request; either one falling back to
+// the org-wide default is resolved client-side, not here.
+const criticalNotAboveLow = (value, helpers) => {
+  if (
+    value.criticalStockThreshold != null &&
+    value.lowStockThreshold != null &&
+    value.criticalStockThreshold > value.lowStockThreshold
+  ) {
+    return helpers.message('criticalStockThreshold cannot be greater than lowStockThreshold');
+  }
+  return value;
+};
+
 // Each entry is either a plain IMEI string, or a { imei, imei2 } pair for dual-SIM phones.
 const imeiEntry = Joi.alternatives().try(
   Joi.string().trim(),
@@ -34,6 +49,8 @@ const createProduct = {
     price: Joi.number().required(),
     cost: Joi.number().required(),
     stockQuantity: Joi.number().required(),
+    lowStockThreshold: Joi.number().integer().min(0).allow(null).optional(),
+    criticalStockThreshold: Joi.number().integer().min(0).allow(null).optional(),
     sku: Joi.string().allow('').default(null),
     category: Joi.string().allow('').default(null),
     categories: Joi.array().items(
@@ -80,7 +97,7 @@ const createProduct = {
     color: Joi.string().trim().allow('', null).optional(),
     shelfLocation: Joi.string().trim().allow('').optional(),
     isActive: Joi.boolean().optional(),
-  }).custom(noBothImeiAndSerial),
+  }).custom(noBothImeiAndSerial).custom(criticalNotAboveLow),
 };
 
 const fetchImageFromSearch = {
@@ -146,6 +163,8 @@ const updateProduct = {
     imeis: Joi.array().items(imeiEntry).optional(),
     cost: Joi.number(),
     stockQuantity: Joi.number(),
+    lowStockThreshold: Joi.number().integer().min(0).allow(null).optional(),
+    criticalStockThreshold: Joi.number().integer().min(0).allow(null).optional(),
     sku: Joi.string().allow(''),
     category: Joi.string().allow(''),
     categories: Joi.array().items(
@@ -186,7 +205,7 @@ const updateProduct = {
     color: Joi.string().trim().allow('', null).optional(),
     shelfLocation: Joi.string().trim().allow('').optional(),
     isActive: Joi.boolean().optional(),
-  }).custom(noBothImeiAndSerial),
+  }).custom(noBothImeiAndSerial).custom(criticalNotAboveLow),
 };
 
 const deleteProduct = {

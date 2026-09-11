@@ -23,6 +23,10 @@ const PurchaseSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  // Marks records created by the trial-account demo-data seeder (see
+  // demoData.service.js) so they can be told apart from real data and cleared via the
+  // self-service "Reset Demo Data" action without touching anything the user added.
+  isDemo: { type: Boolean, default: false, index: true },
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
   invoiceNumber: { type: String, required: true, unique: true },
   // The supplier's own invoice/bill number for this purchase (as printed on their paper

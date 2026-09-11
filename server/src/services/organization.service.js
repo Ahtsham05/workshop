@@ -31,6 +31,8 @@ const {
 const ApiError = require('../utils/ApiError');
 const { PLANS } = require('../config/plans');
 const { normalizeBusinessType } = require('../config/businessTypes');
+const demoDataService = require('./demoData.service');
+const logger = require('../config/logger');
 
 /**
  * Setup organization during user onboarding
@@ -97,6 +99,20 @@ const setupOrganization = async (userId, orgData) => {
     onboardingComplete: true,
     ...(adminRole && { role: adminRole._id }),
   });
+
+  // Deliberately NOT awaited: seeding ~14 purchases + 32 invoices through the real
+  // service layer (each its own multi-step transaction/tax/ledger round trip) can take
+  // well over a minute against a remote MongoDB cluster — comfortably past the client's
+  // request timeout for this endpoint. Awaiting it here left onboarding stuck: the org
+  // was created and onboardingComplete set, but the client never got the response, so it
+  // never left the onboarding screen, and a retry then hit the "already completed" guard
+  // above. Let it run in the background after the response has gone out instead; a
+  // seeding hiccup must never break account creation, so failures are only logged.
+  demoDataService
+    .seedDemoData({ organizationId: organization._id, branchId: branch._id, userId })
+    .catch((err) => {
+      logger.error(`Failed to seed demo data for organization ${organization._id}: ${err.message}`);
+    });
 
   return { organization, branch };
 };
@@ -276,6 +292,30 @@ const clearOrganizationData = async (orgId) => {
   };
 };
 
+/**
+ * Self-service reset of a trial org's seeded demo data (Products, Customers, Suppliers,
+ * Categories, Invoices, Purchases, Expenses tagged isDemo: true) — wipes it and reseeds a
+ * fresh batch. Only permitted while the org is still on a trial subscription; enforced by
+ * the caller (organization.controller.js), not here.
+ * @param {ObjectId} orgId
+ * @returns {Promise<{categories, suppliers, customers, products, purchases, invoices, expenses}>}
+ */
+const resetDemoData = async (orgId) => {
+  const org = await Organization.findById(orgId);
+  if (!org) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
+  }
+  const branch = await Branch.findOne({ organizationId: orgId, isDefault: true });
+  if (!branch) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Default branch not found for this organization');
+  }
+  return demoDataService.resetDemoData({
+    organizationId: orgId,
+    branchId: branch._id,
+    userId: org.owner,
+  });
+};
+
 module.exports = {
   setupOrganization,
   getOrganizationById,
@@ -284,6 +324,7 @@ module.exports = {
   updateOrganization,
   deleteOrganization,
   clearOrganizationData,
+  resetDemoData,
   getAllOrganizations,
 };
 

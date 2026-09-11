@@ -31,4 +31,23 @@ const buildMatchQuery = (scope, product) => {
   return { ...scope, $or: [{ barcode: product.barcode }, nameQuery] };
 };
 
-module.exports = { matchKeyFor, escapeRegex, buildMatchQuery };
+/**
+ * Same "same physical item" heuristic as buildMatchQuery, but with barcode treated as
+ * authoritative — checked first, on its own, and used unconditionally the moment it
+ * matches, exactly like a real barcode scan would. Only falls back to the exact-name
+ * match when there's no barcode to check, or nothing at this scope carries it yet. Used
+ * at the match-*or-create* decision points (inventory transfer, master-product linking)
+ * where getting priority right actually matters, as opposed to buildMatchQuery's single
+ * combined query, kept deliberately simple for the lower-stakes suggestion/lookup
+ * features that use it (see this file's top docblock).
+ */
+const findBestMatch = async ({ Model, scope, product, session }) => {
+  if (product.barcode) {
+    const byBarcode = await Model.findOne({ ...scope, barcode: product.barcode }).session(session || null);
+    if (byBarcode) return byBarcode;
+  }
+  const nameQuery = { name: { $regex: `^${escapeRegex(product.name.trim())}$`, $options: 'i' } };
+  return Model.findOne({ ...scope, ...nameQuery }).session(session || null);
+};
+
+module.exports = { matchKeyFor, escapeRegex, buildMatchQuery, findBestMatch };

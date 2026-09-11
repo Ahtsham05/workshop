@@ -2,10 +2,19 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { SlidersHorizontal, X } from 'lucide-react'
+import { Check, ChevronsUpDown, SlidersHorizontal, X } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
+import { cn } from '@/lib/utils'
 
 export const ALL_SUBCATEGORIES = 'all'
 export const ALL_BRANDS = 'all'
@@ -45,6 +54,80 @@ const QUANTITY_OPERATORS: { value: string; label: string }[] = [
   { value: 'gt', label: '>' },
   { value: 'gte', label: '≥' },
 ]
+
+interface ComboOption {
+  value: string
+  label: string
+}
+
+/** Searchable single-select combobox — same Command/Popover pattern used for the product
+ *  form's category/brand pickers, so typing filters the list and Up/Down + Enter navigate
+ *  and choose an option (built into cmdk, no extra wiring needed). */
+function FilterCombobox({
+  value,
+  onChange,
+  options,
+  searchPlaceholder,
+  emptyText,
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: ComboOption[]
+  searchPlaceholder: string
+  emptyText: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const selected = options.find((o) => o.value === value)
+  const filtered = query.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options
+
+  const handleSelect = (next: string) => {
+    onChange(next)
+    setOpen(false)
+    setQuery('')
+  }
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setQuery('')
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button variant='outline' role='combobox' aria-expanded={open} className='h-9 w-full justify-between font-normal'>
+          <span className='truncate'>{selected?.label ?? ''}</span>
+          <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className='w-[var(--radix-popover-trigger-width)] p-0' align='start'>
+        <Command shouldFilter={false}>
+          <CommandInput placeholder={searchPlaceholder} value={query} onValueChange={setQuery} />
+          <CommandList>
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandGroup>
+              {filtered.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.value}
+                  onSelect={() => handleSelect(option.value)}
+                  className='cursor-pointer gap-2'
+                >
+                  <span className={cn('flex-1 truncate', value === option.value && 'font-medium')}>{option.label}</span>
+                  {value === option.value && <Check className='h-4 w-4 shrink-0 text-primary' />}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 /** "Filters" popover for the Products list — Sub-Category, Brand, and a numeric Stock
  *  Quantity comparison (=, <, ≤, >, ≥) — alongside the existing Category dropdown and
@@ -89,33 +172,30 @@ export function ProductFiltersPanel({
       <PopoverContent className='w-[300px] space-y-3 p-3' align='end'>
         <div className='space-y-1.5'>
           <label className='text-xs font-medium text-muted-foreground'>{t('subcategories')}</label>
-          <Select value={subCategoryFilter} onValueChange={onSubCategoryChange}>
-            <SelectTrigger className='h-9 w-full'>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_SUBCATEGORIES}>{t('All Sub-Categories')}</SelectItem>
-              {subCategories.map((sc) => (
-                <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterCombobox
+            value={subCategoryFilter}
+            onChange={onSubCategoryChange}
+            options={[
+              { value: ALL_SUBCATEGORIES, label: t('All Sub-Categories') },
+              ...subCategories.map((sc) => ({ value: sc.id, label: sc.name })),
+            ]}
+            searchPlaceholder={t('search_categories')}
+            emptyText={t('no_categories_found')}
+          />
         </div>
 
         <div className='space-y-1.5'>
           <label className='text-xs font-medium text-muted-foreground'>{t('Brand')}</label>
-          <Select value={brandFilter} onValueChange={onBrandChange}>
-            <SelectTrigger className='h-9 w-full'>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_BRANDS}>{t('All Brands')}</SelectItem>
-              {brands.map((b) => {
-                const id = b._id || b.id || ''
-                return <SelectItem key={id} value={id}>{b.name}</SelectItem>
-              })}
-            </SelectContent>
-          </Select>
+          <FilterCombobox
+            value={brandFilter}
+            onChange={onBrandChange}
+            options={[
+              { value: ALL_BRANDS, label: t('All Brands') },
+              ...brands.map((b) => ({ value: b._id || b.id || '', label: b.name })),
+            ]}
+            searchPlaceholder={t('Search brands...')}
+            emptyText={t('No brands found')}
+          />
         </div>
 
         <div className='space-y-1.5'>

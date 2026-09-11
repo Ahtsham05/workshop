@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const { Product, ProductVariant, Inventory, MasterProduct, MasterProductVariant, Branch, Category, SubCategory } = require('../models');
-const { buildMatchQuery, escapeRegex } = require('../utils/productMatchKey');
+const { escapeRegex, findBestMatch } = require('../utils/productMatchKey');
 const ApiError = require('../utils/ApiError');
 const batchService = require('./batch.service');
 const imeiService = require('./imei.service');
@@ -27,19 +27,17 @@ const isMasterProductRolloutEnabledForOrg = (organizationId) => {
 
 /**
  * Finds the MasterProduct this product belongs to, by the same org-scoped
- * barcode-OR-exact-name identity used everywhere else in this migration
- * (productMatchKey.js#buildMatchQuery) — or creates one from the product's template
+ * barcode-first-then-exact-name identity used everywhere else in this migration
+ * (productMatchKey.js#findBestMatch) — or creates one from the product's template
  * fields if none exists yet. Mirrors
  * inventoryTransfer.service.js#findOrCreateDestinationProduct's matching, but the query
  * is scoped to organizationId only (MasterProduct is org-level, not branch-level).
- * Trying name even when the product has a barcode matters here specifically: if two
- * branches independently barcode-scanned "the same" item, they'll have two different
- * barcode values (barcode is globally unique on Product, so they can't share one) — a
- * barcode-only lookup would wrongly spin up a second MasterProduct instead of joining
- * the first one by name.
+ * Trying name even when the product has a barcode still matters: a barcode-less product
+ * (or one entered slightly differently) still needs the name fallback to join the right
+ * MasterProduct instead of spinning up a duplicate one.
  */
 const findOrCreateMasterProductForProduct = async (product, session) => {
-  const existing = await MasterProduct.findOne(buildMatchQuery({ organizationId: product.organizationId }, product)).session(session || null);
+  const existing = await findBestMatch({ Model: MasterProduct, scope: { organizationId: product.organizationId }, product, session });
 
   // trackBatch/trackExpiry never live on Product itself — for a non-hasVariants product
   // they live on its hidden default ProductVariant (see

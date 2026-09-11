@@ -97,6 +97,7 @@ import { Route as AuthenticatedSettingsLocalizationImport } from './routes/_auth
 import { Route as AuthenticatedSettingsLocalDatabaseImport } from './routes/_authenticated/settings/local-database'
 import { Route as AuthenticatedSettingsExchangeRatesImport } from './routes/_authenticated/settings/exchange-rates'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
+import { Route as AuthenticatedSettingsDemoDataImport } from './routes/_authenticated/settings/demo-data'
 import { Route as AuthenticatedSettingsCurrencyImport } from './routes/_authenticated/settings/currency'
 import { Route as AuthenticatedSettingsCacheImport } from './routes/_authenticated/settings/cache'
 import { Route as AuthenticatedSettingsBusinessProfileImport } from './routes/_authenticated/settings/business-profile'
@@ -748,6 +749,13 @@ const AuthenticatedSettingsDisplayRoute =
   AuthenticatedSettingsDisplayImport.update({
     id: '/display',
     path: '/display',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsDemoDataRoute =
+  AuthenticatedSettingsDemoDataImport.update({
+    id: '/demo-data',
+    path: '/demo-data',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -1703,6 +1711,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsCurrencyImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/demo-data': {
+      id: '/_authenticated/settings/demo-data'
+      path: '/demo-data'
+      fullPath: '/settings/demo-data'
+      preLoaderRoute: typeof AuthenticatedSettingsDemoDataImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/display': {
       id: '/_authenticated/settings/display'
       path: '/display'
@@ -2478,6 +2493,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsBusinessProfileRoute: typeof AuthenticatedSettingsBusinessProfileRoute
   AuthenticatedSettingsCacheRoute: typeof AuthenticatedSettingsCacheRoute
   AuthenticatedSettingsCurrencyRoute: typeof AuthenticatedSettingsCurrencyRoute
+  AuthenticatedSettingsDemoDataRoute: typeof AuthenticatedSettingsDemoDataRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
   AuthenticatedSettingsExchangeRatesRoute: typeof AuthenticatedSettingsExchangeRatesRoute
   AuthenticatedSettingsLocalDatabaseRoute: typeof AuthenticatedSettingsLocalDatabaseRoute
@@ -2505,6 +2521,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
       AuthenticatedSettingsBusinessProfileRoute,
     AuthenticatedSettingsCacheRoute: AuthenticatedSettingsCacheRoute,
     AuthenticatedSettingsCurrencyRoute: AuthenticatedSettingsCurrencyRoute,
+    AuthenticatedSettingsDemoDataRoute: AuthenticatedSettingsDemoDataRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
     AuthenticatedSettingsExchangeRatesRoute:
       AuthenticatedSettingsExchangeRatesRoute,
@@ -2948,6 +2965,7 @@ export interface FileRoutesByFullPath {
   '/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
+  '/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
@@ -3112,6 +3130,7 @@ export interface FileRoutesByTo {
   '/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
+  '/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
@@ -3280,6 +3299,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/_authenticated/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/_authenticated/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
+  '/_authenticated/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/_authenticated/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
@@ -3450,6 +3470,7 @@ export interface FileRouteTypes {
     | '/settings/business-profile'
     | '/settings/cache'
     | '/settings/currency'
+    | '/settings/demo-data'
     | '/settings/display'
     | '/settings/exchange-rates'
     | '/settings/local-database'
@@ -3613,6 +3634,7 @@ export interface FileRouteTypes {
     | '/settings/business-profile'
     | '/settings/cache'
     | '/settings/currency'
+    | '/settings/demo-data'
     | '/settings/display'
     | '/settings/exchange-rates'
     | '/settings/local-database'
@@ -3779,6 +3801,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/business-profile'
     | '/_authenticated/settings/cache'
     | '/_authenticated/settings/currency'
+    | '/_authenticated/settings/demo-data'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/exchange-rates'
     | '/_authenticated/settings/local-database'
@@ -4047,6 +4070,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/business-profile",
         "/_authenticated/settings/cache",
         "/_authenticated/settings/currency",
+        "/_authenticated/settings/demo-data",
         "/_authenticated/settings/display",
         "/_authenticated/settings/exchange-rates",
         "/_authenticated/settings/local-database",
@@ -4315,6 +4339,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/currency": {
       "filePath": "_authenticated/settings/currency.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/demo-data": {
+      "filePath": "_authenticated/settings/demo-data.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/display": {

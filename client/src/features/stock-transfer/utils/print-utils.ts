@@ -3,15 +3,26 @@ import type { InventoryTransfer, TransferStatus } from '@/stores/inventoryTransf
 
 export type TransferPrintLanguage = 'en' | 'ur'
 
-export interface PrintTransferData {
-  transferId: string
+// A grouped bulk transfer whose line items span more than one real status (e.g. 2 of 3
+// products already received) prints as 'partial' — display-only, never stored as such.
+export type PrintTransferStatus = TransferStatus | 'partial'
+
+export interface PrintTransferLine {
   productName: string
   quantity: number
   imeis?: string[]
   batchNumber?: string
+  status: TransferStatus
+}
+
+export interface PrintTransferData {
+  transferNumber?: string
+  transferId: string
+  lines: PrintTransferLine[]
+  totalQuantity: number
   fromBranchName: string
   toBranchName: string
-  status: TransferStatus
+  status: PrintTransferStatus
   reason?: string
   notes?: string
   transferDate?: string
@@ -39,6 +50,8 @@ const labels = {
     qty: 'Qty',
     reason: 'Reason',
     notes: 'Notes',
+    total_products: 'Total Products',
+    total_qty: 'Total Quantity',
     branch_authorization: 'Branch Authorization',
     stamp_here: 'Stamp / Seal',
     authorized_signature: 'Authorized Signature',
@@ -57,6 +70,7 @@ const labels = {
     status_in_transit: 'In Transit',
     status_completed: 'Completed',
     status_cancelled: 'Cancelled',
+    status_partial: 'Partially Received',
   },
   ur: {
     doc_title: 'اسٹاک ٹرانسفر نوٹ',
@@ -73,6 +87,8 @@ const labels = {
     qty: 'مقدار',
     reason: 'وجہ',
     notes: 'نوٹس',
+    total_products: 'کل پروڈکٹس',
+    total_qty: 'کل مقدار',
     branch_authorization: 'برانچ کی توثیق',
     stamp_here: 'مہر / اسٹیمپ',
     authorized_signature: 'مجاز دستخط',
@@ -91,15 +107,17 @@ const labels = {
     status_in_transit: 'راستے میں',
     status_completed: 'مکمل',
     status_cancelled: 'منسوخ شدہ',
+    status_partial: 'جزوی طور پر موصول',
   },
 } as const
 
-const statusLabelKey: Record<TransferStatus, keyof (typeof labels)['en']> = {
+const statusLabelKey: Record<PrintTransferStatus, keyof (typeof labels)['en']> = {
   suggested: 'status_suggested',
   approved: 'status_approved',
   in_transit: 'status_in_transit',
   completed: 'status_completed',
   cancelled: 'status_cancelled',
+  partial: 'status_partial',
 }
 
 function branchRefName(ref: InventoryTransfer['fromBranchId']): string {
@@ -107,23 +125,42 @@ function branchRefName(ref: InventoryTransfer['fromBranchId']): string {
   return ref?.name || '—'
 }
 
+/**
+ * Builds print data from one or more line items belonging to the same transfer — a plain
+ * single-product transfer passes a 1-element array, a bulk transfer passes every item in
+ * its group. Either way the printout renders one shared header (branches/date/reason) and
+ * one items table with a row per line (or per IMEI, for serialized lines).
+ */
 export function buildTransferPrintData(
-  tr: InventoryTransfer,
+  items: InventoryTransfer | InventoryTransfer[],
   extra: { companyName?: string; companyAddress?: string; companyPhone?: string; companyLogo?: string; language?: TransferPrintLanguage } = {}
 ): PrintTransferData {
+  const list = Array.isArray(items) ? items : [items]
+  if (list.length === 0) throw new Error('Nothing to print')
+  const first = list[0]
+
+  const statuses = [...new Set(list.map((i) => i.status))]
+  const status: PrintTransferStatus = statuses.length === 1 ? statuses[0] : 'partial'
+  const completedDates = list.map((i) => i.completedAt).filter(Boolean) as string[]
+
   return {
-    transferId: tr.id,
-    productName: tr.productName,
-    quantity: tr.quantity,
-    imeis: tr.imeis,
-    batchNumber: tr.batchSnapshot?.batchNumber,
-    fromBranchName: branchRefName(tr.fromBranchId),
-    toBranchName: branchRefName(tr.toBranchId),
-    status: tr.status,
-    reason: tr.reason,
-    notes: tr.notes,
-    transferDate: tr.suggestedAt,
-    completedAt: tr.completedAt,
+    transferNumber: first.transferNumber,
+    transferId: first.id,
+    lines: list.map((i) => ({
+      productName: i.productName,
+      quantity: i.quantity,
+      imeis: i.imeis,
+      batchNumber: i.batchSnapshot?.batchNumber,
+      status: i.status,
+    })),
+    totalQuantity: list.reduce((sum, i) => sum + i.quantity, 0),
+    fromBranchName: branchRefName(first.fromBranchId),
+    toBranchName: branchRefName(first.toBranchId),
+    status,
+    reason: first.reason,
+    notes: first.notes,
+    transferDate: first.suggestedAt,
+    completedAt: completedDates.length === list.length && completedDates.length > 0 ? completedDates.sort().slice(-1)[0] : undefined,
     companyName: extra.companyName,
     companyAddress: extra.companyAddress,
     companyPhone: extra.companyPhone,
@@ -140,15 +177,13 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
   const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
 
   const statusText = texts[statusLabelKey[data.status]]
-  const transferRef = `TRF-${data.transferId.slice(-8).toUpperCase()}`
+  const transferRef = data.transferNumber || `TRF-${data.transferId.slice(-8).toUpperCase()}`
   const companyName = data.companyName ? escapeHtml(data.companyName) : 'Logix Plus Solutions'
-  const productName = escapeHtml(data.productName)
   const fromBranch = escapeHtml(data.fromBranchName)
   const toBranch = escapeHtml(data.toBranchName)
-  const batchNumber = data.batchNumber ? escapeHtml(data.batchNumber) : ''
-  const imeis = data.imeis && data.imeis.length > 0 ? data.imeis.map(escapeHtml) : []
   const reasonHtml = data.reason?.trim() ? invoiceNoteToSafeHtml(data.reason) : ''
   const notesHtml = data.notes?.trim() ? invoiceNoteToSafeHtml(data.notes) : ''
+  const isBulk = data.lines.length > 1
 
   const fmtDate = (value?: string) => {
     if (!value) return '—'
@@ -159,23 +194,37 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
   const infoRow = (label: string, value: string) =>
     `<div class="info-row"><span class="info-label">${label}:</span><span>${value}</span></div>`
 
-  const itemRows = imeis.length > 0
-    ? imeis.map((imei, i) => `
+  let rowNum = 0
+  const itemRows = data.lines
+    .map((line) => {
+      const productName = escapeHtml(line.productName)
+      const batchNumber = line.batchNumber ? escapeHtml(line.batchNumber) : ''
+      const imeis = line.imeis && line.imeis.length > 0 ? line.imeis.map(escapeHtml) : []
+
+      if (imeis.length > 0) {
+        return imeis
+          .map(
+            (imei) => `
+              <tr>
+                <td>${++rowNum}</td>
+                <td>${productName}</td>
+                <td>${imei}</td>
+                <td>1</td>
+              </tr>
+            `
+          )
+          .join('')
+      }
+      return `
         <tr>
-          <td>${i + 1}</td>
-          <td>${productName}</td>
-          <td>${imei}</td>
-          <td>1</td>
-        </tr>
-      `).join('')
-    : `
-        <tr>
-          <td>1</td>
+          <td>${++rowNum}</td>
           <td>${productName}${batchNumber ? `<br><span style="font-size:9px;color:#555;">${texts.batch}: ${batchNumber}</span>` : ''}</td>
           <td>—</td>
-          <td>${data.quantity}</td>
+          <td>${line.quantity}</td>
         </tr>
       `
+    })
+    .join('')
 
   return `
 <!DOCTYPE html>
@@ -203,7 +252,7 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
     .info-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 2px; font-size: 12px; }
     .info-label { font-weight: bold; }
     .items-section { margin-bottom: 12px; }
-    .items-header { border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 5px; font-weight: bold; font-size: 12px; }
+    .items-header { border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 5px; font-weight: bold; font-size: 12px; display: flex; justify-content: space-between; }
     .items-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 4px; table-layout: fixed; }
     .items-table th { border-bottom: 1px dashed #000; padding: 3px 2px; text-align: ${startAlign}; font-weight: bold; font-size: 11px; white-space: nowrap; }
     .items-table th:first-child { width: 16px; text-align: center; }
@@ -211,6 +260,7 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
     .items-table td { padding: 3px 2px; vertical-align: top; border-bottom: 1px dotted #ddd; font-size: 11px; word-wrap: break-word; overflow-wrap: break-word; }
     .items-table td:first-child { text-align: center; }
     .items-table td:last-child { text-align: center; font-weight: bold; }
+    .items-table tfoot td { border-top: 1px solid #000; border-bottom: none; font-weight: bold; padding-top: 5px; }
     .notes-section { margin: 10px 0; padding: 8px 0; border-top: 1px dashed #000; font-size: 10px; }
     .notes-title { font-weight: bold; margin-bottom: 3px; }
     .signatures-section { margin-top: 16px; border-top: 1px dashed #000; padding-top: 12px; }
@@ -258,7 +308,10 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
   </div>
 
   <div class="items-section">
-    <div class="items-header">${texts.items_header}</div>
+    <div class="items-header">
+      <span>${texts.items_header}</span>
+      ${isBulk ? `<span>${texts.total_products}: ${data.lines.length}</span>` : ''}
+    </div>
     <table class="items-table">
       <thead>
         <tr>
@@ -271,6 +324,14 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
       <tbody>
         ${itemRows}
       </tbody>
+      ${isBulk ? `
+      <tfoot>
+        <tr>
+          <td colspan="3">${texts.total_qty}</td>
+          <td>${data.totalQuantity}</td>
+        </tr>
+      </tfoot>
+      ` : ''}
     </table>
   </div>
 
