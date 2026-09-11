@@ -17,12 +17,14 @@ interface Props {
   children: React.ReactNode
   className?: string
   contentClassName?: string
+  style?: React.CSSProperties
 }
 
 export default function LongText({
   children,
   className = '',
   contentClassName = '',
+  style,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [isOverflown, setIsOverflown] = useState(false)
@@ -40,7 +42,7 @@ export default function LongText({
 
   if (!isOverflown)
     return (
-      <div ref={ref} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
+      <div ref={ref} style={style} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
         {children}
       </div>
     )
@@ -51,7 +53,7 @@ export default function LongText({
         <TooltipProvider delayDuration={0}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div ref={ref} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
+              <div ref={ref} style={style} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
                 {children}
               </div>
             </TooltipTrigger>
@@ -64,7 +66,7 @@ export default function LongText({
       <div className='sm:hidden'>
         <Popover>
           <PopoverTrigger asChild>
-            <div ref={ref} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
+            <div ref={ref} style={style} className={cn('truncate', isUrdu ? 'text-right' : '', className)}>
               {children}
             </div>
           </PopoverTrigger>

@@ -13,6 +13,7 @@ import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTableRowActions } from './data-table-row-actions'
 import { useLanguage } from '@/context/language-context'
 import { useUrduDisplay } from '@/context/urdu-display-context'
+import { useProductDisplay } from '@/context/product-display-context'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
 import { getDisplayStockValue, getStockStatus } from '@/lib/product-stock-display'
@@ -26,6 +27,7 @@ export const useProductColumns = (
 ): ColumnDef<Product>[] => {
   const { t } = useLanguage()
   const { showUrdu } = useUrduDisplay()
+  const { productNameMaxChars } = useProductDisplay()
   const expiringByProduct = useExpiringBatchesByProduct()
   const formatCurrency = useFormatMoney()
 
@@ -53,7 +55,7 @@ export const useProductColumns = (
   },
   {
     accessorKey: 'name',
-    size: 260,
+    size: 380,
     header: ({ column }) => <DataTableColumnHeader column={column} title='product_name' />,
     cell: ({ row }) => {
       const product = row.original
@@ -73,7 +75,10 @@ export const useProductColumns = (
           )}
           <div className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
             <ColorDot hex={product.color} />
-            <LongText className={getTextClasses(row.getValue('name') || 'Unnamed product', 'max-w-36 shrink-0')}>
+            <LongText
+              className={getTextClasses(row.getValue('name') || 'Unnamed product', 'shrink-0')}
+              style={{ maxWidth: `${productNameMaxChars}ch` }}
+            >
               {row.getValue('name') || 'Unnamed product'}
             </LongText>
             <FlagBadge flag={product.flag} />

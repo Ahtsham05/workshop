@@ -11,6 +11,7 @@ import { FontProvider } from './context/font-context'
 import { ThemeProvider } from './context/theme-context'
 import { LanguageProvider } from './context/language-context'
 import { UrduDisplayProvider } from './context/urdu-display-context'
+import { ProductDisplayProvider } from './context/product-display-context'
 // Apply stored language to <html> before first render to avoid layout flash
 import { getStoredLanguage, applyLanguageToDocument } from './i18n'
 applyLanguageToDocument(getStoredLanguage())
@@ -57,8 +58,10 @@ if (!rootElement.innerHTML) {
                 <LanguageProvider>
                   <FontProvider>
                     <UrduDisplayProvider>
-                      <RouterProvider router={router} />
-                      <Toaster />
+                      <ProductDisplayProvider>
+                        <RouterProvider router={router} />
+                        <Toaster />
+                      </ProductDisplayProvider>
                     </UrduDisplayProvider>
                   </FontProvider>
                 </LanguageProvider>

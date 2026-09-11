@@ -1,10 +1,26 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useUrduDisplay } from '@/context/urdu-display-context'
+import { useProductDisplay } from '@/context/product-display-context'
+
+const PRODUCT_NAME_WIDTH_OPTIONS = [
+  { value: '25', label: 'Compact (~25 characters)' },
+  { value: '45', label: 'Normal (~45 characters)' },
+  { value: '65', label: 'Wide (~65 characters)' },
+  { value: '80', label: 'Extra wide (~80 characters)' },
+]
 
 export function DisplayForm() {
   const { showUrdu, setShowUrdu, showUrduInput, setShowUrduInput } = useUrduDisplay()
+  const { productNameMaxChars, setProductNameMaxChars } = useProductDisplay()
 
   return (
     <Card>
@@ -47,6 +63,32 @@ export function DisplayForm() {
             checked={showUrduInput}
             onCheckedChange={setShowUrduInput}
           />
+        </div>
+        <div className='flex flex-row items-center justify-between rounded-lg border p-4'>
+          <div className='space-y-0.5'>
+            <Label htmlFor='product-name-width' className='text-base'>
+              Product name column width
+            </Label>
+            <p className='text-sm text-muted-foreground'>
+              How much of a product's name shows before it's cut off in the Products list.
+              Names longer than this still show in full on hover.
+            </p>
+          </div>
+          <Select
+            value={String(productNameMaxChars)}
+            onValueChange={(value) => setProductNameMaxChars(Number(value))}
+          >
+            <SelectTrigger id='product-name-width' className='w-[220px]'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PRODUCT_NAME_WIDTH_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </CardContent>
     </Card>
