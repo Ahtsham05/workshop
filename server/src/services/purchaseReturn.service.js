@@ -300,6 +300,29 @@ const createPurchaseReturn = async (returnBody) => {
       )
       .catch(() => {});
 
+    // 9. Credit the ORIGINAL invoice, not just the account balance. Sending goods back makes
+    // that invoice worth less, so its outstanding must drop too — otherwise the ledger says
+    // the supplier is owed less while the purchase list still shows the full bill open.
+    // Runs after the commit because it reads the committed ledger row (see
+    // supplierPayment.service.js's recordAllocationForLedgerEntry) and moves no money itself.
+    if (purchaseReturn.purchaseId && purchaseReturn.status !== 'rejected') {
+      // eslint-disable-next-line global-require
+      const supplierPaymentService = require('./supplierPayment.service');
+      const returnLedgerEntry = await SupplierLedger.findOne({
+        referenceId: purchaseReturn._id,
+        referenceModel: 'PurchaseReturn',
+        transactionType: 'purchase_return',
+      });
+      if (returnLedgerEntry) {
+        await supplierPaymentService
+          .recordAllocationForLedgerEntry(returnLedgerEntry, { id: returnBody.createdBy })
+          .catch((error) => {
+            // The return itself is already recorded correctly; a failed credit must not undo it.
+            console.error('Failed to credit purchase return to its invoice:', error.message);
+          });
+      }
+    }
+
     return purchaseReturn;
   } catch (err) {
     await session.abortTransaction();
@@ -444,9 +467,46 @@ const updatePurchaseReturnStatus = async (id, status, userId, rejectionReason) =
         createdBy: userId,
       });
     }
+
+    // A rejected return never happened: the supplier's account must not keep the credit
+    // either — the ledger row is created up-front at creation time, before approval.
+    await reverseSupplierEffect(ret);
   }
 
   return ret;
+};
+
+/**
+ * Undo everything a return did to the supplier's account: the invoice credit it applied, its
+ * Supplier Ledger row, and the balance that row moved. Used by both delete and reject.
+ *
+ * Before this existed, deleting or rejecting a return restored the stock but left the payable
+ * permanently reduced — the ledger kept a `purchase_return` debit for goods that were, as far
+ * as the system was now concerned, never sent back.
+ */
+const reverseSupplierEffect = async (ret) => {
+  // eslint-disable-next-line global-require
+  const supplierPaymentService = require('./supplierPayment.service');
+  // eslint-disable-next-line global-require
+  const supplierLedgerService = require('./supplierLedger.service');
+
+  await supplierPaymentService.releaseReturnCredit(ret._id).catch((error) => {
+    console.error('Failed to release purchase return credit:', error.message);
+  });
+
+  const deleted = await SupplierLedger.deleteMany({
+    referenceId: ret._id,
+    referenceModel: 'PurchaseReturn',
+    transactionType: 'purchase_return',
+  });
+
+  if (deleted.deletedCount > 0 && ret.supplierId) {
+    // recalculateBalances re-walks the supplier's entries and rewrites Supplier.balance, so
+    // the balance card lands on the right number without a manual $inc that could double up.
+    await supplierLedgerService.recalculateBalances(ret.supplierId).catch((error) => {
+      console.error('Failed to recalculate supplier balance after return reversal:', error.message);
+    });
+  }
 };
 
 const deletePurchaseReturn = async (id) => {
@@ -495,6 +555,8 @@ const deletePurchaseReturn = async (id) => {
       ret._id
     )
     .catch(() => {});
+
+  await reverseSupplierEffect(ret);
 
   await PurchaseReturn.findByIdAndDelete(id);
 };

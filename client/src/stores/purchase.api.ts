@@ -112,6 +112,29 @@ export const purchaseApi = createApi({
       onQueryStarted: invalidateDownstreamCaches,
     }),
 
+    // Stat-card totals for whatever the purchase list is currently filtered to — same
+    // query string as getPurchases, so the cards always describe the rows below them.
+    getPurchasesSummary: builder.query<PurchaseListSummary, Record<string, unknown>>({
+      query: (params = {}) => ({ url: '/summary', params }),
+      providesTags: ['Purchase'],
+    }),
+
+    // Flattened rows (no pagination) behind Export CSV / Export PDF.
+    exportPurchases: builder.query<{ results: PurchaseExportRow[]; limit: number; truncated: boolean }, Record<string, unknown>>({
+      query: (params = {}) => ({ url: '/export', params }),
+    }),
+
+    // Comment thread on one purchase — see purchase.model.js's embedded `comments`.
+    addPurchaseComment: builder.mutation<{ id: string; message: string; authorName?: string; createdAt: string }, { purchaseId: string; message: string }>({
+      query: ({ purchaseId, message }) => ({ url: `/${purchaseId}/comments`, method: 'POST', body: { message } }),
+      invalidatesTags: (_r, _e, { purchaseId }) => [{ type: 'Purchase', id: purchaseId }, 'Purchase'],
+    }),
+
+    deletePurchaseComment: builder.mutation<unknown, { purchaseId: string; commentId: string }>({
+      query: ({ purchaseId, commentId }) => ({ url: `/${purchaseId}/comments/${commentId}`, method: 'DELETE' }),
+      invalidatesTags: (_r, _e, { purchaseId }) => [{ type: 'Purchase', id: purchaseId }, 'Purchase'],
+    }),
+
     // Get purchase statistics
     getPurchaseStatistics: builder.query({
       query: (params = {}) => ({
@@ -187,6 +210,41 @@ export const purchaseApi = createApi({
   }),
 })
 
+/** Stat-card totals for the current purchase-list filter — see getPurchaseListSummary. */
+export interface PurchaseListSummary {
+  purchaseCount: number
+  supplierCount: number
+  totalValue: number
+  totalSettled: number
+  totalOutstanding: number
+  overdueCount: number
+  overdueAmount: number
+  paidCount: number
+  partialCount: number
+  unpaidCount: number
+  thisMonthValue: number
+}
+
+/** One flattened purchase row for CSV/PDF export. */
+export interface PurchaseExportRow {
+  invoiceNumber: string
+  vendorBillNumber?: string
+  supplierName?: string
+  itemsCount: number
+  purchaseDate: string
+  dueDate?: string | null
+  type?: 'cash' | 'credit'
+  paymentType?: string
+  totalAmount: number
+  settledAmount: number
+  remainingAmount: number
+  settlementStatus: string
+  dueStatus: string
+  notes?: string
+  updatedAt?: string
+  createdByName?: string
+}
+
 /** One product/variant's price-comparison result — see purchase.service.js's getBulkPriceComparison. */
 export interface PriceComparisonEntry {
   hasHistory: boolean
@@ -203,6 +261,10 @@ export interface PriceComparisonEntry {
 export const {
   useCreatePurchaseMutation,
   useGetPurchasesQuery,
+  useGetPurchasesSummaryQuery,
+  useLazyExportPurchasesQuery,
+  useAddPurchaseCommentMutation,
+  useDeletePurchaseCommentMutation,
   useGetPurchaseByIdQuery,
   useUpdatePurchaseMutation,
   useDeletePurchaseMutation,

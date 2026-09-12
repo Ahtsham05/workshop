@@ -8,6 +8,7 @@ const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
+const logger = require('../config/logger');
 
 /**
  * Post a manual supplier payment to the double-entry system.
@@ -241,7 +242,7 @@ const getOpeningBalanceBeforeDate = async (baseFilter, startDate) => {
  * @param {Object} ledgerBody
  * @returns {Promise<SupplierLedger>}
  */
-const createLedgerEntry = async (ledgerBody) => {
+const createLedgerEntry = async (ledgerBody, options = {}) => {
   // Create the entry first
   const entry = await SupplierLedger.create({
     ...ledgerBody,
@@ -256,6 +257,40 @@ const createLedgerEntry = async (ledgerBody) => {
   await syncWalletFromSupplierLedger(updatedEntry, null);
   await syncCashBookFromSupplierLedger(updatedEntry);
   postSupplierLedgerToAccounts(updatedEntry);
+
+  // A standalone "Cash Paid" row (this screen's own form, or a Payment Voucher's supplier
+  // line) is money actually paid to the supplier — so it must settle their open invoices,
+  // not just move the balance. supplierPayment.service.js owns that allocation and attaches
+  // it to THIS entry rather than posting a second one. `skipInvoiceAllocation` is set by
+  // supplierPayment.service itself, which has already allocated before calling us.
+  if (!options.skipInvoiceAllocation) {
+    // Required lazily: supplierPayment.service requires this module back, and a top-level
+    // require would hand one of the two a half-built exports object.
+    // eslint-disable-next-line global-require
+    const supplierPaymentService = require('./supplierPayment.service');
+    try {
+      const payment = await supplierPaymentService.recordAllocationForLedgerEntry(updatedEntry, options.user);
+      if (payment) {
+        // Rides along on the document (never persisted) so the controller can tell the user
+        // which invoices this payment just cleared.
+        updatedEntry.$locals.invoiceAllocation = {
+          paymentId: String(payment._id),
+          paymentNumber: payment.paymentNumber,
+          allocatedTotal: payment.allocatedTotal,
+          unappliedAmount: payment.unappliedAmount,
+          invoices: payment.allocations.map((allocation) => ({
+            invoiceNumber: allocation.invoiceNumber,
+            amount: allocation.amount,
+            fullySettled: allocation.amount >= allocation.outstandingBefore - 0.001,
+          })),
+        };
+      }
+    } catch (error) {
+      // The ledger entry itself is already correct; a failed allocation must not undo it.
+      logger.error(`Failed to allocate supplier ledger payment ${updatedEntry._id}: ${error.message}`);
+    }
+  }
+
   return updatedEntry;
 };
 
@@ -424,6 +459,17 @@ const updateLedgerEntry = async (id, updateBody) => {
   await syncWalletFromSupplierLedger(entry, previousSnapshot);
   await syncCashBookFromSupplierLedger(entry);
   postSupplierLedgerToAccounts(entry);
+
+  // Re-spreads an existing allocation if the payment's account/date moved. Deliberately
+  // does NOT create one for an entry that never had it — retroactively settling invoices
+  // as a side effect of editing an old row's description would be a nasty surprise; use
+  // src/scripts/backfill-supplier-payment-allocations.js for that, explicitly.
+  // eslint-disable-next-line global-require
+  const supplierPaymentService = require('./supplierPayment.service');
+  await supplierPaymentService.syncAllocationForLedgerEntry(entry).catch((error) => {
+    logger.error(`Failed to resync supplier payment allocation for ${entry._id}: ${error.message}`);
+  });
+
   return entry;
 };
 
@@ -441,6 +487,15 @@ const deleteLedgerEntry = async (id) => {
   const supplierId = entry.supplier;
   const transactionDate = entry.transactionDate;
   const previousSnapshot = resolvePaymentSnapshot(entry);
+
+  // Whatever this payment had settled goes back to being outstanding. Handled by a
+  // dedicated release (not voidPayment) because voidPayment deletes the ledger entry —
+  // the two would call each other in a loop.
+  // eslint-disable-next-line global-require
+  const supplierPaymentService = require('./supplierPayment.service');
+  await supplierPaymentService.releaseAllocationsForLedgerEntry(entry._id).catch((error) => {
+    logger.error(`Failed to release supplier payment allocation for ${entry._id}: ${error.message}`);
+  });
   if (previousSnapshot.isPayment && previousSnapshot.walletType) {
     await walletService.adjustWalletBalance({
       organizationId: entry.organizationId,

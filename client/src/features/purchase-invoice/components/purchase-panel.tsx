@@ -1194,6 +1194,8 @@ export default function PurchasePanel({
         splitWalletType: splitPaymentMethod === 'wallet' ? purchase.splitWalletType : undefined,
         splitPaidAmount: splitPaidAmount,
         purchaseDate: purchase.date || new Date().toISOString(),
+        // Only credit purchases carry a due date; switching back to cash clears it.
+        dueDate: purchaseType === 'credit' ? purchase.dueDate || null : null,
         vendorBillNumber: purchase.vendorBillNumber?.trim() || undefined,
         notes: purchase.notes?.trim() || undefined,
         attachments: purchase.attachments || [],
@@ -2227,6 +2229,28 @@ export default function PurchasePanel({
                 className="w-full"
               />
             </div>
+
+            {/* Payment due date — only meaningful on credit terms, where an unpaid remainder
+                actually becomes a debt with a deadline. Drives the purchase list's Overdue
+                badge/filter and the due-date-first payment allocation strategy. */}
+            {purchase.type === 'credit' && (
+              <div>
+                <Label htmlFor="purchase-due-date">{t('Payment Due Date')}</Label>
+                <Input
+                  id="purchase-due-date"
+                  type="date"
+                  value={purchase.dueDate ? new Date(purchase.dueDate).toISOString().split('T')[0] : ''}
+                  min={purchase.date ? new Date(purchase.date).toISOString().split('T')[0] : undefined}
+                  onChange={(e) =>
+                    setPurchase((prev) => ({
+                      ...prev,
+                      dueDate: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                    }))
+                  }
+                  className="w-full"
+                />
+              </div>
+            )}
 
             {/* Vendor Bill No — the supplier's own invoice/bill number as printed on their
                 paper bill, kept separate from our auto-generated Purchase Number above so

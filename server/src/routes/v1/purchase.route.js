@@ -27,6 +27,16 @@ router
   .post(auth('createPurchases'), validate(purchaseValidation.createPurchase), purchaseController.createPurchase)
   .get(auth('viewPurchases'), validate(purchaseValidation.getPurchases), purchaseController.getPurchases);
 
+// Stat-card totals + CSV/PDF export for whatever the list is currently filtered to.
+// Registered ahead of the /:purchaseId catch-all below.
+router
+  .route('/summary')
+  .get(auth('viewPurchases'), validate(purchaseValidation.getPurchasesSummary), purchaseController.getPurchasesSummary);
+
+router
+  .route('/export')
+  .get(auth('viewPurchases'), validate(purchaseValidation.exportPurchases), purchaseController.exportPurchases);
+
 router
   .route('/date')
   .get(auth('viewPurchases'), validate(purchaseValidation.getPurchaseByDate), purchaseController.getPurchaseByDate);
@@ -44,6 +54,14 @@ router
     validate(purchaseValidation.getBulkPriceComparison),
     purchaseController.getBulkPriceComparison
   );
+
+router
+  .route('/:purchaseId/comments')
+  .post(auth('viewPurchases'), validate(purchaseValidation.addPurchaseComment), purchaseController.addPurchaseComment);
+
+router
+  .route('/:purchaseId/comments/:commentId')
+  .delete(auth('editPurchases'), validate(purchaseValidation.deletePurchaseComment), purchaseController.deletePurchaseComment);
 
 router
   .route('/:purchaseId')

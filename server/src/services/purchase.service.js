@@ -1,10 +1,11 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Purchase, Product, ProductVariant, Supplier, SupplierLedger, Organization } = require('../models');
+const { Purchase, Product, ProductVariant, Supplier, SupplierLedger, Organization, Category } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { resolvePurchaseLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildSupplierPurchaseLedgerEntries } = require('../utils/ledgerSettlement');
 const supplierLedgerService = require('./supplierLedger.service');
+const supplierPaymentService = require('./supplierPayment.service');
 const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
@@ -29,6 +30,7 @@ const postPurchaseToAccounts = (purchase) => {
 const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
 const { resolvePurchaseInvoiceBalance } = require('../utils/purchaseBalance');
+const { buildSettlementAddFieldsStage } = require('../utils/purchaseSettlement');
 const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
 const Money = require('../utils/money');
 
@@ -1351,6 +1353,12 @@ const deletePurchaseById = async (purchaseId) => {
     });
   }
 
+  // Any supplier payment money that had been applied to this invoice goes back to that
+  // payment's unapplied credit — see supplierPayment.service.js's detachPurchaseAllocations.
+  await supplierPaymentService.detachPurchaseAllocations(purchase._id).catch((error) => {
+    console.error('Failed to detach supplier payment allocations:', error.message);
+  });
+
   // Remove the purchase after adjusting stock quantities
   await purchase.deleteOne();
 
@@ -1477,10 +1485,485 @@ const getBulkPriceComparison = async ({ organizationId, branchId, items, supplie
   return result;
 };
 
+
+/* ------------------------------------------------------------------------------------
+ * Purchase list: filtering, sorting and totals
+ *
+ * The list screen filters and sorts on settlement (paid / partial / outstanding /
+ * overdue), which is DERIVED from totalAmount vs paidAmount + allocatedAmount rather than
+ * stored (see utils/purchaseSettlement.js for why). Mongoose's `find` can't sort on a
+ * derived value, so the list runs as an aggregation that computes settlement, filters and
+ * paginates — then re-reads that page through `find().populate()` so callers keep getting
+ * fully-populated Mongoose documents, exactly like queryPurchases always returned.
+ * ---------------------------------------------------------------------------------- */
+
+/** Sort keys the client may ask for → the field the pipeline actually sorts on. */
+const PURCHASE_SORT_FIELDS = {
+  invoiceNumber: 'invoiceNumber',
+  amount: 'totalAmount',
+  totalAmount: 'totalAmount',
+  supplier: 'supplierName',
+  supplierName: 'supplierName',
+  purchaseDate: 'purchaseDate',
+  date: 'purchaseDate',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  dueDate: 'dueSortKey',
+  paymentDue: 'dueSortKey',
+  remainingAmount: 'remainingAmount',
+  paidAmount: 'settledAmount',
+  settledAmount: 'settledAmount',
+  items: 'itemsCount',
+};
+
+const escapeRegexLiteral = (raw) => String(raw).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const toFilterObjectId = (value) =>
+  mongoose.Types.ObjectId.isValid(value) ? new mongoose.Types.ObjectId(String(value)) : value;
+
+const toIdArray = (value) =>
+  (Array.isArray(value) ? value : String(value).split(','))
+    .map((entry) => String(entry).trim())
+    .filter(Boolean);
+
+/**
+ * Products matching a free-text term or belonging to a category — purchases reference
+ * products by id, so "search by product" and "filter by category" both have to resolve to a
+ * product id set first, the same way supplier search already does in listSearchFilter.js.
+ */
+const resolveProductIds = async ({ organizationId, branchId, term, categoryId }) => {
+  const productFilter = {};
+  if (organizationId) productFilter.organizationId = toFilterObjectId(organizationId);
+  if (branchId) productFilter.branchId = toFilterObjectId(branchId);
+
+  if (term) {
+    const escaped = escapeRegexLiteral(term);
+    productFilter.$or = [
+      { name: { $regex: escaped, $options: 'i' } },
+      { nameUrdu: { $regex: escaped, $options: 'i' } },
+      { barcode: { $regex: escaped, $options: 'i' } },
+      { sku: { $regex: escaped, $options: 'i' } },
+    ];
+  }
+  if (categoryId) {
+    // Products carry the newer multi-category refs (`categories[]._id`) AND a legacy
+    // free-text `category` name — a filter that only checks one of them silently misses
+    // every product saved under the other, so resolve the category's name and match both.
+    const categoryConditions = [];
+    if (mongoose.Types.ObjectId.isValid(categoryId)) {
+      categoryConditions.push({ 'categories._id': toFilterObjectId(categoryId) });
+      const category = await Category.findById(categoryId).select('name').lean();
+      if (category?.name) {
+        categoryConditions.push({ category: { $regex: `^${escapeRegexLiteral(category.name)}$`, $options: 'i' } });
+        categoryConditions.push({ 'categories.name': { $regex: `^${escapeRegexLiteral(category.name)}$`, $options: 'i' } });
+      }
+    } else {
+      const escapedName = escapeRegexLiteral(categoryId);
+      categoryConditions.push({ category: { $regex: `^${escapedName}$`, $options: 'i' } });
+      categoryConditions.push({ 'categories.name': { $regex: `^${escapedName}$`, $options: 'i' } });
+    }
+    productFilter.$and = [...(productFilter.$and || []), { $or: categoryConditions }];
+  }
+
+  const products = await Product.find(productFilter).select('_id').limit(5000).lean();
+  return products.map((product) => product._id);
+};
+
+/** Suppliers whose name/urdu name/phone matches a free-text term. */
+const resolveSupplierIdsByTerm = async ({ organizationId, branchId, term }) => {
+  const escaped = escapeRegexLiteral(term);
+  const supplierFilter = {
+    $or: [
+      { name: { $regex: escaped, $options: 'i' } },
+      { nameUrdu: { $regex: escaped, $options: 'i' } },
+      { phone: { $regex: escaped, $options: 'i' } },
+    ],
+  };
+  if (organizationId) supplierFilter.organizationId = toFilterObjectId(organizationId);
+  if (branchId) supplierFilter.branchId = toFilterObjectId(branchId);
+  const suppliers = await Supplier.find(supplierFilter).select('_id').lean();
+  return suppliers.map((supplier) => supplier._id);
+};
+
+/**
+ * Turn the list screen's filter payload into the document-level `$match` that runs BEFORE
+ * settlement is computed (cheap, index-friendly). Settlement-dependent filters
+ * (paymentStatus / dueStatus / remaining-amount) are applied afterwards by
+ * buildSettlementMatch.
+ */
+const buildPurchaseListMatch = async (filter = {}, options = {}) => {
+  const match = {};
+  const { organizationId, branchId } = filter;
+  if (organizationId) match.organizationId = toFilterObjectId(organizationId);
+  if (branchId) match.branchId = toFilterObjectId(branchId);
+
+  // "Warehouse" in the UI is this app's Branch — only meaningful for an org-wide viewer
+  // whose request didn't pin a branch already.
+  if (options.branch) match.branchId = toFilterObjectId(options.branch);
+
+  if (options.supplier) {
+    const supplierIds = toIdArray(options.supplier).map(toFilterObjectId);
+    match.supplier = supplierIds.length > 1 ? { $in: supplierIds } : supplierIds[0];
+  }
+  if (options.createdBy) {
+    const userIds = toIdArray(options.createdBy).map(toFilterObjectId);
+    match.createdBy = userIds.length > 1 ? { $in: userIds } : userIds[0];
+  }
+
+  // Payment type: `type` is the settlement terms (cash vs credit) and `paymentMethod` is the
+  // account the money moved through — "wallet" is a method, not a term, so it matches on the
+  // other field. Both are accepted as one filter because that's how the badge reads.
+  if (options.paymentType) {
+    const types = toIdArray(options.paymentType).map((value) => value.toLowerCase());
+    const conditions = [];
+    if (types.includes('cash')) conditions.push({ type: 'cash', paymentMethod: { $ne: 'wallet' } });
+    if (types.includes('credit')) conditions.push({ type: 'credit' });
+    if (types.includes('wallet')) conditions.push({ paymentMethod: 'wallet' });
+    if (conditions.length === 1) Object.assign(match, conditions[0]);
+    else if (conditions.length > 1) match.$and = [...(match.$and || []), { $or: conditions }];
+  }
+
+  if (options.invoiceStatus) {
+    const statuses = toIdArray(options.invoiceStatus).map((value) => value.toLowerCase());
+    if (statuses.length === 1) match.status = statuses[0] === 'completed';
+  }
+
+  // Exact-day filter carried over from the previous list API (?purchaseDate=YYYY-MM-DD).
+  if (options.purchaseDate && !options.startDate && !options.endDate) {
+    const day = new Date(options.purchaseDate);
+    match.purchaseDate = {
+      $gte: new Date(new Date(day).setHours(0, 0, 0, 0)),
+      $lte: new Date(new Date(day).setHours(23, 59, 59, 999)),
+    };
+  }
+
+  if (options.startDate || options.endDate) {
+    match.purchaseDate = {};
+    if (options.startDate) match.purchaseDate.$gte = new Date(new Date(options.startDate).setHours(0, 0, 0, 0));
+    if (options.endDate) match.purchaseDate.$lte = new Date(new Date(options.endDate).setHours(23, 59, 59, 999));
+  }
+
+  if (options.minAmount !== undefined || options.maxAmount !== undefined) {
+    match.totalAmount = {};
+    if (options.minAmount !== undefined && options.minAmount !== '') match.totalAmount.$gte = Number(options.minAmount);
+    if (options.maxAmount !== undefined && options.maxAmount !== '') match.totalAmount.$lte = Number(options.maxAmount);
+    if (Object.keys(match.totalAmount).length === 0) delete match.totalAmount;
+  }
+
+  if (options.category) {
+    const productIds = await resolveProductIds({ organizationId, branchId, categoryId: options.category });
+    match['items.product'] = { $in: productIds };
+  }
+
+  const term = options.search ? String(options.search).trim() : '';
+  if (term) {
+    const escaped = escapeRegexLiteral(term);
+    const searchBy = String(options.searchBy || 'all').toLowerCase();
+    const byField = {
+      invoice: () => [{ invoiceNumber: { $regex: escaped, $options: 'i' } }],
+      vendorbill: () => [{ vendorBillNumber: { $regex: escaped, $options: 'i' } }],
+      notes: () => [{ notes: { $regex: escaped, $options: 'i' } }],
+      // "Reference" covers whatever else identifies the document on paper: our own number,
+      // the supplier's bill number, or the purchase order it came from.
+      reference: () => [
+        { invoiceNumber: { $regex: escaped, $options: 'i' } },
+        { vendorBillNumber: { $regex: escaped, $options: 'i' } },
+      ],
+    };
+
+    let conditions = byField[searchBy] ? byField[searchBy]() : [];
+
+    if (searchBy === 'supplier' || searchBy === 'all') {
+      const supplierIds = await resolveSupplierIdsByTerm({ organizationId, branchId, term });
+      if (supplierIds.length > 0) conditions.push({ supplier: { $in: supplierIds } });
+      else if (searchBy === 'supplier') conditions.push({ supplier: null });
+    }
+    if (searchBy === 'product' || searchBy === 'all') {
+      const productIds = await resolveProductIds({ organizationId, branchId, term });
+      if (productIds.length > 0) conditions.push({ 'items.product': { $in: productIds } });
+      else if (searchBy === 'product') conditions.push({ 'items.product': null });
+    }
+    if (searchBy === 'all') {
+      conditions = conditions.concat([
+        { invoiceNumber: { $regex: escaped, $options: 'i' } },
+        { vendorBillNumber: { $regex: escaped, $options: 'i' } },
+        { notes: { $regex: escaped, $options: 'i' } },
+      ]);
+    }
+
+    match.$and = [...(match.$and || []), { $or: conditions.length > 0 ? conditions : [{ _id: null }] }];
+  }
+
+  return match;
+};
+
+/** Filters that can only be evaluated once settlement has been computed. */
+const buildSettlementMatch = (options = {}) => {
+  const conditions = {};
+
+  if (options.paymentStatus) {
+    const statuses = toIdArray(options.paymentStatus).map((value) => value.toLowerCase());
+    // "outstanding" is the everyday word for "still owes something" — unpaid OR partial.
+    const expanded = statuses.flatMap((status) => (status === 'outstanding' ? ['unpaid', 'partial'] : [status]));
+    if (expanded.length > 0) conditions.settlementStatus = { $in: expanded };
+  }
+
+  if (options.dueStatus) {
+    const dueStatuses = toIdArray(options.dueStatus).map((value) => value.toLowerCase());
+    if (dueStatuses.length > 0) conditions.dueStatus = { $in: dueStatuses };
+  }
+
+  return conditions;
+};
+
+/** Supplier name is needed for both "sort by supplier" and the list's own display copy. */
+const SUPPLIER_LOOKUP_STAGES = [
+  { $lookup: { from: 'suppliers', localField: 'supplier', foreignField: '_id', as: '_supplierDoc' } },
+  { $addFields: { supplierName: { $ifNull: [{ $arrayElemAt: ['$_supplierDoc.name', 0] }, ''] } } },
+  { $project: { _supplierDoc: 0 } },
+];
+
+const buildPurchaseListPipeline = async (filter, options) => {
+  const match = await buildPurchaseListMatch(filter, options);
+  const settlementMatch = buildSettlementMatch(options);
+
+  const pipeline = [
+    { $match: match },
+    ...SUPPLIER_LOOKUP_STAGES,
+    buildSettlementAddFieldsStage(),
+    {
+      $addFields: {
+        dueSortKey: { $ifNull: ['$dueDate', new Date('9999-12-31')] },
+        itemsCount: { $size: { $ifNull: ['$items', []] } },
+      },
+    },
+  ];
+
+  if (Object.keys(settlementMatch).length > 0) {
+    pipeline.push({ $match: settlementMatch });
+  }
+
+  return pipeline;
+};
+
+/**
+ * Paginated purchase list with every list-screen filter, sorted on any column including the
+ * derived settlement ones.
+ *
+ * @param {Object} filter organizationId/branchId scope (from applyBranchFilter)
+ * @param {Object} options filters + `sortBy` ("field:asc|desc") + page/limit
+ */
+const queryPurchaseList = async (filter, options = {}) => {
+  const limit = Math.max(1, parseInt(options.limit, 10) || 10);
+  const page = Math.max(1, parseInt(options.page, 10) || 1);
+  const [rawSortKey, rawSortOrder] = String(options.sortBy || 'purchaseDate:desc').split(':');
+  const sortField = PURCHASE_SORT_FIELDS[rawSortKey] || 'purchaseDate';
+  const sortDirection = String(rawSortOrder).toLowerCase() === 'asc' ? 1 : -1;
+
+  const pipeline = await buildPurchaseListPipeline(filter, options);
+  const [result] = await Purchase.aggregate([
+    ...pipeline,
+    {
+      $facet: {
+        // `_id` is appended as a tiebreaker so a page boundary can never drop or repeat a
+        // row when several purchases share the same sort value (same day, same amount, ...).
+        rows: [
+          { $sort: { [sortField]: sortDirection, _id: sortDirection } },
+          { $skip: (page - 1) * limit },
+          { $limit: limit },
+          {
+            $project: {
+              _id: 1,
+              settledAmount: 1,
+              remainingAmount: 1,
+              settlementStatus: 1,
+              dueStatus: 1,
+              itemsCount: 1,
+            },
+          },
+        ],
+        total: [{ $count: 'count' }],
+      },
+    },
+  ]);
+
+  const rows = result?.rows || [];
+  const totalResults = result?.total?.[0]?.count || 0;
+  const ids = rows.map((row) => row._id);
+
+  // Re-read the page as real documents so callers keep the populated shape they had before
+  // (aggregation can't run Mongoose populate), then restore the aggregation's order.
+  const documents = await Purchase.find({ _id: { $in: ids } })
+    .populate('supplier')
+    .populate('items.product')
+    .populate('items.variantId')
+    .populate('createdBy', 'name email');
+
+  const documentById = new Map(documents.map((document) => [String(document._id), document]));
+  const results = rows
+    .map((row) => {
+      const document = documentById.get(String(row._id));
+      if (!document) return null;
+      // Settlement rides along as plain extra keys on the serialized document — derived, so
+      // it is never persisted back.
+      return {
+        ...document.toJSON(),
+        settledAmount: row.settledAmount,
+        remainingAmount: row.remainingAmount,
+        settlementStatus: row.settlementStatus,
+        dueStatus: row.dueStatus,
+        itemsCount: row.itemsCount,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    results,
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit) || 0,
+    totalResults,
+  };
+};
+
+/**
+ * Headline totals for the list screen's stat cards, computed over the SAME filter set as the
+ * table below them — so narrowing the filters narrows the cards, which is the whole point of
+ * having them there.
+ */
+const getPurchaseListSummary = async (filter, options = {}) => {
+  const pipeline = await buildPurchaseListPipeline(filter, options);
+
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const [result] = await Purchase.aggregate([
+    ...pipeline,
+    {
+      $group: {
+        _id: null,
+        purchaseCount: { $sum: 1 },
+        totalValue: { $sum: { $ifNull: ['$totalAmount', 0] } },
+        totalSettled: { $sum: '$settledAmount' },
+        totalOutstanding: { $sum: { $cond: [{ $gt: ['$remainingAmount', 0] }, '$remainingAmount', 0] } },
+        overdueCount: { $sum: { $cond: [{ $eq: ['$dueStatus', 'overdue'] }, 1, 0] } },
+        overdueAmount: { $sum: { $cond: [{ $eq: ['$dueStatus', 'overdue'] }, '$remainingAmount', 0] } },
+        paidCount: { $sum: { $cond: [{ $eq: ['$settlementStatus', 'paid'] }, 1, 0] } },
+        partialCount: { $sum: { $cond: [{ $eq: ['$settlementStatus', 'partial'] }, 1, 0] } },
+        unpaidCount: { $sum: { $cond: [{ $eq: ['$settlementStatus', 'unpaid'] }, 1, 0] } },
+        thisMonthValue: {
+          $sum: { $cond: [{ $gte: ['$purchaseDate', startOfMonth] }, { $ifNull: ['$totalAmount', 0] }, 0] },
+        },
+        suppliers: { $addToSet: '$supplier' },
+      },
+    },
+    { $addFields: { supplierCount: { $size: '$suppliers' } } },
+    { $project: { _id: 0, suppliers: 0 } },
+  ]).option({ allowDiskUse: true });
+
+  return {
+    purchaseCount: result?.purchaseCount || 0,
+    supplierCount: result?.supplierCount || 0,
+    totalValue: Money.roundMoney(result?.totalValue || 0),
+    totalSettled: Money.roundMoney(result?.totalSettled || 0),
+    totalOutstanding: Money.roundMoney(result?.totalOutstanding || 0),
+    overdueCount: result?.overdueCount || 0,
+    overdueAmount: Money.roundMoney(result?.overdueAmount || 0),
+    paidCount: result?.paidCount || 0,
+    partialCount: result?.partialCount || 0,
+    unpaidCount: result?.unpaidCount || 0,
+    thisMonthValue: Money.roundMoney(result?.thisMonthValue || 0),
+  };
+};
+
+/**
+ * Every purchase matching the filter, flattened for CSV/PDF export — no pagination, but
+ * capped so a mis-clicked "export everything" can't try to serialize a whole year of data
+ * into one response.
+ */
+const EXPORT_ROW_LIMIT = 5000;
+
+const getPurchaseListForExport = async (filter, options = {}) => {
+  const pipeline = await buildPurchaseListPipeline(filter, options);
+  const [rawSortKey, rawSortOrder] = String(options.sortBy || 'purchaseDate:desc').split(':');
+  const sortField = PURCHASE_SORT_FIELDS[rawSortKey] || 'purchaseDate';
+  const sortDirection = String(rawSortOrder).toLowerCase() === 'asc' ? 1 : -1;
+
+  const rows = await Purchase.aggregate([
+    ...pipeline,
+    { $sort: { [sortField]: sortDirection, _id: sortDirection } },
+    { $limit: EXPORT_ROW_LIMIT },
+    { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: '_createdByDoc' } },
+    {
+      $project: {
+        _id: 0,
+        invoiceNumber: 1,
+        vendorBillNumber: 1,
+        supplierName: 1,
+        itemsCount: 1,
+        purchaseDate: 1,
+        dueDate: 1,
+        type: 1,
+        paymentType: 1,
+        totalAmount: 1,
+        settledAmount: 1,
+        remainingAmount: 1,
+        settlementStatus: 1,
+        dueStatus: 1,
+        notes: 1,
+        updatedAt: 1,
+        createdByName: { $ifNull: [{ $arrayElemAt: ['$_createdByDoc.name', 0] }, ''] },
+      },
+    },
+  ]).option({ allowDiskUse: true });
+
+  return { results: rows, limit: EXPORT_ROW_LIMIT, truncated: rows.length >= EXPORT_ROW_LIMIT };
+};
+
+/**
+ * Append a comment to a purchase. Comments are a plain embedded thread (see
+ * purchase.model.js) — no edit, because an audit-relevant note that can be rewritten in
+ * place is worth less than one that can't.
+ */
+const addPurchaseComment = async (purchaseId, { message }, user) => {
+  const purchase = await Purchase.findById(purchaseId);
+  if (!purchase) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Purchase not found');
+  }
+  purchase.comments.push({
+    author: user?.id || user?._id,
+    authorName: user?.name || user?.email,
+    message: String(message).trim(),
+    createdAt: new Date(),
+  });
+  await purchase.save();
+  return purchase.comments[purchase.comments.length - 1];
+};
+
+const deletePurchaseComment = async (purchaseId, commentId) => {
+  const purchase = await Purchase.findById(purchaseId);
+  if (!purchase) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Purchase not found');
+  }
+  const comment = purchase.comments.id(commentId);
+  if (!comment) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Comment not found');
+  }
+  comment.deleteOne();
+  await purchase.save();
+  return purchase.comments;
+};
+
 module.exports = {
   createPurchase,
   generateNextPurchaseInvoiceNumber,
   queryPurchases,
+  queryPurchaseList,
+  getPurchaseListSummary,
+  getPurchaseListForExport,
+  addPurchaseComment,
+  deletePurchaseComment,
   getPurchaseById,
   updatePurchaseById,
   deletePurchaseById,

@@ -60,6 +60,7 @@ import {
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
 import { CommunicationLogPanel } from './communication-log-panel';
+import { SupplierBalanceReconciliation } from './supplier-balance-reconciliation'
 import { Can } from '@/context/permission-context';
 import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
 import {
@@ -1638,6 +1639,11 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               </p>
             </div>
           </div>
+
+          {/* The purchase list totals gross open invoices while this page shows the net
+              account balance — this lays out every rupee of that difference rather than
+              leaving two numbers that look wrong next to each other. */}
+          <SupplierBalanceReconciliation supplierId={supplier._id} supplierName={supplier.name} />
 
           <Can permission="viewCommunicationLog">
             <div className="mb-6">

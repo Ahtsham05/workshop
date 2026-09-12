@@ -1,51 +1,123 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
-import { useLanguage } from '@/context/language-context'
-import { resolveBranchCompanyName } from '@/utils/branch-company-name'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
-import { RootState } from '@/stores/store'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
-import { ArrowLeft, Eye, Edit, Trash2, Plus, Search, Filter, Receipt } from 'lucide-react'
-import { useGetPurchasesQuery } from '@/stores/purchase.api'
-import { useGetBranchQuery } from '@/stores/branch.api'
-import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { InvoiceDeleteDialog } from './invoice-delete-dialog'
-import { PurchaseAttachmentsButton } from './purchase-attachments-button'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import type { RootState } from '@/stores/store'
+import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
+import { cn } from '@/lib/utils'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { SimplePagination } from '@/components/ui/simple-pagination'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Banknote,
+  Copy,
+  Edit,
+  Eye,
+  FileDown,
+  HandCoins,
+  MoreHorizontal,
+  Paperclip,
+  Plus,
+  Printer,
+  Receipt,
+  Trash2,
+  TrendingUp,
+  Users,
+  Wallet,
+} from 'lucide-react'
+import { useGetPurchasesQuery, useGetPurchasesSummaryQuery, useLazyExportPurchasesQuery } from '@/stores/purchase.api'
+import { useGetSupplierReconciliationQuery } from '@/stores/supplierPayment.api'
+import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
-import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
+import { useCanViewCreatedBy } from '@/components/created-by-cell'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
-import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
-import { getPurchaseItemDisplayName, getPurchaseItemBarcode } from '../utils/purchase-item-display'
-import { formatImeiEntries } from '@/stores/imei.api'
-import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
+import {
+  PAPER_FORMATS,
+  resolveThermalSize,
+  resolveSheetSize,
+  withPrintOrientation,
+  type PaperSize,
+  type PrintOrientation,
+} from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
-import { PrintFormatButton } from '@/components/print-format-button'
-import { usePermissions } from '@/context/permission-context'
+import { InvoiceDeleteDialog } from './invoice-delete-dialog'
+import { PurchaseFiltersToolbar } from './purchase-filters-toolbar'
+import { PurchaseViewDrawer } from './purchase-view-drawer'
+import { SupplierPaymentDialog } from './supplier-payment-dialog'
+import { usePurchaseFilters } from '../hooks/use-purchase-filters'
+import { exportPurchasesToCsv, exportPurchasesToPdf } from '../utils/purchase-export'
+import {
+  DUE_STATUS_META,
+  SETTLEMENT_STATUS_META,
+  paymentTypeClassName,
+  resolvePaymentTypeLabel,
+  resolvePurchaseSettlement,
+} from '../utils/purchase-settlement'
 
 interface PurchaseListProps {
   onBack?: () => void
   onCreateNew?: () => void
   onEdit?: (purchase: any) => void
+  /** Opens the create panel pre-filled from an existing purchase (a new invoice, not an edit). */
+  onDuplicate?: (purchase: any) => void
 }
 
-export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseListProps) {
+/** One headline number above the table. */
+function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = 'default',
+}: {
+  label: string
+  value: string
+  hint?: React.ReactNode
+  icon: any
+  tone?: 'default' | 'warning' | 'danger' | 'success'
+}) {
+  const toneClass = {
+    default: 'text-primary bg-primary/10',
+    success: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10',
+    warning: 'text-amber-600 dark:text-amber-400 bg-amber-500/10',
+    danger: 'text-rose-600 dark:text-rose-400 bg-rose-500/10',
+  }[tone]
+
+  return (
+    <Card>
+      <CardContent className='flex items-center gap-3 p-4'>
+        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', toneClass)}>
+          <Icon className='h-5 w-5' />
+        </div>
+        <div className='min-w-0'>
+          <p className='text-xs text-muted-foreground'>{label}</p>
+          <p className='truncate text-xl font-semibold tabular-nums'>{value}</p>
+          {hint && <div className='text-[11px] text-muted-foreground'>{hint}</div>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate }: PurchaseListProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
@@ -54,6 +126,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   const canCreate = hasExplicitPermission('createPurchases')
   const canEdit = hasExplicitPermission('editPurchases')
   const canDelete = hasExplicitPermission('deletePurchases')
+
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -62,42 +135,82 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
   const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
-  const [searchTerm, setSearchTerm] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(10)
+
+  const {
+    filters,
+    draft,
+    queryParams,
+    activeFilterCount,
+    patchDraft,
+    patchImmediate,
+    applyDraft,
+    resetAll,
+    toggleQuickFilter,
+    savedViews,
+    saveView,
+    applyView,
+    deleteView,
+  } = usePurchaseFilters()
+
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  /** id → invoice number, so a selection survives paging and can be matched to export rows. */
+  const [selected, setSelected] = useState<Record<string, string>>({})
+  const [viewingPurchase, setViewingPurchase] = useState<any>(null)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [paymentSupplierId, setPaymentSupplierId] = useState<string | undefined>()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [purchaseToDelete, setPurchaseToDelete] = useState<any>(null)
 
-  // Debounce search term
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchTerm)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [searchTerm])
+  const selectedIds = useMemo(() => Object.keys(selected), [selected])
 
-  // Build query parameters
-  const queryParams = {
-    page: currentPage,
-    limit: itemsPerPage,
-    sortBy: 'purchaseDate:desc',
-    ...(debouncedSearch && {
-      search: debouncedSearch,
-      fieldName: LIST_SEARCH_FIELDS.purchase,
-    }),
+  // Any filter change re-anchors the list at page 1 — staying on page 7 of a result set
+  // that now has two pages just shows an empty table.
+  useEffect(() => {
+    setPage(1)
+    setSelected({})
+  }, [queryParams, limit])
+
+  const listParams = useMemo(() => ({ ...queryParams, page, limit }), [queryParams, page, limit])
+  const { data: purchasesResponse, isLoading, isFetching, error } = useGetPurchasesQuery(listParams)
+  const { data: summary } = useGetPurchasesSummaryQuery(queryParams)
+
+  // Filtered to exactly one supplier? Then this page's outstanding total can be compared
+  // directly against that supplier's ledger balance — and they legitimately differ once
+  // credits/debit notes are in play, so say so here rather than letting the two screens
+  // look like they disagree. See supplierPayment.service.js's getSupplierReconciliation.
+  const singleSupplierId = filters.supplier.length === 1 ? filters.supplier[0] : ''
+  const { data: reconciliation } = useGetSupplierReconciliationQuery(singleSupplierId, { skip: !singleSupplierId })
+  const reconciliationGap = reconciliation
+    ? Math.round((reconciliation.invoiceOutstanding - reconciliation.ledgerBalance) * 100) / 100
+    : 0
+  const [triggerExport, { isFetching: isExporting }] = useLazyExportPurchasesQuery()
+
+  const purchases: any[] = purchasesResponse?.results || []
+  const totalItems = purchasesResponse?.totalResults || 0
+  const totalPages = purchasesResponse?.totalPages || 1
+
+  const allOnPageSelected = purchases.length > 0 && purchases.every((purchase) => selected[purchase.id || purchase._id])
+
+  const toggleSelectAll = () => {
+    setSelected((previous) => {
+      const next = { ...previous }
+      for (const purchase of purchases) {
+        const id = purchase.id || purchase._id
+        if (allOnPageSelected) delete next[id]
+        else next[id] = purchase.invoiceNumber
+      }
+      return next
+    })
   }
 
-  const { data: purchasesResponse, isLoading, error } = useGetPurchasesQuery(queryParams)
-
-  const getPurchasePaymentType = useCallback((purchase: any) => {
-    if (purchase?.paymentType === 'Wallet' && purchase?.walletType) {
-      return purchase.walletType
-    }
-    if (purchase?.paymentType) return purchase.paymentType
-    return Number(purchase?.balance || 0) > 0 ? 'Credit' : 'Cash'
-  }, [])
+  const toggleSelect = (id: string, invoiceNumber: string) =>
+    setSelected((previous) => {
+      const next = { ...previous }
+      if (next[id]) delete next[id]
+      else next[id] = invoiceNumber
+      return next
+    })
 
   const printPurchase = useCallback(
     async (purchase: any, paperSize: PaperSize = defaultPaperSize) => {
@@ -117,13 +230,34 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
           currencyMeta,
         }
 
-        const format = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)]
+        const paperFormat = PAPER_FORMATS[withPrintOrientation(paperSize, printOrientation)]
         const html =
-          format.family === 'thermal'
-            ? printModule.generatePurchaseInvoiceHTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), resolveThermalSize(paperSize))
-            : printModule.generatePurchaseInvoiceA4HTML(purchase, purchase?.supplier?.name || 'N/A', t, branchDetails, preferredLanguage, getInvoicePrintInUrdu(), withPrintOrientation(resolveSheetSize(paperSize), printOrientation), invoiceTemplate)
+          paperFormat.family === 'thermal'
+            ? printModule.generatePurchaseInvoiceHTML(
+                purchase,
+                purchase?.supplier?.name || 'N/A',
+                t,
+                branchDetails,
+                preferredLanguage,
+                getInvoicePrintInUrdu(),
+                resolveThermalSize(paperSize)
+              )
+            : printModule.generatePurchaseInvoiceA4HTML(
+                purchase,
+                purchase?.supplier?.name || 'N/A',
+                t,
+                branchDetails,
+                preferredLanguage,
+                getInvoicePrintInUrdu(),
+                withPrintOrientation(resolveSheetSize(paperSize), printOrientation),
+                invoiceTemplate
+              )
 
-        const printWindow = window.open('', '_blank', `width=${format.popup.width},height=${format.popup.height},scrollbars=yes,resizable=yes`)
+        const printWindow = window.open(
+          '',
+          '_blank',
+          `width=${paperFormat.popup.width},height=${paperFormat.popup.height},scrollbars=yes,resizable=yes`
+        )
         if (printWindow) {
           printWindow.document.write(html)
           printWindow.document.close()
@@ -134,46 +268,57 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
         toast.error(t('Failed to print purchase'))
       }
     },
-    [branchData, t, preferredLanguage, orgData, defaultPaperSize, invoiceTemplate]
+    [branchData, t, preferredLanguage, orgData, defaultPaperSize, invoiceTemplate, printOrientation, currencyMeta]
   )
 
-  const handleDelete = (purchase: any) => {
-    setPurchaseToDelete(purchase)
-    setDeleteDialogOpen(true)
+  /** CSV/PDF run off the server's export endpoint so they cover the whole filtered set,
+   *  not just the page on screen — and honour a selection when one is active. */
+  const runExport = async (kind: 'csv' | 'pdf') => {
+    try {
+      const response = await triggerExport(queryParams).unwrap()
+      // A selection narrows the export to those invoices; with nothing selected it covers
+      // the whole filtered set, not just the page on screen.
+      const selectedInvoiceNumbers = new Set(Object.values(selected))
+      const exportRows = selectedInvoiceNumbers.size
+        ? response.results.filter((row) => selectedInvoiceNumbers.has(row.invoiceNumber))
+        : response.results
+
+      if (exportRows.length === 0) {
+        toast.error(t('Nothing to export'))
+        return
+      }
+
+      if (kind === 'csv') {
+        exportPurchasesToCsv(exportRows)
+        toast.success(`${exportRows.length} ${t('rows exported')}`)
+      } else {
+        const opened = exportPurchasesToPdf(exportRows, {
+          title: t('Purchase Report'),
+          subtitle: resolveBranchCompanyName(orgData?.name, branchData?.name),
+          formatMoney,
+        })
+        if (!opened) toast.error(t('Allow pop-ups to export a PDF'))
+      }
+
+      if (response.truncated) {
+        toast.warning(`${t('Export capped at')} ${response.limit} ${t('rows — narrow the filters for the rest')}`)
+      }
+    } catch {
+      toast.error(t('Export failed'))
+    }
   }
 
-  // Handle server response with pagination info
-  const purchaseList = purchasesResponse?.results || purchasesResponse?.data || []
-  const totalItems = purchasesResponse?.totalResults || purchasesResponse?.total || purchaseList.length
-  const totalPages = purchasesResponse?.totalPages || Math.ceil(totalItems / itemsPerPage)
-  const currentPurchases = purchaseList // Server already returns paginated results
-
-  // Reset to first page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [debouncedSearch, itemsPerPage])
-
-  // Calculate display indices for pagination info
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">{t('Loading purchases...')}</p>
-        </div>
-      </div>
-    )
+  const openPaymentFor = (purchase?: any) => {
+    setPaymentSupplierId(purchase ? String(purchase.supplier?.id || purchase.supplier?._id || '') : undefined)
+    setPaymentDialogOpen(true)
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="text-red-600">{t('Error loading purchases')}: {t('Unknown error')}</p>
-          <Button onClick={() => window.location.reload()} className="mt-4">
+      <div className='flex h-64 items-center justify-center'>
+        <div className='text-center'>
+          <p className='text-destructive'>{t('Error loading purchases')}</p>
+          <Button onClick={() => window.location.reload()} className='mt-4'>
             {t('Retry')}
           </Button>
         </div>
@@ -181,521 +326,416 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit }: PurchaseLi
     )
   }
 
+  const columnCount = 12 + (canViewCreatedBy ? 1 : 0)
+
   return (
-    <div className="space-y-6">
+    <div className='space-y-4'>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className='flex flex-wrap items-start justify-between gap-3'>
+        <div className='flex items-center gap-3'>
           {onBack && (
-            <Button variant="ghost" size="sm" onClick={onBack}>
-              <ArrowLeft className="h-4 w-4" />
+            <Button variant='ghost' size='icon' onClick={onBack}>
+              <ArrowLeft className='h-4 w-4' />
             </Button>
           )}
           <div>
-            <h1 className="text-2xl font-bold">{t('Purchase Management')}</h1>
-            <p className="text-muted-foreground mt-4">{t('Manage supplier purchases')}</p>
+            <h1 className='text-2xl font-bold tracking-tight'>{t('Purchase Management')}</h1>
+            <p className='text-sm text-muted-foreground'>{t('Track supplier purchases, invoices and payments.')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {canCreate ? (
+        <div className='flex flex-wrap items-center gap-2'>
+          {canCreate && (
+            <Button variant='outline' onClick={() => openPaymentFor()}>
+              <HandCoins className='mr-2 h-4 w-4' />
+              {t('Record Supplier Payment')}
+            </Button>
+          )}
+          {canCreate && (
             <Button onClick={onCreateNew}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className='mr-2 h-4 w-4' />
               {t('Create Purchase')}
             </Button>
-          ) : null}
+          )}
         </div>
       </div>
 
+      {/* Stat cards */}
+      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+        <StatCard
+          label={t('Total Purchases')}
+          value={String(summary?.purchaseCount ?? 0)}
+          hint={`${formatMoney(summary?.totalValue ?? 0)} ${t('in value')}`}
+          icon={Receipt}
+        />
+        <StatCard
+          label={t('Suppliers')}
+          value={String(summary?.supplierCount ?? 0)}
+          hint={t('in the current view')}
+          icon={Users}
+          tone='success'
+        />
+        <StatCard
+          label={t('Outstanding Amount')}
+          value={formatMoney(summary?.totalOutstanding ?? 0)}
+          hint={
+            <>
+              <p className='truncate'>
+                {summary?.unpaidCount ?? 0} {t('unpaid')} · {summary?.partialCount ?? 0} {t('partial')}
+              </p>
+              {reconciliation && Math.abs(reconciliationGap) > 0.01 && (
+                // Kept terse so it survives the card's width — the full sentence is the
+                // tooltip, and the itemised bridge lives on the supplier ledger page.
+                <p
+                  className='truncate'
+                  title={`${t('Open purchase invoices')} ${formatMoney(reconciliation.invoiceOutstanding)} − ${formatMoney(
+                    reconciliationGap
+                  )} ${t('of credits, advances and debit notes')} = ${t('supplier account balance')} ${formatMoney(
+                    reconciliation.ledgerBalance
+                  )}`}
+                >
+                  {t('Ledger')} {formatMoney(reconciliation.ledgerBalance)} · −{formatMoney(reconciliationGap)}{' '}
+                  {t('credits')}
+                </p>
+              )}
+            </>
+          }
+          icon={Wallet}
+          tone='warning'
+        />
+        <StatCard
+          label={summary?.overdueAmount ? t('Overdue') : t('This Month')}
+          value={formatMoney(summary?.overdueAmount ? summary.overdueAmount : summary?.thisMonthValue ?? 0)}
+          hint={
+            summary?.overdueAmount
+              ? `${summary.overdueCount} ${t('invoice(s) past due')}`
+              : `${t('purchased since the 1st')}`
+          }
+          icon={summary?.overdueAmount ? AlertTriangle : TrendingUp}
+          tone={summary?.overdueAmount ? 'danger' : 'default'}
+        />
+      </div>
+
       {/* Filters */}
+      <PurchaseFiltersToolbar
+        filters={filters}
+        draft={draft}
+        activeFilterCount={activeFilterCount}
+        onPatchImmediate={patchImmediate}
+        onPatchDraft={patchDraft}
+        onApplyDraft={applyDraft}
+        onReset={resetAll}
+        onToggleQuickFilter={toggleQuickFilter}
+        savedViews={savedViews}
+        onSaveView={saveView}
+        onApplyView={applyView}
+        onDeleteView={deleteView}
+        onExportCsv={() => runExport('csv')}
+        onExportPdf={() => runExport('pdf')}
+        isExporting={isExporting}
+      />
+
+      {/* Table */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="search">{t('Search')}</Label>
-              <div className="relative mt-2">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="search"
-                  placeholder={t('Search by invoice number or vendor bill no...')}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+        <CardContent className='p-0'>
+          {/* Selection bar */}
+          {selectedIds.length > 0 && (
+            <div className='flex flex-wrap items-center justify-between gap-2 border-b bg-primary/5 px-4 py-2.5'>
+              <p className='text-sm font-medium'>
+                {selectedIds.length} {t('selected')}
+              </p>
+              <div className='flex items-center gap-2'>
+                <Button size='sm' variant='outline' onClick={() => runExport('csv')}>
+                  <FileDown className='mr-2 h-3.5 w-3.5' />
+                  {t('Export selected')}
+                </Button>
+                <Button size='sm' variant='ghost' onClick={() => setSelected({})}>
+                  {t('Clear')}
+                </Button>
               </div>
             </div>
+          )}
 
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm('')
-                }}
-                className="w-full"
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                {t('Clear Filters')}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Purchases Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('Purchases List')} ({totalItems})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
+          <div className='overflow-x-auto'>
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>{t('Invoice Number')}</TableHead>
-                  <TableHead>{t('Vendor Bill No')}</TableHead>
+                <TableRow className='hover:bg-transparent'>
+                  <TableHead className='w-10'>
+                    <Checkbox
+                      checked={allOnPageSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label={t('Select all')}
+                      disabled={purchases.length === 0}
+                    />
+                  </TableHead>
+                  <TableHead>{t('Invoice')}</TableHead>
+                  <TableHead>{t('Vendor Bill')}</TableHead>
                   <TableHead>{t('Supplier')}</TableHead>
-                  {/* <TableHead>{t('Phone')}</TableHead> */}
-                  <TableHead>{t('Items')}</TableHead>
-                  <TableHead>{t('Date')}</TableHead>
+                  <TableHead className='text-center'>{t('Items')}</TableHead>
+                  <TableHead>{t('Purchase Date')}</TableHead>
                   <TableHead>{t('Payment Type')}</TableHead>
-                  <TableHead>{t('Amount')}</TableHead>
-                  {/* <TableHead>{t('Status')}</TableHead> */}
+                  <TableHead className='text-right'>{t('Invoice Total')}</TableHead>
+                  <TableHead className='text-right'>{t('Paid Amount')}</TableHead>
+                  <TableHead className='text-right'>{t('Remaining')}</TableHead>
+                  <TableHead>{t('Status')}</TableHead>
                   {canViewCreatedBy && <TableHead>{t('created_by') || 'Created By'}</TableHead>}
-                  <TableHead>{t('Actions')}</TableHead>
+                  <TableHead>{t('Last Updated')}</TableHead>
+                  <TableHead className='w-12 text-right'>{t('Actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentPurchases.map((purchase: any) => (
-                  <TableRow key={purchase._id || purchase.id}>
-                    <TableCell className="font-medium">{purchase.invoiceNumber}</TableCell>
-                    <TableCell className="text-muted-foreground">{purchase.vendorBillNumber || '—'}</TableCell>
-                    <TableCell className='max-w-[14rem]'>
-                      <div className='flex min-w-0 items-center gap-2'>
-                        <ContactPhotoCell
-                          picture={purchase.supplier?.picture}
-                          name={purchase.supplier?.name || 'N/A'}
-                          className='h-8 w-8 shrink-0'
-                        />
-                        <div className='min-w-0 flex-1'>
-                          <BilingualName
-                            primary={purchase.supplier?.name || 'N/A'}
-                            secondary={purchase.supplier?.nameUrdu}
-                          />
-                        </div>
-                      </div>
-                    </TableCell>
-                    {/* <TableCell>
-                      {purchase.supplier?.phone || '-'}
-                    </TableCell> */}
-                    <TableCell>
-                      <Badge variant="outline">
-                        {purchase.items?.length || 0} items
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(purchase.purchaseDate || purchase.createdAt), 'MMM dd, yyyy')}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant='outline'
-                        className={
-                          getPurchasePaymentType(purchase) === 'Credit'
-                            ? 'border-blue-300 text-blue-700'
-                            : 'border-emerald-300 text-emerald-700'
-                        }
+                {isLoading &&
+                  Array.from({ length: 6 }).map((_, index) => (
+                    <TableRow key={`skeleton-${index}`}>
+                      {Array.from({ length: columnCount + 1 }).map((__, cellIndex) => (
+                        <TableCell key={cellIndex}>
+                          <Skeleton className='h-4 w-full' />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+
+                {!isLoading &&
+                  purchases.map((purchase) => {
+                    const id = purchase.id || purchase._id
+                    const settlement = resolvePurchaseSettlement(purchase)
+                    const statusMeta = SETTLEMENT_STATUS_META[settlement.settlementStatus]
+                    const dueMeta = DUE_STATUS_META[settlement.dueStatus]
+                    const paymentTypeLabel = resolvePaymentTypeLabel(purchase)
+                    const isOverdue = settlement.dueStatus === 'overdue'
+
+                    return (
+                      <TableRow
+                        key={id}
+                        data-state={selected[id] ? 'selected' : undefined}
+                        className='cursor-pointer'
+                        onClick={() => setViewingPurchase(purchase)}
                       >
-                        {getPurchasePaymentType(purchase)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{formatMoney(purchase.totalAmount || 0)}</TableCell>
-                    {/* <TableCell>
-                      <Badge variant={purchase.status ? 'default' : 'secondary'}>
-                        {purchase.status ? t('Completed') : t('Pending')}
-                      </Badge>
-                    </TableCell> */}
-                    {canViewCreatedBy && (
-                      <TableCell>
-                        <CreatedByCell createdBy={purchase.createdBy} />
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedPurchase(purchase)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-4xl sm:max-w-5xl">
-                            <DialogHeader>
-                              <DialogTitle>{t('Purchase Details')} - {purchase.invoiceNumber}</DialogTitle>
-                              <DialogDescription>
-                                {t('View detailed information about this purchase invoice including items, supplier details, and total amount.')}
-                              </DialogDescription>
-                            </DialogHeader>
-                            {selectedPurchase && <PurchaseDetails purchase={selectedPurchase} />}
-                          </DialogContent>
-                        </Dialog>
+                        <TableCell onClick={(event) => event.stopPropagation()}>
+                          <Checkbox
+                            checked={Boolean(selected[id])}
+                            onCheckedChange={() => toggleSelect(id, purchase.invoiceNumber)}
+                            aria-label={t('Select row')}
+                          />
+                        </TableCell>
 
-                        <PurchaseAttachmentsButton
-                          attachments={purchase.attachments}
-                          contextLabel={purchase.invoiceNumber}
-                          iconOnly
-                        />
+                        <TableCell>
+                          <div className='flex items-center gap-1.5'>
+                            <span className='font-medium'>{purchase.invoiceNumber}</span>
+                            {purchase.attachments?.length > 0 && (
+                              <Paperclip className='h-3 w-3 text-muted-foreground' aria-label={t('Has attachments')} />
+                            )}
+                          </div>
+                          {purchase.dueDate && (
+                            <p className={cn('text-[11px]', isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}>
+                              {t('Due')} {format(new Date(purchase.dueDate), 'dd MMM yyyy')}
+                            </p>
+                          )}
+                        </TableCell>
 
-                        {canEdit && onEdit && (
-                          <Button variant="ghost" size="sm" onClick={() => onEdit(purchase)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <PrintFormatButton
-                          size='sm'
-                          defaultPaperSize={defaultPaperSize}
-                          onPrint={(paperSize) => printPurchase(purchase, paperSize)}
-                          label=""
-                        />
-                        {canDelete ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(purchase)}
-                            className="text-destructive hover:text-destructive"
+                        <TableCell className='text-muted-foreground'>{purchase.vendorBillNumber || '—'}</TableCell>
+
+                        <TableCell className='max-w-[15rem]'>
+                          <div className='flex min-w-0 items-center gap-2'>
+                            <ContactPhotoCell
+                              picture={purchase.supplier?.picture}
+                              name={purchase.supplier?.name || 'N/A'}
+                              className='h-8 w-8 shrink-0'
+                            />
+                            <div className='min-w-0 flex-1'>
+                              <BilingualName primary={purchase.supplier?.name || 'N/A'} secondary={purchase.supplier?.nameUrdu} />
+                              {purchase.supplier?.phone && (
+                                <p className='truncate text-[11px] text-muted-foreground'>{purchase.supplier.phone}</p>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className='text-center'>
+                          <Badge variant='outline' className='font-normal'>
+                            {purchase.itemsCount ?? purchase.items?.length ?? 0}
+                          </Badge>
+                        </TableCell>
+
+                        <TableCell className='whitespace-nowrap'>
+                          {format(new Date(purchase.purchaseDate || purchase.createdAt), 'dd MMM yyyy')}
+                        </TableCell>
+
+                        <TableCell>
+                          <Badge variant='outline' className={cn('font-normal', paymentTypeClassName(paymentTypeLabel))}>
+                            {paymentTypeLabel}
+                          </Badge>
+                        </TableCell>
+
+                        <TableCell className='text-right font-semibold tabular-nums'>
+                          {formatMoney(Number(purchase.totalAmount || 0))}
+                        </TableCell>
+
+                        <TableCell className='text-right tabular-nums'>
+                          {formatMoney(settlement.settledAmount)}
+                        </TableCell>
+
+                        <TableCell className='text-right tabular-nums'>
+                          <span
+                            className={cn(
+                              settlement.remainingAmount > 0.001
+                                ? 'font-medium text-rose-600 dark:text-rose-400'
+                                : 'text-muted-foreground'
+                            )}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {formatMoney(Math.max(0, settlement.remainingAmount))}
+                          </span>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className='flex flex-col items-start gap-1'>
+                            <Badge variant='outline' className={cn('font-normal', statusMeta.className)}>
+                              {t(statusMeta.label)}
+                            </Badge>
+                            {isOverdue && (
+                              <Badge variant='outline' className={cn('font-normal', dueMeta.className)}>
+                                {t(dueMeta.label)}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {canViewCreatedBy && (
+                          <TableCell className='text-sm text-muted-foreground'>
+                            {typeof purchase.createdBy === 'object' ? purchase.createdBy?.name || '—' : '—'}
+                          </TableCell>
+                        )}
+
+                        <TableCell className='whitespace-nowrap text-xs text-muted-foreground'>
+                          {purchase.updatedAt ? format(new Date(purchase.updatedAt), 'dd MMM yyyy HH:mm') : '—'}
+                        </TableCell>
+
+                        <TableCell className='text-right' onClick={(event) => event.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant='ghost' size='icon' aria-label={t('Actions')}>
+                                <MoreHorizontal className='h-4 w-4' />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align='end' className='w-52'>
+                              <DropdownMenuItem onSelect={() => setViewingPurchase(purchase)}>
+                                <Eye className='mr-2 h-4 w-4' />
+                                {t('View')}
+                              </DropdownMenuItem>
+                              {canEdit && onEdit && (
+                                <DropdownMenuItem onSelect={() => onEdit(purchase)}>
+                                  <Edit className='mr-2 h-4 w-4' />
+                                  {t('Edit')}
+                                </DropdownMenuItem>
+                              )}
+                              {canCreate && onDuplicate && (
+                                <DropdownMenuItem onSelect={() => onDuplicate(purchase)}>
+                                  <Copy className='mr-2 h-4 w-4' />
+                                  {t('Duplicate')}
+                                </DropdownMenuItem>
+                              )}
+                              {canCreate && settlement.remainingAmount > 0.001 && (
+                                <DropdownMenuItem onSelect={() => openPaymentFor(purchase)}>
+                                  <Banknote className='mr-2 h-4 w-4' />
+                                  {t('Record Payment')}
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onSelect={() => printPurchase(purchase)}>
+                                <Printer className='mr-2 h-4 w-4' />
+                                {t('Print')}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => printPurchase(purchase, 'a4')}>
+                                <FileDown className='mr-2 h-4 w-4' />
+                                {t('Download PDF')}
+                              </DropdownMenuItem>
+                              {canDelete && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className='text-destructive focus:text-destructive'
+                                    onSelect={() => {
+                                      setPurchaseToDelete(purchase)
+                                      setDeleteDialogOpen(true)
+                                    }}
+                                  >
+                                    <Trash2 className='mr-2 h-4 w-4' />
+                                    {t('Delete')}
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+
+                {!isLoading && purchases.length === 0 && (
+                  <TableRow className='hover:bg-transparent'>
+                    <TableCell colSpan={columnCount + 1} className='h-48'>
+                      <div className='flex flex-col items-center justify-center gap-2 text-center'>
+                        <Receipt className='h-10 w-10 text-muted-foreground/50' />
+                        <p className='font-medium'>{t('No purchases found')}</p>
+                        <p className='text-sm text-muted-foreground'>
+                          {activeFilterCount > 0 || filters.search
+                            ? t('Try widening or clearing the filters.')
+                            : t('Record your first purchase to see it here.')}
+                        </p>
+                        {activeFilterCount > 0 || filters.search ? (
+                          <Button variant='outline' size='sm' onClick={resetAll} className='mt-2'>
+                            {t('Reset filters')}
                           </Button>
                         ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           </div>
 
-          {currentPurchases.length === 0 && (
-            <div className="text-center py-8">
-              <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">{t('No purchases found')}</p>
-            </div>
-          )}
-
-          {/* Pagination — rows-per-page + nav at bottom */}
-          {totalItems > 0 && (
-            <div className="mt-4 space-y-4 border-t px-2 pt-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-center text-sm text-muted-foreground sm:text-left">
-                  {t('Showing')} {startIndex + 1} {t('to')} {endIndex} {t('of')} {totalItems}{' '}
-                  {t('entries')}
-                </div>
-                <div className="flex items-center justify-center gap-2 sm:justify-end">
-                  <Label htmlFor="purchase-items-per-page" className="text-sm whitespace-nowrap">
-                    {t('Show')}:
-                  </Label>
-                  <Select
-                    value={itemsPerPage.toString()}
-                    onValueChange={(value) => setItemsPerPage(Number(value))}
-                  >
-                    <SelectTrigger id="purchase-items-per-page" className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5</SelectItem>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {totalPages > 1 ? (
-                <>
-              {/* Mobile pagination - simplified */}
-              <div className="flex items-center justify-center gap-2 md:hidden">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-2"
-                >
-                  {t('Previous')}
-                </Button>
-                
-                <div className="flex items-center gap-1 px-3 py-1 bg-muted rounded">
-                  <span className="text-sm">{currentPage}</span>
-                  <span className="text-sm text-muted-foreground">{t('of')}</span>
-                  <span className="text-sm">{totalPages}</span>
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="px-2"
-                >
-                  {t('Next')}
-                </Button>
-              </div>
-
-              {/* Desktop pagination - full controls */}
-              <div className="hidden md:flex items-center justify-center">
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                  >
-                    {t('First')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                  >
-                    {t('Previous')}
-                  </Button>
-                  
-                  {/* Page numbers */}
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i
-                      } else {
-                        pageNum = currentPage - 2 + i
-                      }
-
-                      return (
-                        <Button
-                          key={i}
-                          variant={currentPage === pageNum ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setCurrentPage(pageNum)}
-                          className="w-10"
-                        >
-                          {pageNum}
-                        </Button>
-                      )
-                    })}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                  >
-                    {t('Next')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                  >
-                    {t('Last')}
-                  </Button>
-                </div>
-              </div>
-                </>
-              ) : null}
-            </div>
-          )}
+          <div className={cn('px-4 pb-4', isFetching && !isLoading && 'opacity-60')}>
+            <SimplePagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalResults={totalItems}
+              limit={limit}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              pageSizeOptions={[10, 20, 50, 100]}
+            />
+          </div>
         </CardContent>
       </Card>
 
-      {/* Delete Dialog */}
+      <PurchaseViewDrawer
+        purchaseId={viewingPurchase ? String(viewingPurchase.id || viewingPurchase._id) : null}
+        fallbackPurchase={viewingPurchase}
+        open={Boolean(viewingPurchase)}
+        onOpenChange={(open) => !open && setViewingPurchase(null)}
+        onEdit={(purchase) => {
+          setViewingPurchase(null)
+          onEdit?.(purchase)
+        }}
+        onPrint={(purchase) => printPurchase(purchase)}
+        onRecordPayment={(purchase) => {
+          setViewingPurchase(null)
+          openPaymentFor(purchase)
+        }}
+      />
+
+      <SupplierPaymentDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        defaultSupplierId={paymentSupplierId}
+      />
+
       {purchaseToDelete && (
         <InvoiceDeleteDialog
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
-          currentRow={{
-            ...purchaseToDelete,
-            invoiceNumber: purchaseToDelete.invoiceNumber,
-          }}
+          currentRow={{ ...purchaseToDelete, invoiceNumber: purchaseToDelete.invoiceNumber }}
         />
-      )}
-    </div>
-  )
-}
-
-function PurchaseDetails({ purchase }: { purchase: any }) {
-  const { t } = useLanguage()
-  const formatMoney = useFormatMoney()
-  
-  // Debug log to see the actual data structure
-  console.log('Purchase data:', purchase)
-  console.log('Purchase items:', purchase.items)
-  if (purchase.items && purchase.items.length > 0) {
-    console.log('First item structure:', purchase.items[0])
-  }
-  
-  return (
-    <div className="space-y-6">
-      {/* Purchase Info */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label>{t('Invoice Number')}</Label>
-          <p className="font-medium">{purchase.invoiceNumber}</p>
-        </div>
-        {purchase.vendorBillNumber && (
-          <div>
-            <Label>{t('Vendor Bill No')}</Label>
-            <p className="font-medium">{purchase.vendorBillNumber}</p>
-          </div>
-        )}
-        <div>
-          <Label>{t('Purchase Date')}</Label>
-          <p className="font-medium">
-            {format(new Date(purchase.purchaseDate || purchase.createdAt), 'MMM dd, yyyy HH:mm')}
-          </p>
-        </div>
-        <div>
-          <Label>{t('Supplier')}</Label>
-          <div className='mt-1'>
-            <BilingualName
-              primary={purchase.supplier?.name || 'N/A'}
-              secondary={purchase.supplier?.nameUrdu}
-            />
-          </div>
-        </div>
-        <div>
-          <Label>{t('Status')}</Label>
-          <Badge variant={purchase.status ? 'default' : 'secondary'}>
-            {purchase.status ? t('Completed') : t('Pending')}
-          </Badge>
-        </div>
-        {purchase.attachments?.length > 0 && (
-          <div>
-            <Label>{t('attachments')}</Label>
-            <div className='mt-1'>
-              <PurchaseAttachmentsButton attachments={purchase.attachments} contextLabel={purchase.invoiceNumber} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Purchase Items */}
-      <div>
-        <Label>{t('Purchase Items')}</Label>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('Product')}</TableHead>
-              <TableHead>{t('Quantity')}</TableHead>
-              <TableHead>{t('unit_price')}</TableHead>
-              <TableHead>{t('Total')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {purchase.items?.map((item: any, index: number) => {
-              // getPurchaseItemDisplayName reads item.variantId's attributes (when this
-              // line item is for a real variant) and returns "Toshiba — 12" instead of
-              // just "Toshiba" — without it, two different-variant lines for the same
-              // product look identical here.
-              const productName = getPurchaseItemDisplayName(item)
-
-              const productNameUrdu =
-                (item.product && typeof item.product === 'object' && item.product.nameUrdu) ||
-                item.nameUrdu ||
-                ''
-              
-              // Get price with multiple fallbacks
-              const price = item.priceAtPurchase || item.price || item.unitPrice || item?.product?.cost || 0
-              const gross = (item.quantity || 0) * price
-              const discountAmount = Number(item.discountAmount || 0)
-              const total = item.total || (gross - discountAmount) || 0
-
-              return (
-                <TableRow key={index}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {(item.product?.image || item.image) && (
-                        <img
-                          src={(item.product?.image?.url || item.image?.url || item.product?.image || item.image)}
-                          alt={productName}
-                          className="w-8 h-8 rounded object-cover"
-                        />
-                      )}
-                      <div className='min-w-0'>
-                        <BilingualName primary={productName} secondary={productNameUrdu} primaryClassName='text-sm font-medium' />
-                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                          {getPurchaseItemBarcode(item) && <span>{getPurchaseItemBarcode(item)}</span>}
-                          {item.variantId?.sku && <span>SKU: {item.variantId.sku}</span>}
-                        </div>
-                        {item.batchNumber && (
-                          <div className="text-xs text-blue-600">
-                            Batch: {item.batchNumber}
-                            {item.expiryDate && ` · Exp: ${new Date(item.expiryDate).toLocaleDateString()}`}
-                          </div>
-                        )}
-                        {item.imeis && item.imeis.length > 0 && (
-                          <div className="text-xs text-muted-foreground">IMEI/Serial: {formatImeiEntries(item.imeis)}</div>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{item.quantity || 0} {item.unit || 'pcs'}</TableCell>
-                  <TableCell>{formatMoney(Number(price))}</TableCell>
-                  <TableCell>
-                    {discountAmount > 0 && (
-                      <div className="text-xs text-muted-foreground line-through">{formatMoney(gross)}</div>
-                    )}
-                    {formatMoney(Number(total))}
-                    {discountAmount > 0 && (
-                      <div className="text-xs text-green-600">-{formatMoney(discountAmount)}</div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Purchase Summary */}
-      <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
-        <div>
-          <Label>{t('Total Items')}</Label>
-          <p className="text-lg font-bold">{purchase.items?.length || 0}</p>
-        </div>
-        {Number(purchase.discount || 0) > 0 && (
-          <>
-            <div>
-              <Label>{t('Subtotal')}</Label>
-              <p className="text-lg font-bold">
-                {formatMoney(Number(purchase.totalAmount || 0) + Number(purchase.discount || 0))}
-              </p>
-            </div>
-            <div>
-              <Label>{t('Discount')}</Label>
-              <p className="text-lg font-bold text-green-600">-{formatMoney(Number(purchase.discount || 0))}</p>
-            </div>
-          </>
-        )}
-        <div>
-          <Label>{t('Total Amount')}</Label>
-          <p className="text-lg font-bold text-green-600">{formatMoney(purchase.totalAmount || 0)}</p>
-        </div>
-      </div>
-
-      {/* Notes */}
-      {purchase.notes && (
-        <div>
-          <Label>{t('Notes')}</Label>
-          <p className="text-sm">{purchase.notes}</p>
-        </div>
       )}
     </div>
   )

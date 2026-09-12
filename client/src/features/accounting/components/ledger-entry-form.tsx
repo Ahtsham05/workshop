@@ -29,6 +29,9 @@ import {
 } from '@/lib/wallet-payment-options';
 import { useDispatch } from 'react-redux';
 import { mobileShopApi } from '@/stores/mobile-shop.api';
+import { purchaseApi } from '@/stores/purchase.api';
+import { supplierPaymentApi } from '@/stores/supplierPayment.api';
+import { formatMoneyWithMeta } from '@/lib/format-money';
 
 interface LedgerEntryFormProps {
   ledgerType: 'customer' | 'supplier';
@@ -44,7 +47,7 @@ interface LedgerEntryFormProps {
 export function LedgerEntryForm({
   ledgerType,
   entityId,
-  // entityName,
+  entityName,
   editingEntry,
   defaultTransactionType,
   defaultPaymentMethod,
@@ -246,7 +249,41 @@ export function LedgerEntryForm({
 
         const response = await Axios.post(url, createPayload);
         dispatch(mobileShopApi.util.invalidateTags(['Wallets', 'MobileDashboard', 'CashBook']));
-        toast.success(t('Ledger entry added successfully'));
+
+        // A supplier "Cash Paid" row is allocated to that supplier's open purchase invoices
+        // on the server (see supplierPayment.service.js's recordAllocationForLedgerEntry),
+        // so the purchase list's paid/remaining columns are now stale — and the user should
+        // be told which bills their money just cleared, not left to go and check.
+        const allocation = response.data?.invoiceAllocation;
+        if (allocation) {
+          dispatch(purchaseApi.util.invalidateTags(['Purchase']));
+          dispatch(supplierPaymentApi.util.invalidateTags(['SupplierPayment', 'SupplierAccount']));
+        }
+
+        if (allocation?.invoices?.length) {
+          const settled = allocation.invoices.filter((invoice: any) => invoice.fullySettled).length;
+          const partial = allocation.invoices.length - settled;
+          toast.success(t('Payment recorded'), {
+            description: [
+              `${formatMoneyWithMeta(allocation.allocatedTotal, currencyMeta)} ${t('applied to')} ${allocation.invoices
+                .map((invoice: any) => `#${invoice.invoiceNumber}`)
+                .join(', ')}`,
+              settled > 0 ? `${settled} ${t('invoice(s) fully paid')}` : '',
+              partial > 0 ? `${partial} ${t('partially paid')}` : '',
+              allocation.unappliedAmount > 0
+                ? `${formatMoneyWithMeta(allocation.unappliedAmount, currencyMeta)} ${t('kept as advance')}`
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          });
+        } else if (allocation) {
+          toast.success(t('Payment recorded'), {
+            description: `${t('No open invoices — kept as an advance against')} ${entityName}`,
+          });
+        } else {
+          toast.success(t('Ledger entry added successfully'));
+        }
         
         // Pass the created entry back if it's a payment received/made
         if (onSuccess) {

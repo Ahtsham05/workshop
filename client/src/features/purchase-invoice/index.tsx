@@ -170,6 +170,9 @@ export interface Purchase {
   paymentType?: 'Cash' | 'Card' | 'Bank Transfer' | 'Cheque' | 'Credit' | 'Wallet';
   notes?: string;
   date: string;
+  // When the unpaid remainder is contractually due (credit terms only) — drives the list's
+  // overdue badge/filter and the due-date-first supplier payment allocation.
+  dueDate?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -881,20 +884,26 @@ const PurchaseInvoicePage = () => {
     });
   }, [showProductCatalog]);
 
-  // Handle edit
-  const handleEdit = useCallback((purchaseToEdit: any) => {
-    // Check permission before allowing edit
-    if (!hasPermission('editPurchases' as any)) {
-      toast.error(t('no_permission_edit_purchase') || 'You do not have permission to edit purchases');
+  // Handle edit — and, with { duplicate: true }, "copy this purchase into a new one",
+  // which needs the exact same backend→form item transformation and differs only in what
+  // it keeps: no id, no invoice/bill number, nothing already paid.
+  const handleEdit = useCallback((purchaseToEdit: any, options: { duplicate?: boolean } = {}) => {
+    const isDuplicate = Boolean(options.duplicate);
+    const requiredPermission = isDuplicate ? 'createPurchases' : 'editPurchases';
+    if (!hasPermission(requiredPermission as any)) {
+      toast.error(
+        isDuplicate
+          ? t('no_permission_create_purchase') || 'You do not have permission to create purchases'
+          : t('no_permission_edit_purchase') || 'You do not have permission to edit purchases'
+      );
       return;
     }
 
     clearPurchaseWorkspace();
     
-    console.log('Editing purchase:', purchaseToEdit);
     setCurrentView('create');
-    setIsEditing(true);
-    setEditingPurchase(purchaseToEdit);
+    setIsEditing(!isDuplicate);
+    setEditingPurchase(isDuplicate ? null : purchaseToEdit);
     
     // Transform items from backend format to frontend format. Real-variant line items
     // need the same product-shaped object the create-flow's catalog picker builds
@@ -956,8 +965,6 @@ const PurchaseInvoicePage = () => {
       };
     });
     
-    console.log('Transformed items:', transformedItems);
-    
     // Older purchases only have the legacy `paymentType` string — derive `type`/`paymentMethod`
     // from it when the new fields aren't present on the record being edited.
     const legacyPaymentType = purchaseToEdit.paymentType || 'Cash';
@@ -977,8 +984,28 @@ const PurchaseInvoicePage = () => {
       splitPaidAmount: purchaseToEdit.splitPaidAmount || 0,
       discountType: purchaseToEdit.discountType || 'fixed',
       discountValue: purchaseToEdit.discountValue || 0,
+      // A duplicate is a brand-new invoice: it borrows the supplier and the lines, but not
+      // the identity of the original or anything already settled against it.
+      ...(isDuplicate
+        ? {
+            _id: undefined,
+            id: undefined,
+            invoiceNumber: '',
+            vendorBillNumber: '',
+            paidAmount: 0,
+            balance: 0,
+            splitPaidAmount: 0,
+            attachments: [],
+            date: new Date().toISOString(),
+          }
+        : {}),
     });
-  }, [purchasableCatalog]);
+  }, [purchasableCatalog, hasPermission, t]);
+
+  const handleDuplicate = useCallback(
+    (purchaseToCopy: any) => handleEdit(purchaseToCopy, { duplicate: true }),
+    [handleEdit]
+  );
 
   const refreshProductsAfterPurchase = useCallback(() => {
     setProducts(prevProducts => {
@@ -1040,6 +1067,7 @@ const PurchaseInvoicePage = () => {
           onBack={() => setCurrentView(hasExplicitPermission('createPurchases') ? 'create' : 'list')}
           onCreateNew={handleCreateNew}
           onEdit={handleEdit}
+          onDuplicate={handleDuplicate}
         />
       ) : currentView === 'create' ? (
         <div

@@ -78,20 +78,58 @@ const createPurchase = {
     // the server always derives and stores it from `type`+`paymentMethod`.
     paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet').optional(),
     purchaseDate: Joi.date(),
+    // Credit terms: when the unpaid remainder is due. Drives overdue badges/filters.
+    dueDate: Joi.date().allow(null),
     notes: Joi.string().allow(''),
     attachments: Joi.array().items(attachmentEntry).optional(),
   }),
 };
 
-const getPurchases = {
-  query: Joi.object().keys({
-    supplier: Joi.string(),
-    purchaseDate: Joi.date(),
-    limit: Joi.number(),
-    page: Joi.number(),
-    sortBy: Joi.string(),
-    search: Joi.string(),
-    fieldName: Joi.string(),
+// One shared shape for the list, its stat-card summary and its export — all three run the
+// same filters, so they must accept the same query string (see purchase.controller.js's
+// PURCHASE_LIST_OPTIONS). Comma-separated values are allowed on the multi-select filters.
+const purchaseListQuery = Joi.object().keys({
+  supplier: Joi.string().allow(''),
+  purchaseDate: Joi.date(),
+  limit: Joi.number(),
+  page: Joi.number(),
+  sortBy: Joi.string(),
+  search: Joi.string().allow(''),
+  // Which field(s) the global search box should look in.
+  searchBy: Joi.string().valid('all', 'invoice', 'vendorBill', 'supplier', 'product', 'reference', 'notes'),
+  fieldName: Joi.string().allow(''),
+  paymentStatus: Joi.string().allow(''),
+  paymentType: Joi.string().allow(''),
+  invoiceStatus: Joi.string().allow(''),
+  dueStatus: Joi.string().allow(''),
+  createdBy: Joi.string().allow(''),
+  branch: Joi.string().allow(''),
+  category: Joi.string().allow(''),
+  startDate: Joi.date(),
+  endDate: Joi.date(),
+  minAmount: Joi.number().allow(''),
+  maxAmount: Joi.number().allow(''),
+});
+
+const getPurchases = { query: purchaseListQuery };
+
+const getPurchasesSummary = { query: purchaseListQuery };
+
+const exportPurchases = { query: purchaseListQuery };
+
+const addPurchaseComment = {
+  params: Joi.object().keys({
+    purchaseId: Joi.string().required(),
+  }),
+  body: Joi.object().keys({
+    message: Joi.string().trim().min(1).max(2000).required(),
+  }),
+};
+
+const deletePurchaseComment = {
+  params: Joi.object().keys({
+    purchaseId: Joi.string().required(),
+    commentId: Joi.string().required(),
   }),
 };
 
@@ -157,6 +195,8 @@ const updatePurchase = {
     // the server always derives and stores it from `type`+`paymentMethod`.
     paymentType: Joi.string().valid('Cash', 'Card', 'Bank Transfer', 'Cheque', 'Credit', 'Wallet').optional(),
     purchaseDate: Joi.date(),
+    // Credit terms: when the unpaid remainder is due. Drives overdue badges/filters.
+    dueDate: Joi.date().allow(null),
     notes: Joi.string().allow(''),
     attachments: Joi.array().items(attachmentEntry).optional(),
   }),
@@ -198,6 +238,10 @@ const getBulkPriceComparison = {
 module.exports = {
   createPurchase,
   getPurchases,
+  getPurchasesSummary,
+  exportPurchases,
+  addPurchaseComment,
+  deletePurchaseComment,
   getPurchase,
   updatePurchase,
   deletePurchase,

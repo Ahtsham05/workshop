@@ -112,6 +112,17 @@ const PurchaseSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true },
   paidAmount: { type: Number, default: 0 }, // Amount paid at time of purchase — total across payment + split legs
   balance: { type: Number, default: 0 }, // Remaining balance (totalAmount - paidAmount) — negative means overpaid
+  // Money applied to this invoice AFTER it was recorded, by a SupplierPayment allocation
+  // (see supplierPayment.service.js). Deliberately separate from `paidAmount`: that leg owns
+  // this purchase's own Cash Book/Wallet entry, while each allocation's cash movement is owned
+  // by its payment's Supplier Ledger entry — folding the two together would bank the same
+  // rupee twice. settledAmount/remainingAmount/settlementStatus are derived from the pair,
+  // never stored — see utils/purchaseSettlement.js.
+  allocatedAmount: { type: Number, default: 0, min: 0 },
+  // When the unpaid remainder is contractually due (credit terms). Optional — a purchase with
+  // no due date simply never reports as overdue. Drives the Due Status filter/badges and the
+  // due-date-first payment allocation strategy.
+  dueDate: { type: Date, default: null },
   // Settlement status — does the unpaid remainder become a real Supplier Ledger debt?
   // Kept separate from `paymentMethod` (which account the paidAmount itself went through),
   // mirroring Invoice's `type`/`paymentMethod` split — a Credit purchase can still be paid
@@ -148,6 +159,18 @@ const PurchaseSchema = new mongoose.Schema({
       uploadedAt: { type: Date, default: Date.now },
     },
   ],
+  // Free-text notes colleagues leave on the invoice ("supplier promised a credit note for the
+  // 2 damaged units"). Embedded rather than a separate collection because they are only ever
+  // read with their purchase, never queried across purchases — same reasoning as attachments
+  // above. `authorName` is denormalized so the thread stays readable if the user is removed.
+  comments: [
+    {
+      author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      authorName: { type: String, trim: true },
+      message: { type: String, required: true, trim: true },
+      createdAt: { type: Date, default: Date.now },
+    },
+  ],
 }, {
   timestamps: true,
 });
@@ -164,6 +187,9 @@ PurchaseSchema.index({ organizationId: 1, supplier: 1, vendorBillNumber: 1 });
 // by purchaseDate to find the most recent purchase per product/variant in one aggregation
 // instead of one query per product. purchaseDate: -1 lets that $sort use the index directly.
 PurchaseSchema.index({ organizationId: 1, branchId: 1, 'items.product': 1, purchaseDate: -1 });
+// Supports the supplier payment allocator's "open invoices, oldest first" scan and the
+// supplier-scoped list filter — see supplierPayment.service.js's getOpenInvoicesForSupplier.
+PurchaseSchema.index({ organizationId: 1, branchId: 1, supplier: 1, purchaseDate: 1 });
 
 const Purchase = mongoose.model('Purchase', PurchaseSchema);
 

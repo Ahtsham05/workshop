@@ -56,12 +56,64 @@ const createPurchase = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(purchase);
 });
 
+// Every list-screen filter the toolbar can send. `filter` stays the org/branch scope
+// applyBranchFilter owns; everything else is an "option" the service turns into the
+// aggregation's match/sort stages — including the settlement-derived ones (payment status,
+// due status) that can't exist as stored columns. See purchase.service.js's
+// buildPurchaseListMatch.
+const PURCHASE_LIST_OPTIONS = [
+  'sortBy',
+  'limit',
+  'page',
+  'search',
+  'searchBy',
+  'supplier',
+  'paymentStatus',
+  'paymentType',
+  'invoiceStatus',
+  'dueStatus',
+  'createdBy',
+  'branch',
+  'category',
+  'startDate',
+  'endDate',
+  'minAmount',
+  'maxAmount',
+  'purchaseDate',
+];
+
 const getPurchases = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['supplier', 'purchaseDate']);
+  const filter = {};
   applyBranchFilter(filter, req);
-  const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
-  const result = await purchaseService.queryPurchases(filter, options);
+  const options = pick(req.query, PURCHASE_LIST_OPTIONS);
+  const result = await purchaseService.queryPurchaseList(filter, options);
   res.send(result);
+});
+
+/** Stat-card totals for the current filter set (see getPurchaseListSummary). */
+const getPurchasesSummary = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, PURCHASE_LIST_OPTIONS);
+  res.send(await purchaseService.getPurchaseListSummary(filter, options));
+});
+
+/** Flattened rows for CSV/PDF export — same filters, no pagination. */
+const exportPurchases = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, PURCHASE_LIST_OPTIONS);
+  res.send(await purchaseService.getPurchaseListForExport(filter, options));
+});
+
+const addPurchaseComment = catchAsync(async (req, res) => {
+  const comment = await purchaseService.addPurchaseComment(req.params.purchaseId, req.body, req.user);
+  res.status(httpStatus.CREATED).send(comment);
+});
+
+const deletePurchaseComment = catchAsync(async (req, res) => {
+  const comments = await purchaseService.deletePurchaseComment(req.params.purchaseId, req.params.commentId);
+  res.send({ comments });
 });
 
 const getPurchase = catchAsync(async (req, res) => {
@@ -218,6 +270,10 @@ const getBulkPriceComparison = catchAsync(async (req, res) => {
 module.exports = {
   createPurchase,
   getPurchases,
+  getPurchasesSummary,
+  exportPurchases,
+  addPurchaseComment,
+  deletePurchaseComment,
   getPurchase,
   updatePurchase,
   deletePurchase,

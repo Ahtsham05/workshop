@@ -5,8 +5,15 @@ const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const createLedgerEntry = catchAsync(async (req, res) => {
-  const entry = await supplierLedgerService.createLedgerEntry({ ...req.body, ...getBranchContext(req) });
-  res.status(httpStatus.CREATED).send(entry);
+  const entry = await supplierLedgerService.createLedgerEntry(
+    { ...req.body, ...getBranchContext(req) },
+    { user: req.user }
+  );
+  // A "Cash Paid" row settles the supplier's open invoices (see
+  // supplierPayment.service.js's recordAllocationForLedgerEntry). Hand that result back so
+  // the form can say which invoices it just cleared instead of leaving the user to guess.
+  const invoiceAllocation = entry.$locals?.invoiceAllocation;
+  res.status(httpStatus.CREATED).send(invoiceAllocation ? { ...entry.toJSON(), invoiceAllocation } : entry);
 });
 
 const getLedgerEntries = catchAsync(async (req, res) => {
