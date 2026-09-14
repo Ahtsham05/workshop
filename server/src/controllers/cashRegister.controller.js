@@ -31,6 +31,15 @@ const clearRegister = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getMovements = catchAsync(async (req, res) => {
+  const organizationId = req.organizationId || req.user?.organizationId;
+  const branchId = req.branchId;
+  const result = await cashRegisterService.getMovements(organizationId, branchId, {
+    snapshotId: req.query.snapshotId,
+  });
+  res.send(result);
+});
+
 const getHistory = catchAsync(async (req, res) => {
   const organizationId = req.organizationId || req.user?.organizationId;
   const branchId = req.branchId;
@@ -59,6 +68,7 @@ module.exports = {
   getRegister,
   saveRegister,
   clearRegister,
+  getMovements,
   getHistory,
   deleteHistoryEntry,
 };

@@ -1014,6 +1014,7 @@ const en: Record<string, string> = {
     
     // Table actions
     "edit": "Edit",
+    "double_click_to_edit": "Double-click to edit",
     "delete": "Delete",
     "asc": "Asc",
     "desc": "Desc",

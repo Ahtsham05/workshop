@@ -871,6 +871,7 @@ const ur: Record<string, string> = {
     
     // Table actions
     "edit": "ترمیم کریں",
+    "double_click_to_edit": "ترمیم کے لیے ڈبل کلک کریں",
     "delete": "حذف کریں",
     "asc": "چڑھتا ہوا",
     "desc": "اترتا ہوا",

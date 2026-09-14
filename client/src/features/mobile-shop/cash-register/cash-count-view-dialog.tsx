@@ -13,13 +13,18 @@ import { Separator } from '@/components/ui/separator'
 import { useLanguage } from '@/context/language-context'
 import {
   formatMoney,
+  formatSignedMoney,
   getDenominationLabel,
   normalizeCounts,
   type DenominationCount,
 } from '@/lib/pkr-denominations'
 import { formatBusinessDateTime } from '@/lib/business-timezone'
 import { cn } from '@/lib/utils'
-import type { CashRegisterSnapshot } from '@/stores/cashRegister.api'
+import {
+  useGetCashRegisterMovementsQuery,
+  type CashRegisterSnapshot,
+} from '@/stores/cashRegister.api'
+import { CashMovementsPanel } from './cash-movements-panel'
 
 type Props = {
   snapshot: CashRegisterSnapshot | null
@@ -78,6 +83,12 @@ function renderDenominationSection(
 
 export function CashCountViewDialog({ snapshot, open, onOpenChange }: Props) {
   const { t } = useLanguage()
+  const snapshotId = snapshot ? snapshot.id || snapshot._id : undefined
+  // currentData, not data — never show the previously opened count's entries while loading.
+  const { currentData: movements, isFetching: movementsFetching } = useGetCashRegisterMovementsQuery(
+    { snapshotId },
+    { skip: !open || !snapshotId },
+  )
 
   if (!snapshot) return null
 
@@ -88,7 +99,7 @@ export function CashCountViewDialog({ snapshot, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-lg max-h-[90vh] overflow-y-auto'>
+      <DialogContent className='max-w-3xl max-h-[90vh] overflow-y-auto'>
         <DialogHeader>
           <DialogTitle>{t('Count Details')}</DialogTitle>
           <DialogDescription>
@@ -149,6 +160,39 @@ export function CashCountViewDialog({ snapshot, open, onOpenChange }: Props) {
               <p className='text-sm text-muted-foreground whitespace-pre-wrap'>{snapshot.notes}</p>
             </div>
           ) : null}
+
+          <Separator />
+
+          <div className='space-y-3'>
+            <div className='space-y-1'>
+              <p className='text-sm font-semibold'>{t('What changed since the previous count')}</p>
+              {movements?.previousCount ? (
+                <>
+                  <p className='text-xs text-muted-foreground'>
+                    {t('Previous count')}: {formatBusinessDateTime(movements.previousCount.countedAt)} ·{' '}
+                    {formatMoney(movements.previousCount.countedAmount)} {t('counted')} · {t('Variance')}{' '}
+                    {formatSignedMoney(movements.previousCount.variance)}
+                  </p>
+                  <p className='text-sm'>
+                    {t('Difference changed by')}{' '}
+                    <span className='font-semibold tabular-nums'>
+                      {formatSignedMoney(snapshot.variance - movements.previousCount.variance)}
+                    </span>{' '}
+                    {t('between the two counts — the missing or wrong entry is among these.')}
+                  </p>
+                </>
+              ) : movements ? (
+                <p className='text-xs text-muted-foreground'>
+                  {t('No earlier count — showing cash entries recorded earlier that day.')}
+                </p>
+              ) : null}
+            </div>
+            <CashMovementsPanel
+              data={movements}
+              isLoading={movementsFetching && !movements}
+              emptyLabel={t('No cash entries were recorded between these two counts.')}
+            />
+          </div>
         </div>
       </DialogContent>
     </Dialog>

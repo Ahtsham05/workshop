@@ -55,3 +55,8 @@ export const getDenominationLabel = (value: number, kind: DenominationKind) => {
   const match = PKR_DENOMINATIONS.find((d) => d.value === value && d.kind === kind)
   return match?.label || `Rs ${value} ${kind}`
 }
+
+/** Money with an explicit sign — for differences and cash movement (+Rs 5,418 / -Rs 190). */
+export function formatSignedMoney(value: number): string {
+  return `${value >= 0 ? '+' : '-'}${formatMoney(Math.abs(value))}`
+}

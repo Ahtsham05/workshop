@@ -6,6 +6,7 @@ import {
   Coins,
   Eye,
   History,
+  ListChecks,
   Loader2,
   Minus,
   Plus,
@@ -48,6 +49,7 @@ import {
   computeTotalFromCounts,
   denominationKey,
   formatMoney,
+  formatSignedMoney,
   getDenominationLabel,
   normalizeCounts,
   PKR_DENOMINATIONS,
@@ -63,6 +65,7 @@ import {
   useClearCashRegisterMutation,
   useDeleteCashRegisterHistoryMutation,
   useGetCashRegisterHistoryQuery,
+  useGetCashRegisterMovementsQuery,
   useGetCashRegisterQuery,
   useSaveCashRegisterMutation,
   type CashRegisterSnapshot,
@@ -70,6 +73,7 @@ import {
 import { formatBusinessDateTime } from '@/lib/business-timezone'
 import { cn } from '@/lib/utils'
 import { CashCountViewDialog } from './cash-count-view-dialog'
+import { CashMovementsPanel } from './cash-movements-panel'
 
 const NOTE_SORT_DIRECTION_STORAGE_KEY = 'cash-register-note-sort-direction'
 type SortDirection = 'asc' | 'desc'
@@ -94,6 +98,11 @@ export default function CashRegisterPage() {
     page: historyPage,
     limit: historyLimit,
   })
+  const {
+    data: movements,
+    isFetching: movementsFetching,
+    refetch: refetchMovements,
+  } = useGetCashRegisterMovementsQuery()
 
   const [counts, setCounts] = useState<DenominationCount[]>([])
   const [notes, setNotes] = useState('')
@@ -157,6 +166,22 @@ export default function CashRegisterPage() {
   const physicalTotal = useMemo(() => computeTotalFromCounts(counts), [counts])
   const expectedCash = data?.expectedCashAmount ?? 0
   const variance = physicalTotal - expectedCash
+
+  // The drawer inputs start as the last *saved* count while Expected is live, so every sale,
+  // withdrawal or expense recorded after that count used to show up as a "difference" that
+  // grew all day without anyone miscounting. Until the user edits the counts (recounts),
+  // show the difference as it stood when that count was saved.
+  const sinceLastCount = data?.sinceLastCount ?? null
+  const countsEdited = useMemo(
+    () => JSON.stringify(normalizeCounts(counts)) !== JSON.stringify(normalizeCounts(data?.counts || [])),
+    [counts, data?.counts],
+  )
+  const cashMovedSinceCount = Boolean(
+    sinceLastCount && (sinceLastCount.entryCount > 0 || sinceLastCount.unexplainedChange !== 0),
+  )
+  const showSavedDifference = cashMovedSinceCount && !countsEdited && sinceLastCount != null
+  const displayedVariance = showSavedDifference ? sinceLastCount.varianceAtCount : variance
+  const comparedExpected = showSavedDifference ? sinceLastCount.expectedAtCount : expectedCash
 
   const handleClear = async () => {
     try {
@@ -265,7 +290,11 @@ export default function CashRegisterPage() {
           value={physicalTotal}
           icon={<Wallet className='h-4 w-4' />}
           valuePrefix={currencyPrefix}
-          description={t('Total from your count')}
+          description={
+            showSavedDifference
+              ? `${t('Saved count')} · ${formatBusinessDateTime(sinceLastCount.countedAt)}`
+              : t('Total from your count')
+          }
           tone='cyan'
         />
         <StatCard
@@ -273,22 +302,28 @@ export default function CashRegisterPage() {
           value={expectedCash}
           icon={<Banknote className='h-4 w-4' />}
           valuePrefix={currencyPrefix}
-          description={t('Same as Cash Book cash in hand')}
+          description={
+            sinceLastCount && sinceLastCount.net !== 0
+              ? `${formatSignedMoney(sinceLastCount.net)} ${t('since last count')} · ${t('Same as Cash Book cash in hand')}`
+              : t('Same as Cash Book cash in hand')
+          }
           tone='slate'
         />
         <StatCard
           title={t('Variance')}
-          value={Math.abs(variance)}
+          value={Math.abs(displayedVariance)}
           icon={<RefreshCw className='h-4 w-4' />}
-          valuePrefix={variance >= 0 ? `+${currencyPrefix}` : `-${currencyPrefix}`}
+          valuePrefix={displayedVariance >= 0 ? `+${currencyPrefix}` : `-${currencyPrefix}`}
           description={
-            variance === 0
-              ? t('Matches system balance')
-              : variance > 0
-                ? t('You have more cash than system')
-                : t('You have less cash than system')
+            showSavedDifference
+              ? t('At last count — cash has moved since, recount to compare')
+              : displayedVariance === 0
+                ? t('Matches system balance')
+                : displayedVariance > 0
+                  ? t('You have more cash than system')
+                  : t('You have less cash than system')
           }
-          tone={variance === 0 ? 'emerald' : variance > 0 ? 'amber' : 'rose'}
+          tone={displayedVariance === 0 ? 'emerald' : displayedVariance > 0 ? 'amber' : 'rose'}
         />
         <Card>
           <CardHeader className='pb-2'>
@@ -310,7 +345,10 @@ export default function CashRegisterPage() {
         <CardHeader className='flex flex-row items-center justify-between gap-3'>
           <CardTitle>{t('Count Notes & Coins')}</CardTitle>
           <div className='flex flex-wrap gap-2'>
-            <Button type='button' variant='outline' size='sm' onClick={() => refetch()} disabled={isLoading}>
+            <Button type='button' variant='outline' size='sm' onClick={() => {
+                void refetch()
+                void refetchMovements()
+              }} disabled={isLoading}>
               <RefreshCw className={cn('mr-2 h-4 w-4', isLoading && 'animate-spin')} />
               {t('Refresh')}
             </Button>
@@ -379,8 +417,10 @@ export default function CashRegisterPage() {
                   <span className='text-xl font-bold tabular-nums'>{formatMoney(physicalTotal)}</span>
                 </div>
                 <div className='mt-2 flex flex-wrap items-center justify-between gap-2 text-sm'>
-                  <span className='text-muted-foreground'>{t('Expected from cash book')}</span>
-                  <span className='font-medium tabular-nums'>{formatMoney(expectedCash)}</span>
+                  <span className='text-muted-foreground'>
+                    {showSavedDifference ? t('Expected at that count') : t('Expected from cash book')}
+                  </span>
+                  <span className='font-medium tabular-nums'>{formatMoney(comparedExpected)}</span>
                 </div>
                 <Separator className='my-3' />
                 <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -388,15 +428,22 @@ export default function CashRegisterPage() {
                   <span
                     className={cn(
                       'text-lg font-bold tabular-nums',
-                      variance === 0 && 'text-emerald-600',
-                      variance > 0 && 'text-amber-600',
-                      variance < 0 && 'text-red-600',
+                      displayedVariance === 0 && 'text-emerald-600',
+                      displayedVariance > 0 && 'text-amber-600',
+                      displayedVariance < 0 && 'text-red-600',
                     )}
                   >
-                    {variance >= 0 ? '+' : '-'}
-                    {formatMoney(Math.abs(variance))}
+                    {formatSignedMoney(displayedVariance)}
                   </span>
                 </div>
+                {showSavedDifference ? (
+                  <p className='mt-3 text-xs text-muted-foreground'>
+                    {t('This is your saved count from')} {formatBusinessDateTime(sinceLastCount.countedAt)}.{' '}
+                    {t('Since then')} {sinceLastCount.entryCount} {t('cash entries changed expected cash by')}{' '}
+                    {formatSignedMoney(sinceLastCount.net)} ({t('now')} {formatMoney(expectedCash)}).{' '}
+                    {t('Count the drawer again to compare with the current expected cash.')}
+                  </p>
+                ) : null}
               </div>
 
               <div className='space-y-2'>
@@ -417,6 +464,27 @@ export default function CashRegisterPage() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className='mt-6'>
+        <CardHeader className='space-y-1'>
+          <CardTitle className='flex items-center gap-2'>
+            <ListChecks className='h-5 w-5' />
+            {movements?.previousCount ? t('Cash Movement Since Last Count') : t('Cash Movement Today')}
+          </CardTitle>
+          <p className='text-sm text-muted-foreground'>
+            {movements?.previousCount
+              ? `${t('Every cash entry recorded after the count of')} ${formatBusinessDateTime(movements.previousCount.countedAt)}. ${t('If the drawer does not match, the missing or wrong entry is in this list.')}`
+              : t('Every cash entry recorded today.')}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <CashMovementsPanel
+            data={movements}
+            isLoading={movementsFetching && !movements}
+            emptyLabel={t('No cash entries recorded since the last count.')}
+          />
         </CardContent>
       </Card>
 

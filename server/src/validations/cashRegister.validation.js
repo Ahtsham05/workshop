@@ -22,6 +22,12 @@ const getHistory = {
   }),
 };
 
+const getMovements = {
+  query: Joi.object({
+    snapshotId: Joi.string().custom(objectId),
+  }),
+};
+
 const deleteHistoryEntry = {
   params: Joi.object({
     id: Joi.string().custom(objectId).required(),
@@ -31,5 +37,6 @@ const deleteHistoryEntry = {
 module.exports = {
   saveRegister,
   getHistory,
+  getMovements,
   deleteHistoryEntry,
 };

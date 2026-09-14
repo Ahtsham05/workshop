@@ -3,9 +3,14 @@ const mongoose = require('mongoose');
 const { CashBookEntry } = require('../models');
 const ApiError = require('../utils/ApiError');
 const {
+  PKT_OFFSET_MS,
   applyBusinessDateRange,
   parseBusinessDateBoundary,
+  startOfBusinessDay,
+  toBusinessCalendarDate,
 } = require('../utils/businessTimezone');
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const normalizePaymentMethod = (paymentMethod = 'cash') => {
   const value = String(paymentMethod).trim().toLowerCase();
@@ -20,10 +25,50 @@ const normalizePaymentMethod = (paymentMethod = 'cash') => {
 const isCashPaymentMethod = (paymentMethod = 'cash') =>
   normalizePaymentMethod(paymentMethod) === 'cash';
 
+/**
+ * True when a date carries no time of day — what a date-only picker produces: business
+ * midnight (00:00 PKT) or UTC midnight (05:00 PKT, how `new Date('YYYY-MM-DD')` parses).
+ */
+const isDateOnlyValue = (date) => {
+  const ms = new Date(date).getTime();
+  if (Number.isNaN(ms)) return false;
+  return ms % DAY_MS === 0 || (ms + PKT_OFFSET_MS) % DAY_MS === 0;
+};
+
+const timeOfBusinessDay = (date) => date.getTime() - startOfBusinessDay(toBusinessCalendarDate(date)).getTime();
+
+/**
+ * The moment a cash line sits at in the running balance.
+ *
+ * Modules with date-only pickers (Cash Management, Load, Bill Payment's paid date, Expense,
+ * Invoice date, ...) hand over midnight, which stacked every such line at 12:00 am / 5:00 am
+ * ahead of sales made hours earlier — so the Cash Book balance column never matched the
+ * drawer at any moment of the day and a cash count couldn't be reconciled against it.
+ * Keep the chosen business day, but take the time from when the transaction was actually
+ * recorded: the source document's ObjectId timestamp (stable across edits that delete and
+ * re-create lines), else now.
+ */
+const resolveEntryDate = (date, referenceId, now = new Date()) => {
+  const value = date ? new Date(date) : now;
+  if (Number.isNaN(value.getTime()) || !isDateOnlyValue(value)) return value;
+
+  const day = toBusinessCalendarDate(value);
+  const recordedAt =
+    referenceId && mongoose.Types.ObjectId.isValid(String(referenceId))
+      ? new mongoose.Types.ObjectId(String(referenceId)).getTimestamp()
+      : now;
+
+  if (toBusinessCalendarDate(recordedAt) === day) return recordedAt;
+  // e.g. a bill collected yesterday and marked paid today with today's date
+  if (toBusinessCalendarDate(now) === day) return now;
+  return new Date(startOfBusinessDay(day).getTime() + timeOfBusinessDay(recordedAt));
+};
+
 const createEntry = async (entryBody) => {
   return CashBookEntry.create({
     ...entryBody,
     paymentMethod: normalizePaymentMethod(entryBody.paymentMethod),
+    date: resolveEntryDate(entryBody.date, entryBody.referenceId),
   });
 };
 
@@ -32,23 +77,34 @@ const upsertReferenceEntry = async (entryBody) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'referenceId and referenceModel are required');
   }
 
-  return CashBookEntry.findOneAndUpdate(
-    {
-      referenceId: entryBody.referenceId,
-      referenceModel: entryBody.referenceModel,
-      type: entryBody.type,
-      source: entryBody.source,
-    },
-    {
-      ...entryBody,
-      paymentMethod: normalizePaymentMethod(entryBody.paymentMethod),
-    },
-    {
-      new: true,
-      upsert: true,
-      setDefaultsOnInsert: true,
+  const filter = {
+    referenceId: entryBody.referenceId,
+    referenceModel: entryBody.referenceModel,
+    type: entryBody.type,
+    source: entryBody.source,
+  };
+  const update = {
+    ...entryBody,
+    paymentMethod: normalizePaymentMethod(entryBody.paymentMethod),
+  };
+
+  if (entryBody.date) {
+    update.date = resolveEntryDate(entryBody.date, entryBody.referenceId);
+    // Re-syncing an existing line (any later edit of its source) must not move it to the
+    // edit's time — keep where it was first placed while it's still on the same day.
+    if (isDateOnlyValue(entryBody.date)) {
+      const existing = await CashBookEntry.findOne(filter).select('date').lean();
+      if (existing && toBusinessCalendarDate(existing.date) === toBusinessCalendarDate(new Date(entryBody.date))) {
+        update.date = existing.date;
+      }
     }
-  );
+  }
+
+  return CashBookEntry.findOneAndUpdate(filter, update, {
+    new: true,
+    upsert: true,
+    setDefaultsOnInsert: true,
+  });
 };
 
 const deleteEntriesByReference = async (referenceId, referenceModel) => {
@@ -390,8 +446,11 @@ const setOpeningBalance = async (filter = {}, amount) => {
 };
 
 module.exports = {
+  CASH_MODULE_LABELS,
   normalizePaymentMethod,
   isCashPaymentMethod,
+  isDateOnlyValue,
+  resolveEntryDate,
   createEntry,
   upsertReferenceEntry,
   deleteEntriesByReference,

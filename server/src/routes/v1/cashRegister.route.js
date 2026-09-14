@@ -13,6 +13,8 @@ router.route('/').get(cashRegisterController.getRegister).put(validate(cashRegis
 
 router.route('/clear').post(cashRegisterController.clearRegister);
 
+router.route('/movements').get(validate(cashRegisterValidation.getMovements), cashRegisterController.getMovements);
+
 router.route('/history').get(validate(cashRegisterValidation.getHistory), cashRegisterController.getHistory);
 
 router

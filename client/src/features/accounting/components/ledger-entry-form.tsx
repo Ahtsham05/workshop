@@ -122,8 +122,18 @@ export function LedgerEntryForm({
   // text with no real ledger behind them. Every real account (Cash in Hand or a named
   // Bank Account / mobile wallet) is selectable by its own name, same convention as
   // Invoice/Purchase/Fast Billing's payment method pickers (see wallet-payment-options.ts).
+  // A customer "Cash Paid" / debit note / adjustment on Cash takes that amount out of Cash in
+  // Hand. Goods or services handed over on credit (a package, a panel, a USB) move no cash,
+  // but with Cash as the only choice they were silently deducted from the drawer — so offer
+  // an explicit no-cash method (server: isCreditLedgerPayment → no Cash Book line).
+  const allowsCreditMethod =
+    (ledgerType === 'customer' && ['sale', 'debit_note', 'adjustment'].includes(formData.transactionType)) ||
+    formData.paymentMethod === 'Credit';
   const mergedPaymentMethods = buildMergedPaymentOptions(
-    [{ value: 'Cash', label: t('Cash') }],
+    [
+      { value: 'Cash', label: t('Cash') },
+      ...(allowsCreditMethod ? [{ value: 'Credit', label: t('Credit (no cash)') }] : []),
+    ],
     wallets,
     showWalletBalance,
     currencyMeta,
@@ -156,11 +166,13 @@ export function LedgerEntryForm({
   // Auto-clear disabled field when transaction type changes
   const handleTransactionTypeChange = (value: string) => {
     const newFieldState = getFieldState(value);
+    const keepsCreditMethod = ledgerType === 'customer' && ['sale', 'debit_note', 'adjustment'].includes(value);
     setFormData({
       ...formData,
       transactionType: value,
       debit: newFieldState.enableDebit ? formData.debit : '',
       credit: newFieldState.enableCredit ? formData.credit : '',
+      paymentMethod: formData.paymentMethod === 'Credit' && !keepsCreditMethod ? 'Cash' : formData.paymentMethod,
     });
   };
 
@@ -413,6 +425,11 @@ export function LedgerEntryForm({
                 </SelectContent>
               </Select>
               {errors.walletType && <p className="text-sm text-red-600">{errors.walletType}</p>}
+              {ledgerType === 'customer' && formData.transactionType === 'sale' && formData.paymentMethod === 'Cash' && (
+                <p className="text-xs text-muted-foreground">
+                  {t('Cash Paid takes this amount out of Cash in Hand. For goods or services given on credit (udhaar), choose "Credit (no cash)".')}
+                </p>
+              )}
             </div>
           </div>
 

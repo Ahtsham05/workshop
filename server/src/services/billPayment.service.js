@@ -194,6 +194,21 @@ const syncBillCashEntry = async (billPayment, previous = null) => {
   });
 };
 
+/**
+ * A bill marked paid today from a date-only picker was paid *now* — keep the real time so
+ * its payout lands after the day's collections in Cash Book instead of at 5:00 am, before
+ * the very cash that paid it had even come in.
+ */
+const resolvePaidAt = (value) => {
+  const parsed = parseBusinessDateTime(value) || value;
+  if (!parsed) return parsed;
+  const now = new Date();
+  const paidOn = new Date(parsed);
+  return cashBookService.isDateOnlyValue(paidOn) && toBusinessCalendarDate(paidOn) === toBusinessCalendarDate(now)
+    ? now
+    : parsed;
+};
+
 const createBillPayment = async (body) => {
   const status = body.status || 'pending';
   const billPayment = new BillPayment({
@@ -201,7 +216,7 @@ const createBillPayment = async (body) => {
     dueDate: parseBusinessDateTime(body.dueDate) || body.dueDate,
     status,
     paymentDate:
-      status === 'paid' ? parseBusinessDateTime(body.paymentDate) || body.paymentDate || new Date() : null,
+      status === 'paid' ? resolvePaidAt(body.paymentDate) || new Date() : null,
   });
   applyBillPaymentFinancials(billPayment);
   await billPayment.save();
@@ -428,7 +443,9 @@ const updateBillPaymentById = async (id, updateBody, userId) => {
     billPayment.dueDate = parseBusinessDateTime(updateBody.dueDate) || updateBody.dueDate;
   }
   if (updateBody.paymentDate) {
-    billPayment.paymentDate = parseBusinessDateTime(updateBody.paymentDate) || updateBody.paymentDate;
+    billPayment.paymentDate = wasAlreadyPaid
+      ? parseBusinessDateTime(updateBody.paymentDate) || updateBody.paymentDate
+      : resolvePaidAt(updateBody.paymentDate);
   }
 
   if (billPayment.status === 'paid' && !billPayment.paymentDate) {

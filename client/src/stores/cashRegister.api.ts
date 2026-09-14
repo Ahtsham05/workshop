@@ -2,6 +2,56 @@ import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 import type { DenominationCount } from '@/lib/pkr-denominations'
 
+/** What moved expected cash after the latest saved count (see cashRegister.service getRegister). */
+export interface CashRegisterSinceLastCount {
+  countedAt: string
+  countedAmount: number
+  expectedAtCount: number
+  varianceAtCount: number
+  income: number
+  expense: number
+  net: number
+  entryCount: number
+  editedCount: number
+  unexplainedChange: number
+}
+
+export interface CashMovementEntry {
+  id: string
+  date: string
+  createdAt: string
+  updatedAt: string
+  type: 'income' | 'expense'
+  source: string
+  amount: number
+  description: string
+  referenceModel: string | null
+  module: string
+}
+
+export interface CashMovementsResponse {
+  from: string
+  to: string
+  income: number
+  expense: number
+  net: number
+  entryCount: number
+  truncated: boolean
+  byModule: Array<{ module: string; income: number; expense: number; net: number; count: number }>
+  entries: CashMovementEntry[]
+  editedEntries: CashMovementEntry[]
+  previousCount: {
+    id: string
+    countedAt: string
+    countedAmount: number
+    expectedCashAmount: number
+    variance: number
+  } | null
+  expectedAtStart: number | null
+  expectedAtEnd: number
+  unexplainedChange: number | null
+}
+
 export interface CashRegisterResponse {
   denominations: Array<{ value: number; kind: 'note' | 'coin'; label: string }>
   counts: DenominationCount[]
@@ -11,6 +61,7 @@ export interface CashRegisterResponse {
   notes: string
   lastCountedAt?: string | null
   lastCountedBy?: { name?: string } | string | null
+  sinceLastCount?: CashRegisterSinceLastCount | null
 }
 
 export interface CashRegisterSnapshot {
@@ -53,6 +104,13 @@ export const cashRegisterApi = createApi({
       query: () => ({ url: '/cash-register/clear', method: 'POST' }),
       invalidatesTags: ['CashRegister', 'CashRegisterHistory'],
     }),
+    getCashRegisterMovements: builder.query<CashMovementsResponse, { snapshotId?: string } | void>({
+      query: (params) => ({
+        url: '/cash-register/movements',
+        params: params || {},
+      }),
+      providesTags: ['CashRegister'],
+    }),
     getCashRegisterHistory: builder.query<
       PaginatedSnapshots,
       { page?: number; limit?: number } | void
@@ -75,5 +133,6 @@ export const {
   useSaveCashRegisterMutation,
   useClearCashRegisterMutation,
   useGetCashRegisterHistoryQuery,
+  useGetCashRegisterMovementsQuery,
   useDeleteCashRegisterHistoryMutation,
 } = cashRegisterApi

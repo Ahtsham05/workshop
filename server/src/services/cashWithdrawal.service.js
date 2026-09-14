@@ -3,6 +3,7 @@ const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const walletService = require('./wallet.service');
 const cashBookService = require('./cashBook.service');
+const { withKeyedLock } = require('../utils/keyedLock');
 const customerLedgerService = require('./customerLedger.service');
 
 const sanitizeCustomerId = (value) => {
@@ -299,7 +300,7 @@ const getCashWithdrawalById = async (withdrawalId) => {
   return withdrawal;
 };
 
-const updateCashWithdrawal = async (withdrawalId, updateBody) => {
+const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
   const withdrawal = await getCashWithdrawalById(withdrawalId);
   const linkedCustomer = await resolveLinkedCustomer({
     customerId: Object.prototype.hasOwnProperty.call(updateBody, 'customerId')
@@ -402,7 +403,10 @@ const updateCashWithdrawal = async (withdrawalId, updateBody) => {
   return withdrawal;
 };
 
-const deleteCashWithdrawal = async (withdrawalId) => {
+const updateCashWithdrawal = (withdrawalId, updateBody) =>
+  withKeyedLock(`cash-withdrawal:${withdrawalId}`, () => updateCashWithdrawalUnlocked(withdrawalId, updateBody));
+
+const deleteCashWithdrawalUnlocked = async (withdrawalId) => {
   const withdrawal = await getCashWithdrawalById(withdrawalId);
   const isWithdrawal = withdrawal.transactionType === 'withdrawal';
 
@@ -421,6 +425,11 @@ const deleteCashWithdrawal = async (withdrawalId) => {
   await withdrawal.deleteOne();
   return withdrawal;
 };
+
+// Serialized with updates: a delete racing an edit would otherwise let the edit re-create
+// Cash Book lines for a record that no longer exists.
+const deleteCashWithdrawal = (withdrawalId) =>
+  withKeyedLock(`cash-withdrawal:${withdrawalId}`, () => deleteCashWithdrawalUnlocked(withdrawalId));
 
 const assertBatchWalletBalance = async ({ organizationId, branchId, walletType, transactionType, entries, createdBy }) => {
   if (transactionType === 'withdrawal') {

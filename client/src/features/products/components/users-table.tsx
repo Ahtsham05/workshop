@@ -30,10 +30,17 @@ import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/us
 import { DEFAULT_NARROW_COLUMN_SIZES, usePersistedColumnSizing } from '@/components/data-table/use-persisted-column-sizing'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
 import { useFormatMoney } from '@/lib/format-money'
 import { onEnterAdvance, focusField } from '@/lib/invoice-form-keyboard'
+import { useUsers } from '../context/users-context'
 import type { ReactNode } from 'react'
+
+// Elements a double-click on the row itself shouldn't be hijacked from — the row's own
+// interactive controls (checkboxes, the Active switch, Flag/Stock-alert popovers, the
+// row-actions menu) each handle their own clicks and shouldn't also pop the edit dialog.
+const ROW_DBLCLICK_IGNORE_SELECTOR = 'button, a, input, [role="checkbox"], [role="switch"], [role="menuitem"]'
 
 declare module '@tanstack/react-table' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -129,6 +136,18 @@ export function ProductTable({
   const setSorting = onSortingChangeProp ?? setInternalSorting
   const { t, language } = useLanguage()
   const formatCurrency = useFormatMoney()
+  const { hasPermission } = usePermissions()
+  const { setOpen, setCurrentRow } = useUsers()
+  const canEdit = hasPermission('editProducts' as any)
+
+  const handleRowDoubleClick = (event: React.MouseEvent<HTMLTableRowElement>, product: Product) => {
+    // Bulk inline-edit mode already puts every selected row's fields into edit inputs —
+    // a double-click there shouldn't also pop the full edit dialog on top of it.
+    if (inlineEditMode || !canEdit) return
+    if ((event.target as HTMLElement).closest(ROW_DBLCLICK_IGNORE_SELECTOR)) return
+    setCurrentRow(product)
+    setOpen('edit')
+  }
 
   // Enter advances field-to-field across the inline bulk-edit inputs (Sale Price →
   // Purchase Price → Stock Quantity → next selected row's Sale Price) instead of doing
@@ -245,7 +264,9 @@ export function ProductTable({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && 'selected'}
-                    className='group/row'
+                    className={`group/row ${canEdit && !inlineEditMode ? 'cursor-pointer' : ''}`}
+                    onDoubleClick={(event) => handleRowDoubleClick(event, product)}
+                    title={canEdit && !inlineEditMode ? t('double_click_to_edit') : undefined}
                   >
                     {row.getVisibleCells().map((cell) => {
                       const columnId = cell.column.id
