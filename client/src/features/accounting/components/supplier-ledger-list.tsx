@@ -50,7 +50,10 @@ function ledgerRowMatchesSearch(
 export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps) {
   const { t } = useLanguage();
   const [suppliers, setSuppliers] = useState<SupplierWithBalance[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Starts true (not false) because the mount-time fetch effect below hasn't run yet when
+  // the scroll-restore effect's first pass checks this flag — starting false made it treat
+  // the pre-fetch empty list as "loaded" and burn its one-shot restore on nothing.
+  const [loading, setLoading] = useState(true);
   const {
     search: searchTerm,
     setSearch: setSearchTerm,

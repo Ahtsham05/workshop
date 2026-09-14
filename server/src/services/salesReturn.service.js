@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { SalesReturn, Invoice, Product, CustomerLedger, Customer, CashBookEntry, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const customerLedgerService = require('./customerLedger.service');
 const accountsSystemService = require('./accountsSystem.service');
 const inventorySyncService = require('./inventorySync.service');
 const inventoryService = require('./inventory.service');
@@ -260,7 +261,7 @@ const createSalesReturn = async (returnBody) => {
     }
 
     // 6. Customer Ledger entry (inside transaction)
-    await _createCustomerLedgerEntry(salesReturn, session);
+    const customerLedgerEntry = await _createCustomerLedgerEntry(salesReturn, session);
 
     // 7. CashBook entry (inside transaction)
     await _createCashBookEntryInSession(salesReturn, session);
@@ -322,6 +323,23 @@ const createSalesReturn = async (returnBody) => {
       )
       .catch(() => {});
 
+    // Credit this return to the specific invoice it came from (see
+    // customerPaymentService.recordAllocationForLedgerEntry's isReturn branch) — outside the
+    // transaction since it does its own writes (a CustomerPayment + Invoice.allocatedAmount
+    // increment) that don't participate in this session. The ledger entry itself is already
+    // correct at this point; a failed allocation must not undo the return.
+    if (customerLedgerEntry) {
+      // eslint-disable-next-line global-require
+      const customerPaymentService = require('./customerPayment.service');
+      try {
+        await customerPaymentService.recordAllocationForLedgerEntry(customerLedgerEntry, { id: returnBody.createdBy });
+      } catch (error) {
+        // eslint-disable-next-line global-require
+        const logger = require('../config/logger');
+        logger.error(`Failed to credit sales return ${salesReturn._id} to its invoice: ${error.message}`);
+      }
+    }
+
     return salesReturn;
   } catch (err) {
     await session.abortTransaction();
@@ -369,7 +387,7 @@ const _isFullyReturned = async (invoice, newItems) => {
  * - adjustment: credit (store as customer credit / reduce their outstanding balance)
  */
 const _createCustomerLedgerEntry = async (salesReturn, session) => {
-  if (!salesReturn.customerId) return;
+  if (!salesReturn.customerId) return null;
 
   // Get the running balance for this customer
   const lastEntry = await CustomerLedger.findOne({ customer: salesReturn.customerId })
@@ -386,7 +404,7 @@ const _createCustomerLedgerEntry = async (salesReturn, session) => {
   credit = salesReturn.totalAmount;
   newBalance = currentBalance - salesReturn.totalAmount;
 
-  await CustomerLedger.create(
+  const [entry] = await CustomerLedger.create(
     [
       {
         organizationId: salesReturn.organizationId,
@@ -413,6 +431,8 @@ const _createCustomerLedgerEntry = async (salesReturn, session) => {
     { $inc: { balance: -salesReturn.totalAmount } },
     { session }
   );
+
+  return entry;
 };
 
 /**
@@ -557,6 +577,24 @@ const _reverseSalesReturnStock = async (ret, { userId } = {}) => {
 };
 
 /**
+ * Undo the CustomerLedger effect a return had — used when it's rejected or deleted, so the
+ * customer's balance and the invoice it credited both go back to what they owed before this
+ * return existed. Mirrors purchaseReturn.service.js's reverseSupplierEffect: release the
+ * invoice credit first (it needs the ledger row's referenceId to find itself), THEN delete
+ * the row, THEN recalculate the balance so it doesn't drift.
+ */
+const reverseCustomerEffect = async (ret, user) => {
+  if (!ret.customerId) return;
+
+  // eslint-disable-next-line global-require
+  const customerPaymentService = require('./customerPayment.service');
+  await customerPaymentService.releaseReturnCredit(ret._id, user).catch(() => {});
+
+  await CustomerLedger.deleteMany({ referenceId: ret._id, transactionType: 'sales_return' });
+  await customerLedgerService.recalculateBalances(ret.customerId);
+};
+
+/**
  * Approve or reject a pending sales return.
  */
 const updateSalesReturnStatus = async (id, status, userId, rejectionReason) => {
@@ -580,17 +618,26 @@ const updateSalesReturnStatus = async (id, status, userId, rejectionReason) => {
   } else if (status === 'rejected') {
     // Reverse stock (and IMEI status) that was applied at creation time.
     await _reverseSalesReturnStock(ret, { userId });
+    // A rejected return never happened — hand back whatever invoice credit it applied and
+    // remove it from the customer's ledger/balance too (see 5. in createSalesReturn: the
+    // ledger entry and invoice credit are both posted immediately on creation, before any
+    // approval step, so rejecting has to undo both, not just the stock).
+    await reverseCustomerEffect(ret, { id: userId });
   }
 
   return ret;
 };
 
-const deleteSalesReturn = async (id) => {
+const deleteSalesReturn = async (id, userId) => {
   const ret = await SalesReturn.findById(id);
   if (!ret) throw new ApiError(httpStatus.NOT_FOUND, 'Sales return not found');
 
   // Reverse stock (and IMEI status) that was applied at creation time.
   await _reverseSalesReturnStock(ret, {});
+
+  // Hand back whatever invoice credit this return applied, and remove it from the
+  // customer's ledger/balance.
+  await reverseCustomerEffect(ret, userId ? { id: userId } : undefined);
 
   // Remove cash book entry if any
   await cashBookService.deleteEntriesByReference(ret._id, 'SalesReturn');

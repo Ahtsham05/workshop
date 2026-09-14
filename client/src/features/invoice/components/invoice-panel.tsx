@@ -208,6 +208,11 @@ export function InvoicePanel({
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
   const { showUrdu } = useUrduDisplay()
+  // Rows from the settlement-aware invoice list come through Mongoose's toJSON transform,
+  // which replaces `_id` with `id` — so `editingInvoice._id` alone is undefined for any
+  // invoice opened from that list. Falling back to `.id` keeps updates routed to PATCH
+  // instead of silently falling through to create-a-new-invoice below.
+  const editingInvoiceId: string | undefined = editingInvoice?._id || editingInvoice?.id
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
   const currencySymbol = currencyMeta.symbol
@@ -1578,7 +1583,7 @@ export function InvoicePanel({
       // Don't include status in the payload as it's not allowed in updates
       // Status is likely managed by the backend
 
-      console.log('Saving invoice - isEditing:', isEditing, 'editingInvoice._id:', editingInvoice?._id)
+      console.log('Saving invoice - isEditing:', isEditing, 'editingInvoiceId:', editingInvoiceId)
       console.log('Invoice data being sent:', invoiceData)
       
       let result: Record<string, unknown>
@@ -1603,8 +1608,8 @@ export function InvoicePanel({
 
       if (canQueueOffline && !online) {
         result = await saveOffline()
-      } else if (isEditing && editingInvoice?._id) {
-        result = await updateInvoice({ id: editingInvoice._id, ...invoiceData }).unwrap()
+      } else if (isEditing && editingInvoiceId) {
+        result = await updateInvoice({ id: editingInvoiceId, ...invoiceData }).unwrap()
       } else {
         try {
           result = await createInvoice(invoiceData).unwrap()
@@ -1879,7 +1884,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
@@ -2874,7 +2879,7 @@ export function InvoicePanel({
                   flag={editingInvoice.flag}
                   onSave={async (data) => {
                     try {
-                      await updateInvoiceFlag({ id: editingInvoice._id, ...data }).unwrap()
+                      await updateInvoiceFlag({ id: editingInvoiceId, ...data }).unwrap()
                       toast.success(editingInvoice.flag ? 'Flag updated' : 'Invoice flagged for review')
                     } catch {
                       toast.error('Failed to update flag')
@@ -2882,7 +2887,7 @@ export function InvoicePanel({
                   }}
                   onClear={async () => {
                     try {
-                      await updateInvoiceFlag({ id: editingInvoice._id, clear: true }).unwrap()
+                      await updateInvoiceFlag({ id: editingInvoiceId, clear: true }).unwrap()
                       toast.success('Flag cleared')
                     } catch {
                       toast.error('Failed to clear flag')
@@ -3238,7 +3243,7 @@ export function InvoicePanel({
                   align='start'
                   onSave={async (data) => {
                     try {
-                      await updateInvoiceFlag({ id: editingInvoice._id, ...data }).unwrap()
+                      await updateInvoiceFlag({ id: editingInvoiceId, ...data }).unwrap()
                       toast.success(editingInvoice.flag ? 'Flag updated' : 'Invoice flagged for review')
                     } catch {
                       toast.error('Failed to update flag')
@@ -3246,7 +3251,7 @@ export function InvoicePanel({
                   }}
                   onClear={async () => {
                     try {
-                      await updateInvoiceFlag({ id: editingInvoice._id, clear: true }).unwrap()
+                      await updateInvoiceFlag({ id: editingInvoiceId, clear: true }).unwrap()
                       toast.success('Flag cleared')
                     } catch {
                       toast.error('Failed to clear flag')

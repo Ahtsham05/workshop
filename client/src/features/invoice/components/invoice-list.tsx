@@ -397,7 +397,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
       return
     }
     try {
-      setPrintingInvoiceId(invoice._id)
+      setPrintingInvoiceId(invoice.id || invoice._id)
       const { printData, printContact } = await buildInvoicePrintData(invoice)
 
       if (PAPER_FORMATS[paperSize].family === 'thermal') {
@@ -446,9 +446,10 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   }
 
   const toggleTwoUpSelection = (invoice: any) => {
+    const invoiceId = invoice.id || invoice._id
     setTwoUpSelection((prev) => {
-      const exists = prev.some((inv) => inv._id === invoice._id)
-      if (exists) return prev.filter((inv) => inv._id !== invoice._id)
+      const exists = prev.some((inv) => (inv.id || inv._id) === invoiceId)
+      if (exists) return prev.filter((inv) => (inv.id || inv._id) !== invoiceId)
       if (prev.length >= 2) return prev
       return [...prev, invoice]
     })
@@ -772,8 +773,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   ))}
 
                 {!isLoading && invoiceList.map((invoice: any) => {
-                  const isSelectedForTwoUp = twoUpSelection.some((inv) => inv._id === invoice._id)
                   const id = invoice.id || invoice._id
+                  const isSelectedForTwoUp = twoUpSelection.some((inv) => (inv.id || inv._id) === id)
                   const settlement = resolveInvoiceSettlement(invoice)
                   const statusMeta = SETTLEMENT_STATUS_META[settlement.settlementStatus]
                   const dueMeta = DUE_STATUS_META[settlement.dueStatus]
@@ -966,7 +967,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                             flag={invoice.flag}
                             onSave={async (data) => {
                               try {
-                                await updateInvoiceFlag({ id: invoice._id, ...data }).unwrap()
+                                await updateInvoiceFlag({ id, ...data }).unwrap()
                                 toast.success(invoice.flag ? 'Flag updated' : 'Invoice flagged for review')
                               } catch {
                                 toast.error('Failed to update flag')
@@ -974,7 +975,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                             }}
                             onClear={async () => {
                               try {
-                                await updateInvoiceFlag({ id: invoice._id, clear: true }).unwrap()
+                                await updateInvoiceFlag({ id, clear: true }).unwrap()
                                 toast.success('Flag cleared')
                               } catch {
                                 toast.error('Failed to clear flag')
@@ -996,7 +997,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                             size="sm"
                             defaultPaperSize={defaultPaperSize}
                             allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
-                            disabled={printingInvoiceId === invoice._id}
+                            disabled={printingInvoiceId === id}
                             onPrint={(paperSize) => handlePrintInvoice(invoice, paperSize)}
                             label=""
                           />

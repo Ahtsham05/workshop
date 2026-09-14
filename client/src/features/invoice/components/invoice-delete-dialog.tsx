@@ -32,8 +32,14 @@ export function InvoiceDeleteDialog({ open, onOpenChange, currentRow }: Props) {
     }
     if (value.trim() !== currentRow.invoiceNumber.trim()) return
 
+    const invoiceId = currentRow._id || currentRow.id
+    if (!invoiceId) {
+      toast.error('Invoice ID is missing')
+      return
+    }
+
     try {
-      await deleteInvoice(currentRow._id).unwrap()
+      await deleteInvoice(invoiceId).unwrap()
       toast.success(t('invoice_deleted_successfully') || 'Invoice deleted successfully!')
       onOpenChange(false)
       setValue('')

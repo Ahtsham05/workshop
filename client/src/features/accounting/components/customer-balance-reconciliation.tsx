@@ -58,8 +58,12 @@ export function CustomerBalanceReconciliation({ customerId, customerName }: Cust
         toast.info(t('Nothing left to apply — this account is already up to date'))
         return
       }
+      const parts = [
+        result.paymentCount > 0 ? `${result.paymentCount} ${t('payment(s)')}` : '',
+        result.returnCount > 0 ? `${result.returnCount} ${t('return(s)')}` : '',
+      ].filter(Boolean)
       toast.success(t('Applied to invoices'), {
-        description: `${result.appliedCount} ${t('payment(s)')} · ${formatMoney(result.appliedTotal)} ${t('now settles open invoices')}`,
+        description: `${parts.join(' + ')} · ${formatMoney(result.appliedTotal)} ${t('now settles open invoices')}`,
       })
     } catch (error: any) {
       toast.error(error?.data?.message || t('Could not apply those credits'))
@@ -72,6 +76,13 @@ export function CustomerBalanceReconciliation({ customerId, customerName }: Cust
       label: t('Payments not applied to any invoice'),
       hint: `${data.unallocatedPaymentCount} ${t('ledger payment(s) recorded before invoices tracked their own settlement')}`,
       amount: data.unallocatedPayments,
+      fixable: true,
+    },
+    {
+      key: 'returns',
+      label: t('Sales returns not credited to their invoice'),
+      hint: `${data.returnCount} ${t('return(s) — the goods came back, so that invoice is worth less')}`,
+      amount: data.returnCredits,
       fixable: true,
     },
     {
@@ -169,6 +180,12 @@ export function CustomerBalanceReconciliation({ customerId, customerName }: Cust
             </span>
           </div>
         ))}
+
+        {data.appliedReturnCredits > 0.01 && (
+          <p className='text-xs text-muted-foreground'>
+            {t('Includes')} {formatMoney(data.appliedReturnCredits)} {t('of sales returns already credited to their invoice.')}
+          </p>
+        )}
 
         <Separator />
 

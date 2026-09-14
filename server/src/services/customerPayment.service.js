@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { CustomerPayment, Invoice, Customer, CustomerLedger } = require('../models');
+const { CustomerPayment, Invoice, Customer, CustomerLedger, SalesReturn } = require('../models');
 const ApiError = require('../utils/ApiError');
 const Money = require('../utils/money');
 const { formatMoney } = require('../utils/money');
@@ -321,8 +321,44 @@ const getCustomerReconciliation = async ({ organizationId, branchId, customer })
     Math.max(0, (standalonePayments?.total || 0) - (paymentTotals?.recorded || 0))
   );
 
-  const explained = Money.roundMoney(summary.availableCredit + unallocatedPayments);
+  // Sales returns whose credit never reached their invoice — a return that HAS been applied
+  // moves both sides of the bridge at once (the invoice owes less AND the ledger balance is
+  // lower), so it is not part of the difference; only the ones still floating on the
+  // account are. Same rule the payment side follows above, hence the lookup rather than a
+  // plain sum.
+  const [returnTotals] = await CustomerLedger.aggregate([
+    { $match: { ...match, transactionType: 'sales_return', referenceId: { $ne: null } } },
+    {
+      $lookup: {
+        from: 'customerpayments',
+        localField: '_id',
+        foreignField: 'customerLedgerEntryId',
+        as: '_allocation',
+      },
+    },
+    {
+      $addFields: {
+        isApplied: {
+          $gt: [{ $size: { $filter: { input: '$_allocation', as: 'a', cond: { $eq: ['$$a.status', 'posted'] } } } }, 0],
+        },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        unapplied: { $sum: { $cond: [{ $eq: ['$isApplied', false] }, '$credit', 0] } },
+        unappliedCount: { $sum: { $cond: [{ $eq: ['$isApplied', false] }, 1, 0] } },
+        applied: { $sum: { $cond: [{ $eq: ['$isApplied', true] }, '$credit', 0] } },
+      },
+    },
+  ]);
+
+  const returnCredits = Money.roundMoney(returnTotals?.unapplied || 0);
+  const appliedReturnCredits = Money.roundMoney(returnTotals?.applied || 0);
+
+  const explained = Money.roundMoney(summary.availableCredit + unallocatedPayments + returnCredits);
   const unexplained = Money.roundMoney(summary.totalOutstanding - explained - ledgerBalance);
+  const fixableAmount = Money.roundMoney(unallocatedPayments + returnCredits);
 
   return {
     invoiceCount: summary.invoiceCount,
@@ -332,9 +368,12 @@ const getCustomerReconciliation = async ({ organizationId, branchId, customer })
     availableCredit: summary.availableCredit,
     unallocatedPayments,
     unallocatedPaymentCount: standalonePayments?.count || 0,
+    returnCredits,
+    returnCount: returnTotals?.unappliedCount || 0,
+    appliedReturnCredits,
     unexplained,
-    fixableAmount: unallocatedPayments,
-    isReconciled: Math.abs(unallocatedPayments) <= SETTLEMENT_EPSILON && Math.abs(unexplained) <= SETTLEMENT_EPSILON,
+    fixableAmount,
+    isReconciled: Math.abs(fixableAmount) <= SETTLEMENT_EPSILON && Math.abs(unexplained) <= SETTLEMENT_EPSILON,
   };
 };
 
@@ -357,11 +396,14 @@ const repairCustomerAllocations = async ({ organizationId, branchId, customer },
 
   const entries = await CustomerLedger.find({
     ...scope,
-    transactionType: 'payment_received',
-    referenceId: { $in: [null, undefined] },
+    $or: [
+      { transactionType: 'payment_received', referenceId: { $in: [null, undefined] } },
+      { transactionType: 'sales_return' },
+    ],
   }).sort({ transactionDate: 1, createdAt: 1 });
 
-  const applied = [];
+  const appliedPayments = [];
+  const appliedReturns = [];
 
   for (const entry of entries) {
     const existing = await CustomerPayment.findOne({ customerLedgerEntryId: entry._id }).select('_id');
@@ -369,17 +411,23 @@ const repairCustomerAllocations = async ({ organizationId, branchId, customer },
     const payment = await recordAllocationForLedgerEntry(entry, user);
     if (!payment) continue;
 
-    applied.push({
+    const record = {
       paymentNumber: payment.paymentNumber,
       amount: payment.amount,
       allocatedTotal: payment.allocatedTotal,
       unappliedAmount: payment.unappliedAmount,
       invoices: payment.allocations.map((allocation) => allocation.invoiceNumber),
-    });
+    };
+    if (payment.direction === 'return_credit') appliedReturns.push(record);
+    else appliedPayments.push(record);
   }
+
+  const applied = [...appliedPayments, ...appliedReturns];
 
   return {
     appliedCount: applied.length,
+    paymentCount: appliedPayments.length,
+    returnCount: appliedReturns.length,
     appliedTotal: Money.roundMoney(applied.reduce((sum, entry) => sum + entry.allocatedTotal, 0)),
     payments: applied,
     reconciliation: await getCustomerReconciliation({ organizationId, branchId, customer }),
@@ -953,10 +1001,13 @@ const parseLedgerPaymentMethod = (rawPaymentMethod) => {
 const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'fifo' } = {}) => {
   if (!entry) return null;
   const isPayment = entry.transactionType === 'payment_received';
-  if (!isPayment) return null;
+  const isReturn = entry.transactionType === 'sales_return';
+  if (!isPayment && !isReturn) return null;
   // A payment tied to a source document (an invoice's own paid-at-sale leg) is already
   // reflected on that invoice — allocating it again would settle the same invoice twice.
-  if (entry.referenceId) return null;
+  // Returns are the opposite: they are ALWAYS tied to their SalesReturn document, which is
+  // exactly what tells us which invoice the credit belongs to.
+  if (isPayment && entry.referenceId) return null;
 
   const amount = Money.roundMoney(entry.credit);
   if (!amount || amount <= 0) return null;
@@ -966,13 +1017,43 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
 
   const customer = await Customer.findById(entry.customer).select('name');
 
-  const openInvoices = await getOpenInvoicesForCustomer({
-    organizationId: entry.organizationId,
-    branchId: entry.branchId,
-    customer: entry.customer,
-    strategy: allocationMode,
-  });
-  const plan = planAllocation({ openInvoices, amount, mode: allocationMode });
+  let plan;
+  let mode = allocationMode;
+  let direction = 'payment';
+
+  if (isReturn) {
+    // Goods came back against one specific invoice — this credit belongs there, not on
+    // the oldest open bill.
+    const salesReturn = await SalesReturn.findById(entry.referenceId).select('invoiceId status returnNumber');
+    if (!salesReturn?.invoiceId || salesReturn.status === 'rejected') return null;
+
+    const [invoice] = await getOpenInvoicesForCustomer({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      customer: entry.customer,
+      invoiceIds: [salesReturn.invoiceId],
+    });
+    // Nothing left owing on it (already paid in full) — the return is a credit on the
+    // account or a cash refund, and forcing it onto a settled invoice would overpay it.
+    if (!invoice) return null;
+
+    mode = 'reference';
+    direction = 'return_credit';
+    plan = planAllocation({
+      openInvoices: [invoice],
+      amount,
+      mode: 'reference',
+      manualAllocations: [{ invoiceId: String(invoice._id), amount: Math.min(amount, invoice.remainingAmount) }],
+    });
+  } else {
+    const openInvoices = await getOpenInvoicesForCustomer({
+      organizationId: entry.organizationId,
+      branchId: entry.branchId,
+      customer: entry.customer,
+      strategy: allocationMode,
+    });
+    plan = planAllocation({ openInvoices, amount, mode: allocationMode });
+  }
 
   const { paymentMethod, walletType } = parseLedgerPaymentMethod(entry.paymentMethod);
   const paymentNumber = await generateNextPaymentNumber(entry.organizationId);
@@ -984,24 +1065,28 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
     paymentNumber,
     customer: entry.customer,
     customerName: customer?.name,
-    direction: 'payment',
+    direction,
     paymentDate: entry.transactionDate || entry.createdAt || new Date(),
     amount,
     paymentMethod,
     walletType,
     referenceNumber: entry.reference || undefined,
     notes: entry.notes || undefined,
-    allocationMode,
+    allocationMode: mode,
     allocations: plan.allocations,
     allocatedTotal: plan.allocatedTotal,
-    unappliedAmount: plan.unappliedAmount,
+    // A return credit is never an "advance": whatever it couldn't put on the invoice stays
+    // on the account as the ledger already records it, not as spendable payment credit.
+    unappliedAmount: isReturn ? 0 : plan.unappliedAmount,
     status: 'posted',
     customerLedgerEntryId: entry._id,
     history: [
       historyEntry(
         'created',
         user,
-        `Recorded from the customer ledger — ${formatMoney(amount)} applied across ${plan.allocations.length} invoice(s)`,
+        isReturn
+          ? `Sales return ${entry.reference || ''} credited ${formatMoney(plan.allocatedTotal)} to invoice ${plan.allocations[0]?.invoiceNumber || ''}`.trim()
+          : `Recorded from the customer ledger — ${formatMoney(amount)} applied across ${plan.allocations.length} invoice(s)`,
         amount
       ),
     ],
@@ -1009,6 +1094,21 @@ const recordAllocationForLedgerEntry = async (entry, user, { allocationMode = 'f
 
   await applyAllocationsToInvoices(plan.allocations);
   return payment;
+};
+
+/**
+ * Undo the invoice credit a sales return created — used when that return is deleted or
+ * rejected, so the invoice goes back to owing what it owed. Never touches the ledger: the
+ * return's own delete/reject path owns that side. Mirrors
+ * supplierPayment.service.js's releaseReturnCredit.
+ */
+const releaseReturnCredit = async (salesReturnId, user) => {
+  const entry = await CustomerLedger.findOne({
+    referenceId: toObjectId(salesReturnId),
+    transactionType: 'sales_return',
+  }).select('_id');
+  if (!entry) return null;
+  return releaseAllocationsForLedgerEntry(entry._id, user);
 };
 
 /**
@@ -1129,6 +1229,7 @@ module.exports = {
   recordAllocationForLedgerEntry,
   syncAllocationForLedgerEntry,
   releaseAllocationsForLedgerEntry,
+  releaseReturnCredit,
   getOpenInvoicesForCustomer,
   planAllocation,
   previewAllocation,

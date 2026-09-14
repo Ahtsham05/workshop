@@ -21,7 +21,8 @@ const invalidateMoneyAndInvoices = async (_arg: unknown, { dispatch, queryFulfil
 }
 
 export type AllocationMode = 'fifo' | 'due_date' | 'manual' | 'reference' | 'none'
-export type PaymentDirection = 'payment' | 'refund'
+/** 'return_credit' carries no cash — goods came back, so the invoice is worth less. */
+export type PaymentDirection = 'payment' | 'refund' | 'return_credit'
 export type SettlementStatus = 'unpaid' | 'partial' | 'paid' | 'overpaid'
 export type DueStatus = 'overdue' | 'due_today' | 'due_soon' | 'not_due' | 'no_due_date' | 'settled'
 
@@ -146,11 +147,10 @@ export interface InvoiceSettlementDetail {
 
 /**
  * Why the Customer Ledger's balance and the invoice list's outstanding total differ — see
- * customerPayment.service.js's getCustomerReconciliation. A leaner tie-out than
- * SupplierReconciliation: no contra-credit/return-credit buckets, since neither a
- * shadow-customer account nor sales-return → invoice-credit integration exists on this side
- * yet. The identity always holds: invoiceOutstanding − unallocatedPayments − availableCredit
- * − unexplained = ledgerBalance.
+ * customerPayment.service.js's getCustomerReconciliation. Leaner than SupplierReconciliation:
+ * no contra-credit bucket, since no shadow-customer account concept exists on this side. The
+ * identity always holds: invoiceOutstanding − unallocatedPayments − returnCredits −
+ * availableCredit − unexplained = ledgerBalance.
  */
 export interface CustomerReconciliation {
   invoiceCount: number
@@ -161,8 +161,13 @@ export interface CustomerReconciliation {
   /** Money paid on the ledger that no invoice has been credited with — fixable. */
   unallocatedPayments: number
   unallocatedPaymentCount: number
+  /** Sales returns whose credit never reached their invoice — fixable. */
+  returnCredits: number
+  returnCount: number
+  /** Returns already credited to their invoice — reported for transparency, not a gap. */
+  appliedReturnCredits: number
   unexplained: number
-  /** What the one-click repair can still settle: same as unallocatedPayments here. */
+  /** What the one-click repair can still settle: unallocatedPayments + returnCredits. */
   fixableAmount: number
   isReconciled: boolean
 }
@@ -225,12 +230,14 @@ export const customerPaymentApi = createApi({
     }),
 
     /**
-     * One-click repair for a legacy account: applies ledger "Cash Received" rows that never
-     * reached an invoice. Moves no money, and is idempotent.
+     * One-click repair for a legacy account: applies ledger "Cash Received" rows and sales
+     * returns that never reached an invoice. Moves no money, and is idempotent.
      */
     repairCustomerAllocations: builder.mutation<
       {
         appliedCount: number
+        paymentCount: number
+        returnCount: number
         appliedTotal: number
         payments: { paymentNumber: string; amount: number; allocatedTotal: number; unappliedAmount: number; invoices: string[] }[]
         reconciliation: CustomerReconciliation

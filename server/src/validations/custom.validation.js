@@ -3,7 +3,7 @@ const { endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessT
 
 const objectId = (value, helpers) => {
   if (!value.match(/^[0-9a-fA-F]{24}$/)) {
-    return helpers.message('"{{#label}}" must be a valid mongo id');
+    return helpers.message('{{#label}} must be a valid mongo id');
   }
   return value;
 };
@@ -19,7 +19,7 @@ const objectId = (value, helpers) => {
 const notFutureDate = (value, helpers) => {
   const maxAllowed = endOfBusinessDay(toBusinessCalendarDate(new Date()));
   if (new Date(value).getTime() > maxAllowed.getTime()) {
-    return helpers.message('"{{#label}}" cannot be a future date');
+    return helpers.message('{{#label}} cannot be a future date');
   }
   return value;
 };

@@ -81,11 +81,17 @@ const customerPaymentSchema = new mongoose.Schema(
     // Denormalized so a voided payment still reads correctly if the customer is renamed.
     customerName: { type: String, trim: true },
     /**
-     * 'payment' — the customer paid us (money in, the normal case).
-     * 'refund'  — we gave money back to the customer, which eats into the credit balance
-     *             their earlier over-payments created.
+     * 'payment'       — the customer paid us (money in, the normal case).
+     * 'refund'        — we gave money back to the customer, which eats into the credit
+     *                   balance their earlier over-payments created.
+     * 'return_credit' — goods came back from the customer, so their invoice is worth less.
+     *                   Carries no cash movement of its own (the SalesReturn already posted
+     *                   the ledger credit and any cash refund); this record exists so the
+     *                   credit lands on the ORIGINAL invoice instead of floating on the
+     *                   account, and so it can be released if the return is undone. Mirrors
+     *                   SupplierPayment's identical 'return_credit' direction.
      */
-    direction: { type: String, enum: ['payment', 'refund'], default: 'payment', index: true },
+    direction: { type: String, enum: ['payment', 'refund', 'return_credit'], default: 'payment', index: true },
     paymentDate: { type: Date, default: Date.now, index: true },
     amount: { type: Number, required: true, min: 0.01 },
     // Which account the money moved through. 'wallet' pairs with walletType (a Bank Account

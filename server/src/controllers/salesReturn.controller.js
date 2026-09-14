@@ -46,7 +46,7 @@ const updateSalesReturnStatus = catchAsync(async (req, res) => {
 });
 
 const deleteSalesReturn = catchAsync(async (req, res) => {
-  await salesReturnService.deleteSalesReturn(req.params.returnId);
+  await salesReturnService.deleteSalesReturn(req.params.returnId, req.user.id);
   res.status(httpStatus.NO_CONTENT).send();
 });
 
