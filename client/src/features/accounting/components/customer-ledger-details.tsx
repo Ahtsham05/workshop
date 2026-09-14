@@ -59,6 +59,7 @@ import { balanceBeforeFromLedgerEntry, fetchSupplierBalanceBeforeInvoice } from 
 import { LedgerStatementTable } from './ledger-statement-table';
 import { LedgerCategoryCards, type LedgerCategoryGroup } from './ledger-category-cards';
 import { CommunicationLogPanel } from './communication-log-panel';
+import { CustomerBalanceReconciliation } from './customer-balance-reconciliation';
 import { useGetLeadByCustomerIdQuery } from '@/stores/lead.api';
 import { Can } from '@/context/permission-context';
 import { LEDGER_STATEMENT_SORT, formatLedgerBalanceLabel, getLedgerBalanceTone } from '@/features/accounting/utils/ledger-display';
@@ -1921,6 +1922,8 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               </p>
             </div>
           </div>
+
+          <CustomerBalanceReconciliation customerId={customer._id} customerName={customer.name} />
 
           {originLead && (
             <Can permission="viewLeads">

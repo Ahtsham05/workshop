@@ -139,6 +139,54 @@ const getInvoices = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+// Every filter the new Invoice Management toolbar can send. `filter` stays the org/branch
+// scope applyBranchFilter owns; everything else is an "option" the service turns into the
+// aggregation's match/sort stages — including the settlement-derived ones (payment status,
+// due status) that can't exist as stored columns. See invoice.service.js's buildInvoiceListMatch.
+const INVOICE_LIST_OPTIONS = [
+  'sortBy',
+  'limit',
+  'page',
+  'search',
+  'searchBy',
+  'customerId',
+  'type',
+  'paymentStatus',
+  'dueStatus',
+  'createdBy',
+  'branch',
+  'startDate',
+  'endDate',
+  'minAmount',
+  'maxAmount',
+];
+
+/** Settlement-aware, aggregation-based invoice list — the Invoice Management page's own
+ *  data source, separate from the older getInvoices/queryInvoices other screens still use. */
+const getInvoicesList = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, INVOICE_LIST_OPTIONS);
+  const result = await invoiceService.queryInvoiceList(filter, options);
+  res.send(result);
+});
+
+/** Stat-card totals for the current filter set (see getInvoiceListSummary). */
+const getInvoicesSummary = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, INVOICE_LIST_OPTIONS);
+  res.send(await invoiceService.getInvoiceListSummary(filter, options));
+});
+
+/** Flattened rows for CSV/PDF export — same filters, no pagination. */
+const exportInvoices = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, INVOICE_LIST_OPTIONS);
+  res.send(await invoiceService.getInvoiceListForExport(filter, options));
+});
+
 const getInvoice = catchAsync(async (req, res) => {
   const invoice = await invoiceService.getInvoiceById(req.params.invoiceId);
   if (!invoice) {
@@ -451,6 +499,9 @@ const getPendingInvoiceSummaryByCustomer = catchAsync(async (req, res) => {
 module.exports = {
   createInvoice,
   getInvoices,
+  getInvoicesList,
+  getInvoicesSummary,
+  exportInvoices,
   getInvoice,
   updateInvoice,
   updateInvoiceFlag,

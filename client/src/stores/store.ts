@@ -25,6 +25,7 @@ import { partnerProfitShareLedgerApi } from './partnerProfitShareLedger.api';
 import { partnerPaymentApi } from './partnerPayment.api';
 import { paymentVoucherApi } from './paymentVoucher.api';
 import { supplierPaymentApi } from './supplierPayment.api';
+import { customerPaymentApi } from './customerPayment.api';
 import { receiptVoucherApi } from './receiptVoucher.api';
 import { bankReconciliationApi } from './bankReconciliation.api';
 import { hrApi } from './hr.api';
@@ -102,6 +103,7 @@ export const store = configureStore({
     [partnerPaymentApi.reducerPath]: partnerPaymentApi.reducer,
     [paymentVoucherApi.reducerPath]: paymentVoucherApi.reducer,
     [supplierPaymentApi.reducerPath]: supplierPaymentApi.reducer,
+    [customerPaymentApi.reducerPath]: customerPaymentApi.reducer,
     [receiptVoucherApi.reducerPath]: receiptVoucherApi.reducer,
     [bankReconciliationApi.reducerPath]: bankReconciliationApi.reducer,
     [hrApi.reducerPath]: hrApi.reducer,
@@ -172,6 +174,7 @@ export const store = configureStore({
       partnerPaymentApi.middleware,
       paymentVoucherApi.middleware,
       supplierPaymentApi.middleware,
+      customerPaymentApi.middleware,
       receiptVoucherApi.middleware,
       bankReconciliationApi.middleware,
       hrApi.middleware,

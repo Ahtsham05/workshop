@@ -20,8 +20,10 @@ import {
   storeLedgerListViewMode,
   type LedgerListViewMode,
 } from '../utils/ledger-list-view';
+import { usePersistedListState } from '@/hooks/use-persisted-list-state';
 
 const VIEW_MODE_KEY = 'supplier-ledger-list-view';
+const LIST_STATE_KEY = 'supplier-ledger-list-state';
 
 interface SupplierLedgerListProps {
   onSelectSupplier: (supplier: SupplierWithBalance) => void;
@@ -49,9 +51,15 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
   const { t } = useLanguage();
   const [suppliers, setSuppliers] = useState<SupplierWithBalance[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const {
+    search: searchTerm,
+    setSearch: setSearchTerm,
+    page: currentPage,
+    setPage: setCurrentPage,
+    limit,
+    setLimit,
+    restoreScroll,
+  } = usePersistedListState(LIST_STATE_KEY);
   const [totalPages, setTotalPages] = useState(1);
   const [bulkSmsOpen, setBulkSmsOpen] = useState(false);
   const branchName = useBranchName();
@@ -62,6 +70,13 @@ export function SupplierLedgerList({ onSelectSupplier }: SupplierLedgerListProps
   useEffect(() => {
     fetchSuppliers();
   }, [currentPage, limit]);
+
+  // Once this render's rows are actually on screen, restore the scroll position the user
+  // was at before they drilled into a supplier's ledger — restoring any earlier has nothing
+  // to scroll to yet. No-ops after the first successful restore.
+  useEffect(() => {
+    if (!loading) restoreScroll();
+  }, [loading, restoreScroll]);
 
   const handleViewModeChange = (mode: LedgerListViewMode) => {
     setViewMode(mode);

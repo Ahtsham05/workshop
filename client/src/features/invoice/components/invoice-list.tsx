@@ -1,24 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useLanguage } from '@/context/language-context'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { invoiceTermsToSafeHtml } from '@/lib/rich-text-utils'
 import { usePermissions } from '@/context/permission-context'
 import { permissionMessage } from '@/lib/permission-messages'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -34,31 +28,36 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { SimplePagination } from '@/components/ui/simple-pagination'
 import {
   ArrowLeft,
   Eye,
   Edit,
   Trash2,
   Plus,
-  Search,
-  Filter,
   Receipt,
   Info,
-  // RotateCcw,
   Clock,
   FileCheck,
   Columns2,
   Loader2,
   Zap,
   Flag,
+  Banknote,
+  Wallet,
+  Users,
+  TrendingUp,
+  AlertTriangle,
+  FileDown,
 } from 'lucide-react'
-import { useGetInvoicesQuery, useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
+import { useGetInvoicesListQuery, useGetInvoicesSummaryQuery, useLazyExportInvoicesQuery, useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
 import { FlagBadge, FlagPickerPopover } from '@/components/flag-badge'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Skeleton } from '@/components/ui/skeleton'
 import { generateInvoiceHTML, generateA4InvoiceHTML, generateA4LandscapeTwoInvoicesHTML, openPrintWindowForFormat } from '../utils/print-utils'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetFormat, type PaperSize, type PrintOrientation } from '../utils/paper-format'
 import type { InvoiceTemplate } from '../utils/invoice-template'
@@ -71,10 +70,14 @@ import {
   stashPrintContact,
   type PrintWindowContact,
 } from '../utils/invoice-print-contact-bridge'
-import { toast } from 'sonner'
 import { useGetAllCustomersQuery } from '../../../stores/customer.api'
 import { InvoiceDeleteDialog } from './invoice-delete-dialog'
 import { QuotationConvertDialog } from './quotation-convert-dialog'
+import { CustomerPaymentDialog } from './customer-payment-dialog'
+import { InvoiceFiltersToolbar } from './invoice-filters-toolbar'
+import { useInvoiceFilters } from '../hooks/use-invoice-filters'
+import { exportInvoicesToCsv, exportInvoicesToPdf } from '../utils/invoice-export'
+import { DUE_STATUS_META, SETTLEMENT_STATUS_META, resolveInvoiceSettlement } from '../utils/invoice-settlement'
 import { BilingualName } from '@/components/bilingual-name'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
@@ -97,14 +100,6 @@ interface InvoiceListProps {
   initialTypeFilter?: string
 }
 
-const statusColors: Record<string, string> = {
-  paid: 'bg-green-100 text-green-800',
-  draft: 'bg-blue-100 text-blue-800',
-  finalized: 'bg-purple-100 text-purple-800',
-  cancelled: 'bg-gray-100 text-gray-800',
-  refunded: 'bg-red-100 text-red-800',
-}
-
 const typeColors: Record<string, string> = {
   cash: 'bg-emerald-100 text-emerald-800',
   credit: 'bg-blue-100 text-blue-800',
@@ -118,8 +113,44 @@ function salesmanName(ref: { name?: string; email?: string } | string | null | u
   return typeof ref === 'string' ? ref : ref.name || ref.email || '—'
 }
 
-export function InvoiceList({ onBack, onCreateNew, onEdit, 
-  // onReturn, 
+/** One headline number above the table. Mirrors purchase-list.tsx's identical StatCard. */
+function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = 'default',
+}: {
+  label: string
+  value: string
+  hint?: React.ReactNode
+  icon: any
+  tone?: 'default' | 'warning' | 'danger' | 'success'
+}) {
+  const toneClass = {
+    default: 'text-primary bg-primary/10',
+    success: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10',
+    warning: 'text-amber-600 dark:text-amber-400 bg-amber-500/10',
+    danger: 'text-rose-600 dark:text-rose-400 bg-rose-500/10',
+  }[tone]
+
+  return (
+    <Card>
+      <CardContent className='flex items-center gap-3 p-4'>
+        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', toneClass)}>
+          <Icon className='h-5 w-5' />
+        </div>
+        <div className='min-w-0'>
+          <p className='text-xs text-muted-foreground'>{label}</p>
+          <p className='truncate text-xl font-semibold tabular-nums'>{value}</p>
+          {hint && <div className='text-[11px] text-muted-foreground'>{hint}</div>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+export function InvoiceList({ onBack, onCreateNew, onEdit,
   onConvertPending,
   initialTypeFilter,
 }: InvoiceListProps) {
@@ -134,13 +165,37 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const canViewCreatedBy = useCanViewCreatedBy()
   const [updateInvoiceFlag] = useUpdateInvoiceFlagMutation()
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [typeFilter, setTypeFilter] = useState<string>(initialTypeFilter || 'all')
+
+  const {
+    filters,
+    draft,
+    queryParams,
+    activeFilterCount,
+    patchImmediate,
+    patchDraft,
+    applyDraft,
+    resetAll,
+    toggleQuickFilter,
+    savedViews,
+    saveView,
+    applyView,
+    deleteView,
+  } = useInvoiceFilters()
+
+  // Seeds the "Invoice Type" filter from the caller (e.g. the Pending Invoices shortcut) —
+  // once, on mount, same as the old useState(initialTypeFilter || 'all') did.
+  useEffect(() => {
+    if (initialTypeFilter && initialTypeFilter !== 'all') {
+      patchImmediate({ type: initialTypeFilter })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  /** id → invoice number, so a selection survives paging and can be matched to export rows. */
+  const [selected, setSelected] = useState<Record<string, string>>({})
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
   const [printingInvoiceId, setPrintingInvoiceId] = useState<string | null>(null)
@@ -149,33 +204,21 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const [twoUpMode, setTwoUpMode] = useState(false)
   const [twoUpSelection, setTwoUpSelection] = useState<any[]>([])
   const [printingTwoUp, setPrintingTwoUp] = useState(false)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [paymentCustomerId, setPaymentCustomerId] = useState<string | undefined>()
 
-  // Debounce search term
+  // Any filter change re-anchors the list at page 1 — staying on page 7 of a result set
+  // that now has two pages just shows an empty table.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchTerm)
-    }, 500) // 500ms delay
+    setPage(1)
+    setSelected({})
+  }, [queryParams, limit])
 
-    return () => clearTimeout(timer)
-  }, [searchTerm])
+  const listParams = useMemo(() => ({ ...queryParams, page, limit }), [queryParams, page, limit])
+  const { data: invoicesResponse, isLoading, isFetching, error } = useGetInvoicesListQuery(listParams)
+  const { data: summary } = useGetInvoicesSummaryQuery(queryParams)
+  const [triggerExport, { isFetching: isExporting }] = useLazyExportInvoicesQuery()
 
-  // Build query parameters
-  const queryParams = {
-    page: currentPage,
-    limit: itemsPerPage,
-    ...(debouncedSearch && { search: debouncedSearch }),
-    ...(statusFilter !== 'all' && { status: statusFilter }),
-    ...(typeFilter === 'pending-converted' 
-      ? { type: 'pending', isConvertedToBill: 'true' } 
-      : typeFilter !== 'all' 
-        ? { type: typeFilter } 
-        : {})
-  }
-  
-  console.log('Query Parameters being sent:', queryParams)
-  console.log('Type Filter Value:', typeFilter)
-  
-  const { data: invoicesResponse, isLoading, error } = useGetInvoicesQuery(queryParams)
   const { data: customersData } = useGetAllCustomersQuery({ includeEmployees: true, includeSuppliers: true })
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -184,7 +227,6 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
   const invoiceTemplate: InvoiceTemplate = branchData?.printSettings?.template ?? 'standard'
   const printOrientation: PrintOrientation = branchData?.printSettings?.printOrientation ?? 'portrait'
-  // Remove the deleteInvoice hook since we'll use it in the dialog component
 
   // Create a customer lookup map for efficient customer name resolution
   const customerMap = new Map()
@@ -193,56 +235,28 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
       customerMap.set(customer._id || customer.id, customer)
     })
   } else if (Array.isArray(customersData)) {
-    // Handle case where API returns array directly
     customersData.forEach((customer: any) => {
       customerMap.set(customer._id || customer.id, customer)
     })
   }
-  
-  console.log('Customer data debug:', {
-    customersData,
-    customerMapSize: customerMap.size,
-    customerMapEntries: Array.from(customerMap.entries()).slice(0, 3) // Show first 3 entries
-  })
 
-  // Helper function to get customer name
   const getCustomerName = (invoice: any) => {
-    console.log('Getting customer name for invoice:', {
-      invoiceId: invoice.id,
-      customerId: invoice.customerId,
-      customerFromInvoice: invoice.customer,
-      customerName: invoice.customerName,
-      walkInCustomerName: invoice.walkInCustomerName,
-      customerFromMap: customerMap.get(invoice.customerId)
-    })
-    
-    // For walk-in customers
     if (invoice.customerId === 'walk-in') {
       return invoice.walkInCustomerName || t('walk_in_customer')
     }
-    
-    // For regular customers - check if backend populated customer info
     if (invoice.customer && invoice.customer.name) {
       return invoice.customer.name
     }
-    
-    // Look up customer in our fetched customers data
     if (invoice.customerId && customerMap.has(invoice.customerId)) {
       const customer = customerMap.get(invoice.customerId)
       return customer.name
     }
-    
-    // Fallback to customerName field if available
     if (invoice.customerName) {
       return invoice.customerName
     }
-    
-    // If we have customerId but no customer name, show partial ID (backend issue)
     if (invoice.customerId && invoice.customerId !== 'walk-in') {
-      return `${t('customer_id')}: ${invoice.customerId.substring(0, 8)}...`
+      return `${t('customer_id')}: ${String(invoice.customerId).substring(0, 8)}...`
     }
-    
-    // Final fallback
     return t('unknown_customer')
   }
 
@@ -273,49 +287,20 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     return ''
   }
 
-  // Helper function to get customer phone number
   const getCustomerPhone = (invoice: any) => {
-    // For walk-in customers, they don't have stored phone numbers
-    if (invoice.customerId === 'walk-in') {
-      return '-'
-    }
-    
-    // Check if backend populated customer info with phone
+    if (invoice.customerId === 'walk-in') return '-'
     if (invoice.customer && invoice.customer.phone) {
       return invoice.customer.phone
     }
-    
-    // Look up customer phone in our fetched customers data
     if (invoice.customerId && customerMap.has(invoice.customerId)) {
       const customer = customerMap.get(invoice.customerId)
       return customer.phone || '-'
     }
-    
-    // If no phone number found
     return '-'
-  }
-
-  // Debug logging
-  console.log('Invoice API Response:', { invoicesResponse, isLoading, error })
-  console.log('Type Filter:', typeFilter)
-  
-  // Debug invoice conversion status
-  if (invoicesResponse?.results) {
-    invoicesResponse.results.forEach((inv: any) => {
-      if (inv.type === 'pending') {
-        console.log('Pending Invoice:', {
-          number: inv.invoiceNumber,
-          isConvertedToBill: inv.isConvertedToBill,
-          type: inv.type,
-          shouldBeGreen: inv.isConvertedToBill === true
-        })
-      }
-    })
   }
 
   /** Builds sheet/thermal-agnostic print data + WhatsApp/SMS contact for one invoice. Shared by single and 2-per-page printing. */
   const buildInvoicePrintData = async (invoice: any) => {
-      // Resolve customer name
       const customerName = getCustomerName(invoice)
       const walkInCustomerName = invoice.walkInCustomerName
       const customerNameUrdu = getCustomerUrdu(invoice)
@@ -329,8 +314,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
       const previousBalance = await fetchBalanceBeforeInvoice(customerId, invoice._id || invoice.id, linkedSupplierId)
       const invoiceTotal = Number(invoice.total || 0)
       const invoicePaid = Number(invoice.paidAmount || 0)
-      
-      // Prepare print data
+
       const printData = withCustomerContactForPrint({
         invoiceNumber: invoice.invoiceNumber,
         items: (invoice.items || []).map((item: any) => ({
@@ -479,31 +463,75 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
     setDeleteDialogOpen(true)
   }
 
-  // Handle server response with pagination info
-  const invoiceList = invoicesResponse?.results || invoicesResponse?.data || []
-  const totalItems = invoicesResponse?.totalResults || invoicesResponse?.total || invoiceList.length
-  const totalPages = invoicesResponse?.totalPages || Math.ceil(totalItems / itemsPerPage)
-  const currentInvoices = invoiceList // Server already returns paginated results
-
-  // Reset to first page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [debouncedSearch, statusFilter, typeFilter, itemsPerPage])
-
-  // Calculate display indices for pagination info
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">{t('loading_invoices')}</p>
-        </div>
-      </div>
-    )
+  const openPaymentFor = (invoice?: any) => {
+    const rawId = invoice?.customerId
+    const id = typeof rawId === 'object' ? rawId?._id || rawId?.id : rawId
+    setPaymentCustomerId(id && id !== 'walk-in' ? String(id) : undefined)
+    setPaymentDialogOpen(true)
   }
+
+  /** CSV/PDF run off the server's export endpoint so they cover the whole filtered set,
+   *  not just the page on screen — and honour a selection when one is active. */
+  const runExport = async (kind: 'csv' | 'pdf') => {
+    try {
+      const response = await triggerExport(queryParams).unwrap()
+      const selectedInvoiceNumbers = new Set(Object.values(selected))
+      const exportRows = selectedInvoiceNumbers.size
+        ? response.results.filter((row) => selectedInvoiceNumbers.has(row.invoiceNumber))
+        : response.results
+
+      if (exportRows.length === 0) {
+        toast.error(t('Nothing to export'))
+        return
+      }
+
+      if (kind === 'csv') {
+        exportInvoicesToCsv(exportRows)
+        toast.success(`${exportRows.length} ${t('rows exported')}`)
+      } else {
+        const opened = exportInvoicesToPdf(exportRows, {
+          title: t('Invoice Report'),
+          subtitle: resolveBranchCompanyName(orgData?.name, branchData?.name),
+          formatMoney,
+        })
+        if (!opened) toast.error(t('Allow pop-ups to export a PDF'))
+      }
+
+      if (response.truncated) {
+        toast.warning(`${t('Export capped at')} ${response.limit} ${t('rows — narrow the filters for the rest')}`)
+      }
+    } catch {
+      toast.error(t('Export failed'))
+    }
+  }
+
+  const invoiceList = invoicesResponse?.results || []
+  const totalItems = invoicesResponse?.totalResults || 0
+  const totalPages = invoicesResponse?.totalPages || 1
+
+  const allOnPageSelected = invoiceList.length > 0 && invoiceList.every((invoice: any) => selected[invoice.id || invoice._id])
+
+  const toggleSelectAll = () => {
+    setSelected((previous) => {
+      const next = { ...previous }
+      for (const invoice of invoiceList) {
+        const id = invoice.id || invoice._id
+        if (allOnPageSelected) delete next[id]
+        else next[id] = invoice.invoiceNumber
+      }
+      return next
+    })
+  }
+
+  const toggleSelect = (id: string, invoiceNumber: string) =>
+    setSelected((previous) => {
+      const next = { ...previous }
+      if (next[id]) delete next[id]
+      else next[id] = invoiceNumber
+      return next
+    })
+
+  const selectedIds = useMemo(() => Object.keys(selected), [selected])
 
   if (error) {
     return (
@@ -517,6 +545,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
       </div>
     )
   }
+
+  const columnCount = 13 + (twoUpMode ? 1 : 0) + (canViewCreatedBy ? 1 : 0)
 
   return (
     <div className="space-y-6">
@@ -559,11 +589,45 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
             </Button>
           )}
           {canCreate && (
+            <Button variant="outline" className="whitespace-nowrap" onClick={() => openPaymentFor()}>
+              <Banknote className="h-4 w-4 mr-2" />
+              {t('Record Customer Payment')}
+            </Button>
+          )}
+          {canCreate && (
             <Button className="whitespace-nowrap" onClick={onCreateNew}>
               <Plus className="h-4 w-4 mr-2" />
               {t('create_invoice')}
             </Button>
           )}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex h-8 items-center gap-1.5">
+          <Label htmlFor="invoice-print-urdu" className="text-sm text-muted-foreground">{t('urdu_print')}</Label>
+          <Switch
+            id="invoice-print-urdu"
+            checked={printInUrdu}
+            onCheckedChange={(v) => {
+              setPrintInUrdu(v)
+              setInvoicePrintInUrdu(v)
+            }}
+          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full text-muted-foreground outline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={t('urdu_print_hint')}
+              >
+                <Info className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              {t('urdu_print_hint')}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
@@ -584,119 +648,100 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         </div>
       )}
 
+      {/* Stat cards */}
+      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+        <StatCard
+          label={t('Total Invoices')}
+          value={String(summary?.invoiceCount ?? 0)}
+          hint={`${formatMoney(summary?.totalValue ?? 0)} ${t('in value')}`}
+          icon={Receipt}
+        />
+        <StatCard
+          label={t('Customers')}
+          value={String(summary?.customerCount ?? 0)}
+          hint={t('in the current view')}
+          icon={Users}
+          tone='success'
+        />
+        <StatCard
+          label={t('Outstanding Amount')}
+          value={formatMoney(summary?.totalOutstanding ?? 0)}
+          hint={
+            <p className='truncate'>
+              {summary?.unpaidCount ?? 0} {t('unpaid')} · {summary?.partialCount ?? 0} {t('partial')}
+            </p>
+          }
+          icon={Wallet}
+          tone='warning'
+        />
+        <StatCard
+          label={summary?.overdueAmount ? t('Overdue') : t('This Month')}
+          value={formatMoney(summary?.overdueAmount ? summary.overdueAmount : summary?.thisMonthValue ?? 0)}
+          hint={
+            summary?.overdueAmount
+              ? `${summary.overdueCount} ${t('invoice(s) past due')}`
+              : `${t('billed since the 1st')}`
+          }
+          icon={summary?.overdueAmount ? AlertTriangle : TrendingUp}
+          tone={summary?.overdueAmount ? 'danger' : 'default'}
+        />
+      </div>
+
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <Label htmlFor="search">{t('search')}</Label>
-              <div className="relative mt-2">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="search"
-                  placeholder={t('search_invoices_placeholder')}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            
-            {/* <div>
-              <Label>{t('status')}</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className='w-full mt-2'>
-                  <SelectValue placeholder={t('all_statuses')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_statuses')}</SelectItem>
-                  <SelectItem value="draft">{t('draft')}</SelectItem>
-                  <SelectItem value="finalized">{t('finalized')}</SelectItem>
-                  <SelectItem value="paid">{t('paid')}</SelectItem>
-                  <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
-                  <SelectItem value="refunded">{t('refunded')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div> */}
-
-            <div>
-              <Label>{t('invoice_type')}</Label>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className='w-full mt-2'>
-                  <SelectValue placeholder={t('all_types')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_types')}</SelectItem>
-                  <SelectItem value="cash">{t('cash')}</SelectItem>
-                  <SelectItem value="credit">{t('credit')}</SelectItem>
-                  <SelectItem value="pending">{t('pending')}</SelectItem>
-                  <SelectItem value="quotation">{t('quotation') || 'Quotation'}</SelectItem>
-                  <SelectItem value="pending-converted">{t('converted_pending')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <div className="flex h-5 items-center gap-1.5">
-                <Label htmlFor="invoice-print-urdu">{t('urdu_print')}</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="rounded-full text-muted-foreground outline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-label={t('urdu_print_hint')}
-                    >
-                      <Info className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs">
-                    {t('urdu_print_hint')}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="mt-2 flex h-10 items-center">
-                <Switch
-                  id="invoice-print-urdu"
-                  checked={printInUrdu}
-                  onCheckedChange={(v) => {
-                    setPrintInUrdu(v)
-                    setInvoicePrintInUrdu(v)
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col">
-              <div className="hidden h-5 shrink-0 md:block" aria-hidden />
-              <div className="mt-2 flex min-h-10 items-center">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearchTerm('')
-                    setStatusFilter('all')
-                    setTypeFilter('all')
-                  }}
-                  className="w-full md:w-auto lg:min-w-[10rem]"
-                >
-                  <Filter className="h-4 w-4 mr-2" />
-                  {t('clear_filters')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <InvoiceFiltersToolbar
+        filters={filters}
+        draft={draft}
+        activeFilterCount={activeFilterCount}
+        onPatchImmediate={patchImmediate}
+        onPatchDraft={patchDraft}
+        onApplyDraft={applyDraft}
+        onReset={resetAll}
+        onToggleQuickFilter={toggleQuickFilter}
+        savedViews={savedViews}
+        onSaveView={saveView}
+        onApplyView={applyView}
+        onDeleteView={deleteView}
+        onExportCsv={() => runExport('csv')}
+        onExportPdf={() => runExport('pdf')}
+        isExporting={isExporting}
+      />
 
       {/* Invoices Table */}
       <Card>
         <CardHeader>
           <CardTitle>{t('invoices_list')} ({totalItems})</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className='p-0 sm:p-6'>
+          {/* Selection bar */}
+          {selectedIds.length > 0 && (
+            <div className='mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-primary/5 px-4 py-2.5'>
+              <p className='text-sm font-medium'>
+                {selectedIds.length} {t('selected')}
+              </p>
+              <div className='flex items-center gap-2'>
+                <Button size='sm' variant='outline' onClick={() => runExport('csv')}>
+                  <FileDown className='mr-2 h-3.5 w-3.5' />
+                  {t('Export selected')}
+                </Button>
+                <Button size='sm' variant='ghost' onClick={() => setSelected({})}>
+                  {t('Clear')}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className='w-10'>
+                    <Checkbox
+                      checked={allOnPageSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label={t('Select all')}
+                      disabled={invoiceList.length === 0}
+                    />
+                  </TableHead>
                   {twoUpMode && <TableHead className="w-10" />}
                   <TableHead>{t('invoice_number')}</TableHead>
                   <TableHead>{t('customer')}</TableHead>
@@ -705,18 +750,43 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   <TableHead>{t('payment_method') || 'Payment'}</TableHead>
                   <TableHead>{t('bill_number')}</TableHead>
                   <TableHead>{t('date')}</TableHead>
-                  <TableHead>{t('amount')}</TableHead>
-                  {/* <TableHead>{t('status')}</TableHead> */}
+                  <TableHead className='text-right'>{t('amount')}</TableHead>
+                  <TableHead className='text-right'>{t('Paid Amount')}</TableHead>
+                  <TableHead className='text-right'>{t('Remaining')}</TableHead>
+                  <TableHead>{t('Status')}</TableHead>
                   {canViewCreatedBy && <TableHead>{t('created_by') || 'Created By'}</TableHead>}
                   <TableHead>{t('salesman') || 'Salesman'}</TableHead>
                   <TableHead>{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentInvoices.map((invoice: any) => {
+                {isLoading &&
+                  Array.from({ length: 6 }).map((_, index) => (
+                    <TableRow key={`skeleton-${index}`}>
+                      {Array.from({ length: columnCount + 1 }).map((__, cellIndex) => (
+                        <TableCell key={cellIndex}>
+                          <Skeleton className='h-4 w-full' />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+
+                {!isLoading && invoiceList.map((invoice: any) => {
                   const isSelectedForTwoUp = twoUpSelection.some((inv) => inv._id === invoice._id)
+                  const id = invoice.id || invoice._id
+                  const settlement = resolveInvoiceSettlement(invoice)
+                  const statusMeta = SETTLEMENT_STATUS_META[settlement.settlementStatus]
+                  const dueMeta = DUE_STATUS_META[settlement.dueStatus]
+                  const isOverdue = settlement.dueStatus === 'overdue'
                   return (
-                  <TableRow key={invoice._id} className={isSelectedForTwoUp ? 'bg-primary/5' : undefined}>
+                  <TableRow key={id} className={isSelectedForTwoUp ? 'bg-primary/5' : undefined}>
+                    <TableCell onClick={(event) => event.stopPropagation()}>
+                      <Checkbox
+                        checked={Boolean(selected[id])}
+                        onCheckedChange={() => toggleSelect(id, invoice.invoiceNumber)}
+                        aria-label={t('Select row')}
+                      />
+                    </TableCell>
                     {twoUpMode && (
                       <TableCell>
                         <Checkbox
@@ -737,6 +807,11 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                           </Badge>
                         )}
                       </div>
+                      {invoice.dueDate && (
+                        <p className={cn('text-[11px]', isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}>
+                          {t('Due')} {format(new Date(invoice.dueDate), 'dd MMM yyyy')}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className='max-w-[14rem]'>
                       <div className='flex min-w-0 items-center gap-2'>
@@ -756,7 +831,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                     <TableCell>
                       <Badge className={typeColors[
                         invoice.type === 'pending' && invoice.isConvertedToBill === true
-                          ? 'pending-converted' 
+                          ? 'pending-converted'
                           : invoice.type || 'cash'
                       ]}>
                         {invoice.type === 'pending' && invoice.isConvertedToBill === true
@@ -788,15 +863,34 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                         <span className="text-muted-foreground text-sm">-</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className='whitespace-nowrap'>
                       {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy')}
                     </TableCell>
-                    <TableCell>{formatMoney(invoice.total || 0)}</TableCell>
-                    {/* <TableCell>
-                      <Badge className={statusColors[invoice.status || 'draft']}>
-                        {t(invoice.status || 'draft')}
-                      </Badge>
-                    </TableCell> */}
+                    <TableCell className='text-right font-semibold tabular-nums'>{formatMoney(invoice.total || 0)}</TableCell>
+                    <TableCell className='text-right tabular-nums'>{formatMoney(settlement.settledAmount)}</TableCell>
+                    <TableCell className='text-right tabular-nums'>
+                      <span
+                        className={cn(
+                          settlement.remainingAmount > 0.001
+                            ? 'font-medium text-rose-600 dark:text-rose-400'
+                            : 'text-muted-foreground'
+                        )}
+                      >
+                        {formatMoney(Math.max(0, settlement.remainingAmount))}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className='flex flex-col items-start gap-1'>
+                        <Badge variant='outline' className={cn('font-normal', statusMeta.className)}>
+                          {t(statusMeta.label)}
+                        </Badge>
+                        {isOverdue && (
+                          <Badge variant='outline' className={cn('font-normal', dueMeta.className)}>
+                            {t(dueMeta.label)}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     {canViewCreatedBy && (
                       <TableCell>
                         <CreatedByCell createdBy={invoice.createdBy} />
@@ -809,8 +903,8 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       <div className="flex items-center gap-2">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="sm"
                               onClick={() => setSelectedInvoice(invoice)}
                             >
@@ -842,6 +936,18 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                             className="text-emerald-700 hover:text-emerald-800"
                           >
                             <FileCheck className="h-4 w-4" />
+                          </Button>
+                        )}
+
+                        {canCreate && settlement.remainingAmount > 0.001 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openPaymentFor(invoice)}
+                            title={t('Record Payment')}
+                            className="text-sky-700 hover:text-sky-800"
+                          >
+                            <Banknote className="h-4 w-4" />
                           </Button>
                         )}
 
@@ -911,147 +1017,42 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                   </TableRow>
                   )
                 })}
+
+                {!isLoading && invoiceList.length === 0 && (
+                  <TableRow className='hover:bg-transparent'>
+                    <TableCell colSpan={columnCount + 1} className='h-48'>
+                      <div className='flex flex-col items-center justify-center gap-2 text-center'>
+                        <Receipt className='h-10 w-10 text-muted-foreground/50' />
+                        <p className='font-medium'>{t('no_invoices_found')}</p>
+                        <p className='text-sm text-muted-foreground'>
+                          {activeFilterCount > 0 || filters.search
+                            ? t('Try widening or clearing the filters.')
+                            : t('Create your first invoice to see it here.')}
+                        </p>
+                        {activeFilterCount > 0 || filters.search ? (
+                          <Button variant='outline' size='sm' onClick={resetAll} className='mt-2'>
+                            {t('Reset filters')}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
 
-          {currentInvoices.length === 0 && (
-            <div className="text-center py-8">
-              <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">{t('no_invoices_found')}</p>
-            </div>
-          )}
-
-          {/* Pagination — rows-per-page + nav at bottom */}
-          {totalItems > 0 && (
-            <div className="mt-4 space-y-4 border-t px-2 pt-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-center text-sm text-muted-foreground sm:text-left">
-                  {t('showing')} {startIndex + 1} {t('to')} {endIndex} {t('of')} {totalItems}{' '}
-                  {t('entries')}
-                </div>
-                <div className="flex items-center justify-center gap-2 sm:justify-end">
-                  <Label htmlFor="invoice-items-per-page" className="text-sm whitespace-nowrap">
-                    {t('show')}:
-                  </Label>
-                  <Select
-                    value={itemsPerPage.toString()}
-                    onValueChange={(value) => setItemsPerPage(Number(value))}
-                  >
-                    <SelectTrigger id="invoice-items-per-page" className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5</SelectItem>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {totalPages > 1 ? (
-                <>
-              {/* Mobile pagination - simplified */}
-              <div className="flex items-center justify-center gap-2 md:hidden">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-2"
-                >
-                  {t('previous')}
-                </Button>
-                
-                <div className="flex items-center gap-1 px-3 py-1 bg-muted rounded">
-                  <span className="text-sm">{currentPage}</span>
-                  <span className="text-sm text-muted-foreground">{t('of')}</span>
-                  <span className="text-sm">{totalPages}</span>
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="px-2"
-                >
-                  {t('next')}
-                </Button>
-              </div>
-
-              {/* Desktop pagination - full controls */}
-              <div className="hidden md:flex items-center justify-center">
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                  >
-                    {t('first')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                  >
-                    {t('previous')}
-                  </Button>
-                  
-                  {/* Page numbers */}
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
-                      
-                      return (
-                        <Button
-                          key={pageNum}
-                          variant={currentPage === pageNum ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setCurrentPage(pageNum)}
-                          className="w-8 h-8 p-0"
-                        >
-                          {pageNum}
-                        </Button>
-                      );
-                    })}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                  >
-                    {t('next')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                  >
-                    {t('last')}
-                  </Button>
-                </div>
-              </div>
-                </>
-              ) : null}
-            </div>
-          )}
+          <div className={cn('px-2 pb-2 pt-4', isFetching && !isLoading && 'opacity-60')}>
+            <SimplePagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalResults={totalItems}
+              limit={limit}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              pageSizeOptions={[10, 20, 50, 100]}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -1071,6 +1072,12 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
           if (!open) setQuotationToConvert(null)
         }}
       />
+
+      <CustomerPaymentDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        defaultCustomerId={paymentCustomerId}
+      />
     </div>
   )
 }
@@ -1086,6 +1093,8 @@ function InvoiceDetails({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const settlement = resolveInvoiceSettlement(invoice)
+  const statusMeta = SETTLEMENT_STATUS_META[settlement.settlementStatus]
 
   return (
     <div className="space-y-4 pb-4">
@@ -1108,10 +1117,12 @@ function InvoiceDetails({
           </div>
         </div>
         <div>
-          <Label>{t('status')}</Label>
-          <Badge className={statusColors[invoice.status || 'draft']}>
-            {t(invoice.status || 'draft')}
-          </Badge>
+          <Label>{t('Status')}</Label>
+          <div className='mt-1'>
+            <Badge variant='outline' className={cn('font-normal', statusMeta.className)}>
+              {t(statusMeta.label)}
+            </Badge>
+          </div>
         </div>
       </div>
 
@@ -1139,8 +1150,8 @@ function InvoiceDetails({
                   <TableCell className="whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       {item.image && (
-                        <img 
-                          src={item.image.url} 
+                        <img
+                          src={item.image.url}
                           alt={item.name}
                           className="w-8 h-8 rounded object-cover"
                         />
@@ -1240,16 +1251,16 @@ function InvoiceDetails({
               : invoice.paymentMethod || 'Cash'}
           </p>
         </div>
-        {invoice.paidAmount > 0 && (
+        {settlement.settledAmount > 0 && (
           <div>
             <Label className="text-xs">{t('paid_amount')}</Label>
-            <p className="font-bold text-blue-600">{formatMoney(invoice.paidAmount || 0)}</p>
+            <p className="font-bold text-blue-600">{formatMoney(settlement.settledAmount)}</p>
           </div>
         )}
-        {invoice.balance > 0 && (
+        {settlement.remainingAmount > 0 && (
           <div>
             <Label className="text-xs">{t('balance')}</Label>
-            <p className="font-bold text-red-600">{formatMoney(invoice.balance || 0)}</p>
+            <p className="font-bold text-red-600">{formatMoney(settlement.remainingAmount)}</p>
           </div>
         )}
       </div>

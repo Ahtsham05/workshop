@@ -174,6 +174,8 @@ export interface CashWithdrawalBatchEntry {
   customerCNIC?: string
   customerAccountType?: string
   extraCharge?: number
+  /** Per-row override of the batch's shared commissionRate — omit to use the shared rate. */
+  commissionRate?: number
   notes?: string
 }
 

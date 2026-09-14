@@ -29,6 +29,7 @@ module.exports.CustomerAccountType = require('./customerAccountType.model');
 module.exports.CustomerLedger = require('./customerLedger.model');
 module.exports.SupplierLedger = require('./supplierLedger.model');
 module.exports.SupplierPayment = require('./supplierPayment.model');
+module.exports.CustomerPayment = require('./customerPayment.model');
 module.exports.PersonalLedger = require('./personalLedger.model');
 module.exports.Company = require('./company.model');
 module.exports.Organization = require('./organization.model');

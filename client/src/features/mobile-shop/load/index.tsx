@@ -203,6 +203,12 @@ type BulkWithdrawalEntry = {
   customerNumber: string
   customerAccountType: string
   extraCharge: string
+  /** Per-row override of the shared commission rate — blank means "use the shared rate". */
+  commissionRate: string
+  /** Whether commissionRate is a % of the amount, or a hard currency amount for this row. */
+  commissionMode: 'percent' | 'flat'
+  /** True once the user has typed into the commission field directly — stops amount-driven auto-fill from overwriting it. */
+  commissionManuallySet: boolean
   notes: string
 }
 
@@ -221,8 +227,26 @@ const makeEmptyBulkEntry = (): BulkWithdrawalEntry => ({
   customerNumber: '',
   customerAccountType: 'other',
   extraCharge: '0',
+  commissionRate: '',
+  commissionMode: 'flat',
+  commissionManuallySet: false,
   notes: '',
 })
+
+const computeFlatCommission = (amount: string, sharedRatePercent: string) => {
+  const amountNum = Number(amount) || 0
+  const rateNum = Number(sharedRatePercent) || 0
+  if (amountNum <= 0) return ''
+  return String(Math.round(((amountNum * rateNum) / 100) * 100) / 100)
+}
+
+/** Keeps flat-mode rows the operator hasn't hand-edited in sync with the shared rate. */
+const resyncUneditedFlatEntries = (entries: BulkWithdrawalEntry[], sharedRatePercent: string): BulkWithdrawalEntry[] =>
+  entries.map((entry) =>
+    entry.commissionMode === 'flat' && !entry.commissionManuallySet
+      ? { ...entry, commissionRate: computeFlatCommission(entry.amount, sharedRatePercent) }
+      : entry
+  )
 
 const makeInitialBulkWithdrawalForm = (): BulkWithdrawalFormState => ({
   walletId: '',
@@ -825,16 +849,19 @@ function LoadManagementPage({
   // const requiresFullCashSettlement = !withdrawalForm.customerId
 
   const bulkWithdrawalTotals = useMemo(() => {
-    const commissionRate = Number(bulkWithdrawalForm.commissionRate) || 0
+    const sharedRate = Number(bulkWithdrawalForm.commissionRate) || 0
     let totalAmount = 0
     let totalProfit = 0
     let validCount = 0
     for (const e of bulkWithdrawalForm.entries) {
       const amount = Number(e.amount) || 0
       const extraCharge = Number(e.extraCharge) || 0
+      const commissionProfit = e.commissionMode === 'flat'
+        ? Number(e.commissionRate) || 0
+        : (amount * (e.commissionRate.trim() !== '' ? Number(e.commissionRate) || 0 : sharedRate)) / 100
       if (amount > 0) {
         totalAmount += amount
-        totalProfit += (amount * commissionRate) / 100 + extraCharge
+        totalProfit += commissionProfit + extraCharge
         validCount++
       }
     }
@@ -1270,11 +1297,13 @@ function LoadManagementPage({
       const rate = prev.transactionType === 'withdrawal'
         ? String(selectedWallet?.withdrawalCommissionRate ?? 0)
         : String(selectedWallet?.depositCommissionRate ?? 0)
+      const nextRate = selectedWallet ? rate : prev.commissionRate
       return {
         ...prev,
         walletId,
         walletType: selectedWallet?.type || '',
-        commissionRate: selectedWallet ? rate : prev.commissionRate,
+        commissionRate: nextRate,
+        entries: resyncUneditedFlatEntries(prev.entries, nextRate),
       }
     })
   }
@@ -1284,17 +1313,48 @@ function LoadManagementPage({
     const rate = transactionType === 'withdrawal'
       ? String(selectedWallet?.withdrawalCommissionRate ?? 0)
       : String(selectedWallet?.depositCommissionRate ?? 0)
-    setBulkWithdrawalForm(prev => ({
-      ...prev,
-      transactionType,
-      commissionRate: selectedWallet ? rate : prev.commissionRate,
-    }))
+    setBulkWithdrawalForm(prev => {
+      const nextRate = selectedWallet ? rate : prev.commissionRate
+      return {
+        ...prev,
+        transactionType,
+        commissionRate: nextRate,
+        entries: resyncUneditedFlatEntries(prev.entries, nextRate),
+      }
+    })
   }
 
   const handleBulkEntryChange = (index: number, field: keyof BulkWithdrawalEntry, value: string) => {
     setBulkWithdrawalForm(prev => {
       const entries = [...prev.entries]
-      entries[index] = { ...entries[index], [field]: value }
+      const current = entries[index]
+      let updated: BulkWithdrawalEntry = { ...current, [field]: value }
+
+      if (field === 'commissionRate') {
+        // A direct edit wins from now on — stop auto-fill from clobbering it.
+        updated.commissionManuallySet = true
+      } else if (field === 'amount' && current.commissionMode === 'flat' && !current.commissionManuallySet) {
+        updated.commissionRate = computeFlatCommission(value, prev.commissionRate)
+      }
+
+      entries[index] = updated
+      return { ...prev, entries }
+    })
+  }
+
+  const toggleBulkEntryCommissionMode = (index: number) => {
+    setBulkWithdrawalForm(prev => {
+      const entries = [...prev.entries]
+      const current = entries[index]
+      const nextMode = current.commissionMode === 'flat' ? 'percent' : 'flat'
+      entries[index] = {
+        ...current,
+        commissionMode: nextMode,
+        // Switching back to flat re-arms auto-fill unless the row is re-edited by hand again.
+        ...(nextMode === 'flat' && !current.commissionManuallySet
+          ? { commissionRate: computeFlatCommission(current.amount, prev.commissionRate) }
+          : {}),
+      }
       return { ...prev, entries }
     })
   }
@@ -1361,6 +1421,11 @@ function LoadManagementPage({
           customerNumber: e.customerNumber.trim() || undefined,
           customerAccountType: e.customerAccountType || undefined,
           extraCharge: Number(e.extraCharge) || 0,
+          // Flat mode is a hard currency amount, not a %, so convert it to the equivalent
+          // rate for this row's own amount — the backend only ever stores/compounds a %.
+          commissionRate: e.commissionMode === 'flat'
+            ? (Number(e.amount) > 0 ? (Number(e.commissionRate) || 0) / Number(e.amount) * 100 : 0)
+            : (e.commissionRate.trim() !== '' ? Number(e.commissionRate) : undefined),
           notes: e.notes.trim() || undefined,
         })),
       }).unwrap()
@@ -2338,7 +2403,14 @@ function LoadManagementPage({
                           type='number' min='0' max='100' step='0.01'
                           placeholder='e.g., 2'
                           value={bulkWithdrawalForm.commissionRate}
-                          onChange={(e) => setBulkWithdrawalForm(prev => ({ ...prev, commissionRate: e.target.value }))}
+                          onChange={(e) => {
+                            const newSharedRate = e.target.value
+                            setBulkWithdrawalForm(prev => ({
+                              ...prev,
+                              commissionRate: newSharedRate,
+                              entries: resyncUneditedFlatEntries(prev.entries, newSharedRate),
+                            }))
+                          }}
                         />
                       </div>
                       <div className='space-y-2'>
@@ -2370,6 +2442,7 @@ function LoadManagementPage({
                               <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Account / Phone</th>
                               <th className='text-left p-2 min-w-[130px] text-muted-foreground font-medium'>Account Type</th>
                               <th className='text-left p-2 min-w-[110px] text-muted-foreground font-medium'>Extra Charge</th>
+                              <th className='text-left p-2 min-w-[140px] text-muted-foreground font-medium'>Commission (override)</th>
                               <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Notes</th>
                               <th className='p-2 w-10'></th>
                             </tr>
@@ -2424,6 +2497,28 @@ function LoadManagementPage({
                                     onKeyDown={(e) => handleBulkEntryKeyDown(e, idx)}
                                     className='h-8'
                                   />
+                                </td>
+                                <td className='p-2'>
+                                  <div className='flex items-center gap-1'>
+                                    <Input
+                                      type='number' min='0' step='0.01'
+                                      max={entry.commissionMode === 'percent' ? 100 : undefined}
+                                      placeholder={entry.commissionMode === 'flat' ? '0' : (bulkWithdrawalForm.commissionRate || '0')}
+                                      value={entry.commissionRate}
+                                      onChange={(e) => handleBulkEntryChange(idx, 'commissionRate', e.target.value)}
+                                      onKeyDown={(e) => handleBulkEntryKeyDown(e, idx)}
+                                      className='h-8 w-16'
+                                      title={entry.commissionMode === 'flat' ? 'Hard commission amount for this row' : 'Leave blank to use the shared commission rate'}
+                                    />
+                                    <button
+                                      type='button'
+                                      onClick={() => toggleBulkEntryCommissionMode(idx)}
+                                      className='h-8 px-1.5 text-xs rounded border border-input bg-muted hover:bg-accent shrink-0'
+                                      title='Switch between % and a hard amount'
+                                    >
+                                      {entry.commissionMode === 'flat' ? currencySymbol : '%'}
+                                    </button>
+                                  </div>
                                 </td>
                                 <td className='p-2'>
                                   <Input

@@ -6,7 +6,7 @@ const cashBookService = require('./cashBook.service');
 const customerLedgerService = require('./customerLedger.service');
 const employeeLedgerService = require('./employeeLedger.service');
 const supplierLedgerService = require('./supplierLedger.service');
-const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
+const { buildCustomerSaleLedgerEntries, AMOUNT_EPSILON } = require('../utils/ledgerSettlement');
 const commissionEngineService = require('./commissionEngine.service');
 
 const ApiError = require('../utils/ApiError');
@@ -165,6 +165,10 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
     transaction.notes ||
     `Load Wallet: ${transaction.walletType}${transaction.paymentMethod === 'wallet' && transaction.paymentWalletType ? ` | Payment Wallet: ${transaction.paymentWalletType}` : ''}`;
   const unpaid = Number(transaction.amount || 0) - Number(transaction.receivedAmount || 0);
+  // No explicit cash/credit field on a load sale — infer it the same way the ledger
+  // already decides full-settlement (paid vs total), so a sale left wholly or partly
+  // unpaid shows as "Credit" here instead of always "Cash".
+  const loadLedgerInvoiceType = unpaid > AMOUNT_EPSILON ? 'credit' : 'cash';
 
   const ledgerEntries = buildCustomerSaleLedgerEntries({
     organizationId: transaction.organizationId,
@@ -177,7 +181,7 @@ const syncCustomerLedgerForLoadTransaction = async (transaction) => {
     transactionDate: transaction.date,
     total: transaction.amount,
     paidAmount: transaction.receivedAmount,
-    invoiceType: 'cash',
+    invoiceType: loadLedgerInvoiceType,
     paymentMethod: getLedgerPaymentMethodLabel(transaction.paymentMethod, transaction.paymentWalletType),
     notes: ledgerNotes,
     balance: unpaid,
@@ -395,4 +399,5 @@ module.exports = {
   queryLoadTransactions,
   updateLoadTransaction,
   deleteLoadTransaction,
+  syncCustomerLedgerForLoadTransaction,
 };

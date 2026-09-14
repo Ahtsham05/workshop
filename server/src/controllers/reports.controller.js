@@ -3557,6 +3557,12 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
   });
 
   loadSales.forEach((tx) => {
+    const receivedAmount = Number(tx.receivedAmount) || 0;
+    // A load sale made entirely on credit isn't a cash event — it's a receivable already
+    // tracked in the Customer Ledger, so it doesn't belong in this cash-activity feed.
+    if (receivedAmount <= 0) {
+      return;
+    }
     entries.push({
       id: String(tx._id),
       date: tx.date,
@@ -3567,8 +3573,8 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       partyPhone: tx.mobileNumber || '',
       paymentType: capitalize(tx.paymentMethod) || 'Cash',
       direction: 'in',
-      totalAmount: tx.receivedAmount || tx.amount || 0,
-      paidAmount: tx.receivedAmount || tx.amount || 0,
+      totalAmount: receivedAmount,
+      paidAmount: receivedAmount,
       balance: 0,
       description: `Load sale on ${tx.walletType || 'wallet'}`,
       details: `Load: ${tx.amount || 0} | Wallet: ${tx.walletType || ''}${tx.notes ? ` | ${tx.notes}` : ''}`,

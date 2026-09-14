@@ -146,6 +146,34 @@ const getInvoice = {
   })
 };
 
+// One shared shape for the new Invoice Management list, its stat-card summary and its
+// export — all three run the same filters, so they must accept the same query string (see
+// invoice.controller.js's INVOICE_LIST_OPTIONS). Comma-separated values are allowed on the
+// multi-select filters. Mirrors purchase.validation.js's purchaseListQuery.
+const invoiceListQuery = Joi.object().keys({
+  customerId: Joi.string().allow(''),
+  limit: Joi.number(),
+  page: Joi.number(),
+  sortBy: Joi.string(),
+  search: Joi.string().allow(''),
+  searchBy: Joi.string().valid('all', 'invoice', 'customer', 'product', 'billNumber', 'notes'),
+  type: Joi.string().allow(''),
+  paymentStatus: Joi.string().allow(''),
+  dueStatus: Joi.string().allow(''),
+  createdBy: Joi.string().allow(''),
+  branch: Joi.string().allow(''),
+  startDate: Joi.date(),
+  endDate: Joi.date(),
+  minAmount: Joi.number().allow(''),
+  maxAmount: Joi.number().allow(''),
+});
+
+const getInvoicesList = { query: invoiceListQuery };
+
+const getInvoicesSummary = { query: invoiceListQuery };
+
+const exportInvoices = { query: invoiceListQuery };
+
 const updateInvoice = {
   params: Joi.object({
     invoiceId: Joi.string().custom(objectId)
@@ -315,6 +343,9 @@ const convertQuotation = {
 module.exports = {
   createInvoice,
   getInvoices,
+  getInvoicesList,
+  getInvoicesSummary,
+  exportInvoices,
   getInvoice,
   updateInvoice,
   deleteInvoice,

@@ -147,6 +147,26 @@ export const invoiceApi = createApi({
       providesTags: ['Invoice'],
     }),
 
+    // Settlement-aware, aggregation-based invoice list — the Invoice Management page's own
+    // data source (stat cards, Paid/Remaining/Status columns, payment-status/due-status
+    // filters). Separate from getInvoices above, which other screens keep using untouched.
+    getInvoicesList: builder.query<InvoiceListResult, Record<string, unknown>>({
+      query: (params = {}) => ({ url: '/list', params }),
+      providesTags: ['Invoice'],
+    }),
+
+    // Stat-card totals for whatever the invoice list is currently filtered to — same query
+    // string as getInvoicesList, so the cards always describe the rows below them.
+    getInvoicesSummary: builder.query<InvoiceListSummary, Record<string, unknown>>({
+      query: (params = {}) => ({ url: '/summary', params }),
+      providesTags: ['Invoice'],
+    }),
+
+    // Flattened rows (no pagination) behind Export CSV / Export PDF.
+    exportInvoices: builder.query<{ results: InvoiceExportRow[]; limit: number; truncated: boolean }, Record<string, unknown>>({
+      query: (params = {}) => ({ url: '/export', params }),
+    }),
+
     // Get invoice by ID
     getInvoiceById: builder.query({
       query: (id) => `/${id}`,
@@ -302,10 +322,56 @@ export const invoiceApi = createApi({
   }),
 })
 
+/** Stat-card totals for the current invoice-list filter — see getInvoiceListSummary. */
+export interface InvoiceListSummary {
+  invoiceCount: number
+  customerCount: number
+  totalValue: number
+  totalSettled: number
+  totalOutstanding: number
+  overdueCount: number
+  overdueAmount: number
+  paidCount: number
+  partialCount: number
+  unpaidCount: number
+  thisMonthValue: number
+}
+
+/** One flattened invoice row for CSV/PDF export. */
+export interface InvoiceExportRow {
+  invoiceNumber: string
+  billNumber?: string
+  customerDisplayName?: string
+  itemsCount: number
+  invoiceDate: string
+  dueDate?: string | null
+  type?: 'cash' | 'credit' | 'pending' | 'quotation'
+  paymentMethod?: string
+  total: number
+  settledAmount: number
+  remainingAmount: number
+  settlementStatus: string
+  dueStatus: string
+  notes?: string
+  updatedAt?: string
+  createdByName?: string
+}
+
+export interface InvoiceListResult {
+  results: any[]
+  page: number
+  limit: number
+  totalPages: number
+  totalResults: number
+}
+
 export const {
   useCreateInvoiceMutation,
   useGetInvoicesQuery,
   useLazyGetInvoicesQuery,
+  useGetInvoicesListQuery,
+  useGetInvoicesSummaryQuery,
+  useLazyExportInvoicesQuery,
   useGetInvoiceByIdQuery,
   useUpdateInvoiceMutation,
   useUpdateInvoiceFlagMutation,

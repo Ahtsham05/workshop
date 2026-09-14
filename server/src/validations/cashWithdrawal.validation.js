@@ -85,6 +85,8 @@ const createCashWithdrawalsBatch = {
           customerCNIC: Joi.string().trim().allow(''),
           customerAccountType: Joi.string().trim().allow('', null),
           extraCharge: Joi.number().min(0).default(0),
+          // Optional per-row override of the batch's shared commissionRate.
+          commissionRate: Joi.number().min(0).max(100),
           notes: Joi.string().allow(''),
         })
       )

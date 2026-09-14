@@ -27,6 +27,7 @@ module.exports.auditLogService = require('./auditLog.service.js');
 module.exports.customerLedgerService = require('./customerLedger.service.js');
 module.exports.supplierLedgerService = require('./supplierLedger.service.js');
 module.exports.supplierPaymentService = require('./supplierPayment.service.js');
+module.exports.customerPaymentService = require('./customerPayment.service.js');
 module.exports.personalLedgerService = require('./personalLedger.service.js');
 module.exports.companyService = require('./company.service.js');
 module.exports.organizationService = require('./organization.service.js');

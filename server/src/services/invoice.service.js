@@ -24,6 +24,7 @@ const businessNotifications = require('./whatsapp/businessNotifications.service'
 const { computeDiscountAmount } = require('../utils/discount');
 const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
 const Money = require('../utils/money');
+const { buildSettlementAddFieldsStage } = require('../utils/invoiceSettlement');
 
 /** Sets Invoice.baseCurrencyTotal from the already-computed `total` + currency snapshot. */
 const applyBaseCurrencyTotal = (invoice) => {
@@ -1441,6 +1442,14 @@ const deleteInvoiceById = async (invoiceId) => {
     console.error('Failed to reverse commission on invoice delete:', err);
   }
 
+  // Any customer payment money that had been applied to this invoice goes back to that
+  // payment's unapplied credit — see customerPayment.service.js's detachInvoiceAllocations.
+  // eslint-disable-next-line global-require
+  const customerPaymentService = require('./customerPayment.service');
+  await customerPaymentService.detachInvoiceAllocations(invoice._id).catch((error) => {
+    console.error('Failed to detach customer payment allocations:', error.message);
+  });
+
   await invoice.deleteOne();
   return invoice;
 };
@@ -1850,9 +1859,421 @@ const getCustomerProductHistory = async (customerId, productId) => {
   return stats;
 };
 
+const escapeRegexLiteral = (raw) => String(raw).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const toFilterObjectId = (value) =>
+  mongoose.Types.ObjectId.isValid(value) ? new mongoose.Types.ObjectId(String(value)) : value;
+
+const toIdArray = (value) =>
+  (Array.isArray(value) ? value : String(value).split(','))
+    .map((entry) => String(entry).trim())
+    .filter(Boolean);
+
+/**
+ * Invoice.customerId is a Mixed field ('walk-in' or a customer id) that nothing casts to a
+ * real ObjectId on save — createInvoice stores whatever string the request body sent.
+ * Mongoose's own find()/paginate() auto-cast a query value against the schema when the field
+ * IS a plain ObjectId type, but Mixed has no type to cast to, and aggregate() pipelines skip
+ * that casting layer entirely regardless of field type. So every match against customerId in
+ * THIS aggregation-based list has to accept both encodings rather than assume one.
+ */
+const toCustomerIdMatchValues = (id) => {
+  const str = String(id).trim();
+  return mongoose.Types.ObjectId.isValid(str) ? [str, new mongoose.Types.ObjectId(str)] : [str];
+};
+
+/** Customers whose name/urdu name/phone/whatsapp matches a free-text term. */
+const resolveCustomerIdsByTerm = async ({ organizationId, branchId, term }) => {
+  const escaped = escapeRegexLiteral(term);
+  const customerFilter = {
+    $or: [
+      { name: { $regex: escaped, $options: 'i' } },
+      { nameUrdu: { $regex: escaped, $options: 'i' } },
+      { phone: { $regex: escaped, $options: 'i' } },
+      { whatsapp: { $regex: escaped, $options: 'i' } },
+    ],
+  };
+  if (organizationId) customerFilter.organizationId = toFilterObjectId(organizationId);
+  if (branchId) customerFilter.branchId = toFilterObjectId(branchId);
+  const customers = await Customer.find(customerFilter).select('_id').lean();
+  return customers.map((customer) => customer._id);
+};
+
+/**
+ * Turn the Invoice Management list screen's filter payload into the document-level `$match`
+ * that runs BEFORE settlement is computed (cheap, index-friendly). Settlement-dependent
+ * filters (paymentStatus / dueStatus) are applied afterwards by buildInvoiceSettlementMatch.
+ * Mirrors purchase.service.js's buildPurchaseListMatch.
+ */
+const buildInvoiceListMatch = async (filter = {}, options = {}) => {
+  const match = {};
+  const { organizationId, branchId } = filter;
+  if (organizationId) match.organizationId = toFilterObjectId(organizationId);
+  if (branchId) match.branchId = toFilterObjectId(branchId);
+
+  // "Warehouse" in the UI is this app's Branch — only meaningful for an org-wide viewer
+  // whose request didn't pin a branch already.
+  if (options.branch) match.branchId = toFilterObjectId(options.branch);
+
+  if (options.customerId) {
+    const customerIds = toIdArray(options.customerId);
+    match.customerId = { $in: customerIds.flatMap(toCustomerIdMatchValues) };
+  }
+  if (options.createdBy) {
+    const userIds = toIdArray(options.createdBy).map(toFilterObjectId);
+    match.createdBy = userIds.length > 1 ? { $in: userIds } : userIds[0];
+  }
+
+  // Invoice Type: the existing dropdown's full value set, plus the synthetic
+  // 'pending-converted' value the list UI already used before this rewrite (a pending
+  // invoice that has since been converted to a bill).
+  if (options.type) {
+    const types = toIdArray(options.type).map((value) => value.toLowerCase());
+    const conditions = [];
+    const wantsConverted = types.includes('pending-converted');
+    const wantsPlainPending = types.includes('pending');
+    const otherTypes = types.filter((value) => value !== 'pending-converted' && value !== 'pending');
+
+    if (wantsConverted) conditions.push({ type: 'pending', isConvertedToBill: true });
+    if (wantsPlainPending) conditions.push({ type: 'pending', isConvertedToBill: { $ne: true } });
+    if (otherTypes.length > 0) conditions.push({ type: { $in: otherTypes } });
+
+    if (conditions.length === 1) Object.assign(match, conditions[0]);
+    else if (conditions.length > 1) match.$and = [...(match.$and || []), { $or: conditions }];
+  }
+
+  if (options.startDate || options.endDate) {
+    match.invoiceDate = {};
+    if (options.startDate) match.invoiceDate.$gte = new Date(new Date(options.startDate).setHours(0, 0, 0, 0));
+    if (options.endDate) match.invoiceDate.$lte = new Date(new Date(options.endDate).setHours(23, 59, 59, 999));
+  }
+
+  if (options.minAmount !== undefined || options.maxAmount !== undefined) {
+    match.total = {};
+    if (options.minAmount !== undefined && options.minAmount !== '') match.total.$gte = Number(options.minAmount);
+    if (options.maxAmount !== undefined && options.maxAmount !== '') match.total.$lte = Number(options.maxAmount);
+    if (Object.keys(match.total).length === 0) delete match.total;
+  }
+
+  const term = options.search ? String(options.search).trim() : '';
+  if (term) {
+    const escaped = escapeRegexLiteral(term);
+    const searchBy = String(options.searchBy || 'all').toLowerCase();
+    const byField = {
+      invoice: () => [{ invoiceNumber: { $regex: escaped, $options: 'i' } }],
+      billnumber: () => [{ billNumber: { $regex: escaped, $options: 'i' } }],
+      notes: () => [{ notes: { $regex: escaped, $options: 'i' } }],
+      product: () => [{ 'items.name': { $regex: escaped, $options: 'i' } }],
+    };
+
+    let conditions = byField[searchBy] ? byField[searchBy]() : [];
+
+    if (searchBy === 'customer' || searchBy === 'all') {
+      const customerIds = await resolveCustomerIdsByTerm({ organizationId, branchId, term });
+      if (customerIds.length > 0) conditions.push({ customerId: { $in: customerIds.flatMap(toCustomerIdMatchValues) } });
+      conditions.push({ customerName: { $regex: escaped, $options: 'i' } });
+      conditions.push({ walkInCustomerName: { $regex: escaped, $options: 'i' } });
+    }
+    if (searchBy === 'all') {
+      conditions = conditions.concat([
+        { invoiceNumber: { $regex: escaped, $options: 'i' } },
+        { billNumber: { $regex: escaped, $options: 'i' } },
+        { 'items.name': { $regex: escaped, $options: 'i' } },
+        { notes: { $regex: escaped, $options: 'i' } },
+      ]);
+    }
+
+    match.$and = [...(match.$and || []), { $or: conditions.length > 0 ? conditions : [{ _id: null }] }];
+  }
+
+  return match;
+};
+
+/** Filters that can only be evaluated once settlement has been computed. */
+const buildInvoiceSettlementMatch = (options = {}) => {
+  const conditions = {};
+
+  if (options.paymentStatus) {
+    const statuses = toIdArray(options.paymentStatus).map((value) => value.toLowerCase());
+    // "outstanding" is the everyday word for "still owes something" — unpaid OR partial.
+    const expanded = statuses.flatMap((status) => (status === 'outstanding' ? ['unpaid', 'partial'] : [status]));
+    if (expanded.length > 0) conditions.settlementStatus = { $in: expanded };
+  }
+
+  if (options.dueStatus) {
+    const dueStatuses = toIdArray(options.dueStatus).map((value) => value.toLowerCase());
+    if (dueStatuses.length > 0) conditions.dueStatus = { $in: dueStatuses };
+  }
+
+  return conditions;
+};
+
+/** Customer name is needed for both "sort by customer" and the list's own display copy. */
+const CUSTOMER_LOOKUP_STAGES = [
+  // A plain localField/foreignField $lookup requires the same BSON type on both sides —
+  // customerId is stored as a string (see toCustomerIdMatchValues above), so it would never
+  // match a real customer's ObjectId _id. Converting both sides to strings inside the
+  // pipeline lookup sidesteps that without caring which form customerId happens to be in.
+  {
+    $lookup: {
+      from: 'customers',
+      let: { cid: { $toString: '$customerId' } },
+      pipeline: [{ $match: { $expr: { $eq: [{ $toString: '$_id' }, '$$cid'] } } }],
+      as: '_customerDoc',
+    },
+  },
+  {
+    $addFields: {
+      customerDisplayName: {
+        $ifNull: [
+          { $arrayElemAt: ['$_customerDoc.name', 0] },
+          { $ifNull: ['$customerName', { $ifNull: ['$walkInCustomerName', ''] }] },
+        ],
+      },
+    },
+  },
+  { $project: { _customerDoc: 0 } },
+];
+
+const buildInvoiceListPipeline = async (filter, options) => {
+  const match = await buildInvoiceListMatch(filter, options);
+  const settlementMatch = buildInvoiceSettlementMatch(options);
+
+  const pipeline = [
+    { $match: match },
+    ...CUSTOMER_LOOKUP_STAGES,
+    buildSettlementAddFieldsStage(),
+    {
+      $addFields: {
+        dueSortKey: { $ifNull: ['$dueDate', new Date('9999-12-31')] },
+        itemsCount: { $size: { $ifNull: ['$items', []] } },
+      },
+    },
+  ];
+
+  if (Object.keys(settlementMatch).length > 0) {
+    pipeline.push({ $match: settlementMatch });
+  }
+
+  return pipeline;
+};
+
+const INVOICE_SORT_FIELDS = {
+  invoiceNumber: 'invoiceNumber',
+  amount: 'total',
+  total: 'total',
+  customer: 'customerDisplayName',
+  invoiceDate: 'invoiceDate',
+  date: 'invoiceDate',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  dueDate: 'dueSortKey',
+  paymentDue: 'dueSortKey',
+  remainingAmount: 'remainingAmount',
+  paidAmount: 'settledAmount',
+  settledAmount: 'settledAmount',
+  items: 'itemsCount',
+};
+
+/**
+ * Paginated invoice list with every list-screen filter, sorted on any column including the
+ * derived settlement ones. Mirrors purchase.service.js's queryPurchaseList — a separate
+ * function (and route) from the older `queryInvoices`/`getInvoices`, which other consumers
+ * (fast billing, customer profile, dashboards) keep using untouched.
+ *
+ * @param {Object} filter organizationId/branchId scope (from applyBranchFilter)
+ * @param {Object} options filters + `sortBy` ("field:asc|desc") + page/limit
+ */
+const queryInvoiceList = async (filter, options = {}) => {
+  const limit = Math.max(1, parseInt(options.limit, 10) || 10);
+  const page = Math.max(1, parseInt(options.page, 10) || 1);
+  const [rawSortKey, rawSortOrder] = String(options.sortBy || 'invoiceDate:desc').split(':');
+  const sortField = INVOICE_SORT_FIELDS[rawSortKey] || 'invoiceDate';
+  const sortDirection = String(rawSortOrder).toLowerCase() === 'asc' ? 1 : -1;
+
+  const pipeline = await buildInvoiceListPipeline(filter, options);
+  const [result] = await Invoice.aggregate([
+    ...pipeline,
+    {
+      $facet: {
+        // `_id` is appended as a tiebreaker so a page boundary can never drop or repeat a
+        // row when several invoices share the same sort value (same day, same amount, ...).
+        rows: [
+          { $sort: { [sortField]: sortDirection, _id: sortDirection } },
+          { $skip: (page - 1) * limit },
+          { $limit: limit },
+          {
+            $project: {
+              _id: 1,
+              settledAmount: 1,
+              remainingAmount: 1,
+              settlementStatus: 1,
+              dueStatus: 1,
+              itemsCount: 1,
+            },
+          },
+        ],
+        total: [{ $count: 'count' }],
+      },
+    },
+  ]);
+
+  const rows = result?.rows || [];
+  const totalResults = result?.total?.[0]?.count || 0;
+  const ids = rows.map((row) => row._id);
+
+  // Re-read the page as real documents so callers keep the populated shape they had before
+  // (aggregation can't run Mongoose populate). Customer resolution is manual, same as
+  // queryInvoices above, because customerId is a Mixed field ('walk-in' or an ObjectId) that
+  // Mongoose's own .populate() can't reliably resolve.
+  const documents = await Invoice.find({ _id: { $in: ids } })
+    .populate('createdBy', 'name email')
+    .populate('salesmanId', 'name salesmanCode');
+
+  const customerObjectIds = documents
+    .map((doc) => String(doc.customerId || '').trim())
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  const customerMap = new Map();
+  if (customerObjectIds.length > 0) {
+    const customers = await Customer.find({ _id: { $in: customerObjectIds } }).select(
+      'name nameUrdu phone whatsapp email picture linkedSupplierId'
+    );
+    customers.forEach((customer) => customerMap.set(String(customer._id), customer));
+  }
+
+  const documentById = new Map(documents.map((document) => [String(document._id), document]));
+  const results = rows
+    .map((row) => {
+      const document = documentById.get(String(row._id));
+      if (!document) return null;
+      const documentJson = document.toJSON();
+      const customer = customerMap.get(String(document.customerId));
+      // Settlement rides along as plain extra keys on the serialized document — derived, so
+      // it is never persisted back.
+      return {
+        ...documentJson,
+        customer: customer || undefined,
+        customerName: customer ? customer.name : documentJson.customerName,
+        settledAmount: row.settledAmount,
+        remainingAmount: row.remainingAmount,
+        settlementStatus: row.settlementStatus,
+        dueStatus: row.dueStatus,
+        itemsCount: row.itemsCount,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    results,
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit) || 0,
+    totalResults,
+  };
+};
+
+/**
+ * Headline totals for the list screen's stat cards, computed over the SAME filter set as the
+ * table below them — so narrowing the filters narrows the cards. Mirrors
+ * purchase.service.js's getPurchaseListSummary.
+ */
+const getInvoiceListSummary = async (filter, options = {}) => {
+  const pipeline = await buildInvoiceListPipeline(filter, options);
+
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const [result] = await Invoice.aggregate([
+    ...pipeline,
+    {
+      $group: {
+        _id: null,
+        invoiceCount: { $sum: 1 },
+        totalValue: { $sum: { $ifNull: ['$total', 0] } },
+        totalSettled: { $sum: '$settledAmount' },
+        totalOutstanding: { $sum: { $cond: [{ $gt: ['$remainingAmount', 0] }, '$remainingAmount', 0] } },
+        overdueCount: { $sum: { $cond: [{ $eq: ['$dueStatus', 'overdue'] }, 1, 0] } },
+        overdueAmount: { $sum: { $cond: [{ $eq: ['$dueStatus', 'overdue'] }, '$remainingAmount', 0] } },
+        paidCount: { $sum: { $cond: [{ $eq: ['$settlementStatus', 'paid'] }, 1, 0] } },
+        partialCount: { $sum: { $cond: [{ $eq: ['$settlementStatus', 'partial'] }, 1, 0] } },
+        unpaidCount: { $sum: { $cond: [{ $eq: ['$settlementStatus', 'unpaid'] }, 1, 0] } },
+        thisMonthValue: {
+          $sum: { $cond: [{ $gte: ['$invoiceDate', startOfMonth] }, { $ifNull: ['$total', 0] }, 0] },
+        },
+        customers: { $addToSet: '$customerId' },
+      },
+    },
+    { $addFields: { customerCount: { $size: '$customers' } } },
+    { $project: { _id: 0, customers: 0 } },
+  ]).option({ allowDiskUse: true });
+
+  return {
+    invoiceCount: result?.invoiceCount || 0,
+    customerCount: result?.customerCount || 0,
+    totalValue: Money.roundMoney(result?.totalValue || 0),
+    totalSettled: Money.roundMoney(result?.totalSettled || 0),
+    totalOutstanding: Money.roundMoney(result?.totalOutstanding || 0),
+    overdueCount: result?.overdueCount || 0,
+    overdueAmount: Money.roundMoney(result?.overdueAmount || 0),
+    paidCount: result?.paidCount || 0,
+    partialCount: result?.partialCount || 0,
+    unpaidCount: result?.unpaidCount || 0,
+    thisMonthValue: Money.roundMoney(result?.thisMonthValue || 0),
+  };
+};
+
+/**
+ * Every invoice matching the filter, flattened for CSV/PDF export — no pagination, but
+ * capped so a mis-clicked "export everything" can't try to serialize a whole year of data
+ * into one response. Mirrors purchase.service.js's getPurchaseListForExport.
+ */
+const EXPORT_ROW_LIMIT = 5000;
+
+const getInvoiceListForExport = async (filter, options = {}) => {
+  const pipeline = await buildInvoiceListPipeline(filter, options);
+  const [rawSortKey, rawSortOrder] = String(options.sortBy || 'invoiceDate:desc').split(':');
+  const sortField = INVOICE_SORT_FIELDS[rawSortKey] || 'invoiceDate';
+  const sortDirection = String(rawSortOrder).toLowerCase() === 'asc' ? 1 : -1;
+
+  const rows = await Invoice.aggregate([
+    ...pipeline,
+    { $sort: { [sortField]: sortDirection, _id: sortDirection } },
+    { $limit: EXPORT_ROW_LIMIT },
+    { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: '_createdByDoc' } },
+    {
+      $project: {
+        _id: 0,
+        invoiceNumber: 1,
+        billNumber: 1,
+        customerDisplayName: 1,
+        itemsCount: 1,
+        invoiceDate: 1,
+        dueDate: 1,
+        type: 1,
+        paymentMethod: 1,
+        total: 1,
+        settledAmount: 1,
+        remainingAmount: 1,
+        settlementStatus: 1,
+        dueStatus: 1,
+        notes: 1,
+        updatedAt: 1,
+        createdByName: { $ifNull: [{ $arrayElemAt: ['$_createdByDoc.name', 0] }, ''] },
+      },
+    },
+  ]).option({ allowDiskUse: true });
+
+  return { results: rows, limit: EXPORT_ROW_LIMIT, truncated: rows.length >= EXPORT_ROW_LIMIT };
+};
+
 module.exports = {
   createInvoice,
   queryInvoices,
+  queryInvoiceList,
+  getInvoiceListSummary,
+  getInvoiceListForExport,
   getInvoiceById,
   setInvoiceFlag,
   updateInvoiceById,

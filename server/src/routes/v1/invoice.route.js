@@ -13,6 +13,20 @@ router
   .post(auth('createInvoices'), validate(invoiceValidation.createInvoice), invoiceController.createInvoice)
   .get(auth('viewInvoices'), validate(invoiceValidation.getInvoices), invoiceController.getInvoices);
 
+// Settlement-aware invoice list + stat-card totals + CSV/PDF export for the Invoice
+// Management page. Registered ahead of the /:invoiceId catch-all below.
+router
+  .route('/list')
+  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoicesList), invoiceController.getInvoicesList);
+
+router
+  .route('/summary')
+  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoicesSummary), invoiceController.getInvoicesSummary);
+
+router
+  .route('/export')
+  .get(auth('viewInvoices'), validate(invoiceValidation.exportInvoices), invoiceController.exportInvoices);
+
 router
   .route('/generate-bill-number')
   .get(auth('viewInvoices'), invoiceController.generateBillNumber);

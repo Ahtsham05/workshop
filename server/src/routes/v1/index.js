@@ -37,6 +37,7 @@ const reminderRoute = require('./reminder.route');
 const leadRoute = require('./lead.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
 const supplierPaymentRoute = require('./supplierPayment.route');
+const customerPaymentRoute = require('./customerPayment.route');
 const personalLedgerRoute = require('./personalLedger.route');
 const dashboardRoute = require('./dashboard.route');
 const reportsRoute = require('./reports.route');
@@ -287,6 +288,10 @@ const defaultRoutes = [
   {
     path: '/supplier-payments',
     route: supplierPaymentRoute,
+  },
+  {
+    path: '/customer-payments',
+    route: customerPaymentRoute,
   },
   {
     path: '/personal-ledger',
@@ -726,6 +731,7 @@ const protectedPaths = [
   '/customer-ledger',
   '/supplier-ledger',
   '/supplier-payments',
+  '/customer-payments',
   '/personal-ledger',
   '/dashboard',
   '/reports',

@@ -134,6 +134,13 @@ const InvoiceSchema = new mongoose.Schema({
     // Payment information
     paidAmount: { type: Number, default: 0, min: 0 },
     balance: { type: Number, default: 0 },
+    // Money applied to this invoice AFTER it was recorded, by a CustomerPayment allocation
+    // (see customerPayment.service.js). Deliberately separate from `paidAmount`: that leg owns
+    // this invoice's own Cash Book/Wallet entry, while each allocation's cash movement is owned
+    // by its payment's Customer Ledger entry — folding the two together would bank the same
+    // rupee twice. settledAmount/remainingAmount/settlementStatus are derived from the pair,
+    // never stored — see utils/invoiceSettlement.js. Mirrors purchase.model.js's identical field.
+    allocatedAmount: { type: Number, default: 0, min: 0 },
     dueDate: { type: Date },
     /** Person collecting the products, for 'pending' invoices — shown in the SMS/WhatsApp handoff message. */
     receivedByName: { type: String, trim: true, default: '' },
@@ -240,6 +247,10 @@ const InvoiceSchema = new mongoose.Schema({
 });
 
 InvoiceSchema.index({ organizationId: 1, branchId: 1 });
+// Supports the customer payment allocator's "open invoices, oldest first" scan — see
+// customerPayment.service.js's getOpenInvoicesForCustomer. Mirrors purchase.model.js's
+// identical supplier/purchaseDate index.
+InvoiceSchema.index({ organizationId: 1, branchId: 1, customerId: 1, invoiceDate: 1 });
 
 // add plugin that converts mongoose to json
 InvoiceSchema.plugin(toJSON);

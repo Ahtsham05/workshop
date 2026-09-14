@@ -458,7 +458,9 @@ const createCashWithdrawalsBatch = async (body) => {
         walletId,
         walletType,
         transactionType,
-        commissionRate: Number(commissionRate || 0),
+        // A row's own rate wins over the batch-shared rate — lets one negotiated
+        // customer rate be entered without changing the rate for the rest of the batch.
+        commissionRate: Number(entry.commissionRate ?? commissionRate ?? 0),
         amount: Number(entry.amount),
         customerId: entry.customerId || undefined,
         cashAmount: Number(entry.cashAmount ?? entry.amount),
