@@ -97,3 +97,23 @@ export function formatBusinessDateTime(value: string | Date): string {
     hour12: true,
   })
 }
+
+/** Compact "15-Sep-2026, 11:45 AM" date+time in Pakistan local time — no seconds,
+ * for tight spaces like a printed voucher/receipt field. */
+export function formatBusinessDateTimeShort(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const datePart = date.toLocaleDateString('en-PK', {
+    timeZone: BUSINESS_TIMEZONE,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+  const timePart = date.toLocaleTimeString('en-PK', {
+    timeZone: BUSINESS_TIMEZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+  return `${datePart}, ${timePart}`
+}

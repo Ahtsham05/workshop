@@ -31,6 +31,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html';
 import { useFormatMoney, useCurrencyMeta, FALLBACK_CURRENCY } from '@/lib/format-money';
+import { BUSINESS_TIMEZONE, formatBusinessDate, formatBusinessDateTimeShort } from '@/lib/business-timezone';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/stores/store';
 import { toast } from 'sonner';
@@ -99,14 +100,19 @@ function feeItemLabel(name: string, month?: string, year?: number | string): str
 }
 
 /** Short "12-Aug" style date for a paid-tag badge — day and month only, no year,
- * since the challan header already states the session/year. */
+ * since the challan header already states the session/year. Pinned to Pakistan
+ * time so the label matches the school's local date regardless of the printing
+ * device's own OS/browser timezone (see BUSINESS_TIMEZONE). */
 function formatDayMonth(date?: string | Date | null): string {
   if (!date) return '';
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return '';
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = d.toLocaleDateString('en-US', { month: 'short' });
-  return `${day}-${month}`;
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TIMEZONE, day: '2-digit', month: 'short' })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value])
+  );
+  return `${parts.day}-${parts.month}`;
 }
 
 /** Tags one voucher document's OWN fee items (PAID / PARTIAL / PENDING) using that
@@ -1383,7 +1389,7 @@ export default function FeeVouchers() {
                               ? ` · ${v.feeItems[0].name}`
                               : ` · ${v.month} ${v.year}`)}
                           {' · Due '}
-                          {earliestDueDate ? new Date(earliestDueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          {earliestDueDate ? formatBusinessDate(earliestDueDate) : '—'}
                         </span>
                         {v.studentId?.parent?.phone && (
                           <span className="text-[11px] text-muted-foreground">
@@ -1787,7 +1793,7 @@ export default function FeeVouchers() {
                           <p className="text-xs text-emerald-800">
                             {studentSummary.lastPaid.month} {studentSummary.lastPaid.year}
                             {studentSummary.lastPaid.paidDate && (
-                              <> · {new Date(studentSummary.lastPaid.paidDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })}</>
+                              <> · {formatBusinessDate(studentSummary.lastPaid.paidDate)}</>
                             )}
                           </p>
                         </div>
@@ -2038,13 +2044,13 @@ export default function FeeVouchers() {
                   {(studentLedger.entries || []).map((e: any, idx: number) => (
                     <div key={idx} className="grid grid-cols-[7rem_6rem_6rem_1fr_6rem_6rem_6rem_2rem] gap-2 px-3 py-2 text-xs items-start">
                       <span className="text-muted-foreground">
-                        {e.date ? new Date(e.date).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        {e.date ? formatBusinessDate(e.date) : '—'}
                       </span>
                       <span className="text-muted-foreground">
-                        {e.dueDate ? new Date(e.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        {e.dueDate ? formatBusinessDate(e.dueDate) : '—'}
                       </span>
                       <span className="text-muted-foreground">
-                        {e.paidDate ? new Date(e.paidDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        {e.paidDate ? formatBusinessDate(e.paidDate) : '—'}
                       </span>
                       <div>
                         <p className="font-medium">{e.label}</p>
@@ -2682,12 +2688,11 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
   const discount = v.discount || 0;
   const fine = v.fine || 0;
 
-  const dueDate = v.dueDate
-    ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })
-    : '—';
-  const paidDate = v.paidDate
-    ? new Date(v.paidDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })
-    : '—';
+  const dueDate = v.dueDate ? formatBusinessDate(v.dueDate) : '—';
+  // Paid Date/time is stamped in Pakistan local time regardless of the printing
+  // device's own OS/browser timezone — a device whose clock lags Karachi (e.g. set
+  // to UTC) would otherwise print the wrong calendar date for late-night payments.
+  const paidDate = v.paidDate ? formatBusinessDateTimeShort(v.paidDate) : '—';
   const session = `${v.year || ''}–${(v.year || 0) + 1}`;
   const guardianPhone = v.studentId?.parent?.phone || '—';
   const fatherName = v.studentId?.parent?.fatherName || v.studentId?.parent?.guardianName || '—';
@@ -2875,9 +2880,9 @@ function voucherCopyHTML(v: any, schoolName: string, copyLabel: string, invoiceN
 
 // ── Payment Received Voucher (receipt) — printed on demand, separate from the Fee Challan ──
 function receiptCopyHTML(payment: any, schoolName: string, copyLabel: string, currencySymbol: string = FALLBACK_CURRENCY.symbol): string {
-  const paidOn = payment.paidDate
-    ? new Date(payment.paidDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })
-    : '—';
+  // Pinned to Pakistan time (see formatDayMonth above) so the receipt always shows
+  // the actual local date/time the payment was collected, not the printing device's.
+  const paidOn = payment.paidDate ? formatBusinessDateTimeShort(payment.paidDate) : '—';
   const items: { label: string; amount: number }[] = payment.items || [];
   const itemRows = items
     .map(
