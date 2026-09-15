@@ -9,7 +9,7 @@ import { LowStockWidget } from './components/low-stock-widget'
 import { RecentActivities } from './components/recent-activities'
 import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
-import { QuickActions } from './components/quick-actions'
+import { QuickLinksPanel } from './components/quick-links-panel'
 import { DashboardDateFilter } from './components/dashboard-date-filter'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
 import { useGetLeadStatsQuery } from '@/stores/lead.api'
@@ -165,9 +165,9 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Quick Actions */}
+        {/* Quick Links */}
         <div className='mb-6'>
-          <QuickActions />
+          <QuickLinksPanel />
         </div>
 
         {/* KPI cards — single flowing grid (5 per row on xl) */}

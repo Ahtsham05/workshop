@@ -21,6 +21,7 @@ import { setActiveOrganizationBusinessType } from '@/lib/organization-context'
 import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 import { useReminderWatchdog } from '@/hooks/use-reminder-watchdog'
 import { ReminderAlarmSplash } from '@/components/reminder-alarm-splash'
+import { QuickLinksVoiceWidget } from '@/components/quick-links-voice-widget'
 
 /**
  * Authenticated layout component.
@@ -106,6 +107,7 @@ function AuthenticatedLayout() {
           onComplete={completeCurrent}
         />
       )}
+      <QuickLinksVoiceWidget />
     </TrialExpirationBoundary>
   )
 }

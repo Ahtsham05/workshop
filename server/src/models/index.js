@@ -156,6 +156,9 @@ module.exports.Reminder = require('./reminder.model');
 // CRM Leads
 module.exports.Lead = require('./lead.model');
 
+// Dashboard Quick Links
+module.exports.UserQuickLinks = require('./userQuickLinks.model');
+
 // Localization / Currency / Tax engine
 module.exports.ExchangeRate = require('./exchangeRate.model');
 module.exports.TaxCategory = require('./taxCategory.model');

@@ -12,7 +12,19 @@ export const useVoiceInput = ({ onResult, onError, language: propLanguage }: Use
   const [isSupported, setIsSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
   const { language: contextLanguage, t } = useLanguage();
-  
+
+  // The SpeechRecognition instance below is created exactly once (empty-deps effect)
+  // and its onresult/onerror handlers are wired up at that same moment — if they
+  // closed over `onResult`/`onError` directly, they'd permanently call whatever
+  // function those props were on that first render, even after callers re-render
+  // with a new one (e.g. a quick-links consumer whose onResult closes over a
+  // just-fetched actions list that was still empty at mount). Routing every call
+  // through a ref that's reassigned on every render keeps them current.
+  const onResultRef = useRef(onResult);
+  const onErrorRef = useRef(onError);
+  onResultRef.current = onResult;
+  onErrorRef.current = onError;
+
   // Map app language codes to Web Speech API locale codes
   const SPEECH_LANGUAGE_CODES: Record<string, string> = {
     en: 'en-US',
@@ -54,32 +66,32 @@ export const useVoiceInput = ({ onResult, onError, language: propLanguage }: Use
           if (event.results && event.results.length > 0) {
             const transcript = event.results[0][0].transcript;
             console.log('Transcript:', transcript);
-            onResult(transcript);
+            onResultRef.current(transcript);
           }
         };
 
         recognition.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error);
           setIsListening(false);
-          
+
           switch (event.error) {
             case 'no-speech':
-              onError(t('no_speech_detected'));
+              onErrorRef.current(t('no_speech_detected'));
               break;
             case 'audio-capture':
-              onError(t('microphone_not_available'));
+              onErrorRef.current(t('microphone_not_available'));
               break;
             case 'not-allowed':
-              onError(t('microphone_permission_denied'));
+              onErrorRef.current(t('microphone_permission_denied'));
               break;
             case 'network':
-              onError(t('network_error_voice_recognition'));
+              onErrorRef.current(t('network_error_voice_recognition'));
               break;
             case 'aborted':
               // Don't show error for aborted recognition (user stopped it)
               break;
             default:
-              onError(`${t('voice_recognition_error')}: ${event.error}`);
+              onErrorRef.current(`${t('voice_recognition_error')}: ${event.error}`);
               break;
           }
         };

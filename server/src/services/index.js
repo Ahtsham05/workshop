@@ -122,6 +122,7 @@ module.exports.recurringExpenseService = require('./recurringExpense.service.js'
 module.exports.communicationLogService = require('./communicationLog.service.js');
 module.exports.reminderService = require('./reminder.service.js');
 module.exports.leadService = require('./lead.service.js');
+module.exports.quickLinksService = require('./quickLinks.service.js');
 
 // Localization / Currency / Tax engine
 module.exports.localizationService = require('./localization.service.js');

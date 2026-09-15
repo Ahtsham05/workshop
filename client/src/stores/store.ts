@@ -67,6 +67,7 @@ import { expenseApi } from './expense.api';
 import { communicationLogApi } from './communicationLog.api';
 import { reminderApi } from './reminder.api';
 import { leadApi } from './lead.api';
+import { quickLinksApi } from './quickLinks.api';
 import { localizationApi } from './localization.api';
 import { taxCategoryApi } from './taxCategory.api';
 import { taxRateApi } from './taxRate.api';
@@ -145,6 +146,7 @@ export const store = configureStore({
     [communicationLogApi.reducerPath]: communicationLogApi.reducer,
     [reminderApi.reducerPath]: reminderApi.reducer,
     [leadApi.reducerPath]: leadApi.reducer,
+    [quickLinksApi.reducerPath]: quickLinksApi.reducer,
     [localizationApi.reducerPath]: localizationApi.reducer,
     [taxCategoryApi.reducerPath]: taxCategoryApi.reducer,
     [taxRateApi.reducerPath]: taxRateApi.reducer,
@@ -216,6 +218,7 @@ export const store = configureStore({
       communicationLogApi.middleware,
       reminderApi.middleware,
       leadApi.middleware,
+      quickLinksApi.middleware,
       localizationApi.middleware,
       taxCategoryApi.middleware,
       taxRateApi.middleware,

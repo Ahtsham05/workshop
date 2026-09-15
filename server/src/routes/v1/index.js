@@ -35,6 +35,7 @@ const customerLedgerRoute = require('./customerLedger.route');
 const communicationLogRoute = require('./communicationLog.route');
 const reminderRoute = require('./reminder.route');
 const leadRoute = require('./lead.route');
+const quickLinksRoute = require('./quickLinks.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
 const supplierPaymentRoute = require('./supplierPayment.route');
 const customerPaymentRoute = require('./customerPayment.route');
@@ -308,6 +309,10 @@ const defaultRoutes = [
   {
     path: '/leads',
     route: leadRoute
+  },
+  {
+    path: '/quick-links',
+    route: quickLinksRoute
   },
   {
     path: '/dashboard',
