@@ -70,6 +70,10 @@ cashBookEntrySchema.plugin(toJSON);
 cashBookEntrySchema.plugin(paginate);
 
 cashBookEntrySchema.index({ organizationId: 1, branchId: 1, type: 1, source: 1, date: -1 });
+// Supports Cash in Hand (cashBook.service.js getCashInHandSummary, read on every dashboard
+// load): paymentMethod 'cash' up to a date, which the type/source-prefixed index above can't
+// narrow without an equality on type.
+cashBookEntrySchema.index({ organizationId: 1, branchId: 1, paymentMethod: 1, date: -1 });
 cashBookEntrySchema.index({ referenceId: 1, referenceModel: 1 });
 
 const CashBookEntry = mongoose.model('CashBookEntry', cashBookEntrySchema);

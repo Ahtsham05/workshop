@@ -7,36 +7,23 @@ import { SupplierAiScanDialog } from './supplier-ai-scan-dialog'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { bulkAddSuppliers } from '@/stores/supplier.slice'
-import { toast } from 'sonner'
-import { useLanguage } from '@/context/language-context'
 
 export default function SuppliersDialogs({ setFetch }: any) {
   const { open, setOpen, currentRow, setCurrentRow } = useSuppliers()  // Changed to useSuppliers
   const dispatch = useDispatch<AppDispatch>()
-  const { t } = useLanguage()
 
-  const handleImport = async (suppliers: any[]) => {
-    try {
-      const result = await dispatch(bulkAddSuppliers({ suppliers })).unwrap()
-      
-      toast.success(
-        t('import_successful') || 'Import successful',
-        {
-          description: `${result.insertedCount} ${t('suppliers_plural')} ${t('imported_successfully')}`
-        }
-      )
-      
-      setFetch(true)
-      setOpen(null)
-    } catch (error: any) {
-      console.error('Import error:', error)
-      toast.error(
-        t('error_importing_suppliers') || 'Error importing suppliers',
-        {
-          description: error.message || t('please_try_again')
-        }
-      )
-    }
+  const handleImport = async (
+    suppliers: any[],
+    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' }
+  ) => {
+    // No toast and no dialog close here: the import dialog owns the reporting, and it
+    // needs the per-row breakdown in the response to say which rows didn't make it.
+    // Closing on success would also hide that summary before it could be read.
+    const result = await dispatch(
+      bulkAddSuppliers({ suppliers, duplicateStrategy: options?.duplicateStrategy })
+    ).unwrap()
+    setFetch((prev: boolean) => !prev)
+    return result
   }
 
   return (

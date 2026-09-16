@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { imeiEntry } = require('./custom.validation');
+const { imeiEntry, objectId } = require('./custom.validation');
 
 const getImportableMasterProducts = {
   query: Joi.object().keys({
@@ -9,12 +9,21 @@ const getImportableMasterProducts = {
   }),
 };
 
+const getImportableMasterProductIds = {
+  query: Joi.object().keys({
+    search: Joi.string().allow(''),
+  }),
+};
+
 const importMasterProducts = {
   body: Joi.object().keys({
+    // true = the new products are sellable immediately; omitted/false keeps the
+    // review-first default (created inactive), same as an Excel import.
+    activate: Joi.boolean(),
     items: Joi.array()
       .items(
         Joi.object().keys({
-          masterProductId: Joi.string().required(),
+          masterProductId: Joi.string().custom(objectId).required(),
           price: Joi.number().min(0),
           cost: Joi.number().min(0),
           stockQuantity: Joi.number().min(0),
@@ -28,11 +37,13 @@ const importMasterProducts = {
         })
       )
       .min(1)
+      .max(1000)
       .required(),
   }),
 };
 
 module.exports = {
   getImportableMasterProducts,
+  getImportableMasterProductIds,
   importMasterProducts,
 };

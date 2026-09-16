@@ -12,19 +12,27 @@ const { upload } = require('../../middlewares/upload');
 const router = express.Router();
 router.use(auth(), branchScope(false), checkFeatureAccess('school_management'), requireSchoolAdmin());
 
-// Separate multer instance that accepts Excel files only
+// Separate multer instance for spreadsheet uploads. The extension list matches what the
+// parser can actually read (utils/importSheet.js reads all of these), including CSV —
+// plenty of school software exports CSV, and rejecting it sent people back to Excel to
+// re-save a file that would have imported perfectly well. Matching is case-insensitive:
+// a file named LIST.XLSX is the same file as list.xlsx.
+const SPREADSHEET_PATTERN = /\.(xlsx|xlsm|xlsb|xls|csv|ods)$/i;
 const xlsxUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     const allowed = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/vnd.ms-excel',
+      'application/vnd.oasis.opendocument.spreadsheet',
+      'text/csv',
+      'application/csv',
       'application/octet-stream',
     ];
-    if (allowed.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls)$/i)) {
+    if (allowed.includes(file.mimetype) || SPREADSHEET_PATTERN.test(file.originalname)) {
       cb(null, true);
     } else {
-      cb(new Error('Only .xlsx or .xls files are allowed'), false);
+      cb(new Error(`"${file.originalname}" is not a spreadsheet — upload an Excel (.xlsx, .xls) or .csv file`), false);
     }
   },
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB

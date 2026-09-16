@@ -32,11 +32,9 @@ export interface ImportableMasterProduct {
   masterProductId: string
   name: string
   nameUrdu?: string
-  description?: string
   barcode?: string
   unit?: string
   category?: string
-  categories?: { _id: string; name: string; image?: { url: string; publicId: string } }[]
   brandId?: string | null
   image?: { url: string; publicId: string }
   trackImei?: boolean
@@ -45,6 +43,9 @@ export interface ImportableMasterProduct {
   trackExpiry?: boolean
   warrantyMonths?: number
   hasVariants?: boolean
+  variantCount: number
+  /** false for a product with several variants — one opening quantity can't be split across them. */
+  acceptsOpeningStock: boolean
   suggestedPrice: number
   suggestedCost: number
   carriedAtBranches: string[]
@@ -58,16 +59,27 @@ export interface ImportableMasterProductsResponse {
   totalResults: number
 }
 
+/**
+ * Only masterProductId is required: anything left out falls back to the suggested
+ * price/cost and no opening stock — how "Select all" imports rows never paged to.
+ */
 export interface ImportMasterProductItem {
   masterProductId: string
-  price: number
-  cost: number
-  stockQuantity: number
+  price?: number
+  cost?: number
+  stockQuantity?: number
   // Required server-side when stockQuantity > 0 and the master is batch/expiry or
   // serial/IMEI tracked — see masterProduct.service.js#importMasterProducts.
   batchNumber?: string
   expiryDate?: string
   imeis?: ImeiEntry[]
+}
+
+export interface ImportMasterProductsResult {
+  importedCount: number
+  alreadyImportedCount: number
+  failedCount: number
+  failed: { masterProductId: string; name: string | null; error: string }[]
 }
 
 export const masterProductApi = createApi({
@@ -79,20 +91,29 @@ export const masterProductApi = createApi({
       query: (params) => ({ url: '/importable', params }),
       providesTags: [{ type: 'ImportableMasterProducts', id: 'LIST' }],
     }),
-    importMasterProducts: builder.mutation<unknown[], ImportMasterProductItem[]>({
-      query: (items) => ({
+    getImportableMasterProductIds: builder.query<{ ids: string[]; totalResults: number }, { search?: string }>({
+      query: (params) => ({ url: '/importable/ids', params }),
+      providesTags: [{ type: 'ImportableMasterProducts', id: 'LIST' }],
+    }),
+    // No invalidatesTags: a large import is sent in several requests, and refetching the
+    // importable list after each one re-ran the whole catalog scan mid-import. The dialog
+    // calls invalidateImportableMasterProducts once when the import is done instead.
+    importMasterProducts: builder.mutation<ImportMasterProductsResult, { items: ImportMasterProductItem[]; activate: boolean }>({
+      query: (body) => ({
         url: '/import',
         method: 'POST',
-        body: { items },
-        // Creates each product server-side, not one insertMany — selecting many rows to
-        // import can genuinely take well over the default mutation timeout, so this
-        // needs the same longer allowance as an explicit /bulk endpoint (see
-        // masterProduct.service.js#importMasterProducts and lib/api-timeout.ts).
+        body,
         timeout: BATCH_API_TIMEOUT_MS,
       }),
-      invalidatesTags: [{ type: 'ImportableMasterProducts', id: 'LIST' }],
     }),
   }),
 })
 
-export const { useGetImportableMasterProductsQuery, useImportMasterProductsMutation } = masterProductApi
+export const invalidateImportableMasterProducts = () =>
+  masterProductApi.util.invalidateTags([{ type: 'ImportableMasterProducts', id: 'LIST' }])
+
+export const {
+  useGetImportableMasterProductsQuery,
+  useLazyGetImportableMasterProductIdsQuery,
+  useImportMasterProductsMutation,
+} = masterProductApi

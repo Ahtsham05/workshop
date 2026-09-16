@@ -1,5 +1,19 @@
 import { useState, useRef, useCallback } from 'react';
-import * as XLSX from 'xlsx';
+import {
+  downloadTemplate as downloadTemplateWorkbook,
+  IMPORT_FILE_ACCEPT,
+  isSupportedSpreadsheet,
+  parseDate,
+  parseNumeric,
+  parseSheet,
+  parseText,
+  pickBestSheet,
+  readWorkbook,
+  SpreadsheetError,
+  summarizeSheets,
+  type CellValue,
+  type ImportFieldSpec,
+} from '@/lib/excel-import';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -34,80 +48,113 @@ const REQUIRED_COLS = ['First Name', 'Gender', 'Class'];
 
 const TEMPLATE_ROWS = [
   {
-    'First Name': 'Ahmed',
-    'Last Name': 'Ali',
-    'Gender': 'male',
-    'Date of Birth': '2010-05-20',
-    'Class': 'Class 1',
-    'Section': 'A',
-    'Parent Phone': '03001234567',
-    'Father Name': 'Mr Ali',
-    'Monthly Fee': 3000,
-    'Transport Fee': 500,
-    'Admission Fee': 5000,
-    'Discount': 0,
+    firstName: 'Ahmed',
+    lastName: 'Ali',
+    gender: 'male',
+    dateOfBirth: '2010-05-20',
+    class: 'Class 1',
+    section: 'A',
+    parentPhone: '03001234567',
+    fatherName: 'Mr Ali',
+    monthlyFee: 3000,
+    transportFee: 500,
+    admissionFee: 5000,
+    discount: 0,
   },
   {
-    'First Name': 'Sara',
-    'Last Name': 'Khan',
-    'Gender': 'female',
-    'Date of Birth': '2011-08-15',
-    'Class': 'Class 2',
-    'Section': 'B',
-    'Parent Phone': '03009876543',
-    'Father Name': 'Mr Khan',
-    'Monthly Fee': 3500,
-    'Transport Fee': 0,
-    'Admission Fee': 5000,
-    'Discount': 500,
+    firstName: 'Sara',
+    lastName: 'Khan',
+    gender: 'female',
+    dateOfBirth: '2011-08-15',
+    class: 'Class 2',
+    section: 'B',
+    parentPhone: '03009876543',
+    fatherName: 'Mr Khan',
+    monthlyFee: 3500,
+    transportFee: 0,
+    admissionFee: 5000,
+    discount: 500,
   },
 ];
 
 function downloadTemplate() {
-  const ws = XLSX.utils.json_to_sheet(TEMPLATE_ROWS);
-  ws['!cols'] = [
-    { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 16 },
-    { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 18 },
-    { wch: 14 }, { wch: 14 }, { wch: 15 }, { wch: 12 },
-  ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Students');
-  XLSX.writeFile(wb, 'student_import_template.xlsx');
+  // Built from the same field list the parser matches against, so the template and the
+  // accepted column names can never drift apart. Required columns are marked in the
+  // header, and that marker is ignored when the file comes back in.
+  downloadTemplateWorkbook(STUDENT_FIELDS, TEMPLATE_ROWS, 'student_import_template.xlsx', 'Students');
 }
 
-function previewRows(json: any[]): PreviewRow[] {
-  return json.map((row, i) => {
-    const get = (...keys: string[]) => {
-      for (const k of Object.keys(row)) {
-        if (keys.some((key) => k.toLowerCase().replace(/\s+/g, '') === key.toLowerCase().replace(/\s+/g, ''))) {
-          return String(row[k] ?? '').trim();
-        }
-      }
-      return '';
-    };
+/**
+ * Columns the import understands, with the spellings people actually use. This mirrors
+ * STUDENT_IMPORT_FIELDS in the server's student.controller.js — the server parses the
+ * uploaded file itself, so the two lists have to agree or the preview would promise
+ * something the import doesn't deliver.
+ */
+const STUDENT_FIELDS: ImportFieldSpec[] = [
+  { key: 'firstName', label: 'First Name', required: true, aliases: ['Name', 'Student Name', 'Student', 'Given Name'] },
+  { key: 'lastName', label: 'Last Name', aliases: ['Surname', 'Family Name'] },
+  { key: 'gender', label: 'Gender', required: true, aliases: ['Sex', 'M/F'] },
+  { key: 'dateOfBirth', label: 'Date of Birth', type: 'date', aliases: ['DOB', 'Birth Date', 'Birthday'] },
+  { key: 'class', label: 'Class', required: true, aliases: ['Class Name', 'Grade', 'Standard'] },
+  { key: 'section', label: 'Section', aliases: ['Section Name', 'Sec'] },
+  { key: 'parentPhone', label: 'Parent Phone', type: 'code', aliases: ['Phone', 'Contact Number', 'Mobile', 'Guardian Phone', 'Father Phone'] },
+  { key: 'fatherName', label: 'Father Name', aliases: ['Father', "Father's Name", 'Guardian Name', 'Parent Name'] },
+  { key: 'monthlyFee', label: 'Monthly Fee', type: 'number', aliases: ['Tuition Fee', 'Fee', 'Fees'] },
+  { key: 'transportFee', label: 'Transport Fee', type: 'number', aliases: ['Transport', 'Van Fee', 'Bus Fee'] },
+  { key: 'admissionFee', label: 'Admission Fee', type: 'number', aliases: ['Admission'] },
+  { key: 'discount', label: 'Discount', type: 'number', aliases: ['Concession', 'Rebate'] },
+];
 
-    const firstName = get('firstname', 'first name');
-    const lastName = get('lastname', 'last name');
-    const gender = get('gender').toLowerCase();
-    const dob = get('dateofbirth', 'date of birth', 'dob', 'birthdate');
-    const cls = get('class', 'classname');
-    const section = get('section', 'sectionname');
-    const phone = get('parentphone', 'parent phone', 'phone');
-    const fatherName = get('fathername', 'father name', 'father');
+// male/female/other plus the short forms people type — the same set the server accepts.
+const GENDER_WORDS: Record<string, string> = {
+  m: 'male', male: 'male', boy: 'male', b: 'male',
+  f: 'female', female: 'female', girl: 'female', g: 'female',
+  o: 'other', other: 'other',
+};
 
-    const errors: string[] = [];
-    if (!firstName) errors.push('First Name required');
-    if (!['male', 'female', 'other'].includes(gender)) errors.push(`Gender must be male/female/other (got "${gender || 'empty'}")`);
-    if (!cls) errors.push('Class required');
+const FEE_LABELS: Record<string, string> = {
+  monthlyFee: 'Monthly fee',
+  transportFee: 'Transport fee',
+  admissionFee: 'Admission fee',
+  discount: 'Discount',
+};
 
-    return {
-      rowNum: i + 2,
-      firstName, lastName, gender, dateOfBirth: dob,
-      class: cls, section, parentPhone: phone, fatherName,
-      valid: errors.length === 0,
-      errors,
-    };
+function buildPreviewRow(values: Record<string, CellValue>, excelRow: number): PreviewRow {
+  const firstName = parseText(values.firstName);
+  const lastName = parseText(values.lastName);
+  const genderRaw = parseText(values.gender).toLowerCase();
+  const gender = GENDER_WORDS[genderRaw] || '';
+  const cls = parseText(values.class);
+  const section = parseText(values.section);
+  const phone = parseText(values.parentPhone, { code: true });
+  const fatherName = parseText(values.fatherName);
+
+  const errors: string[] = [];
+  if (!firstName) errors.push('First Name required');
+  if (!gender) errors.push(`Gender must be male/female/other (got "${genderRaw || 'empty'}")`);
+  if (!cls) errors.push('Class required');
+
+  const dob = parseDate(values.dateOfBirth ?? null);
+  if (!dob.ok) errors.push(`Date of birth "${parseText(values.dateOfBirth ?? null)}" could not be read`);
+
+  Object.keys(FEE_LABELS).forEach((key) => {
+    const parsed = parseNumeric(values[key] ?? null);
+    if (!parsed.empty && !parsed.ok) errors.push(`${FEE_LABELS[key]} "${parsed.raw}" is not a number`);
   });
+
+  return {
+    rowNum: excelRow,
+    firstName,
+    lastName,
+    gender,
+    dateOfBirth: dob.value ? dob.value.toISOString().slice(0, 10) : '',
+    class: cls,
+    section,
+    parentPhone: phone,
+    fatherName,
+    valid: errors.length === 0,
+    errors,
+  };
 }
 
 export default function StudentImportPage() {
@@ -115,41 +162,74 @@ export default function StudentImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [parseError, setParseError] = useState('');
+  // Which sheet and header row the file was read from — shown so the row numbers in the
+  // preview and in any error line up with what the user sees in Excel.
+  const [sheetNote, setSheetNote] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [bulkImport, { isLoading: isImporting }] = useBulkImportStudentsMutation();
 
-  const handleFile = useCallback((f: File) => {
-    setFile(f);
+  const handleFile = useCallback(async (f: File) => {
     setImportResult(null);
     setParseError('');
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        // codepage 65001 (UTF-8) is required so non-Latin text (e.g. Urdu) in
-        // CSV files isn't misread as a legacy codepage and turned into "?"/mojibake
-        const wb = XLSX.read(data, { type: 'array', codepage: 65001 });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(ws);
-        if (!json.length) { setParseError('File is empty — no data rows found.'); return; }
-        setPreview(previewRows(json));
-      } catch {
-        setParseError('Could not read file. Make sure it is a valid .xlsx or .xls file.');
+    setPreview([]);
+
+    if (!isSupportedSpreadsheet(f)) {
+      setFile(null);
+      setParseError(`"${f.name}" is not a spreadsheet. Choose an Excel file (.xlsx, .xls) or a .csv file.`);
+      return;
+    }
+
+    setFile(f);
+    try {
+      // Shared reader: finds the header row wherever it is (a school name or a blank row
+      // above it is normal), matches columns however they're spelled, and picks the sheet
+      // that actually holds data. The server repeats exactly this on the uploaded file.
+      const workbook = await readWorkbook(f);
+      const sheets = summarizeSheets(workbook, STUDENT_FIELDS);
+      const sheetName = pickBestSheet(sheets);
+      if (!sheetName) {
+        setParseError('This file has no sheets with any data in them.');
+        setFile(null);
+        return;
       }
-    };
-    reader.readAsArrayBuffer(f);
+
+      const parsed = parseSheet(workbook, sheetName, STUDENT_FIELDS);
+      if (!parsed.rows.length) {
+        setParseError(
+          parsed.missingFields.length
+            ? `No student rows found. These columns are needed: ${parsed.missingFields.map((field) => field.label).join(', ')}.`
+            : 'No student rows found in this file.'
+        );
+        setFile(null);
+        return;
+      }
+
+      setSheetNote(
+        parsed.headerRow
+          ? `Reading sheet "${sheetName}", headers on row ${parsed.headerRow}.`
+          : `Reading sheet "${sheetName}". No header row was recognised, so columns were read in template order.`
+      );
+      setPreview(parsed.rows.map((row) => buildPreviewRow(row.values, row.excelRow)));
+    } catch (err) {
+      setFile(null);
+      setParseError(
+        err instanceof SpreadsheetError
+          ? err.message
+          : 'Could not read file. Save it as .xlsx or .csv in Excel and try again.'
+      );
+    }
   }, []);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) handleFile(f);
+    if (f) void handleFile(f);
     e.target.value = '';
   };
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files?.[0];
-    if (f) handleFile(f);
+    if (f) void handleFile(f);
   };
 
   const validRows = preview.filter((r) => r.valid);
@@ -164,8 +244,9 @@ export default function StudentImportPage() {
       setImportResult(result);
       setPreview([]);
       setFile(null);
-    } catch (err: any) {
-      setParseError(err?.data?.message || 'Import failed. Please try again.');
+    } catch (err) {
+      const message = (err as { data?: { message?: string } })?.data?.message;
+      setParseError(message || 'Import failed. Please try again.');
     }
   };
 
@@ -174,6 +255,7 @@ export default function StudentImportPage() {
     setFile(null);
     setImportResult(null);
     setParseError('');
+    setSheetNote('');
   };
 
   return (
@@ -251,12 +333,12 @@ export default function StudentImportPage() {
           <CardContent className="py-14 flex flex-col items-center gap-3 text-center">
             <Upload className="h-10 w-10 text-gray-400" />
             <div>
-              <p className="font-medium text-gray-700">Drop .xlsx / .xls file here or click to browse</p>
+              <p className="font-medium text-gray-700">Drop an Excel or CSV file here, or click to browse</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Required columns: {REQUIRED_COLS.join(', ')} · Optional: Last Name, Date of Birth, Section, Parent Phone, Father Name
               </p>
             </div>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onFileChange} />
+            <input ref={fileInputRef} type="file" accept={IMPORT_FILE_ACCEPT} className="hidden" onChange={onFileChange} />
           </CardContent>
         </Card>
       )}
@@ -275,6 +357,7 @@ export default function StudentImportPage() {
                 </Badge>
               )}
               <span className="text-sm text-muted-foreground">{preview.length} rows total</span>
+              {sheetNote && <span className="text-xs text-muted-foreground">{sheetNote}</span>}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={reset}>Change File</Button>

@@ -270,6 +270,9 @@ const bulkDeleteProducts = {
 // a stray spreadsheet column doesn't 400 the request either.
 const bulkAddProducts = {
   body: Joi.object().keys({
+    // What to do with a row whose barcode/SKU is already in this branch's catalogue.
+    // Absent means the service's default ('skip') — see product.service.js#bulkAddProducts.
+    duplicateStrategy: Joi.string().valid('skip', 'update', 'error').optional(),
     products: Joi.array().items(
       Joi.object().keys({
         name: Joi.any(),

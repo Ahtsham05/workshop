@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { Upload, FileSpreadsheet } from 'lucide-react'
 import {
@@ -15,38 +14,83 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { StatementLineInput } from '@/stores/bankReconciliation.api'
+import {
+  IMPORT_FILE_ACCEPT,
+  isSupportedSpreadsheet,
+  normalizeHeader,
+  parseDate,
+  parseNumeric,
+  parseText,
+  readWorkbook,
+  SpreadsheetError,
+  type CellValue,
+} from '@/lib/excel-import'
+import * as XLSX from 'xlsx'
 
 type AmountMode = 'single' | 'split'
 
+/** Column selects carry the column INDEX, never the header text: bank exports routinely
+ *  repeat a header or leave one blank, and an empty value is not a legal Select item. */
 const NONE = '__none__'
 
-/** Best-effort auto-pick of a column whose header loosely matches one of `candidates`. */
-function guessColumn(headers: string[], candidates: string[]): string {
-  const lower = headers.map((h) => h.toLowerCase().trim())
-  for (const candidate of candidates) {
-    const idx = lower.findIndex((h) => h.includes(candidate))
-    if (idx >= 0) return headers[idx]
+/** Header spellings banks use, per column we care about. */
+const COLUMN_HINTS: Record<string, string[]> = {
+  date: ['date', 'txndate', 'transactiondate', 'valuedate', 'postingdate', 'trndate'],
+  description: ['description', 'narration', 'details', 'particulars', 'particular', 'memo', 'remarks', 'transactiondetails'],
+  debit: ['debit', 'withdrawal', 'withdrawals', 'paidout', 'dr', 'moneyout'],
+  credit: ['credit', 'deposit', 'deposits', 'paidin', 'cr', 'moneyin'],
+  amount: ['amount', 'transactionamount', 'value'],
+}
+
+/** Best-effort auto-pick of the column whose header matches one of the hints. */
+function guessColumn(headers: string[], hints: string[]): string {
+  const normalized = headers.map(normalizeHeader)
+  for (const hint of hints) {
+    const index = normalized.findIndex((header) => header === hint)
+    if (index >= 0) return String(index)
+  }
+  for (const hint of hints) {
+    const index = normalized.findIndex((header) => header.includes(hint))
+    if (index >= 0) return String(index)
   }
   return NONE
 }
 
-function parseAmount(value: unknown): number {
-  if (value == null || value === '') return 0
-  const cleaned = String(value).replace(/,/g, '').replace(/[^0-9.-]/g, '')
-  const num = parseFloat(cleaned)
-  return Number.isFinite(num) ? num : 0
+/**
+ * Finds the row that holds the column headers. Bank exports open with the account
+ * number, the branch, the statement period and a blank line or two — taking row 1 as the
+ * header (as this dialog used to) left every column named after a piece of that preamble
+ * and nothing could be mapped.
+ */
+function findHeaderRow(matrix: CellValue[][]): number {
+  const allHints = Object.values(COLUMN_HINTS).flat()
+  let bestRow = 0
+  let bestScore = 0
+  const depth = Math.min(matrix.length, 25)
+  for (let i = 0; i < depth; i += 1) {
+    const row = matrix[i] || []
+    let score = 0
+    row.forEach((cell) => {
+      if (typeof cell === 'number' || cell instanceof Date) return
+      const header = normalizeHeader(cell)
+      if (!header) return
+      if (allHints.some((hint) => header === hint || header.includes(hint))) score += 1
+    })
+    if (score > bestScore) {
+      bestScore = score
+      bestRow = i
+    }
+  }
+  return bestRow
 }
 
-function parseDate(value: unknown): string | null {
-  if (value == null || value === '') return null
-  if (typeof value === 'number') {
-    // Excel serial date
-    const parsed = XLSX.SSF.parse_date_code(value)
-    if (!parsed) return null
-    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d)).toISOString()
-  }
-  const d = new Date(String(value))
-  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+/**
+ * Date-only value as UTC midnight. Building it from the local-time Date would shift the
+ * day backwards for every timezone east of UTC — a statement line dated the 16th would
+ * reconcile against the 15th.
+ */
+function toIsoDate(value: Date): string {
+  return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate())).toISOString()
 }
 
 interface StatementUploadDialogProps {
@@ -60,6 +104,9 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<unknown[][]>([])
   const [amountMode, setAmountMode] = useState<AmountMode>('split')
+  // Which row the headers were found on, shown so the user can tell at a glance that the
+  // preamble above their data was skipped rather than misread.
+  const [headerRowNumber, setHeaderRowNumber] = useState(0)
   const [dateCol, setDateCol] = useState(NONE)
   const [descCol, setDescCol] = useState(NONE)
   const [debitCol, setDebitCol] = useState(NONE)
@@ -70,6 +117,7 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
     setFileName('')
     setHeaders([])
     setRows([])
+    setHeaderRowNumber(0)
     setDateCol(NONE)
     setDescCol(NONE)
     setDebitCol(NONE)
@@ -77,70 +125,110 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
     setAmountCol(NONE)
   }
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    event.target.value = ''
     if (!file) return
-    setFileName(file.name)
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer)
-        const workbook = XLSX.read(data, { type: 'array', codepage: 65001 })
-        const sheetName = workbook.SheetNames[0]
-        const worksheet = workbook.Sheets[sheetName]
-        const aoa = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true }) as unknown[][]
-
-        if (aoa.length < 2) {
-          toast.error('No transaction rows found in this file')
-          return
-        }
-
-        const headerRow = aoa[0].map((h) => String(h ?? '').trim())
-        const dataRows = aoa.slice(1).filter((row) => row.some((cell) => cell != null && String(cell).trim() !== ''))
-
-        setHeaders(headerRow)
-        setRows(dataRows)
-        setDateCol(guessColumn(headerRow, ['date']))
-        setDescCol(guessColumn(headerRow, ['description', 'narration', 'details', 'particular', 'memo']))
-        setDebitCol(guessColumn(headerRow, ['debit', 'withdrawal', 'paid out']))
-        setCreditCol(guessColumn(headerRow, ['credit', 'deposit', 'paid in']))
-        setAmountCol(guessColumn(headerRow, ['amount']))
-      } catch {
-        toast.error('Could not read this file — make sure it is a valid CSV or Excel export')
-      }
+    if (!isSupportedSpreadsheet(file)) {
+      toast.error(`"${file.name}" is not a spreadsheet — upload the CSV or Excel export from your bank`)
+      return
     }
-    reader.readAsArrayBuffer(file)
+
+    try {
+      const workbook = await readWorkbook(file)
+      const sheetName = workbook.SheetNames[0]
+      const worksheet = sheetName ? workbook.Sheets[sheetName] : undefined
+      if (!worksheet) {
+        toast.error('This file has no sheets in it')
+        return
+      }
+
+      const matrix = XLSX.utils.sheet_to_json<CellValue[]>(worksheet, {
+        header: 1,
+        raw: true,
+        defval: null,
+        blankrows: false,
+      })
+      if (matrix.length < 2) {
+        toast.error('No transaction rows found in this file')
+        return
+      }
+
+      const headerIndex = findHeaderRow(matrix)
+      const headerRow = (matrix[headerIndex] || []).map((cell) => parseText(cell))
+      const dataRows = matrix
+        .slice(headerIndex + 1)
+        .filter((row) => row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== ''))
+
+      if (!dataRows.length) {
+        toast.error('No transaction rows found under the header row')
+        return
+      }
+
+      setFileName(file.name)
+      setHeaderRowNumber(headerIndex + 1)
+      setHeaders(headerRow)
+      setRows(dataRows)
+      setDateCol(guessColumn(headerRow, COLUMN_HINTS.date))
+      setDescCol(guessColumn(headerRow, COLUMN_HINTS.description))
+      setDebitCol(guessColumn(headerRow, COLUMN_HINTS.debit))
+      setCreditCol(guessColumn(headerRow, COLUMN_HINTS.credit))
+      setAmountCol(guessColumn(headerRow, COLUMN_HINTS.amount))
+    } catch (error) {
+      toast.error(
+        error instanceof SpreadsheetError
+          ? error.message
+          : 'Could not read this file — make sure it is a valid CSV or Excel export'
+      )
+    }
   }
 
-  const parsedLines = useMemo<StatementLineInput[]>(() => {
-    if (!rows.length || dateCol === NONE) return []
-    const columnIndex = (name: string) => headers.indexOf(name)
-    const dateIdx = columnIndex(dateCol)
-    const descIdx = descCol !== NONE ? columnIndex(descCol) : -1
-    const debitIdx = debitCol !== NONE ? columnIndex(debitCol) : -1
-    const creditIdx = creditCol !== NONE ? columnIndex(creditCol) : -1
-    const amountIdx = amountCol !== NONE ? columnIndex(amountCol) : -1
+  // Rows the current mapping can actually turn into transactions, plus how many it had
+  // to leave out — a silently shorter list is how a reconciliation ends up short.
+  const { parsedLines, unreadableRows } = useMemo<{ parsedLines: StatementLineInput[]; unreadableRows: number }>(() => {
+    if (!rows.length || dateCol === NONE) return { parsedLines: [], unreadableRows: 0 }
+
+    const dateIdx = Number(dateCol)
+    const descIdx = descCol !== NONE ? Number(descCol) : -1
+    const debitIdx = debitCol !== NONE ? Number(debitCol) : -1
+    const creditIdx = creditCol !== NONE ? Number(creditCol) : -1
+    const amountIdx = amountCol !== NONE ? Number(amountCol) : -1
 
     const lines: StatementLineInput[] = []
+    let skipped = 0
+
     rows.forEach((row) => {
-      const date = parseDate(row[dateIdx])
-      if (!date) return
-      const description = descIdx >= 0 ? String(row[descIdx] ?? '').trim() : ''
+      // Day-first for slash dates, which is how banks here write them. Reading them
+      // month-first (what `new Date(text)` does) either threw the line away or filed it
+      // under the wrong day for two thirds of the year.
+      const parsedDate = parseDate((row[dateIdx] ?? null) as CellValue)
+      if (!parsedDate.ok || !parsedDate.value) {
+        skipped += 1
+        return
+      }
+      const date = toIsoDate(parsedDate.value)
+      const description = descIdx >= 0 ? parseText((row[descIdx] ?? null) as CellValue) : ''
 
       if (amountMode === 'split') {
-        const debit = debitIdx >= 0 ? Math.abs(parseAmount(row[debitIdx])) : 0
-        const credit = creditIdx >= 0 ? Math.abs(parseAmount(row[creditIdx])) : 0
-        if (debit > 0) lines.push({ date, description, amount: debit, direction: 'out' })
-        else if (credit > 0) lines.push({ date, description, amount: credit, direction: 'in' })
+        const debit = debitIdx >= 0 ? parseNumeric((row[debitIdx] ?? null) as CellValue) : null
+        const credit = creditIdx >= 0 ? parseNumeric((row[creditIdx] ?? null) as CellValue) : null
+        const debitAmount = debit && debit.ok ? Math.abs(debit.value) : 0
+        const creditAmount = credit && credit.ok ? Math.abs(credit.value) : 0
+        if (debitAmount > 0) lines.push({ date, description, amount: debitAmount, direction: 'out' })
+        else if (creditAmount > 0) lines.push({ date, description, amount: creditAmount, direction: 'in' })
+        else skipped += 1
       } else {
-        const amount = amountIdx >= 0 ? parseAmount(row[amountIdx]) : 0
-        if (amount > 0) lines.push({ date, description, amount, direction: 'in' })
-        else if (amount < 0) lines.push({ date, description, amount: Math.abs(amount), direction: 'out' })
+        const amount = amountIdx >= 0 ? parseNumeric((row[amountIdx] ?? null) as CellValue) : null
+        const value = amount && amount.ok ? amount.value : 0
+        if (value > 0) lines.push({ date, description, amount: value, direction: 'in' })
+        else if (value < 0) lines.push({ date, description, amount: Math.abs(value), direction: 'out' })
+        else skipped += 1
       }
     })
-    return lines
-  }, [rows, headers, dateCol, descCol, debitCol, creditCol, amountCol, amountMode])
+
+    return { parsedLines: lines, unreadableRows: skipped }
+  }, [rows, dateCol, descCol, debitCol, creditCol, amountCol, amountMode])
 
   const canParse = headers.length > 0 && dateCol !== NONE && (amountMode === 'split' ? debitCol !== NONE || creditCol !== NONE : amountCol !== NONE)
 
@@ -170,14 +258,16 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
               <Upload className='h-8 w-8 text-muted-foreground' />
               <span className='text-sm font-medium'>Click to select a CSV or Excel file</span>
               <span className='text-xs text-muted-foreground'>.csv, .xlsx, .xls</span>
-              <input type='file' accept='.csv,.xlsx,.xls' className='hidden' onChange={handleFileChange} />
+              <input type='file' accept={IMPORT_FILE_ACCEPT} className='hidden' onChange={(event) => { void handleFileChange(event) }} />
             </label>
           ) : (
             <>
               <div className='flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm'>
                 <FileSpreadsheet className='h-4 w-4 text-muted-foreground' />
                 <span className='font-medium'>{fileName}</span>
-                <span className='text-muted-foreground'>· {rows.length} rows detected</span>
+                <span className='text-muted-foreground'>
+                  · {rows.length} rows detected{headerRowNumber > 1 ? `, headers on row ${headerRowNumber}` : ''}
+                </span>
                 <Button type='button' variant='ghost' size='sm' className='ml-auto h-7' onClick={reset}>
                   Change file
                 </Button>
@@ -188,7 +278,11 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
                 <Select value={dateCol} onValueChange={setDateCol}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {headers.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    {headers.map((header, index) => (
+                      <SelectItem key={index} value={String(index)}>
+                        {header || `Column ${XLSX.utils.encode_col(index)}`}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -199,7 +293,11 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NONE}>None</SelectItem>
-                    {headers.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    {headers.map((header, index) => (
+                      <SelectItem key={index} value={String(index)}>
+                        {header || `Column ${XLSX.utils.encode_col(index)}`}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -224,7 +322,11 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NONE}>None</SelectItem>
-                        {headers.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        {headers.map((header, index) => (
+                      <SelectItem key={index} value={String(index)}>
+                        {header || `Column ${XLSX.utils.encode_col(index)}`}
+                      </SelectItem>
+                    ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -234,7 +336,11 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NONE}>None</SelectItem>
-                        {headers.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        {headers.map((header, index) => (
+                      <SelectItem key={index} value={String(index)}>
+                        {header || `Column ${XLSX.utils.encode_col(index)}`}
+                      </SelectItem>
+                    ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -246,7 +352,11 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE}>None</SelectItem>
-                      {headers.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                      {headers.map((header, index) => (
+                      <SelectItem key={index} value={String(index)}>
+                        {header || `Column ${XLSX.utils.encode_col(index)}`}
+                      </SelectItem>
+                    ))}
                     </SelectContent>
                   </Select>
                   <p className='text-xs text-muted-foreground'>Positive = money in, negative = money out.</p>
@@ -255,6 +365,13 @@ export function StatementUploadDialog({ open, onOpenChange, onParsed }: Statemen
 
               <div className='rounded-lg border bg-muted/30 p-3 text-sm'>
                 <span className='font-medium'>{parsedLines.length}</span> transactions will be parsed with the current mapping.
+                {unreadableRows > 0 && (
+                  <span className='text-muted-foreground'>
+                    {' '}
+                    {unreadableRows} row{unreadableRows !== 1 ? 's' : ''} had no readable date or amount and will be left out —
+                    check the columns above if that looks wrong.
+                  </span>
+                )}
               </div>
             </>
           )}

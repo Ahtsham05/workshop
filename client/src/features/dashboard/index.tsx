@@ -11,8 +11,15 @@ import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickLinksPanel } from './components/quick-links-panel'
 import { DashboardDateFilter } from './components/dashboard-date-filter'
-import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
-import { useGetLeadStatsQuery } from '@/stores/lead.api'
+import {
+  DASHBOARD_QUERY_OPTIONS,
+  DASHBOARD_WIDGET_TAGS,
+  dashboardApi,
+  useGetDashboardStatsQuery,
+} from '@/stores/dashboard.api'
+import { leadApi, useGetLeadStatsQuery } from '@/stores/lead.api'
+import { getWidgetQueryState } from './lib/widget-query-state'
+import { cn } from '@/lib/utils'
 import { useRemindersFeed } from '@/hooks/use-reminders-feed'
 import {
   dashboardRangeQueryParams,
@@ -23,7 +30,7 @@ import {
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useFormatMoney, useCurrencySymbolPrefix } from '@/lib/format-money'
 import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package, TrendingUp, Users, Building2, Wallet } from 'lucide-react'
-import { useSelector } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness, isCashBookBusiness } from '@/lib/business-types'
 import { getDefaultHomeRoute } from '@/lib/default-home-route'
@@ -60,12 +67,22 @@ const formatSalesProfitSubtext = (
 export default function Dashboard() {
   const { t } = useLanguage()
   const { hasExplicitPermission } = usePermissions()
+  const dispatch = useDispatch()
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const isPlatformAdmin = user?.systemRole === 'superAdmin' || user?.systemRole === 'system_admin'
   const [dateRange, setDateRange] = useState<DashboardDateRange>(getDefaultDashboardDateRange)
   const dateParams = dashboardRangeQueryParams(dateRange)
-  const { data: stats, isLoading, isFetching, refetch } = useGetDashboardStatsQuery(dateParams)
-  const statsLoading = isLoading || isFetching
+  const {
+    data: stats,
+    showSkeleton: statsLoading,
+    isRefreshing: statsRefreshing,
+  } = getWidgetQueryState(useGetDashboardStatsQuery(dateParams, DASHBOARD_QUERY_OPTIONS))
+  // Reloads every widget on the page, not just the stat cards — each one subscribes to its
+  // own endpoint, so refetching only the stats query left the chart and lists stale.
+  const refreshDashboard = () => {
+    dispatch(dashboardApi.util.invalidateTags([...DASHBOARD_WIDGET_TAGS]))
+    dispatch(leadApi.util.invalidateTags(['LeadStats']))
+  }
   const comparisonLabel = getComparisonLabel(dateRange.period, t)
   const reportLink = useMemo(
     () =>
@@ -158,8 +175,8 @@ export default function Dashboard() {
             <DashboardDateFilter
               value={dateRange}
               onChange={setDateRange}
-              onRefresh={() => refetch()}
-              isRefreshing={statsLoading}
+              onRefresh={refreshDashboard}
+              isRefreshing={statsLoading || statsRefreshing}
               className='lg:shrink-0'
             />
           </div>
@@ -171,7 +188,10 @@ export default function Dashboard() {
         </div>
 
         {/* KPI cards — single flowing grid (5 per row on xl) */}
-        <div className={DASHBOARD_CARD_GRID}>
+        <div
+          aria-busy={statsLoading || statsRefreshing}
+          className={cn(DASHBOARD_CARD_GRID, 'transition-opacity', statsRefreshing && 'opacity-60')}
+        >
           {showMobileCards && (
             <>
               <StatCard

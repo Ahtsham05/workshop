@@ -83,23 +83,34 @@ const getAllCustomers = catchAsync(async (req, res) => {
 })
 
 const bulkAddCustomers = catchAsync(async (req, res) => {
-  try {
-    const { customers } = req.body;
-    
-    if (!customers || !Array.isArray(customers) || customers.length === 0) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'Customers array is required');
-    }
+  const { customers, duplicateStrategy } = req.body;
 
-    const result = await customerService.bulkAddCustomers(customers, getBranchContext(req));
-    
-    res.status(httpStatus.CREATED).send({
-      message: `Successfully imported ${result.insertedCount} customers`,
-      ...result
-    });
-  } catch (error) {
-    console.error('Bulk add error:', error);
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Bulk import failed: ' + error.message);
+  if (!customers || !Array.isArray(customers) || customers.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Customers array is required');
   }
+
+  // Without this, a request that arrives before the branch switcher has resolved (no
+  // x-branch-id header) would try to insert every row with branchId: undefined, which
+  // Mongoose's insertMany() rejects for the whole batch — the opaque "nothing was
+  // imported" failure product.controller.js had to fix for the same reason.
+  await resolveWriteBranchId(req);
+
+  const result = await customerService.bulkAddCustomers(customers, getBranchContext(req), { duplicateStrategy });
+
+  const failedCount = result.errors?.length || 0;
+  const parts = [];
+  if (result.insertedCount) parts.push(`imported ${result.insertedCount}`);
+  if (result.updatedCount) parts.push(`updated ${result.updatedCount}`);
+  if (result.skippedCount) parts.push(`skipped ${result.skippedCount} already saved`);
+  if (failedCount) parts.push(`${failedCount} row(s) could not be saved`);
+
+  // Always a 201 carrying the full per-row breakdown, even when every row failed. A 400
+  // would collapse "these 3 rows are wrong" into one unhelpful message and throw away
+  // the detail the import dialog lists row by row — same contract as products/students.
+  res.status(httpStatus.CREATED).send({
+    message: parts.length ? `Import finished — ${parts.join(', ')}` : 'Nothing to import',
+    ...result,
+  });
 });
 
 const scanCustomerImage = catchAsync(async (req, res) => {

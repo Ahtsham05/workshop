@@ -101,6 +101,8 @@ expenseSchema.plugin(toJSON);
 expenseSchema.plugin(paginate);
 
 expenseSchema.index({ organizationId: 1, branchId: 1 });
+// Supports the dashboard's and reports' "expenses in this period" totals.
+expenseSchema.index({ organizationId: 1, branchId: 1, date: -1 });
 expenseSchema.index({ organizationId: 1, expenseNumber: 1 }, { unique: true, sparse: true });
 expenseSchema.index({ referenceId: 1, referenceModel: 1 });
 

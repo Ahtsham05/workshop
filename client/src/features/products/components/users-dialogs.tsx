@@ -13,9 +13,17 @@ export default function UsersDialogs({setFetch}:any) {
   const { open, setOpen, currentRow, setCurrentRow } = useUsers()
   const dispatch = useDispatch<AppDispatch>()
 
-  const handleImport = async (products: any[]) => {
+  const handleImport = async (
+    products: any[],
+    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' }
+  ) => {
     try {
-      const result = await dispatch(bulkAddProducts({ products }))
+      // duplicateStrategy tells the server what to do with a row whose barcode/SKU is
+      // already in the catalogue — skip it, update it, or report it. The AI scan dialog
+      // doesn't ask, and gets the server default.
+      const result = await dispatch(
+        bulkAddProducts({ products, duplicateStrategy: options?.duplicateStrategy })
+      )
 
       if (result.meta.requestStatus === 'fulfilled') {
         setFetch((prev: boolean) => !prev)

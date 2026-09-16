@@ -180,6 +180,9 @@ PurchaseSchema.plugin(toJSON);
 PurchaseSchema.plugin(paginate);
 
 PurchaseSchema.index({ organizationId: 1, branchId: 1 });
+// Supports date-range reads with no supplier filter (dashboard purchase totals/recent
+// activities, purchase reports) — the supplier-prefixed index below can't serve those.
+PurchaseSchema.index({ organizationId: 1, branchId: 1, purchaseDate: -1 });
 // Supports the duplicate-vendor-bill check (per supplier) and direct lookups by vendor bill no.
 PurchaseSchema.index({ organizationId: 1, supplier: 1, vendorBillNumber: 1 });
 // Supports the bulk "last purchase price" lookup (purchase price intelligence) —

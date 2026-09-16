@@ -1283,6 +1283,22 @@ const ur: Record<string, string> = {
     "import_n_products": "{{count}} پروڈکٹس درآمد کریں",
     "products_found_at_other_branches": "آپ کی دوسری برانچوں میں {{count}} پروڈکٹس موجود ہیں",
     "opening_qty": "ابتدائی مقدار",
+    "import_as_active": "پروڈکٹس کو فعال کریں",
+    "import_as_active_on_hint": "درآمد ہوتے ہی فروخت کے لیے تیار",
+    "import_as_active_off_hint": "غیر فعال درآمد ہوں گی — جائزے کے بعد پروڈکٹ لسٹ سے فعال کریں",
+    "products_imported_active_hint": "یہ فعال ہیں اور فروخت کے لیے تیار ہیں۔",
+    "products_imported_inactive_hint": "یہ غیر فعال ہیں — تیار ہونے پر پروڈکٹ لسٹ سے فعال کریں۔",
+    "products_already_imported": "{{count}} پروڈکٹس پہلے سے اس برانچ میں موجود تھیں",
+    "products_import_some_failed": "{{imported}} درآمد ہو گئیں، {{failed}} نہیں ہو سکیں — نمایاں قطاریں دیکھیں",
+    "products_import_fix_rows": "{{count}} پروڈکٹس کے لیے ابتدائی اسٹاک کی تفصیل درکار ہے",
+    "products_import_select_all_failed": "تمام پروڈکٹس منتخب نہیں ہو سکیں۔ دوبارہ کوشش کریں۔",
+    "select_all_n": "تمام {{count}} منتخب کریں",
+    "select_this_page_n": "یہ صفحہ منتخب کریں ({{count}})",
+    "clear_selection": "انتخاب ختم کریں",
+    "n_variants": "{{count}} ویریئنٹس",
+    "batch": "بیچ",
+    "serial": "سیریل",
+    "import_stock_per_variant_hint": "درآمد کے بعد ہر ویریئنٹ کا اسٹاک شامل کریں",
 }
 
 export default ur

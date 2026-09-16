@@ -12,20 +12,24 @@ export default function UsersDialogs({setFetch}:any) {
   const { open, setOpen, currentRow, setCurrentRow } = useCustomers()
   const dispatch = useDispatch<AppDispatch>()
 
-  const handleImport = async (customers: any[]) => {
-    try {
-      const result = await dispatch(bulkAddCustomers({ customers }))
-      
-      if (result.meta.requestStatus === 'fulfilled') {
-        setFetch((prev: boolean) => !prev)
-        return Promise.resolve()
-      } else {
-        throw new Error(result.payload || 'Import failed')
-      }
-    } catch (error) {
-      console.error('Import error:', error)
-      throw error
+  const handleImport = async (
+    customers: any[],
+    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' }
+  ) => {
+    // The per-row breakdown in the response is what the import dialog turns into "row 14
+    // could not be saved because…", so it's returned rather than swallowed. The AI card
+    // scanner calls this too, without a strategy, and gets the server default.
+    const result = await dispatch(
+      bulkAddCustomers({ customers, duplicateStrategy: options?.duplicateStrategy })
+    )
+
+    if (result.meta.requestStatus !== 'fulfilled') {
+      const payload = result.payload as { response?: { data?: { message?: string } }; message?: string } | undefined
+      throw new Error(payload?.response?.data?.message || payload?.message || 'Import failed')
     }
+
+    setFetch((prev: boolean) => !prev)
+    return result.payload
   }
   return (
     <>

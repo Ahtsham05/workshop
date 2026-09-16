@@ -3,11 +3,12 @@ const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger, Inventory, StockAdjustment } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
-const { mobileDashboardService, cashBookService, productService } = require('../services');
+const { mobileDashboardService, cashBookService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { normalizeInvoicePayment, normalizePurchasePayment } = require('../utils/invoice-display');
 const { resolveDashboardDateRange, buildDateMatch } = require('../utils/dashboardDateRange');
 const { toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { truthyOr } = require('../utils/aggregateExpressions');
 
 /**
  * Build an aggregate $match scope with properly cast ObjectIds.
@@ -39,111 +40,206 @@ const isValidRefObjectId = (id) => {
   }
 };
 
+const LOW_STOCK_THRESHOLD = 10;
+const LOW_STOCK_WIDGET_LIMIT = 20;
+
+const firstRow = ([row]) => row || {};
+
+const compareObjectIds = (a, b) => {
+  const left = a.toString();
+  const right = b.toString();
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+};
+
+/**
+ * Real stock for every hasVariants product in scope. These products keep
+ * Product.stockQuantity/cost at their legacy fallback (often 0) — the real numbers live on
+ * Inventory, see docs/architecture/universal-product-migration.md.
+ */
+const getVariantStockByProduct = async (productFilter) => {
+  const variantProductIds = await Product.distinct('_id', { ...productFilter, hasVariants: true });
+  if (variantProductIds.length === 0) {
+    return { variantProductIds, stockById: new Map() };
+  }
+  const rows = await Inventory.aggregate([
+    { $match: { productId: { $in: variantProductIds } } },
+    {
+      $group: {
+        _id: '$productId',
+        totalStock: { $sum: '$quantity' },
+        totalValue: { $sum: { $multiply: ['$quantity', '$averageCost'] } },
+      },
+    },
+  ]);
+  return { variantProductIds, stockById: new Map(rows.map((row) => [row._id.toString(), row])) };
+};
+
+/**
+ * Low/out-of-stock counts and total stock value (current snapshot), summed in the database
+ * rather than by loading the whole product catalog into memory on every dashboard refresh.
+ */
+const getInventorySnapshot = async (req) => {
+  const [simpleProducts, { variantProductIds, stockById }] = await Promise.all([
+    Product.aggregate([
+      { $match: { ...buildAggregateScope(req), hasVariants: { $ne: true } } },
+      {
+        $project: {
+          stock: truthyOr('$stockQuantity', 0),
+          unitCost: truthyOr('$cost', truthyOr('$price', 0)),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          lowStockCount: {
+            $sum: { $cond: [{ $and: [{ $gt: ['$stock', 0] }, { $lte: ['$stock', LOW_STOCK_THRESHOLD] }] }, 1, 0] },
+          },
+          outOfStockCount: { $sum: { $cond: [{ $eq: ['$stock', 0] }, 1, 0] } },
+          totalInventoryValue: { $sum: { $multiply: ['$stock', '$unitCost'] } },
+        },
+      },
+    ]).then(firstRow),
+    getVariantStockByProduct(applyBranchFilter({}, req)),
+  ]);
+
+  let lowStockCount = simpleProducts.lowStockCount || 0;
+  let outOfStockCount = simpleProducts.outOfStockCount || 0;
+  let totalInventoryValue = simpleProducts.totalInventoryValue || 0;
+  variantProductIds.forEach((productId) => {
+    const row = stockById.get(productId.toString());
+    const stock = row ? row.totalStock : 0;
+    if (stock > 0 && stock <= LOW_STOCK_THRESHOLD) lowStockCount += 1;
+    if (stock === 0) outOfStockCount += 1;
+    totalInventoryValue += row ? row.totalValue : 0;
+  });
+
+  return { lowStockCount, outOfStockCount, totalInventoryValue };
+};
+
+const resolveBusinessType = async (req, organizationId) => {
+  let businessType = normalizeBusinessType(req.user.businessType);
+  if (organizationId) {
+    const org = await Organization.findById(organizationId).select('businessType');
+    if (org?.businessType) {
+      businessType = normalizeBusinessType(org.businessType);
+    }
+  }
+  return businessType;
+};
+
+/**
+ * Cash in Hand for every business type that keeps a Cash Book, plus the full mobile-shop
+ * summary (load, repairs, bills, SIM sales, ...) for mobile shops. Returns null for business
+ * types that have neither.
+ */
+const getBusinessTypeSummary = async ({ businessType, organizationId, branchId, startDate, endDate }) => {
+  // "Cash in Hand" means cash physically available right now — bound it to the end of
+  // today (business timezone) so a transaction mis-dated in the future (e.g. a sale
+  // saved with a forward date) can't inflate this figure ahead of the Cash Book page,
+  // which always scopes its own "Cash in Hand" to a selected date range ending today.
+  const cashInHandAsOf = toBusinessCalendarDate(new Date());
+
+  if (businessType === 'mobile_shop') {
+    const [summary, cashBookSummary] = await Promise.all([
+      mobileDashboardService.getMobileDashboardSummary({
+        organizationId,
+        branchId,
+        startDate,
+        endDate,
+      }),
+      cashBookService.getCashInHandSummary({ organizationId, branchId, endDate: cashInHandAsOf }),
+    ]);
+    return { ...summary, cashInHand: cashBookSummary.closingBalance };
+  }
+
+  if (!['school', 'restaurant'].includes(businessType)) {
+    const cashBookSummary = await cashBookService.getCashInHandSummary({
+      organizationId,
+      branchId,
+      endDate: cashInHandAsOf,
+    });
+    return { cashInHand: cashBookSummary.closingBalance };
+  }
+
+  return null;
+};
+
 /**
  * Get dashboard statistics
  * @route GET /v1/dashboard/stats
  */
 const getDashboardStats = catchAsync(async (req, res) => {
   const bf = applyBranchFilter({}, req);
+  const aggScope = buildAggregateScope(req);
   const dateRange = resolveDashboardDateRange(req.query);
   const { startDate, endDate, compareStart, compareEnd } = dateRange;
+  const organizationId = req.organizationId || req.user.organizationId;
 
-  const invoiceDateFilter = buildDateMatch('invoiceDate', startDate, endDate);
-  const invoiceCompareFilter = buildDateMatch('invoiceDate', compareStart, compareEnd);
-  const purchaseDateFilter = buildDateMatch('purchaseDate', startDate, endDate);
-  const returnDateFilter = buildDateMatch('date', startDate, endDate);
-  const returnCompareFilter = buildDateMatch('date', compareStart, compareEnd);
+  const sumInvoices = (from, to) =>
+    Invoice.aggregate([
+      { $match: { ...aggScope, ...buildDateMatch('invoiceDate', from, to), status: { $ne: 'cancelled' } } },
+      { $group: { _id: null, revenue: { $sum: '$total' }, count: { $sum: 1 }, profit: { $sum: '$totalProfit' } } },
+    ]).then(firstRow);
 
-  // Revenue and sales in selected period
-  const currentInvoices = await Invoice.find({
-    ...bf,
-    ...invoiceDateFilter,
-    status: { $ne: 'cancelled' },
-  });
+  const sumReturns = (Model) =>
+    Model.aggregate([
+      { $match: { ...aggScope, status: { $ne: 'rejected' }, ...buildDateMatch('date', startDate, endDate) } },
+      { $group: { _id: null, totalAmount: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]).then(firstRow);
 
-  const totalRevenue = currentInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-  const totalSales = currentInvoices.length;
-  const salesProfit = currentInvoices.reduce((sum, inv) => sum + (inv.totalProfit || 0), 0);
-
-  // Previous period for comparison
-  const previousInvoices = await Invoice.find({
-    ...bf,
-    ...invoiceCompareFilter,
-    status: { $ne: 'cancelled' },
-  });
-
-  const previousRevenue = previousInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-  const previousSales = previousInvoices.length;
-
-  const totalRevenueChange =
-    previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
-  const totalSalesChange =
-    previousSales > 0 ? ((totalSales - previousSales) / previousSales) * 100 : 0;
-
-  // Low stock and out of stock products (current snapshot). For hasVariants products,
-  // Product.stockQuantity/cost stay at their legacy fallback (often 0) — real numbers
-  // live on Inventory/ProductVariant, see docs/architecture/universal-product-migration.md.
-  const allProducts = await Product.find({ ...bf });
-  const variantProductIds = allProducts.filter((p) => p.hasVariants).map((p) => p._id);
-  const variantStockById = new Map();
-  const variantValueById = new Map();
-  if (variantProductIds.length > 0) {
-    const inventoryAgg = await Inventory.aggregate([
-      { $match: { productId: { $in: variantProductIds } } },
+  const sumPositiveBalances = (Model) =>
+    Model.aggregate([
+      { $match: aggScope },
       {
         $group: {
-          _id: '$productId',
-          totalStock: { $sum: '$quantity' },
-          totalValue: { $sum: { $multiply: ['$quantity', '$averageCost'] } },
+          _id: null,
+          total: { $sum: { $max: [0, { $ifNull: ['$balance', 0] }] } },
+          count: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$balance', 0] }, 0] }, 1, 0] } },
         },
       },
-    ]);
-    inventoryAgg.forEach((row) => {
-      variantStockById.set(row._id.toString(), row.totalStock);
-      variantValueById.set(row._id.toString(), row.totalValue);
-    });
-  }
-  const getEffectiveStock = (p) => (p.hasVariants ? (variantStockById.get(p._id.toString()) ?? 0) : (p.stockQuantity || 0));
+    ]).then(firstRow);
 
-  const lowStockCount = allProducts.filter((p) => { const s = getEffectiveStock(p); return s > 0 && s <= 10; }).length;
-  const outOfStockCount = allProducts.filter((p) => getEffectiveStock(p) === 0).length;
-
-  const totalInventoryValue = allProducts.reduce((sum, product) => {
-    const productValue = product.hasVariants
-      ? (variantValueById.get(product._id.toString()) ?? 0)
-      : (product.stockQuantity || 0) * (product.cost || product.price || 0);
-    return sum + productValue;
-  }, 0);
-
-  // Pending invoices (current snapshot)
-  const pendingInvoices = await Invoice.find({
-    ...bf,
-    status: 'pending',
-    type: { $in: ['credit', 'pending'] },
-  });
-
-  const pendingInvoicesAmount = pendingInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
-
-  // Period revenue (same as totalRevenue for filtered dashboard)
-  const todayRevenue = totalRevenue;
-  const todayRevenueChange = totalRevenueChange;
-
-  const totalCustomers = await Customer.countDocuments({ ...bf });
-  const totalProducts = await Product.countDocuments({ ...bf });
-
-  const aggScopeEarly = buildAggregateScope(req);
-  const [purchasesAgg, expensesAgg] = await Promise.all([
+  // Every query here is independent, so they all go out in one parallel round (this
+  // endpoint used to await ~8 of them one after another). The business-type summary only
+  // waits on its own organization lookup, not on the rest.
+  const [
+    currentInvoices,
+    previousInvoices,
+    inventory,
+    pendingInvoiceTotals,
+    totalCustomers,
+    totalProducts,
+    purchaseTotals,
+    expenseTotals,
+    salesReturnTotals,
+    purchaseReturnTotals,
+    receivables,
+    payables,
+    walletExpense,
+    { businessType, businessTypeSummary },
+  ] = await Promise.all([
+    sumInvoices(startDate, endDate),
+    sumInvoices(compareStart, compareEnd),
+    getInventorySnapshot(req),
+    // Pending invoices (current snapshot)
+    Invoice.aggregate([
+      { $match: { ...aggScope, status: 'pending', type: { $in: ['credit', 'pending'] } } },
+      { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$balance' } } },
+    ]).then(firstRow),
+    Customer.countDocuments({ ...bf }),
+    Product.countDocuments({ ...bf }),
     Purchase.aggregate([
-      { $match: { ...aggScopeEarly, ...purchaseDateFilter } },
+      { $match: { ...aggScope, ...buildDateMatch('purchaseDate', startDate, endDate) } },
       { $group: { _id: null, totalPurchases: { $sum: '$totalAmount' } } },
-    ]),
+    ]).then(firstRow),
     // Unfiltered by isPaid — this now covers every expense in the period, including
     // unpaid auto-generated recurring cycles, so "Total Expenses" reflects the full
     // obligation. totalPaidExpenses (the old, isPaid-only figure) is what Net Profit
     // After Expense and totalInvestment below actually deduct/count — an unpaid expense
     // hasn't left the bank yet, so it must not reduce profit or count as invested.
     Expense.aggregate([
-      { $match: { ...aggScopeEarly, ...buildDateMatch('date', startDate, endDate) } },
+      { $match: { ...aggScope, ...buildDateMatch('date', startDate, endDate) } },
       {
         $group: {
           _id: null,
@@ -151,11 +247,61 @@ const getDashboardStats = catchAsync(async (req, res) => {
           totalPaidExpenses: { $sum: { $cond: [{ $ne: ['$isPaid', false] }, '$amount', 0] } },
         },
       },
-    ]),
+    ]).then(firstRow),
+    sumReturns(SalesReturn),
+    sumReturns(PurchaseReturn),
+    sumPositiveBalances(Customer),
+    sumPositiveBalances(Supplier),
+    PersonalLedger.aggregate([
+      {
+        $match: {
+          ...aggScope,
+          ...buildDateMatch('transactionDate', startDate, endDate),
+          transactionType: 'expense',
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ['$debit', 0] } },
+          count: { $sum: 1 },
+        },
+      },
+    ]).then(firstRow),
+    resolveBusinessType(req, organizationId).then(async (resolvedType) => ({
+      businessType: resolvedType,
+      businessTypeSummary: await getBusinessTypeSummary({
+        businessType: resolvedType,
+        organizationId,
+        branchId: req.branchId,
+        startDate,
+        endDate,
+      }),
+    })),
   ]);
-  const totalPurchases = purchasesAgg[0]?.totalPurchases || 0;
-  const totalExpenses = expensesAgg[0]?.totalExpenses || 0;
-  const totalPaidExpenses = expensesAgg[0]?.totalPaidExpenses || 0;
+
+  const totalRevenue = currentInvoices.revenue || 0;
+  const totalSales = currentInvoices.count || 0;
+  const salesProfit = currentInvoices.profit || 0;
+  const previousRevenue = previousInvoices.revenue || 0;
+  const previousSales = previousInvoices.count || 0;
+
+  const totalRevenueChange =
+    previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
+  const totalSalesChange =
+    previousSales > 0 ? ((totalSales - previousSales) / previousSales) * 100 : 0;
+
+  const { lowStockCount, outOfStockCount, totalInventoryValue } = inventory;
+  const pendingInvoices = pendingInvoiceTotals.count || 0;
+  const pendingInvoicesAmount = pendingInvoiceTotals.amount || 0;
+
+  // Period revenue (same as totalRevenue for filtered dashboard)
+  const todayRevenue = totalRevenue;
+  const todayRevenueChange = totalRevenueChange;
+
+  const totalPurchases = purchaseTotals.totalPurchases || 0;
+  const totalExpenses = expenseTotals.totalExpenses || 0;
+  const totalPaidExpenses = expenseTotals.totalPaidExpenses || 0;
   const totalPendingExpenses = totalExpenses - totalPaidExpenses;
 
   let mobileSummary = {
@@ -191,87 +337,16 @@ const getDashboardStats = catchAsync(async (req, res) => {
     serviceInvoiceCount: 0,
   };
 
-  const organizationId = req.organizationId || req.user.organizationId;
-  let businessType = normalizeBusinessType(req.user.businessType);
-  if (organizationId) {
-    const org = await Organization.findById(organizationId).select('businessType');
-    if (org?.businessType) {
-      businessType = normalizeBusinessType(org.businessType);
-    }
-  }
-
-  // "Cash in Hand" means cash physically available right now — bound it to the end of
-  // today (business timezone) so a transaction mis-dated in the future (e.g. a sale
-  // saved with a forward date) can't inflate this figure ahead of the Cash Book page,
-  // which always scopes its own "Cash in Hand" to a selected date range ending today.
-  const cashInHandAsOf = toBusinessCalendarDate(new Date());
-
   if (businessType === 'mobile_shop') {
-    const { branchId } = req;
-
-    const [summary, cashBookSummary] = await Promise.all([
-      mobileDashboardService.getMobileDashboardSummary({
-        organizationId,
-        branchId,
-        startDate,
-        endDate,
-      }),
-      cashBookService.getCashInHandSummary({ organizationId, branchId, endDate: cashInHandAsOf }),
-    ]);
-
-    mobileSummary = {
-      ...summary,
-      cashInHand: cashBookSummary.closingBalance,
-    };
-  } else if (!['school', 'restaurant'].includes(businessType)) {
-    const cashBookSummary = await cashBookService.getCashInHandSummary({
-      organizationId,
-      branchId: req.branchId,
-      endDate: cashInHandAsOf,
-    });
-    mobileSummary.cashInHand = cashBookSummary.closingBalance;
+    mobileSummary = businessTypeSummary;
+  } else if (businessTypeSummary) {
+    mobileSummary.cashInHand = businessTypeSummary.cashInHand;
   }
 
-  const aggScope = buildAggregateScope(req);
-  const [salesReturnsAgg, purchaseReturnsAgg] = await Promise.all([
-    SalesReturn.aggregate([
-      {
-        $match: {
-          ...aggScope,
-          status: { $ne: 'rejected' },
-          ...returnDateFilter,
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalSalesReturns: { $sum: '$totalAmount' },
-          salesReturnCount: { $sum: 1 },
-        },
-      },
-    ]),
-    PurchaseReturn.aggregate([
-      {
-        $match: {
-          ...aggScope,
-          status: { $ne: 'rejected' },
-          ...returnDateFilter,
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalPurchaseReturns: { $sum: '$totalAmount' },
-          purchaseReturnCount: { $sum: 1 },
-        },
-      },
-    ]),
-  ]);
-
-  const totalSalesReturns = salesReturnsAgg[0]?.totalSalesReturns || 0;
-  const salesReturnCount = salesReturnsAgg[0]?.salesReturnCount || 0;
-  const totalPurchaseReturns = purchaseReturnsAgg[0]?.totalPurchaseReturns || 0;
-  const purchaseReturnCount = purchaseReturnsAgg[0]?.purchaseReturnCount || 0;
+  const totalSalesReturns = salesReturnTotals.totalAmount || 0;
+  const salesReturnCount = salesReturnTotals.count || 0;
+  const totalPurchaseReturns = purchaseReturnTotals.totalAmount || 0;
+  const purchaseReturnCount = purchaseReturnTotals.count || 0;
 
   // Mobile shop orgs earn revenue outside the product Invoice collection too (SIM sales,
   // service invoices, repair jobs) — fold those in so Net Sales reflects all revenue
@@ -285,54 +360,13 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const netSales = totalRevenue + mobileSalesAddOn - totalSalesReturns;
   const netPurchase = totalPurchases - totalPurchaseReturns;
 
-  const aggScopeBalances = buildAggregateScope(req);
-  const expenseDateFilter = buildDateMatch('transactionDate', startDate, endDate);
-  const [receivablesAgg, payablesAgg, walletExpenseAgg] = await Promise.all([
-    Customer.aggregate([
-      { $match: aggScopeBalances },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: { $max: [0, { $ifNull: ['$balance', 0] }] } },
-          count: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$balance', 0] }, 0] }, 1, 0] } },
-        },
-      },
-    ]),
-    Supplier.aggregate([
-      { $match: aggScopeBalances },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: { $max: [0, { $ifNull: ['$balance', 0] }] } },
-          count: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$balance', 0] }, 0] }, 1, 0] } },
-        },
-      },
-    ]),
-    PersonalLedger.aggregate([
-      {
-        $match: {
-          ...aggScopeBalances,
-          ...expenseDateFilter,
-          transactionType: 'expense',
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: { $ifNull: ['$debit', 0] } },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
-  ]);
-
   const round2 = (n) => parseFloat((n || 0).toFixed(2));
-  const totalReceivable = round2(receivablesAgg[0]?.total || 0);
-  const totalPayable = round2(payablesAgg[0]?.total || 0);
-  const myWalletExpense = round2(walletExpenseAgg[0]?.total || 0);
-  const myWalletExpenseCount = walletExpenseAgg[0]?.count || 0;
-  const receivableCount = receivablesAgg[0]?.count || 0;
-  const payableCount = payablesAgg[0]?.count || 0;
+  const totalReceivable = round2(receivables.total || 0);
+  const totalPayable = round2(payables.total || 0);
+  const myWalletExpense = round2(walletExpense.total || 0);
+  const myWalletExpenseCount = walletExpense.count || 0;
+  const receivableCount = receivables.count || 0;
+  const payableCount = payables.count || 0;
 
   if (businessType !== 'mobile_shop') {
     mobileSummary.totalProfit = mobileSummary.grossProfit ?? salesProfit;
@@ -351,7 +385,7 @@ const getDashboardStats = catchAsync(async (req, res) => {
     lowStockCount,
     outOfStockCount,
     totalInventoryValue,
-    pendingInvoices: pendingInvoices.length,
+    pendingInvoices,
     pendingInvoicesAmount,
     todayRevenue,
     todayRevenueChange,
@@ -614,26 +648,50 @@ const getTopCustomers = catchAsync(async (req, res) => {
  */
 const getLowStockProducts = catchAsync(async (req, res) => {
   const bf = applyBranchFilter({}, req);
-  // Can't filter stockQuantity<=10 in the Mongo query here — for hasVariants products
-  // that field stays at its legacy fallback (often 0) while the real stock lives on
-  // Inventory/ProductVariant (see docs/architecture/universal-product-migration.md).
-  // Fetch the branch's products, resolve real stock via attachVariantAggregates, then
-  // filter/sort/limit in memory.
-  const products = await Product.find(bf).populate('category', 'name');
-  const withAggregates = await productService.attachVariantAggregates(products);
+  const detailFields = 'name image stockQuantity category';
 
-  const lowStockProducts = withAggregates
-    .map(product => ({
+  // Simple products are filtered, sorted and limited by the database directly. hasVariants
+  // products can't be: their Product.stockQuantity stays at a legacy fallback (often 0)
+  // while the real stock lives on Inventory (see
+  // docs/architecture/universal-product-migration.md) — resolve that first, then load
+  // details only for the few that can still make the list.
+  const [simpleProducts, variantProducts] = await Promise.all([
+    Product.find({ ...bf, hasVariants: { $ne: true }, stockQuantity: { $lte: LOW_STOCK_THRESHOLD } })
+      .sort({ stockQuantity: 1, _id: 1 })
+      .limit(LOW_STOCK_WIDGET_LIMIT)
+      .select(detailFields)
+      .populate('category', 'name')
+      .lean(),
+    getVariantStockByProduct(bf).then(async ({ variantProductIds, stockById }) => {
+      const candidates = variantProductIds
+        .map((productId) => ({ productId, stock: stockById.get(productId.toString())?.totalStock ?? 0 }))
+        .filter((candidate) => candidate.stock <= LOW_STOCK_THRESHOLD)
+        .sort((a, b) => a.stock - b.stock || compareObjectIds(a.productId, b.productId))
+        .slice(0, LOW_STOCK_WIDGET_LIMIT);
+      if (candidates.length === 0) return [];
+
+      const docs = await Product.find({ ...bf, _id: { $in: candidates.map((candidate) => candidate.productId) } })
+        .select(detailFields)
+        .populate('category', 'name')
+        .lean();
+      const docById = new Map(docs.map((doc) => [doc._id.toString(), doc]));
+      return candidates
+        .filter((candidate) => docById.has(candidate.productId.toString()))
+        .map((candidate) => ({ ...docById.get(candidate.productId.toString()), stockQuantity: candidate.stock }));
+    }),
+  ]);
+
+  const lowStockProducts = [...simpleProducts, ...variantProducts]
+    .sort((a, b) => a.stockQuantity - b.stockQuantity || compareObjectIds(a._id, b._id))
+    .slice(0, LOW_STOCK_WIDGET_LIMIT)
+    .map((product) => ({
       id: product._id,
       name: product.name,
       image: product.image,
-      stockQuantity: product.hasVariants ? (product.variantStockTotal ?? 0) : product.stockQuantity,
-      minStockLevel: 10,
-      category: product.category && product.category.name ? product.category.name : 'Uncategorized'
-    }))
-    .filter(p => p.stockQuantity <= 10)
-    .sort((a, b) => a.stockQuantity - b.stockQuantity)
-    .slice(0, 20);
+      stockQuantity: product.stockQuantity,
+      minStockLevel: LOW_STOCK_THRESHOLD,
+      category: product.category && product.category.name ? product.category.name : 'Uncategorized',
+    }));
 
   res.status(httpStatus.OK).send(lowStockProducts);
 });
@@ -659,49 +717,53 @@ const getRecentActivities = catchAsync(async (req, res) => {
   const numLimit = parseInt(limit, 10);
   const share = Math.max(1, Math.ceil(numLimit / 3));
 
-  const recentInvoices = await Invoice.find({
-    ...bf,
-    ...buildDateMatch('invoiceDate', startDate, endDate),
-  })
-    .sort({ createdAt: -1 })
-    .limit(share)
-    .select('invoiceNumber total createdAt status walkInCustomerName customerId type paidAmount balance')
-    .lean();
-
-  const customerIdsToResolve = [
-    ...new Set(
-      recentInvoices
-        .map((inv) => inv.customerId)
-        .filter((id) => isValidRefObjectId(id))
-        .map((id) => String(id)),
-    ),
-  ];
-  const customerDocs =
-    customerIdsToResolve.length > 0
-      ? await Customer.find({ _id: { $in: customerIdsToResolve } })
-          .select('name')
-          .lean()
-      : [];
-  const customerNameById = new Map(customerDocs.map((c) => [String(c._id), c.name]));
-
-  const recentPurchases = await Purchase.find({
-    ...bf,
-    ...buildDateMatch('purchaseDate', startDate, endDate),
-  })
-    .sort({ createdAt: -1 })
-    .limit(share)
-    .select('invoiceNumber vendorBillNumber totalAmount paidAmount balance paymentType createdAt supplier')
-    .populate('supplier', 'name')
-    .lean();
-
-  const recentAdjustments = await StockAdjustment.find({
-    ...bf,
-    ...buildDateMatch('createdAt', startDate, endDate),
-  })
-    .sort({ createdAt: -1 })
-    .limit(share)
-    .select('type direction quantity totalValue productName status createdAt')
-    .lean();
+  const [{ recentInvoices, customerNameById }, recentPurchases, recentAdjustments] = await Promise.all([
+    Invoice.find({
+      ...bf,
+      ...buildDateMatch('invoiceDate', startDate, endDate),
+    })
+      .sort({ createdAt: -1 })
+      .limit(share)
+      .select('invoiceNumber total createdAt status walkInCustomerName customerId type paidAmount balance')
+      .lean()
+      .then(async (invoices) => {
+        const customerIdsToResolve = [
+          ...new Set(
+            invoices
+              .map((inv) => inv.customerId)
+              .filter((id) => isValidRefObjectId(id))
+              .map((id) => String(id)),
+          ),
+        ];
+        const customerDocs =
+          customerIdsToResolve.length > 0
+            ? await Customer.find({ _id: { $in: customerIdsToResolve } })
+                .select('name')
+                .lean()
+            : [];
+        return {
+          recentInvoices: invoices,
+          customerNameById: new Map(customerDocs.map((c) => [String(c._id), c.name])),
+        };
+      }),
+    Purchase.find({
+      ...bf,
+      ...buildDateMatch('purchaseDate', startDate, endDate),
+    })
+      .sort({ createdAt: -1 })
+      .limit(share)
+      .select('invoiceNumber vendorBillNumber totalAmount paidAmount balance paymentType createdAt supplier')
+      .populate('supplier', 'name')
+      .lean(),
+    StockAdjustment.find({
+      ...bf,
+      ...buildDateMatch('createdAt', startDate, endDate),
+    })
+      .sort({ createdAt: -1 })
+      .limit(share)
+      .select('type direction quantity totalValue productName status createdAt')
+      .lean(),
+  ]);
 
   // Combine and format activities
   const invoiceActivities = recentInvoices.map((inv) => {

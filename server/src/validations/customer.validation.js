@@ -107,18 +107,30 @@ const bulkDeleteCustomers = {
   }),
 };
 
+// Deliberately permissive per field: this validates the SHAPE of an import request (an
+// array of row-ish objects), not the content of each row. Joi rejects the entire request
+// the moment one item fails — so a single row with a typo'd email or an empty name used
+// to 400 a 2000-row import with one message covering none of the rows the user could
+// actually fix. Row content is validated in customer.service.js#bulkAddCustomers, which
+// reports per row and imports the rest. `.unknown(true)` means a stray spreadsheet column
+// doesn't reject the request either.
 const bulkAddCustomers = {
   body: Joi.object().keys({
+    duplicateStrategy: Joi.string().valid('skip', 'update', 'error').optional(),
     customers: Joi.array().items(
       Joi.object().keys({
-        name: Joi.string().required(),
-        email: Joi.string().email().allow('').optional(),
-        phone: Joi.string().allow('').optional(),
-        whatsapp: Joi.string().allow('').optional(),
-        address: Joi.string().allow('').optional(),
-        balance: Joi.number().optional(),
-        nameUrdu: Joi.string().allow('').optional(),
-      })
+        name: Joi.any(),
+        nameUrdu: Joi.any(),
+        email: Joi.any(),
+        phone: Joi.any(),
+        whatsapp: Joi.any(),
+        address: Joi.any(),
+        balance: Joi.any(),
+        creditLimit: Joi.any(),
+        customerType: Joi.any(),
+        taxNumber: Joi.any(),
+        notes: Joi.any(),
+      }).unknown(true)
     ).required().min(1)
   }),
 };

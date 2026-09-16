@@ -107,6 +107,7 @@ export function DashboardDateFilter({
         <Button
           type='button'
           onClick={onRefresh}
+          disabled={isRefreshing}
           variant='outline'
           size='sm'
           className='h-9 shrink-0 gap-2 shadow-sm'

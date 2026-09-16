@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const { Supplier, Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const supplierLedgerService = require('./supplierLedger.service');
+// Shared spreadsheet-cell parsing for the bulk import below — see utils/importRow.js
+const { toImportText, parseImportNumber, matchKey, phoneKey, isValidEmail } = require('../utils/importRow');
 const accountsSystemService = require('./accountsSystem.service');
 
 /**
@@ -173,65 +175,220 @@ const getAllSuppliers = async (filter = {}) => {
   return Supplier.find({ ...filter, ...ACTIVE_ONLY_FILTER });
 };
 
+const BULK_IMPORT_CHUNK_SIZE = 500;
+// Each imported supplier needs its ledger entry, its Accounts-Payable head and its
+// shadow customer record — real round trips, so they run with bounded concurrency
+// rather than one at a time or all at once. Same constant as customer.service.js.
+const ACCOUNT_SETUP_CONCURRENCY = 10;
+
 /**
- * Bulk add suppliers (import from Excel)
- * @param {Array} suppliersToAdd - Array of suppliers to create
- * @param {Object} branchContext - Organization and branch context
+ * Bulk add suppliers (Excel/CSV import, or the AI card scanner).
+ *
+ * Mirrors customer.service.js#bulkAddCustomers: per-row validation with a usable reason,
+ * duplicate matching on phone → email → name, and readable messages instead of raw
+ * driver text.
+ *
+ * It also finishes the job insertMany() alone could not. createSupplier() does three
+ * things beyond writing the row — the opening-balance ledger entry, the subsidiary
+ * Accounts-Payable head, and the shadow Customer record that lets a supplier be sold to
+ * through the normal sale screens. A bulk-imported supplier used to get none of them,
+ * which is why a backfill script exists for exactly this gap
+ * (scripts/backfill-supplier-customer-accounts.js). Imports now set all three up, and
+ * report a failure as a note instead of discarding an import that is already saved.
+ *
+ * @param {Array} suppliersToAdd
+ * @param {Object} branchContext - { organizationId, branchId, createdBy }
+ * @param {Object} [options]
+ * @param {'skip'|'update'|'error'} [options.duplicateStrategy='skip']
  * @returns {Promise<Object>}
  */
-const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}) => {
-  try {
-    // Process each supplier to ensure proper data format
-    const processedSuppliers = suppliersToAdd.map(supplier => ({
-      name: supplier.name,
-      nameUrdu: supplier.nameUrdu || '',
-      email: supplier.email || '',
-      phone: supplier.phone || '',
-      whatsapp: supplier.whatsapp || '',
-      address: supplier.address || '',
-      balance: supplier.balance ? Number(supplier.balance) : 0,
-      organizationId: branchContext.organizationId,
-      branchId: branchContext.branchId,
-    }));
+const bulkAddSuppliers = async (suppliersToAdd, branchContext = {}, options = {}) => {
+  const { organizationId, branchId, createdBy } = branchContext;
+  const duplicateStrategy = ['skip', 'update', 'error'].includes(options.duplicateStrategy)
+    ? options.duplicateStrategy
+    : 'skip';
 
-    // Insert suppliers
-    const insertedSuppliers = await Supplier.insertMany(processedSuppliers, { 
-      ordered: false // Continue inserting even if some fail
-    });
+  // The whole branch's suppliers, projected down to the three fields duplicate matching
+  // needs. Fetched in full rather than filtered by this batch's values because matching
+  // is normalized (a phone written "+92 300…" here and "0300…" there is one number, and
+  // names match case-insensitively) — an $in on the raw values would miss exactly the
+  // duplicates this is here to catch.
+  const existing = await Supplier.find({ organizationId, branchId }).select('_id name phone email').lean();
+  const byPhone = new Map();
+  const byEmail = new Map();
+  const byName = new Map();
+  existing.forEach((supplier) => {
+    const phone = phoneKey(supplier.phone);
+    if (phone && !byPhone.has(phone)) byPhone.set(phone, supplier);
+    const email = matchKey(supplier.email);
+    if (email && !byEmail.has(email)) byEmail.set(email, supplier);
+    const name = matchKey(supplier.name);
+    if (name && !byName.has(name)) byName.set(name, supplier);
+  });
 
-    for (const supplier of insertedSuppliers) {
-      await supplierLedgerService.syncOpeningBalanceEntry({
-        supplierId: supplier._id,
-        amount: supplier.balance || 0,
-        organizationId: supplier.organizationId,
-        branchId: supplier.branchId,
-        transactionDate: supplier.createdAt,
+  const errors = [];
+  const warnings = [];
+  const validDocs = [];
+  const validMeta = [];
+  const updateOps = [];
+  // Rows deliberately not imported (already saved, or the same supplier twice in one file).
+  // Deliberately NOT warnings: a warning means "imported, with something worth knowing".
+  const skipped = [];
+  const seenInBatch = new Map();
+
+  suppliersToAdd.forEach((row, index) => {
+    const fail = (message) => errors.push({ index, name: toImportText(row.name), error: message });
+
+    const name = toImportText(row.name);
+    if (!name) return fail('Supplier name is empty');
+
+    const balance = parseImportNumber(row.balance);
+    if (!balance.valid) return fail(`Opening balance "${row.balance}" is not a number`);
+
+    const phone = toImportText(row.phone);
+    const whatsapp = toImportText(row.whatsapp) || phone;
+    let email = toImportText(row.email);
+    if (email && !isValidEmail(email)) {
+      warnings.push({ index, name, message: `Email "${email}" doesn't look valid — imported without it` });
+      email = '';
+    }
+
+    const identityKeys = [phoneKey(phone), matchKey(email), matchKey(name)].filter(Boolean);
+    const firstSeenAt = identityKeys.map((key) => seenInBatch.get(key)).find((value) => value !== undefined);
+    if (firstSeenAt !== undefined) {
+      skipped.push({ index, name, reason: `Same supplier as row ${firstSeenAt + 1} in this file — imported once` });
+      return;
+    }
+    identityKeys.forEach((key) => seenInBatch.set(key, index));
+
+    const match =
+      (phoneKey(phone) && byPhone.get(phoneKey(phone))) ||
+      (matchKey(email) && byEmail.get(matchKey(email))) ||
+      byName.get(matchKey(name)) ||
+      null;
+
+    if (match && duplicateStrategy === 'error') {
+      return fail(`"${name}" is already saved as a supplier`);
+    }
+    if (match && duplicateStrategy === 'skip') {
+      skipped.push({ index, name, reason: `"${name}" is already saved — left unchanged` });
+      return;
+    }
+
+    const fields = {
+      name,
+      nameUrdu: toImportText(row.nameUrdu),
+      email,
+      phone,
+      whatsapp,
+      address: toImportText(row.address),
+      taxNumber: toImportText(row.taxNumber),
+    };
+
+    if (match && duplicateStrategy === 'update') {
+      // Empty cell means "leave it alone", never "clear it". Balance stays out of it —
+      // it's a ledger figure, not a spreadsheet column.
+      const set = {};
+      Object.entries(fields).forEach(([key, value]) => {
+        if (value !== '' && value !== undefined) set[key] = value;
+      });
+      updateOps.push({ index, name, filter: { _id: match._id, organizationId, branchId }, set });
+      return;
+    }
+
+    validDocs.push({ ...fields, balance: balance.value ?? 0, organizationId, branchId, createdBy });
+    validMeta.push({ index, name });
+  });
+
+  const insertedSuppliers = [];
+  for (let i = 0; i < validDocs.length; i += BULK_IMPORT_CHUNK_SIZE) {
+    const chunk = validDocs.slice(i, i + BULK_IMPORT_CHUNK_SIZE);
+    const chunkMeta = validMeta.slice(i, i + BULK_IMPORT_CHUNK_SIZE);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const inserted = await Supplier.insertMany(chunk, { ordered: false });
+      insertedSuppliers.push(...inserted);
+    } catch (error) {
+      if (!error.writeErrors) throw error;
+      insertedSuppliers.push(...(error.insertedDocs || []));
+      error.writeErrors.forEach((writeError) => {
+        const raw = writeError.err || writeError;
+        const meta = chunkMeta[writeError.index ?? raw.index] || {};
+        errors.push({
+          index: meta.index,
+          name: meta.name,
+          error: raw.errmsg || writeError.errmsg || 'This supplier could not be saved',
+        });
       });
     }
-
-    return {
-      success: true,
-      insertedCount: insertedSuppliers.length,
-      suppliers: insertedSuppliers
-    };
-  } catch (error) {
-    // Handle bulk insert errors
-    if (error.writeErrors) {
-      const successfulInserts = error.insertedDocs || [];
-      const failedInserts = error.writeErrors.map(err => ({
-        index: err.index,
-        error: err.errmsg
-      }));
-
-      return {
-        success: true,
-        insertedCount: successfulInserts.length,
-        suppliers: successfulInserts,
-        errors: failedInserts
-      };
-    }
-    throw error;
   }
+
+  let updatedCount = 0;
+  if (updateOps.length) {
+    try {
+      const result = await Supplier.bulkWrite(
+        updateOps.map((op) => ({ updateOne: { filter: op.filter, update: { $set: op.set } } })),
+        { ordered: false },
+      );
+      updatedCount = Math.max(result.modifiedCount ?? 0, result.matchedCount ?? 0);
+    } catch (error) {
+      const writeErrors = error.writeErrors || [];
+      if (!writeErrors.length) throw error;
+      updatedCount = Math.max(updateOps.length - writeErrors.length, 0);
+      writeErrors.forEach((writeError) => {
+        const raw = writeError.err || writeError;
+        const op = updateOps[writeError.index ?? raw.index] || {};
+        errors.push({ index: op.index, name: op.name, error: raw.errmsg || 'This supplier could not be updated' });
+      });
+    }
+  }
+
+  for (let i = 0; i < insertedSuppliers.length; i += ACCOUNT_SETUP_CONCURRENCY) {
+    const chunk = insertedSuppliers.slice(i, i + ACCOUNT_SETUP_CONCURRENCY);
+    // eslint-disable-next-line no-await-in-loop
+    const results = await Promise.allSettled(
+      chunk.map(async (supplier) => {
+        await supplierLedgerService.syncOpeningBalanceEntry({
+          supplierId: supplier._id,
+          amount: supplier.balance || 0,
+          organizationId: supplier.organizationId,
+          branchId: supplier.branchId,
+          transactionDate: supplier.createdAt,
+        });
+        try {
+          await accountsSystemService.ensureSupplierAccount(
+            { organizationId: supplier.organizationId, branchId: supplier.branchId, createdBy: supplier.createdBy },
+            supplier,
+          );
+        } catch (err) {
+          // Accounting must never block supplier creation — same rule as createSupplier().
+        }
+        await ensureSupplierCustomerAccount(supplier);
+      }),
+    );
+    results.forEach((result, position) => {
+      if (result.status === 'rejected') {
+        warnings.push({
+          name: chunk[position].name,
+          message: `"${chunk[position].name}" was imported, but its ledger/billing account could not be set up automatically`,
+        });
+      }
+    });
+  }
+
+  errors.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+
+  return {
+    success: insertedSuppliers.length > 0 || updatedCount > 0,
+    insertedCount: insertedSuppliers.length,
+    updatedCount,
+    skippedCount: skipped.length,
+    skipped,
+    duplicateStrategy,
+    suppliers: insertedSuppliers,
+    errors,
+    warnings,
+  };
 };
 
 /**

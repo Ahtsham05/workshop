@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useDispatch } from 'react-redux'
 import {
   Dialog,
   DialogContent,
@@ -11,39 +12,327 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { SimplePagination } from '@/components/ui/simple-pagination'
-import { Loader2, Package, Building2, ScanLine, Search } from 'lucide-react'
+import { AlertCircle, Building2, Loader2, Package, ScanLine, Search } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { onEnterAdvance, focusField } from '@/lib/invoice-form-keyboard'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import type { AppDispatch } from '@/stores/store'
 import { generateBatchNumber } from './variants/generate-variant-combinations'
 import { ImportSerialEntryDialog } from './import-serial-entry-dialog'
 import {
+  invalidateImportableMasterProducts,
   useGetImportableMasterProductsQuery,
   useImportMasterProductsMutation,
+  useLazyGetImportableMasterProductIdsQuery,
   type ImeiEntry,
   type ImportableMasterProduct,
+  type ImportMasterProductItem,
 } from '@/stores/masterProduct.api'
 import { isRequestTimeoutError, getTimeoutErrorMessage } from '@/lib/api-timeout'
 
 const SEARCH_DEBOUNCE_MS = 300
 
-// The org catalog this list draws from can run into the thousands — fetching (and
-// rendering) all of them at once on every dialog open, the way this used to work, meant
-// shipping every field of every master product over the wire and mounting that many rows
-// in the DOM up front. A page at a time, searched server-side, keeps both bounded no
-// matter how large the catalog gets.
-const PAGE_SIZE = 500
+// Rows are server-paged and server-searched (see
+// masterProduct.service.js#getImportableMasterProducts). 100 keeps a page quick to render
+// with every row's fields open; "Select all" covers importing more than one page at once.
+const PAGE_SIZE = 100
 
-// Send the import as several small requests instead of one giant one. A single request
-// for 200+ products takes tens of seconds; if *anything* interrupts a request that long —
-// a real timeout, a network blip, a dev-server reload, the tab losing focus — the whole
-// batch is left in limbo: some products already committed server-side, others not, with
-// no way for the client to know which. Chunking means an interruption only ever costs the
-// current small chunk, the completed chunks stay safely imported, and the user gets live
-// progress instead of a single all-or-nothing spinner.
-const IMPORT_CHUNK_SIZE = 25
+// The server writes a whole request in a fixed handful of queries however many products
+// it carries (masterProduct.service.js#importMasterProducts), so chunks aren't about
+// server time any more — they give a large import visible progress, and mean an
+// interrupted request only costs its own chunk. Retrying is always safe: products already
+// imported are skipped server-side.
+const IMPORT_CHUNK_SIZE = 250
+
+// Per-device memory of the Active switch, so a shop that always imports straight to
+// sale doesn't have to flip it every time.
+const ACTIVATE_PREF_KEY = 'import-branch-products:activate'
+
+const readActivatePref = () => {
+  try {
+    return localStorage.getItem(ACTIVATE_PREF_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+const writeActivatePref = (value: boolean) => {
+  try {
+    localStorage.setItem(ACTIVATE_PREF_KEY, String(value))
+  } catch {
+    // Storage blocked — the switch still works for this session.
+  }
+}
+
+type FieldName = 'qty' | 'batch' | 'price' | 'cost'
+
+// Kept as the raw input text so a field can be cleared and retyped; parsed on import.
+interface RowState {
+  price: string
+  cost: string
+  stockQuantity: string
+  batchNumber: string
+  imeis: ImeiEntry[]
+}
+
+const defaultRowState = (row: ImportableMasterProduct): RowState => ({
+  price: String(row.suggestedPrice ?? 0),
+  cost: String(row.suggestedCost ?? 0),
+  stockQuantity: '',
+  batchNumber: '',
+  imeis: [],
+})
+
+const tracksBatch = (row: ImportableMasterProduct) => !!(row.trackBatch || row.trackExpiry)
+const tracksSerial = (row: ImportableMasterProduct) => !!(row.trackImei || row.trackSerial)
+const toQuantity = (raw: string) => Math.max(Number(raw) || 0, 0)
+// A cleared price/cost field falls back to the suggestion rather than silently becoming 0.
+const toAmount = (raw: string, fallback: number) => (raw.trim() === '' ? fallback : Math.max(Number(raw) || 0, 0))
+
+/** The client-side twin of the server's opening-stock rule, so a mistake costs no round trip. */
+const openingStockProblem = (row: ImportableMasterProduct, state: RowState): string | null => {
+  const qty = row.acceptsOpeningStock ? toQuantity(state.stockQuantity) : 0
+  if (qty <= 0) return null
+  if (tracksSerial(row) && state.imeis.length !== qty) {
+    return `Enter exactly ${qty} ${row.trackSerial ? 'serial' : 'IMEI'} number(s) for the opening stock — ${state.imeis.length} entered`
+  }
+  if (tracksBatch(row) && !state.batchNumber.trim()) return 'Enter a batch number for the opening stock'
+  return null
+}
+
+/**
+ * Label-above-input group for the per-row detail fields. A flex-wrap row of these (not
+ * fixed table columns) lets the fields drop onto their own line on a narrow window
+ * instead of overflowing the dialog where they can't be reached.
+ */
+function FieldGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className='flex flex-col gap-1'>
+      <span className='text-[10px] font-medium text-muted-foreground'>{label}</span>
+      {children}
+    </div>
+  )
+}
+
+interface ImportRowProps {
+  row: ImportableMasterProduct
+  index: number
+  checked: boolean
+  value: RowState | undefined
+  error: string | undefined
+  disabled: boolean
+  onToggle: (id: string) => void
+  onUpdate: (row: ImportableMasterProduct, patch: Partial<RowState>) => void
+  onOpenSerial: (id: string) => void
+  registerField: (id: string, field: FieldName, el: HTMLInputElement | null) => void
+  onAdvance: (index: number, from: FieldName, row: ImportableMasterProduct) => void
+}
+
+/**
+ * One product row. Memoized with stable callbacks from the dialog, so ticking one box or
+ * typing in one field re-renders that row only — not the whole page of them.
+ */
+const ImportRow = memo(function ImportRow({
+  row,
+  index,
+  checked,
+  value,
+  error,
+  disabled,
+  onToggle,
+  onUpdate,
+  onOpenSerial,
+  registerField,
+  onAdvance,
+}: ImportRowProps) {
+  const { t } = useLanguage()
+  const id = row.masterProductId
+  const state = value ?? defaultRowState(row)
+  const qty = row.acceptsOpeningStock ? toQuantity(state.stockQuantity) : 0
+  const needsBatch = tracksBatch(row) && qty > 0
+  const needsSerial = tracksSerial(row) && qty > 0
+
+  return (
+    <div
+      className={cn(
+        'px-4 py-3 transition-colors sm:px-6',
+        error ? 'bg-destructive/5' : checked ? 'bg-primary/5' : 'hover:bg-muted/40'
+      )}
+    >
+      <div className='flex flex-wrap items-center gap-3'>
+        <Checkbox
+          checked={checked}
+          disabled={disabled}
+          onCheckedChange={() => onToggle(id)}
+          aria-label={row.name}
+          className='shrink-0'
+        />
+        <button
+          type='button'
+          disabled={disabled}
+          onClick={() => onToggle(id)}
+          className='flex min-w-0 flex-1 basis-56 items-center gap-3 text-left disabled:cursor-not-allowed'
+        >
+          {row.image?.url ? (
+            <img src={row.image.url} alt='' loading='lazy' className='h-9 w-9 shrink-0 rounded-md border object-cover' />
+          ) : (
+            <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted'>
+              <Package className='h-4 w-4 text-muted-foreground' />
+            </span>
+          )}
+          <span className='min-w-0 flex-1'>
+            <span className='block truncate text-sm font-medium'>{row.name}</span>
+            <span className='mt-0.5 flex min-w-0 flex-wrap items-center gap-1'>
+              {row.category ? (
+                <Badge variant='secondary' className='px-1.5 py-0 text-[10px]'>
+                  {row.category}
+                </Badge>
+              ) : null}
+              {row.hasVariants ? (
+                <Badge variant='outline' className='px-1.5 py-0 text-[10px]'>
+                  {t('n_variants', { count: String(row.variantCount) })}
+                </Badge>
+              ) : null}
+              {tracksBatch(row) ? (
+                <Badge variant='outline' className='px-1.5 py-0 text-[10px]'>
+                  {t('batch')}
+                </Badge>
+              ) : null}
+              {tracksSerial(row) ? (
+                <Badge variant='outline' className='px-1.5 py-0 text-[10px]'>
+                  {row.trackSerial ? t('serial') : 'IMEI'}
+                </Badge>
+              ) : null}
+              <span
+                className='inline-flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground'
+                title={row.carriedAtBranches.join(', ')}
+              >
+                <Building2 className='h-3 w-3 shrink-0' />
+                <span className='truncate'>{row.carriedAtBranches.join(', ')}</span>
+              </span>
+            </span>
+          </span>
+        </button>
+
+        {/* Only a picked product shows its fields — keeps a long list scannable. */}
+        {checked && (
+          <div className='flex w-full shrink-0 flex-wrap items-end gap-2 pl-7 sm:w-auto sm:pl-0'>
+            {row.acceptsOpeningStock ? (
+              <FieldGroup label={t('opening_qty')}>
+                <Input
+                  ref={(el) => registerField(id, 'qty', el)}
+                  type='number'
+                  min={0}
+                  inputMode='decimal'
+                  placeholder='0'
+                  disabled={disabled}
+                  value={state.stockQuantity}
+                  onChange={(e) => onUpdate(row, { stockQuantity: e.target.value })}
+                  onKeyDown={(e) => onEnterAdvance(e, () => onAdvance(index, 'qty', row))}
+                  className='h-8 w-20 text-sm'
+                />
+              </FieldGroup>
+            ) : (
+              <p className='max-w-[9rem] self-center text-[11px] leading-tight text-muted-foreground'>
+                {t('import_stock_per_variant_hint')}
+              </p>
+            )}
+
+            {needsBatch ? (
+              <FieldGroup label={t('batch_serial_label')}>
+                <Input
+                  ref={(el) => registerField(id, 'batch', el)}
+                  placeholder='Batch number'
+                  showVoiceInput={false}
+                  disabled={disabled}
+                  value={state.batchNumber}
+                  onChange={(e) => onUpdate(row, { batchNumber: e.target.value })}
+                  onKeyDown={(e) => onEnterAdvance(e, () => onAdvance(index, 'batch', row))}
+                  className='h-8 w-40 text-sm'
+                />
+              </FieldGroup>
+            ) : needsSerial ? (
+              <FieldGroup label={t('batch_serial_label')}>
+                <button
+                  type='button'
+                  disabled={disabled}
+                  onClick={() => onOpenSerial(id)}
+                  className={cn(
+                    'inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors',
+                    state.imeis.length >= qty
+                      ? 'border-green-300 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400'
+                      : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400'
+                  )}
+                >
+                  <ScanLine className='h-3 w-3' />
+                  {state.imeis.length}/{qty}
+                </button>
+              </FieldGroup>
+            ) : null}
+
+            <FieldGroup label={t('price')}>
+              <Input
+                ref={(el) => registerField(id, 'price', el)}
+                type='number'
+                min={0}
+                inputMode='decimal'
+                disabled={disabled}
+                value={state.price}
+                onChange={(e) => onUpdate(row, { price: e.target.value })}
+                onKeyDown={(e) => onEnterAdvance(e, () => onAdvance(index, 'price', row))}
+                className='h-8 w-24 text-sm'
+              />
+            </FieldGroup>
+
+            <FieldGroup label={t('cost')}>
+              <Input
+                ref={(el) => registerField(id, 'cost', el)}
+                type='number'
+                min={0}
+                inputMode='decimal'
+                disabled={disabled}
+                value={state.cost}
+                onChange={(e) => onUpdate(row, { cost: e.target.value })}
+                onKeyDown={(e) => onEnterAdvance(e, () => onAdvance(index, 'cost', row))}
+                className='h-8 w-24 text-sm'
+              />
+            </FieldGroup>
+          </div>
+        )}
+      </div>
+
+      {error ? (
+        <p role='alert' className='mt-1.5 flex items-start gap-1.5 pl-7 text-xs text-destructive'>
+          <AlertCircle className='mt-px h-3.5 w-3.5 shrink-0' />
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+})
+
+function ListSkeleton() {
+  return (
+    <div className='divide-y'>
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className='flex items-center gap-3 px-4 py-3 sm:px-6'>
+          <Skeleton className='h-4 w-4 rounded' />
+          <Skeleton className='h-9 w-9 rounded-md' />
+          <div className='flex-1 space-y-1.5'>
+            <Skeleton className='h-3.5 w-2/5' />
+            <Skeleton className='h-3 w-1/4' />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface ImportProductsDialogProps {
   open: boolean
@@ -51,278 +340,303 @@ interface ImportProductsDialogProps {
   onImported?: () => void
 }
 
-interface RowState {
-  price: number
-  cost: number
-  stockQuantity: number
-  batchNumber: string
-  imeis: ImeiEntry[]
-}
-
-/**
- * Label-above-input group for the per-row detail fields. A plain flex-wrap row of these
- * (rather than fixed table columns) means the fields always wrap onto their own line
- * instead of silently overflowing the dialog on a narrow window — see the "Import from
- * other branches" bug where Opening Qty/Price/Cost lived in table columns wide enough to
- * push past the dialog edge, inside a vertical-only ScrollArea that clips horizontal
- * overflow instead of scrolling to it. That made the fields exist in the DOM but be
- * genuinely unreachable, so imports silently went through with only default price/cost
- * and zero opening quantity.
- */
-function FieldGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className='flex flex-col gap-1'>
-      <label className='text-[10px] font-medium text-muted-foreground'>{label}</label>
-      {children}
-    </div>
-  )
-}
-
 export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportProductsDialogProps) {
   const { t } = useLanguage()
+  const dispatch = useDispatch<AppDispatch>()
   const [page, setPage] = useState(1)
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
 
-  // isLoading (first-ever fetch only), not isFetching (any fetch): the import mutation
-  // invalidates this query after every chunk, so isFetching flips true repeatedly during
-  // an import — gating the whole dialog body on it would blank out the list and search
-  // box back to a spinner after every chunk instead of just letting it quietly shrink.
-  // Server-paginated + server-searched: a couple hundred to a few thousand importable
-  // products across an org's branches is common, and shipping every field of every one
-  // of them on every dialog open (then filtering/scrolling client-side) doesn't scale —
-  // see masterProduct.service.js#getImportableMasterProducts.
-  const { data, isLoading: isLoadingImportable } = useGetImportableMasterProductsQuery(
+  // isLoading (first fetch only) gates the body; a background refetch keeps the current
+  // rows on screen and only shows a small spinner.
+  const { data, isLoading, isFetching } = useGetImportableMasterProductsQuery(
     { search: debouncedSearch, page, limit: PAGE_SIZE },
-    { skip: !open },
+    { skip: !open, refetchOnMountOrArgChange: 30 }
   )
+  const [fetchAllIds, { isFetching: isSelectingAll }] = useLazyGetImportableMasterProductIdsQuery()
+  const [importMasterProducts] = useImportMasterProductsMutation()
+
   const rows = useMemo(() => data?.results ?? [], [data])
   const totalResults = data?.totalResults ?? 0
   const totalPages = data?.totalPages ?? 0
-  const [importMasterProducts] = useImportMasterProductsMutation()
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [overrides, setOverrides] = useState<Record<string, RowState>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [serialDialogRowId, setSerialDialogRowId] = useState<string | null>(null)
-  // null when not importing; otherwise how many of the total selected items have gone
-  // through so far, updated after each chunk completes.
-  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
-  const isImporting = importProgress !== null
+  const [activate, setActivate] = useState(readActivatePref)
+  // null when not importing; otherwise how many selected products have been sent so far.
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const isImporting = progress !== null
 
-  // A page only ever holds the rows currently on screen, but a selection can span pages
-  // (pick some on page 1, page over, pick more) — so every row ever seen gets kept here
-  // by id, and that's what handleImport and the field/detail rows below read from
-  // regardless of which page put it there.
+  // A selection can span pages and searches, so every row ever shown is kept by id —
+  // that's what the import and the serial dialog read from, not just the current page.
   const [rowCache, setRowCache] = useState<Record<string, ImportableMasterProduct>>({})
   useEffect(() => {
     if (!rows.length) return
     setRowCache((prev) => {
-      const next = { ...prev }
-      let changed = false
+      let next: Record<string, ImportableMasterProduct> | null = null
       for (const row of rows) {
-        if (next[row.masterProductId] !== row) {
+        if (prev[row.masterProductId] !== row) {
+          next ??= { ...prev }
           next[row.masterProductId] = row
-          changed = true
         }
       }
-      return changed ? next : prev
+      return next ?? prev
     })
   }, [rows])
 
-  // Reset everything each time the dialog opens fresh, rather than carrying over a
-  // previous session's picks or search silently.
+  // Start clean on every open rather than silently carrying over the last session's picks.
+  // rowCache is deliberately kept: it's server data, not a choice, and the page RTK Query
+  // already has cached arrives in the same commit as `open` — clearing the cache here
+  // would wipe those rows right after they were added, and edits to them would be lost.
   useEffect(() => {
-    if (open) {
-      setSelectedIds(new Set())
-      setOverrides({})
-      setSerialDialogRowId(null)
-      setSearchInput('')
-      setPage(1)
-      setRowCache({})
-    }
+    if (!open) return
+    setSelectedIds(new Set())
+    setOverrides({})
+    setErrors({})
+    setSerialDialogRowId(null)
+    setSearchInput('')
+    setPage(1)
   }, [open])
 
-  // A new search term invalidates the current page number — without this, searching
-  // while sitting on page 5 would ask the server for page 5 of a much shorter result set.
+  // A new search starts from its first page.
   useEffect(() => {
     setPage(1)
   }, [debouncedSearch])
 
-  // Importing everything on the last page shrinks totalPages out from under the current
-  // page number (the list refetches after every chunk) — clamp back rather than being
-  // left on a now-nonexistent page showing an empty list above a "3 / 2" pager.
+  // Importing the last page's products shrinks totalPages under the current page.
   useEffect(() => {
     if (totalPages > 0 && page > totalPages) setPage(totalPages)
   }, [totalPages, page])
 
-  // Matching name, Urdu name, barcode, category, and the branches that carry it now
-  // happens server-side (see masterProduct.service.js#getImportableMasterProducts) — this
-  // page's rows have already been filtered and sorted by the time they get here.
-  const filtered = rows
+  // Refs let the memoized rows' callbacks stay stable while still reading current state.
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
+  const overridesRef = useRef(overrides)
+  overridesRef.current = overrides
+  const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const importButtonRef = useRef<HTMLButtonElement | null>(null)
 
-  const valueFor = (row: ImportableMasterProduct): RowState =>
-    overrides[row.masterProductId] ?? { price: row.suggestedPrice, cost: row.suggestedCost, stockQuantity: 0, batchNumber: '', imeis: [] }
-
-  const setRow = (id: string, next: RowState) => setOverrides((prev) => ({ ...prev, [id]: next }))
-
-  // Opening-batch identity only matters once there's actually opening stock to seed —
-  // same "auto-suggest the moment it becomes relevant" UX as the batch number field in
-  // users-action-dialog.tsx, just triggered by qty going from 0 to non-zero instead of a
-  // checkbox toggle.
-  const setStockQuantity = (row: ImportableMasterProduct, qty: number) => {
-    const v = valueFor(row)
-    const needsBatch = (row.trackBatch || row.trackExpiry) && qty > 0 && !v.batchNumber
-    setRow(row.masterProductId, { ...v, stockQuantity: qty, batchNumber: needsBatch ? generateBatchNumber() : v.batchNumber })
-  }
-
-  const toggleOne = (id: string) => {
+  const toggleOne = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-  }
+  }, [])
 
-  // "Select all" only ever acts on the current page, so picks made on an earlier page or
-  // search survive paging or typing a new term — the same "select all in this view"
-  // convention as a mail client's list checkbox.
-  const allSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.masterProductId))
-  const toggleAll = () => {
+  const updateRow = useCallback((row: ImportableMasterProduct, patch: Partial<RowState>) => {
+    setOverrides((prev) => {
+      const current = prev[row.masterProductId] ?? defaultRowState(row)
+      const next = { ...current, ...patch }
+      // Suggest a batch number the moment opening stock makes one necessary.
+      if (patch.stockQuantity !== undefined && tracksBatch(row) && toQuantity(patch.stockQuantity) > 0 && !current.batchNumber) {
+        next.batchNumber = generateBatchNumber()
+      }
+      return { ...prev, [row.masterProductId]: next }
+    })
+    setErrors((prev) => {
+      if (!prev[row.masterProductId]) return prev
+      const next = { ...prev }
+      delete next[row.masterProductId]
+      return next
+    })
+  }, [])
+
+  const registerField = useCallback((id: string, field: FieldName, el: HTMLInputElement | null) => {
+    fieldRefs.current[`${id}:${field}`] = el
+  }, [])
+
+  // Enter moves qty → batch (or the serial dialog) → price → cost → the next picked row,
+  // then to the Import button — same parent-owned ref map as the Invoice/Purchase rows
+  // (see lib/invoice-form-keyboard.ts).
+  const focusRowField = useCallback((row: ImportableMasterProduct, field: FieldName) => {
+    focusField(fieldRefs.current[`${row.masterProductId}:${field}`])
+  }, [])
+
+  const focusNextPickedRow = useCallback((fromIndex: number) => {
+    const pageRows = rowsRef.current
+    for (let i = fromIndex; i < pageRows.length; i += 1) {
+      const id = pageRows[i].masterProductId
+      const el = fieldRefs.current[`${id}:qty`] ?? fieldRefs.current[`${id}:price`]
+      if (el) return focusField(el)
+    }
+    focusField(importButtonRef.current, false)
+  }, [])
+
+  const advance = useCallback(
+    (index: number, from: FieldName, row: ImportableMasterProduct) => {
+      const state = overridesRef.current[row.masterProductId] ?? defaultRowState(row)
+      const qty = row.acceptsOpeningStock ? toQuantity(state.stockQuantity) : 0
+      if (from === 'qty') {
+        if (tracksBatch(row) && qty > 0) return focusRowField(row, 'batch')
+        if (tracksSerial(row) && qty > 0) return setSerialDialogRowId(row.masterProductId)
+        return focusRowField(row, 'price')
+      }
+      if (from === 'batch') return focusRowField(row, 'price')
+      if (from === 'price') return focusRowField(row, 'cost')
+      focusNextPickedRow(index + 1)
+    },
+    [focusRowField, focusNextPickedRow]
+  )
+
+  const pageIds = useMemo(() => rows.map((r) => r.masterProductId), [rows])
+  const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id))
+  const togglePage = () => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      filtered.forEach((r) => (allSelected ? next.delete(r.masterProductId) : next.add(r.masterProductId)))
+      pageIds.forEach((id) => (allOnPageSelected ? next.delete(id) : next.add(id)))
       return next
     })
   }
 
-  const selectedCount = selectedIds.size
-  const serialDialogRowIndex = filtered.findIndex((r) => r.masterProductId === serialDialogRowId)
-  const serialDialogRow = filtered[serialDialogRowIndex]
-
-  // Enter advances field-to-field (qty → batch or serial trigger, if visible → price →
-  // cost → next row's qty) instead of submitting the dialog — same parent-owned
-  // ref-map pattern as the Invoice/Purchase item rows (see lib/invoice-form-keyboard.ts).
-  const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const importButtonRef = useRef<HTMLButtonElement | null>(null)
-  const fieldKey = (masterProductId: string, field: 'qty' | 'batch' | 'price' | 'cost') => `${masterProductId}:${field}`
-  const focusRowField = (rowIndex: number, field: 'qty' | 'batch' | 'price' | 'cost') => {
-    const row = filtered[rowIndex]
-    if (!row) {
-      focusField(importButtonRef.current, false)
-      return
+  const selectAllMatching = async () => {
+    try {
+      const { ids } = await fetchAllIds({ search: debouncedSearch }).unwrap()
+      setSelectedIds((prev) => new Set([...prev, ...ids]))
+    } catch {
+      toast.error(t('products_import_select_all_failed'))
     }
-    focusField(fieldRefs.current[fieldKey(row.masterProductId, field)])
   }
 
-  const handleImport = async () => {
-    if (isImporting) return
-    // selectedIds can carry ids picked on pages other than the one currently on screen,
-    // so this reads from rowCache (every row ever seen this session) rather than `rows`
-    // (just the current page).
-    const selectedRows = [...selectedIds].map((id) => rowCache[id]).filter((row): row is ImportableMasterProduct => !!row)
+  const handleActivateChange = (next: boolean) => {
+    setActivate(next)
+    writeActivatePref(next)
+  }
 
-    // Fail fast client-side with a specific, per-product message — same requirement the
-    // server enforces too (masterProduct.service.js#importMasterProducts), checked here
-    // first so a mistake doesn't cost a round trip.
-    for (const row of selectedRows) {
-      const v = valueFor(row)
-      if (v.stockQuantity <= 0) continue
-      if ((row.trackImei || row.trackSerial) && v.imeis.length !== v.stockQuantity) {
-        toast.error(`Enter ${v.stockQuantity} ${row.trackSerial ? 'serial' : 'IMEI'} number(s) for "${row.name}" — ${v.imeis.length} entered`)
-        return
-      }
-      if ((row.trackBatch || row.trackExpiry) && !v.batchNumber.trim()) {
-        toast.error(`Enter a batch number for the opening stock of "${row.name}"`)
-        return
-      }
+  const selectedCount = selectedIds.size
+
+  const handleImport = async () => {
+    if (isImporting || selectedCount === 0) return
+    const ids = [...selectedIds]
+
+    // Rows never paged to have no edits (so no opening stock) and can't fail this check.
+    const problems: Record<string, string> = {}
+    for (const id of ids) {
+      const row = rowCache[id]
+      const state = overrides[id]
+      if (!row || !state) continue
+      const problem = openingStockProblem(row, state)
+      if (problem) problems[id] = problem
+    }
+    const problemIds = Object.keys(problems)
+    if (problemIds.length) {
+      setErrors(problems)
+      const first = rowCache[problemIds[0]]
+      toast.error(t('products_import_fix_rows', { count: String(problemIds.length) }), {
+        description: `${first?.name}: ${problems[problemIds[0]]}`,
+      })
+      return
     }
 
-    const items = selectedRows.map((row) => {
-      const v = valueFor(row)
+    const items: ImportMasterProductItem[] = ids.map((id) => {
+      const row = rowCache[id]
+      if (!row) return { masterProductId: id }
+      const state = overrides[id] ?? defaultRowState(row)
+      const qty = row.acceptsOpeningStock ? toQuantity(state.stockQuantity) : 0
       return {
-        masterProductId: row.masterProductId,
-        price: Number(v.price) || 0,
-        cost: Number(v.cost) || 0,
-        stockQuantity: Number(v.stockQuantity) || 0,
-        batchNumber: v.batchNumber.trim() || undefined,
-        imeis: v.imeis.length ? v.imeis : undefined,
+        masterProductId: id,
+        price: toAmount(state.price, row.suggestedPrice),
+        cost: toAmount(state.cost, row.suggestedCost),
+        stockQuantity: qty,
+        batchNumber: qty > 0 && tracksBatch(row) ? state.batchNumber.trim() : undefined,
+        imeis: qty > 0 && tracksSerial(row) ? state.imeis : undefined,
       }
     })
-    if (items.length === 0) return
 
-    // Sent as sequential chunks (see IMPORT_CHUNK_SIZE above), not one request for
-    // everything — each chunk is awaited and counted before the next one starts, so if
-    // chunk 6 of 10 is the one that fails/times out/gets interrupted, chunks 1-5 are
-    // already safely committed and only the untried remainder needs a retry. Retrying is
-    // always safe regardless: masterProduct.service.js#importMasterProducts matches
-    // already-imported items by masterProductId and returns them as-is instead of
-    // duplicating.
-    let done = 0
-    setImportProgress({ done, total: items.length })
+    setErrors({})
+    setProgress({ done: 0, total: items.length })
+    const failures: Record<string, string> = {}
+    let importedCount = 0
+    let alreadyImportedCount = 0
+    let sent = 0
+    let interruption: unknown = null
     try {
       for (let i = 0; i < items.length; i += IMPORT_CHUNK_SIZE) {
         const chunk = items.slice(i, i + IMPORT_CHUNK_SIZE)
-        await importMasterProducts(chunk).unwrap()
-        done += chunk.length
-        setImportProgress({ done, total: items.length })
-        // Drop exactly the ids that just landed — precise, since we know exactly which
-        // ones we sent, unlike diffing against a re-fetched page which may not even
-        // include these ids' page. Keeps "N selected of M" from overcounting once these
-        // products are gone from the importable list for good (see
-        // masterProduct.service.js#importMasterProducts — already-imported ids are
-        // excluded from later /importable responses).
-        const justImported = new Set(chunk.map((item) => item.masterProductId))
-        setSelectedIds((prev) => new Set([...prev].filter((id) => !justImported.has(id))))
+        const result = await importMasterProducts({ items: chunk, activate }).unwrap()
+        importedCount += result.importedCount
+        alreadyImportedCount += result.alreadyImportedCount
+        result.failed.forEach((f) => {
+          failures[f.masterProductId] = f.error
+        })
+        sent += chunk.length
+        // Everything that landed leaves the selection; failures stay picked for a retry.
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          chunk.forEach((item) => {
+            if (!failures[item.masterProductId]) next.delete(item.masterProductId)
+          })
+          return next
+        })
+        setProgress({ done: sent, total: items.length })
       }
-      toast.success(t('products_imported_success', { count: String(items.length) }))
-      onImported?.()
-      onOpenChange(false)
     } catch (err) {
-      // Refresh the underlying product list/stats regardless of how far it got — whatever
-      // chunks did complete are real, committed products the rest of the app should see
-      // immediately, not just after the next unrelated refresh.
-      onImported?.()
-      if (done > 0) {
-        toast.error(t('products_import_partial', { done: String(done), total: String(items.length) }))
-      } else if (isRequestTimeoutError(err)) {
-        // A timeout only means the client gave up waiting on this one chunk — the request
-        // keeps running server-side, so this chunk may still land a moment later.
+      interruption = err
+    } finally {
+      setProgress(null)
+      // One list refresh for the whole import, not one per chunk.
+      dispatch(invalidateImportableMasterProducts())
+      if (importedCount > 0) onImported?.()
+    }
+
+    const failedIds = Object.keys(failures)
+    if (failedIds.length) setErrors(failures)
+
+    if (interruption) {
+      if (sent > 0) {
+        toast.error(t('products_import_partial', { done: String(sent), total: String(items.length) }))
+      } else if (isRequestTimeoutError(interruption)) {
+        // Only the client gave up waiting — the server may still finish this chunk.
         toast.error(getTimeoutErrorMessage('import these products'))
       } else {
         toast.error(t('products_import_failed'))
       }
-    } finally {
-      setImportProgress(null)
+      return
     }
+
+    if (failedIds.length) {
+      const first = failedIds[0]
+      toast.warning(
+        t('products_import_some_failed', { imported: String(importedCount), failed: String(failedIds.length) }),
+        { description: `${rowCache[first]?.name ?? t('product')}: ${failures[first]}` }
+      )
+      return
+    }
+
+    if (importedCount > 0) {
+      toast.success(t('products_imported_success', { count: String(importedCount) }), {
+        description: activate ? t('products_imported_active_hint') : t('products_imported_inactive_hint'),
+      })
+    } else if (alreadyImportedCount > 0) {
+      toast.info(t('products_already_imported', { count: String(alreadyImportedCount) }))
+    }
+    onOpenChange(false)
   }
 
-  // A zero-result page reads as "nothing at all" when there's no active search, or "no
-  // matches for this search" when there is — the server doesn't need to tell the two
-  // apart separately since debouncedSearch already distinguishes them here.
-  const noProductsAtAll = !isLoadingImportable && totalResults === 0 && !debouncedSearch.trim()
-  const noSearchMatches = !isLoadingImportable && totalResults === 0 && !!debouncedSearch.trim()
+  const serialDialogRow = serialDialogRowId ? rowCache[serialDialogRowId] : undefined
+  const serialDialogState = serialDialogRow ? (overrides[serialDialogRow.masterProductId] ?? defaultRowState(serialDialogRow)) : undefined
+
+  const noProductsAtAll = !isLoading && totalResults === 0 && !debouncedSearch.trim()
+  const noSearchMatches = !isLoading && totalResults === 0 && !!debouncedSearch.trim()
+  // One page is covered by its own checkbox; across pages, fetch just the matching ids.
+  const canSelectAllMatching = totalPages > 1 && selectedCount < totalResults
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        // Ignore close attempts (X button, Escape, overlay click) while a chunk is
-        // in flight — closing mid-import doesn't stop the server from finishing that
-        // chunk, it just makes the client lose track of how far it got.
+        // Closing mid-import doesn't stop the request in flight — it only loses track of
+        // how far the import got — so close attempts are ignored until it finishes.
         if (!next && isImporting) return
         onOpenChange(next)
       }}
     >
-      {/* flex column + max-h + overflow-hidden here, with only the middle section
-          scrolling, is the same "fixed header/footer, scrollable body" shape used by
-          every other tall dialog in this codebase (e.g. categories-action-dialog.tsx).
-          The plain DialogContent this used before has no height cap of its own, so on a
-          short viewport (a laptop with devtools open, a small window) the list could push
-          the Cancel/Import footer below the visible area with no way to scroll to it —
-          not just a cosmetic overflow, the import button was genuinely unreachable. */}
-      <DialogContent className='flex max-h-[85vh] w-[calc(100vw-1.5rem)] max-w-[min(96vw,1024px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl'>
-        <DialogHeader className='shrink-0 gap-1 border-b px-6 py-4'>
+      {/* Fixed header/footer with only the list scrolling, so the footer is always reachable. */}
+      <DialogContent className='flex max-h-[88vh] w-[calc(100vw-1.5rem)] max-w-[min(96vw,1024px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl'>
+        <DialogHeader className='shrink-0 gap-1 border-b px-4 py-4 text-left sm:px-6'>
           <DialogTitle className='flex items-center gap-2 text-base'>
             <Building2 className='h-4 w-4 text-blue-600' />
             {t('import_from_other_branches')}
@@ -330,19 +644,15 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
           <DialogDescription>{t('import_from_other_branches_desc')}</DialogDescription>
         </DialogHeader>
 
-        {isLoadingImportable ? (
-          <div className='flex items-center justify-center gap-2 px-6 py-12 text-sm text-muted-foreground'>
-            <Loader2 className='h-4 w-4 animate-spin' /> {t('loading')}
-          </div>
-        ) : noProductsAtAll ? (
-          <div className='flex flex-col items-center gap-2 px-6 py-12 text-center text-sm text-muted-foreground'>
+        {noProductsAtAll ? (
+          <div className='flex flex-col items-center gap-2 px-6 py-14 text-center text-sm text-muted-foreground'>
             <Building2 className='h-8 w-8 text-muted-foreground/50' />
             {t('no_importable_products')}
           </div>
         ) : (
           <div className='flex min-h-0 flex-1 flex-col'>
-            <div className='flex shrink-0 items-center justify-between gap-3 border-b px-6 py-3'>
-              <div className='relative w-full max-w-xs'>
+            <div className='flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3 sm:px-6'>
+              <div className='relative w-full sm:max-w-xs'>
                 <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
                 <Input
                   autoFocus
@@ -350,15 +660,46 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder={t('search_products')}
                   aria-label={t('search_products')}
+                  disabled={isImporting}
                   className='pl-9'
                 />
               </div>
-              <div className='shrink-0 text-xs text-muted-foreground'>
-                {t('n_selected_of_total', { selected: String(selectedCount), total: String(totalResults) })}
+              <div className='ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
+                {isFetching && !isLoading ? <Loader2 className='h-3.5 w-3.5 animate-spin text-muted-foreground' /> : null}
+                <span className='text-muted-foreground'>
+                  {t('n_selected_of_total', { selected: String(selectedCount), total: String(totalResults) })}
+                </span>
+                {canSelectAllMatching ? (
+                  <Button
+                    type='button'
+                    variant='link'
+                    size='sm'
+                    className='h-auto p-0 text-xs'
+                    disabled={isSelectingAll || isImporting}
+                    onClick={selectAllMatching}
+                  >
+                    {isSelectingAll ? <Loader2 className='mr-1 h-3 w-3 animate-spin' /> : null}
+                    {t('select_all_n', { count: String(totalResults) })}
+                  </Button>
+                ) : null}
+                {selectedCount > 0 ? (
+                  <Button
+                    type='button'
+                    variant='link'
+                    size='sm'
+                    className='h-auto p-0 text-xs text-muted-foreground'
+                    disabled={isImporting}
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    {t('clear_selection')}
+                  </Button>
+                ) : null}
               </div>
             </div>
 
-            {noSearchMatches ? (
+            {isLoading ? (
+              <ListSkeleton />
+            ) : noSearchMatches ? (
               <div className='flex flex-col items-center gap-2 px-6 py-12 text-center text-sm text-muted-foreground'>
                 <Search className='h-8 w-8 text-muted-foreground/50' />
                 {t('no_products_match_search')}
@@ -367,187 +708,109 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
                 </Button>
               </div>
             ) : (
-              <div className='min-h-0 flex-1 overflow-y-auto'>
-                <div className='sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-6 py-2'>
-                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label={t('select_all')} />
-                  <span className='text-xs font-medium text-muted-foreground'>{t('select_all')}</span>
+              <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain'>
+                <div className='sticky top-0 z-10 flex items-center gap-3 border-b bg-background/95 px-4 py-2 backdrop-blur sm:px-6'>
+                  <Checkbox
+                    id='import-select-page'
+                    checked={allOnPageSelected}
+                    onCheckedChange={togglePage}
+                    disabled={isImporting}
+                  />
+                  <Label htmlFor='import-select-page' className='cursor-pointer text-xs font-medium text-muted-foreground'>
+                    {totalPages > 1 ? t('select_this_page_n', { count: String(pageIds.length) }) : t('select_all')}
+                  </Label>
                 </div>
-                <div className='divide-y px-6 pb-3'>
-                  {filtered.map((row, index) => {
-                    const checked = selectedIds.has(row.masterProductId)
-                    const v = valueFor(row)
-                    const needsBatch = (row.trackBatch || row.trackExpiry) && v.stockQuantity > 0
-                    const needsSerial = (row.trackImei || row.trackSerial) && v.stockQuantity > 0
-                    return (
-                      <div key={row.masterProductId} className={`flex flex-wrap items-center gap-3 py-3 ${checked ? 'bg-muted/40' : ''}`}>
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => toggleOne(row.masterProductId)}
-                          className='shrink-0'
-                        />
-                        {row.image?.url ? (
-                          <img src={row.image.url} alt={row.name} className='h-8 w-8 shrink-0 rounded object-cover' />
-                        ) : (
-                          <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded bg-muted'>
-                            <Package className='h-4 w-4 text-muted-foreground' />
-                          </div>
-                        )}
-                        <div className='min-w-0 flex-1 basis-40'>
-                          <div className='truncate text-sm font-medium'>{row.name}</div>
-                          <div className='mt-0.5 flex flex-wrap items-center gap-1'>
-                            {row.category ? (
-                              <Badge variant='secondary' className='px-1.5 py-0 text-[10px]'>
-                                {row.category}
-                              </Badge>
-                            ) : null}
-                            <span
-                              className='inline-flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground'
-                              title={row.carriedAtBranches.join(', ')}
-                            >
-                              <Building2 className='h-3 w-3 shrink-0' />
-                              <span className='truncate'>{row.carriedAtBranches.join(', ')}</span>
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Detail fields sit inline with the name (same row) rather than on
-                            a line below it, and only appear once a product is actually
-                            picked for import — keeps an at-a-glance list scannable across
-                            200+ rows. flex-wrap on the row (not a fixed table column) lets
-                            this group fall onto its own line only if the window is too
-                            narrow to fit it, instead of silently overflowing the dialog. */}
-                        {checked && (
-                          <div className='flex shrink-0 flex-wrap items-end gap-2'>
-                            <FieldGroup label={t('opening_qty')}>
-                              <Input
-                                ref={(el) => { fieldRefs.current[fieldKey(row.masterProductId, 'qty')] = el }}
-                                type='number'
-                                min={0}
-                                value={v.stockQuantity}
-                                onChange={(e) => setStockQuantity(row, Number(e.target.value))}
-                                onKeyDown={(e) =>
-                                  onEnterAdvance(e, () => {
-                                    if (needsBatch) focusRowField(index, 'batch')
-                                    else if (needsSerial) setSerialDialogRowId(row.masterProductId)
-                                    else focusRowField(index, 'price')
-                                  })
-                                }
-                                className='h-8 w-24 text-sm'
-                              />
-                            </FieldGroup>
-
-                            {needsBatch ? (
-                              <FieldGroup label={t('batch_serial_label')}>
-                                <Input
-                                  ref={(el) => { fieldRefs.current[fieldKey(row.masterProductId, 'batch')] = el }}
-                                  placeholder='Batch number'
-                                  showVoiceInput={false}
-                                  value={v.batchNumber}
-                                  onChange={(e) => setRow(row.masterProductId, { ...v, batchNumber: e.target.value })}
-                                  onKeyDown={(e) => onEnterAdvance(e, () => focusRowField(index, 'price'))}
-                                  className='h-8 w-36 text-sm'
-                                />
-                              </FieldGroup>
-                            ) : needsSerial ? (
-                              <FieldGroup label={t('batch_serial_label')}>
-                                <button
-                                  type='button'
-                                  onClick={() => setSerialDialogRowId(row.masterProductId)}
-                                  className={`inline-flex h-8 items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-colors ${
-                                    v.imeis.length >= v.stockQuantity
-                                      ? 'border-green-300 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400'
-                                      : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400'
-                                  }`}
-                                >
-                                  <ScanLine className='h-3 w-3' />
-                                  {v.imeis.length}/{v.stockQuantity}
-                                </button>
-                              </FieldGroup>
-                            ) : null}
-
-                            <FieldGroup label={t('price')}>
-                              <Input
-                                ref={(el) => { fieldRefs.current[fieldKey(row.masterProductId, 'price')] = el }}
-                                type='number'
-                                min={0}
-                                value={v.price}
-                                onChange={(e) => setRow(row.masterProductId, { ...v, price: Number(e.target.value) })}
-                                onKeyDown={(e) => onEnterAdvance(e, () => focusRowField(index, 'cost'))}
-                                className='h-8 w-28 text-sm'
-                              />
-                            </FieldGroup>
-
-                            <FieldGroup label={t('cost')}>
-                              <Input
-                                ref={(el) => { fieldRefs.current[fieldKey(row.masterProductId, 'cost')] = el }}
-                                type='number'
-                                min={0}
-                                value={v.cost}
-                                onChange={(e) => setRow(row.masterProductId, { ...v, cost: Number(e.target.value) })}
-                                onKeyDown={(e) => onEnterAdvance(e, () => focusRowField(index + 1, 'qty'))}
-                                className='h-8 w-28 text-sm'
-                              />
-                            </FieldGroup>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                <div className='divide-y'>
+                  {rows.map((row, index) => (
+                    <ImportRow
+                      key={row.masterProductId}
+                      row={row}
+                      index={index}
+                      checked={selectedIds.has(row.masterProductId)}
+                      value={overrides[row.masterProductId]}
+                      error={errors[row.masterProductId]}
+                      disabled={isImporting}
+                      onToggle={toggleOne}
+                      onUpdate={updateRow}
+                      onOpenSerial={setSerialDialogRowId}
+                      registerField={registerField}
+                      onAdvance={advance}
+                    />
+                  ))}
                 </div>
               </div>
             )}
 
             {!noSearchMatches && totalPages > 1 && (
-              <div className='shrink-0 border-t px-6 py-2'>
-                <SimplePagination currentPage={page} totalPages={totalPages} totalResults={totalResults} limit={PAGE_SIZE} onPageChange={setPage} className='border-t-0 pt-0' />
+              <div className='shrink-0 border-t px-4 py-2 sm:px-6'>
+                <SimplePagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  totalResults={totalResults}
+                  limit={PAGE_SIZE}
+                  onPageChange={setPage}
+                  className='border-t-0 pt-0'
+                />
               </div>
             )}
           </div>
         )}
 
-        <DialogFooter className='shrink-0 border-t px-6 py-4'>
-          {isImporting && importProgress ? (
-            <div className='flex w-full items-center gap-3'>
-              <Loader2 className='h-4 w-4 shrink-0 animate-spin text-muted-foreground' />
+        <DialogFooter className='shrink-0 flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6'>
+          {isImporting && progress ? (
+            <div className='flex w-full items-center gap-3 py-1'>
+              <Loader2 className='h-4 w-4 shrink-0 animate-spin text-primary' />
               <div className='min-w-0 flex-1'>
                 <div className='text-sm text-muted-foreground'>
-                  {t('importing_n_of_total', { done: String(importProgress.done), total: String(importProgress.total) })}
+                  {t('importing_n_of_total', { done: String(progress.done), total: String(progress.total) })}
                 </div>
                 <div className='mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted'>
                   <div
-                    className='h-full rounded-full bg-primary transition-all'
-                    style={{ width: `${Math.round((importProgress.done / importProgress.total) * 100)}%` }}
+                    className='h-full rounded-full bg-primary transition-all duration-300'
+                    style={{ width: `${Math.max(4, Math.round((progress.done / progress.total) * 100))}%` }}
                   />
                 </div>
               </div>
             </div>
           ) : (
             <>
-              <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>
-                {t('cancel')}
-              </Button>
-              <Button ref={importButtonRef} type='button' onClick={handleImport} disabled={selectedCount === 0}>
-                {t('import_n_products', { count: String(selectedCount) })}
-              </Button>
+              <div className='flex items-start gap-3'>
+                <Switch id='import-activate' checked={activate} onCheckedChange={handleActivateChange} className='mt-0.5' />
+                <Label htmlFor='import-activate' className='flex cursor-pointer flex-col items-start gap-0.5'>
+                  <span className='text-sm font-medium'>{t('import_as_active')}</span>
+                  <span className='text-xs font-normal text-muted-foreground'>
+                    {activate ? t('import_as_active_on_hint') : t('import_as_active_off_hint')}
+                  </span>
+                </Label>
+              </div>
+              <div className='flex flex-col-reverse gap-2 sm:flex-row'>
+                <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>
+                  {t('cancel')}
+                </Button>
+                <Button ref={importButtonRef} type='button' onClick={handleImport} disabled={selectedCount === 0}>
+                  {t('import_n_products', { count: String(selectedCount) })}
+                </Button>
+              </div>
             </>
           )}
         </DialogFooter>
       </DialogContent>
 
-      {serialDialogRow && (
+      {serialDialogRow && serialDialogState && (
         <ImportSerialEntryDialog
-          open={!!serialDialogRowId}
+          open
           onOpenChange={(next) => {
-            setSerialDialogRowId(next ? serialDialogRowId : null)
-            // Continue the same field-to-field Enter chain into Price once serial entry
-            // is done (Done button, or auto-close on hitting the target count).
-            if (!next) focusRowField(serialDialogRowIndex, 'price')
+            if (next) return
+            const row = serialDialogRow
+            setSerialDialogRowId(null)
+            // Continue the Enter chain into Price once serial entry is done.
+            focusRowField(row, 'price')
           }}
           productName={serialDialogRow.name}
           isSerial={!!serialDialogRow.trackSerial}
-          targetCount={valueFor(serialDialogRow).stockQuantity}
-          value={valueFor(serialDialogRow).imeis}
-          onChange={(next) => setRow(serialDialogRow.masterProductId, { ...valueFor(serialDialogRow), imeis: next })}
+          targetCount={toQuantity(serialDialogState.stockQuantity)}
+          value={serialDialogState.imeis}
+          onChange={(next) => updateRow(serialDialogRow, { imeis: next })}
         />
       )}
     </Dialog>

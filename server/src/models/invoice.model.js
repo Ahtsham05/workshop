@@ -247,6 +247,10 @@ const InvoiceSchema = new mongoose.Schema({
 });
 
 InvoiceSchema.index({ organizationId: 1, branchId: 1 });
+// Supports every "invoices in this date range" read — dashboard stats/revenue chart/top
+// products & customers/recent activities and the date-filtered reports. Without it each of
+// those scanned the branch's entire invoice history to find one period.
+InvoiceSchema.index({ organizationId: 1, branchId: 1, invoiceDate: -1 });
 // Supports the customer payment allocator's "open invoices, oldest first" scan — see
 // customerPayment.service.js's getOpenInvoicesForCustomer. Mirrors purchase.model.js's
 // identical supplier/purchaseDate index.

@@ -1,370 +1,166 @@
-# Excel Import Feature - Complete Documentation
+# Excel / CSV Import
 
-## Overview
-Complete Excel import functionality for bulk product uploads with comprehensive validation matching the backend MongoDB schema.
+How spreadsheet import works across the app: products, customers, suppliers, brands,
+categories, sub-categories and students.
 
-## Backend Implementation
+## The rule everything follows
 
-### 1. Product Model Schema (`server/src/models/product.model.js`)
+**A bad row costs that row, never the file.** Rows that can't be imported are listed with
+the Excel row number and a reason the shopkeeper can act on, and everything else imports.
+The only hard stop is a file with nothing importable in it.
 
-**Required Fields:**
-- `name`: String (unique)
-- `price`: Number
-- `cost`: Number
-- `stockQuantity`: Number
+Corollaries, each of which used to be violated somewhere:
 
-**Optional Fields:**
-- `barcode`: String (unique, sparse index, allows null)
-- `description`: String
-- `category`: String (legacy)
-- `categories`: Array of category objects
-- `supplier`: ObjectId reference
-- `unit`: String (default: 'pcs', enum: pcs/kg/ltr/etc)
-- `sku`: String (SKU for inventory)
-- `lowStockThreshold`: Number
-- `image`: Object { url, publicId }
+- A file is never rejected for having its header on row 4 instead of row 1.
+- A column is never missed for being called "Sale Price" instead of `price`.
+- A row that's already saved is skipped (or updated) — not reported as an error.
+- A request never 400s over one row's content; the server answers 201 with a per-row
+  breakdown even when every row failed.
+- Anything the import decides for the user (a defaulted unit, a supplier name that matched
+  nothing, a dropped email) is shown, not silent.
 
-### 2. Backend Endpoint
+## Architecture
 
-**Route:** `POST /v1/products/bulk`
+```
+client/src/lib/excel-import.ts          Parsing engine — no React, no feature knowledge
+client/src/components/excel-import-dialog.tsx   The one import dialog UI
+client/src/features/<feature>/components/<x>-import-dialog.tsx   Field list + row builder
 
-**Authentication:** Required (`manageProducts` permission)
+server/src/utils/importRow.js           Cell parsing (numbers, dates, phone/name keys)
+server/src/utils/importSheet.js         Server-side sheet reader (for uploaded files)
+server/src/services/<x>.service.js      bulkAdd* — per-row validation, duplicates, writes
+```
 
-**Validation:** Joi schema validates:
-- Products array must have at least 1 item
-- Each product must have: name, price, cost, stockQuantity
-- Optional fields are validated but not required
-- Barcodes can be empty string or null
+A feature's import dialog supplies three things and nothing else: the field list, a
+`buildRow` that turns one row's cells into an API object, and an `importBatch` that sends
+a batch. File handling, column matching, validation reporting, batching, progress,
+partial success and the failure report all live in the shared dialog.
 
-**Request Body:**
-```json
+### The parsing engine (`client/src/lib/excel-import.ts`)
+
+- `readWorkbook(file)` — accepts `.xlsx .xlsm .xlsb .xls .csv .ods`, case-insensitively,
+  and turns an unreadable/encrypted/oversized file into a sentence the user can act on
+  (`SpreadsheetError`).
+- `summarizeSheets()` / `pickBestSheet()` — scores each sheet by how well its header
+  matches the expected fields, so an "Instructions" first tab doesn't read as "empty".
+- `parseSheet()` — finds the header row anywhere in the first 25 rows, maps each column to
+  a field through the alias table, and returns rows with **true Excel row numbers**. Blank
+  rows, a header repeated mid-file and a trailing "Total" line are dropped. With no
+  recognisable header it falls back to template column order (and skips a first row that
+  looks like an unfamiliar header). An `overrides` argument re-runs the parse with the
+  user's own column choices.
+- `parseNumeric()` — `Rs 62,000`, `1,250.50`, `1.250,50`, `(500)` → -500, `2,999/-`,
+  `۱,۲۵۰`, non-breaking spaces. Returns `{ empty, ok, value, raw }`; `empty` and `not ok`
+  are different answers.
+- `parseText()` — with `{ code: true }` for barcodes/SKUs/phones, which keeps a 13-digit
+  barcode from being printed as `8.9e+12` and strips Excel's leading apostrophe.
+- `parseDate()` — real date cells, Excel serials, and text; slash dates are read
+  **day-first**, falling back to month-first only when day-first is impossible.
+- `downloadTemplate()` / `downloadIssueReport()` — the template is generated from the same
+  field list the parser matches against, so the two can't drift; the issue report hands
+  back only the rows that need fixing, with the reason next to each.
+
+### The dialog (`client/src/components/excel-import-dialog.tsx`)
+
+Select a file → it parses immediately (no separate "Parse" click) → it shows the sheet, the
+header row, the column mapping (editable), how many rows are ready and how many need
+fixing → Import sends batches of 500 with a progress bar → the summary separates:
+
+| Bucket | Meaning |
+| --- | --- |
+| imported | written (inserts + updates) |
+| already saved, left unchanged | `skipped` — deliberate, not a failure |
+| imported with a note | `warnings` — the row is in, with something to know |
+| could not be saved | `errors` — downloadable as a fix-and-re-upload file |
+
+Rows that fail validation are never sent, and the Import button says so:
+*"Import 482 rows, skip 18"*. After an import the parsed file is cleared so the same rows
+can't be sent twice.
+
+## Duplicates
+
+Products, customers and suppliers take a `duplicateStrategy`, chosen in the dialog:
+
+| Strategy | Behaviour |
+| --- | --- |
+| `skip` (default) | Leave the saved record untouched, report the row as skipped |
+| `update` | Refresh details from the file |
+| `error` | Report the row as a problem |
+
+Matching: **products** by barcode, then SKU. **Customers/suppliers** by phone (last 10
+digits, so `+92 300 1234567` and `0300-1234567` are one number), then email, then name —
+all case-insensitive.
+
+`update` never touches **stock** (a file's quantity column is an opening balance;
+overwriting live stock would undo every sale since) or a customer/supplier **balance** (a
+ledger figure). An empty cell means "no change", never "erase what's saved".
+
+Duplicates *within one file* are always caught before sending, naming both rows.
+
+## Server contract
+
+`POST /v1/products/bulk`, `/v1/customers/bulk`, `/v1/suppliers/bulk`, `/v1/brands/bulk`,
+`/v1/categories/bulk`, `/v1/sub-categories/bulk-import` all answer **201** with:
+
+```jsonc
 {
-  "products": [
-    {
-      "name": "Product Name",
-      "price": 100,
-      "cost": 80,
-      "stockQuantity": 50,
-      "barcode": "1234567890",
-      "category": "Electronics",
-      "unit": "pcs",
-      "sku": "SKU001",
-      "lowStockThreshold": 10,
-      "description": "Product description"
-    }
-  ]
+  "message": "Import finished — imported 482, skipped 16 already in the catalogue, 2 row(s) could not be saved",
+  "insertedCount": 482,
+  "updatedCount": 0,
+  "skippedCount": 16,
+  "errors":   [{ "index": 12, "name": "…", "error": "Invalid price \"free\"" }],
+  "skipped":  [{ "index": 3,  "name": "…", "reason": "Already in the catalogue…" }],
+  "warnings": [{ "index": 7,  "name": "…", "message": "Unit \"pieces\" was not recognized…" }],
+  "createdCategories": ["Accessories"]
 }
 ```
 
-**Response:**
-```json
-{
-  "message": "Successfully imported 10 products",
-  "success": true,
-  "insertedCount": 10,
-  "products": [...],
-  "errors": [...]  // If any products failed (e.g., duplicates)
-}
-```
+`index` is the row's position **within the batch that was sent**, which the dialog maps
+back to its Excel row number.
 
-### 3. Service Layer (`server/src/services/product.service.js`)
+Request validation is deliberately shape-only (`Joi.any()` per field, `.unknown(true)`):
+Joi rejects the whole array when one item fails, so per-row rules belong in the service,
+which can report per row and import the rest.
 
-**Function:** `bulkAddProducts(productsToAdd)`
+Imports also run the side effects a manual create runs — the opening-balance ledger entry
+and the subsidiary AR/AP account for customers and suppliers, the shadow Customer record
+for suppliers, Master Product Catalog linking for products. A failure there is reported as
+a note; it never discards an import that is already written.
 
-**Features:**
-- Processes and formats product data
-- Handles null/empty values for optional fields
-- Uses `insertMany` with `ordered: false` to continue on duplicates
-- Returns successful inserts and errors separately
-- Converts empty barcode strings to null for sparse unique index
+## Students (uploads the file, not JSON)
 
-**Error Handling:**
-- Duplicate names/barcodes are caught
-- Returns partial success with error details
-- Continues inserting valid products even if some fail
+The student import posts the file itself, so the server parses it with
+`utils/importSheet.js#readSheetRows` — the same header detection and alias matching the
+browser does. `client/src/features/school/students/student-import.tsx` previews with the
+shared client engine, and the two field lists (there and in
+`student.controller.js#STUDENT_IMPORT_FIELDS`) have to stay in step.
 
-## Frontend Implementation
+## Adding an import to a new entity
 
-### 1. Component (`client/src/features/products/components/product-import-dialog.tsx`)
+1. Write the field list (`ImportFieldSpec[]`) — `key`, `label`, `aliases` in every spelling
+   your users use, `required`, `type`, a `sample` for the template.
+2. Write `buildRow(values, { has })` returning `{ value }`, `{ error }` or
+   `{ value, warning }`. Use `has(field)` to tell a missing column from an empty cell.
+3. Write `importBatch(items)` returning `{ insertedCount, errors, skipped, warnings, notes }`.
+4. Render `<ExcelImportDialog …>`. Don't write file handling.
+5. On the server, follow `customer.service.js#bulkAddCustomers`: validate per row, match
+   duplicates, chunk `insertMany` at 500, attribute write errors back to their row, and
+   return the breakdown above.
 
-**Features:**
-- Template download with sample data
-- File upload (supports .xlsx, .xls, .csv)
-- Client-side validation before import
-- Preview of parsed data (first 10 products)
-- Error display with row numbers and field names
-- Multi-language support (English/Urdu)
-
-**Validation Rules:**
-- **Required:** name, price, cost, stockQuantity
-- **Optional:** barcode, category, unit, sku, lowStockThreshold, description
-- All numeric fields must be positive numbers
-- Empty rows are skipped automatically
-- Header row detection and skip
-
-**Template Structure:**
-```
-| name | barcode | price | cost | stockQuantity | category | unit | sku | lowStockThreshold | description |
-```
-
-### 2. Redux Integration (`client/src/stores/product.slice.ts`)
-
-**Action:** `bulkAddProducts`
-
-**Usage:**
-```typescript
-const result = await dispatch(bulkAddProducts({ products }))
-
-if (result.meta.requestStatus === 'fulfilled') {
-  // Success - refresh product list
-  setFetch((prev) => !prev)
-} else {
-  // Handle error
-  throw new Error(result.payload || 'Import failed')
-}
-```
-
-## User Workflow
-
-1. **Open Import Dialog**
-   - Click "Import Excel" button on Products page
-   - Dialog opens with instructions
-
-2. **Download Template**
-   - Click "Download Template" button
-   - Opens Excel file with:
-     - Header row with field descriptions
-     - 2 sample product rows
-     - Auto-sized columns
-     - Proper formatting
-
-3. **Fill Template**
-   - Add product data starting from row 2
-   - Required fields: name, price, cost, stockQuantity
-   - Optional fields can be left empty
-   - Barcode can be duplicated across files but not within same import
-
-4. **Upload File**
-   - Click "Select Excel File"
-   - Choose filled template
-   - File validation happens automatically
-
-5. **Parse and Validate**
-   - Click "Parse & Validate" button
-   - System validates each row:
-     - Checks required fields
-     - Validates data types
-     - Checks numeric ranges
-     - Displays errors with row numbers
-
-6. **Review Preview**
-   - See first 10 products that will be imported
-   - Check data is correct
-   - Warning about existing products displayed
-
-7. **Import**
-   - Click "Import" button with count
-   - Products are sent to backend
-   - Success toast shows count of imported products
-   - Product list refreshes automatically
-
-## Validation Details
-
-### Client-Side Validation
-
-```typescript
-// Required field validation
-if (!product.name || product.name.trim() === '') {
-  error: 'Product name is required'
-}
-
-if (product.price === undefined || product.price === null || product.price === '') {
-  error: 'Price is required'
-} else if (isNaN(Number(product.price)) || Number(product.price) < 0) {
-  error: 'Price must be a valid positive number'
-}
-
-// Similar for cost and stockQuantity
-
-// Optional field validation
-if (product.lowStockThreshold !== undefined && product.lowStockThreshold !== '') {
-  if (isNaN(Number(product.lowStockThreshold)) || Number(product.lowStockThreshold) < 0) {
-    error: 'Low stock threshold must be a valid positive number'
-  }
-}
-```
-
-### Backend Validation (Joi)
-
-```javascript
-bulkAddProducts: {
-  body: Joi.object().keys({
-    products: Joi.array().items(
-      Joi.object().keys({
-        name: Joi.string().required(),
-        price: Joi.number().required(),
-        cost: Joi.number().required(),
-        stockQuantity: Joi.number().required(),
-        barcode: Joi.string().allow('', null).optional(),
-        description: Joi.string().allow('').optional(),
-        category: Joi.string().allow('').optional(),
-        unit: Joi.string().allow('').optional(),
-        sku: Joi.string().allow('').optional(),
-        lowStockThreshold: Joi.number().optional(),
-      })
-    ).required().min(1)
-  }),
-}
-```
-
-## Error Handling
-
-### Client-Side Errors
-
-1. **File Type Error**
-   - Message: "Invalid file type. Please select .xlsx, .xls, or .csv file"
-   - Shown when wrong file type is selected
-
-2. **Empty File Error**
-   - Message: "The file is empty"
-   - Shown when Excel has no data rows
-
-3. **Validation Errors**
-   - Message: "Validation Errors (X found in Excel file)"
-   - Lists each error with: Row number, Field name, Error message
-   - Example: "Row 3, field: price - Price is required"
-
-4. **Parse Error**
-   - Message: "Error parsing file"
-   - Shown when Excel file is corrupted or can't be read
-
-### Backend Errors
-
-1. **Duplicate Name**
-   - HTTP 400: "Product name 'XYZ' already exists"
-   - Partial success: Other products still imported
-
-2. **Duplicate Barcode**
-   - HTTP 400: "Barcode 'XYZ' already exists"
-   - Partial success: Other products still imported
-
-3. **Validation Error**
-   - HTTP 400: "Products array is required"
-   - HTTP 400: Joi validation errors
-
-## Translation Keys
-
-### English
-```javascript
-"import_excel": "Import Excel"
-"import_products_from_excel": "Import Products from Excel"
-"download_template": "Download Template"
-"select_excel_file": "Select Excel File"
-"parse_and_validate": "Parse & Validate"
-"validation_errors": "Validation Errors"
-"file_parsed_successfully": "File parsed successfully"
-"import_successful": "Import successful"
-"product_name_required": "Product name is required"
-"price_required": "Price is required"
-"price_must_be_positive": "Price must be a valid positive number"
-// ... and 20 more
-```
-
-### Urdu
-```javascript
-"import_excel": "ایکسل امپورٹ کریں"
-"import_products_from_excel": "ایکسل سے پروڈکٹس امپورٹ کریں"
-// ... all English keys have Urdu equivalents
-```
-
-## Testing Checklist
-
-- [ ] Download template generates correct Excel file
-- [ ] Template has correct headers and sample data
-- [ ] File upload accepts .xlsx, .xls, .csv
-- [ ] File upload rejects other file types
-- [ ] Empty rows are skipped
-- [ ] Header row is detected and skipped
-- [ ] Required field validation works
-- [ ] Optional field validation works
-- [ ] Numeric range validation works
-- [ ] Error messages show correct row numbers
-- [ ] Preview shows first 10 products
-- [ ] Import sends correct data to backend
-- [ ] Success toast shows correct count
-- [ ] Product list refreshes after import
-- [ ] Duplicate names/barcodes handled gracefully
-- [ ] Partial success works (some products fail)
-- [ ] Both English and Urdu translations work
-- [ ] Dialog closes after successful import
-- [ ] Dialog can be cancelled
-- [ ] Parse button only shows when file selected
-- [ ] Import button only shows after successful parse
-
-## File Structure
+## Tests
 
 ```
-client/
-  src/
-    features/
-      products/
-        components/
-          product-import-dialog.tsx  # Main import dialog component
-    stores/
-      product.slice.ts               # Redux slice with bulkAddProducts action
-    context/
-      language-context.tsx           # All translation keys
-
-server/
-  src/
-    routes/
-      v1/
-        product.route.js             # POST /bulk endpoint
-    controllers/
-      product.controller.js          # bulkAddProducts controller
-    services/
-      product.service.js             # bulkAddProducts service
-    validations/
-      product.validation.js          # bulkAddProducts validation schema
-    models/
-      product.model.js               # Product schema definition
+server/tests/unit/utils/importRow.test.js        cell parsing
+server/tests/unit/utils/importSheet.test.js      header detection, sheet picking, row numbers
+server/tests/unit/services/customerImport.test.js  per-row behaviour, duplicates, partial writes
+server/tests/unit/services/productImport.test.js   same, for products
 ```
 
-## API Endpoint Summary
+## When a user still reports an import problem
 
-**Endpoint:** `POST /api/v1/products/bulk`
-
-**Headers:**
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
-
-**Body:**
-```json
-{
-  "products": [
-    {
-      "name": "Required",
-      "price": 0,
-      "cost": 0,
-      "stockQuantity": 0,
-      "barcode": "optional",
-      "category": "optional",
-      "unit": "optional",
-      "sku": "optional",
-      "lowStockThreshold": 0,
-      "description": "optional"
-    }
-  ]
-}
-```
-
-## Notes
-
-- Empty barcode values are converted to `null` to work with MongoDB sparse unique index
-- `ordered: false` allows partial success on duplicate errors
-- Template auto-downloads with proper column widths for readability
-- Excel parsing handles different date formats and empty cells gracefully
-- All validation messages are translatable for i18n support
-- Product list automatically refreshes after successful import
+1. Ask for the file. Almost every report is a shape the alias table hasn't seen — add the
+   alias, which fixes it for everyone.
+2. Have them open **Check columns** in the dialog: it shows exactly which column fed which
+   field, and fixes it in place.
+3. Have them use **Download these rows** and send that back — it's the failing rows with
+   the reason attached.

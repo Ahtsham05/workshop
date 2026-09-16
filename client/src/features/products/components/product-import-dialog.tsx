@@ -1,693 +1,355 @@
-import { useState, useCallback } from 'react'
-import { useFormatMoney } from '@/lib/format-money'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { toast } from 'sonner'
-import { Upload, Download, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
-import { useLanguage } from '@/context/language-context'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import * as XLSX from 'xlsx'
+/**
+ * Import products from a spreadsheet.
+ *
+ * All of the file handling — locating the header row, matching columns however they're
+ * spelled, cleaning up "Rs 1,250/-" style cells, batching, partial success, the report
+ * of rows that didn't make it — lives in the shared ExcelImportDialog. What's left here
+ * is what's specific to a product: which columns exist, how a row becomes a product, and
+ * what to do about products that are already in the catalogue.
+ */
 
-interface BulkImportResult {
+import { useCallback, useMemo, useState } from 'react'
+import { useFormatMoney } from '@/lib/format-money'
+import { useLanguage } from '@/context/language-context'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  ExcelImportDialog,
+  type BuiltRow,
+  type ImportBatchOutcome,
+} from '@/components/excel-import-dialog'
+import {
+  parseNumeric,
+  parseText,
+  withCommonAliases,
+  type CellValue,
+  type ImportFieldSpec,
+} from '@/lib/excel-import'
+
+/** What the bulk endpoint sends back for one batch. */
+export interface BulkImportResult {
   insertedCount?: number
+  /** Rows that matched an existing product and were updated instead of inserted. */
+  updatedCount?: number
   errors?: Array<{ index: number; error?: string; name?: string; barcode?: string | null }>
+  /** Rows deliberately left alone (already in the catalogue) — not failures. */
+  skipped?: Array<{ index: number; name?: string; reason: string }>
+  /** Rows that imported, with something worth knowing (a defaulted unit, say). */
   warnings?: Array<{ index: number; name?: string; message: string }>
   createdCategories?: string[]
   createdSubCategories?: string[]
 }
 
+/** How rows matching a product that already exists should be treated. */
+export type DuplicateStrategy = 'skip' | 'update' | 'error'
+
 interface ProductImportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onImport: (products: any[]) => Promise<BulkImportResult | void>
+  onImport: (
+    products: ImportProduct[],
+    options: { duplicateStrategy: DuplicateStrategy }
+  ) => Promise<BulkImportResult | void>
 }
 
 interface ImportProduct {
-  // Original row number in the uploaded file — for local display only, stripped
-  // before the product objects are sent to the API.
-  _row: number
   name: string
   nameUrdu?: string
   barcode?: string | null
   price: number
   cost: number
   stockQuantity: number
-  // Free-text names — the server resolves these to real Category/SubCategory records,
-  // auto-creating whichever ones don't already exist, rather than requiring the file to
-  // reference an existing category by id.
   category?: string
   subCategory?: string
-  categories?: any[]
+  supplier?: string
   unit?: string
   sku?: string
-  // Free-text supplier name, matched case-insensitively against existing suppliers on
-  // the server. Unlike categories, an unmatched supplier is never auto-created (a
-  // supplier needs contact/payment details a spreadsheet row can't supply) — the
-  // product still imports, just without a supplier link.
-  supplier?: string | null
   lowStockThreshold?: number
   description?: string
 }
 
-interface ValidationError {
-  row: number
-  field: string
-  message: string
-}
+/** Optional product fields that are plain pass-through text. */
+type TextField = 'nameUrdu' | 'category' | 'subCategory' | 'supplier' | 'unit' | 'description'
 
-interface ImportRowError {
-  row: number
-  name: string
-  message: string
-}
+/**
+ * Column order here is the template's column order, which is also the order used to
+ * match columns positionally when a file has no header row at all.
+ */
+const PRODUCT_FIELDS: ImportFieldSpec[] = [
+  withCommonAliases({
+    key: 'name',
+    label: 'Product Name',
+    required: true,
+    width: 30,
+    aliases: ['Item', 'Item Name', 'Product', 'Products', 'Item Description', 'Maal', 'Maal ka Naam', 'Naam', 'پروڈکٹ', 'مال'],
+  }),
+  withCommonAliases({ key: 'nameUrdu', label: 'Name (Urdu)', width: 25 }),
+  {
+    key: 'barcode',
+    label: 'Barcode',
+    type: 'code',
+    width: 20,
+    aliases: ['Bar Code', 'Barcode No', 'EAN', 'UPC', 'Scan Code', 'بارکوڈ'],
+  },
+  {
+    key: 'price',
+    label: 'Sale Price',
+    type: 'number',
+    required: true,
+    width: 14,
+    aliases: ['Price', 'Selling Price', 'Retail Price', 'Sales Price', 'MRP', 'Rate', 'Unit Price', 'Qeemat', 'Sale Rate', 'قیمت', 'فروخت'],
+  },
+  {
+    key: 'cost',
+    label: 'Purchase Price',
+    type: 'number',
+    required: true,
+    width: 16,
+    aliases: ['Cost', 'Cost Price', 'Buy Price', 'Buying Price', 'Purchase Rate', 'Kharid', 'Kharid Rate', 'خرید', 'لاگت'],
+  },
+  {
+    key: 'stockQuantity',
+    label: 'Stock Quantity',
+    type: 'number',
+    required: true,
+    width: 16,
+    aliases: ['Stock', 'Qty', 'Quantity', 'Stock Qty', 'Opening Stock', 'Available Qty', 'In Stock', 'Balance Qty', 'Tadaad', 'مقدار', 'اسٹاک'],
+  },
+  { key: 'category', label: 'Category', width: 20, aliases: ['Group', 'Main Category', 'Department', 'کیٹیگری'] },
+  { key: 'subCategory', label: 'Sub Category', width: 20, aliases: ['Subcategory', 'Sub Group', 'Sub Type'] },
+  { key: 'supplier', label: 'Supplier', width: 20, aliases: ['Vendor', 'Supplier Name', 'Party', 'سپلائر'] },
+  { key: 'unit', label: 'Unit', width: 12, aliases: ['UOM', 'Unit of Measure', 'Measure', 'یونٹ'] },
+  { key: 'sku', label: 'SKU', type: 'code', width: 15, aliases: ['Item Code', 'Product Code', 'Code', 'Article Code', 'Ref'] },
+  {
+    key: 'lowStockThreshold',
+    label: 'Low Stock Alert',
+    type: 'number',
+    width: 16,
+    aliases: ['Low Stock', 'Min Stock', 'Minimum Stock', 'Reorder Level', 'Alert Qty', 'Re-order'],
+  },
+  withCommonAliases({ key: 'description', label: 'Description', width: 35 }),
+]
 
-// Sent in batches rather than one giant request: production runs the API behind a
-// serverless platform that hard-caps request body size well below what a multi-thousand
-// row spreadsheet produces as a single JSON payload — that request gets rejected outright
-// (shows up in the browser as a cancelled request) before ever reaching the server code.
-// 500 matches the server's own internal insertMany() chunk size (see
-// BULK_IMPORT_CHUNK_SIZE in product.service.js), so each request maps to exactly one
-// database batch there too.
-const IMPORT_BATCH_SIZE = 500
+const SAMPLE_ROWS = [
+  {
+    name: 'Sample Product 1',
+    nameUrdu: 'سیمپل پروڈکٹ 1',
+    barcode: '1234567890',
+    price: 100,
+    cost: 80,
+    stockQuantity: 50,
+    category: 'Electronics',
+    subCategory: 'Mobile Accessories',
+    supplier: 'Acme Distributors',
+    unit: 'pcs',
+    sku: 'SKU001',
+    lowStockThreshold: 10,
+    description: 'Sample product description',
+  },
+  {
+    name: 'Sample Product 2',
+    nameUrdu: 'سیمپل پروڈکٹ 2',
+    barcode: '0987654321',
+    price: 250,
+    cost: 200,
+    stockQuantity: 30,
+    category: 'Accessories',
+    subCategory: '',
+    supplier: '',
+    unit: 'pcs',
+    sku: 'SKU002',
+    lowStockThreshold: 5,
+    description: 'Another sample product',
+  },
+]
 
 export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImportDialogProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const [file, setFile] = useState<File | null>(null)
-  const [importing, setImporting] = useState(false)
-  const [parsedData, setParsedData] = useState<ImportProduct[]>([])
-  const [errors, setErrors] = useState<ValidationError[]>([])
-  const [parseSuccess, setParseSuccess] = useState(false)
-  const [importErrors, setImportErrors] = useState<ImportRowError[]>([])
-  const [importedCount, setImportedCount] = useState(0)
-  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
+  const [duplicateStrategy, setDuplicateStrategy] = useState<DuplicateStrategy>('skip')
 
-  const downloadTemplate = useCallback(() => {
-    const template = [
-      {
-        name: 'Sample Product 1',
-        nameUrdu: 'سیمپل پروڈکٹ 1',
-        barcode: '1234567890',
-        price: 100,
-        cost: 80,
-        stockQuantity: 50,
-        category: 'Electronics',
-        subCategory: 'Mobile Accessories',
-        supplier: 'Acme Distributors',
-        unit: 'pcs',
-        sku: 'SKU001',
-        lowStockThreshold: 10,
-        description: 'Sample product description'
-      },
-      {
-        name: 'Sample Product 2',
-        nameUrdu: 'سیمپل پروڈکٹ 2',
-        barcode: '0987654321',
-        price: 250,
-        cost: 200,
-        stockQuantity: 30,
-        category: 'Accessories',
-        subCategory: '',
-        supplier: '',
-        unit: 'pcs',
-        sku: 'SKU002',
-        lowStockThreshold: 5,
-        description: 'Another sample product'
-      }
-    ]
+  const buildRow = useCallback(
+    (
+      values: Record<string, CellValue>,
+      { has }: { has: (field: string) => boolean }
+    ): BuiltRow<ImportProduct> => {
+      const name = parseText(values.name)
+      if (!name) return { error: t('Product name is empty') }
 
-    const ws = XLSX.utils.json_to_sheet(template)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Products')
+      const warnings: string[] = []
 
-    // Auto-size columns
-    const colWidths = [
-      { wch: 30 }, // name
-      { wch: 25 }, // nameUrdu
-      { wch: 20 }, // barcode
-      { wch: 15 }, // price
-      { wch: 15 }, // cost
-      { wch: 18 }, // stockQuantity
-      { wch: 20 }, // category
-      { wch: 22 }, // subCategory
-      { wch: 22 }, // supplier
-      { wch: 12 }, // unit
-      { wch: 15 }, // sku
-      { wch: 20 }, // lowStockThreshold
-      { wch: 35 }  // description
-    ]
-    ws['!cols'] = colWidths
-
-    XLSX.writeFile(wb, 'products-import-template.xlsx')
-    toast.success(t('template_downloaded'))
-  }, [t])
-
-  // Strips currency symbols, thousands separators, and stray whitespace from a
-  // spreadsheet cell (e.g. "Rs 62,000", "1,250.50") before it's treated as a number —
-  // real-world exports routinely carry this kind of formatting.
-  const cleanNumber = (raw: unknown): number => {
-    if (raw === undefined || raw === null || raw === '') return NaN
-    if (typeof raw === 'number') return raw
-    const cleaned = String(raw).replace(/[^0-9.-]/g, '')
-    if (cleaned === '' || cleaned === '-' || cleaned === '.') return NaN
-    return Number(cleaned)
-  }
-
-  const validateProduct = (product: any, rowIndex: number): ValidationError[] => {
-    const errors: ValidationError[] = []
-
-    // Required fields
-    if (!product.name || product.name.toString().trim() === '') {
-      errors.push({ row: rowIndex, field: 'name', message: t('product_name_required') })
-    }
-
-    if (product.price === undefined || product.price === null || product.price === '') {
-      errors.push({ row: rowIndex, field: 'price', message: t('price_required') })
-    } else if (isNaN(cleanNumber(product.price)) || cleanNumber(product.price) < 0) {
-      errors.push({ row: rowIndex, field: 'price', message: t('price_must_be_positive') })
-    }
-
-    if (product.cost === undefined || product.cost === null || product.cost === '') {
-      errors.push({ row: rowIndex, field: 'cost', message: t('cost_required') })
-    } else if (isNaN(cleanNumber(product.cost)) || cleanNumber(product.cost) < 0) {
-      errors.push({ row: rowIndex, field: 'cost', message: t('cost_must_be_positive') })
-    }
-
-    if (product.stockQuantity === undefined || product.stockQuantity === null || product.stockQuantity === '') {
-      errors.push({ row: rowIndex, field: 'stockQuantity', message: t('stock_quantity_required') })
-    } else if (isNaN(cleanNumber(product.stockQuantity)) || cleanNumber(product.stockQuantity) < 0) {
-      errors.push({ row: rowIndex, field: 'stockQuantity', message: t('stock_must_be_positive') })
-    }
-
-    // Optional field validation
-    if (product.lowStockThreshold !== undefined && product.lowStockThreshold !== null && product.lowStockThreshold !== '') {
-      if (isNaN(cleanNumber(product.lowStockThreshold)) || cleanNumber(product.lowStockThreshold) < 0) {
-        errors.push({ row: rowIndex, field: 'lowStockThreshold', message: t('low_stock_must_be_positive') })
-      }
-    }
-
-    return errors
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (!selectedFile) return
-
-    // Check file type
-    const validTypes = [
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'text/csv'
-    ]
-    
-    if (!validTypes.includes(selectedFile.type) && 
-        !selectedFile.name.endsWith('.xlsx') && 
-        !selectedFile.name.endsWith('.xls') && 
-        !selectedFile.name.endsWith('.csv')) {
-      toast.error(t('invalid_file_type'))
-      return
-    }
-
-    setFile(selectedFile)
-    setParseSuccess(false)
-    setParsedData([])
-    setErrors([])
-    setImportErrors([])
-    setImportedCount(0)
-  }
-
-  const parseFile = useCallback(async () => {
-    if (!file) {
-      toast.error(t('please_select_file'))
-      return
-    }
-
-    try {
-      setImporting(true)
-      setImportErrors([])
-      setImportedCount(0)
-      const data = await file.arrayBuffer()
-      // codepage 65001 (UTF-8) is required so non-Latin text (e.g. Urdu) in
-      // CSV files isn't misread as a legacy codepage and turned into "?"/mojibake
-      const workbook = XLSX.read(data, { type: 'array', codepage: 65001 })
-      const sheetName = workbook.SheetNames[0]
-      const worksheet = workbook.Sheets[sheetName]
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
-
-      if (jsonData.length === 0) {
-        toast.error(t('file_is_empty'))
-        setImporting(false)
-        return
+      /**
+       * A price/cost/stock column the file doesn't have at all is imported as 0 — plenty
+       * of price lists carry only a sale price, and failing every row of one because it
+       * has no Cost column helps nobody. An empty cell in a column that IS there is a
+       * different thing: the file meant to say something and didn't, so the row waits.
+       */
+      const readAmount = (
+        field: 'price' | 'cost' | 'stockQuantity',
+        label: string
+      ): { value: number } | { error: string } => {
+        if (!has(field)) return { value: 0 }
+        const parsed = parseNumeric(values[field])
+        if (parsed.empty) return { error: t('{{label}} is empty', { label }) }
+        if (!parsed.ok) return { error: t('{{label}} "{{value}}" is not a number', { label, value: parsed.raw }) }
+        if (parsed.value < 0) return { error: t('{{label}} cannot be negative', { label }) }
+        return { value: parsed.value }
       }
 
-      // Skip header rows - detect if first row is a header by checking if price/cost/stockQuantity are non-numeric
-      let dataToProcess = jsonData
-      let rowOffset = 1 // Excel rows start at 1
-      
-      if (jsonData[0]) {
-        const firstRow = jsonData[0] as any
-        const firstRowName = firstRow.name?.toString().toLowerCase() || ''
-        const priceValue = firstRow.price?.toString().toLowerCase() || ''
-        const costValue = firstRow.cost?.toString().toLowerCase() || ''
-        const stockValue = firstRow.stockQuantity?.toString().toLowerCase() || ''
-        
-        // Skip header if name field matches header patterns OR numeric fields contain text
-        const isHeaderByName = firstRowName === 'name' || 
-                               firstRowName.includes('product name') || 
-                               firstRowName.includes('required')
-        const isHeaderByValues = priceValue === 'price' ||
-                                 costValue === 'cost' ||
-                                 stockValue === 'stockquantity' ||
-                                 (isNaN(cleanNumber(firstRow.price)) && firstRow.price !== '' && firstRow.price !== null)
-        
-        if (isHeaderByName || isHeaderByValues) {
-          dataToProcess = jsonData.slice(1)
-          rowOffset = 2 // We skipped header, so data starts at row 2
-        }
+      const price = readAmount('price', t('Sale price'))
+      if ('error' in price) return { error: price.error }
+      const cost = readAmount('cost', t('Purchase price'))
+      if ('error' in cost) return { error: cost.error }
+      const stock = readAmount('stockQuantity', t('Stock quantity'))
+      if ('error' in stock) return { error: stock.error }
+
+      const product: ImportProduct = {
+        name,
+        price: price.value,
+        cost: cost.value,
+        stockQuantity: stock.value,
       }
 
-      // Validate and parse products
-      const products: ImportProduct[] = []
-      const allErrors: ValidationError[] = []
+      const barcode = parseText(values.barcode, { code: true })
+      if (barcode) product.barcode = barcode
+      const sku = parseText(values.sku, { code: true })
+      if (sku) product.sku = sku
 
-      dataToProcess.forEach((row: any, index: number) => {
-        // Skip completely empty rows
-        const hasAnyData = Object.values(row).some(val => val !== '' && val !== null && val !== undefined)
-        if (!hasAnyData) {
-          return
-        }
-
-        const rowErrors = validateProduct(row, index + rowOffset)
-
-        if (rowErrors.length > 0) {
-          allErrors.push(...rowErrors)
-        } else {
-          const product: ImportProduct = {
-            _row: index + rowOffset,
-            name: row.name.toString().trim(),
-            barcode: row.barcode?.toString().trim() || null,
-            price: cleanNumber(row.price),
-            cost: cleanNumber(row.cost),
-            stockQuantity: cleanNumber(row.stockQuantity),
-            unit: row.unit?.toString().trim() || 'pcs',
-          }
-
-          // Add optional fields only if they have values
-          if (row.nameUrdu?.toString().trim()) {
-            product.nameUrdu = row.nameUrdu.toString().trim()
-          }
-          if (row.category?.toString().trim()) {
-            product.category = row.category.toString().trim()
-          }
-          if (row.subCategory?.toString().trim()) {
-            product.subCategory = row.subCategory.toString().trim()
-          }
-          if (row.supplier?.toString().trim()) {
-            product.supplier = row.supplier.toString().trim()
-          }
-          if (row.sku?.toString().trim()) {
-            product.sku = row.sku.toString().trim()
-          }
-          if (row.description?.toString().trim()) {
-            product.description = row.description.toString().trim()
-          }
-          if (row.lowStockThreshold !== undefined && row.lowStockThreshold !== null && row.lowStockThreshold !== '' && !isNaN(cleanNumber(row.lowStockThreshold))) {
-            product.lowStockThreshold = cleanNumber(row.lowStockThreshold)
-          }
-
-          products.push(product)
-        }
+      const optionalText: Array<[TextField, string]> = [
+        ['nameUrdu', parseText(values.nameUrdu)],
+        ['category', parseText(values.category)],
+        ['subCategory', parseText(values.subCategory)],
+        ['supplier', parseText(values.supplier)],
+        ['unit', parseText(values.unit)],
+        ['description', parseText(values.description)],
+      ]
+      optionalText.forEach(([key, value]) => {
+        if (value) product[key] = value
       })
 
-      // Duplicate barcodes within the file itself would otherwise only surface as an
-      // opaque "already used by another product" failure at import time — catch them
-      // here instead, while we still know which two rows collided.
-      const firstRowForBarcode = new Map<string, number>()
-      products.forEach((product) => {
-        if (!product.barcode) return
-        const seenAtRow = firstRowForBarcode.get(product.barcode)
-        if (seenAtRow === undefined) {
-          firstRowForBarcode.set(product.barcode, product._row)
+      // A bad optional cell is never worth losing the row over — the product imports
+      // without it and the dialog says so.
+      const lowStock = parseNumeric(values.lowStockThreshold)
+      if (!lowStock.empty) {
+        if (lowStock.ok && lowStock.value >= 0) {
+          product.lowStockThreshold = lowStock.value
         } else {
-          allErrors.push({
-            row: product._row,
-            field: 'barcode',
-            message: t('duplicate_barcode_in_file_message', { barcode: product.barcode, row: seenAtRow })
-          })
+          warnings.push(t('Low stock alert "{{value}}" was ignored', { value: lowStock.raw }))
         }
-      })
-
-      if (allErrors.length > 0) {
-        setErrors(allErrors)
-        toast.error(`${t('validation_errors')}: ${allErrors.length} errors found`)
-      } else {
-        setParsedData(products)
-        setParseSuccess(true)
-        toast.success(`${t('file_parsed_successfully')}: ${products.length} products ready to import`)
       }
 
-      setImporting(false)
-    } catch (error) {
-      console.error('Error parsing file:', error)
-      toast.error(t('error_parsing_file'))
-      setImporting(false)
-    }
-  }, [file, t])
-
-  const handleImport = useCallback(async () => {
-    if (parsedData.length === 0) {
-      toast.error(t('no_products_to_import'))
-      return
-    }
-
-    setImporting(true)
-    const totalSubmitted = parsedData.length
-    // _row only exists for local display — the API doesn't know about it.
-    const productsToSend = parsedData.map(({ _row, ...rest }) => rest)
-
-    const batches: any[][] = []
-    for (let i = 0; i < productsToSend.length; i += IMPORT_BATCH_SIZE) {
-      batches.push(productsToSend.slice(i, i + IMPORT_BATCH_SIZE))
-    }
-
-    let inserted = 0
-    let warningsCount = 0
-    const rowErrors: ImportRowError[] = []
-    const createdCategories = new Set<string>()
-    const createdSubCategories = new Set<string>()
-    let stoppedEarly = false
-
-    setImportProgress({ done: 0, total: totalSubmitted })
-
-    for (let b = 0; b < batches.length; b++) {
-      const batch = batches[b]
-      const indexOffset = b * IMPORT_BATCH_SIZE
-      try {
-        const result = await onImport(batch)
-        inserted += result?.insertedCount ?? 0
-
-        const failed = result?.errors || []
-        failed.forEach((err) => {
-          const source = parsedData[indexOffset + err.index]
-          rowErrors.push({
-            row: source?._row ?? indexOffset + err.index + 1,
-            name: source?.name || err.name || '',
-            message: err.error || t('unknown_error')
-          })
-        })
-
-        const batchCreatedCategories = result?.createdCategories || []
-        const batchCreatedSubCategories = result?.createdSubCategories || []
-        batchCreatedCategories.forEach((c) => createdCategories.add(c))
-        batchCreatedSubCategories.forEach((c) => createdSubCategories.add(c))
-        warningsCount += result?.warnings?.length || 0
-
-        setImportProgress({ done: Math.min(indexOffset + batch.length, totalSubmitted), total: totalSubmitted })
-      } catch (error) {
-        // Stop sending further batches, but keep whatever already succeeded — those
-        // rows are really saved, and must not be silently dropped from the summary.
-        console.error('Error importing product batch:', error)
-        stoppedEarly = true
-        batch.forEach((product, i) => {
-          const source = parsedData[indexOffset + i]
-          rowErrors.push({
-            row: source?._row ?? indexOffset + i + 1,
-            name: source?.name || product.name || '',
-            message: error instanceof Error ? error.message : t('error_importing_products')
-          })
-        })
-        break
+      if (price.value > 0 && cost.value > 0 && price.value < cost.value) {
+        warnings.push(t('Sale price is below the purchase price'))
       }
-    }
 
-    setImportProgress(null)
-    setImportErrors(rowErrors)
-    setImportedCount(inserted)
+      return { value: product, warning: warnings.length ? warnings.join('; ') : undefined }
+    },
+    [t]
+  )
 
-    if (inserted === 0) {
-      toast.error(t('import_failed_all_products'))
-    } else if (stoppedEarly) {
-      toast.error(t('import_stopped_early_message', { inserted, total: totalSubmitted }))
-    } else if (rowErrors.length > 0) {
-      toast.warning(t('products_imported_with_errors_message', {
-        inserted,
-        total: totalSubmitted,
-        failed: rowErrors.length
-      }))
-    } else {
-      toast.success(`${t('import_successful')}: ${inserted} ${t('products_imported')}`)
-    }
+  const importBatch = useCallback(
+    async (items: ImportProduct[]): Promise<ImportBatchOutcome> => {
+      const result = (await onImport(items, { duplicateStrategy })) || {}
+      const notes: string[] = []
+      if (result.createdCategories?.length) {
+        notes.push(
+          t('Created {{count}} new categories: {{names}}', {
+            count: result.createdCategories.length,
+            names: result.createdCategories.slice(0, 5).join(', '),
+          })
+        )
+      }
+      if (result.createdSubCategories?.length) {
+        notes.push(
+          t('Created {{count}} new sub-categories: {{names}}', {
+            count: result.createdSubCategories.length,
+            names: result.createdSubCategories.slice(0, 5).join(', '),
+          })
+        )
+      }
+      if (result.updatedCount) {
+        notes.push(t('{{count}} products that were already in the catalogue were updated', { count: result.updatedCount }))
+      }
+      return {
+        // Updated rows are imports too — counting only inserts would report "nothing was
+        // imported" for a price-list refresh where every row already existed.
+        insertedCount: (result.insertedCount || 0) + (result.updatedCount || 0),
+        errors: result.errors,
+        // Rows the server left alone on purpose, kept apart from rows that failed.
+        skipped: result.skipped?.map((skip) => ({ index: skip.index, reason: skip.reason })),
+        // Rows that did import, with a note (an unknown unit that was defaulted, a
+        // supplier name that matched nothing) — visible, but not listed as a problem.
+        warnings: result.warnings?.map((warning) => ({ index: warning.index, message: warning.message })),
+        notes,
+      }
+    },
+    [onImport, duplicateStrategy, t]
+  )
 
-    // Categories/sub-categories referenced by name in the file are auto-created on
-    // the server when they don't already exist — surface that so it isn't a silent
-    // side effect the user only discovers later on the Categories page.
-    if (createdCategories.size || createdSubCategories.size) {
-      const parts = []
-      if (createdCategories.size) parts.push(`${createdCategories.size} ${t('categories')}`)
-      if (createdSubCategories.size) parts.push(`${createdSubCategories.size} ${t('subcategories')}`)
-      toast.info(`${t('created')}: ${parts.join(', ')}`)
-    }
-
-    // Non-fatal per-row notes (an unrecognized unit that was defaulted, a supplier
-    // name that didn't match any existing supplier) — the row still imported, this is
-    // just visibility into what the server had to guess or skip.
-    if (warningsCount > 0) {
-      toast.info(t('products_imported_with_notes', { count: String(warningsCount) }))
-    }
-
-    // Clear the file and parsed preview either way — the rows that succeeded are
-    // already saved, so re-parsing and re-clicking Import must not be possible, or
-    // it would silently re-insert them as duplicates. Only a fully successful run
-    // closes the dialog; a partial run stays open (file cleared) showing what failed,
-    // so the user has to explicitly pick a (corrected) file to try again.
-    setFile(null)
-    setParsedData([])
-    setParseSuccess(false)
-    setErrors([])
-    if (rowErrors.length === 0) {
-      onOpenChange(false)
-    }
-
-    setImporting(false)
-  }, [parsedData, onImport, onOpenChange, t])
-
-  const resetDialog = () => {
-    setFile(null)
-    setParsedData([])
-    setErrors([])
-    setParseSuccess(false)
-    setImportErrors([])
-    setImportedCount(0)
-    setImportProgress(null)
-  }
+  const duplicateKeys = useMemo(
+    () => [
+      { label: t('barcode'), get: (item: ImportProduct) => item.barcode || undefined },
+      { label: t('SKU'), get: (item: ImportProduct) => item.sku || undefined },
+    ],
+    [t]
+  )
 
   return (
-    <Dialog open={open} onOpenChange={(open) => {
-      if (!open) resetDialog()
-      onOpenChange(open)
-    }}>
-      <DialogContent className="max-w-3xl max-h-[90vh]">
-        <DialogHeader>
-          <DialogTitle>{t('import_products_from_excel')}</DialogTitle>
-          <DialogDescription>
-            {t('upload_excel_file_to_import_products')}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Template Download */}
-          <Alert>
-            <Download className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between">
-              <span>{t('download_template_first')}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={downloadTemplate}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                {t('download_template')}
-              </Button>
-            </AlertDescription>
-          </Alert>
-
-          {/* File Upload */}
-          <div className="grid w-full items-center gap-1.5">
-            <Label htmlFor="excel-file">{t('select_excel_file')}</Label>
-            <Input
-              id="excel-file"
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleFileChange}
-              disabled={importing}
-            />
-            {file && (
-              <p className="text-sm text-muted-foreground">
-                {t('selected_file')}: {file.name}
-              </p>
+    <ExcelImportDialog<ImportProduct>
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('Import Products from Excel')}
+      description={t('Upload your product list. Columns are matched automatically — you can check and change them before importing.')}
+      entityPlural={t('products')}
+      fields={PRODUCT_FIELDS}
+      sampleRows={SAMPLE_ROWS}
+      templateFileName='products-import-template.xlsx'
+      templateSheetName='Products'
+      buildRow={buildRow}
+      importBatch={importBatch}
+      duplicateKeys={duplicateKeys}
+      options={
+        <div className='space-y-1.5'>
+          <Label className='text-sm'>{t('If a product is already in the catalogue')}</Label>
+          <Select value={duplicateStrategy} onValueChange={(value) => setDuplicateStrategy(value as DuplicateStrategy)}>
+            <SelectTrigger className='h-8 w-full sm:w-[320px]'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='skip'>{t('Skip it (keep what is already saved)')}</SelectItem>
+              <SelectItem value='update'>{t('Update its price, cost and details (stock is not changed)')}</SelectItem>
+              <SelectItem value='error'>{t('Report it as a problem row')}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className='text-xs text-muted-foreground'>
+            {t('Products are matched by barcode, then by SKU.')}
+          </p>
+        </div>
+      }
+      renderPreview={(product) => (
+        <>
+          <div className='font-medium'>
+            {product.name}
+            {product.nameUrdu && (
+              <span className='font-normal text-muted-foreground'>
+                {' · '}
+                <span dir='rtl'>{product.nameUrdu}</span>
+              </span>
             )}
           </div>
-
-          {/* Parse Button */}
-          {file && !parseSuccess && errors.length === 0 && (
-            <Button
-              onClick={parseFile}
-              disabled={importing}
-              className="w-full"
-            >
-              {importing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('parsing')}...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  {t('parse_and_validate')}
-                </>
-              )}
-            </Button>
-          )}
-
-          {/* Validation Errors */}
-          {errors.length > 0 && (
-            <Alert variant="destructive">
-              <XCircle className="h-4 w-4" />
-              <AlertDescription>
-                <div className="font-semibold mb-2">{t('validation_errors')} ({errors.length} {t('found_in_excel_file')})</div>
-                <ScrollArea className="h-40">
-                  <div className="space-y-1">
-                    {errors.map((error, index) => (
-                      <div key={index} className="text-xs">
-                        {t('row')} {error.row}, {t('field')}: {error.field} - {error.message}
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Success Preview */}
-          {parseSuccess && parsedData.length > 0 && (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription>
-                <div className="font-semibold mb-2 text-green-600">
-                  {t('ready_to_import')}: {parsedData.length} products
-                </div>
-                <ScrollArea className="h-40">
-                  <div className="space-y-2">
-                    {parsedData.slice(0, 10).map((product, index) => (
-                      <div key={index} className="text-xs border-b pb-1">
-                        <div className="font-medium">{product.name}{product.nameUrdu && <span className="text-muted-foreground mr-2 font-normal"> · <span dir="rtl">{product.nameUrdu}</span></span>}</div>
-                        <div className="text-muted-foreground">
-                          Price: {formatMoney(product.price)} | Cost: {formatMoney(product.cost)} | Stock: {product.stockQuantity}
-                          {product.barcode && ` | Barcode: ${product.barcode}`}
-                        </div>
-                      </div>
-                    ))}
-                    {parsedData.length > 10 && (
-                      <div className="text-xs text-muted-foreground">
-                        ... and {parsedData.length - 10} more products
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Warning */}
-          {parseSuccess && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {t('warning_existing_products')}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Import Result */}
-          {(importedCount > 0 || importErrors.length > 0) && !parseSuccess && (
-            <Alert variant={importErrors.length > 0 ? 'destructive' : undefined}>
-              {importErrors.length > 0 ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}
-              <AlertDescription>
-                <div className={`font-semibold mb-2 ${importErrors.length === 0 ? 'text-green-600' : ''}`}>
-                  {importErrors.length > 0
-                    ? t('import_completed_with_errors')
-                    : `${t('import_successful')}: ${importedCount} ${t('products_imported')}`}
-                </div>
-                {importErrors.length > 0 && (
-                  <>
-                    <div className="text-xs text-muted-foreground mb-2">
-                      {t('products_imported_with_errors_message', {
-                        inserted: importedCount,
-                        total: importedCount + importErrors.length,
-                        failed: importErrors.length
-                      })}
-                    </div>
-                    <ScrollArea className="h-40">
-                      <div className="space-y-1">
-                        {importErrors.slice(0, 50).map((err, index) => (
-                          <div key={index} className="text-xs">
-                            {t('row')} {err.row}{err.name ? ` (${err.name})` : ''}: {err.message}
-                          </div>
-                        ))}
-                        {importErrors.length > 50 && (
-                          <div className="text-xs text-muted-foreground">
-                            ... and {importErrors.length - 50} more
-                          </div>
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={importing}
-          >
-            {importErrors.length > 0 || importedCount > 0 ? t('close') : t('cancel')}
-          </Button>
-          {parseSuccess && (
-            <Button
-              onClick={handleImport}
-              disabled={importing || parsedData.length === 0}
-            >
-              {importing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {importProgress
-                    ? t('importing_progress', { done: importProgress.done, total: importProgress.total })
-                    : `${t('importing')}...`}
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  {t('import')} ({parsedData.length})
-                </>
-              )}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <div className='text-muted-foreground'>
+            {t('Price')}: {formatMoney(product.price)} | {t('Cost')}: {formatMoney(product.cost)} |{' '}
+            {t('Stock')}: {product.stockQuantity}
+            {product.barcode ? ` | ${t('Barcode')}: ${product.barcode}` : ''}
+          </div>
+        </>
+      )}
+    />
   )
 }

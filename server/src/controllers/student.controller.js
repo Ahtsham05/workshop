@@ -3,7 +3,8 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { studentService } = require('../services');
-const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
+const { readSheetRows } = require('../utils/importSheet');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
 const { Organization } = require('../models');
 
@@ -160,25 +161,59 @@ const getAdmissionForm = catchAsync(async (req, res) => {
   res.send(response);
 });
 
+/**
+ * Columns the student import understands, with the spellings people actually use. Order
+ * doubles as the assumed column order for a file that has no header row at all.
+ */
+const STUDENT_IMPORT_FIELDS = [
+  { key: 'firstName', label: 'First Name', required: true, aliases: ['Name', 'Student Name', 'Student', 'Given Name'] },
+  { key: 'lastName', label: 'Last Name', aliases: ['Surname', 'Family Name'] },
+  { key: 'gender', label: 'Gender', required: true, aliases: ['Sex', 'M/F'] },
+  { key: 'dateOfBirth', label: 'Date of Birth', aliases: ['DOB', 'Birth Date', 'Birthday'] },
+  { key: 'class', label: 'Class', required: true, aliases: ['Class Name', 'Grade', 'Standard'] },
+  { key: 'section', label: 'Section', aliases: ['Section Name', 'Sec'] },
+  { key: 'parentPhone', label: 'Parent Phone', aliases: ['Phone', 'Contact Number', 'Mobile', 'Guardian Phone', 'Father Phone'] },
+  { key: 'fatherName', label: 'Father Name', aliases: ['Father', "Father's Name", 'Guardian Name', 'Parent Name'] },
+  { key: 'monthlyFee', label: 'Monthly Fee', aliases: ['Tuition Fee', 'Fee', 'Fees'] },
+  { key: 'transportFee', label: 'Transport Fee', aliases: ['Transport', 'Van Fee', 'Bus Fee'] },
+  { key: 'admissionFee', label: 'Admission Fee', aliases: ['Admission'] },
+  { key: 'discount', label: 'Discount', aliases: ['Concession', 'Rebate'] },
+];
+
 const bulkImport = catchAsync(async (req, res) => {
   if (!req.file) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Excel file is required');
   }
 
-  const XLSX = require('xlsx');
-  const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Excel file has no sheets');
-  }
-  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+  // Tolerant read: the header row is found wherever it is (files usually open with a
+  // school name or a blank row), columns are matched however they're spelled, and the
+  // sheet that actually holds data is picked rather than blindly the first one — see
+  // utils/importSheet.js. Rows come back keyed by the field names bulkImportStudents
+  // expects, each carrying its real Excel row number.
+  const { rows, headerRow, sheetName, missingFields } = readSheetRows(
+    req.file.buffer,
+    STUDENT_IMPORT_FIELDS,
+  );
+
   if (!rows.length) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Excel file is empty or has no data rows');
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      missingFields.length
+        ? `No student rows found. These columns are needed: ${missingFields
+            .map((key) => (STUDENT_IMPORT_FIELDS.find((field) => field.key === key) || {}).label || key)
+            .join(', ')}.`
+        : 'No student rows found in this file. Check that the data is on one of the sheets and try again.',
+    );
   }
+
+  // Students require a branch. Without this, a request that arrives before the branch
+  // switcher has resolved would fail every single row on `branchId: required` — the same
+  // fix products and customers needed.
+  await resolveWriteBranchId(req);
 
   const scope = getBranchContext(req);
   const results = await studentService.bulkImportStudents(rows, scope);
-  res.status(httpStatus.OK).send(results);
+  res.status(httpStatus.OK).send({ ...results, headerRow, sheetName });
 });
 
 /**

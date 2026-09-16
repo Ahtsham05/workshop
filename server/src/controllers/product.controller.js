@@ -447,7 +447,7 @@ const scanProductImage = catchAsync(async (req, res) => {
 });
 
 const bulkAddProducts = catchAsync(async (req, res) => {
-  const { products } = req.body;
+  const { products, duplicateStrategy } = req.body;
 
   if (!products || !Array.isArray(products) || products.length === 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Products array is required');
@@ -464,20 +464,27 @@ const bulkAddProducts = catchAsync(async (req, res) => {
   // businessType is needed here (not just on the single-create path) because a tracked
   // row (trackImei etc.) is routed through productService.createProduct(), whose IMEI
   // gate checks it — see product.service.js#bulkAddProducts.
-  const result = await productService.bulkAddProducts(products, {
-    ...getBranchContext(req),
-    businessType: req.user.businessType,
-  });
+  const result = await productService.bulkAddProducts(
+    products,
+    {
+      ...getBranchContext(req),
+      businessType: req.user.businessType,
+    },
+    { duplicateStrategy },
+  );
 
   const failedCount = result.errors?.length || 0;
-  const categoryNote = result.createdCategories?.length
-    ? ` — created ${result.createdCategories.length} new categor${result.createdCategories.length === 1 ? 'y' : 'ies'}`
-    : '';
-  const message = result.insertedCount === 0
-    ? `No products were imported — ${failedCount} row(s) failed validation`
-    : failedCount > 0
-      ? `Imported ${result.insertedCount} of ${result.insertedCount + failedCount} products (${failedCount} failed)${categoryNote}`
-      : `Successfully imported ${result.insertedCount} products${categoryNote}`;
+  const parts = [];
+  if (result.insertedCount) parts.push(`imported ${result.insertedCount}`);
+  if (result.updatedCount) parts.push(`updated ${result.updatedCount}`);
+  if (result.skippedCount) parts.push(`skipped ${result.skippedCount} already in the catalogue`);
+  if (failedCount) parts.push(`${failedCount} row(s) could not be saved`);
+  if (result.createdCategories?.length) {
+    parts.push(`created ${result.createdCategories.length} new categor${result.createdCategories.length === 1 ? 'y' : 'ies'}`);
+  }
+  const message = parts.length
+    ? `Import finished — ${parts.join(', ')}`
+    : 'Nothing to import';
 
   // Always resolve with the full per-row breakdown — even when every row failed —
   // instead of throwing, matching student.controller.js#bulkImport's pattern. This is

@@ -149,7 +149,9 @@ export const bulkUpdateProducts = createAsyncThunk(
 
 export const bulkAddProducts = createAsyncThunk(
     'product/bulkAddProducts',
-    catchAsync(async (data: { products: any[] }) => {
+    // duplicateStrategy decides what happens to a row whose barcode/SKU already exists:
+    // 'skip' (default), 'update', or 'error'. Omitted by callers that don't ask.
+    catchAsync(async (data: { products: any[]; duplicateStrategy?: 'skip' | 'update' | 'error' }) => {
         const response = await Axios({
             ...summery.bulkAddProducts,
             data: data

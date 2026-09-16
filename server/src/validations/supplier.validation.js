@@ -88,18 +88,23 @@ const bulkDeleteSuppliers = {
   }),
 };
 
+// Shape-only, for the same reason as customer.validation.js#bulkAddCustomers: one bad
+// row must cost that row, not the whole upload. Per-row rules live in
+// supplier.service.js#bulkAddSuppliers.
 const bulkAddSuppliers = {
   body: Joi.object().keys({
+    duplicateStrategy: Joi.string().valid('skip', 'update', 'error').optional(),
     suppliers: Joi.array().items(
       Joi.object().keys({
-        name: Joi.string().required(),
-        email: Joi.string().email().allow('').optional(),
-        phone: Joi.string().allow('').optional(),
-        whatsapp: Joi.string().allow('').optional(),
-        address: Joi.string().allow('').optional(),
-        balance: Joi.number().optional(),
-        nameUrdu: Joi.string().allow('').optional(),
-      })
+        name: Joi.any(),
+        nameUrdu: Joi.any(),
+        email: Joi.any(),
+        phone: Joi.any(),
+        whatsapp: Joi.any(),
+        address: Joi.any(),
+        balance: Joi.any(),
+        taxNumber: Joi.any(),
+      }).unknown(true)
     ).required().min(1)
   }),
 };

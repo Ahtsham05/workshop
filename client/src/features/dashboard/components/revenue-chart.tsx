@@ -1,7 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useLanguage } from '@/context/language-context'
-import { useGetRevenueDataQuery } from '@/stores/dashboard.api'
+import { DASHBOARD_QUERY_OPTIONS, useGetRevenueDataQuery } from '@/stores/dashboard.api'
+import { getWidgetQueryState } from '../lib/widget-query-state'
+import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   dashboardRangeQueryParams,
@@ -17,10 +19,11 @@ type Props = {
 export function RevenueChart({ dateRange }: Props) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const { data: revenueData, isLoading, isFetching } = useGetRevenueDataQuery(dashboardRangeQueryParams(dateRange))
-  const loading = isLoading || isFetching
+  const { data: revenueData, showSkeleton, isRefreshing } = getWidgetQueryState(
+    useGetRevenueDataQuery(dashboardRangeQueryParams(dateRange), DASHBOARD_QUERY_OPTIONS)
+  )
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <Card className='col-span-1 lg:col-span-4'>
         <CardHeader>
@@ -35,7 +38,10 @@ export function RevenueChart({ dateRange }: Props) {
   }
 
   return (
-    <Card className='col-span-1 lg:col-span-4'>
+    <Card
+      aria-busy={isRefreshing}
+      className={cn('col-span-1 transition-opacity lg:col-span-4', isRefreshing && 'opacity-60')}
+    >
       <CardHeader>
         <div>
           <CardTitle>{t('revenue_overview')}</CardTitle>

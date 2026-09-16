@@ -219,9 +219,21 @@ export interface ProductDetail {
   trackSerial?: boolean
 }
 
+/** Every tag the dashboard page's widgets read — invalidating these reloads the whole page at once. */
+export const DASHBOARD_WIDGET_TAGS = ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities'] as const
+
+/**
+ * Stale-while-revalidate for the dashboard page's widgets: coming back to the dashboard
+ * renders the last numbers instantly (cached for `keepUnusedDataFor`) while a fresh copy
+ * loads in the background, instead of blanking every card to a skeleton on each visit.
+ * Every dashboard widget must pass this same object so their behavior stays consistent.
+ */
+export const DASHBOARD_QUERY_OPTIONS = { refetchOnMountOrArgChange: true } as const
+
 export const dashboardApi = createApi({
   reducerPath: 'dashboardApi',
   baseQuery: baseQueryWithAuth,
+  keepUnusedDataFor: 300,
   tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'CategoryProducts', 'BrandProducts', 'SubCategoryProducts'],
   endpoints: (builder) => ({
     getDashboardStats: builder.query<DashboardStats, DashboardDateParams>({

@@ -14,6 +14,7 @@ const {
   SalesReturn,
 } = require('../models');
 const { startOfBusinessDay, endOfBusinessDay, toBusinessCalendarDate } = require('../utils/businessTimezone');
+const { withDefault, truthyOr, orZero } = require('../utils/aggregateExpressions');
 const { refreshOverdueStatuses } = require('./billPayment.service');
 const { resolveCashInHandBalance } = require('./wallet.service');
 
@@ -62,28 +63,48 @@ const buildInvoiceMatch = ({ organizationId, branchId, startDate, endDate }) => 
   return match;
 };
 
+// Every figure below is summed inside MongoDB rather than by hydrating each period's
+// documents into Node, which used to load every invoice/load/bill row of the period on each
+// dashboard refresh. `withDefault` matters for legacy rows: hydration applied schema
+// defaults (a load sale saved before `paymentMethod` existed counted as cash), so the
+// pipeline has to as well or those rows silently drop out of the cash totals.
+const sumWhen = (condition, value) => ({ $sum: { $cond: [condition, value, 0] } });
+const isCashMethod = (field, defaultValue = 'cash') => ({ $eq: [withDefault(field, defaultValue), 'cash'] });
+
+const aggregateTotals = async (Model, match, accumulators) => {
+  const [row] = await Model.aggregate([{ $match: match }, { $group: { _id: null, ...accumulators } }]);
+  return row || {};
+};
+
 // `type` ('cash'/'credit'/'pending'/'quotation') only says whether the sale was
 // settled immediately — it says nothing about *how*. A direct sale can still be
 // paid into a wallet, so we also need `paymentMethod` to keep wallet receipts
 // out of the cash-in-hand figure.
-const calculateSalesCash = (invoices) => {
-  return invoices.reduce((sum, invoice) => {
-    if (invoice.splitPayment && invoice.splitPayment.length > 0) {
-      return (
-        sum +
-        invoice.splitPayment.reduce((nestedSum, payment) => {
-          return payment.method === 'cash' ? nestedSum + Number(payment.amount || 0) : nestedSum;
-        }, 0)
-      );
-    }
-
-    const isCashPayment = String(invoice.paymentMethod || 'cash').toLowerCase() === 'cash';
-    if (invoice.type === 'cash' && isCashPayment) {
-      return sum + Number(invoice.paidAmount || invoice.total || 0);
-    }
-
-    return sum;
-  }, 0);
+const invoiceCashExpression = {
+  $cond: [
+    { $gt: [{ $size: { $cond: [{ $isArray: '$splitPayment' }, '$splitPayment', []] } }, 0] },
+    {
+      $sum: {
+        $map: {
+          input: '$splitPayment',
+          as: 'payment',
+          in: { $cond: [{ $eq: ['$$payment.method', 'cash'] }, orZero('$$payment.amount'), 0] },
+        },
+      },
+    },
+    {
+      $cond: [
+        {
+          $and: [
+            { $eq: [withDefault('$type', 'cash'), 'cash'] },
+            { $eq: [{ $toLower: truthyOr(withDefault('$paymentMethod', 'cash'), 'cash') }, 'cash'] },
+          ],
+        },
+        truthyOr('$paidAmount', orZero('$total')),
+        0,
+      ],
+    },
+  ],
 };
 
 const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, endDate }) => {
@@ -96,9 +117,7 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const billPeriodFilter = buildBillDashboardDateFilter(startDate, endDate);
   const billDuePeriodFilter = buildDueDateOnlyFilter(startDate, endDate);
 
-  await refreshOverdueStatuses(organizationId, branchId);
-
-  const invoiceMatch = buildInvoiceMatch({ organizationId, branchId, startDate, endDate });
+  const invoiceMatch = buildInvoiceMatch({ organizationId: orgId, branchId: branchOid, startDate, endDate });
 
   const txMatch = { organizationId: orgId, ...(branchOid ? { branchId: branchOid } : {}) };
   const dateRange =
@@ -110,59 +129,134 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
       : null;
   const datedTxMatch = dateRange ? { ...txMatch, date: dateRange } : txMatch;
 
+  // Count due-today and overdue (Pakistan calendar day)
+  const todayStr = toBusinessCalendarDate(new Date());
+  const startOfDay = startOfBusinessDay(todayStr);
+  const endOfDay = endOfBusinessDay(todayStr);
+
+  const cashTxType = withDefault('$transactionType', 'withdrawal');
+  const isDeposit = { $eq: [cashTxType, 'deposit'] };
+  const isWithdrawal = { $eq: [cashTxType, 'withdrawal'] };
+
   const [
-    invoices,
-    loadTransactions,
-    loadPurchases,
-    repairJobs,
-    expenses,
+    invoiceTotals,
+    loadSoldTotals,
+    loadPurchaseTotals,
+    repairTotals,
+    expenseTotals,
     wallets,
-    billPayments,
-    simSales,
-    cashSendReceive,
-    serviceInvoices,
-    salesReturns,
+    billTotals,
+    simSaleTotals,
+    cashTxTotals,
+    serviceTotals,
+    salesReturnTotals,
     inventoryAgg,
+    [billsDueToday, billsDueInPeriod, billsOverdue],
   ] = await Promise.all([
-    Invoice.find(invoiceMatch).select('type paidAmount total totalProfit splitPayment paymentMethod'),
-    LoadTransaction.find(datedTxMatch).select('amount profit paymentMethod walletType'),
-    LoadPurchase.find(datedTxMatch).select('amount profit paymentMethod walletType'),
-    RepairJob.find(datedTxMatch).select('charges cost paymentMethod status'),
+    aggregateTotals(Invoice, invoiceMatch, {
+      totalSales: { $sum: '$total' },
+      salesProfit: { $sum: '$totalProfit' },
+      salesCash: { $sum: invoiceCashExpression },
+    }),
+    aggregateTotals(LoadTransaction, datedTxMatch, {
+      totalDirectLoadSold: { $sum: '$amount' },
+      totalLoadSoldProfit: { $sum: '$profit' },
+      loadCash: sumWhen(isCashMethod('$paymentMethod'), orZero('$amount')),
+    }),
+    aggregateTotals(LoadPurchase, datedTxMatch, {
+      totalLoadPurchased: { $sum: '$amount' },
+      totalLoadPurchaseProfit: { $sum: '$profit' },
+      loadPurchasesCash: sumWhen(isCashMethod('$paymentMethod'), orZero('$amount')),
+    }),
+    aggregateTotals(RepairJob, datedTxMatch, {
+      totalRepairIncome: { $sum: '$charges' },
+      totalRepairProfit: sumWhen(
+        { $in: [withDefault('$status', 'pending'), ['completed', 'delivered']] },
+        { $subtract: [orZero('$charges'), orZero('$cost')] },
+      ),
+      repairCash: sumWhen(isCashMethod('$paymentMethod'), orZero('$charges')),
+    }),
     // Unfiltered by isPaid — includes unpaid auto-generated recurring cycles, so
     // totalExpenses (below) reflects the full obligation, not just what's been paid.
-    Expense.find({
-      organizationId,
-      ...(branchId ? { branchId } : {}),
-      ...(startDate || endDate
-        ? {
-            date: {
-              ...(startDate ? { $gte: new Date(startDate) } : {}),
-              ...(endDate ? { $lte: new Date(endDate) } : {}),
-            },
-          }
-        : {}),
-    }).select('amount paymentMethod isPaid'),
-    Wallet.find({ organizationId, ...(branchId ? { branchId } : {}) }).select('type balance accountType'),
-    BillPayment.find({
-      ...billBaseMatch,
-      ...billPeriodFilter,
-    }).select('totalReceived serviceCharge latePaymentLoss netBillProfit status paymentMethod'),
-    SimSale.find(datedTxMatch).select('saleAmount purchaseAmount commission loadAmount'),
-    CashWithdrawal.find(datedTxMatch).select('amount profit transactionType'),
-    ServiceInvoice.find(datedTxMatch).select('totalAmount'),
-    SalesReturn.find({
-      organizationId: orgId,
-      ...(branchOid ? { branchId: branchOid } : {}),
-      status: { $ne: 'rejected' },
-      ...(dateRange ? { date: dateRange } : {}),
-    }).select('totalAmount'),
-    Product.aggregate([
+    aggregateTotals(Expense, { ...txMatch, ...(dateRange ? { date: dateRange } : {}) }, {
+      totalExpenses: { $sum: '$amount' },
+      // Only expenses actually paid (excludes unpaid auto-generated recurring cycles) — this,
+      // not the all-inclusive totalExpenses above, is what reduces profit/investment: money
+      // not yet paid out hasn't left the bank.
+      totalPaidExpenses: sumWhen({ $ne: [withDefault('$isPaid', true), false] }, orZero('$amount')),
+      expensesCash: sumWhen(
+        { $eq: [{ $toLower: { $ifNull: [withDefault('$paymentMethod', 'Cash'), ''] } }, 'cash'] },
+        orZero('$amount'),
+      ),
+    }),
+    // A cash-type wallet's stored `balance` only reflects wallet-ledger-driven movements —
+    // Cash Book (fed by every module) is the complete, trustworthy number, so the dashboard
+    // stat card should read that instead. Same reasoning as `wallet.service.js`'s
+    // `queryWallets`/`getWalletById` overlay.
+    Wallet.find({ organizationId, ...(branchId ? { branchId } : {}) })
+      .select('type balance accountType')
+      .lean()
+      .then(async (rows) => {
+        if (!rows.some((wallet) => wallet.accountType === 'cash')) return rows;
+        const liveCashBalance = await resolveCashInHandBalance(organizationId, branchId);
+        return rows.map((wallet) => (wallet.accountType === 'cash' ? { ...wallet, balance: liveCashBalance } : wallet));
+      }),
+    aggregateTotals(
+      BillPayment,
+      { ...billBaseMatch, ...billPeriodFilter },
       {
-        $match: {
-          organizationId: orgId,
-          ...(branchOid ? { branchId: branchOid } : {}),
+        totalBillCollection: { $sum: '$totalReceived' },
+        billLatePaymentLoss: { $sum: '$latePaymentLoss' },
+        billPaymentProfit: {
+          $sum: {
+            $cond: [
+              { $eq: [withDefault('$status', 'pending'), 'paid'] },
+              {
+                $ifNull: [
+                  withDefault('$netBillProfit', 0),
+                  { $subtract: [orZero('$serviceCharge'), orZero('$latePaymentLoss')] },
+                ],
+              },
+              orZero('$serviceCharge'),
+            ],
+          },
+        },
+        billPaymentCash: sumWhen(isCashMethod('$paymentMethod'), orZero('$totalReceived')),
+      },
+    ),
+    aggregateTotals(SimSale, datedTxMatch, {
+      totalSimSale: { $sum: '$saleAmount' },
+      totalSimSaleProfit: {
+        $sum: {
+          $ifNull: [
+            withDefault('$commission', 0),
+            { $subtract: [orZero('$saleAmount'), orZero('$purchaseAmount')] },
+          ],
         },
       },
+      simSaleCount: { $sum: 1 },
+      totalSimSaleLoad: { $sum: '$loadAmount' },
+    }),
+    // User-facing Send = deposit; Received = withdrawal (see cash-transaction-labels)
+    aggregateTotals(CashWithdrawal, datedTxMatch, {
+      totalCashSend: sumWhen(isDeposit, orZero('$amount')),
+      totalCashSendProfit: sumWhen(isDeposit, orZero('$profit')),
+      cashSendCount: sumWhen(isDeposit, 1),
+      totalCashReceived: sumWhen(isWithdrawal, orZero('$amount')),
+      totalCashReceivedProfit: sumWhen(isWithdrawal, orZero('$profit')),
+      cashReceivedCount: sumWhen(isWithdrawal, 1),
+    }),
+    aggregateTotals(ServiceInvoice, datedTxMatch, {
+      totalServiceIncome: { $sum: '$totalAmount' },
+      serviceInvoiceCount: { $sum: 1 },
+    }),
+    aggregateTotals(
+      SalesReturn,
+      { ...txMatch, status: { $ne: 'rejected' }, ...(dateRange ? { date: dateRange } : {}) },
+      { salesReturnsImpact: { $sum: '$totalAmount' } },
+    ),
+    Product.aggregate([
+      { $match: txMatch },
       {
         $group: {
           _id: null,
@@ -170,75 +264,63 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
         },
       },
     ]),
+    // The overdue flip must land before the bill counts read `status` — every other query
+    // above only looks at 'paid' (untouched by the flip), so they run alongside it.
+    refreshOverdueStatuses(organizationId, branchId).then(() =>
+      Promise.all([
+        BillPayment.countDocuments({
+          ...billBaseMatch,
+          status: 'pending',
+          dueDate: { $gte: startOfDay, $lte: endOfDay },
+        }),
+        BillPayment.countDocuments({
+          ...billBaseMatch,
+          status: { $in: ['pending', 'overdue'] },
+          ...billDuePeriodFilter,
+        }),
+        BillPayment.countDocuments({
+          ...billBaseMatch,
+          status: 'overdue',
+        }),
+      ]),
+    ),
   ]);
 
-  const totalSales = invoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
-  const salesProfit = invoices.reduce((sum, invoice) => sum + Number(invoice.totalProfit || 0), 0);
-  const salesCash = calculateSalesCash(invoices);
+  const totalSales = invoiceTotals.totalSales || 0;
+  const salesProfit = invoiceTotals.salesProfit || 0;
+  const salesCash = invoiceTotals.salesCash || 0;
 
-  const totalDirectLoadSold = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
-  const totalLoadSoldProfit = loadTransactions.reduce((sum, transaction) => sum + Number(transaction.profit || 0), 0);
-  const loadCash = loadTransactions.reduce((sum, transaction) => {
-    return transaction.paymentMethod === 'cash' ? sum + Number(transaction.amount || 0) : sum;
-  }, 0);
-  const totalLoadPurchased = loadPurchases.reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
-  const totalLoadPurchaseProfit = loadPurchases.reduce((sum, purchase) => sum + Number(purchase.profit || 0), 0);
+  const totalDirectLoadSold = loadSoldTotals.totalDirectLoadSold || 0;
+  const totalLoadSoldProfit = loadSoldTotals.totalLoadSoldProfit || 0;
+  const loadCash = loadSoldTotals.loadCash || 0;
+  const totalLoadPurchased = loadPurchaseTotals.totalLoadPurchased || 0;
+  const totalLoadPurchaseProfit = loadPurchaseTotals.totalLoadPurchaseProfit || 0;
+  const loadPurchasesCash = loadPurchaseTotals.loadPurchasesCash || 0;
 
-  const totalRepairIncome = repairJobs.reduce((sum, job) => sum + Number(job.charges || 0), 0);
-  const totalRepairProfit = repairJobs.reduce((sum, job) => {
-    if (!['completed', 'delivered'].includes(String(job.status || ''))) return sum;
-    return sum + Number(job.charges || 0) - Number(job.cost || 0);
-  }, 0);
-  const repairCash = repairJobs.reduce((sum, job) => {
-    return job.paymentMethod === 'cash' ? sum + Number(job.charges || 0) : sum;
-  }, 0);
+  const totalRepairIncome = repairTotals.totalRepairIncome || 0;
+  const totalRepairProfit = repairTotals.totalRepairProfit || 0;
+  const repairCash = repairTotals.repairCash || 0;
 
-  const totalBillCollection = billPayments.reduce((sum, b) => sum + Number(b.totalReceived || 0), 0);
-  const billLatePaymentLoss = billPayments.reduce((sum, b) => sum + Number(b.latePaymentLoss || 0), 0);
-  const billPaymentProfit = billPayments.reduce((sum, b) => {
-    if (b.status === 'paid') {
-      return sum + Number(b.netBillProfit ?? (Number(b.serviceCharge || 0) - Number(b.latePaymentLoss || 0)));
-    }
-    return sum + Number(b.serviceCharge || 0);
-  }, 0);
-  const billPaymentCash = billPayments.reduce((sum, b) => {
-    return b.paymentMethod === 'cash' ? sum + Number(b.totalReceived || 0) : sum;
-  }, 0);
+  const totalBillCollection = billTotals.totalBillCollection || 0;
+  const billLatePaymentLoss = billTotals.billLatePaymentLoss || 0;
+  const billPaymentProfit = billTotals.billPaymentProfit || 0;
+  const billPaymentCash = billTotals.billPaymentCash || 0;
 
-  const totalSimSale = simSales.reduce((sum, sale) => sum + Number(sale.saleAmount || 0), 0);
-  const totalSimSaleProfit = simSales.reduce(
-    (sum, sale) => sum + Number(sale.commission ?? (Number(sale.saleAmount || 0) - Number(sale.purchaseAmount || 0))),
-    0,
-  );
-  const simSaleCount = simSales.length;
-  const totalSimSaleLoad = simSales.reduce((sum, sale) => sum + Number(sale.loadAmount || 0), 0);
-  const totalLoadSold = totalDirectLoadSold + totalSimSaleLoad;
+  const totalSimSale = simSaleTotals.totalSimSale || 0;
+  const totalSimSaleProfit = simSaleTotals.totalSimSaleProfit || 0;
+  const simSaleCount = simSaleTotals.simSaleCount || 0;
+  const totalLoadSold = totalDirectLoadSold + (simSaleTotals.totalSimSaleLoad || 0);
 
-  // User-facing Send = deposit; Received = withdrawal (see cash-transaction-labels)
-  const cashSendTx = cashSendReceive.filter((tx) => tx.transactionType === 'deposit');
-  const cashReceivedTx = cashSendReceive.filter((tx) => tx.transactionType === 'withdrawal');
-  const totalCashSend = cashSendTx.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
-  const totalCashSendProfit = cashSendTx.reduce((sum, tx) => sum + Number(tx.profit || 0), 0);
-  const cashSendCount = cashSendTx.length;
-  const totalCashReceived = cashReceivedTx.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
-  const totalCashReceivedProfit = cashReceivedTx.reduce((sum, tx) => sum + Number(tx.profit || 0), 0);
-  const cashReceivedCount = cashReceivedTx.length;
+  const totalCashSend = cashTxTotals.totalCashSend || 0;
+  const totalCashSendProfit = cashTxTotals.totalCashSendProfit || 0;
+  const cashSendCount = cashTxTotals.cashSendCount || 0;
+  const totalCashReceived = cashTxTotals.totalCashReceived || 0;
+  const totalCashReceivedProfit = cashTxTotals.totalCashReceivedProfit || 0;
+  const cashReceivedCount = cashTxTotals.cashReceivedCount || 0;
 
-  const totalServiceIncome = serviceInvoices.reduce((sum, inv) => sum + Number(inv.totalAmount || 0), 0);
+  const totalServiceIncome = serviceTotals.totalServiceIncome || 0;
   const totalServiceProfit = totalServiceIncome;
-  const serviceInvoiceCount = serviceInvoices.length;
-
-  // A cash-type wallet's stored `balance` only reflects wallet-ledger-driven movements —
-  // Cash Book (fed by every module) is the complete, trustworthy number, so the dashboard
-  // stat card should read that instead. Same reasoning as `wallet.service.js`'s
-  // `queryWallets`/`getWalletById` overlay.
-  const cashWallets = wallets.filter((wallet) => wallet.accountType === 'cash');
-  if (cashWallets.length > 0) {
-    const liveCashBalance = await resolveCashInHandBalance(organizationId, branchId);
-    cashWallets.forEach((wallet) => {
-      wallet.balance = liveCashBalance;
-    });
-  }
+  const serviceInvoiceCount = serviceTotals.serviceInvoiceCount || 0;
 
   const walletBalances = wallets.reduce(
     (accumulator, wallet) => {
@@ -259,16 +341,11 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
     { jazzcash: 0, easypaisa: 0, total: 0 }
   );
 
-  const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  // Only expenses actually paid (excludes unpaid auto-generated recurring cycles) — this,
-  // not the all-inclusive totalExpenses above, is what reduces profit/investment: money
-  // not yet paid out hasn't left the bank.
-  const totalPaidExpenses = expenses.reduce(
-    (sum, expense) => (expense.isPaid !== false ? sum + Number(expense.amount || 0) : sum),
-    0,
-  );
+  const totalExpenses = expenseTotals.totalExpenses || 0;
+  const totalPaidExpenses = expenseTotals.totalPaidExpenses || 0;
   const totalPendingExpenses = totalExpenses - totalPaidExpenses;
-  const salesReturnsImpact = salesReturns.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
+  const expensesCash = expenseTotals.expensesCash || 0;
+  const salesReturnsImpact = salesReturnTotals.salesReturnsImpact || 0;
   const inventoryValue = inventoryAgg[0]?.total || 0;
 
   const grossProfit =
@@ -287,35 +364,6 @@ const getMobileDashboardSummary = async ({ organizationId, branchId, startDate, 
   const netProfit = grossProfit - totalPaidExpenses - salesReturnsImpact;
   const totalInvestment = inventoryValue + walletBalances.total + totalPaidExpenses;
   const roi = totalInvestment > 0 ? parseFloat(((totalProfit / totalInvestment) * 100).toFixed(2)) : 0;
-
-  // Count due-today and overdue (Pakistan calendar day)
-  const todayStr = toBusinessCalendarDate(new Date());
-  const startOfDay = startOfBusinessDay(todayStr);
-  const endOfDay = endOfBusinessDay(todayStr);
-  const [billsDueToday, billsDueInPeriod, billsOverdue] = await Promise.all([
-    BillPayment.countDocuments({
-      ...billBaseMatch,
-      status: 'pending',
-      dueDate: { $gte: startOfDay, $lte: endOfDay },
-    }),
-    BillPayment.countDocuments({
-      ...billBaseMatch,
-      status: { $in: ['pending', 'overdue'] },
-      ...billDuePeriodFilter,
-    }),
-    BillPayment.countDocuments({
-      ...billBaseMatch,
-      status: 'overdue',
-    }),
-  ]);
-
-  const expensesCash = expenses.reduce((sum, expense) => {
-    return String(expense.paymentMethod || '').toLowerCase() === 'cash' ? sum + Number(expense.amount || 0) : sum;
-  }, 0);
-
-  const loadPurchasesCash = loadPurchases.reduce((sum, purchase) => {
-    return purchase.paymentMethod === 'cash' ? sum + Number(purchase.amount || 0) : sum;
-  }, 0);
 
   const cashInHand = salesCash + loadCash + repairCash + billPaymentCash - expensesCash - loadPurchasesCash;
 

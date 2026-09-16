@@ -12,6 +12,7 @@ const {
   SchoolTransaction,
 } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { parseImportNumber, parseImportDate } = require('../utils/importRow');
 
 const getTenantFilter = (data = {}) => {
   const filter = {};
@@ -303,6 +304,8 @@ const bulkImportStudents = async (rows, scope = {}) => {
 
   const results = { success: [], failed: [], totalRows: rows.length };
 
+  // Rows normally arrive pre-mapped from utils/importSheet.js, but this also accepts raw
+  // sheet_to_json output (any older caller) by matching a column however it's spelled.
   const normalize = (obj, ...keys) => {
     for (const key of keys) {
       for (const k of Object.keys(obj)) {
@@ -314,6 +317,37 @@ const bulkImportStudents = async (rows, scope = {}) => {
     return '';
   };
 
+  const rawCell = (obj, ...keys) => {
+    for (const key of keys) {
+      for (const k of Object.keys(obj)) {
+        if (k.toLowerCase().replace(/\s+/g, '') === key.toLowerCase().replace(/\s+/g, '')) return obj[k];
+      }
+    }
+    return undefined;
+  };
+
+  // "Class 1", "class-1" and "CLASS  1" are the same class to a human, so they're the
+  // same class here — an unmatched class is one of the commonest reasons a school's
+  // first import comes back all red.
+  const looseKey = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const looseClassMap = {};
+  classes.forEach((c) => {
+    const key = looseKey(c.name);
+    if (key && !looseClassMap[key]) looseClassMap[key] = c._id.toString();
+  });
+  const looseSectionMap = {};
+  for (const s of sections) {
+    const key = `${s.classId.toString()}|${looseKey(s.name)}`;
+    if (!looseSectionMap[key]) looseSectionMap[key] = s._id.toString();
+  }
+
+  // male/female/other, plus the short forms and the words people type instead.
+  const GENDER_WORDS = {
+    m: 'male', male: 'male', boy: 'male', b: 'male',
+    f: 'female', female: 'female', girl: 'female', g: 'female',
+    o: 'other', other: 'other',
+  };
+
   // Current month/year for fee records
   const now = new Date();
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -322,54 +356,74 @@ const bulkImportStudents = async (rows, scope = {}) => {
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const rowNum = i + 2; // +2 because row 1 is headers
+    // The row number the user sees in Excel, which is only "i + 2" when the header
+    // happens to be on row 1 — importSheet.js reports the real one.
+    const rowNum = row.__excelRow || i + 2;
 
     try {
       const firstName = normalize(row, 'firstname', 'first name', 'FirstName');
       const lastName = normalize(row, 'lastname', 'last name', 'LastName');
       const genderRaw = normalize(row, 'gender').toLowerCase();
-      const gender = ['male', 'female', 'other'].includes(genderRaw) ? genderRaw : null;
-      const dobRaw = normalize(row, 'dateofbirth', 'date of birth', 'dob', 'birthdate');
+      const gender = GENDER_WORDS[genderRaw] || null;
+      const dobCell = rawCell(row, 'dateofbirth', 'date of birth', 'dob', 'birthdate');
       const className = normalize(row, 'class', 'classname', 'class name');
       const sectionName = normalize(row, 'section', 'sectionname');
       const phone = normalize(row, 'parentphone', 'parent phone', 'phone', 'contactnumber');
       const fatherName = normalize(row, 'fathername', 'father name', 'father');
 
-      // Fee columns
-      const monthlyFeeRaw = normalize(row, 'monthlyfee', 'monthly fee', 'tuitionfee', 'tuition fee', 'fee');
-      const transportFeeRaw = normalize(row, 'transportfee', 'transport fee', 'transport');
-      const admissionFeeRaw = normalize(row, 'admissionfee', 'admission fee');
-      const discountRaw = normalize(row, 'discount');
+      // Fee columns. Parsed properly rather than with Number(): a perfectly ordinary
+      // "3,000" or "Rs 3000" used to come out of `Number(x) || 0` as a silent zero, so a
+      // school's fees were quietly wiped out by a thousands separator.
+      const monthlyFeeCell = rawCell(row, 'monthlyfee', 'monthly fee', 'tuitionfee', 'tuition fee', 'fee');
+      const transportFeeCell = rawCell(row, 'transportfee', 'transport fee', 'transport');
+      const admissionFeeCell = rawCell(row, 'admissionfee', 'admission fee');
+      const discountCell = rawCell(row, 'discount');
 
       const errors = [];
       if (!firstName) errors.push('First Name is required');
       if (!gender) errors.push(`Gender must be male/female/other (got: "${genderRaw || 'empty'}")`);
       if (!className) errors.push('Class is required');
 
-      const classId = classMap[className.toLowerCase()];
+      const classId = classMap[className.toLowerCase()] || looseClassMap[looseKey(className)];
       if (className && !classId) errors.push(`Class "${className}" not found`);
 
       // Look up section by class+name combination
-      const sectionKey = classId && sectionName ? `${classId}|${sectionName.toLowerCase()}` : null;
-      const sectionId = sectionKey ? sectionMap[sectionKey] : undefined;
+      const sectionId = classId && sectionName
+        ? sectionMap[`${classId}|${sectionName.toLowerCase()}`] || looseSectionMap[`${classId}|${looseKey(sectionName)}`]
+        : undefined;
       if (sectionName && !sectionId) errors.push(`Section "${sectionName}" not found`);
+
+      const dob = parseImportDate(dobCell);
+      if (!dob.valid) errors.push(`Date of birth "${dobCell}" could not be read — use a date like 2010-05-20`);
+
+      const fees = {
+        monthlyFee: parseImportNumber(monthlyFeeCell),
+        transportFee: parseImportNumber(transportFeeCell),
+        admissionFee: parseImportNumber(admissionFeeCell),
+        discount: parseImportNumber(discountCell),
+      };
+      const FEE_LABELS = { monthlyFee: 'Monthly fee', transportFee: 'Transport fee', admissionFee: 'Admission fee', discount: 'Discount' };
+      Object.entries(fees).forEach(([key, parsed]) => {
+        if (!parsed.valid) errors.push(`${FEE_LABELS[key]} "${rawCell(row, key) ?? ''}" is not a number`);
+      });
 
       if (errors.length > 0) {
         results.failed.push({ row: rowNum, errors });
         continue;
       }
 
-      // Parse fee values
-      const monthlyFee = monthlyFeeRaw ? Number(monthlyFeeRaw) || 0 : 0;
-      const transportFee = transportFeeRaw ? Number(transportFeeRaw) || 0 : 0;
-      const admissionFee = admissionFeeRaw ? Number(admissionFeeRaw) || 0 : 0;
-      const discount = discountRaw ? Number(discountRaw) || 0 : 0;
+      const monthlyFee = fees.monthlyFee.value || 0;
+      const transportFee = fees.transportFee.value || 0;
+      const admissionFee = fees.admissionFee.value || 0;
+      const discount = fees.discount.value || 0;
 
       const studentData = {
         firstName,
         lastName: lastName || '',
         gender,
-        dateOfBirth: dobRaw ? new Date(dobRaw) : new Date(),
+        // Left unset when the file doesn't say — recording today's date as a date of
+        // birth is worse than recording nothing, and the field is optional.
+        ...(dob.value ? { dateOfBirth: dob.value } : {}),
         classId,
         ...(sectionId ? { sectionId } : {}),
         parent: { phone: phone || '', fatherName: fatherName || '' },

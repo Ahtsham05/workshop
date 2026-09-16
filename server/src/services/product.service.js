@@ -2,6 +2,8 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { Product, ProductVariant, Inventory, Batch, Imei, Organization, Category, SubCategory, Supplier } = require('../models');
 const ApiError = require('../utils/ApiError');
+// Shared spreadsheet-cell parsing, used by every bulk import endpoint — see utils/importRow.js
+const { toImportText, parseImportNumber } = require('../utils/importRow');
 const imeiService = require('./imei.service');
 const batchService = require('./batch.service');
 const { getOrCreateDefaultVariant, getOrCreateInventory } = require('./inventorySync.service');
@@ -1140,31 +1142,6 @@ const normalizeImportUnit = (raw) => {
 };
 
 /**
- * Parses a numeric spreadsheet cell that may carry currency symbols, thousands
- * separators, or stray whitespace (e.g. "Rs 62,000", "1,250.50") into a clean number.
- * Returns `valid: false` instead of throwing, so the caller can attach a specific
- * per-row error rather than let one bad cell fail the whole batch.
- */
-const parseImportNumber = (raw) => {
-  if (raw === undefined || raw === null || raw === '') return { value: undefined, valid: true };
-  if (typeof raw === 'number') return { value: raw, valid: Number.isFinite(raw) };
-  const cleaned = String(raw).replace(/[^0-9.-]/g, '');
-  if (cleaned === '' || cleaned === '-' || cleaned === '.') return { value: undefined, valid: false };
-  const value = Number(cleaned);
-  return { value, valid: Number.isFinite(value) };
-};
-
-/**
- * Coerces a spreadsheet cell to a trimmed string, treating anything that isn't
- * already a string/number (e.g. an accidental nested object from a malformed API
- * call — the bulk-import validation layer is deliberately permissive about per-field
- * types, see product.validation.js#bulkAddProducts) as absent rather than falling back
- * to JS's `String()` coercion, which would silently turn it into the literal text
- * "[object Object]".
- */
-const toImportText = (raw) => (typeof raw === 'string' || typeof raw === 'number' ? String(raw).trim() : '');
-
-/**
  * Resolves free-text category/sub-category names from an import batch to real
  * Category/SubCategory documents, auto-creating whichever ones don't already exist for
  * this org/branch. Batched the same way masterProduct.service.js#linkProductsToMasterProductsBulk
@@ -1277,11 +1254,23 @@ const BULK_IMPORT_CHUNK_SIZE = 500;
  *
  * @param {Array} productsToAdd - Array of products to create
  * @param {Object} branchContext - Organization and branch context
+ * @param {Object} [options]
+ * @param {'skip'|'update'|'error'} [options.duplicateStrategy='skip'] - What to do with a
+ *   row whose barcode (or, failing that, SKU) already belongs to a product in this
+ *   branch. 'skip' leaves the saved product untouched and reports the row as skipped;
+ *   'update' refreshes its details but never its stock (see the update branch below);
+ *   'error'
+ *   reports it as a failed row. Defaults to 'skip' because the common case is
+ *   re-uploading a corrected or extended price list, where failing every already-known
+ *   row turns a routine update into a page of errors.
  * @returns {Promise<Object>}
  */
-const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
+const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) => {
   await ensureProductIndexes();
   const { organizationId, branchId, createdBy } = branchContext;
+  const duplicateStrategy = ['skip', 'update', 'error'].includes(options.duplicateStrategy)
+    ? options.duplicateStrategy
+    : 'skip';
 
   // Row-level normalization first — pure, no DB access — so the batched lookups below
   // only ever see clean, trimmed names.
@@ -1312,19 +1301,23 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
   const requestedSkus = [...new Set(rows.map((r) => r.sku).filter(Boolean))];
   const [existingBarcodeDocs, existingSkuDocs] = await Promise.all([
     requestedBarcodes.length
-      ? Product.find({ organizationId, branchId, barcode: { $in: requestedBarcodes } }).select('barcode').lean()
+      ? Product.find({ organizationId, branchId, barcode: { $in: requestedBarcodes } }).select('_id barcode').lean()
       : [],
     requestedSkus.length
-      ? Product.find({ organizationId, branchId, sku: { $in: requestedSkus } }).select('sku').lean()
+      ? Product.find({ organizationId, branchId, sku: { $in: requestedSkus } }).select('_id sku').lean()
       : [],
   ]);
-  const existingBarcodes = new Set(existingBarcodeDocs.map((d) => d.barcode));
-  const existingSkus = new Set(existingSkuDocs.map((d) => d.sku));
+  // Keep the matched product's id, not just the fact that the code is taken — that's
+  // what duplicateStrategy: 'update' writes to.
+  const existingByBarcode = new Map(existingBarcodeDocs.map((d) => [d.barcode, d]));
+  const existingBySku = new Map(existingSkuDocs.map((d) => [d.sku, d]));
 
   const errors = [];
   const warnings = [];
   const validDocs = [];
   const validMeta = [];
+  const updateOps = []; // duplicateStrategy: 'update' — { filter, set } per matched row
+  const skippedExisting = []; // duplicateStrategy: 'skip' — rows that already exist
   const trackedRows = []; // rows with trackImei/trackSerial/trackBatch/trackExpiry — created individually below, not via insertMany()
   const seenBarcodesInBatch = new Map(); // barcode -> row index that first claimed it
   const seenSkusInBatch = new Map(); // sku -> row index that first claimed it
@@ -1352,18 +1345,34 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
       return fail(`Invalid low stock threshold "${product.lowStockThreshold}"`);
     }
 
+    // A duplicate *within the batch* is always an error: two rows of the same file
+    // claiming one barcode is a mistake in the file, not an existing product to skip
+    // or update.
     if (row.barcode) {
-      if (existingBarcodes.has(row.barcode)) return fail(`Barcode "${row.barcode}" already exists — already used by another product`);
       const firstSeenAt = seenBarcodesInBatch.get(row.barcode);
       if (firstSeenAt !== undefined) return fail(`Duplicate barcode "${row.barcode}" — also used by row ${firstSeenAt + 1} in this import`);
       seenBarcodesInBatch.set(row.barcode, row.index);
     }
 
     if (row.sku) {
-      if (existingSkus.has(row.sku)) return fail(`SKU "${row.sku}" already exists — already used by another product`);
       const firstSeenAt = seenSkusInBatch.get(row.sku);
       if (firstSeenAt !== undefined) return fail(`Duplicate SKU "${row.sku}" — also used by row ${firstSeenAt + 1} in this import`);
       seenSkusInBatch.set(row.sku, row.index);
+    }
+
+    // Matched against what's already saved — barcode first (the stronger identifier),
+    // then SKU. What happens next is the caller's choice, not a fixed rule.
+    const existingMatch =
+      (row.barcode && existingByBarcode.get(row.barcode)) || (row.sku && existingBySku.get(row.sku)) || null;
+    const matchedBy = row.barcode && existingByBarcode.has(row.barcode) ? 'barcode' : 'SKU';
+    const matchedValue = matchedBy === 'barcode' ? row.barcode : row.sku;
+
+    if (existingMatch && duplicateStrategy === 'error') {
+      return fail(`${matchedBy === 'barcode' ? 'Barcode' : 'SKU'} "${matchedValue}" already exists — already used by another product`);
+    }
+    if (existingMatch && duplicateStrategy === 'skip') {
+      skippedExisting.push({ index: row.index, name: row.name, matchedBy, value: matchedValue });
+      return;
     }
 
     const { unit, warning: unitWarning } = normalizeImportUnit(product.unit);
@@ -1399,6 +1408,41 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
       const match = supplierByLower.get(row.supplierName.toLowerCase());
       if (match) supplier = match._id;
       else warnings.push({ index: row.index, name: row.name, message: `Supplier "${row.supplierName}" was not found — imported without a supplier` });
+    }
+
+    // duplicateStrategy: 'update' — refresh what a price list legitimately changes and
+    // nothing else. Stock is deliberately untouched: an import file's quantity column is
+    // an opening balance, and overwriting live stock with it would silently undo every
+    // sale and purchase recorded since the product was created. Quantities are corrected
+    // through a stock adjustment, which leaves an audit trail.
+    if (existingMatch && duplicateStrategy === 'update') {
+      const set = { name: row.name, price: price.value, cost: cost.value, unit };
+      const nameUrdu = toImportText(product.nameUrdu);
+      const description = toImportText(product.description);
+      if (nameUrdu) set.nameUrdu = nameUrdu;
+      if (description) set.description = description;
+      if (categories.length) {
+        set.categories = categories;
+        set.category = categoryLegacy;
+      }
+      if (subCategories.length) set.subCategories = subCategories;
+      if (supplier) set.supplier = supplier;
+      if (lowStockThreshold.value !== undefined) set.lowStockThreshold = lowStockThreshold.value;
+      // Fill in the identifier the match didn't come from, so a row matched by barcode
+      // can still add the SKU it carries (and vice versa) — but never overwrite one
+      // existing code with another, which would silently re-label a different product.
+      if (row.barcode && matchedBy === 'SKU' && !existingByBarcode.has(row.barcode)) set.barcode = row.barcode;
+      if (row.sku && matchedBy === 'barcode' && !existingBySku.has(row.sku)) set.sku = row.sku;
+
+      updateOps.push({
+        index: row.index,
+        name: row.name,
+        matchedBy,
+        value: matchedValue,
+        filter: { _id: existingMatch._id, organizationId, branchId },
+        set,
+      });
+      return;
     }
 
     // Per-unit tracking (IMEI/serial/batch/expiry) can't go through insertMany() below —
@@ -1539,6 +1583,47 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
     }
   }
 
+  // duplicateStrategy: 'update' — one bulkWrite for the whole batch rather than a write
+  // per row. Failures are attributed back to their row instead of rejecting the batch,
+  // the same contract the insert path above follows.
+  let updatedCount = 0;
+  if (updateOps.length) {
+    try {
+      const result = await Product.bulkWrite(
+        updateOps.map((op) => ({ updateOne: { filter: op.filter, update: { $set: op.set } } })),
+        { ordered: false },
+      );
+      updatedCount = result.modifiedCount ?? 0;
+      // A matched product whose values were already identical reports as matched but not
+      // modified — still a successful, intentional no-op, so count it as handled.
+      const matched = result.matchedCount ?? 0;
+      if (matched > updatedCount) updatedCount = matched;
+    } catch (error) {
+      const writeErrors = error.writeErrors || [];
+      if (!writeErrors.length) throw error;
+      updatedCount = Math.max(updateOps.length - writeErrors.length, 0);
+      writeErrors.forEach((writeError) => {
+        const raw = writeError.err || writeError;
+        const op = updateOps[writeError.index ?? raw.index] || {};
+        errors.push({
+          index: op.index,
+          name: op.name,
+          error: raw.errmsg || writeError.errmsg || 'Failed to update this product',
+        });
+      });
+    }
+  }
+
+  // duplicateStrategy: 'skip' — reported per row (not as a blanket count) so the user can
+  // see exactly which rows the import left alone and why. Kept separate from `warnings`:
+  // a warning means "imported, with something worth knowing", a skip means "not imported".
+  // Showing the two in one list is what made an import report read as a list of failures.
+  const skipped = skippedExisting.map((skip) => ({
+    index: skip.index,
+    name: skip.name,
+    reason: `Already in the catalogue (same ${skip.matchedBy} "${skip.value}") — left unchanged`,
+  }));
+
   // Every product inserted via insertMany() above still needs Master Product Catalog
   // linking below — captured before the tracked-row loop adds more to insertedProducts,
   // since those are linked individually as part of createProduct() itself (see below).
@@ -1591,17 +1676,22 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}) => {
   errors.sort((a, b) => a.index - b.index);
 
   return {
-    success: insertedProducts.length > 0,
+    success: insertedProducts.length > 0 || updatedCount > 0,
     insertedCount: insertedProducts.length,
+    updatedCount,
+    skippedCount: skipped.length,
+    duplicateStrategy,
     products: insertedProducts,
     errors,
     warnings,
+    skipped,
     createdCategories,
     createdSubCategories,
   };
 };
 
 module.exports = {
+  ensureProductIndexes,
   createProduct,
   queryProducts,
   getProductById,

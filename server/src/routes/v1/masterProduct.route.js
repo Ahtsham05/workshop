@@ -8,11 +8,15 @@ const masterProductController = require('../../controllers/masterProduct.control
 const router = express.Router();
 router.use(auth(), branchScope());
 
-// Importing = creating a Product at this branch, so both routes reuse the existing
+// Importing = creating a Product at this branch, so every route reuses the existing
 // createProducts permission rather than introducing a new one.
 router
   .route('/importable')
   .get(auth('createProducts'), validate(masterProductValidation.getImportableMasterProducts), masterProductController.getImportableMasterProducts);
+
+router
+  .route('/importable/ids')
+  .get(auth('createProducts'), validate(masterProductValidation.getImportableMasterProductIds), masterProductController.getImportableMasterProductIds);
 
 router
   .route('/import')

@@ -3,7 +3,9 @@ import { useFormatMoney } from '@/lib/format-money'
 // import { Badge } from '@/components/ui/badge'
 import { Users, TrendingUp, Phone } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
-import { useGetTopCustomersQuery } from '@/stores/dashboard.api'
+import { DASHBOARD_QUERY_OPTIONS, useGetTopCustomersQuery } from '@/stores/dashboard.api'
+import { getWidgetQueryState } from '../lib/widget-query-state'
+import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -19,13 +21,11 @@ type Props = {
 export function TopCustomers({ dateRange }: Props) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const { data: topCustomers, isLoading, isFetching } = useGetTopCustomersQuery({
-    limit: 5,
-    ...dashboardRangeQueryParams(dateRange),
-  })
-  const loading = isLoading || isFetching
+  const { data: topCustomers, showSkeleton, isRefreshing } = getWidgetQueryState(
+    useGetTopCustomersQuery({ limit: 5, ...dashboardRangeQueryParams(dateRange) }, DASHBOARD_QUERY_OPTIONS)
+  )
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <Card>
         <CardHeader>
@@ -44,7 +44,7 @@ export function TopCustomers({ dateRange }: Props) {
   }
 
   return (
-    <Card>
+    <Card aria-busy={isRefreshing} className={cn('transition-opacity', isRefreshing && 'opacity-60')}>
       <CardHeader>
         <CardTitle className='flex items-center gap-2'>
           <TrendingUp className='h-5 w-5 text-blue-500' />

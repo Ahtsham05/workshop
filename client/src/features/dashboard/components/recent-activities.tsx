@@ -5,7 +5,8 @@ import { useFormatMoney } from '@/lib/format-money'
 import type { ComponentProps } from 'react'
 import { FileText, ShoppingCart, DollarSign, TrendingUp } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
-import { useGetRecentActivitiesQuery, type RecentActivity } from '@/stores/dashboard.api'
+import { DASHBOARD_QUERY_OPTIONS, useGetRecentActivitiesQuery, type RecentActivity } from '@/stores/dashboard.api'
+import { getWidgetQueryState } from '../lib/widget-query-state'
 import { ADJUSTMENT_TYPE_META } from '@/features/stock-adjustments/lib/adjustment-types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -22,11 +23,9 @@ type Props = {
 export function RecentActivities({ dateRange }: Props) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const { data: activities, isLoading, isFetching } = useGetRecentActivitiesQuery({
-    limit: 8,
-    ...dashboardRangeQueryParams(dateRange),
-  })
-  const loading = isLoading || isFetching
+  const { data: activities, showSkeleton, isRefreshing } = getWidgetQueryState(
+    useGetRecentActivitiesQuery({ limit: 8, ...dashboardRangeQueryParams(dateRange) }, DASHBOARD_QUERY_OPTIONS)
+  )
 
   const getIcon = (activity: RecentActivity) => {
     switch (activity.type) {
@@ -67,7 +66,7 @@ export function RecentActivities({ dateRange }: Props) {
     return t(status)
   }
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <Card className='col-span-1 lg:col-span-4'>
         <CardHeader>
@@ -86,7 +85,10 @@ export function RecentActivities({ dateRange }: Props) {
   }
 
   return (
-    <Card className='col-span-1 lg:col-span-4'>
+    <Card
+      aria-busy={isRefreshing}
+      className={cn('col-span-1 transition-opacity lg:col-span-4', isRefreshing && 'opacity-60')}
+    >
       <CardHeader>
         <CardTitle>{t('Recent Activities')}</CardTitle>
         <CardDescription>

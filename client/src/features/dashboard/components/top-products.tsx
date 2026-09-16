@@ -3,7 +3,9 @@ import { useFormatMoney } from '@/lib/format-money'
 import { Badge } from '@/components/ui/badge'
 import { Package, TrendingUp } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
-import { useGetTopProductsQuery } from '@/stores/dashboard.api'
+import { DASHBOARD_QUERY_OPTIONS, useGetTopProductsQuery } from '@/stores/dashboard.api'
+import { getWidgetQueryState } from '../lib/widget-query-state'
+import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   dashboardRangeQueryParams,
@@ -18,13 +20,11 @@ type Props = {
 export function TopProducts({ dateRange }: Props) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const { data: topProducts, isLoading, isFetching } = useGetTopProductsQuery({
-    limit: 5,
-    ...dashboardRangeQueryParams(dateRange),
-  })
-  const loading = isLoading || isFetching
+  const { data: topProducts, showSkeleton, isRefreshing } = getWidgetQueryState(
+    useGetTopProductsQuery({ limit: 5, ...dashboardRangeQueryParams(dateRange) }, DASHBOARD_QUERY_OPTIONS)
+  )
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <Card>
         <CardHeader>
@@ -43,7 +43,7 @@ export function TopProducts({ dateRange }: Props) {
   }
 
   return (
-    <Card>
+    <Card aria-busy={isRefreshing} className={cn('transition-opacity', isRefreshing && 'opacity-60')}>
       <CardHeader>
         <CardTitle className='flex items-center gap-2'>
           <TrendingUp className='h-5 w-5 text-green-500' />

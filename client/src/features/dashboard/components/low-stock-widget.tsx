@@ -3,19 +3,23 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, Package, TrendingDown, ExternalLink } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
-import { useGetLowStockProductsQuery } from '@/stores/dashboard.api'
+import { DASHBOARD_QUERY_OPTIONS, useGetLowStockProductsQuery } from '@/stores/dashboard.api'
+import { getWidgetQueryState } from '../lib/widget-query-state'
+import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useNavigate } from '@tanstack/react-router'
 
 export function LowStockWidget() {
   const { t } = useLanguage()
   const navigate = useNavigate()
-  const { data: lowStockProducts, isLoading } = useGetLowStockProductsQuery()
+  const { data: lowStockProducts, showSkeleton, isRefreshing } = getWidgetQueryState(
+    useGetLowStockProductsQuery(undefined, DASHBOARD_QUERY_OPTIONS)
+  )
 
   const outOfStock = lowStockProducts?.filter(p => p.stockQuantity === 0) || []
   const lowStock = lowStockProducts?.filter(p => p.stockQuantity > 0 && p.stockQuantity <= (p.minStockLevel || 10)) || []
 
-  if (isLoading) {
+  if (showSkeleton) {
     return (
       <Card className='col-span-1 lg:col-span-3'>
         <CardHeader>
@@ -30,7 +34,10 @@ export function LowStockWidget() {
   }
 
   return (
-    <Card className='col-span-1 lg:col-span-3'>
+    <Card
+      aria-busy={isRefreshing}
+      className={cn('col-span-1 transition-opacity lg:col-span-3', isRefreshing && 'opacity-60')}
+    >
       <CardHeader>
         <div className='flex items-center justify-between'>
           <div>

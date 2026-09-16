@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const { Customer } = require('../models');
 const ApiError = require('../utils/ApiError');
 const customerLedgerService = require('./customerLedger.service');
+// Shared spreadsheet-cell parsing for the bulk import below — see utils/importRow.js
+const { toImportText, parseImportNumber, matchKey, phoneKey, isValidEmail } = require('../utils/importRow');
 const accountsSystemService = require('./accountsSystem.service');
 
 /**
@@ -174,65 +176,244 @@ const getAllCustomers = async (filter = {}, { includeEmployees = false, includeS
   return Customer.find(query);
 }
 
+const BULK_IMPORT_CHUNK_SIZE = 500;
+// ensureCustomerAccount is a real round trip per customer, so imports run it with
+// bounded concurrency — fast enough for a few thousand rows, gentle enough not to open
+// a connection per row. Same constant and reasoning as product.service.js's tracked rows.
+const ACCOUNT_SETUP_CONCURRENCY = 10;
+
 /**
- * Bulk add customers (import from Excel)
- * @param {Array} customersToAdd - Array of customers to create
+ * Bulk add customers (Excel/CSV import, or the AI card scanner — both funnel through
+ * here).
+ *
+ * Three things this deliberately does NOT do, each of which it used to:
+ *
+ *  1. Fail the whole batch over one row. Rows are validated individually and a bad one
+ *     comes back with its own reason while the rest import.
+ *  2. Show raw driver text. A duplicate or validation failure is rewritten into
+ *     something a shopkeeper can act on.
+ *  3. Create customers that are subtly different from ones added through the UI.
+ *     insertMany() skips createCustomer()'s opening-balance ledger entry and its
+ *     subsidiary Accounts-Receivable head, so imported customers used to be invisible to
+ *     the accounts system. Both are now set up for every imported customer, and a
+ *     failure there is reported as a note rather than throwing away an import that has
+ *     already been written.
+ *
+ * @param {Array} customersToAdd
+ * @param {Object} branchContext - { organizationId, branchId, createdBy }
+ * @param {Object} [options]
+ * @param {'skip'|'update'|'error'} [options.duplicateStrategy='skip'] - What to do with a
+ *   row matching a customer that already exists (matched on phone, then email, then
+ *   name). Defaults to 'skip' so re-uploading a contact list tops it up instead of
+ *   duplicating it or erroring on every known customer.
  * @returns {Promise<Object>}
  */
-const bulkAddCustomers = async (customersToAdd, branchContext = {}) => {
-  try {
-    // Process each customer to ensure proper data format
-    const processedCustomers = customersToAdd.map(customer => ({
-      name: customer.name,
-      nameUrdu: customer.nameUrdu || '',
-      email: customer.email || '',
-      phone: customer.phone || '',
-      whatsapp: customer.whatsapp || '',
-      address: customer.address || '',
-      balance: customer.balance ? Number(customer.balance) : 0,
-      organizationId: branchContext.organizationId,
-      branchId: branchContext.branchId,
-    }));
+const bulkAddCustomers = async (customersToAdd, branchContext = {}, options = {}) => {
+  const { organizationId, branchId, createdBy } = branchContext;
+  const duplicateStrategy = ['skip', 'update', 'error'].includes(options.duplicateStrategy)
+    ? options.duplicateStrategy
+    : 'skip';
 
-    // Insert customers
-    const insertedCustomers = await Customer.insertMany(processedCustomers, { 
-      ordered: false // Continue inserting even if some fail (e.g., duplicates)
+  // The whole branch's customers, projected down to the three fields duplicate matching
+  // needs. Fetched in full rather than filtered by this batch's values because matching
+  // is normalized (a phone written "+92 300…" here and "0300…" there is one number, and
+  // names match case-insensitively) — an $in on the raw values would miss exactly the
+  // duplicates this is here to catch. Same approach as category.service.js#bulkAddCategories.
+  const existing = await Customer.find({ organizationId, branchId })
+    .select('_id name phone email')
+    .lean();
+
+  const byPhone = new Map();
+  const byEmail = new Map();
+  const byName = new Map();
+  existing.forEach((customer) => {
+    const phone = phoneKey(customer.phone);
+    if (phone && !byPhone.has(phone)) byPhone.set(phone, customer);
+    const email = matchKey(customer.email);
+    if (email && !byEmail.has(email)) byEmail.set(email, customer);
+    const name = matchKey(customer.name);
+    if (name && !byName.has(name)) byName.set(name, customer);
+  });
+
+  const errors = [];
+  const warnings = [];
+  const validDocs = [];
+  const validMeta = [];
+  const updateOps = [];
+  // Rows deliberately not imported (already saved, or the same customer twice in one file).
+  // Deliberately NOT warnings: a warning means "imported, with something worth knowing".
+  const skipped = [];
+  const seenInBatch = new Map(); // identity key -> row index that first claimed it
+
+  customersToAdd.forEach((row, index) => {
+    const fail = (message) => errors.push({ index, name: toImportText(row.name), error: message });
+
+    const name = toImportText(row.name);
+    if (!name) return fail('Customer name is empty');
+
+    const balance = parseImportNumber(row.balance);
+    if (!balance.valid) return fail(`Opening balance "${row.balance}" is not a number`);
+
+    const creditLimit = parseImportNumber(row.creditLimit);
+    if (!creditLimit.valid) return fail(`Credit limit "${row.creditLimit}" is not a number`);
+
+    const phone = toImportText(row.phone);
+    const whatsapp = toImportText(row.whatsapp) || phone;
+    let email = toImportText(row.email);
+    // An unusable email costs the email, not the customer — the rest of the row is fine.
+    if (email && !isValidEmail(email)) {
+      warnings.push({ index, name, message: `Email "${email}" doesn't look valid — imported without it` });
+      email = '';
+    }
+
+    const identityKeys = [phoneKey(phone), matchKey(email), matchKey(name)].filter(Boolean);
+    const firstSeenAt = identityKeys.map((key) => seenInBatch.get(key)).find((value) => value !== undefined);
+    if (firstSeenAt !== undefined) {
+      skipped.push({ index, name, reason: `Same customer as row ${firstSeenAt + 1} in this file — imported once` });
+      return;
+    }
+    identityKeys.forEach((key) => seenInBatch.set(key, index));
+
+    const match =
+      (phoneKey(phone) && byPhone.get(phoneKey(phone))) ||
+      (matchKey(email) && byEmail.get(matchKey(email))) ||
+      byName.get(matchKey(name)) ||
+      null;
+
+    if (match && duplicateStrategy === 'error') {
+      return fail(`"${name}" is already saved as a customer`);
+    }
+    if (match && duplicateStrategy === 'skip') {
+      skipped.push({ index, name, reason: `"${name}" is already saved — left unchanged` });
+      return;
+    }
+
+    const fields = {
+      name,
+      nameUrdu: toImportText(row.nameUrdu),
+      email,
+      phone,
+      whatsapp,
+      address: toImportText(row.address),
+      taxNumber: toImportText(row.taxNumber),
+      notes: toImportText(row.notes),
+    };
+    const customerType = matchKey(row.customerType);
+    if (['retail', 'wholesale', 'vip', 'corporate'].includes(customerType)) fields.customerType = customerType;
+    else if (customerType) warnings.push({ index, name, message: `Customer type "${row.customerType}" is not recognised — imported without it` });
+    if (creditLimit.value !== undefined) fields.creditLimit = creditLimit.value;
+
+    if (match && duplicateStrategy === 'update') {
+      // Only fields the file actually filled in — an empty cell means "no change",
+      // never "erase what's saved". The balance is left alone too: it's a live ledger
+      // figure, not a spreadsheet column (see updateCustomerById, which re-syncs the
+      // opening-balance entry when it genuinely changes).
+      const set = {};
+      Object.entries(fields).forEach(([key, value]) => {
+        if (value !== '' && value !== undefined) set[key] = value;
+      });
+      updateOps.push({ index, name, filter: { _id: match._id, organizationId, branchId }, set });
+      return;
+    }
+
+    validDocs.push({
+      ...fields,
+      balance: balance.value ?? 0,
+      organizationId,
+      branchId,
+      createdBy,
     });
+    validMeta.push({ index, name });
+  });
 
-    // Sync opening balance ledger entries for imported customers
-    for (const customer of insertedCustomers) {
-      await customerLedgerService.syncOpeningBalanceEntry({
-        customerId: customer._id,
-        amount: customer.balance || 0,
-        organizationId: customer.organizationId,
-        branchId: customer.branchId,
-        transactionDate: customer.createdAt,
+  const insertedCustomers = [];
+  for (let i = 0; i < validDocs.length; i += BULK_IMPORT_CHUNK_SIZE) {
+    const chunk = validDocs.slice(i, i + BULK_IMPORT_CHUNK_SIZE);
+    const chunkMeta = validMeta.slice(i, i + BULK_IMPORT_CHUNK_SIZE);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const inserted = await Customer.insertMany(chunk, { ordered: false });
+      insertedCustomers.push(...inserted);
+    } catch (error) {
+      if (!error.writeErrors) throw error;
+      insertedCustomers.push(...(error.insertedDocs || []));
+      error.writeErrors.forEach((writeError) => {
+        const raw = writeError.err || writeError;
+        const meta = chunkMeta[writeError.index ?? raw.index] || {};
+        errors.push({
+          index: meta.index,
+          name: meta.name,
+          error: raw.errmsg || writeError.errmsg || 'This customer could not be saved',
+        });
       });
     }
-
-    return {
-      success: true,
-      insertedCount: insertedCustomers.length,
-      customers: insertedCustomers
-    };
-  } catch (error) {
-    // Handle bulk insert errors
-    if (error.writeErrors) {
-      const successfulInserts = error.insertedDocs || [];
-      const failedInserts = error.writeErrors.map(err => ({
-        index: err.index,
-        error: err.errmsg
-      }));
-
-      return {
-        success: true,
-        insertedCount: successfulInserts.length,
-        customers: successfulInserts,
-        errors: failedInserts
-      };
-    }
-    throw error;
   }
+
+  let updatedCount = 0;
+  if (updateOps.length) {
+    try {
+      const result = await Customer.bulkWrite(
+        updateOps.map((op) => ({ updateOne: { filter: op.filter, update: { $set: op.set } } })),
+        { ordered: false },
+      );
+      updatedCount = Math.max(result.modifiedCount ?? 0, result.matchedCount ?? 0);
+    } catch (error) {
+      const writeErrors = error.writeErrors || [];
+      if (!writeErrors.length) throw error;
+      updatedCount = Math.max(updateOps.length - writeErrors.length, 0);
+      writeErrors.forEach((writeError) => {
+        const raw = writeError.err || writeError;
+        const op = updateOps[writeError.index ?? raw.index] || {};
+        errors.push({ index: op.index, name: op.name, error: raw.errmsg || 'This customer could not be updated' });
+      });
+    }
+  }
+
+  // Opening-balance ledger entry + subsidiary AR account, exactly as createCustomer()
+  // does for a customer added through the UI. Failures here are reported, never thrown:
+  // the customer row itself is already saved, and losing the whole response over an
+  // accounting hiccup would tell the user nothing was imported when in fact it was.
+  for (let i = 0; i < insertedCustomers.length; i += ACCOUNT_SETUP_CONCURRENCY) {
+    const chunk = insertedCustomers.slice(i, i + ACCOUNT_SETUP_CONCURRENCY);
+    // eslint-disable-next-line no-await-in-loop
+    const results = await Promise.allSettled(
+      chunk.map(async (customer) => {
+        await customerLedgerService.syncOpeningBalanceEntry({
+          customerId: customer._id,
+          amount: customer.balance || 0,
+          organizationId: customer.organizationId,
+          branchId: customer.branchId,
+          transactionDate: customer.createdAt,
+        });
+        await accountsSystemService.ensureCustomerAccount(
+          { organizationId: customer.organizationId, branchId: customer.branchId, createdBy: customer.createdBy },
+          customer,
+        );
+      }),
+    );
+    results.forEach((result, position) => {
+      if (result.status === 'rejected') {
+        warnings.push({
+          name: chunk[position].name,
+          message: `"${chunk[position].name}" was imported, but its ledger account could not be set up automatically`,
+        });
+      }
+    });
+  }
+
+  errors.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+
+  return {
+    success: insertedCustomers.length > 0 || updatedCount > 0,
+    insertedCount: insertedCustomers.length,
+    updatedCount,
+    skippedCount: skipped.length,
+    skipped,
+    duplicateStrategy,
+    customers: insertedCustomers,
+    errors,
+    warnings,
+  };
 };
 
 /**
