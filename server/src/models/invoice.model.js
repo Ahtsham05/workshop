@@ -256,6 +256,11 @@ InvoiceSchema.index({ organizationId: 1, branchId: 1, invoiceDate: -1 });
 // identical supplier/purchaseDate index.
 InvoiceSchema.index({ organizationId: 1, branchId: 1, customerId: 1, invoiceDate: 1 });
 
+// Supports every per-product read over sales history — product analytics' detail page,
+// activity ledger, last-sold lookups and the Product Detail report. Mirrors purchase.model.js's
+// identical items.product/purchaseDate index.
+InvoiceSchema.index({ organizationId: 1, branchId: 1, 'items.productId': 1, invoiceDate: -1 });
+
 // add plugin that converts mongoose to json
 InvoiceSchema.plugin(toJSON);
 InvoiceSchema.plugin(paginate);

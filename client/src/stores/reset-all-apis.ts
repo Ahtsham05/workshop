@@ -28,6 +28,7 @@ import { imeiApi } from './imei.api'
 import { usedPhoneBuybackApi } from './usedPhoneBuyback.api'
 import { insightApi } from './insight.api'
 import { purchaseSuggestionsApi } from './purchaseSuggestions.api'
+import { productAnalyticsApi } from './productAnalytics.api'
 import { productAttributeApi } from './productAttribute.api'
 import { productVariantApi } from './productVariant.api'
 import { productApi } from './product.api'
@@ -59,6 +60,7 @@ const ALL_APIS = [
   productApi, inventoryApi, batchApi, brandApi, purchaseCatalogApi,
   inventoryTransferApi, stockAdjustmentApi, auditLogApi, aiAssistantApi,
   recurringExpenseApi, expenseApi, communicationLogApi, reminderApi, leadApi,
+  productAnalyticsApi,
 ]
 
 /**

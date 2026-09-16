@@ -39,6 +39,10 @@ import { getDisplayStock, getDisplayStockValue, getStockStatus } from '@/lib/pro
 import { useFormatMoney } from '@/lib/format-money'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { BarChart3, LayoutList } from 'lucide-react'
+import { PerformanceView } from './analytics/performance-view'
 
 const SEARCH_DEBOUNCE_MS = 400
 const ALL_STATUS = 'all'
@@ -132,6 +136,13 @@ export default function Products() {
 
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
+  const { view } = useSearch({ from: '/_authenticated/products/' })
+  const navigate = useNavigate({ from: '/products' })
+  const isPerformanceView = view === 'performance'
+  const setView = useCallback(
+    (next: string) => navigate({ search: (prev) => ({ ...prev, view: next === 'performance' ? 'performance' : undefined }) }),
+    [navigate]
+  )
   const formatCurrency = useFormatMoney()
   // Re-sorts the current page (active-first/inactive-last) after a per-row Active
   // toggle — that switch flips instantly on its own but has no way to move the row
@@ -528,7 +539,7 @@ export default function Products() {
     }
   }, []);
 
-  if (showLowStockDetails) {
+  if (showLowStockDetails && !isPerformanceView) {
     return (
       <ProductsProvider>
         <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
@@ -550,14 +561,28 @@ export default function Products() {
           <ImportBranchProductsBanner productCount={allProducts.length} loading={loadingAllProducts} />
 
           <div className='mb-4 flex flex-wrap items-start justify-between gap-3'>
-            <div>
-              <h2 className='text-2xl font-bold tracking-tight'>{t('products_list')}</h2>
-              <p className='text-muted-foreground'>
-                {t('manage_products')}
-              </p>
+            <div className='space-y-3'>
+              <div>
+                <h2 className='text-2xl font-bold tracking-tight'>{t('products_list')}</h2>
+                <p className='text-muted-foreground'>
+                  {isPerformanceView ? t('How every product is selling — rankings, profit and stock movement') : t('manage_products')}
+                </p>
+              </div>
+              <Tabs value={isPerformanceView ? 'performance' : 'catalog'} onValueChange={setView}>
+                <TabsList>
+                  <TabsTrigger value='catalog' className='gap-1.5 px-3'>
+                    <LayoutList className='h-4 w-4' />
+                    {t('Catalog')}
+                  </TabsTrigger>
+                  <TabsTrigger value='performance' className='gap-1.5 px-3'>
+                    <BarChart3 className='h-4 w-4' />
+                    {t('Performance')}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
-            <div className='flex gap-2'>
-              {selectedProducts.length > 0 && !inlineEditMode && (
+            <div className='flex flex-wrap gap-2'>
+              {!isPerformanceView && selectedProducts.length > 0 && !inlineEditMode && (
                 <>
                   <Button
                     variant="outline"
@@ -595,7 +620,7 @@ export default function Products() {
                   </Can>
                 </>
               )}
-              {inlineEditMode && (
+              {!isPerformanceView && inlineEditMode && (
                 <>
                   <div className='flex items-center gap-1.5 rounded-md border bg-card px-2 py-1'>
                     <Select value={bulkPercentOp} onValueChange={(v) => setBulkPercentOp(v as typeof bulkPercentOp)}>
@@ -640,6 +665,10 @@ export default function Products() {
             </div>
           </div>
 
+          {isPerformanceView ? (
+            <PerformanceView />
+          ) : (
+          <>
           <div className='mb-4'>
             <ProductStatCards
               outOfStock={stockCounts.outOfStock}
@@ -776,6 +805,8 @@ export default function Products() {
               broughtForward={broughtForward}
             />
           </div>
+          )}
+          </>
           )}
 
         <ProductDialogs setFetch={setFetch} />

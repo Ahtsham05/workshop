@@ -1,4 +1,5 @@
 import { ColumnDef } from '@tanstack/react-table'
+import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -80,7 +81,14 @@ export const useProductColumns = (
               className={getTextClasses(row.getValue('name') || 'Unnamed product', 'shrink-0')}
               style={{ maxWidth: `${productNameMaxChars}ch` }}
             >
-              {row.getValue('name') || 'Unnamed product'}
+              {/* Opens the product's details/performance page. */}
+              <Link
+                to='/products/$productId'
+                params={{ productId: product._id || product.id || '' }}
+                className='hover:text-primary hover:underline focus-visible:underline focus-visible:outline-none'
+              >
+                {row.getValue('name') || 'Unnamed product'}
+              </Link>
             </LongText>
             <FlagBadge flag={product.flag} />
             {urdu ? (

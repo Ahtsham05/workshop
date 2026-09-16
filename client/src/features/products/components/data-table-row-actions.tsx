@@ -2,7 +2,7 @@ import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { Row } from '@tanstack/react-table'
 import { useNavigate } from '@tanstack/react-router'
 import { IconEdit, IconTrash } from '@tabler/icons-react'
-import { ClipboardEdit, Flag, Gauge } from 'lucide-react'
+import { BarChart3, ClipboardEdit, Flag, Gauge } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDispatch } from 'react-redux'
 import { cn } from '@/lib/utils'
@@ -125,7 +125,15 @@ export function DataTableRowActions({ row, lowStockThreshold, criticalStockThres
             <span className='sr-only'>Open menu</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align='end' className='w-[160px]'>
+        <DropdownMenuContent align='end' className='w-[170px]'>
+          <DropdownMenuItem
+            onClick={() => navigate({ to: '/products/$productId', params: { productId } })}
+          >
+            {t('View details')}
+            <DropdownMenuShortcut>
+              <BarChart3 size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
           {canEdit && (
             <DropdownMenuItem
               onClick={() => {

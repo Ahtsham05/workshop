@@ -132,3 +132,4 @@ module.exports.taxCategoryService = require('./taxCategory.service.js');
 module.exports.taxRateService = require('./taxRate.service.js');
 module.exports.taxJurisdictionService = require('./taxJurisdiction.service.js');
 module.exports.taxExemptionService = require('./taxExemption.service.js');
+module.exports.productAnalyticsService = require('./productAnalytics.service.js');

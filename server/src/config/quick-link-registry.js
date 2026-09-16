@@ -51,6 +51,7 @@ const QUICK_LINK_ACTIONS = [
     category: 'Sales',
     color: 'bg-blue-500 hover:bg-blue-600',
     permission: 'createInvoices',
+    excludeBusinessTypes: ['school', 'restaurant'],
     synonyms: ['new invoice', 'create a new invoice'],
   },
   {
@@ -83,6 +84,11 @@ const QUICK_LINK_ACTIONS = [
     category: 'Purchasing',
     color: 'bg-green-500 hover:bg-green-600',
     permission: 'createPurchases',
+    // Restaurant orgs DO get this route — sidebar-data.ts's 'Restaurant' nav group has
+    // its own 'Stock purchases' entry pointing at the same '/purchase-invoice' route,
+    // so only 'school' is excluded here, overriding the 'Purchasing' category default
+    // of excluding both (see CATEGORY_DEFAULT_EXCLUDE_BUSINESS_TYPES above).
+    excludeBusinessTypes: ['school'],
     synonyms: ['new purchase', 'add purchase invoice'],
   },
   {
@@ -93,6 +99,9 @@ const QUICK_LINK_ACTIONS = [
     category: 'Purchasing',
     color: 'bg-sky-500 hover:bg-sky-600',
     anyPermission: ['viewPurchaseOrders', 'viewPurchases'],
+    // Same restaurant override as 'new_purchase' above — sidebar-data.ts's
+    // 'Restaurant' nav group has its own 'Purchase Orders' entry on this same route.
+    excludeBusinessTypes: ['school'],
   },
   {
     actionKey: 'purchase_returns',
@@ -114,6 +123,7 @@ const QUICK_LINK_ACTIONS = [
     category: 'Catalog & Inventory',
     color: 'bg-purple-500 hover:bg-purple-600',
     permission: 'createProducts',
+    excludeBusinessTypes: ['school', 'restaurant'],
     synonyms: ['new product'],
   },
   {
@@ -144,6 +154,7 @@ const QUICK_LINK_ACTIONS = [
     category: 'Catalog & Inventory',
     color: 'bg-yellow-500 hover:bg-yellow-600',
     permission: 'viewProducts',
+    excludeBusinessTypes: ['school', 'restaurant'],
     synonyms: ['transfer stock', 'move stock', 'transfer inventory'],
   },
   {
@@ -154,6 +165,7 @@ const QUICK_LINK_ACTIONS = [
     category: 'Catalog & Inventory',
     color: 'bg-slate-500 hover:bg-slate-600',
     permission: 'viewProducts',
+    excludeBusinessTypes: ['school', 'restaurant'],
     synonyms: ['adjust stock'],
   },
   {
@@ -1750,27 +1762,95 @@ const DEFAULT_ACTION_KEY_ORDER = [
   'salesmen',
 ];
 
-/** Actions visible to a caller: matches their permissions and every other gating
- *  dimension a sidebar item can carry. `bypassPermissions` mirrors the systemRole
- *  superAdmin/system_admin bypass used everywhere else in this codebase (see
- *  middlewares/permission.js) — those accounts often have no Role document at all, so
- *  checking `permissions[key] === true` would otherwise hide every permission-gated
- *  action from them; it does NOT bypass systemRole/school-role/email allow-lists,
- *  which are independent axes (e.g. a superAdmin still isn't a 'teacher'). */
-const getVisibleActions = (permissions, { businessType, systemRole, schoolRole, email, bypassPermissions = false } = {}) => {
+/** Category-level fallback for the business-type exclusion — these categories are
+ *  ERP-only "storefront" concepts (invoicing, purchasing, stock, ERP-style reports,
+ *  double-entry Accounts/Accounts System, cash/bank) that a school or restaurant org
+ *  never has sidebar access to (see sidebar-data.ts — each of these categories mirrors
+ *  a whole sidebar nav group that carries this exact same exclude at the GROUP level,
+ *  so every item under it is excluded together, not one at a time).
+ *
+ *  This exists because per-item `excludeBusinessTypes` was repeatedly forgotten on
+ *  individual actions as this registry grew (e.g. every "Reports · *" sub-category
+ *  once had it on some items but not others) — a school/restaurant org would then see
+ *  that one stray action in the Quick Links voice widget despite its whole category
+ *  being meant to be ERP-only. A category value below is only ever a *default*: any
+ *  action that declares its own `businessTypes` (an allow-list) or `excludeBusinessTypes`
+ *  is left alone (see resolveExcludeBusinessTypes) — e.g. 'new_purchase'/'purchase_orders'
+ *  in the 'Purchasing' category deliberately override this default down to just
+ *  `['school']`, because a restaurant org DOES get those two specific pages (via its
+ *  own dedicated Restaurant nav group in sidebar-data.ts, reusing the same routes). */
+const CATEGORY_DEFAULT_EXCLUDE_BUSINESS_TYPES = {
+  Sales: ['school', 'restaurant'],
+  Purchasing: ['school', 'restaurant'],
+  'Catalog & Inventory': ['school', 'restaurant'],
+  Contacts: ['school', 'restaurant'],
+  Reports: ['school', 'restaurant'],
+  'Reports · Overview': ['school', 'restaurant'],
+  'Reports · Sales & Customers': ['school', 'restaurant'],
+  'Reports · Purchases & Suppliers': ['school', 'restaurant'],
+  'Reports · Inventory & Stock': ['school', 'restaurant'],
+  'Reports · Finance & Accounts': ['school', 'restaurant'],
+  'Reports · Team & Partners': ['school', 'restaurant'],
+  Accounts: ['school', 'restaurant'],
+  'Accounts System': ['school', 'restaurant'],
+  'Finance & Banking': ['school', 'restaurant'],
+};
+
+/** An action's own `excludeBusinessTypes` (or `businessTypes`, an allow-list that
+ *  makes an exclude-list redundant) always wins — the category default only fills in
+ *  when the action is silent on the business-type dimension entirely. */
+const resolveExcludeBusinessTypes = (action) => {
+  if (action.businessTypes || action.excludeBusinessTypes) return action.excludeBusinessTypes;
+  return CATEGORY_DEFAULT_EXCLUDE_BUSINESS_TYPES[action.category];
+};
+
+/** Whether one action is visible to a caller: matches their permissions and every
+ *  other gating dimension a sidebar item can carry. `bypassPermissions` mirrors the
+ *  systemRole superAdmin/system_admin bypass used everywhere else in this codebase
+ *  (see middlewares/permission.js) — those accounts often have no Role document at
+ *  all, so checking `permissions[key] === true` would otherwise hide every
+ *  permission-gated action from them; it does NOT bypass systemRole/school-role/email
+ *  allow-lists, which are independent axes (e.g. a superAdmin still isn't a
+ *  'teacher'). Exported (not just used inside getVisibleActions below) so callers can
+ *  also re-check a single already-saved action — e.g. a user's persisted Quick Links
+ *  pick, which needs the exact same gating re-applied on every read, not just at
+ *  first-seed time, or a stale pick (business type changed, permission revoked, a
+ *  registry gate added after the fact) keeps silently showing forever. */
+const matchesScope = (
+  action,
+  { permissions, businessType, systemRole, schoolRole, email, bypassPermissions = false } = {}
+) => {
   const hasPermission = (key) => bypassPermissions || (!!permissions && permissions[key] === true);
   const hasAny = (keys) => bypassPermissions || keys.some(hasPermission);
 
-  return QUICK_LINK_ACTIONS.filter((action) => {
-    if (action.businessTypes && !action.businessTypes.includes(businessType)) return false;
-    if (action.excludeBusinessTypes && action.excludeBusinessTypes.includes(businessType)) return false;
-    if (action.systemRole && !action.systemRole.includes(systemRole)) return false;
-    if (action.allowedSchoolRoles && !action.allowedSchoolRoles.includes(schoolRole)) return false;
-    if (action.excludedSchoolRoles && action.excludedSchoolRoles.includes(schoolRole)) return false;
-    if (action.allowedEmails && !action.allowedEmails.includes(email)) return false;
-    if (action.permission) return hasPermission(action.permission);
-    if (action.anyPermission) return hasAny(action.anyPermission);
-    return true;
+  if (action.businessTypes && !action.businessTypes.includes(businessType)) return false;
+  const excludeBusinessTypes = resolveExcludeBusinessTypes(action);
+  if (excludeBusinessTypes && excludeBusinessTypes.includes(businessType)) return false;
+  if (action.systemRole && !action.systemRole.includes(systemRole)) return false;
+  if (action.allowedSchoolRoles && !action.allowedSchoolRoles.includes(schoolRole)) return false;
+  if (action.excludedSchoolRoles && action.excludedSchoolRoles.includes(schoolRole)) return false;
+  if (action.allowedEmails && !action.allowedEmails.includes(email)) return false;
+  if (action.permission) return hasPermission(action.permission);
+  if (action.anyPermission) return hasAny(action.anyPermission);
+  return true;
+};
+
+// Display-order preference, not a gating rule: these three categories should always
+// render last in the Quick Links list/voice widget, in every organization type — the
+// admin/subscription/communications housekeeping pages are the least frequently
+// reached-for actions, so they shouldn't compete with day-to-day business actions for
+// the top of the list. Everything else keeps its normal registry order.
+const TRAILING_CATEGORIES = new Set(['Communications', 'Administration', 'Subscription']);
+
+const getVisibleActions = (permissions, opts = {}) => {
+  const visible = QUICK_LINK_ACTIONS.filter((action) => matchesScope(action, { ...opts, permissions }));
+  // Array#sort is stable (guaranteed since ES2019), so within "trailing" and
+  // "everything else" each keeps its original relative registry order — this only
+  // moves the trailing group as a block to the end.
+  return [...visible].sort((a, b) => {
+    const aTrailing = TRAILING_CATEGORIES.has(a.category) ? 1 : 0;
+    const bTrailing = TRAILING_CATEGORIES.has(b.category) ? 1 : 0;
+    return aTrailing - bTrailing;
   });
 };
 
@@ -1782,4 +1862,4 @@ const getDefaultActionKeys = (permissions, opts = {}) => {
   return DEFAULT_ACTION_KEY_ORDER.filter((key) => visibleKeys.has(key));
 };
 
-module.exports = { QUICK_LINK_ACTIONS, DEFAULT_ACTION_KEY_ORDER, getVisibleActions, getDefaultActionKeys };
+module.exports = { QUICK_LINK_ACTIONS, DEFAULT_ACTION_KEY_ORDER, getVisibleActions, getDefaultActionKeys, matchesScope };

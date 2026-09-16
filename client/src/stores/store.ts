@@ -50,6 +50,7 @@ import { usedPhoneBuybackApi } from './usedPhoneBuyback.api';
 import { newPhonesApi } from './newPhones.api';
 import { insightApi } from './insight.api';
 import { purchaseSuggestionsApi } from './purchaseSuggestions.api';
+import { productAnalyticsApi } from './productAnalytics.api';
 import { productAttributeApi } from './productAttribute.api';
 import { productVariantApi } from './productVariant.api';
 import { productApi } from './product.api';
@@ -129,6 +130,7 @@ export const store = configureStore({
     [newPhonesApi.reducerPath]: newPhonesApi.reducer,
     [insightApi.reducerPath]: insightApi.reducer,
     [purchaseSuggestionsApi.reducerPath]: purchaseSuggestionsApi.reducer,
+    [productAnalyticsApi.reducerPath]: productAnalyticsApi.reducer,
     [productAttributeApi.reducerPath]: productAttributeApi.reducer,
     [productVariantApi.reducerPath]: productVariantApi.reducer,
     [productApi.reducerPath]: productApi.reducer,
@@ -201,6 +203,7 @@ export const store = configureStore({
       newPhonesApi.middleware,
       insightApi.middleware,
       purchaseSuggestionsApi.middleware,
+      productAnalyticsApi.middleware,
       productAttributeApi.middleware,
       productVariantApi.middleware,
       productApi.middleware,

@@ -132,6 +132,66 @@ const getProductStats = {
   }),
 };
 
+// Business calendar dates (YYYY-MM-DD) — see utils/businessTimezone.js.
+const analyticsDate = Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/);
+
+const getProductAnalyticsOverview = {
+  query: Joi.object().keys({
+    startDate: analyticsDate,
+    endDate: analyticsDate,
+  }),
+};
+
+const getProductRankings = {
+  query: Joi.object().keys({
+    startDate: analyticsDate,
+    endDate: analyticsDate,
+    sortBy: Joi.string().max(40),
+    sortOrder: Joi.string().valid('asc', 'desc'),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(200),
+    search: Joi.string().allow('').max(200),
+    categoryId: Joi.alternatives().try(Joi.string().valid('uncategorized'), Joi.string().custom(objectId)),
+    brandId: Joi.string().custom(objectId),
+    abcClass: Joi.string().pattern(/^(A|B|C|none)(,(A|B|C|none))*$/),
+    movement: Joi.string().pattern(/^[a-z_]+(,[a-z_]+)*$/),
+    status: Joi.string().valid('active', 'inactive'),
+    stock: Joi.string().valid('in_stock', 'out_of_stock'),
+    export: Joi.boolean(),
+  }),
+};
+
+const getProductAnalyticsMetrics = {
+  query: Joi.object().keys({
+    ids: Joi.string().required().pattern(/^[0-9a-fA-F]{24}(,[0-9a-fA-F]{24})*$/),
+    startDate: analyticsDate,
+    endDate: analyticsDate,
+  }),
+};
+
+const getProductAnalytics = {
+  params: Joi.object().keys({
+    productId: Joi.string().custom(objectId).required(),
+  }),
+  query: Joi.object().keys({
+    startDate: analyticsDate,
+    endDate: analyticsDate,
+  }),
+};
+
+const getProductActivity = {
+  params: Joi.object().keys({
+    productId: Joi.string().custom(objectId).required(),
+  }),
+  query: Joi.object().keys({
+    startDate: analyticsDate,
+    endDate: analyticsDate,
+    type: Joi.string().pattern(/^(all|sale|purchase|sale_return|purchase_return|adjustment|transfer)(,(sale|purchase|sale_return|purchase_return|adjustment|transfer))*$/),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(100),
+  }),
+};
+
 const getProduct = {
   params: Joi.object().keys({
     productId: Joi.string().required(),
@@ -341,4 +401,9 @@ module.exports = {
   updateProductFlag,
   getDistinctProductTags,
   lookupProductByCode,
+  getProductAnalyticsOverview,
+  getProductRankings,
+  getProductAnalyticsMetrics,
+  getProductAnalytics,
+  getProductActivity,
 };

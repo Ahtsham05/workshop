@@ -4,6 +4,7 @@ const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
 const productValidation = require('../../validations/product.validation');
 const productController = require('../../controllers/product.controller');
+const productAnalyticsController = require('../../controllers/productAnalytics.controller');
 const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
@@ -48,6 +49,26 @@ router
 router
   .route('/stats/by-category')
   .get(auth('viewProducts'), productController.getCategoryBreakdown);
+
+// Product performance analytics — rankings, ABC/movement classes, profitability and per-product
+// history (see services/productAnalytics.service.js). Same audience as the product list itself:
+// anyone who can see the catalog already sees its price and cost columns. Registered ahead of
+// the `/:productId` catch-all below.
+router
+  .route('/analytics/overview')
+  .get(auth('viewProducts'), validate(productValidation.getProductAnalyticsOverview), productAnalyticsController.getOverview);
+router
+  .route('/analytics/rankings')
+  .get(auth('viewProducts'), validate(productValidation.getProductRankings), productAnalyticsController.getRankings);
+router
+  .route('/analytics/metrics')
+  .get(auth('viewProducts'), validate(productValidation.getProductAnalyticsMetrics), productAnalyticsController.getMetrics);
+router
+  .route('/:productId/analytics')
+  .get(auth('viewProducts'), validate(productValidation.getProductAnalytics), productAnalyticsController.getProductAnalytics);
+router
+  .route('/:productId/activity')
+  .get(auth('viewProducts'), validate(productValidation.getProductActivity), productAnalyticsController.getProductActivity);
 
 // Distinct tag values already used in this org/branch — powers tag autocomplete/filter options.
 router
