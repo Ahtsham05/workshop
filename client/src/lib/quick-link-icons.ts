@@ -36,6 +36,10 @@ import {
   Users2,
   WalletCards,
   LinkIcon,
+  DollarSign,
+  LayoutGrid,
+  CalendarCheck,
+  Activity,
 } from 'lucide-react'
 import {
   IconBarcode,
@@ -122,6 +126,10 @@ export const QUICK_LINK_ICON_MAP: Record<string, React.ElementType> = {
   UserCog,
   Users2,
   WalletCards,
+  DollarSign,
+  LayoutGrid,
+  CalendarCheck,
+  Activity,
   IconBarcode,
   IconBook,
   IconBuilding,

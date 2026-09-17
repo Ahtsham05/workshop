@@ -35,7 +35,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -780,14 +780,6 @@ export const sidebarData: SidebarData = {
           excludedSchoolRoles: ['teacher'],
         },
         {
-          title: 'Reports',
-          url: '/school/fees/reports',
-          icon: IconChartBar,
-          businessTypes: ['school'],
-          requiredFeature: 'school_management',
-          excludedSchoolRoles: ['teacher'],
-        },
-        {
           title: 'Fee Categories',
           url: '/school/fees/categories',
           icon: IconCategory,
@@ -800,6 +792,72 @@ export const sidebarData: SidebarData = {
           title: 'Accounts',
           url: '/school/accounts',
           icon: IconCash,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+        },
+      ],
+    },
+    {
+      title: 'Reports',
+      items: [
+        {
+          title: 'Fee Collection Report',
+          url: '/school/fees/reports?tab=fee-collection' as never,
+          icon: FileText,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
+          title: 'Financial',
+          icon: DollarSign,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+          items: [
+            { title: 'Monthly Income/Expense', url: '/school/fees/reports?tab=financial-monthly' as never, icon: DollarSign },
+            { title: 'Daily Collection', url: '/school/fees/reports?tab=financial-daily' as never, icon: AlarmClock },
+            { title: 'Expense Report', url: '/school/fees/reports?tab=financial-expense' as never, icon: Receipt },
+            { title: 'Profit & Loss', url: '/school/fees/reports?tab=financial-pnl' as never, icon: BarChart3 },
+            { title: 'Category-wise', url: '/school/fees/reports?tab=financial-categories' as never, icon: LayoutGrid },
+          ],
+        },
+        {
+          title: 'Students',
+          icon: GraduationCap,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+          items: [
+            { title: 'Fee Status', url: '/school/fees/reports?tab=students-fee-status' as never, icon: ClipboardList },
+            { title: 'Attendance', url: '/school/fees/reports?tab=students-attendance' as never, icon: CalendarCheck },
+            { title: 'Student List', url: '/school/fees/reports?tab=students-list' as never, icon: Users },
+          ],
+        },
+        {
+          title: 'Teachers',
+          icon: UserCog,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+          items: [
+            { title: 'Salary Report', url: '/school/fees/reports?tab=teachers-salary' as never, icon: Landmark },
+            { title: 'Workload', url: '/school/fees/reports?tab=teachers-workload' as never, icon: BookOpen },
+          ],
+        },
+        {
+          title: 'Vouchers Report',
+          url: '/school/fees/reports?tab=vouchers' as never,
+          icon: Receipt,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
+          title: 'Analytics',
+          url: '/school/fees/reports?tab=analytics' as never,
+          icon: Activity,
           businessTypes: ['school'],
           requiredFeature: 'school_management',
           excludedSchoolRoles: ['teacher'],

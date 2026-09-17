@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearch } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   TrendingUp, TrendingDown, BarChart2, Printer, FileText, Download, FileSpreadsheet,
   BookOpen, GraduationCap, DollarSign, PieChart, Activity, Briefcase, Wallet,
+  CalendarClock, Receipt, LineChart as LineChartIcon, LayoutGrid, ClipboardList,
+  CalendarCheck, Users, Landmark,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -74,32 +78,77 @@ function exportToPDF(title: string, headers: string[], rows: string[][], fileNam
 
 // ═══════════════════════════════════════════════════════════════════════════
 
-type TabKey = 'financial' | 'students' | 'teachers' | 'vouchers' | 'analytics' | 'feeCollection';
+type TabKey =
+  | 'fee-collection'
+  | 'financial-monthly'
+  | 'financial-daily'
+  | 'financial-expense'
+  | 'financial-pnl'
+  | 'financial-categories'
+  | 'students-fee-status'
+  | 'students-attendance'
+  | 'students-list'
+  | 'teachers-salary'
+  | 'teachers-workload'
+  | 'vouchers'
+  | 'analytics';
+
+const DEFAULT_TAB: TabKey = 'fee-collection';
 
 const TABS: { key: TabKey; label: string; icon: any }[] = [
-  { key: 'feeCollection', label: 'Fee Collection', icon: FileText },
-  { key: 'financial', label: 'Financial', icon: DollarSign },
-  { key: 'students', label: 'Students', icon: GraduationCap },
-  { key: 'teachers', label: 'Teachers', icon: Briefcase },
+  { key: 'fee-collection', label: 'Fee Collection', icon: FileText },
+  { key: 'financial-monthly', label: 'Monthly Income/Expense', icon: DollarSign },
+  { key: 'financial-daily', label: 'Daily Collection', icon: CalendarClock },
+  { key: 'financial-expense', label: 'Expense Report', icon: Receipt },
+  { key: 'financial-pnl', label: 'Profit & Loss', icon: LineChartIcon },
+  { key: 'financial-categories', label: 'Category-wise', icon: LayoutGrid },
+  { key: 'students-fee-status', label: 'Fee Status', icon: ClipboardList },
+  { key: 'students-attendance', label: 'Attendance', icon: CalendarCheck },
+  { key: 'students-list', label: 'Student List', icon: Users },
+  { key: 'teachers-salary', label: 'Salary Report', icon: Landmark },
+  { key: 'teachers-workload', label: 'Workload', icon: Briefcase },
   { key: 'vouchers', label: 'Vouchers', icon: BookOpen },
   { key: 'analytics', label: 'Analytics', icon: Activity },
 ];
+
+const TAB_KEYS = new Set<string>(TABS.map((t) => t.key));
+const isValidTab = (value: string | undefined): value is TabKey => !!value && TAB_KEYS.has(value);
 
 export default function FeeReports() {
   const now = new Date();
   const user = useSelector((s: RootState) => s.auth.data?.user);
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId });
+  const search = useSearch({ from: '/_authenticated/school/fees/reports/' });
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
-  const [tab, setTab] = useState<TabKey>('feeCollection');
+  const [tab, setTab] = useState<TabKey>(isValidTab(search.tab) ? search.tab : DEFAULT_TAB);
   const [classFilter, setClassFilter] = useState<string>('all');
-  const [financialSub, setFinancialSub] = useState<'monthly' | 'daily' | 'expenseDetail' | 'pnl' | 'categories'>('monthly');
-  const [studentSub, setStudentSub] = useState<'list' | 'feeStatus' | 'attendance'>('feeStatus');
-  const [teacherSub, setTeacherSub] = useState<'salary' | 'workload'>('salary');
   const [voucherStatus, setVoucherStatus] = useState<string>('all');
+
+  // Deep-links from the sidebar (`?tab=financial-pnl`) and the voice
+  // quick-links widget land here by setting this search param — picking a
+  // tab by hand stays local state only, matching accounts-system.tsx's and
+  // the retail Reports page's existing convention (no writing back to the URL).
+  useEffect(() => {
+    if (isValidTab(search.tab)) setTab(search.tab);
+  }, [search.tab]);
+
+  const handleTabChange = (next: string) => {
+    if (isValidTab(next)) setTab(next);
+  };
 
   const { data: classesData } = useGetSchoolClassesQuery({ limit: 100 });
   const classes: any[] = (classesData?.results || []).map((c: any) => ({ ...c, id: c.id || c._id })).filter((c: any) => c.id);
+
+  const classFilterSelect = (
+    <Select value={classFilter} onValueChange={setClassFilter}>
+      <SelectTrigger className="w-40 h-8"><SelectValue placeholder="All Classes" /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Classes</SelectItem>
+        {classes.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
 
   return (
     <div className="h-full w-full p-4 space-y-5">
@@ -125,79 +174,60 @@ export default function FeeReports() {
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit flex-wrap">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all ${tab === key ? 'bg-background shadow text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
-            <Icon className="h-3.5 w-3.5" /> {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Fee Collection Tab */}
-      {tab === 'feeCollection' && (
-        <FeeCollectionTab year={year} month={month} classFilter={classFilter}
-          setClassFilter={setClassFilter} classes={classes} orgName={org?.name || 'School'} />
-      )}
-
-      {/* Financial Tab */}
-      {tab === 'financial' && (
-        <div className="space-y-4">
-          <SubTabBar items={[
-            { key: 'monthly', label: 'Monthly Income/Expense' },
-            { key: 'daily', label: 'Daily Collection' },
-            { key: 'expenseDetail', label: 'Expense Report' },
-            { key: 'pnl', label: 'Profit & Loss' },
-            { key: 'categories', label: 'Category-wise' },
-          ]} active={financialSub} onChange={(k) => setFinancialSub(k as any)} />
-
-          {financialSub === 'monthly' && <FinancialMonthlyReport year={year} />}
-          {financialSub === 'daily' && <FinancialDailyReport year={year} month={month} />}
-          {financialSub === 'expenseDetail' && <FinancialExpenseDetailReport year={year} month={month} />}
-          {financialSub === 'pnl' && <FinancialPnlReport year={year} />}
-          {financialSub === 'categories' && <FinancialCategoryReport />}
+      {/* Every report is a single flat tab — no second click through a category first. */}
+      <Tabs value={tab} onValueChange={handleTabChange}>
+        <div className="overflow-x-auto pb-1">
+          <TabsList className="inline-flex h-auto flex-wrap gap-1 rounded-lg bg-muted p-1 min-w-full sm:min-w-0">
+            {TABS.map(({ key, label, icon: Icon }) => (
+              <TabsTrigger key={key} value={key} className="text-xs sm:text-sm px-2 sm:px-3 gap-1.5">
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </div>
-      )}
 
-      {/* Students Tab */}
-      {tab === 'students' && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <SubTabBar items={[
-              { key: 'feeStatus', label: 'Fee Status' },
-              { key: 'attendance', label: 'Attendance' },
-              { key: 'list', label: 'Student List' },
-            ]} active={studentSub} onChange={(k) => setStudentSub(k as any)} />
-            <Select value={classFilter} onValueChange={setClassFilter}>
-              <SelectTrigger className="w-40 h-8"><SelectValue placeholder="All Classes" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Classes</SelectItem>
-                {classes.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          {studentSub === 'list' && <StudentListReport classId={classFilter !== 'all' ? classFilter : undefined} />}
-          {studentSub === 'feeStatus' && <StudentFeeStatusReport year={year} month={month} classId={classFilter !== 'all' ? classFilter : undefined} />}
-          {studentSub === 'attendance' && <StudentAttendanceReport year={year} month={month} classId={classFilter !== 'all' ? classFilter : undefined} />}
-        </div>
-      )}
+        <TabsContent value="fee-collection" className="mt-4">
+          <FeeCollectionTab year={year} month={month} classFilter={classFilter}
+            setClassFilter={setClassFilter} classes={classes} orgName={org?.name || 'School'} />
+        </TabsContent>
 
-      {/* Teachers Tab */}
-      {tab === 'teachers' && (
-        <div className="space-y-4">
-          <SubTabBar items={[
-            { key: 'salary', label: 'Salary Report' },
-            { key: 'workload', label: 'Workload' },
-          ]} active={teacherSub} onChange={(k) => setTeacherSub(k as any)} />
-          {teacherSub === 'salary' && <TeacherSalaryReport year={year} />}
-          {teacherSub === 'workload' && <TeacherWorkloadReport />}
-        </div>
-      )}
+        <TabsContent value="financial-monthly" className="mt-4">
+          <FinancialMonthlyReport year={year} />
+        </TabsContent>
+        <TabsContent value="financial-daily" className="mt-4">
+          <FinancialDailyReport year={year} month={month} />
+        </TabsContent>
+        <TabsContent value="financial-expense" className="mt-4">
+          <FinancialExpenseDetailReport year={year} month={month} />
+        </TabsContent>
+        <TabsContent value="financial-pnl" className="mt-4">
+          <FinancialPnlReport year={year} />
+        </TabsContent>
+        <TabsContent value="financial-categories" className="mt-4">
+          <FinancialCategoryReport />
+        </TabsContent>
 
-      {/* Vouchers Tab */}
-      {tab === 'vouchers' && (
-        <div className="space-y-4">
+        <TabsContent value="students-fee-status" className="mt-4 space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">{classFilterSelect}</div>
+          <StudentFeeStatusReport year={year} month={month} classId={classFilter !== 'all' ? classFilter : undefined} />
+        </TabsContent>
+        <TabsContent value="students-attendance" className="mt-4 space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">{classFilterSelect}</div>
+          <StudentAttendanceReport year={year} month={month} classId={classFilter !== 'all' ? classFilter : undefined} />
+        </TabsContent>
+        <TabsContent value="students-list" className="mt-4 space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">{classFilterSelect}</div>
+          <StudentListReport classId={classFilter !== 'all' ? classFilter : undefined} />
+        </TabsContent>
+
+        <TabsContent value="teachers-salary" className="mt-4">
+          <TeacherSalaryReport year={year} />
+        </TabsContent>
+        <TabsContent value="teachers-workload" className="mt-4">
+          <TeacherWorkloadReport />
+        </TabsContent>
+
+        <TabsContent value="vouchers" className="mt-4 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <Select value={voucherStatus} onValueChange={setVoucherStatus}>
               <SelectTrigger className="w-36 h-8"><SelectValue placeholder="All Status" /></SelectTrigger>
@@ -209,39 +239,17 @@ export default function FeeReports() {
                 <SelectItem value="overdue">Overdue</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={classFilter} onValueChange={setClassFilter}>
-              <SelectTrigger className="w-40 h-8"><SelectValue placeholder="All Classes" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Classes</SelectItem>
-                {classes.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {classFilterSelect}
           </div>
           <VoucherReport year={year} month={month}
             status={voucherStatus !== 'all' ? voucherStatus : undefined}
             classId={classFilter !== 'all' ? classFilter : undefined} />
-        </div>
-      )}
+        </TabsContent>
 
-      {/* Analytics Tab */}
-      {tab === 'analytics' && <AnalyticsTab year={year} />}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ─── Sub-tab Bar Component ────────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════════════════
-
-function SubTabBar({ items, active, onChange }: { items: { key: string; label: string }[]; active: string; onChange: (k: string) => void }) {
-  return (
-    <div className="flex gap-1 p-0.5 bg-muted/60 rounded-md w-fit">
-      {items.map(({ key, label }) => (
-        <button key={key} onClick={() => onChange(key)}
-          className={`px-2.5 py-1 rounded text-xs transition-all ${active === key ? 'bg-background shadow text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
-          {label}
-        </button>
-      ))}
+        <TabsContent value="analytics" className="mt-4">
+          <AnalyticsTab year={year} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
