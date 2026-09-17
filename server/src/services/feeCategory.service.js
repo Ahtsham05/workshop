@@ -46,7 +46,7 @@ const createCategoriesBulk = async (organizationId, branchId, createdBy, categor
   const created = [];
   const skipped = [];
   docs.forEach((d, idx) => {
-    (upsertedIndexes.has(idx) ? created : skipped).push(d.name);
+    (upsertedIndexes.has(idx) ? created : skipped).push({ index: idx, name: d.name });
   });
 
   return { created, skipped };

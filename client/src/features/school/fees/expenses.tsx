@@ -51,6 +51,7 @@ import {
   RefreshCw,
   Layers,
   Printer,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   useGetSchoolTransactionsQuery,
@@ -73,6 +74,7 @@ import { SchoolRecurringExpenseManager } from './recurring-expenses';
 import { CategoryCombobox, nextCategoryColor } from './category-combobox';
 import { CategoryBreakdown } from './category-breakdown';
 import { BulkCategoriesDialog } from './bulk-categories-dialog';
+import { ExpenseCategoryImportDialog } from './expense-category-import-dialog';
 import { BulkExpensesDialog } from './bulk-expenses-dialog';
 import { printExpenseVoucher } from './print-expense-voucher';
 
@@ -170,6 +172,7 @@ function ExpensesTab() {
   const [categoryToDelete, setCategoryToDelete] = useState<any>(null);
   const [payAllDialogOpen, setPayAllDialogOpen] = useState(false);
   const [bulkCategoriesOpen, setBulkCategoriesOpen] = useState(false);
+  const [categoryImportOpen, setCategoryImportOpen] = useState(false);
   const [bulkExpensesOpen, setBulkExpensesOpen] = useState(false);
 
   // ── API hooks ─────────────────────────────────────────────────────────────
@@ -441,6 +444,9 @@ function ExpensesTab() {
         </Button>
         <Button variant="outline" size="sm" onClick={() => setBulkCategoriesOpen(true)}>
           <Layers className="mr-1.5 h-3.5 w-3.5" /> Add Multiple Categories
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setCategoryImportOpen(true)}>
+          <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" /> Import Categories
         </Button>
         <Button variant="outline" size="sm" onClick={() => setBulkExpensesOpen(true)}>
           <Layers className="mr-1.5 h-3.5 w-3.5" /> Bulk Add Expenses
@@ -944,6 +950,7 @@ function ExpensesTab() {
       </AlertDialog>
 
       <BulkCategoriesDialog open={bulkCategoriesOpen} onOpenChange={setBulkCategoriesOpen} />
+      <ExpenseCategoryImportDialog open={categoryImportOpen} onOpenChange={setCategoryImportOpen} existingCount={categories.length} />
       <BulkExpensesDialog open={bulkExpensesOpen} onOpenChange={setBulkExpensesOpen} categories={categories} />
     </div>
   );
