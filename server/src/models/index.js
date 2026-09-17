@@ -81,6 +81,7 @@ module.exports.AgentBill = require('./agentBill.model');
 // School Accounting Models
 module.exports.FeeCategory = require('./feeCategory.model');
 module.exports.SchoolTransaction = require('./schoolTransaction.model');
+module.exports.SchoolRecurringExpense = require('./schoolRecurringExpense.model');
 module.exports.FeeStructure = require('./feeStructure.model');
 module.exports.FeeVoucher = require('./feeVoucher.model');
 module.exports.FeePaymentRequest = require('./feePaymentRequest.model');

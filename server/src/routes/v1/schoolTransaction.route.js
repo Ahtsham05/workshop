@@ -15,14 +15,24 @@ router
   .post(validate(schoolTransactionValidation.createTransaction), schoolTransactionController.createTransaction)
   .get(validate(schoolTransactionValidation.getTransactions), schoolTransactionController.getTransactions);
 
+router
+  .route('/bulk')
+  .post(validate(schoolTransactionValidation.createTransactionsBulk), schoolTransactionController.createTransactionsBulk);
+
 router.route('/summary/monthly').get(schoolTransactionController.getMonthlySummary);
 router.route('/summary/category').get(schoolTransactionController.getCategoryReport);
 router.route('/summary/yearly-trend').get(schoolTransactionController.getYearlyTrend);
+
+router
+  .route('/pay-bulk')
+  .post(validate(schoolTransactionValidation.payTransactionsBulk), schoolTransactionController.payTransactionsBulk);
 
 router
   .route('/:transactionId')
   .get(validate(schoolTransactionValidation.getTransaction), schoolTransactionController.getTransaction)
   .patch(validate(schoolTransactionValidation.updateTransaction), schoolTransactionController.updateTransaction)
   .delete(validate(schoolTransactionValidation.deleteTransaction), schoolTransactionController.deleteTransaction);
+
+router.route('/:transactionId/pay').patch(schoolTransactionController.payTransaction);
 
 module.exports = router;

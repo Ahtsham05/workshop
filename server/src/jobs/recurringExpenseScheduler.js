@@ -1,5 +1,5 @@
 const logger = require('../config/logger');
-const { recurringExpenseService, agentBillService } = require('../services');
+const { recurringExpenseService, schoolRecurringExpenseService, agentBillService } = require('../services');
 
 const RUN_INTERVAL_MS = 60 * 60 * 1000; // check hourly
 const DAILY_RUN_HOUR_UTC = 1; // run at 1 AM UTC (6 AM PKT)
@@ -22,10 +22,16 @@ const runDailyTasks = async () => {
   isDailyRunning = true;
   try {
     const result = await recurringExpenseService.processDueRecurringExpenses();
-    lastDailyRunDateKey = dateKey;
     if (result.created > 0 || result.errors > 0) {
       logger.info(`Recurring expenses: ${result.created} created, ${result.errors} errors (${result.total} rules)`);
     }
+
+    const schoolResult = await schoolRecurringExpenseService.processDueSchoolRecurringExpenses();
+    if (schoolResult.created > 0 || schoolResult.errors > 0) {
+      logger.info(`School recurring expenses: ${schoolResult.created} created, ${schoolResult.errors} errors (${schoolResult.total} rules)`);
+    }
+
+    lastDailyRunDateKey = dateKey;
   } catch (err) {
     logger.error('Recurring expense scheduler error:', err.message);
   } finally {

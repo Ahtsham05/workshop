@@ -13,6 +13,16 @@ const createCategory = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(category);
 });
 
+const createCategoriesBulk = catchAsync(async (req, res) => {
+  const result = await feeCategoryService.createCategoriesBulk(
+    req.user.organizationId,
+    req.branchId,
+    req.user._id,
+    req.body.categories
+  );
+  res.status(httpStatus.CREATED).send(result);
+});
+
 const getCategories = catchAsync(async (req, res) => {
   const filter = {
     organizationId: req.user.organizationId,
@@ -70,6 +80,7 @@ const seedCategories = catchAsync(async (req, res) => {
 
 module.exports = {
   createCategory,
+  createCategoriesBulk,
   getCategories,
   getCategory,
   getIncomeCategories,

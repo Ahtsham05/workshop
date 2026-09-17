@@ -28,6 +28,10 @@ const feeCategorySchema = mongoose.Schema(
       type: String,
       trim: true,
     },
+    color: {
+      type: String,
+      default: '#6366f1',
+    },
     isActive: {
       type: Boolean,
       default: true,

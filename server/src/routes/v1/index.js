@@ -126,6 +126,7 @@ const teacherAssignmentRoute = require('./teacherAssignment.route');
 // School Accounting Routes
 const feeCategoryRoute = require('./feeCategory.route');
 const schoolTransactionRoute = require('./schoolTransaction.route');
+const schoolRecurringExpenseRoute = require('./schoolRecurringExpense.route');
 const feeStructureRoute = require('./feeStructure.route');
 const feeVoucherRoute = require('./feeVoucher.route');
 const feePaymentRequestRoute = require('./feePaymentRequest.route');
@@ -586,6 +587,10 @@ const defaultRoutes = [
   {
     path: '/school-transactions',
     route: schoolTransactionRoute,
+  },
+  {
+    path: '/school-recurring-expenses',
+    route: schoolRecurringExpenseRoute,
   },
   {
     path: '/fee-structures',

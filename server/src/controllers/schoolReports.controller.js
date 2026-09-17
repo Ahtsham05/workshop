@@ -34,6 +34,13 @@ const getCategoryReport = catchAsync(async (req, res) => {
   res.send(await schoolReportsService.getCategoryWiseReport(scope, req.query.startDate, req.query.endDate));
 });
 
+const getExpenseDetail = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  const year = parseInt(req.query.year || new Date().getFullYear(), 10);
+  const month = req.query.month || new Date().toLocaleString('default', { month: 'long' });
+  res.send(await schoolReportsService.getExpenseDetailReport(scope, year, month));
+});
+
 const getProfitAndLoss = catchAsync(async (req, res) => {
   const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
   const year = parseInt(req.query.year || new Date().getFullYear(), 10);
@@ -110,6 +117,7 @@ module.exports = {
   getMonthlyIncomeExpense,
   getDailyCollection,
   getCategoryReport,
+  getExpenseDetail,
   getProfitAndLoss,
   getStudentList,
   getStudentFeeStatus,

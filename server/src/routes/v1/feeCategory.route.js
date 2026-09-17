@@ -18,6 +18,9 @@ router
 router.route('/income').get(feeCategoryController.getIncomeCategories);
 router.route('/expense').get(feeCategoryController.getExpenseCategories);
 router.route('/seed').post(feeCategoryController.seedCategories);
+router
+  .route('/bulk')
+  .post(validate(feeCategoryValidation.createCategoriesBulk), feeCategoryController.createCategoriesBulk);
 
 router
   .route('/:categoryId')

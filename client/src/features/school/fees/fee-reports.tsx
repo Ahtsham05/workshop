@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   TrendingUp, TrendingDown, BarChart2, Printer, FileText, Download, FileSpreadsheet,
-  BookOpen, GraduationCap, DollarSign, PieChart, Activity, Briefcase,
+  BookOpen, GraduationCap, DollarSign, PieChart, Activity, Briefcase, Wallet,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -16,6 +16,7 @@ import {
   useGetReportFinancialDailyQuery,
   useGetReportFinancialPnlQuery,
   useGetReportFinancialCategoriesQuery,
+  useGetReportFinancialExpenseDetailQuery,
   useGetReportStudentListQuery,
   useGetReportStudentFeeStatusQuery,
   useGetReportStudentAttendanceQuery,
@@ -92,7 +93,7 @@ export default function FeeReports() {
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
   const [tab, setTab] = useState<TabKey>('feeCollection');
   const [classFilter, setClassFilter] = useState<string>('all');
-  const [financialSub, setFinancialSub] = useState<'monthly' | 'daily' | 'pnl' | 'categories'>('monthly');
+  const [financialSub, setFinancialSub] = useState<'monthly' | 'daily' | 'expenseDetail' | 'pnl' | 'categories'>('monthly');
   const [studentSub, setStudentSub] = useState<'list' | 'feeStatus' | 'attendance'>('feeStatus');
   const [teacherSub, setTeacherSub] = useState<'salary' | 'workload'>('salary');
   const [voucherStatus, setVoucherStatus] = useState<string>('all');
@@ -146,12 +147,14 @@ export default function FeeReports() {
           <SubTabBar items={[
             { key: 'monthly', label: 'Monthly Income/Expense' },
             { key: 'daily', label: 'Daily Collection' },
+            { key: 'expenseDetail', label: 'Expense Report' },
             { key: 'pnl', label: 'Profit & Loss' },
             { key: 'categories', label: 'Category-wise' },
           ]} active={financialSub} onChange={(k) => setFinancialSub(k as any)} />
 
           {financialSub === 'monthly' && <FinancialMonthlyReport year={year} />}
           {financialSub === 'daily' && <FinancialDailyReport year={year} month={month} />}
+          {financialSub === 'expenseDetail' && <FinancialExpenseDetailReport year={year} month={month} />}
           {financialSub === 'pnl' && <FinancialPnlReport year={year} />}
           {financialSub === 'categories' && <FinancialCategoryReport />}
         </div>
@@ -1189,6 +1192,206 @@ function FinancialCategoryReport() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ─── Financial: Expense Report (month-wise detail) ────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+function FinancialExpenseDetailReport({ year, month }: { year: number; month: string }) {
+  const { data, isLoading } = useGetReportFinancialExpenseDetailQuery({ year, month });
+  const { data: org } = useGetMyOrganizationQuery();
+  const formatMoney = useFormatMoney();
+  if (isLoading) return <Loading />;
+  if (!data) return <EmptyState />;
+  const { summary, data: detail } = data;
+  const transactions = detail.transactions || [];
+  const categories = detail.categories || [];
+  const paymentMethods = detail.paymentMethods || [];
+  const paidPct = summary.totalTransactions > 0 ? Math.round((summary.paidCount / summary.totalTransactions) * 100) : 0;
+
+  const excelRows = transactions.map((t: any) => ({
+    Date: new Date(t.date).toLocaleDateString('en-GB'),
+    'Expense #': t.expenseNumber || '-',
+    'Voucher #': t.voucherNumber || '-',
+    Category: t.categoryName,
+    Description: t.description || '-',
+    Vendor: t.vendor || '-',
+    Reference: t.reference || '-',
+    'Payment Method': (t.paymentMethod || '').replace('_', ' '),
+    Status: t.isPaid ? 'Paid' : 'Pending',
+    'Recorded By': t.createdByName || '-',
+    Amount: t.amount,
+  }));
+
+  const pdfRows = transactions.map((t: any) => [
+    new Date(t.date).toLocaleDateString('en-GB'),
+    t.expenseNumber || '-',
+    t.categoryName,
+    t.description || '-',
+    t.vendor || '-',
+    (t.paymentMethod || '').replace('_', ' '),
+    t.isPaid ? 'Paid' : 'Pending',
+    t.createdByName || '-',
+    t.amount.toLocaleString(),
+  ]);
+
+  return (
+    <div className="space-y-5">
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
+          <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Total Expense</p>
+          <p className="text-2xl font-bold text-red-700">{formatMoney(summary.totalExpense || 0)}</p>
+          <p className="text-[11px] text-red-600 mt-1">{month} {year}</p>
+        </div>
+        <div className="rounded-xl border-2 border-slate-100 bg-slate-50 p-4">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Transactions</p>
+          <p className="text-2xl font-bold text-slate-700">{summary.totalTransactions || 0}</p>
+          <p className="text-[11px] text-slate-500 mt-1">{summary.categoriesUsed || 0} categor{summary.categoriesUsed === 1 ? 'y' : 'ies'} used</p>
+        </div>
+        <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
+          <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1">Paid</p>
+          <p className="text-2xl font-bold text-emerald-700">{formatMoney(summary.paidTotal || 0)}</p>
+          <p className="text-[11px] text-emerald-600 mt-1">{summary.paidCount || 0} txns ({paidPct}%)</p>
+        </div>
+        <div className="rounded-xl border-2 border-amber-100 bg-amber-50 p-4">
+          <p className="text-[10px] font-semibold text-amber-500 uppercase tracking-wide mb-1">Pending</p>
+          <p className="text-2xl font-bold text-amber-700">{formatMoney(summary.pendingTotal || 0)}</p>
+          <p className="text-[11px] text-amber-600 mt-1">{summary.pendingCount || 0} txns</p>
+        </div>
+      </div>
+
+      {/* Category + Payment Method breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2"><PieChart className="h-4 w-4 text-red-500" /> By Category</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {categories.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={160}>
+                  <RePieChart>
+                    <Pie data={categories} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={65} label={({ percent }: any) => `${(percent * 100).toFixed(0)}%`} fontSize={10}>
+                      {categories.map((c: any, i: number) => <Cell key={i} fill={c.color || PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => formatMoney(v)} />
+                  </RePieChart>
+                </ResponsiveContainer>
+                <div className="space-y-1.5 mt-2">
+                  {categories.map((c: any) => (
+                    <div key={c.name} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
+                        <span className="font-medium truncate">{c.name}</span>
+                        <span className="text-muted-foreground shrink-0">({c.count})</span>
+                      </div>
+                      <span className="font-bold text-red-600 shrink-0">{formatMoney(c.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : <EmptyState text="No expenses this month" />}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2"><Wallet className="h-4 w-4 text-slate-500" /> By Payment Method</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-3">
+            {paymentMethods.length > 0 ? paymentMethods.map((m: any) => {
+              const pct = summary.totalExpense > 0 ? Math.round((m.total / summary.totalExpense) * 100) : 0;
+              return (
+                <div key={m._id || 'unknown'}>
+                  <div className="flex justify-between items-center mb-1 text-xs">
+                    <span className="font-medium capitalize">{(m._id || 'unknown').replace('_', ' ')}</span>
+                    <span className="text-muted-foreground">{m.count} txn{m.count !== 1 ? 's' : ''} · {pct}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-0.5">
+                    <div className="h-full rounded-full bg-indigo-400" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="text-right text-xs font-semibold text-slate-700">{formatMoney(m.total)}</div>
+                </div>
+              );
+            }) : <EmptyState text="No expenses this month" />}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Full Detail Table */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2"><FileText className="h-4 w-4 text-red-500" /> Expense Detail — {month} {year}</CardTitle>
+          <div className="flex gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => printExpenseReport(data, org?.name || 'School', year, month)} disabled={!transactions.length}>
+              <Printer className="mr-1 h-3 w-3" /> Print
+            </Button>
+            <ExportButtons data={excelRows} sheetName="Expenses" fileName={`Expense_Report_${month}_${year}`}
+              pdfTitle={`Expense Report - ${month} ${year}`}
+              headers={['Date', 'Expense #', 'Category', 'Description', 'Vendor', 'Method', 'Status', 'Recorded By', 'Amount']}
+              rows={pdfRows}
+              landscape />
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">#</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Date</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Expense #</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Category</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Description</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Vendor</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Method</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Status</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Recorded By</th>
+                  <th className="text-right px-3 py-2.5 font-semibold text-[11px]">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.length === 0 ? (
+                  <tr><td colSpan={10} className="text-center py-10 text-muted-foreground">No expenses recorded for {month} {year}</td></tr>
+                ) : transactions.map((t: any, idx: number) => (
+                  <tr key={t.id} className="border-b hover:bg-muted/20">
+                    <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{new Date(t.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}</td>
+                    <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{t.expenseNumber || '-'}</td>
+                    <td className="px-3 py-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: `${t.categoryColor}1a`, color: t.categoryColor }}>{t.categoryName}</span>
+                    </td>
+                    <td className="px-3 py-2 max-w-[220px] truncate" title={t.description}>{t.description || '-'}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{t.vendor || '-'}</td>
+                    <td className="px-3 py-2 capitalize">{(t.paymentMethod || '').replace('_', ' ')}</td>
+                    <td className="px-3 py-2">
+                      {t.isPaid ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">Paid</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">Pending</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{t.createdByName || '-'}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-red-600">{formatMoney(t.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {transactions.length > 0 && (
+                <tfoot>
+                  <tr className="bg-muted font-bold text-[11px]">
+                    <td colSpan={9} className="px-3 py-2.5">Total ({transactions.length} transactions)</td>
+                    <td className="px-3 py-2.5 text-right text-red-700">{formatMoney(summary.totalExpense || 0)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ─── Student: List ────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2107,6 +2310,93 @@ function printFeeReport(reportData: any[], schoolName: string, year: number) {
   }).join('');
 
   win.document.write(`<!DOCTYPE html><html><head><title>Fee Report</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:8px;color:#000;background:#fff}.page{width:297mm;padding:8mm 6mm;page-break-after:always}.page:last-child{page-break-after:auto}.header{text-align:center;margin-bottom:6px}.header h1{font-size:16px;font-weight:900;text-transform:uppercase}.header h2{font-size:11px;font-weight:700}.header h3{font-size:10px;color:#444}table{width:100%;border-collapse:collapse;margin-top:4px}th,td{border:1px solid #999;padding:3px 4px}thead tr{background:#e8e8e8}th{font-size:7.5px;font-weight:700;text-transform:uppercase}th.sno{width:20px;text-align:center}th.name{min-width:100px}th.mh{text-align:center;width:48px}th.toth{text-align:right;width:52px}td.sno{text-align:center;color:#555;font-size:7px}td.name{font-weight:600;white-space:nowrap}td.mc{text-align:center;font-size:7.5px}td.mc.paid{color:#047857;font-weight:700}td.mc.partial{color:#2563eb;font-weight:600}td.mc.unpaid{color:#dc2626;font-weight:700}td.tot{text-align:right;font-weight:700;font-size:8px}td.tot.paid{color:#047857}td.tot.unpaid{color:#dc2626}td.ftlabel{font-weight:800;font-size:8px}td.ftot{text-align:center;font-weight:800;font-size:8px}td.ftot.paid{color:#047857;text-align:right}td.ftot.unpaid{color:#dc2626;text-align:right}tbody tr:nth-child(even){background:#fafafa}tbody tr.frow{background:#f3f3f3;break-inside:avoid}.footer{display:flex;justify-content:space-between;margin-top:6px;font-size:7px;color:#888;border-top:1px solid #ccc;padding-top:3px}@media print{@page{size:A4 landscape;margin:5mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${classPages}</body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 600);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── Print Expense Report ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+function printExpenseReport(reportData: any, schoolName: string, year: number, month: string) {
+  const { summary, data: detail } = reportData;
+  const transactions = detail.transactions || [];
+  const categories = detail.categories || [];
+  if (!transactions.length) return;
+  const win = window.open('', '_blank');
+  if (!win) { toast.error('Allow pop-ups to print'); return; }
+
+  const fmt = (n: number) => (n || 0).toLocaleString();
+
+  const catRows = categories.map((c: any) => {
+    const pct = summary.totalExpense > 0 ? Math.round((c.total / summary.totalExpense) * 100) : 0;
+    return `<tr><td>${c.name}</td><td class="c">${c.count}</td><td class="r">${fmt(c.total)}</td><td class="c">${pct}%</td></tr>`;
+  }).join('');
+
+  const txnRows = transactions.map((t: any, idx: number) => `<tr>
+    <td class="c">${idx + 1}</td>
+    <td>${new Date(t.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+    <td>${t.expenseNumber || '-'}</td>
+    <td>${t.categoryName}</td>
+    <td>${t.description || '-'}</td>
+    <td>${t.vendor || '-'}</td>
+    <td class="cap">${(t.paymentMethod || '').replace('_', ' ')}</td>
+    <td class="c ${t.isPaid ? 'paid' : 'pending'}">${t.isPaid ? 'Paid' : 'Pending'}</td>
+    <td>${t.createdByName || '-'}</td>
+    <td class="r">${fmt(t.amount)}</td>
+  </tr>`).join('');
+
+  win.document.write(`<!DOCTYPE html><html><head><title>Expense Report - ${month} ${year}</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:9px;color:#111;background:#fff;padding:10mm}
+.header{text-align:center;margin-bottom:10px;border-bottom:2px solid #111;padding-bottom:8px}
+.header h1{font-size:18px;font-weight:900;text-transform:uppercase}
+.header h2{font-size:12px;font-weight:700;margin-top:2px;color:#333}
+.header h3{font-size:10px;color:#666;margin-top:2px}
+.summary{display:flex;gap:8px;margin:12px 0}
+.box{flex:1;border:1px solid #ccc;border-radius:4px;padding:8px;text-align:center}
+.box .l{font-size:8px;text-transform:uppercase;color:#666;font-weight:700}
+.box .v{font-size:14px;font-weight:800;margin-top:2px}
+.box.exp .v{color:#b91c1c}
+.box.paid .v{color:#047857}
+.box.pend .v{color:#b45309}
+h4.section{font-size:11px;text-transform:uppercase;margin:14px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}
+table{width:100%;border-collapse:collapse;margin-top:2px}
+th,td{border:1px solid #ccc;padding:4px 5px}
+thead{display:table-header-group}
+th{background:#f0f0f0;font-size:8px;text-transform:uppercase;font-weight:700;text-align:left}
+td{font-size:8.5px}
+td.c{text-align:center}
+td.r{text-align:right;font-weight:700}
+td.cap{text-transform:capitalize}
+td.paid{color:#047857;font-weight:700}
+td.pending{color:#b45309;font-weight:700}
+tbody tr:nth-child(even){background:#fafafa}
+tfoot td{font-weight:800;background:#f0f0f0}
+.footer{display:flex;justify-content:space-between;margin-top:10px;font-size:7.5px;color:#888;border-top:1px solid #ccc;padding-top:4px}
+@media print{@page{size:A4 portrait;margin:8mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="header">
+  <h1>${schoolName}</h1>
+  <h2>Expense Report</h2>
+  <h3>${month} ${year}</h3>
+</div>
+<div class="summary">
+  <div class="box exp"><div class="l">Total Expense</div><div class="v">${fmt(summary.totalExpense)}</div></div>
+  <div class="box"><div class="l">Transactions</div><div class="v">${summary.totalTransactions || 0}</div></div>
+  <div class="box paid"><div class="l">Paid</div><div class="v">${fmt(summary.paidTotal)}</div></div>
+  <div class="box pend"><div class="l">Pending</div><div class="v">${fmt(summary.pendingTotal)}</div></div>
+</div>
+<h4 class="section">Category Breakdown</h4>
+<table><thead><tr><th>Category</th><th class="c">Txns</th><th class="r">Total</th><th class="c">%</th></tr></thead><tbody>${catRows}</tbody></table>
+<h4 class="section">Transaction Detail</h4>
+<table><thead><tr><th>#</th><th>Date</th><th>Expense #</th><th>Category</th><th>Description</th><th>Vendor</th><th>Method</th><th>Status</th><th>Recorded By</th><th class="r">Amount</th></tr></thead>
+<tbody>${txnRows}</tbody>
+<tfoot><tr><td colspan="9">Total (${transactions.length} transactions)</td><td class="r">${fmt(summary.totalExpense)}</td></tr></tfoot>
+</table>
+<div class="footer"><span>Printed: ${new Date().toLocaleString()}</span><span>${schoolName} — Expense Report</span></div>
+</body></html>`);
   win.document.close();
   win.focus();
   setTimeout(() => { win.print(); }, 600);

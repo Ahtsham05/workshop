@@ -68,6 +68,8 @@ const getReport = async (scope, { type, period, year, month, classId, teacherId,
       return getDailyCollection(scope, y, m);
     case 'financial-category':
       return getCategoryWiseReport(scope, startDate, endDate);
+    case 'financial-expense-detail':
+      return getExpenseDetailReport(scope, y, m);
     case 'financial-pnl':
       return getProfitAndLoss(scope, y);
 
@@ -349,6 +351,108 @@ const getCategoryWiseReport = async (scope, startDate, endDate) => {
       ...income.map((r) => ({ name: r.name, value: r.total, type: 'INCOME' })),
       ...expense.map((r) => ({ name: r.name, value: r.total, type: 'EXPENSE' })),
     ],
+  };
+};
+
+/**
+ * 3b. Expense Detail — full line-item breakdown for a single month, plus
+ * category/payment-method summaries and a daily trend (used by the
+ * "Expense Report" tab, which needs the raw transactions rather than just
+ * aggregated totals).
+ */
+const getExpenseDetailReport = async (scope, year, month) => {
+  const af = aggFilter(scope);
+  const monthIdx = MONTH_NAMES.indexOf(month);
+  if (monthIdx < 0) {
+    return { summary: {}, data: { transactions: [], categories: [], paymentMethods: [] }, chartData: [] };
+  }
+  const start = new Date(year, monthIdx, 1);
+  const end = new Date(year, monthIdx + 1, 0, 23, 59, 59);
+  const daysInMonth = end.getDate();
+  const dateMatch = { ...af, type: 'EXPENSE', date: { $gte: start, $lte: end } };
+
+  const [transactions, categoryAgg, methodAgg, dailyAgg] = await Promise.all([
+    SchoolTransaction.find(dateMatch)
+      .populate('categoryId', 'name color')
+      .populate('createdBy', 'name email')
+      .sort({ date: -1, createdAt: -1 })
+      .lean(),
+    SchoolTransaction.aggregate([
+      { $match: dateMatch },
+      { $group: { _id: '$categoryId', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+      { $lookup: { from: 'feecategories', localField: '_id', foreignField: '_id', as: 'category' } },
+      { $unwind: { path: '$category', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          categoryId: '$_id',
+          name: { $ifNull: ['$category.name', 'Uncategorized'] },
+          color: { $ifNull: ['$category.color', '#6366f1'] },
+          total: 1,
+          count: 1,
+        },
+      },
+      { $sort: { total: -1 } },
+    ]),
+    SchoolTransaction.aggregate([
+      { $match: dateMatch },
+      { $group: { _id: '$paymentMethod', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+      { $sort: { total: -1 } },
+    ]),
+    SchoolTransaction.aggregate([
+      { $match: dateMatch },
+      { $group: { _id: { $dayOfMonth: '$date' }, total: { $sum: '$amount' } } },
+    ]),
+  ]);
+
+  const totalExpense = transactions.reduce((s, t) => s + (t.amount || 0), 0);
+  const paidTxns = transactions.filter((t) => t.isPaid !== false);
+  const pendingTxns = transactions.filter((t) => t.isPaid === false);
+  const paidTotal = paidTxns.reduce((s, t) => s + (t.amount || 0), 0);
+  const pendingTotal = pendingTxns.reduce((s, t) => s + (t.amount || 0), 0);
+
+  const dailyTrend = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = i + 1;
+    const row = dailyAgg.find((r) => r._id === day);
+    return { day, amount: row?.total || 0 };
+  });
+
+  return {
+    summary: {
+      year,
+      month,
+      totalExpense,
+      totalTransactions: transactions.length,
+      paidCount: paidTxns.length,
+      pendingCount: pendingTxns.length,
+      paidTotal,
+      pendingTotal,
+      categoriesUsed: categoryAgg.length,
+      avgPerTxn: transactions.length ? Math.round(totalExpense / transactions.length) : 0,
+      activeDays: dailyTrend.filter((d) => d.amount > 0).length,
+      daysInMonth,
+    },
+    data: {
+      transactions: transactions.map((t) => ({
+        id: t._id,
+        date: t.date,
+        expenseNumber: t.expenseNumber || null,
+        voucherNumber: t.voucherNumber || null,
+        categoryName: t.categoryId?.name || 'Uncategorized',
+        categoryColor: t.categoryId?.color || '#6366f1',
+        description: t.description || '',
+        vendor: t.vendor || '',
+        reference: t.reference || '',
+        paymentMethod: t.paymentMethod || 'cash',
+        amount: t.amount || 0,
+        isPaid: t.isPaid !== false,
+        paidAt: t.paidAt || null,
+        createdByName: t.createdBy?.name || '',
+      })),
+      categories: categoryAgg,
+      paymentMethods: methodAgg,
+    },
+    chartData: dailyTrend.map((d) => ({ name: `${d.day}`, amount: d.amount })),
   };
 };
 
@@ -1312,6 +1416,7 @@ module.exports = {
   getMonthlyIncomeExpense,
   getDailyCollection,
   getCategoryWiseReport,
+  getExpenseDetailReport,
   getProfitAndLoss,
   getStudentListByClass,
   getStudentFeeStatus,

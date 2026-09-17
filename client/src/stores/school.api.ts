@@ -85,6 +85,7 @@ export const schoolApi = createApi({
     'FeeStructure',
     'FeeVoucher',
     'SchoolTransaction',
+    'SchoolRecurringExpense',
     'FeeAccountingDashboard',
     'AccountHead',
     'JournalEntry',
@@ -875,6 +876,10 @@ export const schoolApi = createApi({
       query: (data) => ({ url: '/fee-categories', method: 'POST', body: data }),
       invalidatesTags: ['FeeCategory'],
     }),
+    createFeeCategoriesBulk: builder.mutation({
+      query: (data) => ({ url: '/fee-categories/bulk', method: 'POST', body: data }),
+      invalidatesTags: ['FeeCategory'],
+    }),
     updateFeeCategory: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/fee-categories/${id}`, method: 'PATCH', body: data }),
       invalidatesTags: ['FeeCategory'],
@@ -1034,6 +1039,10 @@ export const schoolApi = createApi({
       query: (data) => ({ url: '/school-transactions', method: 'POST', body: data }),
       invalidatesTags: ['SchoolTransaction', 'FeeAccountingDashboard'],
     }),
+    createSchoolTransactionsBulk: builder.mutation({
+      query: (data) => ({ url: '/school-transactions/bulk', method: 'POST', body: data }),
+      invalidatesTags: ['SchoolTransaction', 'FeeAccountingDashboard'],
+    }),
     updateSchoolTransaction: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/school-transactions/${id}`, method: 'PATCH', body: data }),
       invalidatesTags: ['SchoolTransaction', 'FeeAccountingDashboard'],
@@ -1041,6 +1050,14 @@ export const schoolApi = createApi({
     deleteSchoolTransaction: builder.mutation({
       query: (id) => ({ url: `/school-transactions/${id}`, method: 'DELETE' }),
       invalidatesTags: ['SchoolTransaction', 'FeeAccountingDashboard'],
+    }),
+    paySchoolTransaction: builder.mutation({
+      query: (id: string) => ({ url: `/school-transactions/${id}/pay`, method: 'PATCH' }),
+      invalidatesTags: ['SchoolTransaction', 'SchoolRecurringExpense', 'FeeAccountingDashboard'],
+    }),
+    paySchoolTransactionsBulk: builder.mutation({
+      query: (data) => ({ url: '/school-transactions/pay-bulk', method: 'POST', body: data }),
+      invalidatesTags: ['SchoolTransaction', 'SchoolRecurringExpense', 'FeeAccountingDashboard'],
     }),
     getTransactionMonthlySummary: builder.query({
       query: (params) => ({ url: '/school-transactions/summary/monthly', params }),
@@ -1053,6 +1070,36 @@ export const schoolApi = createApi({
     getTransactionYearlyTrend: builder.query({
       query: (params) => ({ url: '/school-transactions/summary/yearly-trend', params }),
       providesTags: ['SchoolTransaction'],
+    }),
+
+    // School Recurring Expenses
+    getSchoolRecurringExpenses: builder.query({
+      query: (params) => ({ url: '/school-recurring-expenses', params }),
+      providesTags: ['SchoolRecurringExpense'],
+    }),
+    createSchoolRecurringExpense: builder.mutation({
+      query: (data) => ({ url: '/school-recurring-expenses', method: 'POST', body: data }),
+      invalidatesTags: ['SchoolRecurringExpense'],
+    }),
+    updateSchoolRecurringExpense: builder.mutation({
+      query: ({ id, ...data }) => ({ url: `/school-recurring-expenses/${id}`, method: 'PATCH', body: data }),
+      invalidatesTags: ['SchoolRecurringExpense'],
+    }),
+    deleteSchoolRecurringExpense: builder.mutation({
+      query: (id: string) => ({ url: `/school-recurring-expenses/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['SchoolRecurringExpense'],
+    }),
+    runSchoolRecurringExpensesNow: builder.mutation({
+      query: () => ({ url: '/school-recurring-expenses/run-now', method: 'POST' }),
+      invalidatesTags: ['SchoolRecurringExpense', 'SchoolTransaction', 'FeeAccountingDashboard'],
+    }),
+    paySchoolRecurringExpenseRule: builder.mutation({
+      query: (id: string) => ({ url: `/school-recurring-expenses/${id}/pay`, method: 'POST' }),
+      invalidatesTags: ['SchoolRecurringExpense', 'SchoolTransaction', 'FeeAccountingDashboard'],
+    }),
+    payAllSchoolRecurringExpenses: builder.mutation({
+      query: () => ({ url: '/school-recurring-expenses/pay-all', method: 'POST' }),
+      invalidatesTags: ['SchoolRecurringExpense', 'SchoolTransaction', 'FeeAccountingDashboard'],
     }),
 
     // School Accounting Dashboard & Reports
@@ -1127,6 +1174,10 @@ export const schoolApi = createApi({
     getReportFinancialPnl: builder.query({
       query: (params: { year: number }) => ({ url: '/school-reports-engine/financial/pnl', params }),
       providesTags: ['SchoolTransaction', 'FeeVoucher'],
+    }),
+    getReportFinancialExpenseDetail: builder.query({
+      query: (params: { year: number; month: string }) => ({ url: '/school-reports-engine/financial/expense-detail', params }),
+      providesTags: ['SchoolTransaction'],
     }),
     getReportStudentList: builder.query({
       query: (params?: { classId?: string }) => ({ url: '/school-reports-engine/students/list', params }),
@@ -1537,6 +1588,7 @@ export const {
   useGetIncomeCategoriesQuery,
   useGetExpenseCategoriesQuery,
   useCreateFeeCategoryMutation,
+  useCreateFeeCategoriesBulkMutation,
   useUpdateFeeCategoryMutation,
   useDeleteFeeCategoryMutation,
   useSeedFeeCategoriesMutation,
@@ -1572,12 +1624,24 @@ export const {
   useGetYearlyFeeReportQuery,
   // School Transactions
   useGetSchoolTransactionsQuery,
+  useLazyGetSchoolTransactionsQuery,
   useCreateSchoolTransactionMutation,
+  useCreateSchoolTransactionsBulkMutation,
   useUpdateSchoolTransactionMutation,
   useDeleteSchoolTransactionMutation,
+  usePaySchoolTransactionMutation,
+  usePaySchoolTransactionsBulkMutation,
   useGetTransactionMonthlySummaryQuery,
   useGetTransactionCategoryReportQuery,
   useGetTransactionYearlyTrendQuery,
+  // School Recurring Expenses
+  useGetSchoolRecurringExpensesQuery,
+  useCreateSchoolRecurringExpenseMutation,
+  useUpdateSchoolRecurringExpenseMutation,
+  useDeleteSchoolRecurringExpenseMutation,
+  useRunSchoolRecurringExpensesNowMutation,
+  usePaySchoolRecurringExpenseRuleMutation,
+  usePayAllSchoolRecurringExpensesMutation,
   // School Accounting Dashboard & Reports
   useGetSchoolAccountingDashboardQuery,
   useGetSchoolMonthlyReportQuery,
@@ -1590,6 +1654,7 @@ export const {
   useGetReportFinancialDailyQuery,
   useGetReportFinancialCategoriesQuery,
   useGetReportFinancialPnlQuery,
+  useGetReportFinancialExpenseDetailQuery,
   useGetReportStudentListQuery,
   useGetReportStudentFeeStatusQuery,
   useGetReportStudentAttendanceQuery,

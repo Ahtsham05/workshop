@@ -14,6 +14,16 @@ const createTransaction = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(txn);
 });
 
+const createTransactionsBulk = catchAsync(async (req, res) => {
+  const result = await schoolTransactionService.createTransactionsBulk({
+    ...req.body,
+    organizationId: req.user.organizationId,
+    branchId: req.branchId,
+    createdBy: req.user._id,
+  });
+  res.status(httpStatus.CREATED).send(result);
+});
+
 const getTransactions = catchAsync(async (req, res) => {
   const filter = {
     organizationId: req.user.organizationId,
@@ -22,10 +32,22 @@ const getTransactions = catchAsync(async (req, res) => {
 
   if (req.query.type) filter.type = req.query.type;
   if (req.query.categoryId) filter.categoryId = req.query.categoryId;
+  if (req.query.isPaid !== undefined) filter.isPaid = req.query.isPaid === 'true' || req.query.isPaid === true;
+  if (req.query.referenceId) filter.referenceId = req.query.referenceId;
+  if (req.query.referenceModel) filter.referenceModel = req.query.referenceModel;
+  if (req.query.voucherNumber) filter.voucherNumber = req.query.voucherNumber;
   if (req.query.from || req.query.to) {
     filter.date = {};
     if (req.query.from) filter.date.$gte = new Date(req.query.from);
     if (req.query.to) filter.date.$lte = new Date(req.query.to);
+  }
+  if (req.query.search) {
+    filter.$or = [
+      { description: { $regex: req.query.search, $options: 'i' } },
+      { vendor: { $regex: req.query.search, $options: 'i' } },
+      { expenseNumber: { $regex: req.query.search, $options: 'i' } },
+      { reference: { $regex: req.query.search, $options: 'i' } },
+    ];
   }
 
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
@@ -46,6 +68,25 @@ const updateTransaction = catchAsync(async (req, res) => {
   const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
   const txn = await schoolTransactionService.updateTransactionById(req.params.transactionId, req.body, scope);
   res.send(txn);
+});
+
+const payTransaction = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  const txn = await schoolTransactionService.markTransactionAsPaid(req.params.transactionId, scope, req.user._id);
+  res.send(txn);
+});
+
+const payTransactionsBulk = catchAsync(async (req, res) => {
+  const filter = { organizationId: req.user.organizationId, branchId: req.branchId };
+  if (req.body.referenceId) {
+    filter.referenceId = req.body.referenceId;
+    filter.referenceModel = req.body.referenceModel || 'SchoolRecurringExpense';
+  } else if (req.body.categoryId) {
+    filter.categoryId = req.body.categoryId;
+  }
+  // Otherwise (only `all: true` given) — pay everything pending for this org/branch.
+  const result = await schoolTransactionService.payTransactionsBulk(filter, req.user._id);
+  res.send(result);
 });
 
 const deleteTransaction = catchAsync(async (req, res) => {
@@ -78,9 +119,12 @@ const getYearlyTrend = catchAsync(async (req, res) => {
 
 module.exports = {
   createTransaction,
+  createTransactionsBulk,
   getTransactions,
   getTransaction,
   updateTransaction,
+  payTransaction,
+  payTransactionsBulk,
   deleteTransaction,
   getMonthlySummary,
   getCategoryReport,

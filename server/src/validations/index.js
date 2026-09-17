@@ -6,6 +6,7 @@ module.exports.serviceValidation = require('./service.validation');
 // School Accounting Validations
 module.exports.feeCategoryValidation = require('./feeCategory.validation');
 module.exports.schoolTransactionValidation = require('./schoolTransaction.validation');
+module.exports.schoolRecurringExpenseValidation = require('./schoolRecurringExpense.validation');
 module.exports.feeStructureValidation = require('./feeStructure.validation');
 module.exports.feeVoucherValidation = require('./feeVoucher.validation');
 

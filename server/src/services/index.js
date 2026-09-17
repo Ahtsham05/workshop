@@ -70,6 +70,7 @@ module.exports.billPaymentService = require('./billPayment.service.js');
 // School Accounting Services
 module.exports.feeCategoryService = require('./feeCategory.service.js');
 module.exports.schoolTransactionService = require('./schoolTransaction.service.js');
+module.exports.schoolRecurringExpenseService = require('./schoolRecurringExpense.service.js');
 module.exports.feeStructureService = require('./feeStructure.service.js');
 module.exports.feeVoucherService = require('./feeVoucher.service.js');
 module.exports.feePaymentRequestService = require('./feePaymentRequest.service.js');

@@ -1601,28 +1601,31 @@ const postFeePayment = async (scope, { amount, paymentMethod, voucherId, descrip
  * Auto-create journal entry when an expense transaction is recorded.
  * Debit: Expense account (expense increases)
  * Credit: Cash/Bank (asset decreases)
+ *
+ * Routed through repostForReference so this is safe to call again for the same
+ * transactionId (e.g. after editing the amount/payment method, or when a
+ * previously-unpaid recurring cycle is confirmed paid) — it reverses any prior
+ * posting for that reference before creating the new one instead of stacking
+ * duplicate journal entries.
  */
-const postExpense = async (scope, { amount, paymentMethod, expenseAccountCode, transactionId, description }) => {
-  const [cashAccount, expenseAccount] = await Promise.all([
-    resolvePaymentAccount(scope, paymentMethod),
-    AccountHead.findOne({ ...getTenantFilter(scope), code: expenseAccountCode || '5305', isGroup: false }),
-  ]);
-  if (!cashAccount || !expenseAccount) return null;
-
-  return createJournalEntry(
-    {
-      date: new Date(),
-      entryType: 'EXPENSE',
-      lines: [
-        { accountId: expenseAccount._id, debit: amount, credit: 0, description: 'Expense recorded' },
-        { accountId: cashAccount._id, debit: 0, credit: amount, description: 'Cash/Bank paid' },
-      ],
+const postExpense = async (scope, { amount, paymentMethod, expenseAccountCode, transactionId, description, date }) => {
+  return repostForReference(scope, 'SchoolTransaction', transactionId, 'EXPENSE', async () => {
+    const amt = round2(amount);
+    if (amt <= 0) return null;
+    const [cashAccount, expenseAccount] = await Promise.all([
+      resolvePaymentAccount(scope, paymentMethod),
+      AccountHead.findOne({ ...getTenantFilter(scope), code: expenseAccountCode || '5305', isGroup: false }),
+    ]);
+    if (!cashAccount || !expenseAccount) return null;
+    return {
+      date: date || new Date(),
       narration: description || 'Expense payment',
-      referenceId: transactionId,
-      referenceModel: 'SchoolTransaction',
-    },
-    scope
-  );
+      lines: [
+        { accountId: expenseAccount._id, debit: amt, credit: 0, description: 'Expense recorded' },
+        { accountId: cashAccount._id, debit: 0, credit: amt, description: 'Cash/Bank paid' },
+      ],
+    };
+  });
 };
 
 /**

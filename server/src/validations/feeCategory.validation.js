@@ -6,7 +6,24 @@ const createCategory = {
     name: Joi.string().required().trim(),
     type: Joi.string().valid('INCOME', 'EXPENSE').required(),
     description: Joi.string().allow('', null),
+    color: Joi.string().allow('', null),
     isActive: Joi.boolean(),
+  }),
+};
+
+const createCategoriesBulk = {
+  body: Joi.object().keys({
+    categories: Joi.array()
+      .items(
+        Joi.object().keys({
+          name: Joi.string().required().trim(),
+          type: Joi.string().valid('INCOME', 'EXPENSE').required(),
+          description: Joi.string().allow('', null),
+          color: Joi.string().allow('', null),
+        })
+      )
+      .min(1)
+      .required(),
   }),
 };
 
@@ -35,6 +52,7 @@ const updateCategory = {
       name: Joi.string().trim(),
       type: Joi.string().valid('INCOME', 'EXPENSE'),
       description: Joi.string().allow('', null),
+      color: Joi.string().allow('', null),
       isActive: Joi.boolean(),
     })
     .min(1),
@@ -46,4 +64,4 @@ const deleteCategory = {
   }),
 };
 
-module.exports = { createCategory, getCategories, getCategory, updateCategory, deleteCategory };
+module.exports = { createCategory, createCategoriesBulk, getCategories, getCategory, updateCategory, deleteCategory };

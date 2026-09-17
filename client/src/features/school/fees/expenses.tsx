@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -46,17 +46,35 @@ import {
   ChevronRight,
   LayoutGrid,
   ArrowDownCircle,
+  Wallet,
+  Clock,
+  RefreshCw,
+  Layers,
+  Printer,
 } from 'lucide-react';
 import {
   useGetSchoolTransactionsQuery,
+  useLazyGetSchoolTransactionsQuery,
   useCreateSchoolTransactionMutation,
   useUpdateSchoolTransactionMutation,
   useDeleteSchoolTransactionMutation,
+  usePaySchoolTransactionMutation,
+  usePaySchoolTransactionsBulkMutation,
   useGetExpenseCategoriesQuery,
   useCreateFeeCategoryMutation,
+  useUpdateFeeCategoryMutation,
+  useDeleteFeeCategoryMutation,
 } from '@/stores/school.api';
+import { useGetMyOrganizationQuery } from '@/stores/organization.api';
+import { useBranchPaperSize, useBranchPrintOrientation } from '@/features/invoice/utils/paper-format';
 import { toast } from 'sonner';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
+import { SchoolRecurringExpenseManager } from './recurring-expenses';
+import { CategoryCombobox, nextCategoryColor } from './category-combobox';
+import { CategoryBreakdown } from './category-breakdown';
+import { BulkCategoriesDialog } from './bulk-categories-dialog';
+import { BulkExpensesDialog } from './bulk-expenses-dialog';
+import { printExpenseVoucher } from './print-expense-voucher';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -74,6 +92,8 @@ const PAYMENT_METHOD_COLORS: Record<string, string> = {
   other: 'bg-gray-100 text-gray-700',
 };
 
+const DEFAULT_CATEGORY_COLOR = '#6366f1';
+
 const today = () => new Date().toISOString().slice(0, 10);
 const firstOfMonth = () => {
   const d = new Date();
@@ -86,11 +106,42 @@ const emptyForm = () => ({
   date: today(),
   paymentMethod: 'cash',
   description: '',
+  vendor: '',
+  reference: '',
 });
 
 export default function Expenses() {
+  const [tab, setTab] = useState<'expenses' | 'recurring'>('expenses');
+
+  return (
+    <div className="h-full w-full p-4 space-y-5">
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
+          <p className="text-muted-foreground">Track and manage all school expenses</p>
+        </div>
+      </div>
+
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'expenses' | 'recurring')}>
+        <TabsList>
+          <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsTrigger value="recurring">Recurring Expenses</TabsTrigger>
+        </TabsList>
+        <TabsContent value="expenses" className="mt-4">
+          <ExpensesTab />
+        </TabsContent>
+        <TabsContent value="recurring" className="mt-4">
+          <SchoolRecurringExpenseManager />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function ExpensesTab() {
   const formatMoney = useFormatMoney();
-  const { symbol: currencySymbol } = useCurrencyMeta();
+  const currencyMeta = useCurrencyMeta();
+  const { symbol: currencySymbol } = currencyMeta;
   const todayStr = today();
   const foMonth = firstOfMonth();
 
@@ -111,6 +162,15 @@ export default function Expenses() {
   const [form, setForm] = useState(emptyForm());
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
+  const [newCatColor, setNewCatColor] = useState(DEFAULT_CATEGORY_COLOR);
+  const [categoryEditTarget, setCategoryEditTarget] = useState<any>(null);
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatDesc, setEditCatDesc] = useState('');
+  const [editCatColor, setEditCatColor] = useState(DEFAULT_CATEGORY_COLOR);
+  const [categoryToDelete, setCategoryToDelete] = useState<any>(null);
+  const [payAllDialogOpen, setPayAllDialogOpen] = useState(false);
+  const [bulkCategoriesOpen, setBulkCategoriesOpen] = useState(false);
+  const [bulkExpensesOpen, setBulkExpensesOpen] = useState(false);
 
   // ── API hooks ─────────────────────────────────────────────────────────────
   const queryParams: any = {
@@ -125,17 +185,27 @@ export default function Expenses() {
 
   const { data: txnData, isLoading } = useGetSchoolTransactionsQuery(queryParams);
   const { data: catData } = useGetExpenseCategoriesQuery(undefined);
+  const { data: unpaidData } = useGetSchoolTransactionsQuery({ type: 'EXPENSE', isPaid: false, limit: 1 });
   const [createTxn, { isLoading: creating }] = useCreateSchoolTransactionMutation();
   const [updateTxn, { isLoading: updating }] = useUpdateSchoolTransactionMutation();
   const [deleteTxn, { isLoading: deleting }] = useDeleteSchoolTransactionMutation();
+  const [payTxn, { isLoading: paying }] = usePaySchoolTransactionMutation();
+  const [payAllTxns, { isLoading: payingAll }] = usePaySchoolTransactionsBulkMutation();
   const [createCat, { isLoading: creatingCat }] = useCreateFeeCategoryMutation();
+  const [updateCat, { isLoading: savingCat }] = useUpdateFeeCategoryMutation();
+  const [deleteCat, { isLoading: deletingCat }] = useDeleteFeeCategoryMutation();
+  const [fetchVoucherLines] = useLazyGetSchoolTransactionsQuery();
+  const { data: org } = useGetMyOrganizationQuery();
+  const paperSize = useBranchPaperSize();
+  const orientation = useBranchPrintOrientation();
 
   const expenses: any[] = txnData?.results || [];
   const totalResults = txnData?.totalResults || 0;
   const totalPages = txnData?.totalPages || 1;
   const categories: any[] = catData || [];
+  const unpaidCount = unpaidData?.totalResults || 0;
 
-  // ── Client-side search filter (description / category name) ──────────────
+  // ── Client-side search filter (description / category name / vendor / #) ─
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return expenses.filter((e) => {
@@ -143,7 +213,9 @@ export default function Expenses() {
       if (!q) return true;
       const desc = (e.description || '').toLowerCase();
       const cat = (e.categoryId?.name || '').toLowerCase();
-      return desc.includes(q) || cat.includes(q);
+      const vendor = (e.vendor || '').toLowerCase();
+      const num = (e.expenseNumber || '').toLowerCase();
+      return desc.includes(q) || cat.includes(q) || vendor.includes(q) || num.includes(q);
     });
   }, [expenses, search, methodFilter]);
 
@@ -155,11 +227,12 @@ export default function Expenses() {
 
   // ── Category breakdown (this page) ──────────────────────────────────────
   const categoryBreakdown = useMemo(() => {
-    const map: Record<string, { name: string; total: number; count: number }> = {};
+    const map: Record<string, { name: string; total: number; count: number; color: string }> = {};
     expenses.forEach((e) => {
-      const key = e.categoryId?._id || e.categoryId || 'uncategorized';
+      const key = e.categoryId?.id || e.categoryId?._id || 'uncategorized';
       const name = e.categoryId?.name || 'Uncategorized';
-      if (!map[key]) map[key] = { name, total: 0, count: 0 };
+      const color = e.categoryId?.color || DEFAULT_CATEGORY_COLOR;
+      if (!map[key]) map[key] = { name, total: 0, count: 0, color };
       map[key].total += e.amount || 0;
       map[key].count += 1;
     });
@@ -175,11 +248,13 @@ export default function Expenses() {
   const openEdit = (exp: any) => {
     setEditTarget(exp);
     setForm({
-      categoryId: exp.categoryId?._id || exp.categoryId || '',
+      categoryId: exp.categoryId?.id || exp.categoryId?._id || '',
       amount: String(exp.amount || ''),
       date: new Date(exp.date).toISOString().slice(0, 10),
       paymentMethod: exp.paymentMethod || 'cash',
       description: exp.description || '',
+      vendor: exp.vendor || '',
+      reference: exp.reference || '',
     });
     setExpenseDialog('edit');
   };
@@ -195,6 +270,8 @@ export default function Expenses() {
         date: form.date,
         paymentMethod: form.paymentMethod,
         description: form.description || undefined,
+        vendor: form.vendor || undefined,
+        reference: form.reference || undefined,
       };
       if (form.categoryId) body.categoryId = form.categoryId;
 
@@ -222,17 +299,118 @@ export default function Expenses() {
     }
   };
 
+  const handleMarkPaid = async (exp: any) => {
+    try {
+      await payTxn(exp.id || exp._id).unwrap();
+      toast.success('Marked as paid');
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to mark as paid');
+    }
+  };
+
+  const handlePayAll = async () => {
+    try {
+      const result = await payAllTxns({ all: true }).unwrap();
+      toast.success(`Paid ${result.paidCount} expense${result.paidCount !== 1 ? 's' : ''} (${formatMoney(result.totalAmount)})`);
+      setPayAllDialogOpen(false);
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to pay pending expenses');
+    }
+  };
+
+  /**
+   * Two distinct print options for an expense, matching a real paper workflow:
+   * "print this entry" (always just the one line, even if it happens to be
+   * part of a bulk voucher) vs "print the full voucher" (every line sharing
+   * that voucherNumber, like an invoice with several line items).
+   */
+  const printLines = (voucherNumber: string, exp: any, lines: any[]) => {
+    try {
+      printExpenseVoucher(
+        voucherNumber,
+        exp.date,
+        exp.paymentMethod,
+        lines.map((l: any) => ({ categoryName: l.categoryId?.name, vendor: l.vendor, description: l.description, amount: l.amount })),
+        { name: org?.name || 'School', address: org?.address, phone: org?.phone, currencyMeta },
+        paperSize,
+        orientation,
+      );
+    } catch (err: any) {
+      toast.error(err?.message || 'Unable to open the print window — check your popup blocker');
+    }
+  };
+
+  const handlePrintSingle = (exp: any) => {
+    printLines(exp.expenseNumber || 'EXPENSE', exp, [exp]);
+  };
+
+  const handlePrintVoucher = async (exp: any) => {
+    if (!exp.voucherNumber) return handlePrintSingle(exp);
+    try {
+      const result = await fetchVoucherLines({ type: 'EXPENSE', voucherNumber: exp.voucherNumber, limit: 100 }).unwrap();
+      printLines(exp.voucherNumber, exp, result?.results || []);
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to load voucher');
+    }
+  };
+
   const handleCreateCategory = async () => {
     if (!newCatName.trim()) return toast.error('Category name is required');
     try {
-      await createCat({ name: newCatName.trim(), type: 'EXPENSE', description: newCatDesc.trim() || undefined }).unwrap();
+      await createCat({
+        name: newCatName.trim(),
+        type: 'EXPENSE',
+        description: newCatDesc.trim() || undefined,
+        color: newCatColor,
+      }).unwrap();
       toast.success('Expense category created');
       setNewCatName('');
       setNewCatDesc('');
+      setNewCatColor(DEFAULT_CATEGORY_COLOR);
       setCategoryDialog(false);
     } catch (err: any) {
       toast.error(err?.data?.message || 'Failed to create category');
     }
+  };
+
+  const openEditCategory = (cat: any) => {
+    setCategoryEditTarget(cat);
+    setEditCatName(cat.name || '');
+    setEditCatDesc(cat.description || '');
+    setEditCatColor(cat.color || DEFAULT_CATEGORY_COLOR);
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!categoryEditTarget) return;
+    if (!editCatName.trim()) return toast.error('Category name is required');
+    try {
+      await updateCat({
+        id: categoryEditTarget.id || categoryEditTarget._id,
+        name: editCatName.trim(),
+        description: editCatDesc.trim(),
+        color: editCatColor,
+      }).unwrap();
+      toast.success('Category updated');
+      setCategoryEditTarget(null);
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to update category');
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!categoryToDelete) return;
+    try {
+      await deleteCat(categoryToDelete.id || categoryToDelete._id).unwrap();
+      toast.success('Category deleted');
+      setCategoryToDelete(null);
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to delete category');
+    }
+  };
+
+  const openCategoryDialog = () => {
+    setNewCatColor(nextCategoryColor(categories.length));
+    setCategoryDialog(true);
   };
 
   const resetFilters = () => {
@@ -245,21 +423,31 @@ export default function Expenses() {
   };
 
   return (
-    <div className="h-full w-full p-4 space-y-5">
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
-          <p className="text-muted-foreground">Track and manage all school expenses</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setCategoryDialog(true)}>
-            <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> Add Category
+    <div className="space-y-5">
+      {/* ── Header actions ────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-end gap-2 flex-wrap -mt-1">
+        {unpaidCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-amber-400 text-amber-700 hover:bg-amber-50"
+            onClick={() => setPayAllDialogOpen(true)}
+          >
+            <Wallet className="mr-1.5 h-3.5 w-3.5" /> Pay Pending ({unpaidCount})
           </Button>
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="mr-1.5 h-4 w-4" /> Add Expense
-          </Button>
-        </div>
+        )}
+        <Button variant="outline" size="sm" onClick={openCategoryDialog}>
+          <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> Add Category
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setBulkCategoriesOpen(true)}>
+          <Layers className="mr-1.5 h-3.5 w-3.5" /> Add Multiple Categories
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setBulkExpensesOpen(true)}>
+          <Layers className="mr-1.5 h-3.5 w-3.5" /> Bulk Add Expenses
+        </Button>
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="mr-1.5 h-4 w-4" /> Add Expense
+        </Button>
       </div>
 
       {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
@@ -326,9 +514,15 @@ export default function Expenses() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-        {/* ── Main Table ──────────────────────────────────────────────────── */}
-        <div className="lg:col-span-3 space-y-4">
+      <CategoryBreakdown
+        categories={categories}
+        onAddExpense={(categoryId) => { setEditTarget(null); setForm({ ...emptyForm(), categoryId }); setExpenseDialog('create'); }}
+        onEditCategory={openEditCategory}
+        onDeleteCategory={setCategoryToDelete}
+        onPrintExpense={handlePrintSingle}
+      />
+
+      <div className="space-y-4">
           {/* Filters */}
           <Card>
             <CardContent className="pt-4 pb-3">
@@ -339,7 +533,7 @@ export default function Expenses() {
                     <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
                       className="pl-8 h-9 text-sm"
-                      placeholder="Description or category…"
+                      placeholder="Description, category, vendor, #…"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                     />
@@ -395,7 +589,7 @@ export default function Expenses() {
                     <TableHead>Category</TableHead>
                     <TableHead>Method</TableHead>
                     <TableHead className="text-right pr-4">Amount</TableHead>
-                    <TableHead className="w-20 text-center">Actions</TableHead>
+                    <TableHead className="w-28 text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -418,41 +612,92 @@ export default function Expenses() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((exp: any) => (
-                      <TableRow key={exp.id || exp._id} className="hover:bg-muted/30 text-sm">
-                        <TableCell className="pl-4 text-muted-foreground whitespace-nowrap">
-                          {new Date(exp.date).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: '2-digit' })}
-                        </TableCell>
-                        <TableCell className="max-w-[220px]">
-                          <p className="truncate font-medium">{exp.description || '—'}</p>
-                        </TableCell>
-                        <TableCell>
-                          {exp.categoryId?.name ? (
-                            <Badge variant="outline" className="text-[11px]">{exp.categoryId.name}</Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${PAYMENT_METHOD_COLORS[exp.paymentMethod] || 'bg-gray-100 text-gray-700'}`}>
-                            {exp.paymentMethod?.replace('_', ' ') || '—'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right pr-4 font-semibold text-red-600">
-                          {formatMoney(exp.amount || 0)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(exp)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(exp)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    filtered.map((exp: any) => {
+                      const catColor = exp.categoryId?.color || DEFAULT_CATEGORY_COLOR;
+                      return (
+                        <TableRow key={exp.id || exp._id} className="hover:bg-muted/30 text-sm">
+                          <TableCell className="pl-4 text-muted-foreground whitespace-nowrap">
+                            {new Date(exp.date).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: '2-digit' })}
+                          </TableCell>
+                          <TableCell className="max-w-[240px]">
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate font-medium">{exp.description || '—'}</p>
+                              {exp.isPaid === false && (
+                                <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-600 bg-amber-50 shrink-0">
+                                  <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                              {exp.expenseNumber && <span className="font-mono">{exp.expenseNumber}</span>}
+                              {exp.vendor && <span className="truncate">· {exp.vendor}</span>}
+                              {exp.voucherNumber && (
+                                <button
+                                  type="button"
+                                  className="font-mono text-indigo-600 hover:underline shrink-0"
+                                  title="Part of a bulk voucher — click to print the full voucher"
+                                  onClick={() => handlePrintVoucher(exp)}
+                                >
+                                  · {exp.voucherNumber}
+                                </button>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {exp.categoryId?.name ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[11px]"
+                                style={{ backgroundColor: `${catColor}1a`, color: catColor, borderColor: `${catColor}55` }}
+                              >
+                                {exp.categoryId.name}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${PAYMENT_METHOD_COLORS[exp.paymentMethod] || 'bg-gray-100 text-gray-700'}`}>
+                              {exp.paymentMethod?.replace('_', ' ') || '—'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right pr-4 font-semibold text-red-600">
+                            {formatMoney(exp.amount || 0)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {exp.isPaid === false && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-green-600 hover:text-green-700"
+                                  title="Mark as paid"
+                                  disabled={paying}
+                                  onClick={() => handleMarkPaid(exp)}
+                                >
+                                  <Wallet className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-indigo-600 hover:text-indigo-700"
+                                title={`Print this entry (${exp.expenseNumber || 'expense'})`}
+                                onClick={() => handlePrintSingle(exp)}
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(exp)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(exp)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -473,85 +718,11 @@ export default function Expenses() {
               )}
             </CardContent>
           </Card>
-        </div>
-
-        {/* ── Sidebar: Category Breakdown ──────────────────────────────────── */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <LayoutGrid className="h-4 w-4 text-purple-500" /> By Category
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 pb-4">
-              {isLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-10 bg-muted animate-pulse rounded" />
-                ))
-              ) : categoryBreakdown.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">No data</p>
-              ) : (
-                <>
-                  {categoryBreakdown.map((cat, idx) => {
-                    const pct = monthTotal > 0 ? Math.round((cat.total / monthTotal) * 100) : 0;
-                    const colors = [
-                      'bg-red-500', 'bg-orange-500', 'bg-amber-500',
-                      'bg-yellow-500', 'bg-purple-500', 'bg-pink-500',
-                    ];
-                    const bar = colors[idx % colors.length];
-                    return (
-                      <div key={cat.name}>
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="font-medium truncate max-w-[120px]">{cat.name}</span>
-                          <span className="text-muted-foreground ml-2 shrink-0">{pct}%</span>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-0.5">
-                          <div className={`h-1.5 ${bar} rounded-full transition-all`} style={{ width: `${pct}%` }} />
-                        </div>
-                        <div className="flex justify-between text-[10px] text-muted-foreground">
-                          <span>{cat.count} txn{cat.count !== 1 ? 's' : ''}</span>
-                          <span className="font-medium text-foreground">{formatMoney(cat.total)}</span>
-                        </div>
-                        {idx < categoryBreakdown.length - 1 && <Separator className="mt-2" />}
-                      </div>
-                    );
-                  })}
-                  <div className="pt-2 border-t flex justify-between text-xs font-semibold">
-                    <span>Total</span>
-                    <span className="text-red-600">{formatMoney(monthTotal)}</span>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Quick-add Category */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Expense Categories</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 space-y-1.5">
-              {categories.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No expense categories yet.</p>
-              ) : (
-                categories.slice(0, 8).map((c: any) => (
-                  <div key={c.id || c._id} className="flex items-center justify-between text-xs py-0.5">
-                    <span className="font-medium">{c.name}</span>
-                    {c.description && <span className="text-muted-foreground truncate ml-2 max-w-[80px]">{c.description}</span>}
-                  </div>
-                ))
-              )}
-              <Button variant="outline" size="sm" className="w-full mt-2 text-xs h-7" onClick={() => setCategoryDialog(true)}>
-                <Plus className="mr-1.5 h-3 w-3" /> Add Category
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
       </div>
 
       {/* ── Add/Edit Expense Dialog ──────────────────────────────────────────── */}
       <Dialog open={expenseDialog !== null} onOpenChange={(open) => { if (!open) closeExpenseDialog(); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{expenseDialog === 'create' ? 'Add Expense' : 'Edit Expense'}</DialogTitle>
             <DialogDescription>
@@ -595,15 +766,31 @@ export default function Expenses() {
               </div>
               <div className="col-span-2">
                 <Label>Category</Label>
-                <Select value={form.categoryId || 'none'} onValueChange={(v) => setForm({ ...form, categoryId: v === 'none' ? '' : v })}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select category" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— No Category —</SelectItem>
-                    {categories.map((c: any) => (
-                      <SelectItem key={c.id || c._id} value={c.id || c._id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CategoryCombobox
+                  className="mt-1"
+                  categories={categories}
+                  value={form.categoryId}
+                  onChange={(id) => setForm({ ...form, categoryId: id })}
+                  placeholder="Select or create category"
+                />
+              </div>
+              <div>
+                <Label>Vendor</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="Vendor name"
+                  value={form.vendor}
+                  onChange={(e) => setForm({ ...form, vendor: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Reference</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="Invoice/Receipt #"
+                  value={form.reference}
+                  onChange={(e) => setForm({ ...form, reference: e.target.value })}
+                />
               </div>
               <div className="col-span-2">
                 <Label>Description</Label>
@@ -627,8 +814,8 @@ export default function Expenses() {
       </Dialog>
 
       {/* ── Add Category Dialog ──────────────────────────────────────────────── */}
-      <Dialog open={categoryDialog} onOpenChange={(open) => { if (!open) { setCategoryDialog(false); setNewCatName(''); setNewCatDesc(''); } }}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={categoryDialog} onOpenChange={(open) => { if (!open) { setCategoryDialog(false); setNewCatName(''); setNewCatDesc(''); setNewCatColor(DEFAULT_CATEGORY_COLOR); } }}>
+        <DialogContent className="max-w-sm sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>New Expense Category</DialogTitle>
             <DialogDescription>Create a category to organise your expenses.</DialogDescription>
@@ -642,9 +829,16 @@ export default function Expenses() {
               <Label>Description</Label>
               <Input className="mt-1" placeholder="Optional" value={newCatDesc} onChange={(e) => setNewCatDesc(e.target.value)} />
             </div>
+            <div>
+              <Label>Color</Label>
+              <div className="mt-1 flex items-center gap-2">
+                <input type="color" className="h-9 w-12 rounded border cursor-pointer" value={newCatColor} onChange={(e) => setNewCatColor(e.target.value)} />
+                <Input className="flex-1" value={newCatColor} onChange={(e) => setNewCatColor(e.target.value)} />
+              </div>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setCategoryDialog(false); setNewCatName(''); setNewCatDesc(''); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setCategoryDialog(false); setNewCatName(''); setNewCatDesc(''); setNewCatColor(DEFAULT_CATEGORY_COLOR); }}>Cancel</Button>
             <Button onClick={handleCreateCategory} disabled={creatingCat}>
               {creatingCat ? 'Creating…' : 'Create'}
             </Button>
@@ -652,7 +846,61 @@ export default function Expenses() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete Confirmation ──────────────────────────────────────────────── */}
+      {/* ── Edit Category Dialog ──────────────────────────────────────────────── */}
+      <Dialog open={!!categoryEditTarget} onOpenChange={(open) => { if (!open) setCategoryEditTarget(null); }}>
+        <DialogContent className="max-w-sm sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Category</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>Name *</Label>
+              <Input className="mt-1" value={editCatName} onChange={(e) => setEditCatName(e.target.value)} />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input className="mt-1" value={editCatDesc} onChange={(e) => setEditCatDesc(e.target.value)} />
+            </div>
+            <div>
+              <Label>Color</Label>
+              <div className="mt-1 flex items-center gap-2">
+                <input type="color" className="h-9 w-12 rounded border cursor-pointer" value={editCatColor} onChange={(e) => setEditCatColor(e.target.value)} />
+                <Input className="flex-1" value={editCatColor} onChange={(e) => setEditCatColor(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCategoryEditTarget(null)}>Cancel</Button>
+            <Button onClick={handleUpdateCategory} disabled={savingCat}>
+              {savingCat ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Category Confirmation ──────────────────────────────────────── */}
+      <AlertDialog open={!!categoryToDelete} onOpenChange={(open) => { if (!open) setCategoryToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes <strong>{categoryToDelete?.name}</strong>. Expenses already recorded under it keep their history but show as uncategorized.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteCategory}
+              disabled={deletingCat}
+            >
+              {deletingCat ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Delete Expense Confirmation ──────────────────────────────────────── */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -676,6 +924,27 @@ export default function Expenses() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Pay All Pending Confirmation ───────────────────────────────────────── */}
+      <AlertDialog open={payAllDialogOpen} onOpenChange={setPayAllDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Pay All Pending Expenses</AlertDialogTitle>
+            <AlertDialogDescription>
+              This marks every unpaid expense (including auto-generated recurring cycles) as paid and posts them to the accounting ledger.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={payingAll}>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-green-600 hover:bg-green-700" onClick={handlePayAll} disabled={payingAll}>
+              {payingAll ? (<><RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Paying…</>) : 'Pay All'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <BulkCategoriesDialog open={bulkCategoriesOpen} onOpenChange={setBulkCategoriesOpen} />
+      <BulkExpensesDialog open={bulkExpensesOpen} onOpenChange={setBulkExpensesOpen} categories={categories} />
     </div>
   );
 }

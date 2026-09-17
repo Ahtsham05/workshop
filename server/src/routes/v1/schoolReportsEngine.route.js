@@ -15,6 +15,7 @@ router.route('/').get(schoolReportsController.getReport);
 router.route('/financial/monthly').get(schoolReportsController.getMonthlyIncomeExpense);
 router.route('/financial/daily').get(schoolReportsController.getDailyCollection);
 router.route('/financial/categories').get(schoolReportsController.getCategoryReport);
+router.route('/financial/expense-detail').get(schoolReportsController.getExpenseDetail);
 router.route('/financial/pnl').get(schoolReportsController.getProfitAndLoss);
 
 // Students

@@ -6,6 +6,7 @@ module.exports.serviceController = require('./service.controller');
 // School Accounting Controllers
 module.exports.feeCategoryController = require('./feeCategory.controller');
 module.exports.schoolTransactionController = require('./schoolTransaction.controller');
+module.exports.schoolRecurringExpenseController = require('./schoolRecurringExpense.controller');
 module.exports.feeStructureController = require('./feeStructure.controller');
 module.exports.feeVoucherController = require('./feeVoucher.controller');
 module.exports.feePaymentRequestController = require('./feePaymentRequest.controller');
