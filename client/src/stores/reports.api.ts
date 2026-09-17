@@ -89,6 +89,7 @@ export interface SalesInvoiceDetail {
   // Overall invoice-level discount (resolved Rs), on top of any per-item discounts.
   discount: number
   total: number
+  profit: number
   paidAmount: number
   balance: number
   customerName: string
@@ -942,6 +943,7 @@ export interface ActivitySummaryEntry {
   totalAmount: number
   paidAmount: number
   balance: number
+  profit?: number
   description: string
   details?: string
   status: string

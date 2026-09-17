@@ -79,6 +79,7 @@ interface UnifiedInvoiceRow {
   type: string
   status: string
   total: number
+  profit: number
   paidAmount: number
   balance: number
   discount?: number
@@ -88,7 +89,9 @@ interface UnifiedInvoiceRow {
 
 // Modules from the Activity Summary feed that count as "sale modules" for a mobile
 // shop — everything else (Purchases, Expenses, customer/supplier ledger payments…)
-// stays out of a sales ledger.
+// stays out of a sales ledger. 'Cash Management' is deliberately excluded — those are
+// wallet/cash transfers (e.g. sending cash out via a wallet), not sales, and including
+// them was inflating Total Revenue and the Sale Balance totals with non-sale money.
 const SALE_MODULE_NAMES = new Set([
   'Load', 'Sim Sale', 'Repairing', 'Services', 'Bill Payments', 'Installments',
 ])
@@ -103,6 +106,7 @@ const salesRowFromDetail = (inv: SalesInvoiceDetail): UnifiedInvoiceRow => ({
   type: inv.type,
   status: inv.status,
   total: inv.total,
+  profit: inv.profit || 0,
   paidAmount: inv.paidAmount,
   balance: inv.balance,
   discount: inv.discount,
@@ -123,6 +127,7 @@ const activityEntryToRow = (entry: ActivitySummaryEntry): UnifiedInvoiceRow => {
     type: entry.subType,
     status: entry.status,
     total: entry.totalAmount,
+    profit: entry.profit || 0,
     paidAmount: entry.paidAmount,
     balance: entry.balance,
     module: entry.module,
@@ -147,6 +152,7 @@ const agentBillToRow = (bill: AgentBillRecord): UnifiedInvoiceRow => ({
   type: 'Agent Bill',
   status: bill.isPaid ? 'paid' : 'pending',
   total: bill.totalAmount,
+  profit: 0,
   paidAmount: bill.isPaid ? bill.totalAmount : 0,
   balance: bill.isPaid ? 0 : bill.totalAmount,
   module: 'Agent Bills',
@@ -201,6 +207,7 @@ const moduleColors: Record<string, string> = {
   'Services':      'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400',
   'Bill Payments':   'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400',
   'Installments':    'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400',
+  'Cash Management': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   'Agent Bills':     'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300',
 }
 
@@ -248,11 +255,52 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         totalInvoices: mergedInvoices.length,
         totalItems: mergedInvoices.reduce((s, r) => s + r.items.reduce((s2, i) => s2 + i.quantity, 0), 0),
         totalSales: mergedInvoices.reduce((s, r) => s + r.total, 0),
+        totalProfit: mergedInvoices.reduce((s, r) => s + (r.profit || 0), 0),
+        // Cash actually realized across every merged transaction — a credit row's unpaid
+        // portion (its `balance`) is excluded, so an outstanding credit sale doesn't inflate
+        // this the way summing raw totals would.
+        totalSaleBalance: mergedInvoices.reduce((s, r) => s + Math.max(0, r.total - (r.balance || 0)), 0),
       }),
       [mergedInvoices]
     )
 
     const detailsLoading = detailLoading || (isMobileShop && (activityLoading || (isAgentBillUser && agentBillLoading)))
+
+    // Day-grouped sales/profit totals across every merged mobile-shop module, for the
+    // Sales Trend chart and Detailed Sales Data table below — mirrors the shape the
+    // Invoice-only backend endpoint returns (see SalesReportData) so both data sources
+    // are interchangeable in the JSX.
+    const mobileShopChartData = useMemo(() => {
+      if (!isMobileShop) return []
+      const byDate = new Map<string, { totalSales: number; totalProfit: number; invoiceCount: number }>()
+      mergedInvoices.forEach((inv) => {
+        const key = format(new Date(inv.invoiceDate), 'yyyy-MM-dd')
+        const row = byDate.get(key) || { totalSales: 0, totalProfit: 0, invoiceCount: 0 }
+        row.totalSales += inv.total
+        row.totalProfit += inv.profit || 0
+        row.invoiceCount += 1
+        byDate.set(key, row)
+      })
+      return Array.from(byDate.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([_id, row]) => ({
+          _id,
+          totalSales: row.totalSales,
+          totalProfit: row.totalProfit,
+          totalCost: row.totalSales - row.totalProfit,
+          invoiceCount: row.invoiceCount,
+          avgSale: row.invoiceCount > 0 ? row.totalSales / row.invoiceCount : 0,
+        }))
+    }, [mergedInvoices, isMobileShop])
+
+    const chartRows = useMemo(
+      () => (isMobileShop ? mobileShopChartData : (data?.data || [])),
+      [isMobileShop, mobileShopChartData, data?.data]
+    )
+    const cardRevenue = isMobileShop ? mergedSummary.totalSales : (data?.summary?.totalRevenue || 0)
+    const cardProfit = isMobileShop ? mergedSummary.totalProfit : (data?.summary?.totalProfit || 0)
+    const cardInvoices = isMobileShop ? mergedSummary.totalInvoices : (data?.summary?.totalInvoices || 0)
+    const cardAvgInvoice = cardInvoices > 0 ? cardRevenue / cardInvoices : 0
 
     // Flatten invoices into date-grouped product rows for the Products Only view
     const productsByDate = useMemo(() => {
@@ -265,6 +313,8 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         quantity: number
         unitPrice: number
         subtotal: number
+        saleBalance: number
+        isCredit: boolean
         discountAmount?: number
         imeis?: ImeiEntryInput[]
         variantLabel?: string | null
@@ -276,6 +326,14 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
       mergedInvoices.forEach((inv) => {
         const dateStr = format(new Date(inv.invoiceDate), 'dd MMM yyyy')
         if (!dateMap.has(dateStr)) dateMap.set(dateStr, [])
+        // Share of this invoice actually realized as cash — driven off `balance` (the same
+        // "amount still owed" figure the Invoice View's own Balance column already shows),
+        // not `paidAmount`, since paidAmount means something different per module (e.g. for
+        // Bill Payments it's just the bill face value split, not what's actually been
+        // collected). A fully settled row puts its whole subtotal here; an outstanding
+        // credit row prorates by how much of the total is still unpaid.
+        const isCredit = (inv.balance || 0) > 0
+        const cashRatio = inv.total > 0 ? Math.max(0, inv.total - (inv.balance || 0)) / inv.total : 1
         inv.items.forEach((item) => {
           dateMap.get(dateStr)!.push({
             invoiceNumber: inv.invoiceNumber,
@@ -285,6 +343,8 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
+            saleBalance: item.subtotal * cashRatio,
+            isCredit,
             discountAmount: item.discountAmount,
             imeis: item.imeis,
             variantLabel: item.variantLabel,
@@ -312,9 +372,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           const wb = XLSX.utils.book_new()
 
           // Sheet 1 — daily summary
-          if (data?.data && data.data.length > 0) {
+          if (chartRows.length > 0) {
             const summarySheet = XLSX.utils.json_to_sheet(
-              data.data.map((row) => ({
+              chartRows.map((row) => ({
                 [t('date')]:     row._id,
                 [t('invoices')]: row.invoiceCount,
                 [t('sales')]:    row.totalSales,
@@ -332,6 +392,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           if (mergedInvoices.length > 0) {
             const rows: object[] = []
             mergedInvoices.forEach((inv) => {
+              const cashRatio = inv.total > 0 ? inv.paidAmount / inv.total : 0
               inv.items.forEach((item, idx) => {
                 rows.push({
                   ...(isMobileShop ? { Module: idx === 0 ? inv.module : '' } : {}),
@@ -353,6 +414,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   'Unit Sale Price':   item.unitPrice,
                   'Item Discount': item.discountAmount || 0,
                   Subtotal:       item.subtotal,
+                  'Sale Balance': item.subtotal * cashRatio,
                   ...(item.note ? { Notes: item.note } : {}),
                 })
               })
@@ -378,6 +440,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               'Unit Sale Price':   '',
               'Item Discount': '',
               Subtotal:       mergedSummary.totalSales,
+              'Sale Balance': mergedSummary.totalSaleBalance,
             })
             const detailSheet = XLSX.utils.json_to_sheet(rows)
             XLSX.utils.book_append_sheet(wb, detailSheet, 'Invoice Details')
@@ -395,11 +458,11 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           toast.error(t('Failed to export data'))
         }
       },
-    }), [data, mergedInvoices, mergedSummary, isMobileShop, t, language])
+    }), [chartRows, mergedInvoices, mergedSummary, isMobileShop, t, language])
 
     const formatCurrency = useFormatMoney()
 
-    if (isLoading) {
+    if (isLoading || (isMobileShop && detailsLoading)) {
       return (
         <div className='space-y-4'>
           <Skeleton className='h-[200px] w-full' />
@@ -421,8 +484,11 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>
-                {formatCurrency(data?.summary?.totalRevenue || 0)}
+                {formatCurrency(cardRevenue)}
               </div>
+              {isMobileShop && (
+                <p className='text-xs text-muted-foreground mt-1'>Sales + load, sim, repair, service, bill &amp; installment</p>
+              )}
             </CardContent>
           </Card>
 
@@ -435,13 +501,11 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>
-                {formatCurrency(data?.summary?.totalProfit || 0)}
+                {formatCurrency(cardProfit)}
               </div>
               <p className='text-xs text-muted-foreground mt-1'>
                 {t('margin')}:{' '}
-                {data?.summary?.totalRevenue
-                  ? ((data.summary.totalProfit / data.summary.totalRevenue) * 100).toFixed(2)
-                  : 0}
+                {cardRevenue ? ((cardProfit / cardRevenue) * 100).toFixed(2) : 0}
                 %
               </p>
             </CardContent>
@@ -455,7 +519,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               </div>
             </CardHeader>
             <CardContent>
-              <div className='text-2xl font-bold'>{data?.summary?.totalInvoices || 0}</div>
+              <div className='text-2xl font-bold'>{cardInvoices}</div>
             </CardContent>
           </Card>
 
@@ -468,7 +532,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             </CardHeader>
             <CardContent>
               <div className='text-2xl font-bold'>
-                {formatCurrency(data?.summary?.avgInvoiceValue || 0)}
+                {formatCurrency(cardAvgInvoice)}
               </div>
             </CardContent>
           </Card>
@@ -482,7 +546,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width='100%' height={400}>
-              <BarChart data={data?.data || []}>
+              <BarChart data={chartRows}>
                 <CartesianGrid strokeDasharray='3 3' />
                 <XAxis dataKey='_id' />
                 <YAxis />
@@ -513,7 +577,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data?.data?.map((row, index) => (
+                {chartRows.map((row, index) => (
                   <TableRow key={index}>
                     <TableCell>{row._id}</TableCell>
                     <TableCell className='text-right'>{row.invoiceCount}</TableCell>
@@ -542,7 +606,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
               <CardTitle>Invoice Details</CardTitle>
               <CardDescription>
                 {isMobileShop
-                  ? 'Every sale invoice, load sale/purchase, sim sale, repair, service, bill payment, installment, cash management send/receive and agent bill in the selected period — click a row to see individual items'
+                  ? 'Every sale invoice, load sale, sim sale, repair, service, bill payment and installment in the selected period — click a row to see individual items'
                   : 'All invoices in the selected period — click a row to see individual items'}
               </CardDescription>
             </div>
@@ -606,6 +670,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       <TableHead className='text-right'>Qty</TableHead>
                       <TableHead className='text-right'>Unit Sale Price</TableHead>
                       <TableHead className='text-right'>Subtotal</TableHead>
+                      <TableHead className='text-right'>Sale Balance</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -614,7 +679,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                         {/* Date group header */}
                         <TableRow className='bg-muted/40 border-t'>
                           <TableCell
-                            colSpan={isMobileShop ? 10 : 9}
+                            colSpan={isMobileShop ? 11 : 10}
                             className='py-2 px-4 font-semibold text-sm text-foreground'
                           >
                             {date}
@@ -681,6 +746,20 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                                 </div>
                               )}
                             </TableCell>
+                            <TableCell className='text-right text-sm'>
+                              {row.saleBalance > 0 && (
+                                <div className='text-emerald-600 dark:text-emerald-400'>
+                                  {formatCurrency(row.saleBalance)}
+                                </div>
+                              )}
+                              {row.isCredit ? (
+                                <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'>
+                                  Credit
+                                </span>
+                              ) : row.saleBalance <= 0 ? (
+                                <span className='text-muted-foreground'>—</span>
+                              ) : null}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </Fragment>
@@ -699,6 +778,9 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                       <TableCell />
                       <TableCell className='text-right text-lg text-primary'>
                         {formatCurrency(mergedSummary.totalSales)}
+                      </TableCell>
+                      <TableCell className='text-right text-lg text-emerald-600 dark:text-emerald-400'>
+                        {formatCurrency(mergedSummary.totalSaleBalance)}
                       </TableCell>
                     </TableRow>
                   </TableFooter>

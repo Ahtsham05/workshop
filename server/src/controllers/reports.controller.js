@@ -187,6 +187,7 @@ const getSalesInvoiceDetails = catchAsync(async (req, res) => {
         subtotal: 1,
         discount: { $ifNull: ['$discount', 0] },
         total: 1,
+        profit: { $ifNull: ['$totalProfit', 0] },
         paidAmount: 1,
         balance: 1,
         customerName: {
@@ -3378,19 +3379,19 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       .select('category description amount paymentMethod date referenceId')
       .lean(),
     LoadTransaction.find({ ...scope, ...dateMatch('date') })
-      .select('walletType customerName mobileNumber amount receivedAmount paymentMethod paymentWalletType date notes')
+      .select('walletType customerName mobileNumber amount receivedAmount paymentMethod paymentWalletType date notes profit')
       .lean(),
     LoadPurchase.find({ ...scope, ...dateMatch('date') })
       .select('walletType supplierName amount paidAmount paymentMethod paymentWalletType date notes')
       .lean(),
     CashWithdrawal.find({ ...scope, ...dateMatch('date') })
-      .select('walletType transactionType amount customerName customerNumber customerAccountType cashAmount date notes')
+      .select('walletType transactionType amount customerName customerNumber customerAccountType cashAmount date notes profit')
       .lean(),
     SimSale.find({ ...scope, ...dateMatch('date') })
-      .select('jobNumber date productName walletType simAmount loadAmount saleAmount purchaseAmount customerName customerPhone paymentMethod notes')
+      .select('jobNumber date productName walletType simAmount loadAmount saleAmount purchaseAmount commission customerName customerPhone paymentMethod notes')
       .lean(),
     RepairJob.find({ ...scope, ...dateMatch('date') })
-      .select('date customerName phone deviceModel issue status charges advanceAmount paymentMethod technician')
+      .select('date customerName phone deviceModel issue status charges advanceAmount paymentMethod technician cost')
       .lean(),
     ServiceInvoice.find({ ...scope, ...dateMatch('date') })
       .select('invoiceNumber date customerName customerPhone totalAmount paymentMethod items')
@@ -3402,7 +3403,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
         { paymentDate: { $in: [null, undefined] }, createdAt: { $gte: start, $lte: end } },
       ],
     })
-      .select('referenceNumber paymentDate createdAt customerName billType companyName billAmount serviceCharge totalReceived status paymentMethod')
+      .select('referenceNumber paymentDate createdAt customerName billType companyName billAmount serviceCharge totalReceived status paymentMethod netBillProfit latePaymentLoss')
       .lean(),
     InstallmentPayment.find({ ...scope, ...dateMatch('date') })
       .select('amount paymentNumber paymentMethod isDownPayment date notes installmentPlanId')
@@ -3576,6 +3577,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       totalAmount: receivedAmount,
       paidAmount: receivedAmount,
       balance: 0,
+      profit: tx.profit || 0,
       description: `Load sale on ${tx.walletType || 'wallet'}`,
       details: `Load: ${tx.amount || 0} | Wallet: ${tx.walletType || ''}${tx.notes ? ` | ${tx.notes}` : ''}`,
       status: 'completed',
@@ -3617,6 +3619,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       totalAmount: cw.amount || 0,
       paidAmount: cw.cashAmount || cw.amount || 0,
       balance: 0,
+      profit: cw.profit || 0,
       description: `${isReceive ? 'Receive' : 'Send'} via ${cw.walletType || 'wallet'}`,
       details: `Wallet: ${cw.walletType || ''} | Account: ${cw.customerNumber || '—'}${cw.notes ? ` | ${cw.notes}` : ''}`,
       status: 'completed',
@@ -3661,6 +3664,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       totalAmount: sim.saleAmount || 0,
       paidAmount: sim.saleAmount || 0,
       balance: 0,
+      profit: sim.commission ? sim.commission : (sim.saleAmount || 0) - (sim.purchaseAmount || 0),
       description: `Sim sale: ${sim.productName || 'SIM'}`,
       details: `SIM: ${sim.simAmount || 0} | Load: ${sim.loadAmount || 0} | Wallet: ${sim.walletType || ''}`,
       status: 'completed',
@@ -3681,6 +3685,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       totalAmount: job.charges || 0,
       paidAmount: job.advanceAmount || 0,
       balance: Math.max(0, (job.charges || 0) - (job.advanceAmount || 0)),
+      profit: ['completed', 'delivered'].includes(job.status) ? Math.max(0, (job.charges || 0) - (job.cost || 0)) : 0,
       description: `${job.deviceModel || 'Device'} — ${job.issue || 'Repair'}`,
       details: `Status: ${job.status || ''} | Technician: ${job.technician || '—'}`,
       status: job.status || 'pending',
@@ -3701,6 +3706,7 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       totalAmount: svc.totalAmount || 0,
       paidAmount: svc.totalAmount || 0,
       balance: 0,
+      profit: svc.totalAmount || 0,
       description: `Service invoice ${svc.invoiceNumber || ''}`,
       details: formatItemsSummary(svc.items, 'serviceName', 'quantity'),
       status: 'paid',
@@ -3722,6 +3728,9 @@ const getActivitySummaryReport = catchAsync(async (req, res) => {
       totalAmount: bill.totalReceived || 0,
       paidAmount: bill.billAmount || 0,
       balance: 0,
+      profit: bill.status === 'paid'
+        ? (bill.netBillProfit || (bill.serviceCharge || 0) - (bill.latePaymentLoss || 0))
+        : (bill.serviceCharge || 0),
       description: `${bill.companyName || 'Utility'} bill payment`,
       details: `Bill: ${bill.billAmount || 0} | Service charge: ${bill.serviceCharge || 0}`,
       status: bill.status || 'completed',
