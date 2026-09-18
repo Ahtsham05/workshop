@@ -147,6 +147,17 @@ export const bulkUpdateProducts = createAsyncThunk(
     })
 )
 
+export const bulkSetProductCategories = createAsyncThunk(
+    'product/bulkSetProductCategories',
+    catchAsync(async (data: { productIds: string[]; categories: { _id: string; name: string; image?: { url?: string; publicId?: string } }[]; subCategories: { _id: string; name: string; image?: { url?: string; publicId?: string } }[] }) => {
+        const response = await Axios({
+            ...summery.bulkSetProductCategories,
+            data: data
+        });
+        return response.data;
+    })
+)
+
 export const bulkAddProducts = createAsyncThunk(
     'product/bulkAddProducts',
     // duplicateStrategy decides what happens to a row whose barcode/SKU already exists:
@@ -230,6 +241,19 @@ const productSlice = createSlice({
                     });
                 }
             })
+            .addCase(bulkSetProductCategories.fulfilled, (state, action) => {
+                // Mirror the write onto the already-loaded rows so the table reflects the
+                // new category/sub-category immediately, without waiting on a refetch.
+                if (Array.isArray(state.data)) {
+                    const updatedIds = new Set(action.meta.arg.productIds);
+                    const { categories, subCategories } = action.payload as { categories: any[]; subCategories: any[] };
+                    state.data = state.data.map((product: any) =>
+                        updatedIds.has(product._id || product.id)
+                            ? { ...product, categories, subCategories, category: categories[0]?.name || '' }
+                            : product
+                    );
+                }
+            })
             .addCase(bulkAddProducts.fulfilled, (state, action) => {
                 // Add the newly created products to state
                 if (Array.isArray(state.data) && action.payload.products) {
@@ -253,6 +277,7 @@ const productSlice = createSlice({
                         bulkDeleteProducts,
                         fetchAllProducts,
                         bulkUpdateProducts,
+                        bulkSetProductCategories,
                         bulkAddProducts
                     ])
                 ),

@@ -301,6 +301,12 @@ const ur: Record<string, string> = {
     "bulk_delete_failed": "منتخب پروڈکٹس حذف کرنے میں ناکامی",
     "and_more_products": "اور {{count}} مزید",
 
+    // Bulk Category Assignment (Products)
+    "bulk_set_category": "کیٹگری سیٹ کریں",
+    "bulk_set_category_description": "منتخب کردہ ہر پروڈکٹ پر لاگو کرنے کے لیے کیٹگریز اور ذیلی کیٹگریز منتخب کریں۔ یہ ہر پروڈکٹ کی موجودہ کیٹگریز کی جگہ لے لے گا۔",
+    "bulk_category_clear_warning": "کوئی کیٹگری یا ذیلی کیٹگری منتخب نہیں کی گئی — لاگو کرنے سے تمام منتخب پروڈکٹس کی کیٹگریز ہٹ جائیں گی۔",
+    "apply_to_products": "{{count}} پروڈکٹس پر لاگو کریں",
+
     // Bulk Delete Customers
     "bulk_delete_customers": "کسٹمرز حذف کریں",
     "bulk_delete_customers_confirmation_suffix": "کسٹمر(ز)۔ اس عمل کو واپس نہیں کیا جا سکتا۔",

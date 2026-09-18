@@ -433,6 +433,27 @@ const bulkUpdateProducts = catchAsync(async (req, res) => {
   }
 });
 
+// Products list's "Set Category" bulk action — applies the same categories/sub-categories
+// to every selected product in one call. Scoped to the caller's org/branch (via
+// branchScope) so a product id from outside this tenant can't be touched.
+const bulkSetProductCategories = catchAsync(async (req, res) => {
+  const { productIds, categories, subCategories } = req.body;
+  const scope = applyBranchFilter({}, req);
+
+  const result = await productService.bulkSetProductCategories({
+    productIds,
+    categories,
+    subCategories,
+    organizationId: scope.organizationId,
+    branchId: scope.branchId,
+  });
+
+  res.send({
+    message: `Updated categories for ${result.modifiedCount} of ${productIds.length} product${productIds.length === 1 ? '' : 's'}`,
+    ...result,
+  });
+});
+
 const scanProductImage = catchAsync(async (req, res) => {
   if (!req.file) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'No image file provided');
@@ -512,6 +533,7 @@ module.exports = {
   deleteProductImage,
   fetchImageFromSearch,
   bulkUpdateProducts,
+  bulkSetProductCategories,
   bulkAddProducts,
   scanProductImage,
   updateProductFlag,

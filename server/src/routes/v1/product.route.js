@@ -109,6 +109,12 @@ router
   .route('/bulk-update')
   .patch(auth('editProducts'), validate(productValidation.bulkUpdateProducts), productController.bulkUpdateProducts);
 
+// Bulk category/sub-category assignment — the Products list's "Set Category" toolbar
+// action, applies the same category/sub-category selection to every selected product.
+router
+  .route('/bulk-category')
+  .patch(auth('editProducts'), validate(productValidation.bulkSetProductCategories), productController.bulkSetProductCategories);
+
 // Bulk delete route — registered before the `/:productId` catch-all below so
 // `/bulk-delete` isn't swallowed as a productId.
 router

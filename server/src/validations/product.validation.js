@@ -313,6 +313,36 @@ const bulkUpdateProducts = {
   }),
 };
 
+// Sets the same categories/sub-categories on every product in `productIds` — the
+// Products list's "Set Category" bulk action. Only `_id` is trusted here (the service
+// re-resolves name/image from the real Category/SubCategory docs); name/image are still
+// accepted so the request body shape matches createProduct/updateProduct's `categories`.
+const bulkSetProductCategories = {
+  body: Joi.object().keys({
+    productIds: Joi.array().items(Joi.string()).required().min(1),
+    categories: Joi.array().items(
+      Joi.object().keys({
+        _id: Joi.string().required(),
+        name: Joi.string().optional(),
+        image: Joi.object().keys({
+          url: Joi.string(),
+          publicId: Joi.string(),
+        }).optional(),
+      })
+    ).default([]),
+    subCategories: Joi.array().items(
+      Joi.object().keys({
+        _id: Joi.string().required(),
+        name: Joi.string().optional(),
+        image: Joi.object().keys({
+          url: Joi.string(),
+          publicId: Joi.string(),
+        }).optional(),
+      })
+    ).default([]),
+  }),
+};
+
 const bulkDeleteProducts = {
   body: Joi.object().keys({
     ids: Joi.array().items(Joi.string()).required().min(1),
@@ -396,6 +426,7 @@ module.exports = {
   getAllProducts,
   getProductStats,
   bulkUpdateProducts,
+  bulkSetProductCategories,
   bulkDeleteProducts,
   bulkAddProducts,
   updateProductFlag,

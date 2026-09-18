@@ -390,6 +390,12 @@ const en: Record<string, string> = {
     "bulk_delete_failed": "Failed to delete selected products",
     "and_more_products": "and {{count}} more",
 
+    // Bulk Category Assignment (Products)
+    "bulk_set_category": "Set Category",
+    "bulk_set_category_description": "Choose categories and sub-categories to apply to every selected product. This replaces whatever each product currently has.",
+    "bulk_category_clear_warning": "No categories or sub-categories selected — applying will clear categories from all selected products.",
+    "apply_to_products": "Apply to {{count}} products",
+
     // Bulk Delete Customers
     "bulk_delete_customers": "Delete Customers",
     "bulk_delete_customers_confirmation_suffix": "customer(s). This action cannot be undone.",

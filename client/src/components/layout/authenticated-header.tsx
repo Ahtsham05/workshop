@@ -5,6 +5,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { LanguageSwitch } from '@/components/language-switch'
 import { WhatsAppHeaderButton } from '@/components/whatsapp/whatsapp-header-button'
 import { SyncStatusBadge } from '@/components/layout/sync-status-badge'
+import { BranchIndicator } from '@/components/layout/branch-indicator'
 
 type AuthenticatedHeaderProps = {
   showSearch?: boolean
@@ -13,6 +14,7 @@ type AuthenticatedHeaderProps = {
 export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderProps) {
   return (
     <Header fixed>
+      <BranchIndicator />
       <div className='ml-auto flex items-center space-x-4'>
         <SyncStatusBadge />
         {showSearch ? <Search /> : null}

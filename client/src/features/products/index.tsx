@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Edit, Package, Boxes, Wallet, CircleDollarSign, Sparkles, Trash2 } from 'lucide-react'
+import { Edit, Package, Boxes, Wallet, CircleDollarSign, Sparkles, Trash2, Tags } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
@@ -39,6 +39,7 @@ import { getDisplayStock, getDisplayStockValue, getStockStatus } from '@/lib/pro
 import { useFormatMoney } from '@/lib/format-money'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
+import { BulkCategoryDialog } from './components/bulk-category-dialog'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BarChart3, LayoutList } from 'lucide-react'
@@ -124,6 +125,7 @@ export default function Products() {
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false)
   const [categoryBreakdown, setCategoryBreakdown] = useState<CategoryBreakdownRow[]>([])
   const [loadingCategoryBreakdown, setLoadingCategoryBreakdown] = useState(false)
   // Column-header sort — resolved server-side (see buildSortByParam) so it reorders the
@@ -608,6 +610,14 @@ export default function Products() {
                   >
                     <span>{t('Deactivate Selected')} ({selectedProducts.length})</span>
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setBulkCategoryOpen(true)}
+                    className='space-x-1'
+                  >
+                    <Tags size={16} />
+                    <span>{t('bulk_set_category')} ({selectedProducts.length})</span>
+                  </Button>
                   <Can permission='deleteProducts'>
                     <Button
                       variant="destructive"
@@ -839,6 +849,16 @@ export default function Products() {
           onOpenChange={setBulkDeleteOpen}
           products={selectedProducts}
           onDeleted={() => {
+            setSelectedProducts([])
+            setFetch((prev) => !prev)
+          }}
+        />
+
+        <BulkCategoryDialog
+          open={bulkCategoryOpen}
+          onOpenChange={setBulkCategoryOpen}
+          products={selectedProducts}
+          onApplied={() => {
             setSelectedProducts([])
             setFetch((prev) => !prev)
           }}

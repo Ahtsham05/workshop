@@ -1073,12 +1073,69 @@ const bulkUpdateProducts = async (productsToUpdate) => {
   });
   
   const result = await Product.bulkWrite(bulkOps);
-  
+
   // Return the updated products
   const productIds = productsToUpdate.map(p => p.id);
   const updatedProducts = await Product.find({ _id: { $in: productIds } });
-  
+
   return updatedProducts;
+};
+
+/**
+ * Sets the SAME categories/sub-categories on every product in `productIds` — the "bulk
+ * categorize" action from the Products list's selection toolbar. Full replace, not merge
+ * (matches how the single-product edit form's category picker already behaves: whatever
+ * is selected there becomes the product's whole `categories`/`subCategories` array).
+ *
+ * Categories/sub-categories are re-resolved here from the real Category/SubCategory
+ * documents (org/branch-scoped) instead of trusting the client-sent name/image, unlike
+ * createProduct/updateProduct which accept the {_id,name,image} triplet as-is — this
+ * closes that gap for the one endpoint that can silently touch hundreds of products at
+ * once, and guarantees the embedded snapshot matches what the category actually looks
+ * like right now.
+ */
+const bulkSetProductCategories = async ({ productIds, categories = [], subCategories = [], organizationId, branchId }) => {
+  const scope = {};
+  if (organizationId) scope.organizationId = organizationId;
+  if (branchId) scope.branchId = branchId;
+
+  const categoryIds = [...new Set(categories.map((c) => c._id).filter(Boolean))];
+  const subCategoryIds = [...new Set(subCategories.map((c) => c._id).filter(Boolean))];
+
+  const [realCategories, realSubCategories] = await Promise.all([
+    categoryIds.length ? Category.find({ _id: { $in: categoryIds }, ...scope }).select('_id name image').lean() : [],
+    subCategoryIds.length ? SubCategory.find({ _id: { $in: subCategoryIds }, ...scope }).select('_id name image').lean() : [],
+  ]);
+
+  if (realCategories.length !== categoryIds.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'One or more selected categories could not be found');
+  }
+  if (realSubCategories.length !== subCategoryIds.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'One or more selected sub-categories could not be found');
+  }
+
+  const resolvedCategories = realCategories.map((c) => ({ _id: c._id, name: c.name, ...(c.image?.url ? { image: c.image } : {}) }));
+  const resolvedSubCategories = realSubCategories.map((c) => ({ _id: c._id, name: c.name, ...(c.image?.url ? { image: c.image } : {}) }));
+
+  const result = await Product.updateMany(
+    { _id: { $in: productIds }, ...scope },
+    {
+      $set: {
+        categories: resolvedCategories,
+        subCategories: resolvedSubCategories,
+        // Legacy singular field — keep it pointed at the first category, same as the
+        // Excel import path's `categoryLegacy` (see resolveImportCategories below).
+        category: resolvedCategories[0]?.name || '',
+      },
+    }
+  );
+
+  return {
+    matchedCount: result.matchedCount,
+    modifiedCount: result.modifiedCount,
+    categories: resolvedCategories,
+    subCategories: resolvedSubCategories,
+  };
 };
 
 const UNIT_ALIASES = {
@@ -1704,6 +1761,7 @@ module.exports = {
   getProductStats,
   getCategoryBreakdown,
   bulkUpdateProducts,
+  bulkSetProductCategories,
   bulkAddProducts,
   attachVariantAggregates,
   getPurchasableCatalog,

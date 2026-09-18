@@ -1,7 +1,9 @@
+import { format } from 'date-fns'
 import { CalendarDays, RefreshCcw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useLanguage } from '@/context/language-context'
 import {
   buildDashboardDateRange,
@@ -10,6 +12,14 @@ import {
   type DashboardDateRange,
 } from '@/lib/dashboard-date-range'
 import { cn } from '@/lib/utils'
+
+/** "YYYY-MM-DD" business calendar key -> local Date, with no timezone shifting. */
+const parseDateKey = (key: string) => {
+  const [year, month, day] = key.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+const formatDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 type Props = {
   value: DashboardDateRange
@@ -64,35 +74,48 @@ export function DashboardDateFilter({
       </div>
 
       {value.period === 'custom' ? (
-        <div className='flex h-9 items-center gap-1.5 rounded-lg border bg-background px-2.5 shadow-sm'>
-          <CalendarDays className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden />
-          <Input
-            type='date'
-            aria-label={t('From')}
-            value={value.startDate}
-            onChange={(e) =>
-              onChange({
-                period: 'custom',
-                startDate: e.target.value,
-                endDate: value.endDate,
-              })
-            }
-            className='h-7 w-[8.75rem] border-0 bg-transparent px-1 shadow-none focus-visible:ring-0'
-          />
+        <div className='flex h-9 items-center gap-1.5'>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant='outline' size='sm' className='h-9 justify-start gap-2 px-3 font-normal'>
+                <CalendarDays className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden />
+                {format(parseDateKey(value.startDate), 'PPP')}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className='w-auto p-0' align='start'>
+              <Calendar
+                mode='single'
+                selected={parseDateKey(value.startDate)}
+                onSelect={(date) => {
+                  if (!date) return
+                  onChange({ period: 'custom', startDate: formatDateKey(date), endDate: value.endDate })
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+
           <span className='text-xs text-muted-foreground'>{t('To')}</span>
-          <Input
-            type='date'
-            aria-label={t('To')}
-            value={value.endDate}
-            onChange={(e) =>
-              onChange({
-                period: 'custom',
-                startDate: value.startDate,
-                endDate: e.target.value,
-              })
-            }
-            className='h-7 w-[8.75rem] border-0 bg-transparent px-1 shadow-none focus-visible:ring-0'
-          />
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant='outline' size='sm' className='h-9 justify-start gap-2 px-3 font-normal'>
+                <CalendarDays className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden />
+                {format(parseDateKey(value.endDate), 'PPP')}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className='w-auto p-0' align='start'>
+              <Calendar
+                mode='single'
+                selected={parseDateKey(value.endDate)}
+                onSelect={(date) => {
+                  if (!date) return
+                  onChange({ period: 'custom', startDate: value.startDate, endDate: formatDateKey(date) })
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
         </div>
       ) : (
         <div className='hidden h-9 items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-3 text-sm text-muted-foreground sm:flex'>
