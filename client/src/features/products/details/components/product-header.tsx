@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useRouter } from '@tanstack/react-router'
-import { ArrowLeft, ClipboardEdit, Fingerprint, Layers, Pencil, RefreshCw, ShoppingCart } from 'lucide-react'
+import { ArrowLeft, ClipboardEdit, DollarSign, Fingerprint, Layers, Pencil, RefreshCw, ShoppingCart } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -69,6 +69,7 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit }: Props) {
 
   const canEdit = hasPermission('editProducts')
   const canPurchase = hasPermission('createPurchases') && !product.hasVariants
+  const canCheckPrice = hasPermission('viewPriceChecker')
   const reorderQty = suggestReorderQuantity(metrics)
 
   const unitMargin = product.price - product.cost
@@ -199,10 +200,20 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit }: Props) {
                 </TooltipContent>
               </Tooltip>
             ) : null}
+            {canCheckPrice ? (
+              <Button
+                variant='outline'
+                className='h-9 w-full gap-2 md:w-auto'
+                onClick={() => navigate({ to: '/price-checker', search: { q: product.name } })}
+              >
+                <DollarSign className='h-4 w-4' />
+                {t('Check Price')}
+              </Button>
+            ) : null}
             {canEdit ? (
               <Button
                 variant='outline'
-                className={cn('h-9 w-full gap-2 md:w-auto', !canPurchase && 'col-span-2 md:col-span-1')}
+                className={cn('h-9 w-full gap-2 md:w-auto', !canPurchase && !canCheckPrice && 'col-span-2 md:col-span-1')}
                 onClick={() => navigate({ to: '/stock-adjustments', search: { productId: product.id, productName: product.name } })}
               >
                 <ClipboardEdit className='h-4 w-4' />

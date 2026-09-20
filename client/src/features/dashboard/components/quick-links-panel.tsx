@@ -161,7 +161,7 @@ export function QuickLinksPanel() {
   if (isLoading) {
     return (
       <Card>
-        <CardContent className='flex flex-col gap-4 pt-6'>
+        <CardContent className='flex flex-col gap-4'>
           <div className='flex items-center justify-between gap-3'>
             <div className='flex items-center gap-3'>
               <Skeleton className='h-9 w-9 shrink-0 rounded-lg' />
@@ -185,7 +185,7 @@ export function QuickLinksPanel() {
   return (
     <>
       <Card>
-        <CardContent className='flex flex-col gap-4 pt-6'>
+        <CardContent className='flex flex-col gap-4'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <div className='flex items-center gap-3'>
               <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-violet-500 text-primary-foreground shadow-sm'>

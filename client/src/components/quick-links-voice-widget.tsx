@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { VoiceOrb } from '@/features/ai-assistant/components/voice-mode/voice-orb'
 import { useLanguage } from '@/context/language-context'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 import { resolveQuickLinkIcon } from '@/lib/quick-link-icons'
 import { QUICK_LINK_CATEGORY_GROUPS, getQuickLinkCategoryGroupId } from '@/lib/quick-link-category-groups'
@@ -35,6 +36,7 @@ const PILL_INACTIVE = 'border-border/80 bg-background text-foreground hover:bg-m
 export function QuickLinksVoiceWidget() {
   const { t } = useLanguage()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [activeGroup, setActiveGroup] = useState('all')
@@ -159,13 +161,28 @@ export function QuickLinksVoiceWidget() {
         sideOffset={12}
         className='w-[380px] max-w-[calc(100vw-2.5rem)] p-0 sm:w-[400px]'
         onOpenAutoFocus={(e) => {
-          // Radix's default here would focus the content wrapper itself. We want the
-          // search input focused instead, so typing to filter works the instant the
+          // Radix's default here would focus the first tabbable inside. On a laptop we want
+          // the search input focused instead, so typing to filter works the instant the
           // popover opens — same as clicking would, minus the extra click.
           // PopoverContent isn't ref-forwarding, but Radix dispatches this event ON
           // the content element itself, so currentTarget reaches it without one.
           e.preventDefault()
-          ;(e.currentTarget as HTMLElement).querySelector<HTMLInputElement>('[cmdk-input]')?.focus()
+          const content = e.currentTarget as HTMLElement
+
+          // On phones/tablets, focusing a text input pops the on-screen keyboard over
+          // roughly half the panel the moment it opens — hiding the voice orb and the
+          // list people opened it to see, and shoving the page around. So touch-first
+          // devices get NO input focus (the panel wrapper takes it, which keeps screen
+          // readers oriented without raising a keyboard) and tap the field when they
+          // actually want to type. "Touch-first" = the app's own phone+tablet cutoff
+          // (useIsMobile, < 1024px) OR a coarse primary pointer, which also catches
+          // tablets >= 1024px wide (iPad landscape / Pro) that width alone would miss.
+          const touchFirst = isMobile || window.matchMedia('(pointer: coarse)').matches
+          if (touchFirst) {
+            content.focus({ preventScroll: true })
+            return
+          }
+          content.querySelector<HTMLInputElement>('[cmdk-input]')?.focus()
         }}
       >
         <div className='flex max-h-[75vh] flex-col'>

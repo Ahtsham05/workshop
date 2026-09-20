@@ -93,7 +93,7 @@ export const sidebarData: SidebarData = {
         {
           title: 'Catalog & Inventory',
           icon: IconPackages,
-          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'viewImeiTracking'],
+          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'viewImeiTracking', 'viewPriceChecker'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
             { title: 'Categories', url: '/categories', icon: IconCategory, permission: 'viewCategories' },
@@ -102,6 +102,7 @@ export const sidebarData: SidebarData = {
             { title: 'Stock Transfer', url: '/stock-transfer', icon: IconTransfer, permission: 'viewProducts' },
             { title: 'Stock Adjustments', url: '/stock-adjustments', icon: ClipboardEdit, permission: 'viewProducts' },
             { title: 'IMEI / Serial Tracking', url: '/mobile-shop/imei-tracking', icon: ShieldCheck, permission: 'viewImeiTracking' },
+            { title: 'Price Checker', url: '/price-checker', icon: DollarSign, permission: 'viewPriceChecker' },
           ],
         },
         {

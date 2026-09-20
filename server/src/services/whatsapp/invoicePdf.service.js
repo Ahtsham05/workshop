@@ -38,7 +38,11 @@ function resolveExecutablePath() {
 let sharedBrowser = null;
 
 async function getBrowser() {
-  if (!sharedBrowser || !sharedBrowser.isConnected()) {
+  // puppeteer-core v25 renamed Browser#isConnected() to a `connected` boolean property —
+  // the old method throws "isConnected is not a function" on every check after the first
+  // (sharedBrowser starts null, so the very first call never evaluated this branch),
+  // meaning every PDF generation after the first since server start was silently broken.
+  if (!sharedBrowser || !sharedBrowser.connected) {
     const puppeteer = await getPuppeteerModule();
     sharedBrowser = await puppeteer.launch({
       headless: true,

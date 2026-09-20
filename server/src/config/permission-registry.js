@@ -15,6 +15,11 @@ const PERMISSION_GROUPS = [
     permissions: ['viewImeiTracking', 'manageImeiTracking'],
   },
   {
+    id: 'price_checker',
+    label: 'Price Checker',
+    permissions: ['viewPriceChecker', 'managePriceCheckerSources'],
+  },
+  {
     id: 'invoices',
     label: 'Invoices',
     permissions: ['viewInvoices', 'createInvoices', 'editInvoices', 'deleteInvoices', 'printInvoices'],

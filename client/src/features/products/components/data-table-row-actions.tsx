@@ -2,7 +2,7 @@ import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { Row } from '@tanstack/react-table'
 import { useNavigate } from '@tanstack/react-router'
 import { IconEdit, IconTrash } from '@tabler/icons-react'
-import { BarChart3, ClipboardEdit, Flag, Gauge } from 'lucide-react'
+import { BarChart3, ClipboardEdit, DollarSign, Flag, Gauge } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDispatch } from 'react-redux'
 import { cn } from '@/lib/utils'
@@ -44,6 +44,7 @@ export function DataTableRowActions({ row, lowStockThreshold, criticalStockThres
 
   const canEdit = hasPermission('editProducts' as any)
   const canDelete = hasPermission('deleteProducts' as any)
+  const canCheckPrice = hasPermission('viewPriceChecker')
 
   // Don't show actions menu if user has no permissions
   if (!canEdit && !canDelete) {
@@ -134,6 +135,16 @@ export function DataTableRowActions({ row, lowStockThreshold, criticalStockThres
               <BarChart3 size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
+          {canCheckPrice && (
+            <DropdownMenuItem
+              onClick={() => navigate({ to: '/price-checker', search: { q: row.original.name } })}
+            >
+              {t('Check Price')}
+              <DropdownMenuShortcut>
+                <DollarSign size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
           {canEdit && (
             <DropdownMenuItem
               onClick={() => {

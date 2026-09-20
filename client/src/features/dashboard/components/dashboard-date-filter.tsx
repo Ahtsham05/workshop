@@ -29,10 +29,13 @@ type Props = {
   className?: string
 }
 
-const PRESETS: { id: DashboardDatePreset; labelKey: string }[] = [
+// `shortKey` is what phones show — "This Week"/"This Month" don't fit four-across in a
+// ~310px card (the old inline-flex/shrink-0 group was ~340px wide and hung out of the
+// card's left edge), so below `sm` they read "Week"/"Month".
+const PRESETS: { id: DashboardDatePreset; labelKey: string; shortKey?: string }[] = [
   { id: 'today', labelKey: 'Today' },
-  { id: 'week', labelKey: 'This Week' },
-  { id: 'month', labelKey: 'This Month' },
+  { id: 'week', labelKey: 'This Week', shortKey: 'Week' },
+  { id: 'month', labelKey: 'This Month', shortKey: 'Month' },
   { id: 'custom', labelKey: 'Custom' },
 ]
 
@@ -55,31 +58,42 @@ export function DashboardDateFilter({
 
   return (
     <div className={cn('flex flex-wrap items-center justify-end gap-2', className)}>
-      <div className='inline-flex h-9 shrink-0 items-center rounded-lg border bg-muted/60 p-1'>
+      <div className='grid h-9 w-full grid-cols-4 items-center rounded-lg border bg-muted/60 p-1 sm:inline-flex sm:w-auto sm:shrink-0'>
         {PRESETS.map((preset) => (
           <button
             key={preset.id}
             type='button'
             onClick={() => setPreset(preset.id)}
             className={cn(
-              'inline-flex h-7 items-center rounded-md px-3 text-sm font-medium transition-colors',
+              'inline-flex h-7 w-full items-center justify-center whitespace-nowrap rounded-md px-1.5 text-sm font-medium transition-colors sm:w-auto sm:px-3',
               value.period === preset.id
                 ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {t(preset.labelKey)}
+            {preset.shortKey ? (
+              <>
+                <span className='sm:hidden'>{t(preset.shortKey)}</span>
+                <span className='hidden sm:inline'>{t(preset.labelKey)}</span>
+              </>
+            ) : (
+              t(preset.labelKey)
+            )}
           </button>
         ))}
       </div>
 
       {value.period === 'custom' ? (
-        <div className='flex h-9 items-center gap-1.5'>
+        // Phones: [start] To [end] as one three-column row (short "Sep 20, 2026" dates, no
+        // icon) — the long "September 20th, 2026" format made two buttons ~400px wide.
+        // sm+ keeps the original inline layout.
+        <div className='grid w-full grid-cols-[1fr_auto_1fr] items-center gap-1.5 sm:flex sm:h-9 sm:w-auto'>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant='outline' size='sm' className='h-9 justify-start gap-2 px-3 font-normal'>
-                <CalendarDays className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden />
-                {format(parseDateKey(value.startDate), 'PPP')}
+              <Button variant='outline' size='sm' className='h-9 min-w-0 justify-center gap-2 px-2 font-normal sm:justify-start sm:px-3'>
+                <CalendarDays className='hidden h-4 w-4 shrink-0 text-muted-foreground sm:block' aria-hidden />
+                <span className='sm:hidden'>{format(parseDateKey(value.startDate), 'PP')}</span>
+                <span className='hidden sm:inline'>{format(parseDateKey(value.startDate), 'PPP')}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className='w-auto p-0' align='start'>
@@ -99,9 +113,10 @@ export function DashboardDateFilter({
 
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant='outline' size='sm' className='h-9 justify-start gap-2 px-3 font-normal'>
-                <CalendarDays className='h-4 w-4 shrink-0 text-muted-foreground' aria-hidden />
-                {format(parseDateKey(value.endDate), 'PPP')}
+              <Button variant='outline' size='sm' className='h-9 min-w-0 justify-center gap-2 px-2 font-normal sm:justify-start sm:px-3'>
+                <CalendarDays className='hidden h-4 w-4 shrink-0 text-muted-foreground sm:block' aria-hidden />
+                <span className='sm:hidden'>{format(parseDateKey(value.endDate), 'PP')}</span>
+                <span className='hidden sm:inline'>{format(parseDateKey(value.endDate), 'PPP')}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className='w-auto p-0' align='start'>

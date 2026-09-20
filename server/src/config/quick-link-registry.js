@@ -178,6 +178,17 @@ const QUICK_LINK_ACTIONS = [
     permission: 'viewImeiTracking',
     excludeBusinessTypes: ['school', 'restaurant'],
   },
+  {
+    actionKey: 'price_checker',
+    label: 'Price Checker',
+    iconKey: 'DollarSign',
+    route: '/price-checker',
+    category: 'Catalog & Inventory',
+    color: 'bg-green-600 hover:bg-green-700',
+    permission: 'viewPriceChecker',
+    excludeBusinessTypes: ['school', 'restaurant'],
+    synonyms: ['check price', 'compare price', 'competitor price'],
+  },
 
   // ---- Contacts ----
   {

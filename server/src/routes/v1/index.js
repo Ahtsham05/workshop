@@ -7,6 +7,7 @@ const masterProductRoute = require('./masterProduct.route');
 const categoryRoute = require('./category.route');
 const subCategoryRoute = require('./subCategory.route');
 const brandRoute = require('./brand.route');
+const priceCheckerRoute = require('./priceChecker.route');
 const productAttributeRoute = require('./productAttribute.route');
 const productVariantRoute = require('./productVariant.route');
 const inventoryRoute = require('./inventory.route');
@@ -182,6 +183,10 @@ const defaultRoutes = [
   {
     path: '/brands',
     route: brandRoute,
+  },
+  {
+    path: '/price-checker',
+    route: priceCheckerRoute,
   },
   {
     path: '/product-attributes',
