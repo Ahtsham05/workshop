@@ -5,6 +5,7 @@ const branchScope = require('../../middlewares/branchScope');
 const productValidation = require('../../validations/product.validation');
 const productController = require('../../controllers/product.controller');
 const productAnalyticsController = require('../../controllers/productAnalytics.controller');
+const productBranchSyncController = require('../../controllers/productBranchSync.controller');
 const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
@@ -120,6 +121,18 @@ router
 router
   .route('/bulk-delete')
   .delete(auth('deleteProducts'), validate(productValidation.bulkDeleteProducts), productController.bulkDeleteProducts);
+
+// "Sync Across Branches" — push products from this branch to the caller's other branches.
+// Creating products in another branch is still creating products, so it reuses the
+// createProducts permission (the same call the pull-side master-products import makes);
+// which branches may be targeted is checked per request in the service. Registered ahead
+// of the `/:productId` catch-all below.
+router
+  .route('/branch-sync/preview')
+  .post(auth('createProducts'), validate(productValidation.previewBranchSync), productBranchSyncController.previewBranchSync);
+router
+  .route('/branch-sync')
+  .post(auth('createProducts'), validate(productValidation.syncProductsToBranches), productBranchSyncController.syncProductsToBranches);
 
 // Bulk add (import) route
 router

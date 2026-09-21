@@ -22,6 +22,7 @@ import { ProductKpis } from './components/product-kpis'
 import { ProductInsights } from './components/product-insights'
 import { PriceHistoryChart, StockFlowChart } from './components/product-flow-charts'
 import { ProductActivityTab } from './components/product-activity-tab'
+import { ProductPriceHistoryTab } from './components/product-price-history-tab'
 import { ProductCustomersTab } from './components/product-customers-tab'
 import { ProductSuppliersTab } from './components/product-suppliers-tab'
 import { ProductVariantsTab } from './components/product-variants-tab'
@@ -132,6 +133,7 @@ export default function ProductDetailsPage({ productId }: { productId: string })
             <div className='overflow-x-auto'>
               <TabsList>
                 <TabsTrigger value='activity'>{t('Activity')}</TabsTrigger>
+                <TabsTrigger value='prices'>{t('Price history')}</TabsTrigger>
                 <TabsTrigger value='customers'>
                   {t('Customers')}
                   {analytics.customers.uniqueCustomers > 0 ? (
@@ -154,6 +156,9 @@ export default function ProductDetailsPage({ productId }: { productId: string })
             </div>
             <TabsContent value='activity'>
               <ProductActivityTab productId={productId} range={range} />
+            </TabsContent>
+            <TabsContent value='prices'>
+              <ProductPriceHistoryTab productId={productId} hasVariants={hasVariants} />
             </TabsContent>
             <TabsContent value='customers'>
               <ProductCustomersTab data={analytics} />

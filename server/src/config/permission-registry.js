@@ -20,6 +20,11 @@ const PERMISSION_GROUPS = [
     permissions: ['viewPriceChecker', 'managePriceCheckerSources'],
   },
   {
+    id: 'price_updates',
+    label: 'Price Updates',
+    permissions: ['viewPriceUpdates', 'managePriceUpdates'],
+  },
+  {
     id: 'invoices',
     label: 'Invoices',
     permissions: ['viewInvoices', 'createInvoices', 'editInvoices', 'deleteInvoices', 'printInvoices'],
@@ -348,6 +353,7 @@ const PERMISSION_TAB_GROUPS = {
   business: [
     'products',
     'imei_tracking',
+    'price_updates',
     'invoices',
     'purchases',
     'purchase_orders',

@@ -237,6 +237,7 @@ const createDefaultRoles = async () => {
         viewInstallments: true, manageInstallments: true,
         viewImeiTracking: true, manageImeiTracking: true,
         viewPriceChecker: true, managePriceCheckerSources: true,
+        viewPriceUpdates: true, managePriceUpdates: true,
         viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
         viewExpenseReports: true, viewSimSaleReports: true, viewProfitLossReports: true,
         viewLoadReports: true, viewRepairReports: true, viewServiceReports: true,

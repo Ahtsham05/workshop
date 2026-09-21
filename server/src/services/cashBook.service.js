@@ -117,6 +117,17 @@ const deleteEntriesByReference = async (referenceId, referenceModel) => {
   return CashBookEntry.deleteMany({ referenceId: id, referenceModel });
 };
 
+/** Reword every cash book entry a source document owns. Wording only — never touches an amount. */
+const updateDescriptionByReference = async (referenceId, referenceModel, description) => {
+  if (!referenceId || !referenceModel) {
+    return { modifiedCount: 0 };
+  }
+  const id = mongoose.Types.ObjectId.isValid(String(referenceId))
+    ? new mongoose.Types.ObjectId(String(referenceId))
+    : referenceId;
+  return CashBookEntry.updateMany({ referenceId: id, referenceModel }, { $set: { description } });
+};
+
 /** Delete just one leg (type 'income' or 'expense') of a reference's cash book entries —
  * for sources like BillPayment whose two legs can independently move to/from a wallet
  * (which carries no CashBookEntry at all) without affecting the other leg. */
@@ -454,6 +465,7 @@ module.exports = {
   createEntry,
   upsertReferenceEntry,
   deleteEntriesByReference,
+  updateDescriptionByReference,
   deleteEntryByReferenceAndType,
   deleteEmployeeLedgerPaymentCashBook,
   queryEntries,

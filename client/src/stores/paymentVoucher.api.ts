@@ -1,6 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 import { invalidateWalletCaches } from './wallet-cache-invalidation'
+import { auditLogApi } from './auditLog.api'
 
 /** A voucher moves a Bank Account's balance and posts Cash Book entries server-side, but
  *  paymentVoucherApi is a separate RTK Query slice from every cache that displays that —
@@ -12,6 +13,21 @@ const invalidateWalletsAndCashBook = async (_arg: unknown, { dispatch, queryFulf
   try {
     await queryFulfilled
     invalidateWalletCaches(dispatch)
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
+
+/** An edit also writes an audit-trail entry, which the voucher's Activity tab reads from a
+ *  separate slice — refresh it too so the edit shows up without reopening the page. */
+const invalidateAfterUpdate = async (
+  _arg: unknown,
+  { dispatch, queryFulfilled }: { dispatch: (action: never) => unknown; queryFulfilled: Promise<unknown> }
+) => {
+  try {
+    await queryFulfilled
+    invalidateWalletCaches(dispatch as (action: unknown) => unknown)
+    dispatch(auditLogApi.util.invalidateTags(['AuditLog']) as never)
   } catch {
     // mutation failed — nothing to invalidate
   }
@@ -40,6 +56,14 @@ export interface PaymentVoucherLine {
   supplierLedgerEntryId?: string
 }
 
+/** `createdBy` / `updatedBy` come back as a populated user from the single-voucher endpoint,
+ *  but as a bare id from the list. */
+export interface PaymentVoucherUser {
+  id: string
+  name: string
+  email?: string
+}
+
 export interface PaymentVoucherRecord {
   id: string
   voucherNumber: string
@@ -50,8 +74,10 @@ export interface PaymentVoucherRecord {
   totalAmount: number
   reference?: string
   notes?: string
-  createdBy?: { id: string; name: string } | string
+  createdBy?: PaymentVoucherUser | string
+  updatedBy?: PaymentVoucherUser | string
   createdAt: string
+  updatedAt?: string
 }
 
 export interface CreatePaymentVoucherLine {
@@ -69,6 +95,17 @@ export interface CreatePaymentVoucherRequest {
   lines: CreatePaymentVoucherLine[]
   reference?: string
   notes?: string
+}
+
+/** Same as create, but a line that edits an existing one carries that line's `id`; a line
+ *  without one is new, and a stored line that isn't sent back is removed. */
+export interface UpdatePaymentVoucherLine extends CreatePaymentVoucherLine {
+  id?: string
+}
+
+export interface UpdatePaymentVoucherRequest extends Omit<CreatePaymentVoucherRequest, 'lines'> {
+  id: string
+  lines: UpdatePaymentVoucherLine[]
 }
 
 export interface GetPaymentVouchersParams {
@@ -107,6 +144,11 @@ export const paymentVoucherApi = createApi({
       invalidatesTags: ['PaymentVoucher'],
       onQueryStarted: invalidateWalletsAndCashBook,
     }),
+    updatePaymentVoucher: builder.mutation<PaymentVoucherRecord, UpdatePaymentVoucherRequest>({
+      query: ({ id, ...body }) => ({ url: `/payment-vouchers/${id}`, method: 'PATCH', body }),
+      invalidatesTags: ['PaymentVoucher'],
+      onQueryStarted: invalidateAfterUpdate,
+    }),
     deletePaymentVoucher: builder.mutation<void, string>({
       query: (id) => ({ url: `/payment-vouchers/${id}`, method: 'DELETE' }),
       invalidatesTags: ['PaymentVoucher'],
@@ -119,5 +161,6 @@ export const {
   useGetPaymentVouchersQuery,
   useGetPaymentVoucherQuery,
   useCreatePaymentVoucherMutation,
+  useUpdatePaymentVoucherMutation,
   useDeletePaymentVoucherMutation,
 } = paymentVoucherApi

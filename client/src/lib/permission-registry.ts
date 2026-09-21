@@ -24,6 +24,7 @@ export type PermissionKey =
   | 'viewInstallments' | 'manageInstallments'
   | 'viewImeiTracking' | 'manageImeiTracking'
   | 'viewPriceChecker' | 'managePriceCheckerSources'
+  | 'viewPriceUpdates' | 'managePriceUpdates'
   | 'viewUsedPhones' | 'buyUsedPhones' | 'editUsedPhones' | 'sellUsedPhones' | 'deleteUsedPhones'
   | 'viewNewPhones' | 'buyNewPhones' | 'editNewPhones' | 'sellNewPhones' | 'deleteNewPhones'
   | 'viewReports' | 'viewSalesReports' | 'viewPurchaseReports' | 'viewInventoryReports'
@@ -82,6 +83,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'products', label: 'Products', permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'] },
   { id: 'imei_tracking', label: 'IMEI / Serial Tracking', permissions: ['viewImeiTracking', 'manageImeiTracking'] },
   { id: 'price_checker', label: 'Price Checker', permissions: ['viewPriceChecker', 'managePriceCheckerSources'] },
+  { id: 'price_updates', label: 'Price Updates', permissions: ['viewPriceUpdates', 'managePriceUpdates'] },
   { id: 'invoices', label: 'Invoices', permissions: ['viewInvoices', 'createInvoices', 'editInvoices', 'deleteInvoices', 'printInvoices'] },
   { id: 'purchases', label: 'Purchases', permissions: ['viewPurchases', 'createPurchases', 'editPurchases', 'deletePurchases'] },
   { id: 'purchase_orders', label: 'Purchase Orders', permissions: ['viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders', 'deletePurchaseOrders', 'receivePurchaseOrders'] },
@@ -167,7 +169,7 @@ export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.pe
 
 export const PERMISSION_TAB_GROUPS = {
   business: [
-    'products', 'imei_tracking', 'price_checker', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
+    'products', 'imei_tracking', 'price_checker', 'price_updates', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
     'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system', 'leads',
     'communication_log', 'reminders', 'whatsapp', 'sms', 'ai_assistant', 'insights', 'purchase_suggestions', 'barcode',
   ],

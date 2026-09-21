@@ -83,6 +83,8 @@ import { TagsInput } from '@/components/tags-input'
 import { ColorSwatchPicker } from '@/components/color-swatch-picker'
 import { useGetDistinctProductTagsQuery } from '@/stores/product.api'
 import { MarkupPercentInput } from './markup-percent-input'
+import { SyncToBranchesOption } from './sync-to-branches-option'
+import { summarizeBranchSync, useBranchSyncRunner, useSyncTargetBranches } from '../hooks/use-branch-sync'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -199,6 +201,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
 
   const dispatch = useDispatch<AppDispatch>()
   const [createProductVariant] = useCreateProductVariantMutation()
+  // "Also add to my other branches" — ticked by default for a new product. `null` ids means
+  // every other branch; the picker narrows it. See sync-to-branches-option.tsx.
+  const { targets: syncTargets } = useSyncTargetBranches()
+  const runBranchSync = useBranchSyncRunner()
+  const [syncToBranches, setSyncToBranches] = useState(true)
+  const [syncBranchIds, setSyncBranchIds] = useState<string[] | null>(null)
   const { categories } = useSelector((state: RootState) => state.category)
   const { subCategories } = useSelector((state: RootState) => state.subCategory)
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -217,6 +225,13 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   // Serial number tracking (TVs, laptops, appliances) applies to every business type.
   const isMobileShop = isMobileShopBusiness(orgData?.businessType || user?.businessType)
   
+  // Every fresh Add Product starts ticked and aimed at all the other branches.
+  useEffect(() => {
+    if (!open) return
+    setSyncToBranches(true)
+    setSyncBranchIds(null)
+  }, [open])
+
   // Refetch categories when dialog opens (in case new ones were added)
   useEffect(() => {
     if (open) {
@@ -428,6 +443,30 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     }
   }
 
+  // Adds the just-created product to the other branches the user ticked. Runs LAST —
+  // after any variants were saved — so the variants come across too. It can never fail the
+  // save: the product already exists here, so a problem is reported as a warning that says
+  // where to retry, not as an error.
+  const syncCreatedProduct = async (productId: string) => {
+    const branchIds = (syncBranchIds === null ? syncTargets : syncTargets.filter((b) => syncBranchIds.includes(b.id))).map((b) => b.id)
+    if (branchIds.length === 0) return
+    const run = await runBranchSync({ productIds: [productId], branchIds })
+    const { created, failed, branchesReached } = summarizeBranchSync(run.result)
+    const firstFailure = run.result.branches.flatMap((b) => (b.error ? [b.error] : b.failed.map((f) => f.error)))[0]
+    const problem = run.errorMessage ?? firstFailure ?? run.result.skipped[0]?.reason
+    if (run.stoppedEarly || failed > 0 || run.result.skipped.length > 0 || problem) {
+      // react-hot-toast has no warning variant or description line — one longer-lived message.
+      toast(
+        `${t('Saved here, but not added to every branch')}${problem ? `: ${problem}` : ''}. ${t('Retry from the Products page: Added Today → Sync Across Branches.')}`,
+        { icon: '⚠️', duration: 9000 }
+      )
+    } else if (created > 0) {
+      toast.success(t('Also added to {{count}} other branch(es)', { count: branchesReached }))
+    } else {
+      toast(t('Your other branches already have this product'), { icon: 'ℹ️' })
+    }
+  }
+
   // Without this, pressing Enter (or clicking Save) while a required field is still
   // invalid (e.g. Sale Price left at 0) fails validation completely silently — looks
   // exactly like the button/Enter key "did nothing".
@@ -478,6 +517,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         }
         setFetch?.((prev: any) => !prev)
         dispatch(imeiApi.util.invalidateTags(['Imei']))
+        if (syncToBranches && syncTargets.length > 0) {
+          await syncCreatedProduct(created?.id || created?._id)
+        }
         onCreated?.(created)
       }
       form.reset()
@@ -1896,6 +1938,16 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
           </Form>
         </div>
         <DialogFooter className='shrink-0 border-t border-border/60 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80'>
+          {!isEdit && (
+            <SyncToBranchesOption
+              targets={syncTargets}
+              checked={syncToBranches}
+              onCheckedChange={setSyncToBranches}
+              selectedIds={syncBranchIds}
+              onSelectedIdsChange={setSyncBranchIds}
+              disabled={isSubmitting}
+            />
+          )}
           <Button type='button' variant='outline' onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             {t('cancel')}
           </Button>

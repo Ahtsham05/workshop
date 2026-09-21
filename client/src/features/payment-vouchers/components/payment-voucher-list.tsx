@@ -2,19 +2,26 @@ import { useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { format, isValid } from 'date-fns'
-import { Printer, Trash2, Receipt } from 'lucide-react'
+import { Eye, Pencil, Printer, Trash2, Receipt } from 'lucide-react'
 import { usePermissions } from '@/context/permission-context'
 import { RootState } from '@/stores/store'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import {
   useGetPaymentVouchersQuery,
+  useGetPaymentVoucherQuery,
   useDeletePaymentVoucherMutation,
   type PaymentVoucherRecord,
 } from '@/stores/paymentVoucher.api'
 import { useBranchPaperSize, useBranchPrintOrientation } from '@/features/invoice/utils/paper-format'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { printPaymentVoucher } from '../utils/print-payment-voucher'
+import {
+  PAYEE_TYPE_BADGE_CLASS, PAYEE_TYPE_LABELS,
+  toPaymentSheetData,
+} from '../utils/voucher-sheet-data'
+import { VoucherDetailSheet } from './voucher-detail-sheet'
+import { PaymentVoucherDialog } from './payment-voucher-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -51,19 +58,6 @@ const formatDate = (value?: string) => {
   return isValid(parsed) ? format(parsed, 'MMM dd, yyyy') : '-'
 }
 
-const PAYEE_TYPE_BADGE_CLASS: Record<string, string> = {
-  expense: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
-  supplier: 'bg-blue-100 text-blue-700 hover:bg-blue-100',
-  other: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
-  mixed: 'bg-purple-100 text-purple-700 hover:bg-purple-100',
-}
-
-const PAYEE_TYPE_LABELS: Record<string, string> = {
-  expense: 'Expense',
-  supplier: 'Supplier',
-  other: 'Other',
-}
-
 const voucherTypeLabel = (voucher: PaymentVoucherRecord) => {
   const types = new Set(voucher.lines.map((l) => l.payeeType))
   if (types.size > 1) return 'mixed'
@@ -79,7 +73,7 @@ export function PaymentVoucherList() {
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
   const { hasExplicitPermission } = usePermissions()
-  const canDelete = hasExplicitPermission('managePaymentVouchers')
+  const canManage = hasExplicitPermission('managePaymentVouchers')
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const { data: walletsData } = useGetWalletsQuery()
@@ -92,6 +86,15 @@ export function PaymentVoucherList() {
   const [payeeType, setPayeeType] = useState(ALL_TYPES)
   const [voucherToDelete, setVoucherToDelete] = useState<PaymentVoucherRecord | null>(null)
 
+  // What is open is tracked separately from what it shows, so a closing sheet/dialog keeps its
+  // content for the exit animation instead of flashing empty.
+  const [viewingId, setViewingId] = useState<string | null>(null)
+  const [viewOpen, setViewOpen] = useState(false)
+  const [editing, setEditing] = useState<PaymentVoucherRecord | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
+  // Editing from the sheet returns to it afterwards, so view → edit → save reads as one flow.
+  const [returnToViewId, setReturnToViewId] = useState<string | null>(null)
+
   const { data, isLoading } = useGetPaymentVouchersQuery({
     search: search || undefined,
     bankAccountId: bankAccountId === ALL_ACCOUNTS ? undefined : bankAccountId,
@@ -99,6 +102,13 @@ export function PaymentVoucherList() {
     limit: 50,
   })
   const vouchers = data?.results ?? []
+
+  // The row is enough to open the sheet instantly; the single-voucher endpoint adds who created
+  // and last edited it. `currentData` (not `data`) so it never shows the previously opened one.
+  const { currentData: detail, isFetching: isFetchingDetail } = useGetPaymentVoucherQuery(viewingId as string, {
+    skip: !viewingId || !viewOpen,
+  })
+  const viewingRecord: PaymentVoucherRecord | undefined = detail ?? vouchers.find((v) => v.id === viewingId)
 
   const [deleteVoucher, { isLoading: isDeleting }] = useDeletePaymentVoucherMutation()
 
@@ -122,6 +132,31 @@ export function PaymentVoucherList() {
       paperSize,
       orientation,
     )
+  }
+
+  const openView = (voucher: PaymentVoucherRecord) => {
+    setViewingId(voucher.id)
+    setViewOpen(true)
+  }
+
+  const openEdit = (voucher: PaymentVoucherRecord, fromView = false) => {
+    setEditing(voucher)
+    setEditOpen(true)
+    if (fromView) {
+      // A Sheet is also a dialog, and the edit form's keyboard navigation binds to the first open
+      // one — so the sheet has to be closed while the form is up.
+      setReturnToViewId(voucher.id)
+      setViewOpen(false)
+    }
+  }
+
+  const handleEditOpenChange = (open: boolean) => {
+    setEditOpen(open)
+    if (!open && returnToViewId) {
+      setViewingId(returnToViewId)
+      setViewOpen(true)
+      setReturnToViewId(null)
+    }
   }
 
   const handleDelete = async () => {
@@ -199,8 +234,19 @@ export function PaymentVoucherList() {
                 </TableHeader>
                 <TableBody>
                   {vouchers.map((voucher) => (
-                    <TableRow key={voucher.id}>
-                      <TableCell className='font-medium whitespace-nowrap'>{voucher.voucherNumber}</TableCell>
+                    <TableRow key={voucher.id} className='cursor-pointer' onClick={() => openView(voucher)}>
+                      <TableCell className='font-medium whitespace-nowrap'>
+                        <button
+                          type='button'
+                          className='rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openView(voucher)
+                          }}
+                        >
+                          {voucher.voucherNumber}
+                        </button>
+                      </TableCell>
                       <TableCell className='whitespace-nowrap'>{formatDate(voucher.date)}</TableCell>
                       <TableCell>{voucher.bankAccountName || '-'}</TableCell>
                       <TableCell className='max-w-[220px]'>
@@ -218,11 +264,19 @@ export function PaymentVoucherList() {
                         {formatMoney(Number(voucher.totalAmount || 0))}
                       </TableCell>
                       <TableCell>
-                        <div className='flex items-center justify-end gap-1'>
+                        <div className='flex items-center justify-end gap-1' onClick={(e) => e.stopPropagation()}>
+                          <Button size='sm' variant='outline' className='h-8' onClick={() => openView(voucher)} title='View voucher'>
+                            <Eye className='h-4 w-4' />
+                          </Button>
+                          {canManage ? (
+                            <Button size='sm' variant='outline' className='h-8' onClick={() => openEdit(voucher)} title='Edit voucher'>
+                              <Pencil className='h-4 w-4' />
+                            </Button>
+                          ) : null}
                           <Button size='sm' variant='outline' className='h-8' onClick={() => handlePrint(voucher)} title='Print voucher'>
                             <Printer className='h-4 w-4' />
                           </Button>
-                          {canDelete ? (
+                          {canManage ? (
                             <Button
                               size='sm'
                               variant='outline'
@@ -243,6 +297,26 @@ export function PaymentVoucherList() {
           )}
         </CardContent>
       </Card>
+
+      <VoucherDetailSheet
+        kind='payment'
+        voucher={viewingRecord ? toPaymentSheetData(viewingRecord) : null}
+        open={viewOpen}
+        onOpenChange={setViewOpen}
+        isRefreshing={isFetchingDetail}
+        onPrint={viewingRecord ? () => handlePrint(viewingRecord) : undefined}
+        onEdit={canManage && viewingRecord ? () => openEdit(viewingRecord, true) : undefined}
+        onDelete={
+          canManage && viewingRecord
+            ? () => {
+                setViewOpen(false)
+                setVoucherToDelete(viewingRecord)
+              }
+            : undefined
+        }
+      />
+
+      <PaymentVoucherDialog voucher={editing} open={editOpen} onOpenChange={handleEditOpenChange} />
 
       <AlertDialog open={!!voucherToDelete} onOpenChange={(open) => !open && setVoucherToDelete(null)}>
         <AlertDialogContent>

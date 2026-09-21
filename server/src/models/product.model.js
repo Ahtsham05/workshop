@@ -199,6 +199,9 @@ ProductSchema.index({ organizationId: 1, branchId: 1, name: 1 }, { unique: false
 ProductSchema.index({ organizationId: 1, branchId: 1, tags: 1 });
 // Supports the dashboard low-stock widget's "lowest stock first, top 20" query.
 ProductSchema.index({ organizationId: 1, branchId: 1, stockQuantity: 1 });
+// Supports the Products page's "Added Today" view and its header count (a createdAt range
+// within one branch), which are read on every list refresh.
+ProductSchema.index({ organizationId: 1, branchId: 1, createdAt: -1 });
 
 // SKU and barcode are each unique per (organizationId, branchId) — the same code can be
 // reused by a different branch, or a different organization entirely; this is what

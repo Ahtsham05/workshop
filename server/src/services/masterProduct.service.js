@@ -651,6 +651,18 @@ const removeImportedProducts = async (productIds) => {
  * `activate` decides whether the new products are sellable straight away. It defaults to
  * false, the same review-first default as an Excel or AI-scan import.
  *
+ * Callers inside the server (never the HTTP schema — see masterProduct.validation.js) may
+ * put extra fields on an item, which is how productBranchSync.service.js pushes a concrete
+ * product to other branches through this same write path instead of a second copy of it:
+ *   - `isActive`      overrides `activate` for this one product.
+ *   - `overrides`     values that replace the MasterProduct's template for this item. The
+ *                     master is only ever the shape a product had when it was first linked;
+ *                     editing a product never refreshes it, so a push must carry the source
+ *                     product's current name/barcode/tax/etc. itself.
+ *   - `variants`      the real variants to create, in MasterProductVariant's shape, instead
+ *                     of reading them off the master (same staleness reason).
+ *   - `taxCategoryId` overrides the tax category otherwise borrowed from another branch.
+ *
  * The barcode is carried over when no other product at this branch already uses it —
  * barcodes are unique per branch (see product.model.js), same as
  * inventoryTransfer.service.js#findOrCreateDestinationProduct copies it.
@@ -662,7 +674,7 @@ const removeImportedProducts = async (productIds) => {
  *
  * @returns {Promise<{ importedCount: number, alreadyImportedCount: number, failedCount: number, failed: Array<{ masterProductId: string, name: string|null, error: string }> }>}
  */
-const importMasterProducts = async ({ organizationId, branchId, createdBy, items, activate = false }) => {
+const importMasterProductsUnlocked = async ({ organizationId, branchId, createdBy, items, activate = false }) => {
   const productService = require('./product.service');
   const isActive = !!activate;
 
@@ -706,16 +718,26 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
     const master = masterById.get(masterId);
     if (!master) fail(masterId, 'This product is no longer available to import');
     else if (alreadyHereIds.has(masterId)) alreadyImportedCount += 1;
-    else pending.push({ item, master });
+    else pending.push({ item, master: item.overrides ? { ...master, ...item.overrides } : master });
   }
 
-  const variantMasterIds = pending.filter((p) => p.master.hasVariants).map((p) => p.master._id);
+  // A caller-supplied `variants` list already says which variants to create — only the
+  // rest need reading off the master.
+  const variantMasterIds = pending.filter((p) => p.master.hasVariants && !p.item.variants).map((p) => p.master._id);
   const barcodes = pending.map((p) => p.master.barcode).filter(Boolean);
-  const [masterVariants, barcodesInUse] = await Promise.all([
+  const productSkus = pending.map((p) => p.master.sku).filter(Boolean);
+  const variantBarcodes = pending.flatMap((p) => (p.item.variants || []).map((v) => v.barcode)).filter(Boolean);
+  const [masterVariants, barcodesInUse, productSkusInUse, variantBarcodesInUse] = await Promise.all([
     variantMasterIds.length ? MasterProductVariant.find({ masterProductId: { $in: variantMasterIds } }).lean() : [],
     barcodes.length ? Product.find({ organizationId, branchId, barcode: { $in: barcodes } }).select('barcode').lean() : [],
+    productSkus.length ? Product.find({ organizationId, branchId, sku: { $in: productSkus } }).select('sku').lean() : [],
+    variantBarcodes.length
+      ? ProductVariant.find({ organizationId, branchId, barcode: { $in: variantBarcodes } }).select('barcode').lean()
+      : [],
   ]);
   const takenBarcodes = new Set(barcodesInUse.map((p) => p.barcode));
+  const takenProductSkus = new Set(productSkusInUse.map((p) => p.sku));
+  const takenVariantBarcodes = new Set(variantBarcodesInUse.map((v) => v.barcode));
   const variantsByMaster = new Map();
   for (const mv of masterVariants) {
     const key = String(mv.masterProductId);
@@ -727,7 +749,7 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
   const entries = [];
   for (const { item, master } of pending) {
     const id = String(master._id);
-    const variants = master.hasVariants ? variantsByMaster.get(id) || [] : [];
+    const variants = master.hasVariants ? item.variants || variantsByMaster.get(id) || [] : [];
     const soleVariant = variants.length === 1 ? variants[0] : null;
     // With more than one variant there's no way to know how one opening quantity splits
     // across them, so a multi-variant product always starts at zero.
@@ -757,8 +779,9 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
       ...entry,
       price: firstFiniteNumber(item.price, master.defaultPrice, source?.price),
       cost: firstFiniteNumber(item.cost, master.defaultCost, source?.cost),
-      taxCategoryId: source?.taxCategoryId || null,
+      taxCategoryId: item.taxCategoryId !== undefined ? item.taxCategoryId : source?.taxCategoryId || null,
       barcode: master.barcode && !takenBarcodes.has(master.barcode) ? master.barcode : undefined,
+      sku: master.sku && !takenProductSkus.has(master.sku) ? master.sku : undefined,
       needsOpeningRecords: stockQuantity > 0 && (tracksBatch || tracksSerial),
     });
   }
@@ -812,11 +835,19 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
       hasVariants: !!master.hasVariants,
       masterProductId: master._id,
       taxCategoryId: entry.taxCategoryId,
-      isActive,
+      isActive: typeof entry.item.isActive === 'boolean' ? entry.item.isActive : isActive,
+      // Only ever present when a caller pushed a concrete product's values (`overrides`) —
+      // a MasterProduct itself carries none of these, so a plain import is unchanged.
+      // Shelf location is deliberately never copied: it is a place in one shop.
+      ...(master.tags?.length ? { tags: master.tags } : {}),
+      ...(master.color ? { color: master.color } : {}),
+      ...(master.lowStockThreshold != null ? { lowStockThreshold: master.lowStockThreshold } : {}),
+      ...(master.criticalStockThreshold != null ? { criticalStockThreshold: master.criticalStockThreshold } : {}),
     };
     // insertMany skips the schema's pre('save') hook that strips an empty barcode, and an
     // empty string would collide under the partial unique index — only set a real one.
     if (entry.barcode) doc.barcode = entry.barcode;
+    if (entry.sku) doc.sku = entry.sku;
     return doc;
   };
 
@@ -830,6 +861,9 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
       createdBy,
       isDefault: false,
       ...(sku && !takenSkus.has(sku) ? { sku } : {}),
+      // Only a caller-supplied variant (see `variants` above) carries a barcode — a
+      // MasterProductVariant never has one. Barcodes are unique per branch, like SKUs.
+      ...(masterVariant.barcode && !takenVariantBarcodes.has(masterVariant.barcode) ? { barcode: masterVariant.barcode } : {}),
       attributes: masterVariant.attributes,
       price: masterVariant.defaultPrice ?? entry.price,
       cost: masterVariant.defaultCost ?? entry.cost,
@@ -1051,12 +1085,35 @@ const importMasterProducts = async ({ organizationId, branchId, createdBy, items
   return { importedCount, alreadyImportedCount, failedCount: failed.length, failed };
 };
 
+// Whether a master is "already here" is read before anything is written, so two imports
+// into one branch running at once (a double-click, or one person pulling while another
+// pushes) would both see it missing and each create it — a duplicate product. Running
+// them one after another per branch lets the second see the first's products and count
+// them as already imported. Per process only; it costs nothing when there is no overlap.
+const importTailByBranch = new Map();
+
+const importMasterProducts = (args) => {
+  const key = `${args.organizationId}:${args.branchId}`;
+  const previous = importTailByBranch.get(key) || Promise.resolve();
+  const run = previous.then(() => importMasterProductsUnlocked(args));
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  importTailByBranch.set(key, tail);
+  tail.then(() => {
+    if (importTailByBranch.get(key) === tail) importTailByBranch.delete(key);
+  });
+  return run;
+};
+
 module.exports = {
   isMasterProductRolloutEnabledForOrg,
   findOrCreateMasterProductForProduct,
   findOrCreateMasterVariantForVariant,
   linkProductToMasterProduct,
   linkProductsToMasterProductsBulk,
+  linkUnlinkedProductsForOrg,
   getImportableMasterProducts,
   getImportableMasterProductIds,
   importMasterProducts,

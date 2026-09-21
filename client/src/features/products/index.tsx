@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Edit, Package, Boxes, Wallet, CircleDollarSign, Sparkles, Trash2, Tags } from 'lucide-react'
+import { Edit, Package, Boxes, Wallet, CircleDollarSign, Sparkles, Trash2, Tags, RefreshCw, CalendarPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
@@ -40,6 +40,8 @@ import { useFormatMoney } from '@/lib/format-money'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 import { BulkCategoryDialog } from './components/bulk-category-dialog'
+import { SyncBranchesDialog } from './components/sync-branches-dialog'
+import { useSyncTargetBranches } from './hooks/use-branch-sync'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BarChart3, LayoutList } from 'lucide-react'
@@ -95,7 +97,7 @@ export default function Products() {
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingAllProducts, setLoadingAllProducts] = useState(true)
-  const [productStats, setProductStats] = useState<{ totalProducts: number; totalStockQuantity: number; totalStockValue: number } | null>(null)
+  const [productStats, setProductStats] = useState<{ totalProducts: number; totalStockQuantity: number; totalStockValue: number; addedTodayCount?: number } | null>(null)
   const [loadingStats, setLoadingStats] = useState(true)
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
@@ -126,6 +128,11 @@ export default function Products() {
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false)
+  // "Added Today" view — only what this branch added today (Pakistan calendar). Resolved by
+  // the server on every fetch, so it is simply empty again the next business day.
+  const [addedTodayOnly, setAddedTodayOnly] = useState(false)
+  const [syncOpen, setSyncOpen] = useState(false)
+  const [syncInitialSource, setSyncInitialSource] = useState<'selected' | 'addedToday' | undefined>(undefined)
   const [categoryBreakdown, setCategoryBreakdown] = useState<CategoryBreakdownRow[]>([])
   const [loadingCategoryBreakdown, setLoadingCategoryBreakdown] = useState(false)
   // Column-header sort — resolved server-side (see buildSortByParam) so it reorders the
@@ -146,6 +153,9 @@ export default function Products() {
     [navigate]
   )
   const formatCurrency = useFormatMoney()
+  // The user's other branches — empty for a one-branch shop, which hides every sync control.
+  const { targets: syncTargets } = useSyncTargetBranches()
+  const addedTodayCount = productStats?.addedTodayCount ?? 0
   // Re-sorts the current page (active-first/inactive-last) after a per-row Active
   // toggle — that switch flips instantly on its own but has no way to move the row
   // without this, see active-toggle-cell.tsx.
@@ -219,7 +229,10 @@ export default function Products() {
   // capped at 1000 rows and would silently under-report once the catalog grows past that.
   useEffect(() => {
     setLoadingStats(true)
-    dispatch(fetchProductStats(isSingleCategorySelected ? { category: categoryFilter } : {}))
+    dispatch(fetchProductStats({
+      ...(isSingleCategorySelected ? { category: categoryFilter } : {}),
+      ...(addedTodayOnly ? { addedToday: true } : {}),
+    }))
       .then((data) => {
         if (data.payload) {
           setProductStats(data.payload)
@@ -230,11 +243,11 @@ export default function Products() {
         console.error('Error fetching product stats:', error)
         setLoadingStats(false)
       })
-  }, [fetch, dispatch, categoryFilter, isSingleCategorySelected])
+  }, [fetch, dispatch, categoryFilter, isSingleCategorySelected, addedTodayOnly])
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter])
+  }, [debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, addedTodayOnly])
 
   // Fetch paginated products for table display — skipped in breakdown mode, which
   // shows the per-category rollup instead of the flat table.
@@ -264,6 +277,7 @@ export default function Products() {
       ...(costMax ? { costMax } : {}),
       ...(trackingFilter.imei ? { trackImei: true } : {}),
       ...(trackingFilter.serial ? { trackSerial: true } : {}),
+      ...(addedTodayOnly ? { addedToday: true } : {}),
     };
 
     dispatch(fetchProducts(params))
@@ -287,7 +301,7 @@ export default function Products() {
         setLoading(false)
         toast.error('Failed to fetch products')
       })
-  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, dispatch, isBreakdownMode, isSingleCategorySelected])
+  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, addedTodayOnly, dispatch, isBreakdownMode, isSingleCategorySelected])
 
   // Category-wise rollup for the "All Categories" breakdown view — fetched only while
   // that mode is active.
@@ -671,6 +685,22 @@ export default function Products() {
                   </Button>
                 </>
               )}
+              {!isPerformanceView && syncTargets.length > 0 && (
+                <Can permission='createProducts'>
+                  <Button
+                    variant='outline'
+                    className='gap-1.5'
+                    onClick={() => {
+                      setSyncInitialSource(undefined)
+                      setSyncOpen(true)
+                    }}
+                  >
+                    <RefreshCw className='h-4 w-4' />
+                    {t('Sync Across Branches')}
+                    {selectedProducts.length > 0 ? ` (${selectedProducts.length})` : ''}
+                  </Button>
+                </Can>
+              )}
               <ProductPrimaryButtons />
             </div>
           </div>
@@ -713,6 +743,11 @@ export default function Products() {
                 }
               </Badge>
             )}
+            {addedTodayOnly && !isBreakdownMode && (
+              <Badge variant='secondary' className='h-9 px-3 text-sm font-normal'>
+                {t('Totals for')}: {t('Added today')}
+              </Badge>
+            )}
             {!isBreakdownMode && (
               <>
                 <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
@@ -746,6 +781,39 @@ export default function Products() {
               onSelectCategory={(categoryId) => setCategoryFilter(categoryId)}
             />
           ) : (
+          <>
+          {addedTodayOnly && (
+            <div className='mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm dark:border-blue-900 dark:bg-blue-950/30'>
+              <div className='flex items-center gap-2 text-blue-900 dark:text-blue-200'>
+                <CalendarPlus className='h-4 w-4 shrink-0' />
+                <span>
+                  {!loading && totalResults === 0
+                    ? t('No products have been added today yet. New products will appear here.')
+                    : t('Showing only products added today. This view starts empty again each day.')}
+                </span>
+              </div>
+              <div className='flex items-center gap-2'>
+                {syncTargets.length > 0 && addedTodayCount > 0 && (
+                  <Can permission='createProducts'>
+                    <Button
+                      size='sm'
+                      className='h-8 gap-1.5'
+                      onClick={() => {
+                        setSyncInitialSource('addedToday')
+                        setSyncOpen(true)
+                      }}
+                    >
+                      <RefreshCw className='h-3.5 w-3.5' />
+                      {t('Sync to other branches')}
+                    </Button>
+                  </Can>
+                )}
+                <Button size='sm' variant='ghost' className='h-8' onClick={() => setAddedTodayOnly(false)}>
+                  {t('Show all products')}
+                </Button>
+              </div>
+            </div>
+          )}
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
             <ProductTable
               data={products}
@@ -766,6 +834,20 @@ export default function Products() {
               }
               toolbarTrailing={
                 <>
+                  <Button
+                    type='button'
+                    variant={addedTodayOnly ? 'default' : 'outline'}
+                    size='sm'
+                    className='h-9 gap-1.5'
+                    aria-pressed={addedTodayOnly}
+                    onClick={() => setAddedTodayOnly((on) => !on)}
+                  >
+                    <CalendarPlus className='h-4 w-4' />
+                    {t('Added Today')}
+                    <Badge variant={addedTodayOnly ? 'secondary' : 'outline'} className='ml-0.5 h-5 min-w-5 justify-center px-1.5 tabular-nums'>
+                      {loadingStats && productStats === null ? '…' : addedTodayCount.toLocaleString()}
+                    </Badge>
+                  </Button>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className='h-9 w-[150px]'>
                       <SelectValue placeholder={t('All Status')} />
@@ -815,6 +897,7 @@ export default function Products() {
               broughtForward={broughtForward}
             />
           </div>
+          </>
           )}
           </>
           )}
@@ -852,6 +935,14 @@ export default function Products() {
             setSelectedProducts([])
             setFetch((prev) => !prev)
           }}
+        />
+
+        <SyncBranchesDialog
+          open={syncOpen}
+          onOpenChange={setSyncOpen}
+          selectedProducts={selectedProducts}
+          addedTodayCount={addedTodayCount}
+          initialSource={syncInitialSource}
         />
 
         <BulkCategoryDialog

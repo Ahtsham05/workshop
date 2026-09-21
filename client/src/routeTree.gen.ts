@@ -20,6 +20,7 @@ import { Route as AuthenticatedStockAdjustmentsImport } from './routes/_authenti
 import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedPurchaseSuggestionsImport } from './routes/_authenticated/purchase-suggestions'
+import { Route as AuthenticatedPriceUpdatesImport } from './routes/_authenticated/price-updates'
 import { Route as AuthenticatedPriceCheckerImport } from './routes/_authenticated/price-checker'
 import { Route as AuthenticatedPaymentVouchersImport } from './routes/_authenticated/payment-vouchers'
 import { Route as AuthenticatedInsightsImport } from './routes/_authenticated/insights'
@@ -238,6 +239,12 @@ const AuthenticatedPurchaseSuggestionsRoute =
     path: '/purchase-suggestions',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+
+const AuthenticatedPriceUpdatesRoute = AuthenticatedPriceUpdatesImport.update({
+  id: '/price-updates',
+  path: '/price-updates',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 const AuthenticatedPriceCheckerRoute = AuthenticatedPriceCheckerImport.update({
   id: '/price-checker',
@@ -1509,6 +1516,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPriceCheckerImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/price-updates': {
+      id: '/_authenticated/price-updates'
+      path: '/price-updates'
+      fullPath: '/price-updates'
+      preLoaderRoute: typeof AuthenticatedPriceUpdatesImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/purchase-suggestions': {
       id: '/_authenticated/purchase-suggestions'
       path: '/purchase-suggestions'
@@ -2762,6 +2776,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
   AuthenticatedPaymentVouchersRoute: typeof AuthenticatedPaymentVouchersRoute
   AuthenticatedPriceCheckerRoute: typeof AuthenticatedPriceCheckerRoute
+  AuthenticatedPriceUpdatesRoute: typeof AuthenticatedPriceUpdatesRoute
   AuthenticatedPurchaseSuggestionsRoute: typeof AuthenticatedPurchaseSuggestionsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSchoolRoute: typeof AuthenticatedSchoolRouteWithChildren
@@ -2852,6 +2867,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
   AuthenticatedPaymentVouchersRoute: AuthenticatedPaymentVouchersRoute,
   AuthenticatedPriceCheckerRoute: AuthenticatedPriceCheckerRoute,
+  AuthenticatedPriceUpdatesRoute: AuthenticatedPriceUpdatesRoute,
   AuthenticatedPurchaseSuggestionsRoute: AuthenticatedPurchaseSuggestionsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSchoolRoute: AuthenticatedSchoolRouteWithChildren,
@@ -2967,6 +2983,7 @@ export interface FileRoutesByFullPath {
   '/insights': typeof AuthenticatedInsightsRoute
   '/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/price-checker': typeof AuthenticatedPriceCheckerRoute
+  '/price-updates': typeof AuthenticatedPriceUpdatesRoute
   '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/school': typeof AuthenticatedSchoolRouteWithChildren
@@ -3136,6 +3153,7 @@ export interface FileRoutesByTo {
   '/insights': typeof AuthenticatedInsightsRoute
   '/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/price-checker': typeof AuthenticatedPriceCheckerRoute
+  '/price-updates': typeof AuthenticatedPriceUpdatesRoute
   '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/stock-adjustments': typeof AuthenticatedStockAdjustmentsRoute
@@ -3305,6 +3323,7 @@ export interface FileRoutesById {
   '/_authenticated/insights': typeof AuthenticatedInsightsRoute
   '/_authenticated/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/_authenticated/price-checker': typeof AuthenticatedPriceCheckerRoute
+  '/_authenticated/price-updates': typeof AuthenticatedPriceUpdatesRoute
   '/_authenticated/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
@@ -3478,6 +3497,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/payment-vouchers'
     | '/price-checker'
+    | '/price-updates'
     | '/purchase-suggestions'
     | '/reports'
     | '/school'
@@ -3646,6 +3666,7 @@ export interface FileRouteTypes {
     | '/insights'
     | '/payment-vouchers'
     | '/price-checker'
+    | '/price-updates'
     | '/purchase-suggestions'
     | '/reports'
     | '/stock-adjustments'
@@ -3813,6 +3834,7 @@ export interface FileRouteTypes {
     | '/_authenticated/insights'
     | '/_authenticated/payment-vouchers'
     | '/_authenticated/price-checker'
+    | '/_authenticated/price-updates'
     | '/_authenticated/purchase-suggestions'
     | '/_authenticated/reports'
     | '/_authenticated/school'
@@ -4032,6 +4054,7 @@ export const routeTree = rootRoute
         "/_authenticated/insights",
         "/_authenticated/payment-vouchers",
         "/_authenticated/price-checker",
+        "/_authenticated/price-updates",
         "/_authenticated/purchase-suggestions",
         "/_authenticated/reports",
         "/_authenticated/school",
@@ -4215,6 +4238,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/price-checker": {
       "filePath": "_authenticated/price-checker.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/price-updates": {
+      "filePath": "_authenticated/price-updates.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/purchase-suggestions": {

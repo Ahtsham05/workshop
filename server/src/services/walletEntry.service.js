@@ -24,6 +24,14 @@ const deleteEntriesByReference = async (referenceId, referenceModel) => {
   return WalletEntry.deleteMany({ referenceId, referenceModel });
 };
 
+/**
+ * Reword every wallet entry a source document owns. Wording only — never touches an amount or a
+ * balance, which is what makes it safe for a correction that shouldn't move money.
+ */
+const updateDescriptionByReference = async (referenceId, referenceModel, description) => {
+  return WalletEntry.updateMany({ referenceId, referenceModel }, { $set: { description } });
+};
+
 /** Delete just one leg (type 'in' or 'out') of a reference's wallet entries. */
 const deleteEntryByReferenceAndType = async (referenceId, referenceModel, type) => {
   return WalletEntry.deleteOne({ referenceId, referenceModel, type });
@@ -136,6 +144,7 @@ module.exports = {
   upsertReferenceEntry,
   deleteEntriesByReference,
   deleteEntryByReferenceAndType,
+  updateDescriptionByReference,
   syncWalletPayment,
   reverseWalletPayment,
 };

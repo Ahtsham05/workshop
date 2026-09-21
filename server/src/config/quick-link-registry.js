@@ -189,6 +189,17 @@ const QUICK_LINK_ACTIONS = [
     excludeBusinessTypes: ['school', 'restaurant'],
     synonyms: ['check price', 'compare price', 'competitor price'],
   },
+  {
+    actionKey: 'price_updates',
+    label: 'Price Updates',
+    iconKey: 'TrendingUp',
+    route: '/price-updates',
+    category: 'Catalog & Inventory',
+    color: 'bg-blue-600 hover:bg-blue-700',
+    permission: 'managePriceUpdates',
+    excludeBusinessTypes: ['school', 'restaurant'],
+    synonyms: ['update prices', 'price list', 'supplier rates', 'whatsapp rates', 'change cost', 'new rates'],
+  },
 
   // ---- Contacts ----
   {

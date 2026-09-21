@@ -67,6 +67,18 @@ const endOfBusinessDay = (calendarDate) => {
 };
 
 /**
+ * The business day (00:00:00.000–23:59:59.999 PKT) that contains `date`, as UTC Dates.
+ * "Today" for anything that must roll over at Pakistan midnight — not UTC midnight, and
+ * not whatever timezone the server or the browser happens to run in.
+ * @param {Date} [date=new Date()]
+ * @returns {{ calendarDate: string, start: Date, end: Date }}
+ */
+const getBusinessDayRange = (date = new Date()) => {
+  const calendarDate = toBusinessCalendarDate(date);
+  return { calendarDate, start: startOfBusinessDay(calendarDate), end: endOfBusinessDay(calendarDate) };
+};
+
+/**
  * Convert a filter/query date to an inclusive boundary Date in Pakistan.
  * @param {string|Date} value
  * @param {boolean} isEnd When true, returns end of that calendar day.
@@ -171,6 +183,7 @@ module.exports = {
   extractBusinessCalendarDate,
   startOfBusinessDay,
   endOfBusinessDay,
+  getBusinessDayRange,
   parseBusinessDateBoundary,
   parseBusinessDateTime,
   applyBusinessDateRange,

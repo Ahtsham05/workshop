@@ -11,6 +11,7 @@ const branchAvailabilityService = require('../services/branchAvailability.servic
 const { auditLogService } = require('../services');
 const { userHasAnyPermission } = require('../middlewares/permission');
 const { toDuplicateKeyApiError } = require('../utils/duplicateKeyError');
+const { addedTodayFilter } = require('../utils/addedToday');
 
 const TRACKED_PRODUCT_FIELDS = ['name', 'price', 'cost', 'stockQuantity', 'lowStockThreshold', 'criticalStockThreshold', 'barcode'];
 
@@ -162,9 +163,19 @@ const applyRangeFilter = (filter, field, minParam, maxParam) => {
   }
 };
 
+/**
+ * "Added Today" view: only products created today, by the Pakistan calendar (not the
+ * browser's or the server's). It is worked out per request, so the same view is empty again
+ * the next business day — there is nothing stored to clear.
+ */
+const applyAddedTodayFilter = (filter, addedTodayParam) => {
+  if (addedTodayParam === true || addedTodayParam === 'true') Object.assign(filter, addedTodayFilter());
+};
+
 const getProducts = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'description', 'isActive', 'brandId', 'trackImei', 'trackSerial']);
   applyBranchFilter(filter, req);
+  applyAddedTodayFilter(filter, req.query.addedToday);
   applyCategoryFilter(filter, req.query.category);
   applySubCategoryFilter(filter, req.query.subCategory);
   applyStockQuantityFilter(filter, req.query.stockQuantity, req.query.stockQuantityOp);
@@ -386,8 +397,14 @@ const getProductStats = catchAsync(async (req, res) => {
   // for just the selected category (or the "Uncategorized" bucket) instead of always
   // the whole catalog.
   applyCategoryFilter(filter, req.query.category);
-  const stats = await productService.getProductStats(filter);
-  res.send(stats);
+  applyAddedTodayFilter(filter, req.query.addedToday);
+  const [stats, addedTodayCount] = await Promise.all([
+    productService.getProductStats(filter),
+    // Always this branch's whole "added today" count, whatever the filters above are —
+    // it labels the Added Today chip even while the chip is off.
+    productService.countAddedToday({ organizationId: req.organizationId, branchId: req.branchId }),
+  ]);
+  res.send({ ...stats, addedTodayCount });
 });
 
 // Powers the Products page's "All Categories" breakdown view — one row per category

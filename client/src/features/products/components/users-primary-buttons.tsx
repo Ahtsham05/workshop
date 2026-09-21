@@ -6,7 +6,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useUsers } from '../context/users-context'
-import { PlusCircle, Upload, Building2, ChevronDown } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { PlusCircle, Upload, Building2, ChevronDown, TrendingUp } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { Can } from '@/context/permission-context'
 
@@ -16,6 +17,15 @@ export default function UsersPrimaryButtons() {
 
   return (
     <div className='flex gap-2'>
+      {/* Entry point to the Price Update Center — supplier price lists (WhatsApp / PDF / Excel). */}
+      <Can permission='managePriceUpdates'>
+        <Button asChild variant='outline' className='gap-1.5'>
+          <Link to='/price-updates'>
+            <TrendingUp className='h-4 w-4' />
+            {t('Update Prices')}
+          </Link>
+        </Button>
+      </Can>
       <Can permission='createProducts'>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -114,10 +114,11 @@ export const fetchAllProducts = createAsyncThunk(
 
 export const fetchProductStats = createAsyncThunk(
     'product/fetchProductStats',
-    catchAsync(async (params: { category?: string } = {}) => {
-        const query = new URLSearchParams(
-            params.category ? { category: params.category } : {}
-        ).toString();
+    catchAsync(async (params: { category?: string; addedToday?: boolean } = {}) => {
+        const query = new URLSearchParams({
+            ...(params.category ? { category: params.category } : {}),
+            ...(params.addedToday ? { addedToday: 'true' } : {}),
+        }).toString();
         const response = await Axios({
             ...summery.fetchProductStats,
             url: query ? `${summery.fetchProductStats.url}?${query}` : summery.fetchProductStats.url,

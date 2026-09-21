@@ -157,16 +157,22 @@ const createOrUpdateWallet = async ({
   return wallet;
 };
 
+/**
+ * What a Bank Account can actually spend right now. A cash-type wallet's true available
+ * balance is Cash Book's, not the stored field (which only reflects wallet-ledger-driven
+ * movements, not the full cash history every other module has been posting to Cash Book all
+ * along) — basing a sufficiency check on the stale stored value would falsely reject
+ * payments the business can actually afford. Every balance check goes through this so a
+ * pre-flight check can never disagree with the real one in `adjustWalletBalance`.
+ */
+const resolveSpendableBalance = async (wallet) =>
+  wallet.accountType === 'cash' ? resolveCashInHandBalance(wallet.organizationId, wallet.branchId) : wallet.balance;
+
 const adjustWalletBalance = async ({ organizationId, branchId, type, amount, operation, userId }) => {
   const wallet = await ensureWallet({ organizationId, branchId, type, userId });
   const numericAmount = Number(amount || 0);
 
-  // A cash-type wallet's true available balance is Cash Book's, not the stored field (which
-  // only reflects wallet-ledger-driven movements, not the full cash history every other
-  // module has been posting to Cash Book all along) — basing the sufficiency check on the
-  // stale stored value would falsely reject payments the business can actually afford.
-  const baseBalance =
-    wallet.accountType === 'cash' ? await resolveCashInHandBalance(organizationId, branchId) : wallet.balance;
+  const baseBalance = await resolveSpendableBalance(wallet);
 
   const nextBalance = operation === 'deduct' ? baseBalance - numericAmount : baseBalance + numericAmount;
 
@@ -305,4 +311,5 @@ module.exports = {
   deleteWallet,
   deactivateWallet,
   resolveCashInHandBalance,
+  resolveSpendableBalance,
 };

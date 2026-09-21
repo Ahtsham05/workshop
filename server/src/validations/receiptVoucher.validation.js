@@ -27,6 +27,24 @@ const createVoucher = {
   }),
 };
 
+// Same body as create, but each line may carry the `id` of the stored line it edits (a line
+// without one is new; a stored line that isn't submitted is removed).
+const updateVoucher = {
+  params: Joi.object().keys({
+    receiptVoucherId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object().keys({
+    date: Joi.date().optional(),
+    bankAccountId: Joi.string().custom(objectId).required(),
+    lines: Joi.array()
+      .items(voucherLine.keys({ id: Joi.string().custom(objectId).optional() }))
+      .min(1)
+      .required(),
+    reference: Joi.string().trim().allow('').optional(),
+    notes: Joi.string().trim().allow('').optional(),
+  }),
+};
+
 const getVouchers = {
   query: Joi.object().keys({
     bankAccountId: Joi.string(),
@@ -55,6 +73,7 @@ const deleteVoucher = {
 
 module.exports = {
   createVoucher,
+  updateVoucher,
   getVouchers,
   getVoucher,
   deleteVoucher,

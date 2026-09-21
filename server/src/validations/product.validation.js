@@ -116,6 +116,8 @@ const getProducts = {
     costMax: Joi.number(),
     trackImei: Joi.boolean(),
     trackSerial: Joi.boolean(),
+    // Only products created today (Pakistan time) — see utils/addedToday.js.
+    addedToday: Joi.boolean(),
     sortBy: Joi.string(),
     limit: Joi.number(),
     page: Joi.number(),
@@ -129,6 +131,7 @@ const getAllProducts = {}
 const getProductStats = {
   query: Joi.object().keys({
     category: Joi.string(),
+    addedToday: Joi.boolean(),
   }),
 };
 
@@ -415,6 +418,25 @@ const bulkAddProducts = {
   }),
 };
 
+// "Sync Across Branches" — see services/productBranchSync.service.js. A preview names its
+// products by ids (a selection) or by scope (everything added today, which the server
+// resolves and hands back as ids); the sync itself only takes ids, a chunk at a time.
+const previewBranchSync = {
+  body: Joi.object()
+    .keys({
+      productIds: Joi.array().items(Joi.string().custom(objectId)).min(1).max(1000),
+      scope: Joi.string().valid('addedToday'),
+    })
+    .xor('productIds', 'scope'),
+};
+
+const syncProductsToBranches = {
+  body: Joi.object().keys({
+    productIds: Joi.array().items(Joi.string().custom(objectId)).min(1).max(300).required(),
+    branchIds: Joi.array().items(Joi.string().custom(objectId)).min(1).max(50).required(),
+  }),
+};
+
 module.exports = {
   createProduct,
   fetchImageFromSearch,
@@ -437,4 +459,6 @@ module.exports = {
   getProductAnalyticsMetrics,
   getProductAnalytics,
   getProductActivity,
+  previewBranchSync,
+  syncProductsToBranches,
 };

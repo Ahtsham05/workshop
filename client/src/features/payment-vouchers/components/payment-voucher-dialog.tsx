@@ -4,12 +4,16 @@ import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { format } from 'date-fns'
-import { CalendarIcon, Plus, Trash2 } from 'lucide-react'
+import { CalendarIcon, Info, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppDispatch, RootState } from '@/stores/store'
 import { fetchSuppliers } from '@/stores/supplier.slice'
 import { normalizeSuppliersList, resolveEntityId } from '@/features/purchase-invoice/utils/catalog-helpers'
-import { useCreatePaymentVoucherMutation } from '@/stores/paymentVoucher.api'
+import {
+  useCreatePaymentVoucherMutation,
+  useUpdatePaymentVoucherMutation,
+  type PaymentVoucherRecord,
+} from '@/stores/paymentVoucher.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import { TransactionCategoryPicker } from '@/features/accounting/components/transaction-category-picker'
 import {
@@ -20,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -35,9 +40,13 @@ import { cn } from '@/lib/utils'
 
 const lineSchema = z
   .object({
-    payeeType: z.enum(['expense', 'supplier']),
+    // Id of the stored line this row edits ('' for a row that is new).
+    lineId: z.string(),
+    payeeType: z.enum(['expense', 'supplier', 'other']),
     category: z.string(),
     supplierId: z.string(),
+    // Only for a legacy 'other' line (free-text payee) — this dialog never offers to create one.
+    payeeName: z.string(),
     // Untouched rows (the default 8) sit at 0 and are silently dropped on submit — only a
     // row the user actually put an amount into needs its payee filled in.
     amount: z.coerce.number().min(0),
@@ -51,6 +60,10 @@ const lineSchema = z
     message: 'Select a supplier',
     path: ['supplierId'],
   })
+  .refine((d) => Number(d.amount) <= 0 || d.payeeType !== 'other' || !!d.payeeName.trim(), {
+    message: 'Enter a payee name',
+    path: ['payeeName'],
+  })
 
 const voucherSchema = z.object({
   date: z.date(),
@@ -62,9 +75,11 @@ const voucherSchema = z.object({
 type VoucherFormValues = z.infer<typeof voucherSchema>
 
 const emptyLine = () => ({
-  payeeType: 'supplier' as const,
+  lineId: '',
+  payeeType: 'supplier' as 'expense' | 'supplier' | 'other',
   category: '',
   supplierId: '',
+  payeeName: '',
   amount: 0,
   description: '',
 })
@@ -78,22 +93,65 @@ const defaultFormValues = (): VoucherFormValues => ({
   notes: '',
 })
 
+/** The form, pre-filled from a stored voucher — only its own lines, no spare blank rows. */
+const valuesFromVoucher = (voucher: PaymentVoucherRecord): VoucherFormValues => ({
+  date: new Date(voucher.date),
+  bankAccountId: voucher.bankAccountId,
+  notes: voucher.notes ?? '',
+  lines: voucher.lines.map((line) => ({
+    lineId: line.id ?? '',
+    payeeType: line.payeeType,
+    category: line.category ?? '',
+    supplierId: line.supplierId ?? '',
+    payeeName: line.payeeType === 'other' ? line.payeeName : '',
+    amount: line.amount,
+    description: line.description ?? '',
+  })),
+})
+
+/** What "has anything changed?" compares. Blank rows the user added but never filled in don't
+ *  count — they're dropped on save — and amounts are numbers however they were typed. */
+const fingerprint = (values: VoucherFormValues) =>
+  JSON.stringify({
+    date: values.date instanceof Date ? values.date.getTime() : null,
+    bankAccountId: values.bankAccountId,
+    notes: values.notes,
+    lines: values.lines
+      .filter((line) => line.lineId || Number(line.amount) > 0)
+      .map((line) => [
+        line.lineId,
+        line.payeeType,
+        line.category,
+        line.supplierId,
+        line.payeeName,
+        Number(line.amount) || 0,
+        line.description,
+      ]),
+  })
+
 interface PaymentVoucherDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated: (voucherId: string) => void
+  /** Pass a stored voucher to edit it; omit for a new one. */
+  voucher?: PaymentVoucherRecord | null
+  onCreated?: (voucherId: string) => void
+  onUpdated?: (voucherId: string) => void
 }
 
-export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentVoucherDialogProps) {
+export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, onUpdated }: PaymentVoucherDialogProps) {
+  const isEdit = !!voucher
   const formatMoney = useFormatMoney()
   const dispatch = useDispatch<AppDispatch>()
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !open })
   const wallets = (walletsData?.results ?? []).filter((w) => w.isActive !== false)
   const suppliersData = useSelector((state: RootState) => state.supplier.data)
   const suppliers = normalizeSuppliersList(suppliersData)
-  const [createVoucher, { isLoading }] = useCreatePaymentVoucherMutation()
+  const [createVoucher, { isLoading: isCreating }] = useCreatePaymentVoucherMutation()
+  const [updateVoucher, { isLoading: isUpdating }] = useUpdatePaymentVoucherMutation()
+  const isLoading = isCreating || isUpdating
   const submitButtonRef = useRef<HTMLButtonElement>(null)
   const prevLineCountRef = useRef(DEFAULT_ROW_COUNT)
+  const initialFingerprint = useMemo(() => (voucher ? fingerprint(valuesFromVoucher(voucher)) : ''), [voucher])
 
   useEffect(() => {
     if (open) dispatch(fetchSuppliers({ page: 1, limit: 1000 }))
@@ -109,13 +167,15 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
 
   useEffect(() => {
     if (open) {
-      form.reset(defaultFormValues())
-      prevLineCountRef.current = DEFAULT_ROW_COUNT
+      const values = voucher ? valuesFromVoucher(voucher) : defaultFormValues()
+      form.reset(values)
+      prevLineCountRef.current = values.lines.length
     }
-  }, [open, form])
+  }, [open, voucher, form])
 
   const lines = form.watch('lines')
   const totalAmount = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
+  const hasChanges = isEdit && fingerprint(form.watch()) !== initialFingerprint
 
   const supplierOptions = suppliers.map((s) => ({
     value: resolveEntityId(s),
@@ -123,6 +183,18 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
     sublabel: s.phone,
     picture: s.picture,
   }))
+  // A supplier already on this voucher must stay selectable even if it isn't in the fetched list
+  // (deleted since, or past the first page) — otherwise its row would read as empty.
+  voucher?.lines.forEach((line) => {
+    if (line.supplierId && !supplierOptions.some((option) => option.value === line.supplierId)) {
+      supplierOptions.push({
+        value: line.supplierId,
+        label: line.supplierName || line.payeeName,
+        sublabel: undefined,
+        picture: undefined,
+      })
+    }
+  })
 
   const fieldIds = useMemo(() => {
     const ids = ['voucher-date', 'voucher-bank-account']
@@ -154,29 +226,55 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
   }, [fields.length, voucherEnter])
 
   const onSubmit: SubmitHandler<VoucherFormValues> = async (data) => {
+    if (isEdit && !hasChanges) {
+      toast.info('Nothing has changed')
+      return
+    }
+    if (isEdit) {
+      // A line that already exists can't just be zeroed — that would silently delete it, and a
+      // voucher's history shouldn't change by accident. Removing is the trash button.
+      const emptied = data.lines.findIndex((line) => line.lineId && !(Number(line.amount) > 0))
+      if (emptied >= 0) {
+        form.setError(`lines.${emptied}.amount`, { type: 'manual', message: 'Enter an amount, or remove the line' })
+        toast.error('Every existing line needs an amount — use the trash button to remove one')
+        return
+      }
+    }
     const nonEmptyLines = data.lines.filter((line) => Number(line.amount) > 0)
     if (nonEmptyLines.length === 0) {
       toast.error('Add an amount to at least one line')
       return
     }
+    const payload = {
+      date: data.date.toISOString(),
+      bankAccountId: data.bankAccountId,
+      lines: nonEmptyLines.map((line) => ({
+        id: line.lineId || undefined,
+        payeeType: line.payeeType,
+        category: line.payeeType === 'expense' ? line.category : undefined,
+        supplierId: line.payeeType === 'supplier' ? line.supplierId : undefined,
+        payeeName: line.payeeType === 'other' ? line.payeeName.trim() : undefined,
+        amount: line.amount,
+        description: line.description || undefined,
+      })),
+      notes: data.notes,
+    }
     try {
-      const voucher = await createVoucher({
-        date: data.date.toISOString(),
-        bankAccountId: data.bankAccountId,
-        lines: nonEmptyLines.map((line) => ({
-          payeeType: line.payeeType,
-          category: line.payeeType === 'expense' ? line.category : undefined,
-          supplierId: line.payeeType === 'supplier' ? line.supplierId : undefined,
-          amount: line.amount,
-          description: line.description || undefined,
-        })),
-        notes: data.notes,
-      }).unwrap()
-      toast.success(`Payment voucher ${voucher.voucherNumber} created`)
-      onCreated(voucher.id)
+      if (voucher) {
+        const updated = await updateVoucher({ id: voucher.id, ...payload }).unwrap()
+        toast.success(`Payment voucher ${updated.voucherNumber} updated`)
+        onUpdated?.(updated.id)
+      } else {
+        const created = await createVoucher({
+          ...payload,
+          lines: payload.lines.map(({ id: _id, ...line }) => line),
+        }).unwrap()
+        toast.success(`Payment voucher ${created.voucherNumber} created`)
+        onCreated?.(created.id)
+      }
       onOpenChange(false)
     } catch (error: any) {
-      toast.error(error?.data?.message || 'Failed to create payment voucher')
+      toast.error(error?.data?.message || `Failed to ${isEdit ? 'update' : 'create'} payment voucher`)
     }
   }
 
@@ -186,13 +284,31 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-[960px]'>
         <DialogHeader className='px-6 pt-6 pb-4'>
-          <DialogTitle>New Payment Voucher</DialogTitle>
+          <DialogTitle>{isEdit ? (
+              <>
+                Edit Payment Voucher · <span className='whitespace-nowrap'>{voucher?.voucherNumber}</span>
+              </>
+            ) : (
+              'New Payment Voucher'
+            )}</DialogTitle>
           <DialogDescription>
-            Record one or more payments made out from a bank account · {MOBILE_FORM_KEYBOARD_HINT}
+            {isEdit
+              ? 'Change the date, account, lines or notes of this voucher'
+              : 'Record one or more payments made out from a bank account'}{' '}
+            · {MOBILE_FORM_KEYBOARD_HINT}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className='flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6'>
+        <form onSubmit={form.handleSubmit(onSubmit)} className='flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 sm:overflow-hidden'>
+          {isEdit && (
+            <Alert className='shrink-0 border-amber-500/30 bg-amber-500/5'>
+              <Info className='h-4 w-4' />
+              <AlertDescription>
+                Saving updates the bank balance, Cash Book and any linked expense or supplier ledger entry. Only the lines
+                you change are re-posted.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className='grid shrink-0 gap-4 sm:grid-cols-2'>
             <div className='space-y-2'>
               <Label>Date</Label>
@@ -215,7 +331,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
                   <Calendar
                     mode='single'
                     selected={form.watch('date')}
-                    onSelect={(d) => form.setValue('date', d || new Date())}
+                    onSelect={(d) => form.setValue('date', d || new Date(), { shouldDirty: true })}
                     initialFocus
                   />
                 </PopoverContent>
@@ -224,7 +340,10 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
 
             <div className='space-y-2'>
               <Label>Pay From (Bank Account)</Label>
-              <Select value={form.watch('bankAccountId')} onValueChange={(v) => form.setValue('bankAccountId', v, { shouldValidate: true })}>
+              <Select
+                value={form.watch('bankAccountId')}
+                onValueChange={(v) => form.setValue('bankAccountId', v, { shouldValidate: true, shouldDirty: true })}
+              >
                 <SelectTrigger className='w-full' id='voucher-bank-account' {...voucherEnter.enterProps('voucher-bank-account')}>
                   <SelectValue placeholder='Select a bank account...' />
                 </SelectTrigger>
@@ -234,6 +353,10 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
                       {w.type} ({formatMoney(Number(w.balance || 0))})
                     </SelectItem>
                   ))}
+                  {/* The voucher's own account, if it has since been deactivated and so isn't listed. */}
+                  {voucher && !wallets.some((w) => w.id === voucher.bankAccountId) && (
+                    <SelectItem value={voucher.bankAccountId}>{voucher.bankAccountName || 'Previous account'} (inactive)</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               {wallets.length === 0 && (
@@ -253,7 +376,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
             </Button>
           </div>
 
-          <div className='min-h-0 flex-1 overflow-y-auto rounded-lg border'>
+          <div className='min-h-[220px] flex-1 overflow-y-auto rounded-lg border sm:min-h-0'>
             <Table>
               <TableHeader className='sticky top-0 z-10 bg-background'>
                 <TableRow>
@@ -275,7 +398,10 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
                         <Select
                           value={form.watch(`lines.${index}.payeeType`)}
                           onValueChange={(v) =>
-                            form.setValue(`lines.${index}.payeeType`, v as 'expense' | 'supplier', { shouldValidate: true })
+                            form.setValue(`lines.${index}.payeeType`, v as 'expense' | 'supplier' | 'other', {
+                              shouldValidate: true,
+                              shouldDirty: true,
+                            })
                           }
                         >
                           <SelectTrigger
@@ -288,6 +414,8 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
                           <SelectContent>
                             <SelectItem value='supplier'>Supplier</SelectItem>
                             <SelectItem value='expense'>Expense</SelectItem>
+                            {/* Only ever shown for a legacy line that already is one. */}
+                            {payeeType === 'other' && <SelectItem value='other'>Other</SelectItem>}
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -297,7 +425,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
                           <TransactionCategoryPicker
                             transactionType='business_expense'
                             value={form.watch(`lines.${index}.category`)}
-                            onChange={(v) => form.setValue(`lines.${index}.category`, v, { shouldValidate: true })}
+                            onChange={(v) => form.setValue(`lines.${index}.category`, v, { shouldValidate: true, shouldDirty: true })}
                             id={`line-${index}-payee`}
                             data-enter-field={`line-${index}-payee`}
                             onKeyDown={payeeEnterProps.onKeyDown}
@@ -306,11 +434,18 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
                             hideTitle
                             allowManage={false}
                           />
+                        ) : payeeType === 'other' ? (
+                          <Input
+                            placeholder='Payee name'
+                            id={`line-${index}-payee`}
+                            {...payeeEnterProps}
+                            {...form.register(`lines.${index}.payeeName`)}
+                          />
                         ) : (
                           <SearchableSelect
                             options={supplierOptions}
                             value={form.watch(`lines.${index}.supplierId`)}
-                            onValueChange={(v) => form.setValue(`lines.${index}.supplierId`, v, { shouldValidate: true })}
+                            onValueChange={(v) => form.setValue(`lines.${index}.supplierId`, v, { shouldValidate: true, shouldDirty: true })}
                             placeholder='Select a supplier...'
                             searchPlaceholder='Search suppliers...'
                             emptyText='No suppliers found.'
@@ -322,9 +457,9 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
                             popoverClassName='w-[320px]'
                           />
                         )}
-                        {(lineError?.category || lineError?.supplierId) && (
+                        {(lineError?.category || lineError?.supplierId || lineError?.payeeName) && (
                           <p className='mt-1 text-xs text-red-500'>
-                            {lineError.category?.message || lineError.supplierId?.message}
+                            {lineError.category?.message || lineError.supplierId?.message || lineError.payeeName?.message}
                           </p>
                         )}
                       </TableCell>
@@ -385,8 +520,12 @@ export function PaymentVoucherDialog({ open, onOpenChange, onCreated }: PaymentV
             <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button ref={submitButtonRef} type='submit' disabled={isLoading || wallets.length === 0}>
-              {isLoading ? 'Saving...' : 'Create Voucher'}
+            <Button
+              ref={submitButtonRef}
+              type='submit'
+              disabled={isLoading || wallets.length === 0 || (isEdit && !hasChanges)}
+            >
+              {isLoading ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Voucher'}
             </Button>
           </DialogFooter>
         </form>

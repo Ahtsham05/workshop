@@ -35,7 +35,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -93,7 +93,7 @@ export const sidebarData: SidebarData = {
         {
           title: 'Catalog & Inventory',
           icon: IconPackages,
-          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'viewImeiTracking', 'viewPriceChecker'],
+          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'viewImeiTracking', 'viewPriceChecker', 'viewPriceUpdates', 'managePriceUpdates'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
             { title: 'Categories', url: '/categories', icon: IconCategory, permission: 'viewCategories' },
@@ -103,6 +103,7 @@ export const sidebarData: SidebarData = {
             { title: 'Stock Adjustments', url: '/stock-adjustments', icon: ClipboardEdit, permission: 'viewProducts' },
             { title: 'IMEI / Serial Tracking', url: '/mobile-shop/imei-tracking', icon: ShieldCheck, permission: 'viewImeiTracking' },
             { title: 'Price Checker', url: '/price-checker', icon: DollarSign, permission: 'viewPriceChecker' },
+            { title: 'Price Updates', url: '/price-updates', icon: TrendingUp, anyPermission: ['viewPriceUpdates', 'managePriceUpdates'] },
           ],
         },
         {

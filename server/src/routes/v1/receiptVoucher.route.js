@@ -16,6 +16,7 @@ router
 router
   .route('/:receiptVoucherId')
   .get(auth('viewPaymentVouchers'), validate(receiptVoucherValidation.getVoucher), receiptVoucherController.getVoucher)
+  .patch(auth('managePaymentVouchers'), validate(receiptVoucherValidation.updateVoucher), receiptVoucherController.updateVoucher)
   .delete(auth('managePaymentVouchers'), validate(receiptVoucherValidation.deleteVoucher), receiptVoucherController.deleteVoucher);
 
 module.exports = router;

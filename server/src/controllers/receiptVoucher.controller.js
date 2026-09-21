@@ -5,6 +5,7 @@ const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const ApiError = require('../utils/ApiError');
 const { formatMoney } = require('../utils/money');
+const { voucherAuditSnapshot, voucherCreateAuditFields } = require('../utils/voucherAudit');
 
 const createVoucher = catchAsync(async (req, res) => {
   const voucher = await receiptVoucherService.createVoucher({ ...req.body, ...getBranchContext(req) }, req.user.id);
@@ -15,8 +16,8 @@ const createVoucher = catchAsync(async (req, res) => {
     module: 'ReceiptVoucher',
     entityId: voucher._id,
     entityName: `${voucher.voucherNumber} — ${formatMoney(voucher.totalAmount, currencyMeta)}`,
-    after: voucher.toObject ? voucher.toObject() : voucher,
-    fields: ['bankAccountId', 'lines', 'totalAmount'],
+    after: voucherAuditSnapshot(voucher, 'payerName'),
+    fields: voucherCreateAuditFields(voucher),
   });
   res.status(httpStatus.CREATED).send(voucher);
 });
@@ -47,16 +48,40 @@ const getVouchers = catchAsync(async (req, res) => {
 });
 
 const getVoucher = catchAsync(async (req, res) => {
-  const voucher = await receiptVoucherService.getVoucherById(req.params.receiptVoucherId);
+  const voucher = await receiptVoucherService.getVoucherDetailById(req.params.receiptVoucherId, applyBranchFilter({}, req));
   if (!voucher) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Receipt voucher not found');
   }
   res.send(voucher);
 });
 
+const updateVoucher = catchAsync(async (req, res) => {
+  const scope = applyBranchFilter({}, req);
+  const before = await receiptVoucherService.getVoucherById(req.params.receiptVoucherId, scope);
+  if (!before) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Receipt voucher not found');
+  }
+  const beforeSnapshot = voucherAuditSnapshot(before, 'payerName');
+
+  const voucher = await receiptVoucherService.updateVoucher(req.params.receiptVoucherId, scope, req.body, req.user.id);
+
+  const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
+  await auditLogService.recordAuditLog({
+    req,
+    action: 'update',
+    module: 'ReceiptVoucher',
+    entityId: voucher._id,
+    entityName: `${voucher.voucherNumber} — ${formatMoney(voucher.totalAmount, currencyMeta)}`,
+    before: beforeSnapshot,
+    after: voucherAuditSnapshot(voucher, 'payerName'),
+  });
+  res.send(voucher);
+});
+
 const deleteVoucher = catchAsync(async (req, res) => {
-  const voucher = await receiptVoucherService.getVoucherById(req.params.receiptVoucherId);
-  await receiptVoucherService.deleteVoucherById(req.params.receiptVoucherId);
+  const scope = applyBranchFilter({}, req);
+  const voucher = await receiptVoucherService.getVoucherById(req.params.receiptVoucherId, scope);
+  await receiptVoucherService.deleteVoucherById(req.params.receiptVoucherId, scope);
   let entityName;
   if (voucher) {
     const currencyMeta = await localizationService.resolveOrganizationCurrencyMeta(req.organizationId);
@@ -76,5 +101,6 @@ module.exports = {
   createVoucher,
   getVouchers,
   getVoucher,
+  updateVoucher,
   deleteVoucher,
 };

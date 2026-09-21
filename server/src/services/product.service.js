@@ -12,6 +12,7 @@ const { UNITS, DEFAULT_UNIT } = require('../config/units');
 const masterProductService = require('./masterProduct.service');
 const { extractDuplicateFieldFromMessage, labelFor } = require('../utils/duplicateKeyError');
 const logger = require('../config/logger');
+const { addedTodayFilter } = require('../utils/addedToday');
 
 let productIndexesEnsured = false;
 let ensureProductIndexesInFlight = null;
@@ -385,6 +386,19 @@ const getProductStats = async (filter) => {
     totalStockQuantity: simple.stockQuantity + variantStockQuantity,
     totalStockValue: simple.stockValue + variantStockValue,
   };
+};
+
+/**
+ * How many products this branch has added today (Pakistan calendar) — the number on the
+ * Products page's "Added Today" chip. See utils/addedToday.js.
+ */
+const countAddedToday = async ({ organizationId, branchId }) => {
+  // Never count across tenants: without an organization there is nothing to scope to, and
+  // an undefined branchId is left out (org-wide read) rather than matched as "no branch".
+  if (!organizationId) return 0;
+  const filter = { organizationId, ...addedTodayFilter() };
+  if (branchId) filter.branchId = branchId;
+  return Product.countDocuments(filter);
 };
 
 const UNCATEGORIZED_CATEGORY_ID = 'uncategorized';
@@ -1759,6 +1773,7 @@ module.exports = {
   bulkDeleteProductsByIds,
   getAllProducts,
   getProductStats,
+  countAddedToday,
   getCategoryBreakdown,
   bulkUpdateProducts,
   bulkSetProductCategories,

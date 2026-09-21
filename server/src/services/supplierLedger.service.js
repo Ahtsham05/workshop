@@ -474,6 +474,36 @@ const updateLedgerEntry = async (id, updateBody) => {
 };
 
 /**
+ * Change only an entry's wording (description / reference / notes). Nothing here can move a
+ * balance — unlike `updateLedgerEntry`, which reverses and re-applies the entry's wallet effect on
+ * every call and so fails for a payment whose account no longer holds the money (or a cash-type
+ * account whose live balance already excludes it), even though nothing is actually changing.
+ * Used when a Payment Voucher line is merely re-worded.
+ * @param {ObjectId} id
+ * @param {{description?: string, reference?: string, notes?: string}} text
+ * @returns {Promise<SupplierLedger>}
+ */
+const updateLedgerEntryText = async (id, { description, reference, notes }) => {
+  const entry = await getLedgerEntryById(id);
+  if (!entry) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Ledger entry not found');
+  }
+
+  if (description !== undefined) entry.description = description;
+  if (reference !== undefined) entry.reference = reference;
+  if (notes !== undefined) entry.notes = notes;
+  await entry.save();
+
+  // The rows derived from this entry carry its wording too.
+  if (entry.description) {
+    await walletEntryService.updateDescriptionByReference(entry._id, 'SupplierLedger', entry.description);
+    await cashBookService.updateDescriptionByReference(entry._id, 'SupplierLedger', entry.description);
+  }
+  postSupplierLedgerToAccounts(entry);
+  return entry;
+};
+
+/**
  * Delete ledger entry
  * @param {ObjectId} id
  * @returns {Promise<SupplierLedger>}
@@ -821,6 +851,7 @@ module.exports = {
   getBalanceBeforeReference,
   getSupplierLedgerSummary,
   updateLedgerEntry,
+  updateLedgerEntryText,
   deleteLedgerEntry,
   getAllSuppliersWithBalances,
   updateLedgerEntriesByReference,

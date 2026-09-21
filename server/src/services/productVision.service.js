@@ -334,4 +334,7 @@ module.exports = {
   extractProductsFromImage,
   resolveModelsToTry,
   fetchAvailableModels,
+  // Shared with priceListExtract.service.js (price-list OCR) so there is one Gemini client.
+  geminiRequest,
+  extractGeminiText,
 };
