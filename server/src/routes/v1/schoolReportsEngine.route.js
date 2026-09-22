@@ -22,6 +22,7 @@ router.route('/financial/pnl').get(schoolReportsController.getProfitAndLoss);
 router.route('/students/list').get(schoolReportsController.getStudentList);
 router.route('/students/fee-status').get(schoolReportsController.getStudentFeeStatus);
 router.route('/students/attendance').get(schoolReportsController.getStudentAttendance);
+router.route('/students/left').get(schoolReportsController.getStudentsLeft);
 
 // Teachers
 router.route('/teachers/salary').get(schoolReportsController.getTeacherSalary);

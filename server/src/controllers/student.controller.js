@@ -254,8 +254,21 @@ const promoteStudents = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+// ── Struck Off / Left Students ──────────────────────────────────────────────
+
+const struckOffStudent = catchAsync(async (req, res) => {
+  const result = await studentService.struckOffStudent(req.params.id, req.body, getScope(req), req.user._id);
+  res.send(result);
+});
+
+const reinstateStudent = catchAsync(async (req, res) => {
+  const doc = await studentService.reinstateStudent(req.params.id, getScope(req), req.user._id);
+  res.send(doc);
+});
+
 module.exports = {
   createStudent, getStudents, getStudent, updateStudent, deleteStudent,
   getStudentsByClass, getAdmissionForm, bulkImport, admitStudent,
   promoteStudents, getPromotionEligibility,
+  struckOffStudent, reinstateStudent,
 };

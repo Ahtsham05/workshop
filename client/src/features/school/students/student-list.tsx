@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Eye, Pencil, Trash2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, GraduationCap } from 'lucide-react';
+import { Plus, Search, Eye, Pencil, Trash2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, GraduationCap, UserX, RotateCcw } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
-import { useGetStudentsQuery, useDeleteStudentMutation, useGetSchoolClassesQuery } from '@/stores/school.api';
+import { useGetStudentsQuery, useDeleteStudentMutation, useGetSchoolClassesQuery, useReinstateStudentMutation } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import StudentStrikeOffDialog from './student-strike-off-dialog';
 
 export default function StudentList() {
   const navigate = useNavigate();
@@ -38,6 +39,8 @@ export default function StudentList() {
   const { data, isLoading } = useGetStudentsQuery(params);
   const { data: classesData } = useGetSchoolClassesQuery({ limit: 100 });
   const [deleteStudent] = useDeleteStudentMutation();
+  const [reinstateStudent] = useReinstateStudentMutation();
+  const [strikeOffTarget, setStrikeOffTarget] = useState<{ id: string; name: string; admissionNumber?: string } | null>(null);
 
   const totalPages = data?.totalPages || 1;
   const totalResults = data?.totalResults || 0;
@@ -48,6 +51,15 @@ export default function StudentList() {
       toast.success('Student deleted successfully');
     } catch {
       toast.error('Failed to delete student');
+    }
+  };
+
+  const handleReinstate = async (id: string) => {
+    try {
+      await reinstateStudent(id).unwrap();
+      toast.success('Student reinstated to active');
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to reinstate student');
     }
   };
 
@@ -77,6 +89,11 @@ export default function StudentList() {
     inactive: 'bg-gray-100 text-gray-700',
     graduated: 'bg-blue-100 text-blue-700',
     transferred: 'bg-orange-100 text-orange-700',
+    struck_off: 'bg-red-100 text-red-700',
+  };
+
+  const statusLabels: Record<string, string> = {
+    struck_off: 'Struck Off',
   };
 
   const from = totalResults === 0 ? 0 : (page - 1) * limit + 1;
@@ -128,6 +145,7 @@ export default function StudentList() {
                 <SelectItem value="inactive">Inactive</SelectItem>
                 <SelectItem value="graduated">Graduated</SelectItem>
                 <SelectItem value="transferred">Transferred</SelectItem>
+                <SelectItem value="struck_off">Struck Off</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -171,7 +189,7 @@ export default function StudentList() {
                       <TableCell>{student.sectionId?.name || '-'}</TableCell>
                       <TableCell>{student.parent?.phone || '-'}</TableCell>
                       <TableCell>
-                        <Badge className={statusColors[student.status] || 'bg-gray-100'}>{student.status}</Badge>
+                        <Badge className={statusColors[student.status] || 'bg-gray-100'}>{statusLabels[student.status] || student.status}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
@@ -181,6 +199,24 @@ export default function StudentList() {
                           <Button variant="ghost" size="icon" onClick={() => navigate({ to: `/school/students/${student.id || student._id}` as any, search: { edit: true } as any })}>
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          {student.status === 'struck_off' ? (
+                            <Button variant="ghost" size="icon" title="Reinstate" onClick={() => handleReinstate(student.id || student._id)}>
+                              <RotateCcw className="h-4 w-4 text-emerald-600" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Mark as Left / Struck Off"
+                              onClick={() => setStrikeOffTarget({
+                                id: student.id || student._id,
+                                name: `${student.firstName} ${student.lastName || ''}`.trim(),
+                                admissionNumber: student.admissionNumber,
+                              })}
+                            >
+                              <UserX className="h-4 w-4 text-orange-600" />
+                            </Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-red-600" /></Button>
@@ -188,7 +224,10 @@ export default function StudentList() {
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Delete Student</AlertDialogTitle>
-                                <AlertDialogDescription>This action cannot be undone. This will permanently delete the student record.</AlertDialogDescription>
+                                <AlertDialogDescription>
+                                  This action cannot be undone and permanently erases the student's fee vouchers and academic history along with the record.
+                                  If the student has simply left the school, use "Mark as Left / Struck Off" instead — it keeps all fee and academic history intact.
+                                </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -265,6 +304,16 @@ export default function StudentList() {
           )}
         </CardContent>
       </Card>
+
+      {strikeOffTarget && (
+        <StudentStrikeOffDialog
+          studentId={strikeOffTarget.id}
+          studentName={strikeOffTarget.name}
+          admissionNumber={strikeOffTarget.admissionNumber}
+          open={!!strikeOffTarget}
+          onClose={() => setStrikeOffTarget(null)}
+        />
+      )}
     </div>
   );
 }

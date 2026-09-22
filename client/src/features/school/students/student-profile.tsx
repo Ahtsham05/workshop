@@ -6,14 +6,24 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Printer, Pencil, X, Camera, Loader2, GraduationCap, Users, CreditCard } from 'lucide-react';
+import { ArrowLeft, Printer, Pencil, X, Camera, Loader2, GraduationCap, Users, CreditCard, UserX, RotateCcw, FileWarning } from 'lucide-react';
 import StudentAvatar from '../components/student-avatar';
 import { useNavigate } from '@tanstack/react-router';
-import { useGetStudentQuery, useGetStudentFeesQuery, useUpdateStudentMutation, useGetSchoolClassesQuery, useGetAllSectionsQuery } from '@/stores/school.api';
+import { useGetStudentQuery, useGetStudentFeesQuery, useUpdateStudentMutation, useGetSchoolClassesQuery, useGetAllSectionsQuery, useReinstateStudentMutation } from '@/stores/school.api';
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
 import AdmissionFormPrint from './admission-form-print';
+import StudentStrikeOffDialog from './student-strike-off-dialog';
 import { useFormatMoney } from '@/lib/format-money';
+
+const LEAVING_REASON_LABELS: Record<string, string> = {
+  fee_default: 'Fee Default (non-payment)',
+  withdrawn: 'Parent Withdrew Admission',
+  relocation: 'Relocation / Moved City',
+  disciplinary: 'Disciplinary Action',
+  academic: 'Academic Reasons',
+  other: 'Other',
+};
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
@@ -24,9 +34,11 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
   const { data: student, isLoading } = useGetStudentQuery(id);
   const { data: fees } = useGetStudentFeesQuery(id);
   const [updateStudent, { isLoading: isUpdating }] = useUpdateStudentMutation();
+  const [reinstateStudent, { isLoading: isReinstating }] = useReinstateStudentMutation();
   const { data: classesData } = useGetSchoolClassesQuery({ limit: 100 });
   const { data: allSectionsData } = useGetAllSectionsQuery({});
   const [printOpen, setPrintOpen] = useState(false);
+  const [strikeOffOpen, setStrikeOffOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(defaultEdit);
   const [formInitialized, setFormInitialized] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -169,13 +181,24 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
     }
   };
 
+  const handleReinstate = async () => {
+    try {
+      await reinstateStudent(id).unwrap();
+      toast.success('Student reinstated to active');
+    } catch (err: any) {
+      toast.error(err?.data?.message || 'Failed to reinstate student');
+    }
+  };
+
   if (isLoading) return <div className="flex items-center justify-center h-64">Loading...</div>;
   if (!student) return <div className="text-center py-8">Student not found</div>;
 
   const statusColors: Record<string, string> = {
     active: 'bg-green-100 text-green-700', inactive: 'bg-gray-100 text-gray-700',
     graduated: 'bg-blue-100 text-blue-700', transferred: 'bg-orange-100 text-orange-700',
+    struck_off: 'bg-red-100 text-red-700',
   };
+  const statusLabels: Record<string, string> = { struck_off: 'Struck Off' };
 
   /* ───── EDIT MODE ───── */
   if (isEditing) {
@@ -259,8 +282,19 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={(v) => updateField('status', v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem><SelectItem value="graduated">Graduated</SelectItem><SelectItem value="transferred">Transferred</SelectItem></SelectContent>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="graduated">Graduated</SelectItem>
+                    <SelectItem value="transferred">Transferred</SelectItem>
+                    <SelectItem value="struck_off">Struck Off</SelectItem>
+                  </SelectContent>
                 </Select>
+                {form.status === 'struck_off' && student.status !== 'struck_off' && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Tip: use the "Mark as Left" button on the profile page instead — it records the leaving reason, date and outstanding dues.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -356,6 +390,17 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
           <Printer className="h-4 w-4" />
           Print Admission Form
         </Button>
+        {student.status === 'struck_off' ? (
+          <Button variant="outline" size="sm" className="gap-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50" onClick={handleReinstate} disabled={isReinstating}>
+            {isReinstating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            Reinstate
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" className="gap-2 text-red-700 border-red-300 hover:bg-red-50" onClick={() => setStrikeOffOpen(true)}>
+            <UserX className="h-4 w-4" />
+            Mark as Left
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -368,7 +413,7 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
             />
             <h2 className="text-xl font-bold">{student.firstName} {student.lastName}</h2>
             <p className="text-muted-foreground">Roll: {student.rollNumber || 'N/A'}</p>
-            <Badge className={`mt-2 ${statusColors[student.status] || ''}`}>{student.status}</Badge>
+            <Badge className={`mt-2 ${statusColors[student.status] || ''}`}>{statusLabels[student.status] || student.status}</Badge>
           </CardContent>
         </Card>
 
@@ -388,6 +433,34 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {student.status === 'struck_off' && student.leftInfo && (
+        <Card className="border-red-200 bg-red-50/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-700">
+              <FileWarning className="h-5 w-5" />
+              Left / Struck-Off Details
+            </CardTitle>
+            <CardDescription>This student is no longer active. Fee and academic history remain on record.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div><span className="text-sm text-muted-foreground">Leaving Date</span><p className="font-medium">{student.leftInfo.leftDate ? new Date(student.leftInfo.leftDate).toLocaleDateString() : '-'}</p></div>
+              <div><span className="text-sm text-muted-foreground">Reason</span><p className="font-medium">{LEAVING_REASON_LABELS[student.leftInfo.reason] || student.leftInfo.reason || '-'}</p></div>
+              <div><span className="text-sm text-muted-foreground">TC Number</span><p className="font-medium">{student.leftInfo.tcNumber || '-'}</p></div>
+              <div>
+                <span className="text-sm text-muted-foreground">Dues at Leaving</span>
+                <p className={`font-medium ${student.leftInfo.outstandingDuesAtLeaving > 0 ? 'text-red-600' : ''}`}>
+                  {formatMoney(student.leftInfo.outstandingDuesAtLeaving || 0)}
+                </p>
+              </div>
+              {student.leftInfo.remarks && (
+                <div className="col-span-2 md:col-span-4"><span className="text-sm text-muted-foreground">Remarks</span><p className="font-medium">{student.leftInfo.remarks}</p></div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Parent / Guardian</CardTitle></CardHeader>
@@ -441,6 +514,13 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
       )}
 
       <AdmissionFormPrint studentId={id} open={printOpen} onClose={() => setPrintOpen(false)} />
+      <StudentStrikeOffDialog
+        studentId={id}
+        studentName={`${student.firstName} ${student.lastName || ''}`.trim()}
+        admissionNumber={student.admissionNumber}
+        open={strikeOffOpen}
+        onClose={() => setStrikeOffOpen(false)}
+      />
     </div>
   );
 }

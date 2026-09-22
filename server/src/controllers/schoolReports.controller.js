@@ -67,6 +67,12 @@ const getStudentAttendance = catchAsync(async (req, res) => {
   res.send(await schoolReportsService.getStudentAttendanceSummary(scope, year, month, req.query.classId));
 });
 
+const getStudentsLeft = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  const { classId, reason, startDate, endDate } = req.query;
+  res.send(await schoolReportsService.getLeftStudentsReport(scope, { classId, reason, startDate, endDate }));
+});
+
 /** Teacher reports */
 const getTeacherSalary = catchAsync(async (req, res) => {
   const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
@@ -122,6 +128,7 @@ module.exports = {
   getStudentList,
   getStudentFeeStatus,
   getStudentAttendance,
+  getStudentsLeft,
   getTeacherSalary,
   getTeacherWorkload,
   getVoucherReport,

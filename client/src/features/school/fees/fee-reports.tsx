@@ -8,7 +8,7 @@ import {
   TrendingUp, TrendingDown, BarChart2, Printer, FileText, Download, FileSpreadsheet,
   BookOpen, GraduationCap, DollarSign, PieChart, Activity, Briefcase, Wallet,
   CalendarClock, Receipt, LineChart as LineChartIcon, LayoutGrid, ClipboardList,
-  CalendarCheck, Users, Landmark,
+  CalendarCheck, Users, Landmark, UserX,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -24,6 +24,7 @@ import {
   useGetReportStudentListQuery,
   useGetReportStudentFeeStatusQuery,
   useGetReportStudentAttendanceQuery,
+  useGetReportStudentsLeftQuery,
   useGetReportTeacherSalaryQuery,
   useGetReportTeacherWorkloadQuery,
   useGetReportVouchersQuery,
@@ -88,6 +89,7 @@ type TabKey =
   | 'students-fee-status'
   | 'students-attendance'
   | 'students-list'
+  | 'students-left'
   | 'teachers-salary'
   | 'teachers-workload'
   | 'vouchers'
@@ -105,6 +107,7 @@ const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: 'students-fee-status', label: 'Fee Status', icon: ClipboardList },
   { key: 'students-attendance', label: 'Attendance', icon: CalendarCheck },
   { key: 'students-list', label: 'Student List', icon: Users },
+  { key: 'students-left', label: 'Left / Struck Off', icon: UserX },
   { key: 'teachers-salary', label: 'Salary Report', icon: Landmark },
   { key: 'teachers-workload', label: 'Workload', icon: Briefcase },
   { key: 'vouchers', label: 'Vouchers', icon: BookOpen },
@@ -218,6 +221,10 @@ export default function FeeReports() {
         <TabsContent value="students-list" className="mt-4 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">{classFilterSelect}</div>
           <StudentListReport classId={classFilter !== 'all' ? classFilter : undefined} />
+        </TabsContent>
+        <TabsContent value="students-left" className="mt-4 space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">{classFilterSelect}</div>
+          <StudentLeftReport classId={classFilter !== 'all' ? classFilter : undefined} />
         </TabsContent>
 
         <TabsContent value="teachers-salary" className="mt-4">
@@ -1472,6 +1479,139 @@ function StudentListReport({ classId }: { classId?: string }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── Student: Left / Struck Off ────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+const LEAVING_REASONS = [
+  { value: 'all', label: 'All Reasons' },
+  { value: 'fee_default', label: 'Fee Default' },
+  { value: 'withdrawn', label: 'Withdrawn' },
+  { value: 'relocation', label: 'Relocation' },
+  { value: 'disciplinary', label: 'Disciplinary' },
+  { value: 'academic', label: 'Academic' },
+  { value: 'other', label: 'Other' },
+];
+
+function StudentLeftReport({ classId }: { classId?: string }) {
+  const [reason, setReason] = useState('all');
+  const { data, isLoading } = useGetReportStudentsLeftQuery({
+    ...(classId ? { classId } : {}),
+    ...(reason !== 'all' ? { reason } : {}),
+  });
+  const formatMoney = useFormatMoney();
+
+  const reasonSelect = (
+    <Select value={reason} onValueChange={setReason}>
+      <SelectTrigger className="w-44 h-8"><SelectValue /></SelectTrigger>
+      <SelectContent>
+        {LEAVING_REASONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+
+  if (isLoading) return <div className="space-y-4">{reasonSelect}<Loading /></div>;
+  if (!data) return <EmptyState />;
+  const { summary, data: students, chartData } = data;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {reasonSelect}
+        <ExportButtons data={students} sheetName="Left Students" fileName="Left_Struck_Off_Students"
+          pdfTitle="Left / Struck-Off Students Report"
+          headers={['Name', 'Adm#', 'Class', 'Left Date', 'Reason', 'TC#', 'Dues at Leaving', 'Pending Now']}
+          rows={students.map((s: any) => [
+            s.name, s.admissionNumber, s.className,
+            s.leftDate ? new Date(s.leftDate).toLocaleDateString() : '-',
+            s.reasonLabel, s.tcNumber || '-',
+            s.outstandingDuesAtLeaving.toLocaleString(), s.currentPendingAmount.toLocaleString(),
+          ])}
+          landscape
+        />
+      </div>
+
+      {!students.length ? (
+        <EmptyState text="No students have been struck off / left yet" />
+      ) : (
+        <>
+          {/* KPI Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <SummaryCard label="Total Left" value={summary.totalLeft} color="text-slate-700" raw />
+            <SummaryCard label="Dues Cleared" value={summary.clearedCount} color="text-emerald-600" raw />
+            <SummaryCard label="Still Owing" value={summary.pendingCount} color="text-red-600" raw />
+            <SummaryCard label="Outstanding Now" value={summary.totalOutstandingNow} color="text-red-600" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Reason breakdown chart */}
+            {chartData.length > 0 && (
+              <Card className="lg:col-span-1">
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <PieChart className="h-4 w-4 text-slate-500" /> By Reason
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <RePieChart>
+                      <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={(e: any) => `${e.name}: ${e.value}`}>
+                        {chartData.map((_: any, i: number) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Table */}
+            <div className="lg:col-span-2 rounded-lg border overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/50 border-b">
+                    <th className="text-left px-3 py-2 font-semibold text-[11px]">Student</th>
+                    <th className="text-left px-3 py-2 font-semibold text-[11px]">Class</th>
+                    <th className="text-left px-3 py-2 font-semibold text-[11px]">Left Date</th>
+                    <th className="text-left px-3 py-2 font-semibold text-[11px]">Reason</th>
+                    <th className="text-right px-3 py-2 font-semibold text-[11px] text-red-600">Pending Now</th>
+                    <th className="text-center px-3 py-2 font-semibold text-[11px]">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map((s: any) => (
+                    <tr key={s.id} className="border-b hover:bg-muted/20">
+                      <td className="px-3 py-1.5">
+                        <div className="font-medium">{s.name}</div>
+                        <div className="text-muted-foreground text-[10px]">#{s.admissionNumber}</div>
+                      </td>
+                      <td className="px-3 py-1.5 text-muted-foreground">{s.className || '-'}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">{s.leftDate ? new Date(s.leftDate).toLocaleDateString() : '-'}</td>
+                      <td className="px-3 py-1.5">{s.reasonLabel}</td>
+                      <td className="px-3 py-1.5 text-right font-semibold">
+                        {s.currentPendingAmount > 0
+                          ? <span className="text-red-600">{formatMoney(s.currentPendingAmount)}</span>
+                          : <span className="text-emerald-600">—</span>}
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        {s.isCleared ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">Cleared</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">Owing</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

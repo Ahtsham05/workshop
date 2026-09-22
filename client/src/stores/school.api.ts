@@ -234,6 +234,15 @@ export const schoolApi = createApi({
       query: (data) => ({ url: '/students/promote', method: 'POST', body: data }),
       invalidatesTags: ['Student', 'SchoolDashboard'],
     }),
+    struckOffStudent: builder.mutation({
+      query: ({ id, ...body }: { id: string; leftDate?: string; reason: string; remarks?: string; tcNumber?: string }) =>
+        ({ url: `/students/${id}/strike-off`, method: 'POST', body }),
+      invalidatesTags: ['Student', 'SchoolDashboard', 'FeeVoucher'],
+    }),
+    reinstateStudent: builder.mutation({
+      query: (id: string) => ({ url: `/students/${id}/reinstate`, method: 'POST' }),
+      invalidatesTags: ['Student', 'SchoolDashboard'],
+    }),
 
     // Teachers
     getTeachers: builder.query({
@@ -1191,6 +1200,11 @@ export const schoolApi = createApi({
       query: (params: { year: number; month: string; classId?: string }) => ({ url: '/school-reports-engine/students/attendance', params }),
       providesTags: ['SchoolAttendance'],
     }),
+    getReportStudentsLeft: builder.query({
+      query: (params?: { classId?: string; reason?: string; startDate?: string; endDate?: string }) =>
+        ({ url: '/school-reports-engine/students/left', params }),
+      providesTags: ['Student', 'FeeVoucher'],
+    }),
     getReportTeacherSalary: builder.query({
       query: (params: { year: number }) => ({ url: '/school-reports-engine/teachers/salary', params }),
       providesTags: ['TeacherPayroll'],
@@ -1432,6 +1446,8 @@ export const {
   useAdmitStudentMutation,
   useGetPromotionEligibilityQuery,
   usePromoteStudentsMutation,
+  useStruckOffStudentMutation,
+  useReinstateStudentMutation,
   // Teachers
   useGetTeachersQuery,
   useGetTeacherQuery,
@@ -1658,6 +1674,7 @@ export const {
   useGetReportStudentListQuery,
   useGetReportStudentFeeStatusQuery,
   useGetReportStudentAttendanceQuery,
+  useGetReportStudentsLeftQuery,
   useGetReportTeacherSalaryQuery,
   useGetReportTeacherWorkloadQuery,
   useGetReportVouchersQuery,

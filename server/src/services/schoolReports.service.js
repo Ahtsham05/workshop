@@ -748,6 +748,102 @@ const getStudentAttendanceSummary = async (scope, year, month, classId) => {
   };
 };
 
+const LEAVING_REASON_LABELS = {
+  fee_default: 'Fee Default',
+  withdrawn: 'Withdrawn',
+  relocation: 'Relocation',
+  disciplinary: 'Disciplinary',
+  academic: 'Academic',
+  other: 'Other',
+};
+
+/**
+ * Struck-off / left students report — who left, why, and what they still owe.
+ * Outstanding dues are recomputed live (via checkStudentPendingFees) rather than
+ * only reading the leaving-day snapshot, since families sometimes pay off old
+ * dues after the student has already left.
+ */
+const getLeftStudentsReport = async (scope, { classId, reason, startDate, endDate } = {}) => {
+  const { checkStudentPendingFees } = require('./student.service');
+  const tf = getTenantFilter(scope);
+
+  const match = { ...tf, status: 'struck_off' };
+  if (classId) match.classId = classId;
+  if (reason) match['leftInfo.reason'] = reason;
+  if (startDate || endDate) {
+    match['leftInfo.leftDate'] = {};
+    if (startDate) match['leftInfo.leftDate'].$gte = new Date(startDate);
+    if (endDate) match['leftInfo.leftDate'].$lte = new Date(endDate);
+  }
+
+  const students = await Student.find(match)
+    .populate('classId', 'name')
+    .populate('sectionId', 'name')
+    .sort({ 'leftInfo.leftDate': -1 })
+    .lean();
+
+  if (!students.length) {
+    return {
+      summary: { totalLeft: 0, totalOutstandingNow: 0, totalOutstandingAtLeaving: 0, clearedCount: 0 },
+      data: [],
+      chartData: [],
+    };
+  }
+
+  const ids = students.map((s) => s._id.toString());
+  const pendingMap = await checkStudentPendingFees(ids, scope);
+
+  const byReason = {};
+  let totalOutstandingNow = 0;
+  let totalOutstandingAtLeaving = 0;
+  let clearedCount = 0;
+
+  const data = students.map((s) => {
+    const pending = pendingMap[s._id.toString()] || { pendingCount: 0, pendingAmount: 0 };
+    const reasonKey = s.leftInfo?.reason || 'other';
+    byReason[reasonKey] = (byReason[reasonKey] || 0) + 1;
+    totalOutstandingNow += pending.pendingAmount;
+    totalOutstandingAtLeaving += s.leftInfo?.outstandingDuesAtLeaving || 0;
+    if (pending.pendingAmount === 0) clearedCount += 1;
+
+    return {
+      id: s._id,
+      name: `${s.firstName} ${s.lastName || ''}`.trim(),
+      admissionNumber: s.admissionNumber,
+      rollNumber: s.rollNumber,
+      className: s.classId?.name || '',
+      sectionName: s.sectionId?.name || '',
+      fatherName: s.parent?.fatherName || '',
+      phone: s.parent?.phone || '',
+      leftDate: s.leftInfo?.leftDate || null,
+      reason: reasonKey,
+      reasonLabel: LEAVING_REASON_LABELS[reasonKey] || reasonKey,
+      remarks: s.leftInfo?.remarks || '',
+      tcNumber: s.leftInfo?.tcNumber || '',
+      outstandingDuesAtLeaving: s.leftInfo?.outstandingDuesAtLeaving || 0,
+      currentPendingAmount: pending.pendingAmount,
+      currentPendingCount: pending.pendingCount,
+      isCleared: pending.pendingAmount === 0,
+      reinstatedDate: s.leftInfo?.reinstatedDate || null,
+    };
+  });
+
+  return {
+    summary: {
+      totalLeft: students.length,
+      totalOutstandingNow,
+      totalOutstandingAtLeaving,
+      clearedCount,
+      pendingCount: students.length - clearedCount,
+    },
+    data,
+    chartData: Object.entries(byReason).map(([key, value]) => ({
+      name: LEAVING_REASON_LABELS[key] || key,
+      value,
+    })),
+  };
+};
+
 // ═════════════════════════════════════════════════════════════════════════════
 // TEACHER REPORTS
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1421,6 +1517,7 @@ module.exports = {
   getStudentListByClass,
   getStudentFeeStatus,
   getStudentAttendanceSummary,
+  getLeftStudentsReport,
   getTeacherSalaryReport,
   getTeacherWorkload,
   getVouchersByStatus,

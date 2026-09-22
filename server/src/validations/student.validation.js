@@ -33,7 +33,7 @@ const createStudent = {
       }),
       Joi.string(), // FormData sends as JSON string
     ),
-    status: Joi.string().valid('active', 'inactive', 'graduated', 'transferred'),
+    status: Joi.string().valid('active', 'inactive', 'graduated', 'transferred', 'struck_off'),
     prorateFee: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')),
   }),
 };
@@ -44,7 +44,7 @@ const getStudents = {
     lastName: Joi.string(),
     classId: Joi.string().custom(objectId),
     sectionId: Joi.string().custom(objectId),
-    status: Joi.string().valid('active', 'inactive', 'graduated', 'transferred'),
+    status: Joi.string().valid('active', 'inactive', 'graduated', 'transferred', 'struck_off'),
     admissionNumber: Joi.string(),
     search: Joi.string().allow(''),
     sortBy: Joi.string(),
@@ -95,7 +95,7 @@ const updateStudent = {
         }),
         Joi.string(),
       ),
-      status: Joi.string().valid('active', 'inactive', 'graduated', 'transferred'),
+      status: Joi.string().valid('active', 'inactive', 'graduated', 'transferred', 'struck_off'),
     })
     .min(1),
 };
@@ -109,6 +109,24 @@ const deleteStudent = {
 const getStudentsByClass = {
   params: Joi.object().keys({
     classId: Joi.string().custom(objectId),
+  }),
+};
+
+const struckOffStudent = {
+  params: Joi.object().keys({
+    id: Joi.string().custom(objectId),
+  }),
+  body: Joi.object().keys({
+    leftDate: Joi.alternatives().try(Joi.date(), Joi.string()),
+    reason: Joi.string().valid('fee_default', 'withdrawn', 'relocation', 'disciplinary', 'academic', 'other').required(),
+    remarks: Joi.string().allow(''),
+    tcNumber: Joi.string().allow(''),
+  }),
+};
+
+const reinstateStudent = {
+  params: Joi.object().keys({
+    id: Joi.string().custom(objectId),
   }),
 };
 
@@ -136,4 +154,6 @@ module.exports = {
   getStudentsByClass,
   promoteStudents,
   getPromotionEligibility,
+  struckOffStudent,
+  reinstateStudent,
 };

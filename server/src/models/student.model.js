@@ -110,8 +110,28 @@ const studentSchema = mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'inactive', 'graduated', 'transferred'],
+      enum: ['active', 'inactive', 'graduated', 'transferred', 'struck_off'],
       default: 'active',
+    },
+    // Populated when status becomes 'struck_off' — captures why/when the student
+    // left and what they still owed at that moment, for record-keeping and the
+    // Left/Struck-Off Students report. Kept (not cleared) after a reinstatement so
+    // the last leaving episode stays in the audit trail; reinstatedDate/By mark it closed.
+    leftInfo: {
+      leftDate: { type: Date },
+      reason: {
+        type: String,
+        enum: ['fee_default', 'withdrawn', 'relocation', 'disciplinary', 'academic', 'other'],
+      },
+      remarks: { type: String, trim: true },
+      // Snapshot of unpaid vouchers at the moment of leaving — later payments against
+      // those vouchers don't change this figure, so it stays an accurate "what they
+      // owed when they left" record even if dues are later settled or written off.
+      outstandingDuesAtLeaving: { type: Number, default: 0, min: 0 },
+      tcNumber: { type: String, trim: true },
+      struckOffBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      reinstatedDate: { type: Date },
+      reinstatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     },
   },
   { timestamps: true }

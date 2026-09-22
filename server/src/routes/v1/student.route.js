@@ -60,6 +60,14 @@ router
   .get(auth('getSchool'), validate(studentValidation.getStudent), studentController.getAdmissionForm);
 
 router
+  .route('/:id/strike-off')
+  .post(auth('manageSchool'), validate(studentValidation.struckOffStudent), studentController.struckOffStudent);
+
+router
+  .route('/:id/reinstate')
+  .post(auth('manageSchool'), validate(studentValidation.reinstateStudent), studentController.reinstateStudent);
+
+router
   .route('/class/:classId')
   .get(auth('getSchool'), validate(studentValidation.getStudentsByClass), studentController.getStudentsByClass);
 

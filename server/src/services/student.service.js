@@ -725,6 +725,60 @@ const getPromotionEligibility = async (classId, scope = {}) => {
   });
 };
 
+/**
+ * Mark a student as struck off (left the school) — for voluntary withdrawal, fee
+ * default, relocation, disciplinary action, etc. Unlike deleteStudentById, this
+ * NEVER removes financial history: fee vouchers, ledgers and transactions stay
+ * intact so past dues remain visible in reports even after the student is gone.
+ * The student's pending dues at this exact moment are snapshotted onto leftInfo
+ * so the amount they owed on leaving is preserved regardless of what happens later.
+ */
+const struckOffStudent = async (id, body, scope = {}, actorId) => {
+  const doc = await getStudentById(id, scope);
+  if (!doc) throw new ApiError(httpStatus.NOT_FOUND, 'Student not found');
+  if (doc.status === 'struck_off') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Student is already struck off');
+  }
+
+  const pendingMap = await checkStudentPendingFees([id], scope);
+  const pending = pendingMap[id.toString()] || { pendingCount: 0, pendingAmount: 0 };
+
+  doc.status = 'struck_off';
+  doc.leftInfo = {
+    leftDate: body.leftDate ? new Date(body.leftDate) : new Date(),
+    reason: body.reason,
+    remarks: body.remarks || '',
+    outstandingDuesAtLeaving: pending.pendingAmount,
+    tcNumber: body.tcNumber || '',
+    struckOffBy: actorId,
+  };
+  await doc.save();
+
+  return { student: doc, pendingCount: pending.pendingCount, pendingAmount: pending.pendingAmount };
+};
+
+/**
+ * Undo a strike-off — re-admits the student to active status (e.g. dues were
+ * cleared, or the withdrawal was reversed). The prior leftInfo is kept (not wiped)
+ * with reinstatedDate/By stamped on it, so the leaving episode stays on record.
+ */
+const reinstateStudent = async (id, scope = {}, actorId) => {
+  const doc = await getStudentById(id, scope);
+  if (!doc) throw new ApiError(httpStatus.NOT_FOUND, 'Student not found');
+  if (doc.status !== 'struck_off') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Only a struck-off student can be reinstated');
+  }
+
+  doc.status = 'active';
+  doc.leftInfo = {
+    ...(doc.leftInfo?.toObject ? doc.leftInfo.toObject() : doc.leftInfo || {}),
+    reinstatedDate: new Date(),
+    reinstatedBy: actorId,
+  };
+  await doc.save();
+  return doc;
+};
+
 module.exports = {
   generateAdmissionNumber,
   generateRollNumber,
@@ -742,4 +796,7 @@ module.exports = {
   bulkImportStudents,
   promoteStudents,
   getPromotionEligibility,
+  checkStudentPendingFees,
+  struckOffStudent,
+  reinstateStudent,
 };

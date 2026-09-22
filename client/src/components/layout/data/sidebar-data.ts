@@ -35,7 +35,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -841,6 +841,7 @@ export const sidebarData: SidebarData = {
             { title: 'Fee Status', url: '/school/fees/reports?tab=students-fee-status' as never, icon: ClipboardList },
             { title: 'Attendance', url: '/school/fees/reports?tab=students-attendance' as never, icon: CalendarCheck },
             { title: 'Student List', url: '/school/fees/reports?tab=students-list' as never, icon: Users },
+            { title: 'Left / Struck Off', url: '/school/fees/reports?tab=students-left' as never, icon: UserX },
           ],
         },
         {
