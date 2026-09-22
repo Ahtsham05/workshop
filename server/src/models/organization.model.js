@@ -16,6 +16,11 @@ const buildNumberingSectionSchema = (defaults) => new mongoose.Schema({
   // Floor used only the first time a counter bucket is ever seeded (see
   // documentNumbering.service.js#ensureCounterSeeded) — not a live "current number".
   startingNumber: { type: Number, min: 1, default: 1 },
+  // 'organization' (default): one sequence shared by every branch, numbers stay continuous
+  // org-wide. 'branch': each branch gets its own independent sequence (e.g. Branch A and
+  // Branch B can both legitimately reach INV-001000 at the same time) — see
+  // documentNumbering.service.js's bucketKeyFor.
+  scope: { type: String, enum: ['organization', 'branch'], default: 'organization' },
 }, { _id: false });
 
 const organizationSchema = mongoose.Schema(

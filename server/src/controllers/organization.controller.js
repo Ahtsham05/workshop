@@ -164,6 +164,7 @@ const previewDocumentNumbering = catchAsync(async (req, res) => {
   assertOwnOrganization(req);
   const result = await documentNumberingService.peekNextNumber({
     organizationId: req.params.orgId,
+    branchId: req.body.branchId,
     docType: req.body.docType,
     config: req.body.config,
   });
@@ -180,6 +181,7 @@ const setDocumentNumberingNextNumber = catchAsync(async (req, res) => {
   assertOwnOrganization(req);
   const result = await documentNumberingService.setNextNumber({
     organizationId: req.params.orgId,
+    branchId: req.body.branchId,
     docType: req.params.docType,
     nextNumber: req.body.nextNumber,
   });

@@ -195,10 +195,12 @@ PurchaseSchema.index({ organizationId: 1, branchId: 1, 'items.product': 1, purch
 // Supports the supplier payment allocator's "open invoices, oldest first" scan and the
 // supplier-scoped list filter — see supplierPayment.service.js's getOpenInvoicesForSupplier.
 PurchaseSchema.index({ organizationId: 1, branchId: 1, supplier: 1, purchaseDate: 1 });
-// Per-organization unique purchase number — replaces the old global unique index so two
-// different tenants can legitimately share the same number with no collision (see
-// documentNumbering.service.js).
-PurchaseSchema.index({ organizationId: 1, invoiceNumber: 1 }, { unique: true });
+// Unique purchase number, scoped per organization AND branch — branch-scoped (not just
+// org-scoped) so a docType configured for per-branch numbering can let two branches
+// legitimately share the same number with no collision; documentNumbering.service.js's
+// generateNextNumber and assertManualNumberAvailable add back org-wide uniqueness in JS for
+// docTypes still configured for org-wide numbering (this codebase's default).
+PurchaseSchema.index({ organizationId: 1, branchId: 1, invoiceNumber: 1 }, { unique: true });
 
 const Purchase = mongoose.model('Purchase', PurchaseSchema);
 

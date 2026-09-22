@@ -356,7 +356,7 @@ const generateBillNumber = catchAsync(async (req, res) => {
 });
 
 const getNextInvoiceNumber = catchAsync(async (req, res) => {
-  const invoiceNumber = await invoiceService.previewNextInvoiceNumber(req.organizationId, req.query.type);
+  const invoiceNumber = await invoiceService.previewNextInvoiceNumber(req.organizationId, req.branchId, req.query.type);
   // Not reserved — same caching concern as generateBillNumber above.
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');

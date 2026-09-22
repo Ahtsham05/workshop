@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Loader2, FileText, ShoppingCart, FileSignature, Hash } from 'lucide-react'
+import { Loader2, FileText, ShoppingCart, FileSignature, Hash, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import ContentSection from '../components/content-section'
 import { EntityFormSection } from '@/components/entity-form-section'
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { useSettingsSaveShortcut } from '@/lib/settings-form-keyboard'
 import { getErrorMessage } from '@/lib/get-error-message'
+import { useGetMyBranchesQuery } from '@/stores/branch.api'
 import {
   useGetMyOrganizationQuery,
   useUpdateOrganizationSettingsMutation,
@@ -25,6 +26,7 @@ import {
   type NumberingDateSegment,
   type NumberingResetPeriod,
   type NumberingDocType,
+  type NumberingScope,
 } from '@/stores/organization.api'
 
 // Mirrors server/src/services/documentNumbering.service.js's formatNumber/dateSegmentFor
@@ -63,6 +65,19 @@ const RESET_PERIOD_OPTIONS: Array<{ value: NumberingResetPeriod; label: string }
   { value: 'monthly', label: 'Every month' },
 ]
 
+const SCOPE_OPTIONS: Array<{ value: NumberingScope; label: string; description: string }> = [
+  {
+    value: 'organization',
+    label: 'Organization-wide',
+    description: 'One running sequence shared by every branch — no gaps across the whole business.',
+  },
+  {
+    value: 'branch',
+    label: 'Per branch',
+    description: 'Each branch counts its own sequence independently, e.g. Branch A and Branch B can both reach 1000 at the same time.',
+  },
+]
+
 const clampResetPeriod = (dateSegment: NumberingDateSegment, resetPeriod: NumberingResetPeriod): NumberingResetPeriod =>
   GRANULARITY[resetPeriod] > GRANULARITY[dateSegment] ? (dateSegment === 'none' ? 'never' : dateSegment) : resetPeriod
 
@@ -99,14 +114,27 @@ function NumberingSection({
   const [fetchPreview, { data: previewResult, isLoading: previewLoading }] = usePreviewDocumentNumberingMutation()
   const [setNextNumber, { isLoading: settingNext }] = useSetDocumentNumberingNextNumberMutation()
   const [nextNumberInput, setNextNumberInput] = useState('')
+  const { data: branches = [] } = useGetMyBranchesQuery(undefined, { skip: value.scope !== 'branch' })
+  const [selectedBranchId, setSelectedBranchId] = useState('')
 
-  // Only re-asks the server when dateSegment/resetPeriod change — those are the only fields
-  // that pick a different counter bucket. Prefix/separator/padding are pure re-formatting of
-  // the already-fetched seq, done instantly below with no round trip.
+  // Default to the org's default branch (or just the first one) the moment branches load and
+  // nothing's picked yet — only matters once scope is switched to 'branch'.
   useEffect(() => {
-    fetchPreview({ orgId, docType, config: value })
+    if (selectedBranchId || branches.length === 0) return
+    setSelectedBranchId(branches.find((b) => b.isDefault)?.id ?? branches[0].id)
+  }, [branches, selectedBranchId])
+
+  const branchId = value.scope === 'branch' ? selectedBranchId : undefined
+  const branchNotReady = value.scope === 'branch' && !branchId
+
+  // Only re-asks the server when dateSegment/resetPeriod/scope/branch change — those are the
+  // only things that pick a different counter bucket. Prefix/separator/padding are pure
+  // re-formatting of the already-fetched seq, done instantly below with no round trip.
+  useEffect(() => {
+    if (branchNotReady) return
+    fetchPreview({ orgId, docType, config: value, branchId })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, docType, value.dateSegment, value.resetPeriod])
+  }, [orgId, docType, value.dateSegment, value.resetPeriod, value.scope, branchId, branchNotReady])
 
   const nextSeq = previewResult?.nextSeq ?? 1
   const previewText = formatPreviewNumber(value, nextSeq)
@@ -120,12 +148,12 @@ function NumberingSection({
   const nextNumberWouldCollide = nextNumberValid && parsedNextNumber < nextSeq
 
   const handleSetNextNumber = async () => {
-    if (!nextNumberValid || nextNumberWouldCollide) return
+    if (!nextNumberValid || nextNumberWouldCollide || branchNotReady) return
     try {
-      const result = await setNextNumber({ orgId, docType, nextNumber: parsedNextNumber }).unwrap()
+      const result = await setNextNumber({ orgId, docType, nextNumber: parsedNextNumber, branchId }).unwrap()
       toast.success(`Next ${meta.title.toLowerCase()} number set to ${result.preview}`)
       setNextNumberInput('')
-      fetchPreview({ orgId, docType, config: value })
+      fetchPreview({ orgId, docType, config: value, branchId })
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to update the next number'))
     }
@@ -134,6 +162,44 @@ function NumberingSection({
   return (
     <EntityFormSection title={meta.title} description={meta.description} icon={meta.icon}>
       <div className='grid gap-4 sm:grid-cols-2'>
+        <div className='sm:col-span-2'>
+          <Label className='text-sm'>Numbering scope</Label>
+          <Select value={value.scope} onValueChange={(v) => onChange({ ...value, scope: v as NumberingScope })}>
+            <SelectTrigger className='mt-1'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCOPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className='mt-1 text-xs text-muted-foreground'>{SCOPE_OPTIONS.find((o) => o.value === value.scope)?.description}</p>
+        </div>
+        {value.scope === 'branch' && (
+          <div className='sm:col-span-2'>
+            <Label className='text-sm'>Branch</Label>
+            <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+              <SelectTrigger className='mt-1'>
+                <Building2 className='h-4 w-4 shrink-0 text-muted-foreground' />
+                <SelectValue placeholder='Select a branch' />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                    {b.isDefault ? ' (Default)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className='mt-1 text-xs text-muted-foreground'>
+              Preview and "Resume from number" below apply to this branch only — every branch keeps its own independent sequence.
+            </p>
+          </div>
+        )}
         <div>
           <Label className='text-sm'>Prefix</Label>
           <Input
@@ -201,7 +267,9 @@ function NumberingSection({
       <div className='flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2'>
         <Hash className='h-4 w-4 shrink-0 text-muted-foreground' />
         <span className='text-sm text-muted-foreground'>Preview:</span>
-        {previewLoading && !previewResult ? (
+        {branchNotReady ? (
+          <span className='text-sm text-muted-foreground'>Select a branch above</span>
+        ) : previewLoading && !previewResult ? (
           <Loader2 className='h-3.5 w-3.5 animate-spin text-muted-foreground' />
         ) : (
           <span className='font-mono text-sm font-medium'>{previewText}</span>
@@ -217,6 +285,7 @@ function NumberingSection({
             placeholder={String(nextSeq)}
             value={nextNumberInput}
             onChange={(e) => setNextNumberInput(e.target.value)}
+            disabled={branchNotReady}
             className='mt-1 w-40'
           />
         </div>
@@ -224,7 +293,7 @@ function NumberingSection({
           type='button'
           variant='outline'
           size='sm'
-          disabled={!nextNumberValid || nextNumberWouldCollide || settingNext}
+          disabled={!nextNumberValid || nextNumberWouldCollide || settingNext || branchNotReady}
           onClick={handleSetNextNumber}
         >
           {settingNext ? <Loader2 className='h-4 w-4 animate-spin' /> : 'Set'}

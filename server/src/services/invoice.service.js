@@ -495,9 +495,25 @@ const createInvoice = async (invoiceBody, userId) => {
   // couldn't reach organizationId/the org's format cleanly.
   const hasManualInvoiceNumber = Boolean(invoiceBody.invoiceNumber && String(invoiceBody.invoiceNumber).trim());
   const numberingDocType = invoiceBody.type === 'quotation' ? 'quotation' : 'invoice';
-  const initialInvoiceNumber = hasManualInvoiceNumber
-    ? String(invoiceBody.invoiceNumber).trim()
-    : await documentNumberingService.generateNextNumber({ organizationId: invoiceBody.organizationId, docType: numberingDocType });
+  let initialInvoiceNumber;
+  if (hasManualInvoiceNumber) {
+    initialInvoiceNumber = String(invoiceBody.invoiceNumber).trim();
+    // The DB's unique index is branch-scoped, which alone isn't enough when this docType is
+    // configured for organization-wide numbering (the default) — without this, two branches
+    // could end up with the same manually-typed number. See assertManualNumberAvailable.
+    await documentNumberingService.assertManualNumberAvailable({
+      organizationId: invoiceBody.organizationId,
+      branchId: invoiceBody.branchId,
+      docType: numberingDocType,
+      invoiceNumber: initialInvoiceNumber,
+    });
+  } else {
+    initialInvoiceNumber = await documentNumberingService.generateNextNumber({
+      organizationId: invoiceBody.organizationId,
+      branchId: invoiceBody.branchId,
+      docType: numberingDocType,
+    });
+  }
 
   // Create invoice
   const invoice = new Invoice({
@@ -1508,6 +1524,7 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
   invoice.type = targetType;
   invoice.invoiceNumber = await documentNumberingService.generateNextNumber({
     organizationId: invoice.organizationId,
+    branchId: invoice.branchId,
     docType: 'invoice',
   });
   invoice.updatedBy = userId;
@@ -1806,12 +1823,13 @@ const generateBillNumber = async () => {
  * consuming a number. Still not "reserved" for a specific save: another invoice created in
  * between will take this exact number, and this preview will move on to the next one.
  * @param {string} organizationId
+ * @param {string} branchId - required only when this docType's numbering scope is 'branch'
  * @param {string} type - invoice type ('quotation' gets the QUO- config, everything else invoice's)
  * @returns {Promise<string>}
  */
-const previewNextInvoiceNumber = async (organizationId, type) => {
+const previewNextInvoiceNumber = async (organizationId, branchId, type) => {
   const docType = type === 'quotation' ? 'quotation' : 'invoice';
-  const { preview } = await documentNumberingService.peekNextNumber({ organizationId, docType });
+  const { preview } = await documentNumberingService.peekNextNumber({ organizationId, branchId, docType });
   return preview;
 };
 

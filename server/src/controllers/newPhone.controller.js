@@ -16,7 +16,7 @@ const getStats = catchAsync(async (req, res) => {
 const createPurchase = catchAsync(async (req, res) => {
   const body = {
     ...req.body,
-    invoiceNumber: await purchaseService.generateNextPurchaseInvoiceNumber(req.organizationId),
+    invoiceNumber: await purchaseService.generateNextPurchaseInvoiceNumber(req.organizationId, req.branchId),
     ...getBranchContext(req),
   };
   const purchase = await newPhoneService.createNewPhonePurchase(body);

@@ -264,11 +264,16 @@ InvoiceSchema.index({ organizationId: 1, branchId: 1, customerId: 1, invoiceDate
 // identical items.product/purchaseDate index.
 InvoiceSchema.index({ organizationId: 1, branchId: 1, 'items.productId': 1, invoiceDate: -1 });
 
-// Per-organization unique invoice/quotation number (Invoice and Quotation share this field
-// and collection, distinguished by `type`; see documentNumbering.service.js's DOC_TYPES).
-// Compound with organizationId so two different tenants can legitimately share the same
-// number with no collision — sparse since a document mid-creation may not have one yet.
-InvoiceSchema.index({ organizationId: 1, invoiceNumber: 1 }, { unique: true, sparse: true });
+// Unique invoice/quotation number, scoped per organization AND branch (Invoice and
+// Quotation share this field and collection, distinguished by `type`; see
+// documentNumbering.service.js's DOC_TYPES). Branch-scoped (not just org-scoped) so a
+// docType configured for per-branch numbering can let two branches legitimately share the
+// same number with no collision; documentNumbering.service.js's generateNextNumber and
+// assertManualNumberAvailable add back org-wide uniqueness in JS for docTypes still
+// configured for org-wide numbering (this codebase's default). Mirrors serviceInvoice.model.js's
+// identical {organizationId, branchId, invoiceNumber} unique index. Sparse since a document
+// mid-creation may not have a number yet.
+InvoiceSchema.index({ organizationId: 1, branchId: 1, invoiceNumber: 1 }, { unique: true, sparse: true });
 
 // add plugin that converts mongoose to json
 InvoiceSchema.plugin(toJSON);

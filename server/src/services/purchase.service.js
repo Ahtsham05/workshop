@@ -311,12 +311,12 @@ const resolvePurchaseLedgerPaymentMethod = (purchase) => {
  * Replaces the old global "scan for max trailing digits + 1" scheme, which wasn't scoped per
  * organization and always used a hardcoded INV- prefix despite being a purchase.
  */
-const generateNextPurchaseInvoiceNumber = async (organizationId) =>
-  documentNumberingService.generateNextNumber({ organizationId, docType: 'purchase' });
+const generateNextPurchaseInvoiceNumber = async (organizationId, branchId) =>
+  documentNumberingService.generateNextNumber({ organizationId, branchId, docType: 'purchase' });
 
 /** Non-mutating peek at the next purchase number — see documentNumbering.service.js#peekNextNumber. */
-const previewNextPurchaseInvoiceNumber = async (organizationId) => {
-  const { preview } = await documentNumberingService.peekNextNumber({ organizationId, docType: 'purchase' });
+const previewNextPurchaseInvoiceNumber = async (organizationId, branchId) => {
+  const { preview } = await documentNumberingService.peekNextNumber({ organizationId, branchId, docType: 'purchase' });
   return preview;
 };
 

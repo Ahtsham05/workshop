@@ -26,61 +26,183 @@ const minimalInvoice = (overrides) => ({
 // path only ever runs once per process. These two tests must be the FIRST to touch their
 // docType in this file, or a later test's earlier call would have already flipped the memo
 // and short-circuited before this test's simulated legacy index even existed.
-describe('documentNumbering.service — legacy global unique index migration', () => {
-  test('migrates Invoice\'s legacy global unique index to a per-organization compound index, and generation still works after', async () => {
+describe('documentNumbering.service — legacy unique index migration', () => {
+  test('migrates Invoice\'s legacy index (global or org-scoped) up to a {organizationId, branchId, invoiceNumber} compound index', async () => {
     const collection = mongoose.connection.collection('invoices');
-    await collection.createIndex({ invoiceNumber: 1 }, { unique: true, name: 'invoiceNumber_1' });
-    expect((await collection.indexes()).some((idx) => idx.name === 'invoiceNumber_1')).toBe(true);
+    // Simulate a deploy that already ran the FIRST migration (org-scoped, 2-field) — the
+    // shape this exact codebase shipped moments before branch-scoping was added.
+    await collection.createIndex({ organizationId: 1, invoiceNumber: 1 }, { unique: true, name: 'organizationId_1_invoiceNumber_1' });
+    expect((await collection.indexes()).some((idx) => idx.name === 'organizationId_1_invoiceNumber_1')).toBe(true);
 
     const org = await insertOrganization();
     const number = await documentNumberingService.generateNextNumber({ organizationId: org._id, docType: 'invoice' });
     expect(number).toMatch(/^INV-/);
 
     const indexesAfter = await collection.indexes();
-    expect(indexesAfter.some((idx) => idx.name === 'invoiceNumber_1')).toBe(false);
+    expect(indexesAfter.some((idx) => idx.name === 'organizationId_1_invoiceNumber_1')).toBe(false);
     expect(
-      indexesAfter.some((idx) => idx.unique && idx.key.organizationId === 1 && idx.key.invoiceNumber === 1)
+      indexesAfter.some(
+        (idx) => idx.unique && idx.key.organizationId === 1 && idx.key.branchId === 1 && idx.key.invoiceNumber === 1
+      )
     ).toBe(true);
   });
 
-  test('after migration, two different orgs CAN share the same manually-typed invoiceNumber (previously would collide globally)', async () => {
+  test('DB-level: same org + same branch + same number is rejected; same org + DIFFERENT branch + same number is now allowed (branch-scoped index)', async () => {
+    const org = await insertOrganization();
+    const branchA = new mongoose.Types.ObjectId();
+    const branchB = new mongoose.Types.ObjectId();
+
+    await Invoice.create(minimalInvoice({ organizationId: org._id, branchId: branchA, invoiceNumber: 'CUSTOM-001' }));
+    await expect(
+      Invoice.create(minimalInvoice({ organizationId: org._id, branchId: branchA, invoiceNumber: 'CUSTOM-001' }))
+    ).rejects.toThrow(); // same org, same branch, same number — still rejected
+
+    await expect(
+      Invoice.create(minimalInvoice({ organizationId: org._id, branchId: branchB, invoiceNumber: 'CUSTOM-001' }))
+    ).resolves.toBeTruthy(); // same org, different branch — DB alone no longer blocks this
+  });
+
+  test('two different organizations CAN share the same manually-typed invoiceNumber (the original multi-tenant bug)', async () => {
     const orgA = await insertOrganization({ name: 'Org A' });
     const orgB = await insertOrganization({ name: 'Org B' });
 
-    await Invoice.create(minimalInvoice({ organizationId: orgA._id, invoiceNumber: 'CUSTOM-001' }));
+    await Invoice.create(minimalInvoice({ organizationId: orgA._id, invoiceNumber: 'CUSTOM-002' }));
     await expect(
-      Invoice.create(minimalInvoice({ organizationId: orgB._id, invoiceNumber: 'CUSTOM-001' }))
-    ).resolves.toBeTruthy(); // different org, same number — no collision
-
-    await expect(
-      Invoice.create(minimalInvoice({ organizationId: orgA._id, invoiceNumber: 'CUSTOM-001' }))
-    ).rejects.toThrow(); // same org, same number — still rejected
+      Invoice.create(minimalInvoice({ organizationId: orgB._id, invoiceNumber: 'CUSTOM-002' }))
+    ).resolves.toBeTruthy();
   });
 
-  test('migrates Purchase\'s legacy global unique index the same way, and cross-org sharing works', async () => {
+  test('migrates Purchase\'s legacy index the same way', async () => {
     const collection = mongoose.connection.collection('purchases');
     await collection.createIndex({ invoiceNumber: 1 }, { unique: true, name: 'invoiceNumber_1' });
 
-    const orgA = await insertOrganization({ name: 'Org A' });
-    const orgB = await insertOrganization({ name: 'Org B' });
-    const number = await documentNumberingService.generateNextNumber({ organizationId: orgA._id, docType: 'purchase' });
+    const org = await insertOrganization();
+    const number = await documentNumberingService.generateNextNumber({ organizationId: org._id, docType: 'purchase' });
     expect(number).toMatch(/^PUR-/);
 
     const indexesAfter = await collection.indexes();
     expect(indexesAfter.some((idx) => idx.name === 'invoiceNumber_1')).toBe(false);
     expect(
-      indexesAfter.some((idx) => idx.unique && idx.key.organizationId === 1 && idx.key.invoiceNumber === 1)
+      indexesAfter.some(
+        (idx) => idx.unique && idx.key.organizationId === 1 && idx.key.branchId === 1 && idx.key.invoiceNumber === 1
+      )
     ).toBe(true);
+  });
+});
 
-    const basePurchase = {
-      branchId: new mongoose.Types.ObjectId(),
+describe('documentNumbering.service — assertManualNumberAvailable (manual-override collision guard)', () => {
+  test('organization-scoped docType: rejects a manual number already used by ANOTHER branch in the same org (closes the gap the branch-scoped DB index alone leaves)', async () => {
+    const org = await insertOrganization(); // invoice defaults to scope: 'organization'
+    const branchA = new mongoose.Types.ObjectId();
+    const branchB = new mongoose.Types.ObjectId();
+    await Invoice.create(minimalInvoice({ organizationId: org._id, branchId: branchA, invoiceNumber: 'ORG-SHARED-001' }));
+
+    await expect(
+      documentNumberingService.assertManualNumberAvailable({
+        organizationId: org._id,
+        branchId: branchB,
+        docType: 'invoice',
+        invoiceNumber: 'ORG-SHARED-001',
+      })
+    ).rejects.toThrow(/already in use/);
+  });
+
+  test('branch-scoped docType: allows the same manual number in two different branches (DB index alone is sufficient)', async () => {
+    const org = await insertOrganization();
+    org.documentNumbering.purchase.scope = 'branch';
+    await org.save();
+    const branchA = new mongoose.Types.ObjectId();
+    const branchB = new mongoose.Types.ObjectId();
+
+    await expect(
+      documentNumberingService.assertManualNumberAvailable({
+        organizationId: org._id,
+        branchId: branchB,
+        docType: 'purchase',
+        invoiceNumber: 'BR-SHARED-001',
+      })
+    ).resolves.toBeUndefined(); // no-ops for branch scope; nothing to reject
+  });
+});
+
+describe('documentNumbering.service — per-branch numbering scope', () => {
+  test('generateNextNumber throws if scope is "branch" and no branchId is given', async () => {
+    const org = await insertOrganization();
+    org.documentNumbering.purchase.scope = 'branch';
+    await org.save();
+
+    await expect(
+      documentNumberingService.generateNextNumber({ organizationId: org._id, docType: 'purchase' })
+    ).rejects.toThrow(/[Bb]ranch is required/);
+  });
+
+  test('two branches of the SAME org get fully independent sequences — Branch A hitting 1000 never affects or skips Branch B', async () => {
+    const org = await insertOrganization();
+    org.documentNumbering.purchase.scope = 'branch';
+    await org.save();
+    const branchA = new mongoose.Types.ObjectId();
+    const branchB = new mongoose.Types.ObjectId();
+
+    for (let i = 0; i < 5; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await documentNumberingService.generateNextNumber({ organizationId: org._id, branchId: branchA, docType: 'purchase' });
+    }
+    const branchBFirst = await documentNumberingService.generateNextNumber({ organizationId: org._id, branchId: branchB, docType: 'purchase' });
+    expect(branchBFirst).toBe('PUR-000001'); // unaffected by Branch A's 5 prior numbers
+
+    const branchASixth = await documentNumberingService.generateNextNumber({ organizationId: org._id, branchId: branchA, docType: 'purchase' });
+    expect(branchASixth).toBe('PUR-000006'); // unaffected by Branch B's activity in between
+  });
+
+  test('"resume from number" on one branch does not affect another branch\'s sequence', async () => {
+    const org = await insertOrganization();
+    org.documentNumbering.purchase.scope = 'branch';
+    await org.save();
+    const branchA = new mongoose.Types.ObjectId();
+    const branchB = new mongoose.Types.ObjectId();
+
+    await documentNumberingService.generateNextNumber({ organizationId: org._id, branchId: branchA, docType: 'purchase' }); // PUR-000001
+    await documentNumberingService.setNextNumber({ organizationId: org._id, branchId: branchA, docType: 'purchase', nextNumber: 1000 });
+
+    const branchANext = await documentNumberingService.generateNextNumber({ organizationId: org._id, branchId: branchA, docType: 'purchase' });
+    expect(branchANext).toBe('PUR-001000');
+
+    const branchBNext = await documentNumberingService.generateNextNumber({ organizationId: org._id, branchId: branchB, docType: 'purchase' });
+    expect(branchBNext).toBe('PUR-000001'); // completely untouched by Branch A's resume
+  });
+
+  test('peekNextNumber for a draft config with scope "branch" requires branchId', async () => {
+    const org = await insertOrganization();
+    await expect(
+      documentNumberingService.peekNextNumber({
+        organizationId: org._id,
+        docType: 'purchase',
+        config: { prefix: 'PUR', separator: '-', dateSegment: 'none', resetPeriod: 'never', padding: 6, startingNumber: 1, scope: 'branch' },
+      })
+    ).rejects.toThrow(/[Bb]ranch is required/);
+  });
+
+  test('lazy seeding for a branch-scoped bucket only counts THAT branch\'s historical documents', async () => {
+    const org = await insertOrganization();
+    org.documentNumbering.purchase.scope = 'branch';
+    await org.save();
+    const branchA = new mongoose.Types.ObjectId();
+    const branchB = new mongoose.Types.ObjectId();
+
+    await Purchase.create({
+      organizationId: org._id,
+      branchId: branchA,
       supplier: new mongoose.Types.ObjectId(),
       items: [],
       totalAmount: 100,
-      invoiceNumber: 'PCUSTOM-001',
-    };
-    await Purchase.create({ organizationId: orgA._id, ...basePurchase });
-    await expect(Purchase.create({ organizationId: orgB._id, ...basePurchase })).resolves.toBeTruthy();
+      invoiceNumber: 'PUR-000075',
+    });
+
+    const branchANext = await documentNumberingService.generateNextNumber({ organizationId: org._id, branchId: branchA, docType: 'purchase' });
+    expect(branchANext).toBe('PUR-000076'); // continues Branch A's own history
+
+    const branchBNext = await documentNumberingService.generateNextNumber({ organizationId: org._id, branchId: branchB, docType: 'purchase' });
+    expect(branchBNext).toBe('PUR-000001'); // Branch B has no history of its own, starts fresh
   });
 });
 

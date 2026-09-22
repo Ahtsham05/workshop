@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { purchaseService, supplierService, productService, auditLogService } = require('../services');
+const { purchaseService, supplierService, productService, auditLogService, documentNumberingService } = require('../services');
 const purchaseVisionService = require('../services/purchaseVision.service');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
@@ -18,11 +18,23 @@ const createPurchase = catchAsync(async (req, res) => {
   // silently swapped for an auto-generated one the user never asked for — mirrors Invoice's
   // identical hasManualInvoiceNumber handling.
   const hasManualInvoiceNumber = Boolean(req.body.invoiceNumber && String(req.body.invoiceNumber).trim());
+  let resolvedInvoiceNumber;
+  if (hasManualInvoiceNumber) {
+    resolvedInvoiceNumber = String(req.body.invoiceNumber).trim();
+    // The DB's unique index is branch-scoped, which alone isn't enough when Purchase is
+    // configured for organization-wide numbering (the default) — see assertManualNumberAvailable.
+    await documentNumberingService.assertManualNumberAvailable({
+      organizationId: req.organizationId,
+      branchId: req.branchId,
+      docType: 'purchase',
+      invoiceNumber: resolvedInvoiceNumber,
+    });
+  } else {
+    resolvedInvoiceNumber = await purchaseService.generateNextPurchaseInvoiceNumber(req.organizationId, req.branchId);
+  }
   const newPurchaseData = {
     ...req.body,
-    invoiceNumber: hasManualInvoiceNumber
-      ? String(req.body.invoiceNumber).trim()
-      : await purchaseService.generateNextPurchaseInvoiceNumber(req.organizationId),
+    invoiceNumber: resolvedInvoiceNumber,
     ...getBranchContext(req),
   };
 
@@ -162,7 +174,7 @@ const getPurchaseByDate = catchAsync(async (req, res) => {
 // read of this org's real counter (see getNextInvoiceNumber on the invoice controller for
 // the identical pattern).
 const getNextPurchaseInvoiceNumber = catchAsync(async (req, res) => {
-  const invoiceNumber = await purchaseService.previewNextPurchaseInvoiceNumber(req.organizationId);
+  const invoiceNumber = await purchaseService.previewNextPurchaseInvoiceNumber(req.organizationId, req.branchId);
   res.send({ invoiceNumber });
 });
 

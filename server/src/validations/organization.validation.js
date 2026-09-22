@@ -14,6 +14,7 @@ const numberingSection = Joi.object({
   resetPeriod: Joi.string().valid('never', 'yearly', 'monthly'),
   padding: Joi.number().integer().min(1).max(10),
   startingNumber: Joi.number().integer().min(1),
+  scope: Joi.string().valid('organization', 'branch'),
 }).custom((value) => {
   if (
     value.dateSegment &&
@@ -93,6 +94,9 @@ const previewDocumentNumbering = {
   body: Joi.object().keys({
     docType: Joi.string().valid('invoice', 'purchase', 'quotation').required(),
     config: numberingSection,
+    // Required only when the (draft or resolved) config's scope is 'branch' — selects which
+    // branch's bucket to preview.
+    branchId: Joi.string().custom(objectId),
   }),
 };
 
@@ -105,6 +109,9 @@ const setDocumentNumberingNextNumber = {
   }),
   body: Joi.object().keys({
     nextNumber: Joi.number().integer().min(1).required(),
+    // Required only when this docType's numbering scope is 'branch' — selects which branch's
+    // bucket to resume/skip ahead.
+    branchId: Joi.string().custom(objectId),
   }),
 };
 

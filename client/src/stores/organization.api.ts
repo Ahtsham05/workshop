@@ -27,6 +27,7 @@ export type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
 export type NumberingDateSegment = 'none' | 'yearly' | 'monthly';
 export type NumberingResetPeriod = 'never' | 'yearly' | 'monthly';
 export type NumberingDocType = 'invoice' | 'purchase' | 'quotation';
+export type NumberingScope = 'organization' | 'branch';
 
 /** One section (Invoice/Purchase/Quotation) of Organization.documentNumbering — mirrors
  * server/src/models/organization.model.js's buildNumberingSectionSchema. */
@@ -37,6 +38,9 @@ export interface NumberingSectionConfig {
   resetPeriod: NumberingResetPeriod;
   padding: number;
   startingNumber: number;
+  /** 'organization' (default): one sequence shared by every branch. 'branch': each branch
+   * gets its own fully independent sequence — see documentNumbering.service.js's bucketKeyFor. */
+  scope: NumberingScope;
 }
 
 export interface DocumentNumberingConfig {
@@ -194,25 +198,26 @@ export const organizationApi = createApi({
     // the org's real persisted config/counter. Never increments anything.
     previewDocumentNumbering: builder.mutation<
       DocumentNumberingPreview,
-      { orgId: string; docType: NumberingDocType; config?: NumberingSectionConfig }
+      { orgId: string; docType: NumberingDocType; config?: NumberingSectionConfig; branchId?: string }
     >({
-      query: ({ orgId, docType, config }) => ({
+      query: ({ orgId, docType, config, branchId }) => ({
         url: `/organizations/${orgId}/document-numbering/preview`,
         method: 'POST',
-        body: { docType, config },
+        body: { docType, config, branchId },
       }),
     }),
     // Admin "resume/skip-ahead" override — sets the counter so the *next* generated number
     // for this docType equals nextNumber. Rejected server-side if that would collide with an
-    // already-issued number.
+    // already-issued number. `branchId` selects which branch's bucket when this docType's
+    // scope is 'branch'.
     setDocumentNumberingNextNumber: builder.mutation<
       DocumentNumberingPreview,
-      { orgId: string; docType: NumberingDocType; nextNumber: number }
+      { orgId: string; docType: NumberingDocType; nextNumber: number; branchId?: string }
     >({
-      query: ({ orgId, docType, nextNumber }) => ({
+      query: ({ orgId, docType, nextNumber, branchId }) => ({
         url: `/organizations/${orgId}/document-numbering/${docType}/next-number`,
         method: 'PATCH',
-        body: { nextNumber },
+        body: { nextNumber, branchId },
       }),
       invalidatesTags: ['Organization'],
     }),
