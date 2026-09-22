@@ -24,6 +24,32 @@ export interface SubscriptionUsage {
 export type TaxSystem = 'NONE' | 'VAT' | 'SALES_TAX' | 'GST' | 'CUSTOM';
 export type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
 
+export type NumberingDateSegment = 'none' | 'yearly' | 'monthly';
+export type NumberingResetPeriod = 'never' | 'yearly' | 'monthly';
+export type NumberingDocType = 'invoice' | 'purchase' | 'quotation';
+
+/** One section (Invoice/Purchase/Quotation) of Organization.documentNumbering — mirrors
+ * server/src/models/organization.model.js's buildNumberingSectionSchema. */
+export interface NumberingSectionConfig {
+  prefix: string;
+  separator: string;
+  dateSegment: NumberingDateSegment;
+  resetPeriod: NumberingResetPeriod;
+  padding: number;
+  startingNumber: number;
+}
+
+export interface DocumentNumberingConfig {
+  invoice: NumberingSectionConfig;
+  purchase: NumberingSectionConfig;
+  quotation: NumberingSectionConfig;
+}
+
+export interface DocumentNumberingPreview {
+  preview: string;
+  nextSeq: number;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -53,6 +79,7 @@ export interface Organization {
   defaultTaxCategoryId?: string | null;
   locale?: string;
   dateFormat?: DateFormat;
+  documentNumbering?: DocumentNumberingConfig;
 }
 
 export interface UpdateOrganizationSettingsRequest {
@@ -64,6 +91,7 @@ export interface UpdateOrganizationSettingsRequest {
   defaultTaxCategoryId?: string | null;
   locale?: string;
   dateFormat?: DateFormat;
+  documentNumbering?: DocumentNumberingConfig;
 }
 
 export interface SetupOrganizationRequest {
@@ -161,6 +189,33 @@ export const organizationApi = createApi({
       }),
       invalidatesTags: ['Organization'],
     }),
+    // Non-mutating "what would the next number look like" — with `config`, previews a draft
+    // (not-yet-saved) section from the Document Numbering settings form; without it, peeks
+    // the org's real persisted config/counter. Never increments anything.
+    previewDocumentNumbering: builder.mutation<
+      DocumentNumberingPreview,
+      { orgId: string; docType: NumberingDocType; config?: NumberingSectionConfig }
+    >({
+      query: ({ orgId, docType, config }) => ({
+        url: `/organizations/${orgId}/document-numbering/preview`,
+        method: 'POST',
+        body: { docType, config },
+      }),
+    }),
+    // Admin "resume/skip-ahead" override — sets the counter so the *next* generated number
+    // for this docType equals nextNumber. Rejected server-side if that would collide with an
+    // already-issued number.
+    setDocumentNumberingNextNumber: builder.mutation<
+      DocumentNumberingPreview,
+      { orgId: string; docType: NumberingDocType; nextNumber: number }
+    >({
+      query: ({ orgId, docType, nextNumber }) => ({
+        url: `/organizations/${orgId}/document-numbering/${docType}/next-number`,
+        method: 'PATCH',
+        body: { nextNumber },
+      }),
+      invalidatesTags: ['Organization'],
+    }),
     getSubscriptionUsage: builder.query<SubscriptionUsage, void>({
       query: () => '/payments/subscription/usage',
       providesTags: ['Organization'],
@@ -184,6 +239,8 @@ export const {
   useLazyGetMyOrganizationQuery,
   useUpdateOrganizationMutation,
   useUpdateOrganizationSettingsMutation,
+  usePreviewDocumentNumberingMutation,
+  useSetDocumentNumberingNextNumberMutation,
   useGetSubscriptionUsageQuery,
   useResetDemoDataMutation,
 } = organizationApi;

@@ -189,7 +189,7 @@ const seedPurchases = async ({ organizationId, branchId, userId }, suppliers, pr
     const purchaseDate = recentDate(90);
 
     try {
-      const invoiceNumber = await purchaseService.generateNextPurchaseInvoiceNumber();
+      const invoiceNumber = await purchaseService.generateNextPurchaseInvoiceNumber(organizationId);
       // eslint-disable-next-line no-await-in-loop
       const purchase = await purchaseService.createPurchase({
         organizationId,

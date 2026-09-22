@@ -3,6 +3,21 @@ const { toJSON, paginate } = require('./plugins');
 const { BUSINESS_TYPES, normalizeBusinessType } = require('../config/businessTypes');
 const { TAX_SYSTEMS } = require('../config/countries');
 
+// One section (Invoice/Purchase/Quotation) of the documentNumbering config below.
+// `dateSegment` and `resetPeriod` must stay consistent — see documentNumbering.service.js's
+// assertNumberingConsistency, which both the update-org validation and this schema-level
+// default rely on staying in sync with.
+const buildNumberingSectionSchema = (defaults) => new mongoose.Schema({
+  prefix: { type: String, trim: true, default: defaults.prefix },
+  separator: { type: String, trim: true, default: '-' },
+  dateSegment: { type: String, enum: ['none', 'yearly', 'monthly'], default: defaults.dateSegment },
+  resetPeriod: { type: String, enum: ['never', 'yearly', 'monthly'], default: defaults.resetPeriod },
+  padding: { type: Number, min: 1, max: 10, default: 6 },
+  // Floor used only the first time a counter bucket is ever seeded (see
+  // documentNumbering.service.js#ensureCounterSeeded) — not a live "current number".
+  startingNumber: { type: Number, min: 1, default: 1 },
+}, { _id: false });
+
 const organizationSchema = mongoose.Schema(
   {
     name: {
@@ -95,6 +110,29 @@ const organizationSchema = mongoose.Schema(
       type: String,
       enum: ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'],
       default: 'DD/MM/YYYY',
+    },
+    // Per-organization customizable Invoice/Purchase/Quotation number format — see
+    // documentNumbering.service.js for the atomic per-org counter that mints numbers from
+    // this config. Subdocument defaults keep every org (existing and new) resolving a fully
+    // populated config with zero migration: invoice/quotation reproduce today's actual
+    // INV-/QUO-YYYYMM-000001 output exactly; purchase gets a new PUR- prefix (previously
+    // hardcoded to the confusing INV- prefix despite being a purchase).
+    documentNumbering: {
+      type: new mongoose.Schema({
+        invoice: {
+          type: buildNumberingSectionSchema({ prefix: 'INV', dateSegment: 'monthly', resetPeriod: 'monthly' }),
+          default: () => ({}),
+        },
+        purchase: {
+          type: buildNumberingSectionSchema({ prefix: 'PUR', dateSegment: 'none', resetPeriod: 'never' }),
+          default: () => ({}),
+        },
+        quotation: {
+          type: buildNumberingSectionSchema({ prefix: 'QUO', dateSegment: 'monthly', resetPeriod: 'monthly' }),
+          default: () => ({}),
+        },
+      }, { _id: false }),
+      default: () => ({}),
     },
     website: {
       type: String,

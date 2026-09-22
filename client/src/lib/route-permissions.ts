@@ -122,6 +122,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/settings/business-profile', anyPermission: ['viewBusinessProfile'] },
   { prefix: '/settings/localization', anyPermission: ['viewLocalizationSettings'] },
   { prefix: '/settings/currency', anyPermission: ['viewLocalizationSettings'] },
+  { prefix: '/settings/document-numbering', anyPermission: ['viewLocalizationSettings'] },
   { prefix: '/settings/tax-categories', anyPermission: ['viewTaxCategories'] },
   { prefix: '/settings/tax-rates', anyPermission: ['viewTaxRates'] },
   { prefix: '/settings/tax-jurisdictions', anyPermission: ['viewTaxJurisdictions'] },

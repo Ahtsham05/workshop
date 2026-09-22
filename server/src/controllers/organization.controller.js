@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { organizationService, auditLogService } = require('../services');
+const { organizationService, auditLogService, documentNumberingService } = require('../services');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
 const logger = require('../config/logger');
 
@@ -16,6 +16,7 @@ const TRACKED_ORG_TAX_FIELDS = [
   'dateFormat',
   'taxNumber',
   'country',
+  'documentNumbering',
 ];
 
 /**
@@ -154,10 +155,43 @@ const resetDemoData = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * POST /v1/organizations/:orgId/document-numbering/preview
+ * Non-mutating "what would the next number look like" — used for the Document Numbering
+ * settings page's live preview. Never increments the real counter.
+ */
+const previewDocumentNumbering = catchAsync(async (req, res) => {
+  assertOwnOrganization(req);
+  const result = await documentNumberingService.peekNextNumber({
+    organizationId: req.params.orgId,
+    docType: req.body.docType,
+    config: req.body.config,
+  });
+  res.send(result);
+});
+
+/**
+ * PATCH /v1/organizations/:orgId/document-numbering/:docType/next-number
+ * Admin "resume/skip-ahead" override — sets the counter so the *next* generated number
+ * equals nextNumber. Rejects with a clear error if that would collide with an already-issued
+ * number in the current bucket.
+ */
+const setDocumentNumberingNextNumber = catchAsync(async (req, res) => {
+  assertOwnOrganization(req);
+  const result = await documentNumberingService.setNextNumber({
+    organizationId: req.params.orgId,
+    docType: req.params.docType,
+    nextNumber: req.body.nextNumber,
+  });
+  res.send(result);
+});
+
 module.exports = {
   setupOrganization,
   getMyOrganization,
   getOrganization,
   updateOrganization,
   resetDemoData,
+  previewDocumentNumbering,
+  setDocumentNumberingNextNumber,
 };

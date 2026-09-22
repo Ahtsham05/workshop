@@ -19,6 +19,7 @@ import {
   IconArrowsExchange,
   IconMapPin,
   IconFlask,
+  IconListNumbers,
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
 import SidebarNav from './components/sidebar-nav'
@@ -145,6 +146,12 @@ const sidebarNavItems: SettingsNavItem[] = [
     title: 'Currency',
     icon: <IconCurrencyDollar size={18} />,
     href: '/settings/currency',
+    anyPermission: ['viewLocalizationSettings'],
+  },
+  {
+    title: 'Document Numbering',
+    icon: <IconListNumbers size={18} />,
+    href: '/settings/document-numbering',
     anyPermission: ['viewLocalizationSettings'],
   },
   {

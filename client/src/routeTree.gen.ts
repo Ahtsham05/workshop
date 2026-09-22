@@ -99,6 +99,7 @@ import { Route as AuthenticatedSettingsNotificationsImport } from './routes/_aut
 import { Route as AuthenticatedSettingsLocalizationImport } from './routes/_authenticated/settings/localization'
 import { Route as AuthenticatedSettingsLocalDatabaseImport } from './routes/_authenticated/settings/local-database'
 import { Route as AuthenticatedSettingsExchangeRatesImport } from './routes/_authenticated/settings/exchange-rates'
+import { Route as AuthenticatedSettingsDocumentNumberingImport } from './routes/_authenticated/settings/document-numbering'
 import { Route as AuthenticatedSettingsDisplayImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsDemoDataImport } from './routes/_authenticated/settings/demo-data'
 import { Route as AuthenticatedSettingsCurrencyImport } from './routes/_authenticated/settings/currency'
@@ -765,6 +766,13 @@ const AuthenticatedSettingsExchangeRatesRoute =
   AuthenticatedSettingsExchangeRatesImport.update({
     id: '/exchange-rates',
     path: '/exchange-rates',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsDocumentNumberingRoute =
+  AuthenticatedSettingsDocumentNumberingImport.update({
+    id: '/document-numbering',
+    path: '/document-numbering',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -1783,6 +1791,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsDisplayImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/document-numbering': {
+      id: '/_authenticated/settings/document-numbering'
+      path: '/document-numbering'
+      fullPath: '/settings/document-numbering'
+      preLoaderRoute: typeof AuthenticatedSettingsDocumentNumberingImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/exchange-rates': {
       id: '/_authenticated/settings/exchange-rates'
       path: '/exchange-rates'
@@ -2553,6 +2568,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsCurrencyRoute: typeof AuthenticatedSettingsCurrencyRoute
   AuthenticatedSettingsDemoDataRoute: typeof AuthenticatedSettingsDemoDataRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
+  AuthenticatedSettingsDocumentNumberingRoute: typeof AuthenticatedSettingsDocumentNumberingRoute
   AuthenticatedSettingsExchangeRatesRoute: typeof AuthenticatedSettingsExchangeRatesRoute
   AuthenticatedSettingsLocalDatabaseRoute: typeof AuthenticatedSettingsLocalDatabaseRoute
   AuthenticatedSettingsLocalizationRoute: typeof AuthenticatedSettingsLocalizationRoute
@@ -2581,6 +2597,8 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsCurrencyRoute: AuthenticatedSettingsCurrencyRoute,
     AuthenticatedSettingsDemoDataRoute: AuthenticatedSettingsDemoDataRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
+    AuthenticatedSettingsDocumentNumberingRoute:
+      AuthenticatedSettingsDocumentNumberingRoute,
     AuthenticatedSettingsExchangeRatesRoute:
       AuthenticatedSettingsExchangeRatesRoute,
     AuthenticatedSettingsLocalDatabaseRoute:
@@ -3037,6 +3055,7 @@ export interface FileRoutesByFullPath {
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
   '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
@@ -3206,6 +3225,7 @@ export interface FileRoutesByTo {
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
   '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
@@ -3379,6 +3399,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
   '/_authenticated/settings/demo-data': typeof AuthenticatedSettingsDemoDataRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/_authenticated/settings/document-numbering': typeof AuthenticatedSettingsDocumentNumberingRoute
   '/_authenticated/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/_authenticated/settings/local-database': typeof AuthenticatedSettingsLocalDatabaseRoute
   '/_authenticated/settings/localization': typeof AuthenticatedSettingsLocalizationRoute
@@ -3554,6 +3575,7 @@ export interface FileRouteTypes {
     | '/settings/currency'
     | '/settings/demo-data'
     | '/settings/display'
+    | '/settings/document-numbering'
     | '/settings/exchange-rates'
     | '/settings/local-database'
     | '/settings/localization'
@@ -3722,6 +3744,7 @@ export interface FileRouteTypes {
     | '/settings/currency'
     | '/settings/demo-data'
     | '/settings/display'
+    | '/settings/document-numbering'
     | '/settings/exchange-rates'
     | '/settings/local-database'
     | '/settings/localization'
@@ -3893,6 +3916,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/currency'
     | '/_authenticated/settings/demo-data'
     | '/_authenticated/settings/display'
+    | '/_authenticated/settings/document-numbering'
     | '/_authenticated/settings/exchange-rates'
     | '/_authenticated/settings/local-database'
     | '/_authenticated/settings/localization'
@@ -4166,6 +4190,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/currency",
         "/_authenticated/settings/demo-data",
         "/_authenticated/settings/display",
+        "/_authenticated/settings/document-numbering",
         "/_authenticated/settings/exchange-rates",
         "/_authenticated/settings/local-database",
         "/_authenticated/settings/localization",
@@ -4457,6 +4482,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/display": {
       "filePath": "_authenticated/settings/display.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/document-numbering": {
+      "filePath": "_authenticated/settings/document-numbering.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/exchange-rates": {

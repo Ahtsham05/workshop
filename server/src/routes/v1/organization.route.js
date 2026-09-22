@@ -31,4 +31,22 @@ router.patch(
 // in the controller.
 router.post('/:orgId/demo-data/reset', auth('manageBusinessProfile'), organizationController.resetDemoData);
 
+// POST /v1/organizations/:orgId/document-numbering/preview — non-mutating live preview for
+// the Document Numbering settings page. Same permission as the profile PATCH above.
+router.post(
+  '/:orgId/document-numbering/preview',
+  auth('manageBusinessProfile'),
+  validate(organizationValidation.previewDocumentNumbering),
+  organizationController.previewDocumentNumbering
+);
+
+// PATCH /v1/organizations/:orgId/document-numbering/:docType/next-number — admin
+// resume/skip-ahead override for one docType's sequence.
+router.patch(
+  '/:orgId/document-numbering/:docType/next-number',
+  auth('manageBusinessProfile'),
+  validate(organizationValidation.setDocumentNumberingNextNumber),
+  organizationController.setDocumentNumberingNextNumber
+);
+
 module.exports = router;

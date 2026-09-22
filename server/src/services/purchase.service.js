@@ -15,6 +15,7 @@ const inventorySyncService = require('./inventorySync.service');
 const inventoryService = require('./inventory.service');
 const batchService = require('./batch.service');
 const partnerProfitShareRuleService = require('./partnerProfitShareRule.service');
+const documentNumberingService = require('./documentNumbering.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 
 /** Post (or re-post) double-entry journal entries for a purchase. Fire-and-forget. */
@@ -304,45 +305,19 @@ const resolvePurchaseLedgerPaymentMethod = (purchase) => {
   return 'Cash';
 };
 
-const DEFAULT_PURCHASE_INVOICE_SEQ = 5000;
-
-const parsePurchaseInvoiceSequence = (invoiceNumber) => {
-  const match = String(invoiceNumber || '').match(/(\d+)$/);
-  if (!match) return null;
-  const seq = parseInt(match[1], 10);
-  return Number.isFinite(seq) ? seq : null;
-};
-
 /**
- * Generate the next purchase invoice number (format: INV-####).
- * Scans existing numbers and uses the highest trailing numeric suffix,
- * ignoring malformed values like INV-NaN.
- *
- * Same trailing-digit-suffix scan as before, but computed inside MongoDB via
- * aggregation instead of pulling every Purchase document across the wire and
- * looping in JS — this runs on every create attempt (up to 3x on a collision
- * retry) and every time the New Purchase panel previews the next number, so it
- * scaled directly with total purchase count. $regexFind mirrors the same
- * /(\d+)$/ pattern used by parsePurchaseInvoiceSequence.
+ * Generate the next purchase invoice number, per this org's own customizable numbering
+ * config (prefix/padding/date segment/reset period — see documentNumbering.service.js).
+ * Replaces the old global "scan for max trailing digits + 1" scheme, which wasn't scoped per
+ * organization and always used a hardcoded INV- prefix despite being a purchase.
  */
-const generateNextPurchaseInvoiceNumber = async () => {
-  const [result] = await Purchase.aggregate([
-    { $match: { invoiceNumber: { $regex: /(\d+)$/ } } },
-    {
-      $project: {
-        seq: {
-          $let: {
-            vars: { m: { $regexFind: { input: '$invoiceNumber', regex: /(\d+)$/ } } },
-            in: { $toInt: { $arrayElemAt: ['$$m.captures', 0] } },
-          },
-        },
-      },
-    },
-    { $group: { _id: null, maxSeq: { $max: '$seq' } } },
-  ]);
+const generateNextPurchaseInvoiceNumber = async (organizationId) =>
+  documentNumberingService.generateNextNumber({ organizationId, docType: 'purchase' });
 
-  const maxSeq = Math.max(DEFAULT_PURCHASE_INVOICE_SEQ, result?.maxSeq ?? DEFAULT_PURCHASE_INVOICE_SEQ);
-  return `INV-${maxSeq + 1}`;
+/** Non-mutating peek at the next purchase number — see documentNumbering.service.js#peekNextNumber. */
+const previewNextPurchaseInvoiceNumber = async (organizationId) => {
+  const { preview } = await documentNumberingService.peekNextNumber({ organizationId, docType: 'purchase' });
+  return preview;
 };
 
 /**
@@ -1958,6 +1933,7 @@ const deletePurchaseComment = async (purchaseId, commentId) => {
 module.exports = {
   createPurchase,
   generateNextPurchaseInvoiceNumber,
+  previewNextPurchaseInvoiceNumber,
   queryPurchases,
   queryPurchaseList,
   getPurchaseListSummary,

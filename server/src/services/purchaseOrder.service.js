@@ -584,7 +584,7 @@ const receiveItems = async (orderId, body, ctx) => {
   const splitWalletType = body.splitWalletType;
   const splitPaidAmount = Number(body.splitPaidAmount || 0);
 
-  const invoiceNumber = await purchaseService.generateNextPurchaseInvoiceNumber();
+  const invoiceNumber = await purchaseService.generateNextPurchaseInvoiceNumber(ctx.organizationId || order.organizationId);
 
   const purchaseBody = {
     organizationId: ctx.organizationId || order.organizationId,

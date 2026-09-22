@@ -10,28 +10,16 @@ const getStats = catchAsync(async (req, res) => {
   res.send(stats);
 });
 
-/** Mirrors purchase.controller.js#createPurchase's invoice-number retry loop — the
- *  invoiceNumber is generated server-side and can rarely collide under concurrent buys. */
+// invoiceNumber is generated server-side from this org's own customizable purchase sequence
+// (see documentNumbering.service.js, which already guards against colliding with any
+// manually-entered number elsewhere in the app).
 const createPurchase = catchAsync(async (req, res) => {
-  const MAX_RETRIES = 3;
-  let purchase;
-
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
-    const body = {
-      ...req.body,
-      invoiceNumber: await purchaseService.generateNextPurchaseInvoiceNumber(),
-      ...getBranchContext(req),
-    };
-    try {
-      purchase = await newPhoneService.createNewPhonePurchase(body);
-      break;
-    } catch (err) {
-      if (err.code === 11000 && err.keyPattern?.invoiceNumber && attempt < MAX_RETRIES - 1) {
-        continue;
-      }
-      throw err;
-    }
-  }
+  const body = {
+    ...req.body,
+    invoiceNumber: await purchaseService.generateNextPurchaseInvoiceNumber(req.organizationId),
+    ...getBranchContext(req),
+  };
+  const purchase = await newPhoneService.createNewPhonePurchase(body);
 
   res.status(httpStatus.CREATED).send(purchase);
 });

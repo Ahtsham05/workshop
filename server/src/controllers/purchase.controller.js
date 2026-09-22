@@ -12,35 +12,29 @@ const TRACKED_PURCHASE_FIELDS = ['totalAmount', 'paidAmount', 'balance', 'status
 
 const createPurchase = catchAsync(async (req, res) => {
   // A manually-typed override (see invoiceNumber input in the New Purchase form) is kept
-  // as-is; only an omitted/blank number gets auto-generated. A manual number that collides
-  // gets a clear error instead of being silently swapped for an auto-generated one the user
-  // never asked for — mirrors Invoice's identical hasManualInvoiceNumber handling.
+  // as-is; only an omitted/blank number gets auto-generated from this org's own customizable
+  // sequence (see documentNumbering.service.js, which already guards against colliding with
+  // a manual number). A manual number that collides gets a clear error instead of being
+  // silently swapped for an auto-generated one the user never asked for — mirrors Invoice's
+  // identical hasManualInvoiceNumber handling.
   const hasManualInvoiceNumber = Boolean(req.body.invoiceNumber && String(req.body.invoiceNumber).trim());
-  const MAX_RETRIES = 3;
+  const newPurchaseData = {
+    ...req.body,
+    invoiceNumber: hasManualInvoiceNumber
+      ? String(req.body.invoiceNumber).trim()
+      : await purchaseService.generateNextPurchaseInvoiceNumber(req.organizationId),
+    ...getBranchContext(req),
+  };
+
   let purchase;
-
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
-    const newPurchaseData = {
-      ...req.body,
-      invoiceNumber: hasManualInvoiceNumber
-        ? String(req.body.invoiceNumber).trim()
-        : await purchaseService.generateNextPurchaseInvoiceNumber(),
-      ...getBranchContext(req),
-    };
-
-    try {
-      purchase = await purchaseService.createPurchase(newPurchaseData);
-      break;
-    } catch (err) {
-      const isDuplicateInvoiceNumber = err.code === 11000 && err.keyPattern?.invoiceNumber;
-      if (isDuplicateInvoiceNumber && hasManualInvoiceNumber) {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Invoice number "${req.body.invoiceNumber}" is already in use`);
-      }
-      if (isDuplicateInvoiceNumber && attempt < MAX_RETRIES - 1) {
-        continue;
-      }
-      throw err;
+  try {
+    purchase = await purchaseService.createPurchase(newPurchaseData);
+  } catch (err) {
+    const isDuplicateInvoiceNumber = err.code === 11000 && err.keyPattern?.invoiceNumber;
+    if (isDuplicateInvoiceNumber && hasManualInvoiceNumber) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `Invoice number "${req.body.invoiceNumber}" is already in use`);
     }
+    throw err;
   }
 
   await auditLogService.recordAuditLog({
@@ -164,11 +158,11 @@ const getPurchaseByDate = catchAsync(async (req, res) => {
   res.send(purchase);
 });
 
-// Preview the invoice number the next createPurchase would assign — not reserved, just
-// what the New Purchase form shows before a purchase exists to save (see getNextInvoiceNumber
-// on the invoice controller for the identical pattern).
+// Preview the invoice number the next createPurchase would assign — a true non-mutating
+// read of this org's real counter (see getNextInvoiceNumber on the invoice controller for
+// the identical pattern).
 const getNextPurchaseInvoiceNumber = catchAsync(async (req, res) => {
-  const invoiceNumber = await purchaseService.generateNextPurchaseInvoiceNumber();
+  const invoiceNumber = await purchaseService.previewNextPurchaseInvoiceNumber(req.organizationId);
   res.send({ invoiceNumber });
 });
 

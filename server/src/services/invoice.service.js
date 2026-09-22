@@ -23,6 +23,7 @@ const { toStockQuantity, getStockQuantityFromItem } = require('../utils/inventor
 const businessNotifications = require('./whatsapp/businessNotifications.service');
 const { computeDiscountAmount } = require('../utils/discount');
 const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
+const documentNumberingService = require('./documentNumbering.service');
 const Money = require('../utils/money');
 const { buildSettlementAddFieldsStage } = require('../utils/invoiceSettlement');
 
@@ -487,9 +488,21 @@ const createInvoice = async (invoiceBody, userId) => {
     fallbackTax: Number(invoiceBody.tax || 0),
   });
 
+  // Number is resolved up front — either the caller's manual override (kept as-is; a
+  // collision throws a clean error below rather than being silently swapped for a number
+  // the user never asked for) or the org's own customizable auto sequence (see
+  // documentNumbering.service.js). Previously assigned by a model-level pre-save hook, which
+  // couldn't reach organizationId/the org's format cleanly.
+  const hasManualInvoiceNumber = Boolean(invoiceBody.invoiceNumber && String(invoiceBody.invoiceNumber).trim());
+  const numberingDocType = invoiceBody.type === 'quotation' ? 'quotation' : 'invoice';
+  const initialInvoiceNumber = hasManualInvoiceNumber
+    ? String(invoiceBody.invoiceNumber).trim()
+    : await documentNumberingService.generateNextNumber({ organizationId: invoiceBody.organizationId, docType: numberingDocType });
+
   // Create invoice
   const invoice = new Invoice({
     ...invoiceBody,
+    invoiceNumber: initialInvoiceNumber,
     items: taxAndCurrency.items,
     discountType: overallDiscountType,
     discountValue: overallDiscountValue,
@@ -517,29 +530,17 @@ const createInvoice = async (invoiceBody, userId) => {
     invoice.finalize();
   }
 
-  // Save with retry for duplicate invoice number race condition (E11000) — but only when
-  // the number was auto-generated. A manually-typed override (see invoiceNumber input in
-  // the New Invoice form) that collides gets a clear error instead of being silently
-  // swapped out for a different auto-generated number the user never asked for.
-  const hasManualInvoiceNumber = Boolean(invoiceBody.invoiceNumber && String(invoiceBody.invoiceNumber).trim());
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      await invoice.save();
-      break;
-    } catch (err) {
-      const isDuplicateInvoiceNumber = err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNumber;
-      if (isDuplicateInvoiceNumber && hasManualInvoiceNumber) {
-        throw new ApiError(httpStatus.BAD_REQUEST, `Invoice number "${invoiceBody.invoiceNumber}" is already in use`);
-      }
-      if (isDuplicateInvoiceNumber && attempt < MAX_RETRIES - 1) {
-        // Duplicate invoice number - regenerate and retry
-        invoice.invoiceNumber = undefined;
-        invoice.isNew = true;
-      } else {
-        throw err;
-      }
+  // documentNumberingService.generateNextNumber already guarantees an auto-generated number
+  // is free at mint time, so the only collision `.save()` can still hit here is a manually-typed
+  // override — give that a clear, actionable error instead of a raw Mongo E11000.
+  try {
+    await invoice.save();
+  } catch (err) {
+    const isDuplicateInvoiceNumber = err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNumber;
+    if (isDuplicateInvoiceNumber && hasManualInvoiceNumber) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `Invoice number "${invoiceBody.invoiceNumber}" is already in use`);
     }
+    throw err;
   }
   console.log('Invoice saved with ID:', invoice._id);
   await syncWalkInInvoiceCashEntry(invoice);
@@ -1505,7 +1506,10 @@ const convertQuotationToInvoice = async (invoiceId, convertBody, userId) => {
 
   const previousQuotationNumber = invoice.invoiceNumber;
   invoice.type = targetType;
-  invoice.invoiceNumber = await Invoice.generateNextDocumentNumber('INV');
+  invoice.invoiceNumber = await documentNumberingService.generateNextNumber({
+    organizationId: invoice.organizationId,
+    docType: 'invoice',
+  });
   invoice.updatedBy = userId;
   invoice.convertedBy = userId;
   invoice.convertedAt = new Date();
@@ -1796,17 +1800,19 @@ const generateBillNumber = async () => {
 };
 
 /**
- * Preview the invoice number the next save would receive — same sequence
- * `generateNextDocumentNumber` assigns in the pre-save hook, just surfaced ahead of time
- * so the New Invoice form can show it before the invoice actually exists. Not reserved:
- * two concurrent previews can return the same value, same as generateBillNumber above —
- * the invoiceNumber unique index is still the real guard at save time.
- * @param {string} type - invoice type ('quotation' gets the QUO- prefix, everything else INV-)
+ * Preview the invoice number the next save would receive, per this org's own customizable
+ * numbering config (see documentNumbering.service.js) — a true non-mutating read of the real
+ * counter, so the New Invoice form can show it before the invoice actually exists without
+ * consuming a number. Still not "reserved" for a specific save: another invoice created in
+ * between will take this exact number, and this preview will move on to the next one.
+ * @param {string} organizationId
+ * @param {string} type - invoice type ('quotation' gets the QUO- config, everything else invoice's)
  * @returns {Promise<string>}
  */
-const previewNextInvoiceNumber = async (type) => {
-  const prefix = type === 'quotation' ? 'QUO' : 'INV';
-  return await Invoice.generateNextDocumentNumber(prefix);
+const previewNextInvoiceNumber = async (organizationId, type) => {
+  const docType = type === 'quotation' ? 'quotation' : 'invoice';
+  const { preview } = await documentNumberingService.peekNextNumber({ organizationId, docType });
+  return preview;
 };
 
 /**
