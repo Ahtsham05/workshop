@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger, Inventory, StockAdjustment } = require('../models');
+const { Invoice, Product, Customer, Purchase, Supplier, SalesReturn, PurchaseReturn, Organization, Expense, PersonalLedger, Inventory, StockAdjustment, CustomerPayment, SupplierPayment } = require('../models');
 const { applyBranchFilter } = require('../utils/branchFilter');
 const { mobileDashboardService, cashBookService } = require('../services');
 const { normalizeBusinessType } = require('../config/businessTypes');
@@ -200,6 +200,22 @@ const getDashboardStats = catchAsync(async (req, res) => {
       },
     ]).then(firstRow);
 
+  // Actual cash movement in the dashboard's selected period — posted payments only
+  // (direction: 'payment' excludes refunds/return-credits; status: 'posted' excludes
+  // voided entries), same startDate/endDate every other period-scoped card here uses.
+  const sumPostedPayments = (Model) =>
+    Model.aggregate([
+      {
+        $match: {
+          ...aggScope,
+          direction: 'payment',
+          status: 'posted',
+          ...buildDateMatch('paymentDate', startDate, endDate),
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]).then(firstRow);
+
   // Every query here is independent, so they all go out in one parallel round (this
   // endpoint used to await ~8 of them one after another). The business-type summary only
   // waits on its own organization lookup, not on the rest.
@@ -216,6 +232,8 @@ const getDashboardStats = catchAsync(async (req, res) => {
     purchaseReturnTotals,
     receivables,
     payables,
+    paymentsReceivedTotals,
+    paymentsPaidTotals,
     walletExpense,
     { businessType, businessTypeSummary },
   ] = await Promise.all([
@@ -252,6 +270,8 @@ const getDashboardStats = catchAsync(async (req, res) => {
     sumReturns(PurchaseReturn),
     sumPositiveBalances(Customer),
     sumPositiveBalances(Supplier),
+    sumPostedPayments(CustomerPayment),
+    sumPostedPayments(SupplierPayment),
     PersonalLedger.aggregate([
       {
         $match: {
@@ -367,6 +387,10 @@ const getDashboardStats = catchAsync(async (req, res) => {
   const myWalletExpenseCount = walletExpense.count || 0;
   const receivableCount = receivables.count || 0;
   const payableCount = payables.count || 0;
+  const paymentsReceived = round2(paymentsReceivedTotals.total || 0);
+  const paymentsReceivedCount = paymentsReceivedTotals.count || 0;
+  const paymentsPaid = round2(paymentsPaidTotals.total || 0);
+  const paymentsPaidCount = paymentsPaidTotals.count || 0;
 
   if (businessType !== 'mobile_shop') {
     mobileSummary.totalProfit = mobileSummary.grossProfit ?? salesProfit;
@@ -400,6 +424,10 @@ const getDashboardStats = catchAsync(async (req, res) => {
     netPurchase,
     totalReceivable,
     totalPayable,
+    paymentsReceived,
+    paymentsReceivedCount,
+    paymentsPaid,
+    paymentsPaidCount,
     myWalletExpense,
     myWalletExpenseCount,
     receivableCount,
@@ -820,6 +848,64 @@ const getRecentActivities = catchAsync(async (req, res) => {
     .slice(0, numLimit);
 
   res.status(httpStatus.OK).send(activities);
+});
+
+/**
+ * Credit/pending invoices with an outstanding balance and a due date, soonest due first —
+ * already-overdue ones sort naturally to the top since their due date is furthest in the past.
+ * @route GET /v1/dashboard/upcoming-invoices
+ */
+const getUpcomingInvoices = catchAsync(async (req, res) => {
+  const bf = applyBranchFilter({}, req);
+  const { limit = 8 } = req.query;
+  const numLimit = parseInt(limit, 10) || 8;
+
+  const invoices = await Invoice.find({
+    ...bf,
+    type: { $in: ['credit', 'pending'] },
+    status: { $ne: 'cancelled' },
+    balance: { $gt: 0 },
+    dueDate: { $ne: null },
+  })
+    .sort({ dueDate: 1 })
+    .limit(numLimit)
+    .select('invoiceNumber total paidAmount balance dueDate invoiceDate walkInCustomerName customerId')
+    .lean();
+
+  const customerIdsToResolve = [
+    ...new Set(
+      invoices
+        .map((inv) => inv.customerId)
+        .filter((id) => isValidRefObjectId(id))
+        .map((id) => String(id)),
+    ),
+  ];
+  const customerDocs =
+    customerIdsToResolve.length > 0
+      ? await Customer.find({ _id: { $in: customerIdsToResolve } }).select('name phone').lean()
+      : [];
+  const customerById = new Map(customerDocs.map((c) => [String(c._id), c]));
+
+  const now = new Date();
+  const upcomingInvoices = invoices.map((inv) => {
+    const cid = inv.customerId;
+    const customer = cid && isValidRefObjectId(cid) ? customerById.get(String(cid)) : null;
+    return {
+      id: inv._id,
+      invoiceNumber: inv.invoiceNumber,
+      customerName: customer?.name || inv.walkInCustomerName || 'Walk-in Customer',
+      customerPhone: customer?.phone || null,
+      customerId: cid && isValidRefObjectId(cid) ? String(cid) : null,
+      total: inv.total,
+      paidAmount: inv.paidAmount,
+      balance: inv.balance,
+      dueDate: inv.dueDate,
+      invoiceDate: inv.invoiceDate,
+      isOverdue: new Date(inv.dueDate) < now,
+    };
+  });
+
+  res.status(httpStatus.OK).send(upcomingInvoices);
 });
 
 /**
@@ -1532,6 +1618,7 @@ module.exports = {
   getTopCustomers,
   getLowStockProducts,
   getRecentActivities,
+  getUpcomingInvoices,
   getProductsByCategory,
   getProductsByBrand,
   getCategoryProducts,

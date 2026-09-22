@@ -209,7 +209,7 @@ export interface AgingReportInvoice {
   paidAmount: number
   balance: number
   daysOverdue: number
-  bucket: 'current' | 'days1to30' | 'days31to60' | 'days61to90' | 'days90plus'
+  bucket: 'current' | 'bucket1' | 'bucket2' | 'bucket3' | 'bucket4'
 }
 
 export interface AgingReportCustomer {
@@ -221,10 +221,10 @@ export interface AgingReportCustomer {
   whatsapp?: string
   email?: string
   current: number
-  days1to30: number
-  days31to60: number
-  days61to90: number
-  days90plus: number
+  bucket1: number
+  bucket2: number
+  bucket3: number
+  bucket4: number
   totalOutstanding: number
   invoiceCount: number
   maxDaysOverdue: number
@@ -233,10 +233,10 @@ export interface AgingReportCustomer {
 
 export interface AgingReportSummary {
   current: number
-  days1to30: number
-  days31to60: number
-  days61to90: number
-  days90plus: number
+  bucket1: number
+  bucket2: number
+  bucket3: number
+  bucket4: number
   totalOutstanding: number
   totalCustomers: number
   customersOverdue: number
@@ -252,7 +252,7 @@ export interface SupplierAgingPurchase {
   paidAmount: number
   balance: number
   daysOverdue: number
-  bucket: 'current' | 'days1to30' | 'days31to60' | 'days61to90' | 'days90plus'
+  bucket: 'current' | 'bucket1' | 'bucket2' | 'bucket3' | 'bucket4'
 }
 
 export interface SupplierAgingData {
@@ -263,10 +263,10 @@ export interface SupplierAgingData {
   whatsapp?: string
   email?: string
   current: number
-  days1to30: number
-  days31to60: number
-  days61to90: number
-  days90plus: number
+  bucket1: number
+  bucket2: number
+  bucket3: number
+  bucket4: number
   totalOutstanding: number
   purchaseCount: number
   maxDaysOverdue: number
@@ -275,10 +275,10 @@ export interface SupplierAgingData {
 
 export interface SupplierAgingSummary {
   current: number
-  days1to30: number
-  days31to60: number
-  days61to90: number
-  days90plus: number
+  bucket1: number
+  bucket2: number
+  bucket3: number
+  bucket4: number
   totalOutstanding: number
   totalSuppliers: number
   suppliersOverdue: number
@@ -1360,10 +1360,12 @@ export const reportsApi = createApi({
       data: AgingReportCustomer[]
       summary: AgingReportSummary
       asOfDate: string
-    }, { asOfDate?: string }>({
+      bucketSize: number
+    }, { asOfDate?: string; bucketSize?: number }>({
       query: (params) => {
         const searchParams = new URLSearchParams()
         if (params.asOfDate) searchParams.set('asOfDate', params.asOfDate)
+        if (params.bucketSize) searchParams.set('bucketSize', String(params.bucketSize))
         return `/aging?${searchParams.toString()}`
       },
       providesTags: ['AgingReport'],
@@ -1385,10 +1387,12 @@ export const reportsApi = createApi({
       data: SupplierAgingData[]
       summary: SupplierAgingSummary
       asOfDate: string
-    }, { asOfDate?: string }>({
+      bucketSize: number
+    }, { asOfDate?: string; bucketSize?: number }>({
       query: (params) => {
         const searchParams = new URLSearchParams()
         if (params.asOfDate) searchParams.set('asOfDate', params.asOfDate)
+        if (params.bucketSize) searchParams.set('bucketSize', String(params.bucketSize))
         return `/suppliers/aging?${searchParams.toString()}`
       },
       providesTags: ['SupplierAgingReport'],

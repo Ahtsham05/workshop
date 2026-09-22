@@ -97,6 +97,12 @@ export interface DashboardStats {
   serviceInvoiceCount?: number
   totalReceivable?: number
   totalPayable?: number
+  /** Actual customer payments posted in the dashboard's selected date range. */
+  paymentsReceived?: number
+  paymentsReceivedCount?: number
+  /** Actual supplier payments posted in the dashboard's selected date range. */
+  paymentsPaid?: number
+  paymentsPaidCount?: number
   myWalletExpense?: number
   myWalletExpenseCount?: number
   receivableCount?: number
@@ -164,6 +170,20 @@ export interface RecentActivity {
   status: string
 }
 
+export interface UpcomingInvoice {
+  id: string
+  invoiceNumber: string
+  customerName: string
+  customerPhone?: string | null
+  customerId?: string | null
+  total: number
+  paidAmount: number
+  balance: number
+  dueDate: string
+  invoiceDate: string
+  isOverdue: boolean
+}
+
 export interface CategoryProductData {
   categoryId?: string
   categoryName: string
@@ -220,7 +240,7 @@ export interface ProductDetail {
 }
 
 /** Every tag the dashboard page's widgets read — invalidating these reloads the whole page at once. */
-export const DASHBOARD_WIDGET_TAGS = ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities'] as const
+export const DASHBOARD_WIDGET_TAGS = ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'UpcomingInvoices'] as const
 
 /**
  * Stale-while-revalidate for the dashboard page's widgets: coming back to the dashboard
@@ -234,7 +254,7 @@ export const dashboardApi = createApi({
   reducerPath: 'dashboardApi',
   baseQuery: baseQueryWithAuth,
   keepUnusedDataFor: 300,
-  tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'CategoryProducts', 'BrandProducts', 'SubCategoryProducts'],
+  tagTypes: ['DashboardStats', 'Revenue', 'TopProducts', 'TopCustomers', 'LowStock', 'RecentActivities', 'UpcomingInvoices', 'CategoryProducts', 'BrandProducts', 'SubCategoryProducts'],
   endpoints: (builder) => ({
     getDashboardStats: builder.query<DashboardStats, DashboardDateParams>({
       query: (params) => ({
@@ -274,6 +294,13 @@ export const dashboardApi = createApi({
         params: { ...params, limit },
       }),
       providesTags: ['RecentActivities'],
+    }),
+    getUpcomingInvoices: builder.query<UpcomingInvoice[], { limit?: number } | void>({
+      query: (params) => ({
+        url: '/upcoming-invoices',
+        params: { limit: params?.limit ?? 8 },
+      }),
+      providesTags: ['UpcomingInvoices'],
     }),
     getProductsByCategory: builder.query<CategoryProductData[], DashboardDateParams>({
       query: (params) => ({
@@ -327,6 +354,7 @@ export const {
   useGetTopCustomersQuery,
   useGetLowStockProductsQuery,
   useGetRecentActivitiesQuery,
+  useGetUpcomingInvoicesQuery,
   useGetProductsByCategoryQuery,
   useGetProductsByBrandQuery,
   useGetCategoryProductsQuery,

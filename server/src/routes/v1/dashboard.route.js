@@ -31,6 +31,10 @@ router
   .get(auth('viewDashboard'), dashboardController.getRecentActivities);
 
 router
+  .route('/upcoming-invoices')
+  .get(auth('viewDashboard'), dashboardController.getUpcomingInvoices);
+
+router
   .route('/products-by-category')
   .get(auth('viewDashboard'), dashboardController.getProductsByCategory);
 
@@ -216,6 +220,29 @@ module.exports = router;
  *           type: integer
  *           default: 10
  *         description: Maximum number of activities to return
+ *     responses:
+ *       "200":
+ *         description: OK
+ *       "401":
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+
+/**
+ * @swagger
+ * /dashboard/upcoming-invoices:
+ *   get:
+ *     summary: Get upcoming invoices
+ *     description: Retrieve credit/pending invoices with an outstanding balance, soonest due date first
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 8
+ *         description: Maximum number of invoices to return
  *     responses:
  *       "200":
  *         description: OK

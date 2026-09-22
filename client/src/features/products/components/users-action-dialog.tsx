@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -79,6 +80,7 @@ import { BrandSelector } from './brand-selector'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { useGetTaxCategoriesQuery } from '@/stores/taxCategory.api'
 import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
+import { focusField, onEnterAdvance } from '@/lib/invoice-form-keyboard'
 import { TagsInput } from '@/components/tags-input'
 import { ColorSwatchPicker } from '@/components/color-swatch-picker'
 import { useGetDistinctProductTagsQuery } from '@/stores/product.api'
@@ -157,6 +159,49 @@ const formSchema = z.object({
 })
 
 type productForm = z.infer<typeof formSchema>
+
+// Order fields are visited when pressing Enter moves focus forward through the "Add
+// Product" form. Plain inputs get focused directly (via data-enter-field); the three
+// inline Popover/Command comboboxes (categories, subCategories, unit) are opened
+// instead of just focused, since a closed combobox would otherwise need a second Enter
+// before it shows anything to pick. A step that isn't currently rendered (Tax Category
+// hidden, Sub Categories with no category chosen yet, Margin fields while a product has
+// variants) is skipped over automatically.
+const ENTER_FIELD_ORDER = [
+  'barcode', 'name', 'description', 'categories', 'subCategories', 'brand', 'taxCategory',
+  'cost', 'price', 'marginPct', 'marginAmount', 'stockQuantity', 'unit', 'tags', 'shelfLocation',
+] as const
+type EnterFieldId = typeof ENTER_FIELD_ORDER[number]
+
+// Maps a chain step to the react-hook-form field it reflects, for the "what did I skip"
+// scan run once Enter is pressed on the very last field (Shelf location). marginPct/
+// marginAmount have no entry — they're a calculator, not a persisted value — so the scan
+// passes over them.
+const ENTER_FIELD_TO_FORM_KEY: Partial<Record<EnterFieldId, keyof productForm>> = {
+  barcode: 'barcode',
+  name: 'name',
+  description: 'description',
+  categories: 'categories',
+  subCategories: 'subCategories',
+  brand: 'brandId',
+  taxCategory: 'taxCategoryId',
+  cost: 'cost',
+  price: 'price',
+  stockQuantity: 'stockQuantity',
+  unit: 'unit',
+  tags: 'tags',
+  shelfLocation: 'shelfLocation',
+}
+
+function isEnterValueEmpty(id: EnterFieldId, value: unknown): boolean {
+  if (value === undefined || value === null) return true
+  if (typeof value === 'string') return value.trim() === ''
+  if (Array.isArray(value)) return value.length === 0
+  // Cost/Price must be > 0 to ever save (see the form's superRefine) — a 0 left at its
+  // default means "never actually typed", unlike Stock Quantity, which is valid at 0.
+  if (typeof value === 'number') return (id === 'cost' || id === 'price') && value <= 0
+  return false
+}
 
 interface Props {
   currentRow?: any
@@ -601,6 +646,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       ])
       setCategorySearchQuery('')
       setCategoriesOpen(false)
+      advanceEnterChain('categories')
     } catch {
       toast.error(`Failed to create category "${name}"`)
     } finally {
@@ -661,12 +707,67 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       ])
       setSubCategorySearchQuery('')
       setSubCategoriesOpen(false)
+      advanceEnterChain('subCategories')
     } catch {
       toast.error(`Failed to create sub-category "${name}"`)
     } finally {
       setIsCreatingSubCategory(false)
     }
   }
+
+  // Enter-key field chain for this dialog — see ENTER_FIELD_ORDER above. `focusEnterField`
+  // covers plain inputs and the standalone combobox components (Brand/Tax Category), which
+  // carry a matching data-enter-field on their trigger. `focusEnterStep` additionally
+  // handles the three inline Popover/Command comboboxes owned directly by this component,
+  // which are opened rather than merely focused.
+  const focusEnterField = (id: EnterFieldId) => {
+    const el = formRef.current?.querySelector<HTMLElement>(`[data-enter-field="${id}"]`)
+    if (!el) return false
+    focusField(el)
+    return true
+  }
+
+  const focusEnterStep = (id: EnterFieldId): boolean => {
+    if (id === 'categories') {
+      setCategoriesOpen(true)
+      return true
+    }
+    if (id === 'subCategories') {
+      // Read the freshest committed value directly instead of the `selectedCategoryIds`
+      // watch — a category just picked in this same tick hasn't re-rendered yet, but
+      // react-hook-form's internal store already reflects it.
+      if ((form.getValues('categories') || []).length === 0) return false
+      setSubCategoriesOpen(true)
+      return true
+    }
+    if (id === 'unit') {
+      setUnitsOpen(true)
+      return true
+    }
+    return focusEnterField(id)
+  }
+
+  // Once Enter reaches the last field (Shelf location) with nowhere further to go, jump
+  // back to whichever field along the way is still empty (e.g. Barcode never scanned)
+  // instead of stopping — so Enter alone can walk right back to what needs filling in.
+  const focusFirstIncompleteField = () => {
+    for (const id of ENTER_FIELD_ORDER) {
+      const formKey = ENTER_FIELD_TO_FORM_KEY[id]
+      if (!formKey) continue
+      if (isEnterValueEmpty(id, form.getValues(formKey)) && focusEnterStep(id)) return
+    }
+  }
+
+  const advanceEnterChain = (currentId: EnterFieldId) => {
+    const idx = ENTER_FIELD_ORDER.indexOf(currentId)
+    for (let i = idx + 1; i < ENTER_FIELD_ORDER.length; i++) {
+      if (focusEnterStep(ENTER_FIELD_ORDER[i])) return
+    }
+    focusFirstIncompleteField()
+  }
+
+  const enterAdvance = (id: EnterFieldId) => (e: ReactKeyboardEvent<HTMLElement>) =>
+    onEnterAdvance(e, () => advanceEnterChain(id))
 
   const nameWatch = form.watch('name')
   const costWatch = form.watch('cost')
@@ -740,6 +841,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                               value={field.value}
                               onChange={setSkuBarcode}
                               className="flex-1"
+                              data-enter-field='barcode'
                             />
                             <Button
                               type="button"
@@ -1042,6 +1144,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             form.setValue('description', e.target.value)
                           }
                         }}
+                        data-enter-field='name'
+                        onKeyDown={enterAdvance('name')}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1089,6 +1193,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                           descriptionAutoSyncRef.current = false
                           field.onChange(e)
                         }}
+                        data-enter-field='description'
+                        onKeyDown={enterAdvance('description')}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1116,6 +1222,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                               variant="outline"
                               role="combobox"
                               aria-expanded={categoriesOpen}
+                              data-enter-field='categories'
                               className="w-full justify-between min-h-[2.5rem] h-auto py-0"
                             >
                               <div className="flex items-center gap-2 flex-1">
@@ -1206,6 +1313,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                             }]
                                             field.onChange(newCategories)
                                           }
+                                          setCategoriesOpen(false)
+                                          setCategorySearchQuery('')
+                                          advanceEnterChain('categories')
                                         }}
                                         className="flex items-center gap-2 cursor-pointer"
                                       >
@@ -1291,6 +1401,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                               role='combobox'
                               aria-expanded={subCategoriesOpen}
                               disabled={selectedCategoryIds.length === 0}
+                              data-enter-field='subCategories'
                               className='w-full justify-between min-h-[2.5rem] h-auto py-0'
                             >
                               <div className='flex items-center gap-2 flex-1'>
@@ -1362,6 +1473,9 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                               { _id: subCategory.id, name: subCategory.name, image: subCategory.image },
                                             ])
                                           }
+                                          setSubCategoriesOpen(false)
+                                          setSubCategorySearchQuery('')
+                                          advanceEnterChain('subCategories')
                                         }}
                                         className='flex items-center gap-2 cursor-pointer'
                                       >
@@ -1434,7 +1548,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   <FormItem className='gap-1.5'>
                     <FormLabel>Brand</FormLabel>
                     <FormControl>
-                      <BrandSelector value={field.value} onChange={field.onChange} />
+                      <BrandSelector
+                        value={field.value}
+                        onChange={field.onChange}
+                        data-enter-field='brand'
+                        onSelected={() => advanceEnterChain('brand')}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1455,6 +1574,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                           placeholder="Use organization default"
                           searchPlaceholder='Search tax categories...'
                           clearLabel='Use organization default'
+                          data-enter-field='taxCategory'
+                          onSelected={() => advanceEnterChain('taxCategory')}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1493,6 +1614,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             setNumericValue('cost', e.target.value)
                             // field.onChange(e)
                           }}
+                          data-enter-field='cost'
+                          onKeyDown={enterAdvance('cost')}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1514,6 +1637,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             setNumericValue('price', e.target.value)
                             // field.onChange(e)
                           }}
+                          data-enter-field='price'
+                          onKeyDown={enterAdvance('price')}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1527,6 +1652,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   cost={costWatch || 0}
                   price={priceWatch || 0}
                   onPriceChange={(next) => setNumericValue('price', next)}
+                  inputRef={(el) => el?.setAttribute('data-enter-field', 'marginPct')}
+                  onKeyDown={enterAdvance('marginPct')}
+                  amountInputRef={(el) => el?.setAttribute('data-enter-field', 'marginAmount')}
+                  onAmountKeyDown={enterAdvance('marginAmount')}
                 />
               )}
               <div className='grid gap-4 sm:grid-cols-2'>
@@ -1546,15 +1675,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                             setNumericValue('stockQuantity', e.target.value)
                             // field.onChange(e)
                           }}
-                          onKeyDown={(e) => {
-                            // Custom hop instead of the generic next-field jump — the
-                            // Unit combobox is a button/popover, not a plain input, so it
-                            // would otherwise be skipped entirely.
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              setUnitsOpen(true)
-                            }
-                          }}
+                          data-enter-field='stockQuantity'
+                          onKeyDown={enterAdvance('stockQuantity')}
                         />
                       </FormControl>
                       <FormMessage />
@@ -1575,6 +1697,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                               variant="outline"
                               role="combobox"
                               aria-expanded={unitsOpen}
+                              data-enter-field='unit'
                               className="w-full justify-between"
                             >
                               <div className="flex items-center gap-2">
@@ -1601,9 +1724,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                         onSelect={() => {
                                           field.onChange(unit.value)
                                           setUnitsOpen(false)
-                                          // Popover close returns focus to its trigger button first —
-                                          // defer past that so this focus call is the one that wins.
-                                          setTimeout(() => tagsInputRef.current?.focus(), 0)
+                                          advanceEnterChain('unit')
                                         }}
                                         className="flex items-center justify-between cursor-pointer"
                                       >
@@ -1815,9 +1936,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                         onChange={field.onChange}
                         suggestions={tagSuggestions}
                         placeholder='e.g. clearance, fragile, best-seller...'
-                        onEmptyEnter={() => {
-                          formRef.current?.querySelector<HTMLInputElement>('input[name="shelfLocation"]')?.focus()
-                        }}
+                        data-enter-field='tags'
+                        onEmptyEnter={() => advanceEnterChain('tags')}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1845,7 +1965,13 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   <FormItem className='gap-1.5'>
                     <FormLabel>Shelf location</FormLabel>
                     <FormControl>
-                      <Input placeholder='e.g. A-12-3' autoComplete='off' {...field} />
+                      <Input
+                        placeholder='e.g. A-12-3'
+                        autoComplete='off'
+                        {...field}
+                        data-enter-field='shelfLocation'
+                        onKeyDown={enterAdvance('shelfLocation')}
+                      />
                     </FormControl>
                     <p className='text-xs text-muted-foreground'>Where this product physically sits in the shop.</p>
                     <FormMessage />

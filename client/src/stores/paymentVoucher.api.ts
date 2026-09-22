@@ -39,6 +39,9 @@ interface PaginatedResult<T> {
   limit: number
   totalPages: number
   totalResults: number
+  /** Sum of `totalAmount` across every voucher matching the filter, not just this page —
+   *  powers the list's Total row. */
+  totalAmountSum: number
 }
 
 export type PaymentVoucherPayeeType = 'expense' | 'supplier' | 'other'
@@ -114,6 +117,8 @@ export interface GetPaymentVouchersParams {
   search?: string
   startDate?: string
   endDate?: string
+  minAmount?: number
+  maxAmount?: number
   page?: number
   limit?: number
   sortBy?: string
@@ -159,6 +164,7 @@ export const paymentVoucherApi = createApi({
 
 export const {
   useGetPaymentVouchersQuery,
+  useLazyGetPaymentVouchersQuery,
   useGetPaymentVoucherQuery,
   useCreatePaymentVoucherMutation,
   useUpdatePaymentVoucherMutation,

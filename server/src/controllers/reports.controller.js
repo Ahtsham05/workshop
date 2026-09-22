@@ -933,6 +933,32 @@ const getCustomerReport = catchAsync(async (req, res) => {
   res.status(httpStatus.OK).send({ data: customerData, summary: summary[0] || {}, period: { startDate: start, endDate: end } });
 });
 
+/* ── Aging bucket helpers (shared by customer + supplier aging reports) ──────
+ * The aging period ("bucket size") is configurable — a customer/supplier can
+ * be aged in 30-day periods (the default: Current, 1-30, 31-60, 61-90, 90+)
+ * or in tighter 3/7/15-day periods for closer follow-up. Bucket field names
+ * stay generic (`bucket1..4`) regardless of size so the response shape never
+ * changes; the human-readable ranges are derived from `bucketSize` on the
+ * frontend. */
+const AGING_BUCKET_SIZES = [3, 7, 15, 30];
+
+const parseAgingBucketSize = (value) => {
+  const n = Number(value);
+  return AGING_BUCKET_SIZES.includes(n) ? n : 30;
+};
+
+const buildAgingBucketExpr = (bucketSize) => ({
+  $switch: {
+    branches: [
+      { case: { $lte: ['$daysOverdue', 0] }, then: 'current' },
+      { case: { $lte: ['$daysOverdue', bucketSize] }, then: 'bucket1' },
+      { case: { $lte: ['$daysOverdue', bucketSize * 2] }, then: 'bucket2' },
+      { case: { $lte: ['$daysOverdue', bucketSize * 3] }, then: 'bucket3' },
+    ],
+    default: 'bucket4',
+  },
+});
+
 /* ── Customer Aging (Accounts Receivable) ─────────────────────────────────────
  * Buckets every currently-outstanding credit/pending invoice by how overdue it
  * is against `asOfDate`. Invoices with no `dueDate` are treated as due on their
@@ -940,6 +966,7 @@ const getCustomerReport = catchAsync(async (req, res) => {
 const getCustomerAgingReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const asOfDate = parseDateBoundary(req.query.asOfDate, true) || new Date();
+  const bucketSize = parseAgingBucketSize(req.query.bucketSize);
 
   const baseMatch = {
     ...scope,
@@ -961,17 +988,7 @@ const getCustomerAgingReport = catchAsync(async (req, res) => {
     ],
   };
 
-  const bucketExpr = {
-    $switch: {
-      branches: [
-        { case: { $lte: ['$daysOverdue', 0] }, then: 'current' },
-        { case: { $lte: ['$daysOverdue', 30] }, then: 'days1to30' },
-        { case: { $lte: ['$daysOverdue', 60] }, then: 'days31to60' },
-        { case: { $lte: ['$daysOverdue', 90] }, then: 'days61to90' },
-      ],
-      default: 'days90plus',
-    },
-  };
+  const bucketExpr = buildAgingBucketExpr(bucketSize);
 
   const bucketSum = (bucket) => ({ $sum: { $cond: [{ $eq: ['$bucket', bucket] }, '$balance', 0] } });
 
@@ -1016,10 +1033,10 @@ const getCustomerAgingReport = catchAsync(async (req, res) => {
         whatsapp: { $first: '$customer.whatsapp' },
         email: { $first: '$customer.email' },
         current: bucketSum('current'),
-        days1to30: bucketSum('days1to30'),
-        days31to60: bucketSum('days31to60'),
-        days61to90: bucketSum('days61to90'),
-        days90plus: bucketSum('days90plus'),
+        bucket1: bucketSum('bucket1'),
+        bucket2: bucketSum('bucket2'),
+        bucket3: bucketSum('bucket3'),
+        bucket4: bucketSum('bucket4'),
         totalOutstanding: { $sum: '$balance' },
         invoiceCount: { $sum: 1 },
         maxDaysOverdue: { $max: '$daysOverdue' },
@@ -1044,22 +1061,22 @@ const getCustomerAgingReport = catchAsync(async (req, res) => {
   const summary = customerData.reduce(
     (acc, row) => {
       acc.current += row.current;
-      acc.days1to30 += row.days1to30;
-      acc.days31to60 += row.days31to60;
-      acc.days61to90 += row.days61to90;
-      acc.days90plus += row.days90plus;
+      acc.bucket1 += row.bucket1;
+      acc.bucket2 += row.bucket2;
+      acc.bucket3 += row.bucket3;
+      acc.bucket4 += row.bucket4;
       acc.totalOutstanding += row.totalOutstanding;
       acc.totalCustomers += 1;
       if (row.totalOutstanding - row.current > 0) acc.customersOverdue += 1;
       return acc;
     },
     {
-      current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0,
+      current: 0, bucket1: 0, bucket2: 0, bucket3: 0, bucket4: 0,
       totalOutstanding: 0, totalCustomers: 0, customersOverdue: 0,
     }
   );
 
-  res.status(httpStatus.OK).send({ data: customerData, summary, asOfDate });
+  res.status(httpStatus.OK).send({ data: customerData, summary, asOfDate, bucketSize });
 });
 
 /* ── Suppliers ─────────────────────────────────────────────────────────────── */
@@ -1128,6 +1145,7 @@ const getSupplierReport = catchAsync(async (req, res) => {
 const getSupplierAgingReport = catchAsync(async (req, res) => {
   const scope = buildScope(req);
   const asOfDate = parseDateBoundary(req.query.asOfDate, true) || new Date();
+  const bucketSize = parseAgingBucketSize(req.query.bucketSize);
 
   const baseMatch = {
     ...scope,
@@ -1135,17 +1153,7 @@ const getSupplierAgingReport = catchAsync(async (req, res) => {
     balance: { $gt: 0 },
   };
 
-  const bucketExpr = {
-    $switch: {
-      branches: [
-        { case: { $lte: ['$daysOverdue', 0] }, then: 'current' },
-        { case: { $lte: ['$daysOverdue', 30] }, then: 'days1to30' },
-        { case: { $lte: ['$daysOverdue', 60] }, then: 'days31to60' },
-        { case: { $lte: ['$daysOverdue', 90] }, then: 'days61to90' },
-      ],
-      default: 'days90plus',
-    },
-  };
+  const bucketExpr = buildAgingBucketExpr(bucketSize);
 
   const bucketSum = (bucket) => ({ $sum: { $cond: [{ $eq: ['$bucket', bucket] }, '$balance', 0] } });
 
@@ -1171,10 +1179,10 @@ const getSupplierAgingReport = catchAsync(async (req, res) => {
         whatsapp: { $first: '$supplierDoc.whatsapp' },
         email: { $first: '$supplierDoc.email' },
         current: bucketSum('current'),
-        days1to30: bucketSum('days1to30'),
-        days31to60: bucketSum('days31to60'),
-        days61to90: bucketSum('days61to90'),
-        days90plus: bucketSum('days90plus'),
+        bucket1: bucketSum('bucket1'),
+        bucket2: bucketSum('bucket2'),
+        bucket3: bucketSum('bucket3'),
+        bucket4: bucketSum('bucket4'),
         totalOutstanding: { $sum: '$balance' },
         purchaseCount: { $sum: 1 },
         maxDaysOverdue: { $max: '$daysOverdue' },
@@ -1200,22 +1208,22 @@ const getSupplierAgingReport = catchAsync(async (req, res) => {
   const summary = supplierData.reduce(
     (acc, row) => {
       acc.current += row.current;
-      acc.days1to30 += row.days1to30;
-      acc.days31to60 += row.days31to60;
-      acc.days61to90 += row.days61to90;
-      acc.days90plus += row.days90plus;
+      acc.bucket1 += row.bucket1;
+      acc.bucket2 += row.bucket2;
+      acc.bucket3 += row.bucket3;
+      acc.bucket4 += row.bucket4;
       acc.totalOutstanding += row.totalOutstanding;
       acc.totalSuppliers += 1;
       if (row.totalOutstanding - row.current > 0) acc.suppliersOverdue += 1;
       return acc;
     },
     {
-      current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0,
+      current: 0, bucket1: 0, bucket2: 0, bucket3: 0, bucket4: 0,
       totalOutstanding: 0, totalSuppliers: 0, suppliersOverdue: 0,
     }
   );
 
-  res.status(httpStatus.OK).send({ data: supplierData, summary, asOfDate });
+  res.status(httpStatus.OK).send({ data: supplierData, summary, asOfDate, bucketSize });
 });
 
 /* ── Expenses ──────────────────────────────────────────────────────────────── */

@@ -152,6 +152,12 @@ export const sidebarData: SidebarData = {
             { title: 'Expenses', url: '/accounting?tab=expenses' as never, icon: IconCash, permission: 'viewAccounting' },
             { title: 'Customer Ledgers', url: '/accounting?tab=customers' as never, icon: IconUsers, permission: 'viewCustomers' },
             { title: 'Supplier Ledgers', url: '/accounting?tab=suppliers' as never, icon: IconBuilding, permission: 'viewSuppliers' },
+            {
+              title: 'Customer & Supplier Payments',
+              url: '/payment-collections' as never,
+              icon: IconCreditCard,
+              anyPermission: ['viewPayments', 'viewAccounting', 'manageLedgers'],
+            },
             { title: 'Recurring Expense', url: '/accounting?tab=recurring' as never, icon: IconCalendarEvent, permission: 'viewAccounting' },
             { title: 'My Personal Account', url: '/accounting?tab=wallet' as never, icon: IconCreditCard, permission: 'viewAccounting' },
           ],

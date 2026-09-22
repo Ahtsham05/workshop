@@ -60,6 +60,8 @@ const getVouchers = {
     search: Joi.string(),
     startDate: Joi.date(),
     endDate: Joi.date(),
+    minAmount: Joi.number().min(0),
+    maxAmount: Joi.number().min(0),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),

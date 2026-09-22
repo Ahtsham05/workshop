@@ -12,9 +12,12 @@ interface MarkupPercentInputProps {
   className?: string
   /** Narrow layout for tight table cells (variant grid) — just the % input, no amount field. */
   compact?: boolean
-  /** Compact mode only — lets a caller (e.g. the variant table's Enter-to-advance chain) reach the underlying input. */
+  /** Lets a caller (e.g. an Enter-to-advance field chain) reach the underlying % input. */
   inputRef?: (el: HTMLInputElement | null) => void
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
+  /** Non-compact mode only — same as inputRef/onKeyDown but for the Margin amount input. */
+  amountInputRef?: (el: HTMLInputElement | null) => void
+  onAmountKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
 }
 
 // Native number-input spin buttons make a percent/amount field look like a stray
@@ -34,7 +37,7 @@ const noSpinner = '[appearance:textfield] [&::-webkit-outer-spin-button]:appeara
  * round-tripped value (e.g. "3" while typing "30"), while still freely refreshing
  * whichever margin field the user ISN'T currently typing in.
  */
-export function MarkupPercentInput({ cost, price, onPriceChange, className, compact, inputRef, onKeyDown }: MarkupPercentInputProps) {
+export function MarkupPercentInput({ cost, price, onPriceChange, className, compact, inputRef, onKeyDown, amountInputRef, onAmountKeyDown }: MarkupPercentInputProps) {
   const [pct, setPct] = useState('')
   const [amount, setAmount] = useState('')
   const editingPctRef = useRef(false)
@@ -103,6 +106,7 @@ export function MarkupPercentInput({ cost, price, onPriceChange, className, comp
 
   const amountInput = (
     <Input
+      ref={amountInputRef}
       type='number'
       step='1'
       placeholder={cost > 0 ? '0' : '—'}
@@ -111,6 +115,7 @@ export function MarkupPercentInput({ cost, price, onPriceChange, className, comp
       showVoiceInput={false}
       onChange={(e) => handleAmountChange(e.target.value)}
       onBlur={() => { editingAmountRef.current = false }}
+      onKeyDown={onAmountKeyDown}
       className={cn('h-8 text-xs', noSpinner, 'w-full pl-9')}
     />
   )

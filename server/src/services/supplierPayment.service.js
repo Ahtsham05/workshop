@@ -1059,6 +1059,13 @@ const reallocatePayment = async (paymentId, { allocations: manualAllocations = [
   return getPaymentById(payment._id);
 };
 
+/** Sum of `amount` across every payment matching `filter`, not just the current page — powers
+ *  a payments list's Total row the same way paymentVoucher.service's sumFilteredAmount does. */
+const sumFilteredAmount = async (filter) => {
+  const docs = await SupplierPayment.find(filter).select('amount').lean();
+  return docs.reduce((sum, doc) => sum + (doc.amount || 0), 0);
+};
+
 const queryPayments = async (filter, options) => {
   const opts = { ...options };
   opts.populate = [
@@ -1066,7 +1073,8 @@ const queryPayments = async (filter, options) => {
     { path: 'createdBy', select: 'name email' },
   ];
   opts.sortBy = opts.sortBy || 'paymentDate:desc,createdAt:desc';
-  return SupplierPayment.paginate(filter, opts);
+  const [result, totalAmountSum] = await Promise.all([SupplierPayment.paginate(filter, opts), sumFilteredAmount(filter)]);
+  return { ...result, totalAmountSum };
 };
 
 const getPaymentById = async (id) =>

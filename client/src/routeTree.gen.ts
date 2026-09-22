@@ -23,6 +23,7 @@ import { Route as AuthenticatedPurchaseSuggestionsImport } from './routes/_authe
 import { Route as AuthenticatedPriceUpdatesImport } from './routes/_authenticated/price-updates'
 import { Route as AuthenticatedPriceCheckerImport } from './routes/_authenticated/price-checker'
 import { Route as AuthenticatedPaymentVouchersImport } from './routes/_authenticated/payment-vouchers'
+import { Route as AuthenticatedPaymentCollectionsImport } from './routes/_authenticated/payment-collections'
 import { Route as AuthenticatedInsightsImport } from './routes/_authenticated/insights'
 import { Route as AuthenticatedCashRegisterImport } from './routes/_authenticated/cash-register'
 import { Route as AuthenticatedCashBookImport } from './routes/_authenticated/cash-book'
@@ -256,6 +257,13 @@ const AuthenticatedPaymentVouchersRoute =
   AuthenticatedPaymentVouchersImport.update({
     id: '/payment-vouchers',
     path: '/payment-vouchers',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedPaymentCollectionsRoute =
+  AuthenticatedPaymentCollectionsImport.update({
+    id: '/payment-collections',
+    path: '/payment-collections',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -1500,6 +1508,13 @@ declare module '@tanstack/react-router' {
       path: '/insights'
       fullPath: '/insights'
       preLoaderRoute: typeof AuthenticatedInsightsImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/payment-collections': {
+      id: '/_authenticated/payment-collections'
+      path: '/payment-collections'
+      fullPath: '/payment-collections'
+      preLoaderRoute: typeof AuthenticatedPaymentCollectionsImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/payment-vouchers': {
@@ -2774,6 +2789,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedCashRegisterRoute: typeof AuthenticatedCashRegisterRoute
   AuthenticatedInsightsRoute: typeof AuthenticatedInsightsRoute
+  AuthenticatedPaymentCollectionsRoute: typeof AuthenticatedPaymentCollectionsRoute
   AuthenticatedPaymentVouchersRoute: typeof AuthenticatedPaymentVouchersRoute
   AuthenticatedPriceCheckerRoute: typeof AuthenticatedPriceCheckerRoute
   AuthenticatedPriceUpdatesRoute: typeof AuthenticatedPriceUpdatesRoute
@@ -2865,6 +2881,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedCashRegisterRoute: AuthenticatedCashRegisterRoute,
   AuthenticatedInsightsRoute: AuthenticatedInsightsRoute,
+  AuthenticatedPaymentCollectionsRoute: AuthenticatedPaymentCollectionsRoute,
   AuthenticatedPaymentVouchersRoute: AuthenticatedPaymentVouchersRoute,
   AuthenticatedPriceCheckerRoute: AuthenticatedPriceCheckerRoute,
   AuthenticatedPriceUpdatesRoute: AuthenticatedPriceUpdatesRoute,
@@ -2981,6 +2998,7 @@ export interface FileRoutesByFullPath {
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
+  '/payment-collections': typeof AuthenticatedPaymentCollectionsRoute
   '/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/price-checker': typeof AuthenticatedPriceCheckerRoute
   '/price-updates': typeof AuthenticatedPriceUpdatesRoute
@@ -3151,6 +3169,7 @@ export interface FileRoutesByTo {
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/cash-register': typeof AuthenticatedCashRegisterRoute
   '/insights': typeof AuthenticatedInsightsRoute
+  '/payment-collections': typeof AuthenticatedPaymentCollectionsRoute
   '/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/price-checker': typeof AuthenticatedPriceCheckerRoute
   '/price-updates': typeof AuthenticatedPriceUpdatesRoute
@@ -3321,6 +3340,7 @@ export interface FileRoutesById {
   '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/cash-register': typeof AuthenticatedCashRegisterRoute
   '/_authenticated/insights': typeof AuthenticatedInsightsRoute
+  '/_authenticated/payment-collections': typeof AuthenticatedPaymentCollectionsRoute
   '/_authenticated/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/_authenticated/price-checker': typeof AuthenticatedPriceCheckerRoute
   '/_authenticated/price-updates': typeof AuthenticatedPriceUpdatesRoute
@@ -3495,6 +3515,7 @@ export interface FileRouteTypes {
     | '/cash-book'
     | '/cash-register'
     | '/insights'
+    | '/payment-collections'
     | '/payment-vouchers'
     | '/price-checker'
     | '/price-updates'
@@ -3664,6 +3685,7 @@ export interface FileRouteTypes {
     | '/cash-book'
     | '/cash-register'
     | '/insights'
+    | '/payment-collections'
     | '/payment-vouchers'
     | '/price-checker'
     | '/price-updates'
@@ -3832,6 +3854,7 @@ export interface FileRouteTypes {
     | '/_authenticated/cash-book'
     | '/_authenticated/cash-register'
     | '/_authenticated/insights'
+    | '/_authenticated/payment-collections'
     | '/_authenticated/payment-vouchers'
     | '/_authenticated/price-checker'
     | '/_authenticated/price-updates'
@@ -4052,6 +4075,7 @@ export const routeTree = rootRoute
         "/_authenticated/cash-book",
         "/_authenticated/cash-register",
         "/_authenticated/insights",
+        "/_authenticated/payment-collections",
         "/_authenticated/payment-vouchers",
         "/_authenticated/price-checker",
         "/_authenticated/price-updates",
@@ -4230,6 +4254,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/insights": {
       "filePath": "_authenticated/insights.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/payment-collections": {
+      "filePath": "_authenticated/payment-collections.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/payment-vouchers": {

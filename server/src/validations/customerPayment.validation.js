@@ -56,6 +56,8 @@ const getPayments = {
     search: Joi.string().allow(''),
     startDate: Joi.date(),
     endDate: Joi.date(),
+    minAmount: Joi.number().min(0),
+    maxAmount: Joi.number().min(0),
     sortBy: Joi.string(),
     limit: Joi.number(),
     page: Joi.number(),

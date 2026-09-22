@@ -3,6 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const { paymentVoucherService, auditLogService, localizationService } = require('../services');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
+const { applyBusinessDateRange } = require('../utils/businessTimezone');
 const ApiError = require('../utils/ApiError');
 const { formatMoney } = require('../utils/money');
 const { voucherAuditSnapshot, voucherCreateAuditFields } = require('../utils/voucherAudit');
@@ -29,10 +30,17 @@ const getVouchers = catchAsync(async (req, res) => {
   if (req.query.payeeType) {
     filter['lines.payeeType'] = req.query.payeeType;
   }
-  if (req.query.startDate || req.query.endDate) {
-    filter.date = {};
-    if (req.query.startDate) filter.date.$gte = new Date(req.query.startDate);
-    if (req.query.endDate) filter.date.$lte = new Date(req.query.endDate);
+  // Calendar dates ("2026-09-22") from the date-range filter are boundaries in Pakistan time,
+  // not UTC midnight — otherwise the last few hours of "today" fall outside an "up to today" range.
+  const dateRange = pick(req.query, ['startDate', 'endDate']);
+  applyBusinessDateRange(dateRange);
+  if (dateRange.date) {
+    filter.date = dateRange.date;
+  }
+  if (req.query.minAmount || req.query.maxAmount) {
+    filter.totalAmount = {};
+    if (req.query.minAmount) filter.totalAmount.$gte = Number(req.query.minAmount);
+    if (req.query.maxAmount) filter.totalAmount.$lte = Number(req.query.maxAmount);
   }
   if (req.query.search) {
     filter.$or = [

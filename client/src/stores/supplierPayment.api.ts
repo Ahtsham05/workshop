@@ -32,6 +32,8 @@ interface PaginatedResult<T> {
   limit: number
   totalPages: number
   totalResults: number
+  /** Sum of `amount` across every payment matching the filter, not just this page. */
+  totalAmountSum: number
 }
 
 /** One still-owed invoice, as the allocation preview sees it. */
@@ -207,7 +209,20 @@ export const supplierPaymentApi = createApi({
   endpoints: (builder) => ({
     getSupplierPayments: builder.query<
       PaginatedResult<SupplierPaymentRecord>,
-      { supplier?: string; status?: string; direction?: string; search?: string; startDate?: string; endDate?: string; page?: number; limit?: number } | void
+      {
+        supplier?: string
+        status?: string
+        direction?: string
+        paymentMethod?: 'cash' | 'wallet'
+        search?: string
+        startDate?: string
+        endDate?: string
+        minAmount?: number
+        maxAmount?: number
+        sortBy?: string
+        page?: number
+        limit?: number
+      } | void
     >({
       query: (params) => ({ url: '/supplier-payments', params: { limit: 20, ...(params || {}) } }),
       providesTags: ['SupplierPayment'],
@@ -309,6 +324,7 @@ export const supplierPaymentApi = createApi({
 
 export const {
   useGetSupplierPaymentsQuery,
+  useLazyGetSupplierPaymentsQuery,
   useGetSupplierPaymentQuery,
   useGetPurchasePaymentsQuery,
   useGetOpenInvoicesQuery,

@@ -13,15 +13,17 @@ interface InlineBarcodeInputProps {
   onChange?: (value: string) => void
   className?: string
   disabled?: boolean
+  'data-enter-field'?: string
 }
 
-export function InlineBarcodeInput({ 
-  onBarcodeEntered, 
+export function InlineBarcodeInput({
+  onBarcodeEntered,
   placeholder,
   value = '',
   onChange,
   className,
-  disabled = false
+  disabled = false,
+  'data-enter-field': dataEnterField,
 }: InlineBarcodeInputProps) {
   const { t } = useLanguage()
   const [isListening, setIsListening] = useState(false)
@@ -99,6 +101,7 @@ export function InlineBarcodeInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder || t('enter_or_scan_barcode')}
           disabled={disabled}
+          data-enter-field={dataEnterField}
           showVoiceInput={false}
           className={cn(
             "pr-10 font-mono",

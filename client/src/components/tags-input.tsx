@@ -13,6 +13,7 @@ interface TagsInputProps {
    *  so a caller can move focus elsewhere (e.g. the next field) instead of the no-op
    *  default of just swallowing the keypress. */
   onEmptyEnter?: () => void
+  'data-enter-field'?: string
 }
 
 /** Free-text chip/tag input — Enter or comma commits a tag, Backspace on an empty input
@@ -21,7 +22,7 @@ interface TagsInputProps {
  *  Forwards a ref to the underlying draft `<input>` so a caller can focus it directly
  *  (e.g. right after a preceding field's own selection commits). */
 export const TagsInput = forwardRef<HTMLInputElement, TagsInputProps>(function TagsInput(
-  { value, onChange, placeholder, suggestions, className, onEmptyEnter },
+  { value, onChange, placeholder, suggestions, className, onEmptyEnter, 'data-enter-field': dataEnterField },
   forwardedRef
 ) {
   const [draft, setDraft] = useState('')
@@ -90,6 +91,7 @@ export const TagsInput = forwardRef<HTMLInputElement, TagsInputProps>(function T
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => setSuggestionsOpen(true)}
+          data-enter-field={dataEnterField}
           onBlur={() => { commitDraft(); setTimeout(() => setSuggestionsOpen(false), 100) }}
           placeholder={value.length === 0 ? placeholder ?? 'Add a tag and press Enter...' : ''}
           className='h-6 min-w-[8rem] flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground'

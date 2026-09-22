@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { RevenueChart } from './components/revenue-chart'
 import { LowStockWidget } from './components/low-stock-widget'
 import { RecentActivities } from './components/recent-activities'
+import { UpcomingInvoices } from './components/upcoming-invoices'
 import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickLinksPanel } from './components/quick-links-panel'
@@ -29,7 +30,7 @@ import {
 } from '@/lib/dashboard-date-range'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useFormatMoney, useCurrencySymbolPrefix } from '@/lib/format-money'
-import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package, TrendingUp, Users, Building2, Wallet } from 'lucide-react'
+import { DollarSign, ShoppingCart, AlertTriangle, FileText, RefreshCcw, Package, TrendingUp, Users, Building2, Wallet, CalendarClock, CalendarCheck2 } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
 import { isMobileShopBusiness, isRestaurantBusiness, isSchoolBusiness, isCashBookBusiness } from '@/lib/business-types'
@@ -99,6 +100,23 @@ export default function Dashboard() {
           tab,
           startDate: dateParams.startDate,
           endDate: dateParams.endDate,
+        },
+      }),
+    [dateParams.endDate, dateParams.startDate]
+  )
+  // Matches the same `direction`/`status` the dashboard's own paymentsReceived/paymentsPaid
+  // aggregation filters on (dashboard.controller.js sumPostedPayments), so the total this link
+  // lands on is the same number the card just showed, not a different filtered subset.
+  const paymentsLink = useMemo(
+    () =>
+      (tab: 'customer' | 'supplier'): StatCardLink => ({
+        to: '/payment-collections',
+        search: {
+          tab,
+          startDate: dateParams.startDate,
+          endDate: dateParams.endDate,
+          direction: 'payment',
+          status: 'posted',
         },
       }),
     [dateParams.endDate, dateParams.startDate]
@@ -375,6 +393,34 @@ export default function Dashboard() {
             link={{ to: '/accounting', search: { tab: 'suppliers' } }}
           />
           <StatCard
+            title={t('Payments Received')}
+            value={stats?.paymentsReceived || 0}
+            icon={<CalendarCheck2 className='h-4 w-4' />}
+            valuePrefix={currencyPrefix}
+            description={
+              stats?.paymentsReceivedCount
+                ? `${stats.paymentsReceivedCount} ${t('payments')} · ${t('in selected period')}`
+                : t('Customer payments collected in selected period')
+            }
+            isLoading={statsLoading}
+            tone='sky'
+            link={paymentsLink('customer')}
+          />
+          <StatCard
+            title={t('Payments Paid')}
+            value={stats?.paymentsPaid || 0}
+            icon={<CalendarClock className='h-4 w-4' />}
+            valuePrefix={currencyPrefix}
+            description={
+              stats?.paymentsPaidCount
+                ? `${stats.paymentsPaidCount} ${t('payments')} · ${t('in selected period')}`
+                : t('Supplier payments sent in selected period')
+            }
+            isLoading={statsLoading}
+            tone='orange'
+            link={paymentsLink('supplier')}
+          />
+          <StatCard
             title='My Wallet'
             value={stats?.myWalletExpense || 0}
             icon={<Wallet className='h-4 w-4' />}
@@ -622,6 +668,11 @@ export default function Dashboard() {
         {/* Recent Activities */}
         <div className='grid grid-cols-1 gap-6'>
           <RecentActivities dateRange={dateRange} />
+        </div>
+
+        {/* Upcoming Invoices */}
+        <div className='grid grid-cols-1 gap-6 mt-6'>
+          <UpcomingInvoices />
         </div>
     </>
   )

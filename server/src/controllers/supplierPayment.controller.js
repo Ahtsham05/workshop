@@ -4,6 +4,7 @@ const ApiError = require('../utils/ApiError');
 const pick = require('../utils/pick');
 const { supplierPaymentService, auditLogService } = require('../services');
 const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
+const { applyBusinessDateRange } = require('../utils/businessTimezone');
 
 const scopeOf = (req) => {
   const scope = {};
@@ -110,11 +111,19 @@ const getPayments = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['supplier', 'status', 'direction', 'paymentMethod']);
   applyBranchFilter(filter, req);
 
-  const { startDate, endDate, search } = req.query;
-  if (startDate || endDate) {
-    filter.paymentDate = {};
-    if (startDate) filter.paymentDate.$gte = new Date(new Date(startDate).setHours(0, 0, 0, 0));
-    if (endDate) filter.paymentDate.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
+  const { search, minAmount, maxAmount } = req.query;
+  // Calendar dates ("2026-09-22") are boundaries in Pakistan time, not server-local/UTC
+  // midnight — otherwise this list's total can drift from the dashboard card's, which resolves
+  // the same date range in business time.
+  const dateRange = pick(req.query, ['startDate', 'endDate']);
+  applyBusinessDateRange(dateRange, 'paymentDate');
+  if (dateRange.paymentDate) {
+    filter.paymentDate = dateRange.paymentDate;
+  }
+  if (minAmount || maxAmount) {
+    filter.amount = {};
+    if (minAmount) filter.amount.$gte = Number(minAmount);
+    if (maxAmount) filter.amount.$lte = Number(maxAmount);
   }
   if (search) {
     const escaped = String(search)

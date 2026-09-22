@@ -218,6 +218,15 @@ const createVoucher = async (voucherBody, userId) => {
   return voucher;
 };
 
+/** Sum of `totalAmount` across every voucher matching `filter`, not just the current page —
+ * `.find(filter)` (not `.aggregate`) so the same ObjectId/string casting the list query
+ * already relies on applies here too. Powers the list's Total row, which has to reflect the
+ * whole filtered set even when the page only shows up to `limit` of them. */
+const sumFilteredAmount = async (filter) => {
+  const docs = await ReceiptVoucher.find(filter).select('totalAmount').lean();
+  return docs.reduce((sum, doc) => sum + (doc.totalAmount || 0), 0);
+};
+
 /**
  * Query for receipt vouchers
  * @param {Object} filter - Mongo filter
@@ -226,7 +235,8 @@ const createVoucher = async (voucherBody, userId) => {
  */
 const queryVouchers = async (filter, options) => {
   const opts = { ...options, sortBy: options.sortBy || 'date:desc' };
-  return ReceiptVoucher.paginate(filter, opts);
+  const [result, totalAmountSum] = await Promise.all([ReceiptVoucher.paginate(filter, opts), sumFilteredAmount(filter)]);
+  return { ...result, totalAmountSum };
 };
 
 /**

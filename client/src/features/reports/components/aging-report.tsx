@@ -1,77 +1,35 @@
-import { useState, Fragment, forwardRef, useImperativeHandle } from 'react'
+import { useState, useMemo, Fragment, forwardRef, useImperativeHandle } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { useGetCustomerAgingReportQuery, AgingReportCustomer } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { buildCustomerBalanceMessage } from '@/utils/sms-messages'
 import { format } from 'date-fns'
-import { ChevronDown, ChevronRight, CalendarIcon, CheckCircle2, Clock, AlertCircle, AlertTriangle, XCircle, Wallet } from 'lucide-react'
+import { ChevronDown, ChevronRight, CalendarIcon, Wallet } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { cn } from '@/lib/utils'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
-
-type BucketKey = 'current' | 'days1to30' | 'days31to60' | 'days61to90' | 'days90plus'
-
-const BUCKETS: Array<{
-  key: BucketKey
-  label: string
-  tone: 'emerald' | 'amber' | 'orange' | 'rose' | 'slate'
-  icon: typeof CheckCircle2
-  badge: string
-}> = [
-  {
-    key: 'current',
-    label: 'Current',
-    tone: 'emerald',
-    icon: CheckCircle2,
-    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-  },
-  {
-    key: 'days1to30',
-    label: '1-30 Days',
-    tone: 'amber',
-    icon: Clock,
-    badge: 'bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200',
-  },
-  {
-    key: 'days31to60',
-    label: '31-60 Days',
-    tone: 'orange',
-    icon: AlertCircle,
-    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-  },
-  {
-    key: 'days61to90',
-    label: '61-90 Days',
-    tone: 'rose',
-    icon: AlertTriangle,
-    badge: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400',
-  },
-  {
-    key: 'days90plus',
-    label: '90+ Days',
-    tone: 'slate',
-    icon: XCircle,
-    badge: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-400',
-  },
-]
+import { buildAgingBuckets, AGING_BUCKET_SIZES, DEFAULT_AGING_BUCKET_SIZE, AgingBucketSize } from '../utils/aging-buckets'
 
 export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
   const { t, language } = useLanguage()
   const branchName = useBranchName()
   const [asOfDate, setAsOfDate] = useState<Date>(() => new Date())
+  const [bucketSize, setBucketSize] = useState<AgingBucketSize>(DEFAULT_AGING_BUCKET_SIZE)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const queryAsOfDate = format(asOfDate, 'yyyy-MM-dd')
-  const { data, isFetching: isLoading } = useGetCustomerAgingReportQuery({ asOfDate: queryAsOfDate })
+  const { data, isFetching: isLoading } = useGetCustomerAgingReportQuery({ asOfDate: queryAsOfDate, bucketSize })
+  const BUCKETS = useMemo(() => buildAgingBuckets(bucketSize), [bucketSize])
 
   useImperativeHandle(ref, () => ({
     exportToExcel: () => {
@@ -85,10 +43,10 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
           [t('customer')]: reportEntityName(language, row.customerName, row.customerNameUrdu),
           [t('phone')]: row.phone || 'N/A',
           [t('Current')]: row.current,
-          '1-30 Days': row.days1to30,
-          '31-60 Days': row.days31to60,
-          '61-90 Days': row.days61to90,
-          '90+ Days': row.days90plus,
+          [BUCKETS[1].label]: row.bucket1,
+          [BUCKETS[2].label]: row.bucket2,
+          [BUCKETS[3].label]: row.bucket3,
+          [BUCKETS[4].label]: row.bucket4,
           [t('total')]: row.totalOutstanding,
         }))
 
@@ -125,28 +83,47 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
     <div className='space-y-6'>
       <Card>
         <CardHeader>
-          <CardTitle>{t('As of Date')}</CardTitle>
-          <CardDescription>{t('Aging buckets are calculated against the balance outstanding as of this date')}</CardDescription>
+          <CardTitle>{t('Report Settings')}</CardTitle>
+          <CardDescription>{t('Aging buckets are calculated against the balance outstanding as of this date, using the selected aging period')}</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant='outline' className='w-[240px] justify-start text-left font-normal'>
-                <CalendarIcon className='mr-2 h-4 w-4' />
-                {format(asOfDate, 'PPP')}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className='w-auto p-0' align='start'>
-              <Calendar
-                mode='single'
-                selected={asOfDate}
-                onSelect={(date) => {
-                  if (date) setAsOfDate(date)
-                }}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+        <CardContent className='flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end'>
+          <div className='flex flex-col gap-1.5'>
+            <span className='text-xs font-medium text-muted-foreground'>{t('As of Date')}</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant='outline' className='w-[240px] justify-start text-left font-normal'>
+                  <CalendarIcon className='mr-2 h-4 w-4' />
+                  {format(asOfDate, 'PPP')}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className='w-auto p-0' align='start'>
+                <Calendar
+                  mode='single'
+                  selected={asOfDate}
+                  onSelect={(date) => {
+                    if (date) setAsOfDate(date)
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <div className='flex flex-col gap-1.5'>
+            <span className='text-xs font-medium text-muted-foreground'>{t('Aging Period')}</span>
+            <Select value={String(bucketSize)} onValueChange={(v) => setBucketSize(Number(v) as AgingBucketSize)}>
+              <SelectTrigger className='w-[180px]'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AGING_BUCKET_SIZES.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size} {t('Days')}{size === DEFAULT_AGING_BUCKET_SIZE ? ` (${t('Default')})` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
@@ -200,10 +177,10 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
                     <TableHead>{t('customer')}</TableHead>
                     <TableHead>{t('phone')}</TableHead>
                     <TableHead className='text-right'>{t('Current')}</TableHead>
-                    <TableHead className='text-right'>1-30</TableHead>
-                    <TableHead className='text-right'>31-60</TableHead>
-                    <TableHead className='text-right'>61-90</TableHead>
-                    <TableHead className='text-right'>90+</TableHead>
+                    <TableHead className='text-right'>{BUCKETS[1].shortLabel}</TableHead>
+                    <TableHead className='text-right'>{BUCKETS[2].shortLabel}</TableHead>
+                    <TableHead className='text-right'>{BUCKETS[3].shortLabel}</TableHead>
+                    <TableHead className='text-right'>{BUCKETS[4].shortLabel}</TableHead>
                     <TableHead className='text-right'>{t('total')}</TableHead>
                     <TableHead className='w-10' />
                   </TableRow>
@@ -228,10 +205,10 @@ export const AgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref
                           </TableCell>
                           <TableCell className='text-sm text-muted-foreground'>{row.phone || 'N/A'}</TableCell>
                           <TableCell className='text-right'>{row.current ? formatCurrency(row.current) : '—'}</TableCell>
-                          <TableCell className='text-right'>{row.days1to30 ? formatCurrency(row.days1to30) : '—'}</TableCell>
-                          <TableCell className='text-right'>{row.days31to60 ? formatCurrency(row.days31to60) : '—'}</TableCell>
-                          <TableCell className='text-right'>{row.days61to90 ? formatCurrency(row.days61to90) : '—'}</TableCell>
-                          <TableCell className='text-right'>{row.days90plus ? formatCurrency(row.days90plus) : '—'}</TableCell>
+                          <TableCell className='text-right'>{row.bucket1 ? formatCurrency(row.bucket1) : '—'}</TableCell>
+                          <TableCell className='text-right'>{row.bucket2 ? formatCurrency(row.bucket2) : '—'}</TableCell>
+                          <TableCell className='text-right'>{row.bucket3 ? formatCurrency(row.bucket3) : '—'}</TableCell>
+                          <TableCell className='text-right'>{row.bucket4 ? formatCurrency(row.bucket4) : '—'}</TableCell>
                           <TableCell className='text-right font-semibold'>{formatCurrency(row.totalOutstanding)}</TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             {row.totalOutstanding > 0 && (row.phone || row.whatsapp) && (
