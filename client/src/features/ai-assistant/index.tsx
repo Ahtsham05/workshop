@@ -366,7 +366,7 @@ export default function AiAssistantPage() {
         >
           <div className='flex h-full min-h-0 flex-col'>
             <div className='flex-none border-b py-1'>
-              <QuickActions onSelect={submitText} />
+              <QuickActions onSelect={submitText} onClose={() => setShowSidebar(false)} />
             </div>
             <div className='min-h-0 flex-1'>
               <ConversationList

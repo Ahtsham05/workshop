@@ -127,7 +127,7 @@ export function CommunicationLogPanel({ relatedType, relatedId, relatedName }: C
   return (
     <Card className="overflow-hidden">
       <Collapsible open={expanded} onOpenChange={setExpanded}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CollapsibleTrigger asChild>
             <button
               type="button"

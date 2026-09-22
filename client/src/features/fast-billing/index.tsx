@@ -754,7 +754,7 @@ export default function FastBillingPage() {
             </p>
           </div>
         </div>
-        <div className='flex items-center gap-2'>
+        <div className='flex items-center gap-2 max-sm:w-full max-sm:flex-wrap max-sm:gap-1.5'>
           {cart.length > 0 && (
             <div className='mr-1 hidden items-baseline gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/40 sm:flex'>
               <span className='text-xs text-muted-foreground'>{cart.length} items</span>
@@ -796,7 +796,7 @@ export default function FastBillingPage() {
         </div>
       </div>
 
-      <div className='grid gap-4 xl:grid-cols-12'>
+      <div className='grid grid-cols-1 gap-4 xl:grid-cols-12'>
         <div className='flex flex-col gap-3 xl:col-span-7'>
           <BarcodeScanInput
             ref={scanInputRef}

@@ -255,6 +255,8 @@ export type SyncQueueOperation = {
 
 export type ElectronAPI = {
   isElectron: boolean
+  /** The main process answers getDisplayMedia (screenshots / screen recording work without a picker). */
+  supportsDisplayCapture?: boolean
   getNetworkStatus: () => Promise<NetworkStatus>
   onNetworkStatus: (callback: (status: NetworkStatus) => void) => () => void
   sync: {

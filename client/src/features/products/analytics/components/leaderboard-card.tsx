@@ -33,7 +33,10 @@ export function LeaderboardCard({ title, icon, tabs, loading }: Props) {
 
   return (
     <Card className='gap-0'>
-      <CardHeader className='space-y-2 pb-3'>
+      {/* Phones: CardHeader is a bare `grid`, whose implicit column grew to the tab bar's minimum width and pushed the
+          "Needs attention" card ~8px past the screen at 320px. grid-cols-1 lets it shrink to the card, and the tab
+          labels drop a size so "Running out 5 | Dead stock 5 | Returns 5" fits. */}
+      <CardHeader className='space-y-2 pb-3 max-sm:grid-cols-1'>
         <CardTitle className='flex items-center gap-2 text-base'>
           {icon}
           {title}
@@ -42,7 +45,7 @@ export function LeaderboardCard({ title, icon, tabs, loading }: Props) {
           <Tabs value={tab.key} onValueChange={setActive}>
             <TabsList className='h-8 w-full'>
               {tabs.map((candidate) => (
-                <TabsTrigger key={candidate.key} value={candidate.key} className='flex-1 px-2 text-xs'>
+                <TabsTrigger key={candidate.key} value={candidate.key} className='flex-1 px-2 text-xs max-sm:min-w-0 max-sm:px-1 max-sm:text-[11px]'>
                   {candidate.label}
                   {candidate.rows.length > 0 ? (
                     <span className='ml-1 text-[10px] text-muted-foreground tabular-nums'>{candidate.rows.length}</span>

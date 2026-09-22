@@ -1878,6 +1878,73 @@ export default function PurchasePanel({
     return { productCell, qtyControl, purchasePriceControl, priceComparisonIndicator, sellingPriceControl, discountControl, totalDisplay, deleteButton }
   }
 
+  // Phones only (sm:hidden below 640px): Preview/Save/Save & Print always reachable at the
+  // bottom of the screen instead of buried mid-page (catalog-shown mode) or up in the header
+  // (catalog-hidden mode, where the portaled bar sits above the fold on a tall form but still
+  // scrolls away with everything else). Independent of showProductCatalog — unlike the two
+  // existing action groups above/below (both now `max-sm:hidden`), this is the only one that
+  // renders on phones. Mirrors InvoicePanel's identical bar (see invoice-panel.tsx).
+  const mobileSaveDisabled = !(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading
+  const mobilePrintDisabled = !getSupplierId(purchase.supplier as Supplier) || purchase.items.length === 0 || isLoading
+  const mobileActionsBar = (
+    <div className='fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/90 px-3 pt-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:hidden'>
+      <div className='mb-1.5 flex items-center justify-between gap-2'>
+        <span className='text-xs text-muted-foreground'>
+          {purchase.items.filter((i) => (i.product.id || (i.product as any)?._id) && i.product.name).length} {t('Purchase Items')}
+        </span>
+        <span className='text-sm font-bold tabular-nums'>{formatMoney(totals.total)}</span>
+      </div>
+      <div className='flex items-center gap-2'>
+        <Button
+          type='button'
+          onClick={previewPurchase}
+          size='icon'
+          variant='outline'
+          disabled={purchase.items.length === 0}
+          className='h-10 w-10 shrink-0'
+        >
+          <Eye className='h-4 w-4' />
+          <span className='sr-only'>{t('Preview')}</span>
+        </Button>
+        <Button
+          type='button'
+          onClick={() => handleSavePurchase('none')}
+          size='lg'
+          variant='outline'
+          disabled={mobileSaveDisabled}
+          className='h-10 min-w-0 flex-1 gap-1.5 px-2'
+        >
+          {isLoading && savingType === 'none' ? (
+            <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
+          ) : (
+            <Save className='h-4 w-4 shrink-0' />
+          )}
+          <span className='truncate'>{isEditing ? t('Update Purchase') : t('Save Purchase')}</span>
+        </Button>
+        <PrintFormatButton
+          onPrint={(paperSize) => handleSavePurchase(paperSize)}
+          defaultPaperSize={defaultPaperSize}
+          size='lg'
+          variant='default'
+          fullWidth
+          disabled={mobilePrintDisabled}
+          className='min-w-0 flex-[1.3]'
+          mainButtonClassName='h-10 min-w-0 bg-emerald-600 hover:bg-emerald-700'
+          mainButtonContent={
+            isLoading && savingType !== 'none' ? (
+              <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
+            ) : (
+              <>
+                <Printer className='h-4 w-4 shrink-0' />
+                <span className='ml-1.5 truncate'>{t('Save & Print Receipt')}</span>
+              </>
+            )
+          }
+        />
+      </div>
+    </div>
+  )
+
   return (
     <div
       className={cn(
@@ -1888,6 +1955,10 @@ export default function PurchasePanel({
             // below), so a column's height is just its own content.
             'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
           : 'space-y-4',
+        // Reserves room for the fixed mobile bar above (~7rem covers its two rows + the
+        // safe-area inset baked into the same env() the bar itself pads with) so it never
+        // covers the last card/field.
+        'max-sm:pb-[calc(7rem+env(safe-area-inset-bottom))]',
       )}
     >
       {/* Column 1 (compact mode): Purchase Details. */}
@@ -2385,8 +2456,13 @@ export default function PurchasePanel({
               per-field labels of their own (see renderPurchaseItemCard), same as the
               desktop table only labels columns in its own header, not every cell. */}
           {(showProductCatalog || isPhone || isItemsAreaNarrow) && purchase.items.length > 0 && (
+            // overflow-x-auto: the fixed column widths below add up to ~600px — wider than a phone
+            // card. Without this the row doesn't wrap (nothing here can) and just pushes the whole
+            // card, and the page, that many px wider instead of scrolling within itself, exactly
+            // like the per-item controls row already does (compare its own overflow-x-auto below).
+            // Inert whenever the row already fits (catalog-shown desktop, wide dense columns).
             <div className={cn(
-              'flex items-center gap-2 border-b bg-muted/40 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground',
+              'flex items-center gap-2 overflow-x-auto border-b bg-muted/40 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground',
               !showProductCatalog ? 'px-2' : 'px-3',
             )}>
               <div className='flex w-[100px] shrink-0 justify-center'>{t('Qty')}</div>
@@ -2777,9 +2853,11 @@ export default function PurchasePanel({
           )}
 
           {/* Save Buttons — compact mode (catalog hidden): the header-portaled bar below
-              is the buttons row, these full-size duplicates would just repeat it. */}
+              is the buttons row, these full-size duplicates would just repeat it. Hidden on
+              phones either way: the fixed bottom bar (below, sm:hidden) is reachable without
+              scrolling, which these buried-in-the-page duplicates never were. */}
           {showProductCatalog && (
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-3 max-sm:hidden">
             <Button
               type='button'
               onClick={previewPurchase}
@@ -2888,8 +2966,10 @@ export default function PurchasePanel({
         if (stickyActionsContainer) return createPortal(bar, stickyActionsContainer)
         // No header slot yet — fall back to a floating bottom bar (with item count/total
         // for context, since it's not sitting next to the page title in this fallback).
+        // Hidden on phones — the dedicated fixed bottom bar below covers them, and this
+        // is only ever on screen for the one frame before the portal ref attaches.
         return (
-          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90 max-sm:hidden'>
             <div className='flex items-baseline gap-2 pl-1'>
               <span className='text-xs text-muted-foreground'>
                 {purchase.items.filter((i) => (i.product.id || (i.product as any)?._id) && i.product.name).length} {t('Purchase Items')}
@@ -2939,6 +3019,14 @@ export default function PurchasePanel({
         }}
         onCreated={handleQuickCreated}
       />
+
+      {/* Portaled straight to <body> — not just a sibling `<div>` here — for two reasons: (1) any
+          ancestor with a CSS transform/filter would silently turn this `fixed` bar into a child
+          of THAT ancestor instead of the viewport; (2) a plain sibling was still counted by the
+          parent's `space-y-4` (Tailwind's spacing selector doesn't check `display:none`, only the
+          `hidden` attribute) and added a stray 16px gap below the last card even while this bar
+          itself rendered nothing on desktop. */}
+      {createPortal(mobileActionsBar, document.body)}
     </div>
   )
 }

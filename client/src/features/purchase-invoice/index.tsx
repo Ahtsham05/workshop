@@ -1214,8 +1214,11 @@ const PurchaseInvoicePage = () => {
                 )}
               </Button>
             </div>
+            {/* max-sm:hidden: on phones PurchasePanel's own fixed bottom bar (Preview/Save/
+                Save & Print) covers this instead — always reachable without scrolling back
+                up to the header, unlike this slot once the form scrolls past it. */}
             {!showProductCatalog && (
-              <div ref={setHeaderActionsSlot} className="flex flex-wrap items-center gap-2" />
+              <div ref={setHeaderActionsSlot} className="flex flex-wrap items-center gap-2 max-sm:hidden" />
             )}
           </div>
 

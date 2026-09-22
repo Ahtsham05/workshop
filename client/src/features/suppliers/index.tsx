@@ -194,12 +194,12 @@ export default function Suppliers() {
     <SupplierProvider>
         <div className='mb-2 flex flex-wrap items-center justify-between space-y-2'>
           <div>
-            <h2 className='text-2xl font-bold tracking-tight mb-5'>{t('suppliers_list')}</h2>
+            <h2 className='text-2xl font-bold tracking-tight mb-5 max-sm:mb-1'>{t('suppliers_list')}</h2>
             <p className='text-muted-foreground'>
               {t('manage_suppliers')}
             </p>
           </div>
-          <div className='flex flex-wrap gap-2'>
+          <div className='flex flex-wrap gap-2 max-sm:w-full'>
             {viewMode === 'table' && selectedSuppliers.length > 0 && (
               <>
                 <Button
@@ -234,8 +234,10 @@ export default function Suppliers() {
           </div>
         </div>
 
-        <div className='mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4'>
+        {/* Phones: two cards per row like the dashboard; the odd third card spans the full width. */}
+        <div className='mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 max-sm:[&>:last-child:nth-child(odd)]:col-span-2'>
           <StatCard
+            inlineHeaderOnMobile
             title={t('total_suppliers')}
             value={stats?.totalSuppliers ?? 0}
             description={t('manage_suppliers')}
@@ -244,6 +246,7 @@ export default function Suppliers() {
             isLoading={isStatsLoading}
           />
           <StatCard
+            inlineHeaderOnMobile
             title={t('outstanding_payable')}
             value={fmtAmt(stats?.outstandingPayable ?? 0)}
             description={t('Payable')}
@@ -252,6 +255,7 @@ export default function Suppliers() {
             isLoading={isStatsLoading}
           />
           <StatCard
+            inlineHeaderOnMobile
             title={t('new_this_month')}
             value={stats?.newThisMonth ?? 0}
             description={t('suppliers_added_this_month')}

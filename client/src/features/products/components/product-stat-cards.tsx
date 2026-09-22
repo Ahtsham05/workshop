@@ -42,15 +42,35 @@ export function ProductStatCards({ outOfStock, lowStock, criticalStock, totalPro
   ]
 
   return (
-    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+    // Phones: two cards per row. Each becomes a small grid — icon and label on the first row, the number
+    // under them — so a long label wraps beside the icon instead of being cut. All `max-sm:`, so from 640px
+    // up the cards are laid out exactly as before.
+    <div className='grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4 max-sm:gap-3'>
       {cards.map(({ label, value, icon: Icon, tone }) => (
-        <div key={label} className={cn('flex items-center gap-4 rounded-xl border p-4', CARD_TONES[tone].card)}>
-          <span className={cn('inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', CARD_TONES[tone].icon)}>
-            <Icon className='h-5 w-5' />
+        <div
+          key={label}
+          className={cn(
+            'flex items-center gap-4 rounded-xl border p-4',
+            'max-sm:grid max-sm:grid-cols-[2.25rem_minmax(0,1fr)] max-sm:grid-rows-[minmax(2.25rem,auto)] max-sm:content-start max-sm:gap-x-2.5 max-sm:p-3',
+            CARD_TONES[tone].card,
+          )}
+        >
+          <span
+            className={cn(
+              'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+              'max-sm:col-start-1 max-sm:row-start-1 max-sm:h-9 max-sm:w-9 max-sm:self-center',
+              CARD_TONES[tone].icon,
+            )}
+          >
+            <Icon className='h-5 w-5 max-sm:h-4 max-sm:w-4' />
           </span>
-          <div className='min-w-0'>
-            <p className='truncate text-sm font-medium text-muted-foreground'>{label}</p>
-            <p className='text-2xl font-bold tabular-nums text-foreground'>{loading ? '…' : value.toLocaleString()}</p>
+          <div className='min-w-0 max-sm:contents'>
+            <p className='truncate text-sm font-medium text-muted-foreground max-sm:col-start-2 max-sm:row-start-1 max-sm:line-clamp-2 max-sm:self-center max-sm:whitespace-normal max-sm:break-words max-sm:text-[13px] max-sm:leading-snug'>
+              {label}
+            </p>
+            <p className='text-2xl font-bold tabular-nums text-foreground max-sm:col-span-2 max-sm:row-start-2 max-sm:mt-1'>
+              {loading ? '…' : value.toLocaleString()}
+            </p>
           </div>
         </div>
       ))}

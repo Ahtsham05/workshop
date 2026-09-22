@@ -260,14 +260,16 @@ export function LowStockAlert({
   } else {
     banner = (
       <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+        {/* Phones: less side padding, a slightly smaller title that may wrap, and the "View All" group never
+            squeezed (it used to wrap to "View / All" next to the title). */}
+        <CardHeader className="pb-3 max-sm:px-4">
+          <div className="flex items-center justify-between max-sm:gap-2">
             <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
-              <AlertTriangle className="w-5 h-5" />
-              <CardTitle className="text-lg text-red-700 dark:text-red-400">{t('out_of_stock_products')}</CardTitle>
+              <AlertTriangle className="w-5 h-5 max-sm:shrink-0" />
+              <CardTitle className="text-lg text-red-700 dark:text-red-400 max-sm:text-base">{t('out_of_stock_products')}</CardTitle>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-primary">{t('View All')}</span>
+            <div className="flex items-center gap-2 max-sm:shrink-0 max-sm:gap-1">
+              <span className="text-sm font-medium text-primary max-sm:whitespace-nowrap">{t('View All')}</span>
               <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); toggleAlerts() }}>
                 <BellOff className="w-4 h-4" />
               </Button>
@@ -277,7 +279,7 @@ export function LowStockAlert({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="max-sm:px-4">
           <div className="flex flex-wrap items-center gap-2">
             {outOfStockProducts.slice(0, 3).map((product) => (
               <Badge key={product._id || product.id} variant="destructive">

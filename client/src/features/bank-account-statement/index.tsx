@@ -26,6 +26,8 @@ import { useGetWalletBalanceStatementQuery, type WalletBalanceDetailItem } from 
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-timezone'
 import { useFormatMoney } from '@/lib/format-money'
+import { fitValueSize } from '@/lib/fit-value-size'
+import { cn } from '@/lib/utils'
 
 const formatDate = (value?: string) => {
   if (!value) return '-'
@@ -147,6 +149,15 @@ export default function BankAccountStatementPage({ initialWalletType }: BankAcco
   const totalDebit = ledgerRows.reduce((sum, row) => sum + row.debit, 0)
   const totalCredit = ledgerRows.reduce((sum, row) => sum + row.credit, 0)
 
+  // Precomputed (not just inline in the JSX below) so fitValueSize has the exact string it'll
+  // render — a truncated "Rs43…" would be misleading on a money figure, so the half-width phone
+  // cards shrink the font to fit instead of cutting digits.
+  const openingStr = fmt(data?.periodOpeningBalance ?? 0)
+  const closingStr = fmt(data?.periodClosingBalance ?? 0)
+  const creditStr = `+${fmt(totalCredit)}`
+  const debitStr = `-${fmt(totalDebit)}`
+  const transactionsStr = String(ledgerRows.length)
+
   const handleExport = () => {
     if (!data) {
       toast.error('No statement data available to export')
@@ -204,7 +215,7 @@ export default function BankAccountStatementPage({ initialWalletType }: BankAcco
       </div>
 
       <Card>
-        <CardContent className='grid gap-4 pt-6 md:grid-cols-3'>
+        <CardContent className='grid grid-cols-1 gap-4 pt-6 md:grid-cols-3'>
           <div className='space-y-2'>
             <p className='text-sm font-medium'>Bank Account</p>
             {walletsLoading ? (
@@ -259,50 +270,54 @@ export default function BankAccountStatementPage({ initialWalletType }: BankAcco
         <Skeleton className='h-[420px] w-full' />
       ) : data ? (
         <>
-          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-5'>
-            <Card className={kpiCardClass('slate')}>
+          {/* Phones: two cards per row like the dashboard; the odd fifth card spans the full width.
+              @container + fitValueSize: at half card width a long formatted amount shrinks to fit
+              on one line instead of being truncated mid-digit (misleading on a money figure) or
+              overflowing past the icon. */}
+          <div className='grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-5 max-sm:[&>:last-child:nth-child(odd)]:col-span-2'>
+            <Card className={cn(kpiCardClass('slate'), '@container')}>
               <CardHeader className='pb-2'>
                 <CardTitle className='text-sm font-medium'>Opening Balance</CardTitle>
               </CardHeader>
-              <CardContent className='flex items-center justify-between'>
-                <p className='text-xl font-bold'>{fmt(data.periodOpeningBalance)}</p>
-                <Landmark className='h-4 w-4 text-muted-foreground' />
+              <CardContent className='flex items-center justify-between gap-2'>
+                <p className='min-w-0 whitespace-nowrap font-bold' style={{ fontSize: fitValueSize(openingStr) }}>{openingStr}</p>
+                <Landmark className='h-4 w-4 shrink-0 text-muted-foreground' />
               </CardContent>
             </Card>
-            <Card className={kpiCardClass('emerald')}>
+            <Card className={cn(kpiCardClass('emerald'), '@container')}>
               <CardHeader className='pb-2'>
                 <CardTitle className='text-sm font-medium'>Total Credit (In)</CardTitle>
               </CardHeader>
-              <CardContent className='flex items-center justify-between'>
-                <p className='text-xl font-bold text-green-600'>+{fmt(totalCredit)}</p>
-                <ArrowDownLeft className='h-4 w-4 text-green-600' />
+              <CardContent className='flex items-center justify-between gap-2'>
+                <p className='min-w-0 whitespace-nowrap font-bold text-green-600' style={{ fontSize: fitValueSize(creditStr) }}>{creditStr}</p>
+                <ArrowDownLeft className='h-4 w-4 shrink-0 text-green-600' />
               </CardContent>
             </Card>
-            <Card className={kpiCardClass('rose')}>
+            <Card className={cn(kpiCardClass('rose'), '@container')}>
               <CardHeader className='pb-2'>
                 <CardTitle className='text-sm font-medium'>Total Debit (Out)</CardTitle>
               </CardHeader>
-              <CardContent className='flex items-center justify-between'>
-                <p className='text-xl font-bold text-red-600'>-{fmt(totalDebit)}</p>
-                <ArrowUpRight className='h-4 w-4 text-red-600' />
+              <CardContent className='flex items-center justify-between gap-2'>
+                <p className='min-w-0 whitespace-nowrap font-bold text-red-600' style={{ fontSize: fitValueSize(debitStr) }}>{debitStr}</p>
+                <ArrowUpRight className='h-4 w-4 shrink-0 text-red-600' />
               </CardContent>
             </Card>
-            <Card className={kpiCardClass('indigo')}>
+            <Card className={cn(kpiCardClass('indigo'), '@container')}>
               <CardHeader className='pb-2'>
                 <CardTitle className='text-sm font-medium'>Transactions</CardTitle>
               </CardHeader>
-              <CardContent className='flex items-center justify-between'>
-                <p className='text-xl font-bold'>{ledgerRows.length}</p>
-                <ReceiptText className='h-4 w-4 text-muted-foreground' />
+              <CardContent className='flex items-center justify-between gap-2'>
+                <p className='min-w-0 whitespace-nowrap font-bold' style={{ fontSize: fitValueSize(transactionsStr) }}>{transactionsStr}</p>
+                <ReceiptText className='h-4 w-4 shrink-0 text-muted-foreground' />
               </CardContent>
             </Card>
-            <Card className={kpiCardClass('cyan')}>
+            <Card className={cn(kpiCardClass('cyan'), '@container')}>
               <CardHeader className='pb-2'>
                 <CardTitle className='text-sm font-medium'>Closing Balance</CardTitle>
               </CardHeader>
-              <CardContent className='flex items-center justify-between'>
-                <p className='text-xl font-bold text-purple-600'>{fmt(data.periodClosingBalance)}</p>
-                <Landmark className='h-4 w-4 text-purple-600' />
+              <CardContent className='flex items-center justify-between gap-2'>
+                <p className='min-w-0 whitespace-nowrap font-bold text-purple-600' style={{ fontSize: fitValueSize(closingStr) }}>{closingStr}</p>
+                <Landmark className='h-4 w-4 shrink-0 text-purple-600' />
               </CardContent>
             </Card>
           </div>

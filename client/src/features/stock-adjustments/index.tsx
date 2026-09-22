@@ -106,10 +106,12 @@ export default function StockAdjustments() {
   }
 
   return (
-    <div className='space-y-6 p-4 md:p-6'>
+    // Phones: no extra page padding (the layout already gives 1rem), tighter spacing, the header icon aligned
+    // to the title instead of floating beside the subtitle, and the action as a full-width button.
+    <div className='space-y-6 p-4 md:p-6 max-sm:space-y-4 max-sm:p-0'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
-        <div className='flex items-center gap-2'>
-          <ClipboardEdit className='h-6 w-6 text-primary' />
+        <div className='flex items-center gap-2 max-sm:items-start'>
+          <ClipboardEdit className='h-6 w-6 text-primary max-sm:mt-1' />
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>{t('Stock Adjustments')}</h1>
             <p className='text-sm text-muted-foreground'>
@@ -117,14 +119,16 @@ export default function StockAdjustments() {
             </p>
           </div>
         </div>
-        <Button onClick={openCreateDialog}>
+        <Button onClick={openCreateDialog} className='max-sm:w-full'>
           <Plus className='mr-2 h-4 w-4' />
           {t('New Adjustment')}
         </Button>
       </div>
 
-      <div className='grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
+      {/* Phones: two cards per row like the dashboard; the odd fifth card spans the full width. */}
+      <div className='grid gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 max-sm:gap-3 max-sm:[&>:last-child:nth-child(odd)]:col-span-2'>
         <StatCard
+          inlineHeaderOnMobile
           title={t('Damage')}
           value={stats?.byType.damage.value ?? 0}
           valuePrefix={currencyPrefix}
@@ -133,6 +137,7 @@ export default function StockAdjustments() {
           description={t('{{count}} report(s)').replace('{{count}}', String(stats?.byType.damage.count ?? 0))}
         />
         <StatCard
+          inlineHeaderOnMobile
           title={t('Theft / Stolen')}
           value={stats?.byType.theft.value ?? 0}
           valuePrefix={currencyPrefix}
@@ -141,6 +146,7 @@ export default function StockAdjustments() {
           description={t('{{count}} report(s)').replace('{{count}}', String(stats?.byType.theft.count ?? 0))}
         />
         <StatCard
+          inlineHeaderOnMobile
           title={t('Expired / Lost')}
           value={(stats?.byType.expired.value ?? 0) + (stats?.byType.lost.value ?? 0)}
           valuePrefix={currencyPrefix}
@@ -152,6 +158,7 @@ export default function StockAdjustments() {
           )}
         />
         <StatCard
+          inlineHeaderOnMobile
           title={t('Total Shrinkage Value')}
           value={stats?.totalLossValue ?? 0}
           valuePrefix={currencyPrefix}
@@ -160,6 +167,7 @@ export default function StockAdjustments() {
           description={t('Damage + theft + expired + lost')}
         />
         <StatCard
+          inlineHeaderOnMobile
           title={t('Total Adjustments')}
           value={stats?.totalAdjustments ?? 0}
           icon={<ListChecks />}
@@ -169,15 +177,17 @@ export default function StockAdjustments() {
       </div>
 
       <Card>
-        <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-3 space-y-0'>
+        {/* Phones: less side padding, and the filters become a tidy grid — search and type full width,
+            direction and status side by side — instead of four narrow controls each on its own row. */}
+        <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 max-sm:px-3'>
           <div>
             <CardTitle className='text-base'>{t('Adjustment History')}</CardTitle>
             <CardDescription>{t('Every stock change and who recorded it')}</CardDescription>
           </div>
-          <div className='flex flex-wrap gap-2'>
+          <div className='flex flex-wrap gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2'>
             <Input
               placeholder={t('Search product...')}
-              className='h-9 w-40'
+              className='h-9 w-40 max-sm:col-span-2 max-sm:w-full'
               value={searchText}
               onChange={(e) => {
                 setSearchText(e.target.value)
@@ -185,7 +195,7 @@ export default function StockAdjustments() {
               }}
             />
             <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v as typeof typeFilter); setPage(1) }}>
-              <SelectTrigger className='h-9 w-40'>
+              <SelectTrigger className='h-9 w-40 max-sm:col-span-2 max-sm:w-full'>
                 <SelectValue placeholder={t('Type')} />
               </SelectTrigger>
               <SelectContent>
@@ -198,7 +208,7 @@ export default function StockAdjustments() {
               </SelectContent>
             </Select>
             <Select value={directionFilter} onValueChange={(v) => { setDirectionFilter(v as typeof directionFilter); setPage(1) }}>
-              <SelectTrigger className='h-9 w-32'>
+              <SelectTrigger className='h-9 w-32 max-sm:w-full'>
                 <SelectValue placeholder={t('Direction')} />
               </SelectTrigger>
               <SelectContent>
@@ -208,7 +218,7 @@ export default function StockAdjustments() {
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as typeof statusFilter); setPage(1) }}>
-              <SelectTrigger className='h-9 w-32'>
+              <SelectTrigger className='h-9 w-32 max-sm:w-full'>
                 <SelectValue placeholder={t('Status')} />
               </SelectTrigger>
               <SelectContent>
@@ -219,7 +229,7 @@ export default function StockAdjustments() {
             </Select>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className='max-sm:px-3'>
           {isFetching ? (
             <div className='space-y-2'>
               {[...Array(5)].map((_, i) => (

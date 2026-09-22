@@ -33,7 +33,9 @@ export function CustomerListPagination({
 
   return (
     <div className='flex items-center justify-end overflow-clip px-2' style={{ overflowClipMargin: 1 }}>
-      <div className='flex items-center sm:space-x-6 lg:space-x-8'>
+      {/* Phones: the three groups need ~345px, more than a 320-375px screen has, and (right-aligned) the
+          overflow was clipped off the left edge. Below 640px they wrap onto two lines instead. */}
+      <div className='flex items-center sm:space-x-6 lg:space-x-8 max-sm:flex-wrap max-sm:justify-end max-sm:gap-x-4 max-sm:gap-y-2'>
         <div className='flex items-center space-x-2'>
           <p className='text-sm font-medium'>{t('rows_per_page')}</p>
           <Select

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
-import { Plus, Search, Eye, Trash2, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, Search, Eye, Trash2, CheckCircle, XCircle, Receipt, Wallet, PackageCheck } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,6 +45,7 @@ import {
 } from '@/stores/returns.api'
 import { usePermissions } from '@/context/permission-context'
 import { useFormatMoney } from '@/lib/format-money'
+import { cn } from '@/lib/utils'
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -58,6 +59,13 @@ const refundColors: Record<string, string> = {
   easypaisa: 'bg-green-100 text-green-800',
   adjustment: 'bg-blue-100 text-blue-800',
 }
+
+// Icon badge shown only on phones (`max-sm:`) — desktop/tablet keep the plain card look untouched.
+const SUMMARY_ICON_TONES = {
+  sky: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
+  emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  amber: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+} as const
 
 interface SalesReturnListProps {
   onCreateNew: () => void
@@ -135,28 +143,43 @@ export default function SalesReturnList({ onCreateNew }: SalesReturnListProps) {
         ) : null}
       </div>
 
-      {/* Summary */}
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-3'>
+      {/* Summary — 2-up on phones (below sm), 3-up from sm and up (unchanged there) */}
+      <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4'>
         <Card>
-          <CardContent className='pt-6'>
-            <p className='text-sm text-muted-foreground'>Total Returns</p>
-            <p className='text-2xl font-bold'>{data?.totalResults ?? 0}</p>
+          <CardContent className='pt-6 max-sm:flex max-sm:items-center max-sm:gap-3 max-sm:p-3'>
+            <span className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg max-sm:inline-flex', SUMMARY_ICON_TONES.sky)}>
+              <Receipt className='h-4 w-4' />
+            </span>
+            <div className='max-sm:min-w-0'>
+              <p className='text-sm text-muted-foreground max-sm:truncate max-sm:text-xs'>Total Returns</p>
+              <p className='text-2xl font-bold max-sm:text-lg'>{data?.totalResults ?? 0}</p>
+            </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className='pt-6'>
-            <p className='text-sm text-muted-foreground'>Total Amount</p>
-            <p className='text-2xl font-bold'>
-              {formatMoney(returns.reduce((sum, r) => sum + r.totalAmount, 0))}
-            </p>
+          <CardContent className='pt-6 max-sm:flex max-sm:items-center max-sm:gap-3 max-sm:p-3'>
+            <span className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg max-sm:inline-flex', SUMMARY_ICON_TONES.emerald)}>
+              <Wallet className='h-4 w-4' />
+            </span>
+            <div className='max-sm:min-w-0'>
+              <p className='text-sm text-muted-foreground max-sm:truncate max-sm:text-xs'>Total Amount</p>
+              <p className='text-2xl font-bold max-sm:text-lg'>
+                {formatMoney(returns.reduce((sum, r) => sum + r.totalAmount, 0))}
+              </p>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className='pt-6'>
-            <p className='text-sm text-muted-foreground'>Items Returned</p>
-            <p className='text-2xl font-bold'>
-              {returns.reduce((sum, r) => sum + r.items.reduce((s, i) => s + i.quantity, 0), 0)}
-            </p>
+        <Card className='max-sm:col-span-2'>
+          <CardContent className='pt-6 max-sm:flex max-sm:items-center max-sm:gap-3 max-sm:p-3'>
+            <span className={cn('hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg max-sm:inline-flex', SUMMARY_ICON_TONES.amber)}>
+              <PackageCheck className='h-4 w-4' />
+            </span>
+            <div className='max-sm:min-w-0'>
+              <p className='text-sm text-muted-foreground max-sm:truncate max-sm:text-xs'>Items Returned</p>
+              <p className='text-2xl font-bold max-sm:text-lg'>
+                {returns.reduce((sum, r) => sum + r.items.reduce((s, i) => s + i.quantity, 0), 0)}
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>

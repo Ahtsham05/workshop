@@ -1269,7 +1269,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
           <ArrowLeft className="w-4 h-4 mr-2" />
           {t('Back to Suppliers')}
         </Button>
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center max-sm:w-full">
           <Button variant="outline" size="sm" onClick={exportToExcel}>
             <Download className="w-4 h-4 mr-2" />
             {t('Export')}
@@ -1613,7 +1613,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             </div>
           </div>
 
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
             <div className="rounded-lg border px-4 py-3">
               <p className="text-xs text-muted-foreground">{t('Opening Balance')}</p>
               <p className={`mt-1 text-lg font-semibold tabular-nums ${getLedgerBalanceTone('supplier', openingBalance)}`}>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, net, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, net, session, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -423,6 +423,14 @@ if (!gotSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
+    // Screenshots and screen recordings from the header camera use getDisplayMedia. Electron
+    // has no picker of its own, so answer with the page that asked: the capture is an exact copy
+    // of this app's window, needs no prompt, and can never reach the rest of the desktop.
+    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+      if (!request.frame) return callback({});
+      callback({ video: request.frame });
+    });
+
     ensureUserServerEnv();
     setupIpc();
     restoreLocalDatabase();

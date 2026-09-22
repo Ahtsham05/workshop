@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const electronAPI = {
   isElectron: true,
+  // main.mjs answers getDisplayMedia requests (see setDisplayMediaRequestHandler there).
+  supportsDisplayCapture: true,
   getNetworkStatus: () => ipcRenderer.invoke('network:status'),
   onNetworkStatus: (callback) => {
     const handler = (_event, status) => callback(status);

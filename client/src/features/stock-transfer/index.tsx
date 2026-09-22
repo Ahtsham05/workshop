@@ -126,10 +126,12 @@ export default function StockTransfer() {
   }
 
   return (
-    <div className='space-y-6 p-4 md:p-6'>
+    // Phones: no extra page padding (the layout already gives 1rem), tighter spacing, the header icon aligned
+    // to the title, and the two actions sharing the full width (they wrap if a narrow screen can't fit both).
+    <div className='space-y-6 p-4 md:p-6 max-sm:space-y-4 max-sm:p-0'>
       <div className='flex flex-wrap items-center justify-between gap-3'>
-        <div className='flex items-center gap-2'>
-          <ArrowLeftRight className='h-6 w-6 text-primary' />
+        <div className='flex items-center gap-2 max-sm:items-start'>
+          <ArrowLeftRight className='h-6 w-6 text-primary max-sm:mt-1' />
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>{t('Stock Transfer')}</h1>
             <p className='text-sm text-muted-foreground'>
@@ -137,12 +139,12 @@ export default function StockTransfer() {
             </p>
           </div>
         </div>
-        <div className='flex gap-2'>
-          <Button variant='outline' onClick={() => setView('bulk')}>
+        <div className='flex gap-2 max-sm:w-full max-sm:flex-wrap'>
+          <Button variant='outline' onClick={() => setView('bulk')} className='max-sm:flex-1'>
             <Layers className='mr-2 h-4 w-4' />
             {t('Bulk Transfer')}
           </Button>
-          <Button onClick={openCreateDialog}>
+          <Button onClick={openCreateDialog} className='max-sm:flex-1'>
             <Plus className='mr-2 h-4 w-4' />
             {t('New Transfer')}
           </Button>
@@ -157,14 +159,15 @@ export default function StockTransfer() {
       />
 
       <Card>
-        <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-3 space-y-0'>
+        {/* Phones: less side padding, and the two filters share one row instead of stacking. */}
+        <CardHeader className='flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 max-sm:px-3'>
           <div>
             <CardTitle className='text-base'>{t('Transfers')}</CardTitle>
             <CardDescription>{t('Outgoing and incoming transfers for this branch')}</CardDescription>
           </div>
-          <div className='flex flex-wrap gap-2'>
+          <div className='flex flex-wrap gap-2 max-sm:grid max-sm:w-full max-sm:grid-cols-2'>
             <Select value={directionFilter} onValueChange={(v) => { setDirectionFilter(v as typeof directionFilter); setPage(1) }}>
-              <SelectTrigger className='h-9 w-36'>
+              <SelectTrigger className='h-9 w-36 max-sm:w-full'>
                 <SelectValue placeholder={t('Direction')} />
               </SelectTrigger>
               <SelectContent>
@@ -174,7 +177,7 @@ export default function StockTransfer() {
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as typeof statusFilter); setPage(1) }}>
-              <SelectTrigger className='h-9 w-36'>
+              <SelectTrigger className='h-9 w-36 max-sm:w-full'>
                 <SelectValue placeholder={t('Status')} />
               </SelectTrigger>
               <SelectContent>
@@ -186,7 +189,7 @@ export default function StockTransfer() {
             </Select>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className='max-sm:px-3'>
           {isFetching ? (
             <div className='space-y-2'>
               {[...Array(5)].map((_, i) => (

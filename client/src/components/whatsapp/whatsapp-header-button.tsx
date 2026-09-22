@@ -5,7 +5,7 @@ import { useWhatsAppOptional } from '@/context/whatsapp-context'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, MessageCircle } from 'lucide-react'
 
-export function WhatsAppHeaderButton() {
+export function WhatsAppHeaderButton({ className }: { className?: string }) {
   if (!WHATSAPP_UI_ENABLED) return null
 
   const wa = useWhatsAppOptional()
@@ -23,6 +23,7 @@ export function WhatsAppHeaderButton() {
           className={cn(
             'relative',
             isReady ? 'text-[#25D366] hover:bg-green-50' : 'text-muted-foreground',
+            className,
           )}
           onClick={openConnectionDialog}
           aria-label='WhatsApp'

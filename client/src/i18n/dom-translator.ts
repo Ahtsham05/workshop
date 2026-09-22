@@ -80,6 +80,20 @@ function isSkippedElement(el: Element | null): boolean {
 }
 
 
+/**
+ * True when `node` is, or sits inside, an explicit opt-out (.notranslate / [data-no-translate]).
+ *
+ * The tree walker prunes those subtrees, but the MutationObserver hands us bare text nodes
+ * (changed or newly added), so the ancestors have to be checked separately. Without this, text
+ * that updates inside an opted-out element — e.g. the header clock — is sent for translation on
+ * every change. Deliberately limited to the explicit opt-outs: the tag-based skips above keep
+ * their existing behaviour.
+ */
+function isOptedOut(node: Node): boolean {
+  const start = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
+  return !!start?.closest('.notranslate, [data-no-translate]')
+}
+
 /** Heuristic: is this English-looking text worth translating? */
 function shouldTranslateText(text: string): boolean {
   const trimmed = text.trim()
@@ -276,6 +290,8 @@ export function startDomTranslator(lang: SupportedLanguage): void {
   // Observe future changes (React re-renders, navigation, async loads).
   observer = new MutationObserver((records) => {
     for (const r of records) {
+      // Attribute records are left alone: inputs still get placeholder/title translation.
+      if (r.type !== 'attributes' && isOptedOut(r.target)) continue
       if (r.type === 'childList') {
         r.addedNodes.forEach((added) => {
           if (added.nodeType === Node.TEXT_NODE) {

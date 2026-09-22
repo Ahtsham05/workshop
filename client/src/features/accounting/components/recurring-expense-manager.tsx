@@ -279,14 +279,14 @@ export function RecurringExpenseManager() {
   return (
     <div className='space-y-4'>
       {/* Header */}
-      <div className='flex items-center justify-between'>
+      <div className='flex flex-wrap items-center justify-between gap-3'>
         <div>
           <h2 className='text-lg font-semibold'>Recurring Expenses</h2>
           <p className='text-sm text-muted-foreground'>
             {activeRules.length} active rule{activeRules.length !== 1 ? 's' : ''} · auto-generated daily, catches up missed days automatically
           </p>
         </div>
-        <div className='flex gap-2'>
+        <div className='flex flex-wrap gap-2 max-sm:w-full'>
           <Button variant='outline' size='sm' onClick={handleRunNow} disabled={isRunning}>
             {isRunning ? <Loader2 className='h-4 w-4 animate-spin' /> : <RefreshCw className='h-4 w-4' />}
             <span className='ml-1.5'>Run Now</span>

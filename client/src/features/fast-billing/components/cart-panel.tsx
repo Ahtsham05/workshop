@@ -169,7 +169,7 @@ export function CartPanel({
                 })()}
               </div>
 
-              <div className='flex shrink-0 items-center gap-1.5'>
+              <div className='flex shrink-0 items-center gap-1.5 max-sm:w-full max-sm:flex-wrap max-sm:gap-2'>
                 <div className='flex items-center overflow-hidden rounded-lg border bg-background'>
                   <Button
                     type='button'

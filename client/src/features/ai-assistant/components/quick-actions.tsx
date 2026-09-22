@@ -1,4 +1,5 @@
-import { BarChart3, Package, Receipt, AlertTriangle, TrendingUp, Users, ChevronRight } from 'lucide-react'
+import { BarChart3, Package, Receipt, AlertTriangle, TrendingUp, Users, ChevronRight, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { toneIconWrapClass, type StatCardTone } from '@/lib/stat-card-tones'
 
 const QUICK_ACTIONS: { icon: typeof BarChart3; label: string; description: string; prompt: string; tone: StatCardTone }[] = [
@@ -10,10 +11,26 @@ const QUICK_ACTIONS: { icon: typeof BarChart3; label: string; description: strin
   { icon: Users, label: 'Customer Overview', description: 'New vs returning customers', prompt: 'Show my top customers this month', tone: 'cyan' },
 ]
 
-export function QuickActions({ onSelect }: { onSelect: (prompt: string) => void }) {
+export function QuickActions({ onSelect, onClose }: { onSelect: (prompt: string) => void; onClose?: () => void }) {
   return (
     <div className='space-y-0.5 px-2 py-2'>
-      <p className='px-2.5 pb-1.5 text-xs font-semibold text-muted-foreground'>Quick Actions</p>
+      <div className='flex items-center justify-between'>
+        <p className='px-2.5 pb-1.5 text-xs font-semibold text-muted-foreground'>Quick Actions</p>
+        {/* Below lg the sidebar is a full-screen drawer, and its only other close button (the arrow
+            beside "Conversations") sits under this whole list — so put a close right at the top. */}
+        {onClose && (
+          <Button
+            size='icon'
+            variant='ghost'
+            onClick={onClose}
+            className='mr-1 h-7 w-7 shrink-0 rounded-lg lg:hidden'
+            title='Close'
+            aria-label='Close quick actions and history'
+          >
+            <X className='h-4 w-4' />
+          </Button>
+        )}
+      </div>
       {QUICK_ACTIONS.map(({ icon: Icon, label, description, prompt, tone }) => (
         <button
           key={label}

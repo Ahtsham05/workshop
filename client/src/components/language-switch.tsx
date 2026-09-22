@@ -42,7 +42,7 @@ function useInflightTranslations() {
   return count
 }
 
-export function LanguageSwitch() {
+export function LanguageSwitch({ className }: { className?: string }) {
   const { language, setLanguage } = useLanguage()
   const inflight = useInflightTranslations()
   const isTranslating = inflight > 0
@@ -55,7 +55,7 @@ export function LanguageSwitch() {
         <Button
           variant="ghost"
           size="sm"
-          className="relative h-9 gap-1.5 px-2.5 text-sm font-medium"
+          className={cn('relative h-9 gap-1.5 px-2.5 text-sm font-medium', className)}
           aria-label="Switch language"
         >
           {isTranslating ? (

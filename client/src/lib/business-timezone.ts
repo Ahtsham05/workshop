@@ -98,6 +98,46 @@ export function formatBusinessDateTime(value: string | Date): string {
   })
 }
 
+const clockFormat = new Intl.DateTimeFormat('en-PK', {
+  timeZone: BUSINESS_TIMEZONE,
+  weekday: 'short',
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+})
+
+/** Pieces for a live clock in Pakistan time: `{ weekday: 'Mon', date: '21 Sept 2026', time: '3:24:02 PM' }`.
+ * Assembled from parts (not the locale pattern) so punctuation and AM/PM casing stay fixed. */
+export function getBusinessClockParts(date: Date = new Date()) {
+  const p = Object.fromEntries(clockFormat.formatToParts(date).map((part) => [part.type, part.value]))
+  return {
+    weekday: p.weekday,
+    date: `${p.day} ${p.month} ${p.year}`,
+    time: `${p.hour}:${p.minute}:${p.second} ${(p.dayPeriod ?? '').toUpperCase()}`.trim(),
+  }
+}
+
+const fileStampFormat = new Intl.DateTimeFormat('en-CA', {
+  timeZone: BUSINESS_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+
+/** Filename-safe Pakistan timestamp, e.g. "2026-09-21_15-24-02". */
+export function formatBusinessFileStamp(date: Date = new Date()): string {
+  const p = Object.fromEntries(fileStampFormat.formatToParts(date).map((part) => [part.type, part.value]))
+  return `${p.year}-${p.month}-${p.day}_${p.hour}-${p.minute}-${p.second}`
+}
+
 /** Compact "15-Sep-2026, 11:45 AM" date+time in Pakistan local time — no seconds,
  * for tight spaces like a printed voucher/receipt field. */
 export function formatBusinessDateTimeShort(value: string | Date): string {

@@ -1013,8 +1013,8 @@ export function PersonalLedger() {
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
+      {/* Summary Cards — 2-up on phones, unchanged from sm up */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-6">
         <Card>
           <CardContent className="pt-5 pb-5 min-h-[110px]">
             <div className="flex items-center justify-between">

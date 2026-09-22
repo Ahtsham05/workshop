@@ -68,7 +68,8 @@ export function PerformanceView() {
         </Alert>
       ) : null}
 
-      <div className={refreshing ? 'grid grid-cols-1 gap-3 opacity-60 transition-opacity sm:grid-cols-2 lg:grid-cols-5' : 'grid grid-cols-1 gap-3 transition-opacity sm:grid-cols-2 lg:grid-cols-5'}>
+      {/* Phones: two tiles per row (the odd fifth one spans the full width). */}
+      <div className={refreshing ? 'grid grid-cols-2 gap-3 opacity-60 transition-opacity sm:grid-cols-2 lg:grid-cols-5 max-sm:[&>:last-child:nth-child(odd)]:col-span-2' : 'grid grid-cols-2 gap-3 transition-opacity sm:grid-cols-2 lg:grid-cols-5 max-sm:[&>:last-child:nth-child(odd)]:col-span-2'}>
         <KpiTile
           label={t('Net sales')}
           value={formatMoney(overview?.totals.netRevenue ?? 0)}

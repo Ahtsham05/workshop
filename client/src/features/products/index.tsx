@@ -7,6 +7,7 @@ import { LowStockAlert } from './components/low-stock-alert'
 import { LowStockDetails } from './components/low-stock-details'
 import { ImportBranchProductsBanner } from './components/import-branch-products-banner'
 import { ProductStatCards } from './components/product-stat-cards'
+import { ProductSummaryChip } from './components/product-summary-chip'
 import { CategoryFilterCombobox, NO_CATEGORY_FILTER, ALL_CATEGORIES_BREAKDOWN, UNCATEGORIZED_CATEGORY } from './components/category-filter-combobox'
 import { CategoryBreakdown, type CategoryBreakdownRow } from './components/category-breakdown'
 import { ProductFiltersPanel, ALL_SUBCATEGORIES, ALL_BRANDS, NO_QUANTITY_OP, type QuantityFilter, type RangeFilter, type TrackingFilter } from './components/product-filters-panel'
@@ -597,7 +598,7 @@ export default function Products() {
                 </TabsList>
               </Tabs>
             </div>
-            <div className='flex flex-wrap gap-2'>
+            <div className='flex flex-wrap gap-2 max-sm:w-full'>
               {!isPerformanceView && selectedProducts.length > 0 && !inlineEditMode && (
                 <>
                   <Button
@@ -646,9 +647,9 @@ export default function Products() {
               )}
               {!isPerformanceView && inlineEditMode && (
                 <>
-                  <div className='flex items-center gap-1.5 rounded-md border bg-card px-2 py-1'>
+                  <div className='flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 max-sm:w-full max-sm:flex-wrap'>
                     <Select value={bulkPercentOp} onValueChange={(v) => setBulkPercentOp(v as typeof bulkPercentOp)}>
-                      <SelectTrigger className='h-8 w-[190px] text-xs'>
+                      <SelectTrigger className='h-8 w-[190px] text-xs max-sm:w-full'>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -662,7 +663,7 @@ export default function Products() {
                       step='0.1'
                       placeholder='%'
                       showVoiceInput={false}
-                      className='h-8 w-16 text-xs'
+                      className='h-8 w-16 text-xs max-sm:flex-1'
                       value={bulkPercentValue}
                       onChange={(e) => setBulkPercentValue(e.target.value)}
                     />
@@ -689,7 +690,7 @@ export default function Products() {
                 <Can permission='createProducts'>
                   <Button
                     variant='outline'
-                    className='gap-1.5'
+                    className='gap-1.5 max-sm:w-full'
                     onClick={() => {
                       setSyncInitialSource(undefined)
                       setSyncOpen(true)
@@ -733,7 +734,7 @@ export default function Products() {
           </div>
 
           <div className='mb-4 flex flex-wrap items-center gap-2'>
-            <CategoryFilterCombobox value={categoryFilter} onChange={setCategoryFilter} categories={categories} />
+            <CategoryFilterCombobox value={categoryFilter} onChange={setCategoryFilter} categories={categories} className='max-sm:w-full' />
             {isSingleCategorySelected && (
               <Badge variant='secondary' className='h-9 px-3 text-sm font-normal'>
                 {t('Totals for')}: {
@@ -749,28 +750,30 @@ export default function Products() {
               </Badge>
             )}
             {!isBreakdownMode && (
-              <>
-                <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
-                  <Package className='h-4 w-4 text-muted-foreground' />
-                  <span className='text-muted-foreground'>{t('total_products')}:</span>
-                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalProducts ?? 0).toLocaleString()}</span>
-                </div>
-                <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
-                  <Boxes className='h-4 w-4 text-muted-foreground' />
-                  <span className='text-muted-foreground'>{t('total_stock_quantity')}:</span>
-                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : (productStats?.totalStockQuantity ?? 0).toLocaleString()}</span>
-                </div>
-                <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
-                  <Wallet className='h-4 w-4 text-muted-foreground' />
-                  <span className='text-muted-foreground'>{t('total_value_of_stock')}:</span>
-                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : formatCurrency(productStats?.totalStockValue ?? 0)}</span>
-                </div>
-                <div className='flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm'>
-                  <CircleDollarSign className='h-4 w-4 text-muted-foreground' />
-                  <span className='text-muted-foreground'>{t('Avg Purchase Price')}:</span>
-                  <span className='font-semibold tabular-nums'>{loadingStats ? '…' : formatCurrency(avgPurchasePrice)}</span>
-                </div>
-              </>
+              // `contents` keeps the four chips as direct flex children of the row (so from 640px up they
+              // flow exactly as before); on phones the wrapper becomes a 2-column grid of small tiles.
+              <div className='contents max-sm:grid max-sm:w-full max-sm:grid-cols-2 max-sm:gap-2'>
+                <ProductSummaryChip
+                  icon={Package}
+                  label={t('total_products')}
+                  value={loadingStats ? '…' : (productStats?.totalProducts ?? 0).toLocaleString()}
+                />
+                <ProductSummaryChip
+                  icon={Boxes}
+                  label={t('total_stock_quantity')}
+                  value={loadingStats ? '…' : (productStats?.totalStockQuantity ?? 0).toLocaleString()}
+                />
+                <ProductSummaryChip
+                  icon={Wallet}
+                  label={t('total_value_of_stock')}
+                  value={loadingStats ? '…' : formatCurrency(productStats?.totalStockValue ?? 0)}
+                />
+                <ProductSummaryChip
+                  icon={CircleDollarSign}
+                  label={t('Avg Purchase Price')}
+                  value={loadingStats ? '…' : formatCurrency(avgPurchasePrice)}
+                />
+              </div>
             )}
           </div>
 

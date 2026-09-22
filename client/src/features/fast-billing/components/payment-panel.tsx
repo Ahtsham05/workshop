@@ -158,7 +158,7 @@ export function PaymentPanel({
     <div className='flex flex-col gap-3.5'>
       <div className='space-y-1.5'>
         <SectionLabel>Customer</SectionLabel>
-        <div className='flex items-center gap-2'>
+        <div className='flex items-center gap-2 max-sm:flex-wrap'>
           <Popover open={customerPickerOpen} onOpenChange={setCustomerPickerOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -246,7 +246,7 @@ export function PaymentPanel({
               value={walkInCustomerName}
               onChange={(e) => onWalkInCustomerNameChange(e.target.value)}
               onFocus={selectOnFocus}
-              className='h-10 w-36 text-xs shadow-sm'
+              className='h-10 w-36 text-xs shadow-sm max-sm:w-full'
             />
           )}
         </div>

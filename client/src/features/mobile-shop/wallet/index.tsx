@@ -216,7 +216,13 @@ export default function WalletPage() {
           : `Create and manage your bank accounts and cash-in-hand accounts · ${MOBILE_FORM_KEYBOARD_HINT}`
       }
     >
-      <div className='grid gap-6 lg:grid-cols-[1fr_2fr]'>
+      {/* grid-cols-1: without a named phone column, this grid had no template below `lg` at all —
+          the browser fell back to an implicit auto-sized column that grows to fit its widest
+          child's content instead of the viewport, and the "Your Bank Accounts" table (wide even
+          with its own internal scroll wrapper) dragged the whole page open sideways. Same root
+          cause as the bare-`grid` overflow class documented elsewhere in this app; see other
+          mobile-polish commits today. */}
+      <div className='grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]'>
         {canManage ? (
         <Card>
           <CardHeader>

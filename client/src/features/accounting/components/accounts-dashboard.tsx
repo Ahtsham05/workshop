@@ -19,6 +19,7 @@ import { useLanguage } from '@/context/language-context';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { useIsPhone } from '@/hooks/use-mobile';
 
 interface DashboardStats {
   totalExpenses: number;
@@ -54,6 +55,10 @@ interface AccountsDashboardProps {
 export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps) {
   const { t } = useLanguage();
   const formatMoney = useFormatMoney();
+  // Recharts' on-slice labels are absolutely positioned assuming a wide container — on a
+  // ~340px-wide phone card they run off the edge and overlap. Phones fall back to a plain
+  // legend (category names only); desktop/tablet keep the original on-slice labels untouched.
+  const isPhone = useIsPhone();
   const [stats, setStats] = useState<DashboardStats>({
     totalExpenses: 0,
     monthlyExpenses: 0,
@@ -191,8 +196,8 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
         </Button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Summary Cards — 2-up on phones, unchanged from sm up */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Monthly Expenses */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -275,8 +280,8 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry) => `${entry.category}: ${formatMoney(entry.amount)}`}
-                    outerRadius={80}
+                    label={isPhone ? false : (entry) => `${entry.category}: ${formatMoney(entry.amount)}`}
+                    outerRadius={isPhone ? 65 : 80}
                     fill="#8884d8"
                     dataKey="amount"
                   >
@@ -285,7 +290,18 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: number) => formatMoney(value)} />
-                  <Legend />
+                  <Legend
+                    payload={
+                      isPhone
+                        ? stats.expensesByCategory.map((entry, index) => ({
+                            value: entry.category,
+                            type: 'square' as const,
+                            color: COLORS[index % COLORS.length],
+                          }))
+                        : undefined
+                    }
+                    wrapperStyle={isPhone ? { fontSize: 11 } : undefined}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

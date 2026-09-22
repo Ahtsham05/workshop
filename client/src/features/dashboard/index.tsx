@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type ComponentProps } from 'react'
 import { isPast, isToday } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
-import { StatCard, type StatCardLink } from './components/stat-card'
+import { StatCard as BaseStatCard, type StatCardLink } from './components/stat-card'
 import { Card } from '@/components/ui/card'
 import { RevenueChart } from './components/revenue-chart'
 import { LowStockWidget } from './components/low-stock-widget'
@@ -52,8 +52,15 @@ import {
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
 
+// Every card on this page uses the phone layout with the icon beside the title. It's opt-in on
+// StatCard, so the cards on other pages are unaffected.
+const StatCard = (props: ComponentProps<typeof BaseStatCard>) => (
+  <BaseStatCard inlineHeaderOnMobile {...props} />
+)
+
+// grid-cols-2 = two cards per row on phones; md and up are unchanged.
 const DASHBOARD_CARD_GRID =
-  'grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 mb-6'
+  'grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 mb-6'
 
 const formatSalesProfitSubtext = (
   salesProfit: number | undefined,

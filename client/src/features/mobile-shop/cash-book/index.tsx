@@ -187,8 +187,10 @@ export default function CashBookPage() {
         </CardContent>
       </Card>
 
-      <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+      {/* Phones: two cards per row like the dashboard. */}
+      <div className='grid grid-cols-2 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
         <StatCard
+          inlineHeaderOnMobile
           title='Opening Balance'
           value={summary?.openingBalance || 0}
           icon={<BookOpen className='h-4 w-4' />}
@@ -197,6 +199,7 @@ export default function CashBookPage() {
           tone='slate'
         />
         <StatCard
+          inlineHeaderOnMobile
           title='Total Income'
           value={summary?.totalIncome || 0}
           icon={<ArrowUpCircle className='h-4 w-4' />}
@@ -205,6 +208,7 @@ export default function CashBookPage() {
           tone='emerald'
         />
         <StatCard
+          inlineHeaderOnMobile
           title='Total Expense'
           value={summary?.totalExpense || 0}
           icon={<ArrowDownCircle className='h-4 w-4' />}
@@ -213,6 +217,7 @@ export default function CashBookPage() {
           tone='rose'
         />
         <StatCard
+          inlineHeaderOnMobile
           title='Cash in Hand'
           value={summary?.closingBalance || 0}
           icon={<Wallet className='h-4 w-4' />}

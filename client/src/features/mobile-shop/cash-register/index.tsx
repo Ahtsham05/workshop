@@ -284,8 +284,10 @@ export default function CashRegisterPage() {
       title={t('Track Cash')}
       description={`${t('Count notes and coins in your cash drawer and compare with system cash balance.')} · ${MOBILE_FORM_KEYBOARD_HINT}`}
     >
-      <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+      {/* Phones: two cards per row like the dashboard. */}
+      <div className='grid grid-cols-2 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
         <StatCard
+          inlineHeaderOnMobile
           title={t('Physical Cash')}
           value={physicalTotal}
           icon={<Wallet className='h-4 w-4' />}
@@ -298,6 +300,7 @@ export default function CashRegisterPage() {
           tone='cyan'
         />
         <StatCard
+          inlineHeaderOnMobile
           title={t('Expected Cash')}
           value={expectedCash}
           icon={<Banknote className='h-4 w-4' />}
@@ -310,6 +313,7 @@ export default function CashRegisterPage() {
           tone='slate'
         />
         <StatCard
+          inlineHeaderOnMobile
           title={t('Variance')}
           value={Math.abs(displayedVariance)}
           icon={<RefreshCw className='h-4 w-4' />}
@@ -325,38 +329,37 @@ export default function CashRegisterPage() {
           }
           tone={displayedVariance === 0 ? 'emerald' : displayedVariance > 0 ? 'amber' : 'rose'}
         />
-        <Card>
-          <CardHeader className='pb-2'>
-            <CardTitle className='flex items-center gap-2 text-sm font-medium text-muted-foreground'>
-              <History className='h-4 w-4' />
-              {t('Last Count')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className='text-lg font-semibold'>
-              {data?.lastCountedAt ? formatBusinessDateTime(data.lastCountedAt) : t('Never')}
-            </p>
-            <p className='mt-1 text-xs text-muted-foreground'>{t('When counts were last saved')}</p>
-          </CardContent>
-        </Card>
+        {/* A StatCard (not a bespoke Card) so it lines up with its 3 siblings above — same
+            icon/title/value/description shape, just a date string instead of an amount. */}
+        <StatCard
+          inlineHeaderOnMobile
+          title={t('Last Count')}
+          value={data?.lastCountedAt ? formatBusinessDateTime(data.lastCountedAt) : t('Never')}
+          icon={<History className='h-4 w-4' />}
+          description={t('When counts were last saved')}
+          tone='slate'
+        />
       </div>
 
       <Card className='mt-6'>
-        <CardHeader className='flex flex-row items-center justify-between gap-3'>
+        {/* Phones: the title and the 3-button row stack instead of squeezing side by side
+            (which wrapped the title into 3 vertical lines) — the buttons then share one
+            even row instead of each claiming their own line. */}
+        <CardHeader className='flex flex-row items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch'>
           <CardTitle>{t('Count Notes & Coins')}</CardTitle>
-          <div className='flex flex-wrap gap-2'>
+          <div className='flex flex-wrap gap-2 max-sm:grid max-sm:grid-cols-3'>
             <Button type='button' variant='outline' size='sm' onClick={() => {
                 void refetch()
                 void refetchMovements()
-              }} disabled={isLoading}>
+              }} disabled={isLoading} className='max-sm:px-1.5'>
               <RefreshCw className={cn('mr-2 h-4 w-4', isLoading && 'animate-spin')} />
               {t('Refresh')}
             </Button>
-            <Button type='button' variant='outline' size='sm' onClick={handleClear} disabled={clearing}>
+            <Button type='button' variant='outline' size='sm' onClick={handleClear} disabled={clearing} className='max-sm:px-1.5'>
               {clearing ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : null}
               {t('Clear All')}
             </Button>
-            <Button ref={saveBtnRef} type='button' size='sm' onClick={handleSave} disabled={saving}>
+            <Button ref={saveBtnRef} type='button' size='sm' onClick={handleSave} disabled={saving} className='max-sm:px-1.5'>
               {saving ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Save className='mr-2 h-4 w-4' />}
               {t('Save Count')}
             </Button>

@@ -4,7 +4,10 @@ import { format, isPast, isToday, startOfDay, subDays } from 'date-fns'
 import {
   Plus,
   AlarmClock,
+  AlertCircle,
   CalendarClock,
+  CalendarDays,
+  CheckCircle2,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -14,6 +17,7 @@ import {
   MessageCircle,
   User,
   Building2,
+  type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -66,6 +70,14 @@ const PRIORITY_STYLES: Record<ReminderPriority, string> = {
   medium: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
   high: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   urgent: 'bg-red-500/10 text-red-600 dark:text-red-400',
+}
+
+// Phones only: a solid left edge on each reminder row, coloured by priority, so urgency reads at a glance.
+const PRIORITY_ACCENT: Record<ReminderPriority, string> = {
+  low: 'max-sm:border-l-slate-400',
+  medium: 'max-sm:border-l-blue-500',
+  high: 'max-sm:border-l-amber-500',
+  urgent: 'max-sm:border-l-red-500',
 }
 
 type StatusTab = 'active' | 'completed' | 'cancelled' | 'all'
@@ -153,50 +165,52 @@ export default function RemindersPage() {
   }
 
   return (
-    <div className="h-full w-full space-y-6 p-4">
-      <div className="flex items-center justify-between">
+    // Phones: no extra page padding (the layout already gives 1rem), tighter spacing, and the header stacks
+    // so the title gets the full width and "New Reminder" becomes a full-width button under it.
+    <div className="h-full w-full space-y-6 p-4 max-sm:space-y-4 max-sm:p-0">
+      <div className="flex items-center justify-between max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-            <AlarmClock className="h-7 w-7" />
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight max-sm:text-2xl">
+            <AlarmClock className="h-7 w-7 max-sm:h-6 max-sm:w-6" />
             {t('Tasks & Reminders')}
           </h1>
-          <p className="text-muted-foreground">{t('Follow-ups and alarms for customers, suppliers, and general tasks')}</p>
+          <p className="text-muted-foreground max-sm:text-sm">{t('Follow-ups and alarms for customers, suppliers, and general tasks')}</p>
         </div>
         <Can permission="createReminders">
-          <Button onClick={() => setAddOpen(true)}>
+          <Button onClick={() => setAddOpen(true)} className="max-sm:w-full">
             <Plus className="mr-1.5 h-4 w-4" />
             {t('New Reminder')}
           </Button>
         </Can>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label={t('Overdue')} value={stats.overdue.length} tone="text-red-600" />
-        <StatCard label={t('Due Today')} value={stats.dueToday.length} tone="text-amber-600" />
-        <StatCard label={t('Upcoming')} value={stats.upcoming.length} tone="text-blue-600" />
-        <StatCard label={t('Completed this week')} value={stats.completedThisWeek.length} tone="text-emerald-600" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label={t('Overdue')} value={stats.overdue.length} tone="text-red-600" icon={AlertCircle} chip="bg-red-600" />
+        <StatCard label={t('Due Today')} value={stats.dueToday.length} tone="text-amber-600" icon={CalendarClock} chip="bg-amber-500" />
+        <StatCard label={t('Upcoming')} value={stats.upcoming.length} tone="text-blue-600" icon={CalendarDays} chip="bg-blue-600" />
+        <StatCard label={t('Completed this week')} value={stats.completedThisWeek.length} tone="text-emerald-600" icon={CheckCircle2} chip="bg-emerald-600" />
       </div>
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <Card className="max-sm:py-3">
+        <CardContent className="space-y-4 pt-6 max-sm:px-3 max-sm:pt-0">
+          <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
             <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as StatusTab)}>
-              <TabsList>
+              <TabsList className="max-sm:w-full">
                 <TabsTrigger value="active">{t('Active')}</TabsTrigger>
                 <TabsTrigger value="completed">{t('Completed')}</TabsTrigger>
                 <TabsTrigger value="cancelled">{t('Cancelled')}</TabsTrigger>
                 <TabsTrigger value="all">{t('All')}</TabsTrigger>
               </TabsList>
             </Tabs>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 max-sm:flex-col max-sm:items-stretch">
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('Search reminders...')}
-                className="w-48"
+                className="w-48 max-sm:w-full"
               />
               <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v as ReminderPriority | 'all')}>
-                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-32 max-sm:w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t('All priorities')}</SelectItem>
                   <SelectItem value="low">{t('Low')}</SelectItem>
@@ -288,12 +302,32 @@ export default function RemindersPage() {
   )
 }
 
-function StatCard({ label, value, tone }: { label: string; value: number; tone: string }) {
+function StatCard({
+  label,
+  value,
+  tone,
+  icon: Icon,
+  chip,
+}: {
+  label: string
+  value: number
+  tone: string
+  icon: LucideIcon
+  chip: string
+}) {
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={cn('mt-1 text-2xl font-semibold tabular-nums', tone)}>{value}</p>
+    <Card className="max-sm:gap-0 max-sm:py-3">
+      <CardContent className="pt-6 max-sm:px-3 max-sm:pt-0">
+        {/* Phones: a solid icon chip beside the label, like the dashboard cards. `hidden` + `max-sm:inline-flex`
+            keeps the chip out of every layout from 640px up. min-h-9 reserves two label lines so the values
+            in a row line up. */}
+        <div className="max-sm:flex max-sm:min-h-9 max-sm:items-center max-sm:gap-2">
+          <span className={cn('hidden size-8 shrink-0 items-center justify-center rounded-lg text-white max-sm:inline-flex', chip)}>
+            <Icon className="size-4" />
+          </span>
+          <p className="text-xs text-muted-foreground max-sm:min-w-0 max-sm:text-[13px] max-sm:leading-snug max-sm:font-medium max-sm:text-foreground/85">{label}</p>
+        </div>
+        <p className={cn('mt-1 text-2xl font-semibold tabular-nums', tone, 'max-sm:mt-2')}>{value}</p>
       </CardContent>
     </Card>
   )
@@ -353,16 +387,17 @@ function ReminderRow({
   const overdue = !isDone && isPast(dueDate) && !isToday(dueDate)
 
   return (
-    <div className={cn('flex items-start gap-3 rounded-lg border p-3', overdue && 'border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20')}>
+    <div className={cn('flex items-start gap-3 rounded-lg border p-3 max-sm:border-l-4', PRIORITY_ACCENT[reminder.priority], overdue && 'border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20')}>
       <Checkbox
         checked={isDone}
         disabled={isDone}
         onCheckedChange={() => !isDone && onComplete(reminder)}
-        className="mt-0.5"
+        className="mt-0.5 max-sm:size-5"
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={cn('text-sm font-medium', isDone && 'text-muted-foreground line-through')}>
+          {/* Phones: the title takes its own line so the badges always sit underneath, never squeezed beside it. */}
+          <span className={cn('text-sm font-medium max-sm:basis-full', isDone && 'text-muted-foreground line-through')}>
             {reminder.title}
           </span>
           <Badge className={cn('text-[10px] font-normal', PRIORITY_STYLES[reminder.priority])}>
@@ -394,15 +429,17 @@ function ReminderRow({
           <p className="mt-1 text-sm text-muted-foreground">{reminder.description}</p>
         )}
         <p className={cn('mt-1 flex items-center gap-1 text-xs', overdue ? 'font-medium text-red-600' : 'text-muted-foreground')}>
-          <Clock className="h-3 w-3" />
-          {format(dueDate, 'PPP p')}
+          <Clock className="h-3 w-3 max-sm:shrink-0" />
+          {/* Phones get a compact one-line date instead of "September 22nd, 2026 8:00 AM". */}
+          <span className="max-sm:hidden">{format(dueDate, 'PPP p')}</span>
+          <span className="hidden max-sm:inline">{format(dueDate, 'MMM d, yyyy · p')}</span>
         </p>
       </div>
 
       {!isDone && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 max-sm:h-8 max-sm:w-8">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>

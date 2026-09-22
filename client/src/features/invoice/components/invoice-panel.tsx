@@ -2179,7 +2179,12 @@ export function InvoicePanel({
                                   <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0" />
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-[560px] p-0" align="start" side="bottom" sideOffset={4}>
+                              {/* w-[calc(100vw-2rem)]: a bare w-[560px] overflowed any phone screen — this
+                                  popover auto-opens on a fresh invoice (see the mount effect above), so it
+                                  was the very first thing a phone user saw. Matches Purchase's identical
+                                  picker (see purchase-panel.tsx) — unchanged above ~592px viewports, where
+                                  the calc already exceeds 560 and max-w caps it at the same 560px as before. */}
+                              <PopoverContent className="w-[calc(100vw-2rem)] max-w-[560px] p-0" align="start" side="bottom" sideOffset={4}>
                                 <Command shouldFilter={false}>
                                   <div className="relative">
                                     <CommandInput
@@ -2811,6 +2816,66 @@ export function InvoicePanel({
     )
   }
 
+  // Phones only (sm:hidden below 640px): Preview/Save/Save & Print always reachable at the
+  // bottom of the screen instead of buried mid-page (catalog-shown mode) or up in the header
+  // (catalog-hidden mode, where the portaled bar scrolls away with everything else on a tall
+  // form). Independent of showProductCatalog — unlike the two existing action groups
+  // above/below (both now `max-sm:hidden`), this is the only one that renders on phones.
+  // Mirrors PurchasePanel's identical bar (see purchase-panel.tsx).
+  const mobileSaveDisabled = !invoice.customerId || invoice.items.length === 0 || savingType !== null
+  const mobileActionsBar = (
+    <div className='fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/90 px-3 pt-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:hidden'>
+      <div className='mb-1.5 flex items-center justify-between gap-2'>
+        <span className='text-xs text-muted-foreground'>
+          {invoice.items.filter((i) => i.productId && i.name).length} {t('invoice_items')}
+        </span>
+        <span className='text-sm font-bold tabular-nums'>{formatMoney(invoice.total)}</span>
+      </div>
+      <div className='flex items-center gap-2'>
+        <Button type='button' onClick={previewInvoice} size='icon' variant='outline' disabled={invoice.items.length === 0} className='h-10 w-10 shrink-0'>
+          <Eye className='h-4 w-4' />
+          <span className='sr-only'>{t('Preview')}</span>
+        </Button>
+        <Button
+          type='button'
+          onClick={() => handleSaveInvoice('none')}
+          size='lg'
+          variant='outline'
+          disabled={mobileSaveDisabled}
+          className='h-10 min-w-0 flex-1 gap-1.5 px-2'
+        >
+          {savingType === 'none' ? (
+            <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
+          ) : (
+            <Save className='h-4 w-4 shrink-0' />
+          )}
+          <span className='truncate'>{isEditing ? t('update_invoice') : t('Save Invoice')}</span>
+        </Button>
+        <PrintFormatButton
+          onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+          defaultPaperSize={defaultPaperSize}
+          allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+          size='lg'
+          variant='default'
+          fullWidth
+          disabled={mobileSaveDisabled}
+          className='min-w-0 flex-[1.3]'
+          mainButtonClassName='h-10 min-w-0 bg-emerald-600 hover:bg-emerald-700'
+          mainButtonContent={
+            savingType !== null && savingType !== 'none' ? (
+              <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
+            ) : (
+              <>
+                <Printer className='h-4 w-4 shrink-0' />
+                <span className='ml-1.5 truncate'>{isEditing ? t('update_and_print_receipt') : t('Save & Print Invoice')}</span>
+              </>
+            )
+          }
+        />
+      </div>
+    </div>
+  )
+
   return (
     <div
       className={cn(
@@ -2825,6 +2890,10 @@ export function InvoicePanel({
             // chain actually clip it.
             'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
           : 'space-y-4',
+        // Reserves room for the fixed mobile bar above (~7rem covers its two rows + the
+        // safe-area inset baked into the same env() the bar itself pads with) so it never
+        // covers the last card/field.
+        'max-sm:pb-[calc(7rem+env(safe-area-inset-bottom))]',
       )}
     >
       {/* Keyboard Language Override
@@ -3060,11 +3129,15 @@ export function InvoicePanel({
                     <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align={isRTL ? "end" : "start"} side="bottom" sideOffset={4}>
+                {/* w-[calc(100vw-2rem)]: a bare w-[400px] overflowed any phone screen — Customer is a
+                    required field on every invoice, so this was reachable on every single mobile
+                    invoice. Matches the product-search picker's identical fix above and Purchase's
+                    own supplier picker (see purchase-panel.tsx). Unchanged above ~432px viewports. */}
+                <PopoverContent className="w-[calc(100vw-2rem)] max-w-[400px] p-0" align={isRTL ? "end" : "start"} side="bottom" sideOffset={4}>
                   <Command shouldFilter={false}>
                     <div className="relative">
-                      <CommandInput 
-                        placeholder={t('search_customers_by_name_or_phone')} 
+                      <CommandInput
+                        placeholder={t('search_customers_by_name_or_phone')}
                         value={customerSearchQuery}
                         onValueChange={setCustomerSearchQuery}
                         className="pr-10"
@@ -4051,9 +4124,10 @@ export function InvoicePanel({
 
           <div className='grid grid-cols-1 gap-3'>
             {/* Compact mode (catalog hidden): the sticky bar below is the buttons row —
-                these full-size duplicates would just repeat it right above. */}
+                these full-size duplicates would just repeat it right above. Hidden on phones
+                either way — the fixed bottom bar (below, sm:hidden) replaces both. */}
             {showProductCatalog && (
-              <>
+              <div className='grid grid-cols-1 gap-3 max-sm:hidden'>
                 <Button
                   onClick={() => handleSaveInvoice('none')}
                   className='w-full'
@@ -4099,7 +4173,7 @@ export function InvoicePanel({
                     )
                   }
                 />
-              </>
+              </div>
             )}
 
             {/* Send After Save selector — pending-only: it's a goods-handoff receipt
@@ -4249,8 +4323,10 @@ export function InvoicePanel({
         if (stickyActionsContainer) return createPortal(bar, stickyActionsContainer)
         // No header slot yet — fall back to a floating bottom bar (with item count/total
         // for context, since it's not sitting next to the page title in this fallback).
+        // Hidden on phones — the dedicated fixed bottom bar below covers them, and this
+        // is only ever on screen for the one frame before the portal ref attaches.
         return (
-          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90'>
+          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90 max-sm:hidden'>
             <div className='flex items-baseline gap-2 pl-1'>
               <span className='text-xs text-muted-foreground'>
                 {invoice.items.filter((i) => i.productId && i.name).length} {t('invoice_items')}
@@ -4325,6 +4401,13 @@ export function InvoicePanel({
         )
       })()}
 
+      {/* Portaled straight to <body> — not just a sibling `<div>` here — for two reasons: (1) any
+          ancestor with a CSS transform/filter would silently turn this `fixed` bar into a child
+          of THAT ancestor instead of the viewport; (2) a plain sibling was still counted by the
+          parent's `space-y-4` (Tailwind's spacing selector doesn't check `display:none`, only the
+          `hidden` attribute) and added a stray 16px gap below the last card even while this bar
+          itself rendered nothing on desktop. */}
+      {createPortal(mobileActionsBar, document.body)}
     </div>
   )
 }

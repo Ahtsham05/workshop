@@ -375,11 +375,11 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <div className="text-sm text-gray-600">
+            <div className="flex items-center justify-between mt-4 max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
+              <div className="text-sm text-gray-600 max-sm:text-center">
                 {t('Showing')} {(currentPage - 1) * pageSize + 1} {t('to')} {Math.min(currentPage * pageSize, totalResults)} {t('of')} {totalResults} {t('expenses')}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 max-sm:w-full max-sm:flex-wrap max-sm:justify-center">
                 <Button
                   variant="outline"
                   size="sm"

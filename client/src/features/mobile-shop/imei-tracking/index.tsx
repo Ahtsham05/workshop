@@ -144,9 +144,11 @@ export default function ImeiTrackingPage() {
     >
 
       {/* ── Stats ── */}
-      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6'>
+      {/* Phones: two cards per row like the dashboard. */}
+      <div className='grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6 max-sm:gap-3'>
         <div className={cn('rounded-xl', !quickFilter && activeTab === 'in_stock' && 'ring-2 ring-sky-500 ring-offset-2')}>
           <StatCard
+            inlineHeaderOnMobile
             title='In Stock'
             value={stats?.in_stock ?? 0}
             description='Ready to sell'
@@ -158,6 +160,7 @@ export default function ImeiTrackingPage() {
         </div>
         <div className={cn('rounded-xl', !quickFilter && activeTab === 'sold' && 'ring-2 ring-emerald-500 ring-offset-2')}>
           <StatCard
+            inlineHeaderOnMobile
             title='Sold'
             value={stats?.sold ?? 0}
             description='With a customer'
@@ -169,6 +172,7 @@ export default function ImeiTrackingPage() {
         </div>
         <div className={cn('rounded-xl', quickFilter === 'warranty_expiring' && 'ring-2 ring-amber-500 ring-offset-2')}>
           <StatCard
+            inlineHeaderOnMobile
             title='Warranty Expiring Soon'
             value={stats?.warrantyExpiringSoon ?? 0}
             description='Within next 30 days'
@@ -180,6 +184,7 @@ export default function ImeiTrackingPage() {
         </div>
         <div className={cn('rounded-xl', quickFilter === 'lost_stolen' && 'ring-2 ring-rose-500 ring-offset-2')}>
           <StatCard
+            inlineHeaderOnMobile
             title='Lost / Stolen'
             value={(stats?.lost ?? 0) + (stats?.stolen ?? 0)}
             description='Needs follow-up'
@@ -205,7 +210,7 @@ export default function ImeiTrackingPage() {
 
       {/* ── List ── */}
       <Card>
-        <CardHeader className='pb-3'>
+        <CardHeader className='pb-3 max-sm:px-3'>
           <CardTitle className='flex items-center gap-2'>
             <ShieldCheck className='h-5 w-5 text-primary' /> {isMobileShop ? 'IMEI Records' : 'Serial Number Records'}
           </CardTitle>
@@ -224,7 +229,7 @@ export default function ImeiTrackingPage() {
             )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className='max-sm:px-3'>
           <Tabs value={quickFilter ? '' : activeTab} onValueChange={(v) => goToTab(v as 'all' | ImeiStatus)} className='mb-3'>
             <TabsList className='flex-wrap h-auto gap-1'>
               <TabsTrigger value='all'>All</TabsTrigger>

@@ -15,11 +15,14 @@ export default function UsersPrimaryButtons() {
   const { setOpen } = useUsers()
   const { t } = useLanguage()
 
+  // Phones: the three buttons need ~430px and ran off the right edge of a 375px screen (dragging the whole
+  // page sideways). Below 640px the row wraps: the two secondary buttons share a line (growing to fill it)
+  // and "Add Product" takes the full width beneath. From 640px up this is the same single row as before.
   return (
-    <div className='flex gap-2'>
+    <div className='flex gap-2 max-sm:w-full max-sm:flex-wrap'>
       {/* Entry point to the Price Update Center — supplier price lists (WhatsApp / PDF / Excel). */}
       <Can permission='managePriceUpdates'>
-        <Button asChild variant='outline' className='gap-1.5'>
+        <Button asChild variant='outline' className='gap-1.5 max-sm:flex-1'>
           <Link to='/price-updates'>
             <TrendingUp className='h-4 w-4' />
             {t('Update Prices')}
@@ -29,7 +32,7 @@ export default function UsersPrimaryButtons() {
       <Can permission='createProducts'>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant='outline' className='gap-1.5'>
+            <Button variant='outline' className='gap-1.5 max-sm:flex-1'>
               <Upload className='h-4 w-4' />
               {t('Import / Export')}
               <ChevronDown className='h-3.5 w-3.5 opacity-60' />
@@ -46,7 +49,7 @@ export default function UsersPrimaryButtons() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button className='gap-1.5' onClick={() => setOpen('add')}>
+        <Button className='gap-1.5 max-sm:basis-full' onClick={() => setOpen('add')}>
           <PlusCircle className='h-4 w-4' />
           {t('add_product')}
         </Button>
