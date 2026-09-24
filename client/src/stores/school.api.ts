@@ -55,6 +55,99 @@ const invalidateWalletCachesFromBankAccount = async (
   }
 };
 
+export type SchoolSmsStatus = {
+  connected: boolean
+  state: 'READY' | 'OFFLINE' | 'NO_DEVICE' | string
+  totalDevices: number
+  deviceId?: string
+  deviceName?: string
+  phoneNumber?: string
+  simSlot?: number
+  smsSentToday?: number
+  smsSentTotal?: number
+  lastSeen?: string | null
+}
+
+export type SchoolSmsSkipped = { id?: string; name: string; admissionNo?: string }
+
+export type SchoolSmsSendResult = {
+  total: number
+  sent: number
+  failed: { phone: string; name?: string; reason: string }[]
+  /** Students matched by the filter but left out because they have no parent phone on record. */
+  skipped?: SchoolSmsSkipped[]
+  deviceName?: string
+  message?: string
+}
+
+export type SchoolSmsTemplate = {
+  id: string
+  title: string
+  category: string
+  context: 'broadcast' | 'fee_alert'
+  /** Raw wording with {placeholders} — what goes into the composer. */
+  body: string
+  /** The same wording already filled in, i.e. what a parent actually receives. */
+  preview: string
+  encoding: string
+  segments: number
+  characters: number
+  builtIn: boolean
+}
+
+export type SchoolSmsTemplateList = {
+  categories: string[]
+  /** Realistic placeholder values (with this branch's real school name) used for previews. */
+  sample: Record<string, string>
+  templates: SchoolSmsTemplate[]
+}
+
+export type SchoolSmsFeeAlertArgs = {
+  studentIds?: string[]
+  classId?: string
+  message?: string
+  feeStatus?: string
+}
+
+export type SchoolSmsFeeAlertRecipient = {
+  phone: string
+  name: string
+  admissionNo?: string
+  amount: number
+  month?: string | number
+  year?: string | number
+  feeType?: string
+  status?: string
+  message: string
+}
+
+export type SchoolSmsFeeAlertPreview = {
+  total: number
+  totalDue: number
+  truncated: boolean
+  recipients: SchoolSmsFeeAlertRecipient[]
+  skipped: SchoolSmsSkipped[]
+}
+
+/**
+ * Every school SMS send writes rows to the same SmsGatewayMessage collection the
+ * Communications → SMS Log page reads. That page lives in `smsGatewayApi`, a separate RTK
+ * Query slice, so invalidating this slice's `SchoolSms` tag would leave the log showing a
+ * stale list until a manual refetch. Mirrors the wallet helper above.
+ */
+const invalidateSmsLogCaches = async (
+  _arg: unknown,
+  { dispatch, queryFulfilled }: { dispatch: (action: unknown) => unknown; queryFulfilled: Promise<unknown> },
+) => {
+  try {
+    await queryFulfilled;
+    const { smsGatewayApi } = await import('./smsGateway.api');
+    dispatch(smsGatewayApi.util.invalidateTags(['SmsMessages', 'SmsDevices']));
+  } catch {
+    // send failed — nothing new landed in the log
+  }
+};
+
 export const schoolApi = createApi({
   reducerPath: 'schoolApi',
   baseQuery: baseQueryWithAuth,
@@ -93,6 +186,8 @@ export const schoolApi = createApi({
     'Budget',
     'AccountsDashboard',
     'WhatsApp',
+    'SchoolSms',
+    'SchoolSmsTemplate',
   ],
   endpoints: (builder) => ({
     // Dashboard
@@ -1409,6 +1504,51 @@ export const schoolApi = createApi({
     >({
       query: (body) => ({ url: '/whatsapp/fee-alerts', method: 'POST', body, timeout: 300000 }),
     }),
+
+    // School SMS Messaging (Android SMS gateway)
+    getSchoolSmsStatus: builder.query<SchoolSmsStatus, void>({
+      query: () => ({ url: '/school-sms/status', headers: { 'Cache-Control': 'no-cache' } }),
+      providesTags: ['SchoolSms'],
+      keepUnusedDataFor: 0,
+    }),
+    sendSchoolSms: builder.mutation<{ success: boolean; status: string }, { phone: string; message: string }>({
+      query: (body) => ({ url: '/school-sms/send', method: 'POST', body }),
+      onQueryStarted: invalidateSmsLogCaches,
+    }),
+    sendSchoolSmsBulk: builder.mutation<SchoolSmsSendResult, { studentIds: string[]; message: string }>({
+      query: (body) => ({ url: '/school-sms/send-bulk', method: 'POST', body, timeout: 300000 }),
+      onQueryStarted: invalidateSmsLogCaches,
+    }),
+    getSchoolSmsTemplates: builder.query<SchoolSmsTemplateList, void>({
+      query: () => ({ url: '/school-sms/templates' }),
+      providesTags: ['SchoolSmsTemplate'],
+    }),
+    createSchoolSmsTemplate: builder.mutation<
+      { id: string; title: string },
+      { title: string; body: string; context?: 'broadcast' | 'fee_alert' }
+    >({
+      query: (body) => ({ url: '/school-sms/templates', method: 'POST', body }),
+      invalidatesTags: ['SchoolSmsTemplate'],
+    }),
+    deleteSchoolSmsTemplate: builder.mutation<void, string>({
+      query: (id) => ({ url: `/school-sms/templates/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['SchoolSmsTemplate'],
+    }),
+    sendSchoolSmsToClass: builder.mutation<SchoolSmsSendResult, { classId: string; message: string }>({
+      query: (body) => ({ url: '/school-sms/send-to-class', method: 'POST', body, timeout: 300000 }),
+      onQueryStarted: invalidateSmsLogCaches,
+    }),
+    sendSchoolSmsToAll: builder.mutation<SchoolSmsSendResult, { message: string; classId?: string }>({
+      query: (body) => ({ url: '/school-sms/send-to-all', method: 'POST', body, timeout: 300000 }),
+      onQueryStarted: invalidateSmsLogCaches,
+    }),
+    previewSchoolSmsFeeAlerts: builder.mutation<SchoolSmsFeeAlertPreview, SchoolSmsFeeAlertArgs>({
+      query: (body) => ({ url: '/school-sms/fee-alerts/preview', method: 'POST', body, timeout: 300000 }),
+    }),
+    sendSchoolSmsFeeAlerts: builder.mutation<SchoolSmsSendResult, SchoolSmsFeeAlertArgs>({
+      query: (body) => ({ url: '/school-sms/fee-alerts', method: 'POST', body, timeout: 300000 }),
+      onQueryStarted: invalidateSmsLogCaches,
+    }),
   }),
 });
 
@@ -1718,4 +1858,15 @@ export const {
   useSendWhatsAppToClassMutation,
   useSendWhatsAppToAllMutation,
   useSendWhatsAppFeeAlertsMutation,
+  // School SMS Messaging
+  useGetSchoolSmsStatusQuery,
+  useSendSchoolSmsMutation,
+  useSendSchoolSmsBulkMutation,
+  useGetSchoolSmsTemplatesQuery,
+  useCreateSchoolSmsTemplateMutation,
+  useDeleteSchoolSmsTemplateMutation,
+  useSendSchoolSmsToClassMutation,
+  useSendSchoolSmsToAllMutation,
+  usePreviewSchoolSmsFeeAlertsMutation,
+  useSendSchoolSmsFeeAlertsMutation,
 } = schoolApi;

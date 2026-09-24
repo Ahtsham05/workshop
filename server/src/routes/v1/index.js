@@ -138,6 +138,7 @@ const accountsSystemRoute = require('./accountsSystem.route');
 const whatsappRoute = require('./whatsapp.route');
 const whatsappCloudRoute = require('./whatsappCloud.route');
 const smsGatewayRoute = require('./smsGateway.route');
+const schoolSmsRoute = require('./schoolSms.route');
 const whatsappEnterpriseRoute = require('./whatsappEnterprise.route');
 const restaurantRoute = require('./restaurant.route');
 const restaurantPublicRoute = require('./restaurantPublic.route');
@@ -671,6 +672,10 @@ const defaultRoutes = [
   {
     path: '/sms-gateway',
     route: smsGatewayRoute,
+  },
+  {
+    path: '/school-sms',
+    route: schoolSmsRoute,
   },
   // These two mount at '/' because they define their own full paths. They must be
   // registered last so path-specific routers (including public routes like the

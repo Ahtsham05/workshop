@@ -144,25 +144,13 @@ async function startApplication() {
     logger.warn('Index migration warning (non-fatal):', err.message);
   }
 
-  // The SMS Gateway's "connected socket" registry lives in process memory (server/src/
-  // services/smsGateway.service.js `connectedSockets`) and always starts empty on boot —
-  // so any device still marked isOnline:true from before this restart is stale by
-  // definition (no socket can exist for it yet). Left uncorrected, a send picks that
-  // "online" device, finds no live socket, and the message sits at status 'pending'
-  // forever with no error. Devices reconnect and re-mark themselves online within
-  // seconds regardless.
-  try {
-    const { SmsDevice } = require('./models');
-    const { modifiedCount } = await SmsDevice.updateMany(
-      { isOnline: true },
-      { isOnline: false, socketId: null },
-    );
-    if (modifiedCount > 0) {
-      logger.info(`Reset ${modifiedCount} stale SMS gateway device(s) to offline on startup`);
-    }
-  } catch (err) {
-    logger.warn('SMS gateway device reset warning (non-fatal):', err.message);
-  }
+  // NOTE: this used to blanket-reset every isOnline device to offline on boot, on the
+  // assumption that one process owned every socket. With the same database served by more
+  // than one process (a local dev server alongside the deployed one, or several instances
+  // behind a load balancer) that reset knocked *other* processes' healthy phones offline on
+  // every restart. Staleness is now derived from the heartbeat timestamp instead
+  // (smsGateway.service.js `isDeviceLive`), which needs no reset and is correct for any
+  // number of processes.
 
   try {
     const { roleService } = require('./services');
@@ -185,6 +173,13 @@ async function startApplication() {
             methods: ['GET', 'POST'],
           });
           logger.info('SMS Gateway Socket.io initialized');
+
+          // Sends accepted by a process that does not hold the phone's socket leave their
+          // rows 'pending'; this drainer is how the process that *does* hold it picks them
+          // up. Safe to run in every process — each row is claimed atomically.
+          const smsGatewayService = require('./services/smsGateway.service');
+          smsGatewayService.startPendingSmsDrainer();
+          logger.info('SMS Gateway pending-message drainer started');
         } catch (err) {
           logger.warn('SMS Gateway socket skipped:', err.message);
         }

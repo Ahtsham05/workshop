@@ -137,6 +137,7 @@ import { Route as AuthenticatedSchoolTeacherAttendanceIndexImport } from './rout
 import { Route as AuthenticatedSchoolTeacherAssignmentsIndexImport } from './routes/_authenticated/school/teacher-assignments/index'
 import { Route as AuthenticatedSchoolSubjectsIndexImport } from './routes/_authenticated/school/subjects/index'
 import { Route as AuthenticatedSchoolStudentsIndexImport } from './routes/_authenticated/school/students/index'
+import { Route as AuthenticatedSchoolSmsIndexImport } from './routes/_authenticated/school/sms/index'
 import { Route as AuthenticatedSchoolSectionsIndexImport } from './routes/_authenticated/school/sections/index'
 import { Route as AuthenticatedSchoolReportsIndexImport } from './routes/_authenticated/school/reports/index'
 import { Route as AuthenticatedSchoolNotificationsIndexImport } from './routes/_authenticated/school/notifications/index'
@@ -1033,6 +1034,13 @@ const AuthenticatedSchoolStudentsIndexRoute =
   AuthenticatedSchoolStudentsIndexImport.update({
     id: '/students/',
     path: '/students/',
+    getParentRoute: () => AuthenticatedSchoolRoute,
+  } as any)
+
+const AuthenticatedSchoolSmsIndexRoute =
+  AuthenticatedSchoolSmsIndexImport.update({
+    id: '/sms/',
+    path: '/sms/',
     getParentRoute: () => AuthenticatedSchoolRoute,
   } as any)
 
@@ -2407,6 +2415,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSchoolSectionsIndexImport
       parentRoute: typeof AuthenticatedSchoolImport
     }
+    '/_authenticated/school/sms/': {
+      id: '/_authenticated/school/sms/'
+      path: '/sms'
+      fullPath: '/school/sms'
+      preLoaderRoute: typeof AuthenticatedSchoolSmsIndexImport
+      parentRoute: typeof AuthenticatedSchoolImport
+    }
     '/_authenticated/school/students/': {
       id: '/_authenticated/school/students/'
       path: '/students'
@@ -2667,6 +2682,7 @@ interface AuthenticatedSchoolRouteChildren {
   AuthenticatedSchoolNotificationsIndexRoute: typeof AuthenticatedSchoolNotificationsIndexRoute
   AuthenticatedSchoolReportsIndexRoute: typeof AuthenticatedSchoolReportsIndexRoute
   AuthenticatedSchoolSectionsIndexRoute: typeof AuthenticatedSchoolSectionsIndexRoute
+  AuthenticatedSchoolSmsIndexRoute: typeof AuthenticatedSchoolSmsIndexRoute
   AuthenticatedSchoolStudentsIndexRoute: typeof AuthenticatedSchoolStudentsIndexRoute
   AuthenticatedSchoolSubjectsIndexRoute: typeof AuthenticatedSchoolSubjectsIndexRoute
   AuthenticatedSchoolTeacherAssignmentsIndexRoute: typeof AuthenticatedSchoolTeacherAssignmentsIndexRoute
@@ -2722,6 +2738,7 @@ const AuthenticatedSchoolRouteChildren: AuthenticatedSchoolRouteChildren = {
     AuthenticatedSchoolNotificationsIndexRoute,
   AuthenticatedSchoolReportsIndexRoute: AuthenticatedSchoolReportsIndexRoute,
   AuthenticatedSchoolSectionsIndexRoute: AuthenticatedSchoolSectionsIndexRoute,
+  AuthenticatedSchoolSmsIndexRoute: AuthenticatedSchoolSmsIndexRoute,
   AuthenticatedSchoolStudentsIndexRoute: AuthenticatedSchoolStudentsIndexRoute,
   AuthenticatedSchoolSubjectsIndexRoute: AuthenticatedSchoolSubjectsIndexRoute,
   AuthenticatedSchoolTeacherAssignmentsIndexRoute:
@@ -3143,6 +3160,7 @@ export interface FileRoutesByFullPath {
   '/school/notifications': typeof AuthenticatedSchoolNotificationsIndexRoute
   '/school/reports': typeof AuthenticatedSchoolReportsIndexRoute
   '/school/sections': typeof AuthenticatedSchoolSectionsIndexRoute
+  '/school/sms': typeof AuthenticatedSchoolSmsIndexRoute
   '/school/students': typeof AuthenticatedSchoolStudentsIndexRoute
   '/school/subjects': typeof AuthenticatedSchoolSubjectsIndexRoute
   '/school/teacher-assignments': typeof AuthenticatedSchoolTeacherAssignmentsIndexRoute
@@ -3312,6 +3330,7 @@ export interface FileRoutesByTo {
   '/school/notifications': typeof AuthenticatedSchoolNotificationsIndexRoute
   '/school/reports': typeof AuthenticatedSchoolReportsIndexRoute
   '/school/sections': typeof AuthenticatedSchoolSectionsIndexRoute
+  '/school/sms': typeof AuthenticatedSchoolSmsIndexRoute
   '/school/students': typeof AuthenticatedSchoolStudentsIndexRoute
   '/school/subjects': typeof AuthenticatedSchoolSubjectsIndexRoute
   '/school/teacher-assignments': typeof AuthenticatedSchoolTeacherAssignmentsIndexRoute
@@ -3487,6 +3506,7 @@ export interface FileRoutesById {
   '/_authenticated/school/notifications/': typeof AuthenticatedSchoolNotificationsIndexRoute
   '/_authenticated/school/reports/': typeof AuthenticatedSchoolReportsIndexRoute
   '/_authenticated/school/sections/': typeof AuthenticatedSchoolSectionsIndexRoute
+  '/_authenticated/school/sms/': typeof AuthenticatedSchoolSmsIndexRoute
   '/_authenticated/school/students/': typeof AuthenticatedSchoolStudentsIndexRoute
   '/_authenticated/school/subjects/': typeof AuthenticatedSchoolSubjectsIndexRoute
   '/_authenticated/school/teacher-assignments/': typeof AuthenticatedSchoolTeacherAssignmentsIndexRoute
@@ -3663,6 +3683,7 @@ export interface FileRouteTypes {
     | '/school/notifications'
     | '/school/reports'
     | '/school/sections'
+    | '/school/sms'
     | '/school/students'
     | '/school/subjects'
     | '/school/teacher-assignments'
@@ -3831,6 +3852,7 @@ export interface FileRouteTypes {
     | '/school/notifications'
     | '/school/reports'
     | '/school/sections'
+    | '/school/sms'
     | '/school/students'
     | '/school/subjects'
     | '/school/teacher-assignments'
@@ -4004,6 +4026,7 @@ export interface FileRouteTypes {
     | '/_authenticated/school/notifications/'
     | '/_authenticated/school/reports/'
     | '/_authenticated/school/sections/'
+    | '/_authenticated/school/sms/'
     | '/_authenticated/school/students/'
     | '/_authenticated/school/subjects/'
     | '/_authenticated/school/teacher-assignments/'
@@ -4331,6 +4354,7 @@ export const routeTree = rootRoute
         "/_authenticated/school/notifications/",
         "/_authenticated/school/reports/",
         "/_authenticated/school/sections/",
+        "/_authenticated/school/sms/",
         "/_authenticated/school/students/",
         "/_authenticated/school/subjects/",
         "/_authenticated/school/teacher-assignments/",
@@ -4840,6 +4864,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/school/sections/": {
       "filePath": "_authenticated/school/sections/index.tsx",
+      "parent": "/_authenticated/school"
+    },
+    "/_authenticated/school/sms/": {
+      "filePath": "_authenticated/school/sms/index.tsx",
       "parent": "/_authenticated/school"
     },
     "/_authenticated/school/students/": {

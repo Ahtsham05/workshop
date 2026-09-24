@@ -35,7 +35,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -721,6 +721,14 @@ export const sidebarData: SidebarData = {
           title: 'WhatsApp Messaging',
           url: '/school/whatsapp',
           icon: MessageCircle,
+          businessTypes: ['school'],
+          requiredFeature: 'school_management',
+          excludedSchoolRoles: ['teacher'],
+        },
+        {
+          title: 'SMS Messaging',
+          url: '/school/sms',
+          icon: MessageSquare,
           businessTypes: ['school'],
           requiredFeature: 'school_management',
           excludedSchoolRoles: ['teacher'],

@@ -154,6 +154,7 @@ module.exports.AuditLog = require('./auditLog.model');
 // SMS Gateway
 module.exports.SmsDevice = require('./smsDevice.model');
 module.exports.SmsGatewayMessage = require('./smsGatewayMessage.model');
+module.exports.SchoolSmsTemplate = require('./schoolSmsTemplate.model');
 
 // Communication Log + Tasks & Reminders
 module.exports.CommunicationLog = require('./communicationLog.model');
