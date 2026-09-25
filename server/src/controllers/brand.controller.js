@@ -5,7 +5,7 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
 const { getBranchContext } = require('../utils/branchFilter');
-const { searchPexelsAndUpload } = require('../services/imageSearch.service');
+const webImageSearchService = require('../services/webImageSearch.service');
 
 const createBrand = catchAsync(async (req, res) => {
   let brandData = req.body;
@@ -132,11 +132,30 @@ const deleteBrandLogo = catchAsync(async (req, res) => {
 
 const fetchImageFromSearch = catchAsync(async (req, res) => {
   const { query } = req.body;
-  const result = await searchPexelsAndUpload(query, {
-    folder: 'brands',
+  const trimmed = String(query || '').trim();
+  if (trimmed.length < 2) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Enter at least 2 characters to search for a logo.');
+  }
+
+  // Multi-provider search (Google/DuckDuckGo/Openverse/Wikimedia), ranked with a bonus
+  // for square, transparent-PNG shots — a logo, not a Pexels stock photo of the product.
+  const { results } = await webImageSearchService.search({ query: trimmed, perPage: 8 });
+  const best = results[0];
+  if (!best) {
+    throw new ApiError(
+      httpStatus.NOT_FOUND,
+      'No logo found for that name. Try different wording, or use "Find from web" to browse options.'
+    );
+  }
+
+  const { images } = await webImageSearchService.importImages({
+    items: [{ url: best.url, token: best.token, provider: best.provider, sourceUrl: best.sourceUrl }],
+    context: 'brand',
     publicIdPrefix: 'brand',
   });
-  res.send(result);
+
+  const [image] = images;
+  res.send({ url: image.url, publicId: image.publicId, providerUrl: image.sourceUrl || '' });
 });
 
 module.exports = {

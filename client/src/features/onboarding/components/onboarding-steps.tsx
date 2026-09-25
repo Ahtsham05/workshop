@@ -65,37 +65,43 @@ type OnboardingForm = UseFormReturn<OnboardingFormValues>
 
 /* ── Welcome ─────────────────────────────────────────────────────────────── */
 
+// No dark: variants on these tiles: WelcomeStep always renders inside the
+// permanently-light content panel (see OnboardingShell), so a dark: class here
+// would just be dead weight — worse, it would incorrectly fire if <html> happens to
+// be dark, since Tailwind's dark: variant matches ANY .dark ancestor, not the
+// nearest one (the same gap documented on AuthLayout).
 const WELCOME_POINTS = [
   {
     icon: Building2,
     title: 'Your business, set up once',
     body: 'We create your organization and its main branch from what you enter here.',
-    tile: 'bg-blue-500/15 text-blue-600 dark:bg-blue-400/20 dark:text-blue-300',
+    tile: 'bg-blue-500/15 text-blue-600',
   },
   {
     icon: Landmark,
     title: 'Money and tax, ready to go',
     body: 'Pick your country and we preset the currency, date format and tax system.',
-    tile: 'bg-violet-500/15 text-violet-600 dark:bg-violet-400/20 dark:text-violet-300',
+    tile: 'bg-violet-500/15 text-violet-600',
   },
   {
     icon: WifiOff,
     title: 'Nothing is locked in',
     body: 'Every answer can be changed later from Settings — nothing here is permanent.',
-    tile: 'bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/20 dark:text-emerald-300',
+    tile: 'bg-emerald-500/15 text-emerald-600',
   },
 ]
 
 /** Shared with the auth screens' Sign in / Create account buttons, so the whole
- *  first-run journey (sign up → onboarding) reads as one visual piece. */
+ *  first-run journey (sign up → onboarding) reads as one visual piece — both are
+ *  the flat black `bg-neutral-900` used there, not a light/dark pair. */
 export const CTA_BUTTON_CLASS =
-  'rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 text-white shadow-lg shadow-indigo-600/25 transition-all hover:from-indigo-600 hover:via-blue-600 hover:to-violet-600 hover:shadow-xl hover:brightness-110 dark:shadow-indigo-950/40'
+  'rounded-xl bg-neutral-900 text-white shadow-lg shadow-black/20 transition-all hover:bg-black hover:shadow-xl'
 
 export function WelcomeStep({ name, onStart }: { name?: string; onStart: () => void }) {
   return (
     <div className='space-y-8'>
       <div className='space-y-3'>
-        <span className='inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-500/10 to-violet-500/10 px-3 py-1 text-xs font-medium text-indigo-600 ring-1 ring-indigo-500/20 dark:text-sky-300 dark:ring-sky-400/20'>
+        <span className='inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-500/10 to-violet-500/10 px-3 py-1 text-xs font-medium text-indigo-600 ring-1 ring-indigo-500/20'>
           <Sparkles className='h-3.5 w-3.5' aria-hidden />
           Welcome aboard
         </span>
@@ -198,7 +204,7 @@ export function BusinessStep({
                     className={cn(
                       'flex items-start gap-3 rounded-xl border p-4 text-left transition-all',
                       selected
-                        ? 'border-indigo-500 bg-indigo-500/[0.05] ring-2 ring-indigo-500/25 dark:bg-indigo-400/[0.08]'
+                        ? 'border-indigo-500 bg-indigo-500/[0.05] ring-2 ring-indigo-500/25'
                         : 'hover:border-muted-foreground/40 hover:bg-muted/40'
                     )}
                   >
@@ -215,7 +221,7 @@ export function BusinessStep({
                     <span className='min-w-0 flex-1'>
                       <span className='flex items-center gap-2'>
                         <span className='text-sm font-medium'>{type.label}</span>
-                        {selected && <Check className='h-4 w-4 text-indigo-600 dark:text-indigo-400' aria-hidden />}
+                        {selected && <Check className='h-4 w-4 text-indigo-600' aria-hidden />}
                       </span>
                       <span className='text-muted-foreground mt-0.5 block text-xs leading-relaxed'>
                         {type.description}
@@ -497,7 +503,7 @@ export function SuccessStep({
   return (
     <div className='space-y-6 text-center'>
       <div className='flex justify-center'>
-        <span className='flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 ring-8 ring-emerald-500/5 dark:text-emerald-400'>
+        <span className='flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 ring-8 ring-emerald-500/5'>
           <CheckCircle2 className='h-8 w-8' aria-hidden />
         </span>
       </div>

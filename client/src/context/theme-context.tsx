@@ -20,6 +20,27 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
+/**
+ * Applies the last known theme mode to <html> before React mounts — the same trick
+ * `applyStoredAppearance()` / `applyLanguageToDocument()` use. Without this, the
+ * `.dark`/`.light` class is only added inside `ThemeProvider`'s `useEffect`, which
+ * fires after the first paint, so every full page load (including the hard
+ * `window.location.href` reload on logout) flashes the light `:root` tokens first.
+ */
+export function applyStoredTheme(
+  defaultTheme: Theme = 'dark',
+  storageKey = 'vite-ui-theme'
+): void {
+  const root = window.document.documentElement
+  const stored = (localStorage.getItem(storageKey) as Theme) || defaultTheme
+  const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light'
+  const effective = stored === 'system' ? systemTheme : stored
+  root.classList.remove('light', 'dark')
+  root.classList.add(effective)
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = 'system',

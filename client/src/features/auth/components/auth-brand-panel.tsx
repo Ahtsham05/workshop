@@ -221,7 +221,7 @@ function DeviceMockup() {
  */
 export function AuthBrandPanel() {
   return (
-    <aside className='relative hidden overflow-hidden bg-[linear-gradient(165deg,#eef2ff_0%,#f5f7ff_45%,#eff6ff_100%)] dark:bg-[linear-gradient(155deg,#0a1122_0%,#122142_48%,#1b3c78_100%)] lg:flex lg:flex-col'>
+    <aside className='relative hidden overflow-hidden bg-[linear-gradient(165deg,#eef2ff_0%,#f5f7ff_45%,#eff6ff_100%)] dark:bg-[linear-gradient(155deg,#050508_0%,#0c0e18_48%,#161a2c_100%)] lg:flex lg:flex-col'>
       {/* depth: two soft light sources + a faint grid — neutral enough to read on
           both the light gradient and the dark navy one above */}
       <div

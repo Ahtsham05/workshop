@@ -365,16 +365,16 @@ export interface AppearancePreferences {
   themeColor: ThemeColorKey
 }
 
-// Matches the 'royal' preset below on purpose: brand-new accounts (nothing saved
-// yet, on either this device or the account) land on the same indigo-violet accent
-// as the sign-in, sign-up and onboarding screens, instead of the neutral stock
-// look — so Settings → Appearance also shows "Royal" as already selected rather
-// than looking like an unmatched custom mix.
+// Matches the 'midnight' preset below on purpose: brand-new accounts (nothing saved
+// yet, on either this device or the account) land on a dark, black-surfaced look with
+// the same indigo accent family already baked into the sign-in, sign-up and onboarding
+// screens — instead of the light stock look — so Settings → Appearance also shows
+// "Midnight" as already selected rather than looking like an unmatched custom mix.
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
-  rowScheme: 'lavender',
+  rowScheme: 'slate',
   alternateRows: true,
   branchTint: 'subtle',
-  themeColor: 'violet',
+  themeColor: 'indigo',
 }
 
 /* ── Themes (presets) ────────────────────────────────────────────────────────
@@ -569,7 +569,20 @@ export function writeStoredAppearance(prefs: AppearancePreferences) {
   }
 }
 
-/** Drops this device's copy of the appearance state (used on sign-out). */
+/**
+ * Drops this device's copy of the appearance state (used on sign-out). Only clears
+ * the cache — it deliberately does NOT also repaint <html> here. Sign-out always
+ * happens while the *previous* user's page is still the one on screen (the redirect
+ * to /sign-in is either a client-side nav or a `window.location.href` reload fired a
+ * moment later), so an eager `applyAppearance(DEFAULT_APPEARANCE, '')` right here
+ * used to flash the next default colours over the still-visible old page before it
+ * was replaced. The DOM still ends up correct either way: `AppearanceProvider`'s own
+ * effect reacts to the user going null (same Redux update that triggers this clear)
+ * and re-applies from the now-empty cache through the normal render cycle, and on a
+ * hard reload `main.tsx`'s `applyStoredAppearance()` re-reads the cleared cache
+ * before the new page's first paint. Both leave nothing of the signed-out user's
+ * colours behind; neither one flashes.
+ */
 export function clearStoredAppearance(): void {
   try {
     localStorage.removeItem(PREFS_KEY)
@@ -577,7 +590,6 @@ export function clearStoredAppearance(): void {
   } catch {
     /* ignore */
   }
-  applyAppearance(DEFAULT_APPEARANCE, '')
 }
 
 export function readStoredBranchColor(): BranchColorKey {

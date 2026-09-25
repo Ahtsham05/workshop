@@ -39,6 +39,7 @@ import { toast } from 'sonner';
 import { useFormatMoney } from '@/lib/format-money';
 import ReceiptRegister from './receipt-register';
 import FeeCollectionReports from './fee-collection-reports';
+import { useOrgAndUser, printReport } from './report-print';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const PIE_COLORS = ['#10b981', '#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -780,10 +781,29 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
 function FinancialMonthlyReport({ year }: { year: number }) {
   const { data, isLoading } = useGetReportFinancialMonthlyQuery({ year });
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: months, chartData } = data;
   const profitRate = summary.income > 0 ? Math.round((summary.profit / summary.income) * 100) : 0;
+  const pdfHeaders = ['Month', 'Income', 'Expense', 'Profit'];
+  const pdfRows = months.map((m: any) => [m.month, m.income.toLocaleString(), m.expense.toLocaleString(), m.profit.toLocaleString()]);
+  const handlePrint = () => printReport(org, {
+    title: `Monthly Income/Expense Report - ${year}`,
+    periodLabel: `Year ${year}`,
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Total Income', value: formatMoney(summary.income || 0) },
+        { label: 'Total Expense', value: formatMoney(summary.expense || 0) },
+        { label: 'Net Profit', value: formatMoney(summary.profit || 0) },
+        { label: 'Margin', value: `${profitRate}%` },
+      ],
+    }, {
+      type: 'table', heading: 'Monthly Breakdown', headers: pdfHeaders, rows: pdfRows,
+      footer: ['Year Total', formatMoney(summary.income || 0), formatMoney(summary.expense || 0), formatMoney(summary.profit || 0)],
+    }],
+  });
 
   return (
     <div className="space-y-5">
@@ -814,8 +834,9 @@ function FinancialMonthlyReport({ year }: { year: number }) {
           <CardTitle className="text-sm font-semibold flex items-center gap-2"><BarChart2 className="h-4 w-4 text-slate-500" /> Monthly Income vs Expense — {year}</CardTitle>
           <ExportButtons data={months} sheetName="Monthly" fileName={`Monthly_Report_${year}`}
             pdfTitle={`Monthly Income/Expense - ${year}`}
-            headers={['Month', 'Income', 'Expense', 'Profit']}
-            rows={months.map((m: any) => [m.month, m.income.toLocaleString(), m.expense.toLocaleString(), m.profit.toLocaleString()])} />
+            headers={pdfHeaders}
+            rows={pdfRows}
+            onPrint={handlePrint} />
         </CardHeader>
         <CardContent className="px-4 pb-4">
           <ResponsiveContainer width="100%" height={260}>
@@ -888,11 +909,30 @@ function FinancialMonthlyReport({ year }: { year: number }) {
 function FinancialDailyReport({ year, month }: { year: number; month: string }) {
   const { data, isLoading } = useGetReportFinancialDailyQuery({ year, month });
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: days, chartData } = data;
   const avgDaily = summary.activeDays > 0 ? Math.round(summary.totalCollected / summary.activeDays) : 0;
   const activePct = summary.totalDays > 0 ? Math.round((summary.activeDays / summary.totalDays) * 100) : 0;
+  const pdfHeaders = ['Day', 'Date', 'Amount', 'Transactions'];
+  const pdfRows = days.map((d: any) => [String(d.day), d.date, d.amount.toLocaleString(), String(d.transactions)]);
+  const handlePrint = () => printReport(org, {
+    title: `Daily Collection Report - ${month} ${year}`,
+    periodLabel: `${month} ${year}`,
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Total Collected', value: formatMoney(summary.totalCollected || 0) },
+        { label: 'Active Days', value: `${summary.activeDays} / ${summary.totalDays}` },
+        { label: 'Daily Average', value: formatMoney(avgDaily) },
+        { label: 'Total Transactions', value: String(days.reduce((s: number, d: any) => s + (d.transactions || 0), 0)) },
+      ],
+    }, {
+      type: 'table', heading: 'Daily Breakdown', headers: pdfHeaders, rows: pdfRows,
+      footer: [`Total (${summary.activeDays} days)`, '', formatMoney(summary.totalCollected || 0), String(days.reduce((s: number, d: any) => s + (d.transactions || 0), 0))],
+    }],
+  });
 
   return (
     <div className="space-y-5">
@@ -926,8 +966,9 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
           <CardTitle className="text-sm font-semibold flex items-center gap-2"><Activity className="h-4 w-4 text-emerald-500" /> Daily Collection — {month} {year}</CardTitle>
           <ExportButtons data={days} sheetName="Daily" fileName={`Daily_Collection_${month}_${year}`}
             pdfTitle={`Daily Collection - ${month} ${year}`}
-            headers={['Day', 'Date', 'Amount', 'Transactions']}
-            rows={days.map((d: any) => [String(d.day), d.date, d.amount.toLocaleString(), String(d.transactions)])} />
+            headers={pdfHeaders}
+            rows={pdfRows}
+            onPrint={handlePrint} />
         </CardHeader>
         <CardContent className="px-4 pb-4">
           <ResponsiveContainer width="100%" height={240}>
@@ -985,10 +1026,29 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
 function FinancialPnlReport({ year }: { year: number }) {
   const { data, isLoading } = useGetReportFinancialPnlQuery({ year });
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: months, chartData } = data;
   const feeRate = summary.feeExpected > 0 ? Math.round((summary.feeCollected / summary.feeExpected) * 100) : 0;
+  const pdfHeaders = ['Month', 'Income', 'Expense', 'Profit', 'Fee Expected', 'Fee Collected', 'Fee Pending'];
+  const pdfRows = months.map((m: any) => [m.month, m.income.toLocaleString(), m.expense.toLocaleString(), m.profit.toLocaleString(), m.feeExpected.toLocaleString(), m.feeCollected.toLocaleString(), m.feePending.toLocaleString()]);
+  const handlePrint = () => printReport(org, {
+    title: `Profit & Loss Report - ${year}`,
+    periodLabel: `Year ${year}`,
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Income', value: formatMoney(summary.income || 0) },
+        { label: 'Expense', value: formatMoney(summary.expense || 0) },
+        { label: 'Net Profit / Loss', value: formatMoney(summary.profit || 0) },
+        { label: 'Fee Collection Rate', value: `${feeRate}%` },
+      ],
+    }, {
+      type: 'table', heading: 'Monthly Breakdown', headers: pdfHeaders, rows: pdfRows,
+      footer: ['Year Total', formatMoney(summary.income || 0), formatMoney(summary.expense || 0), formatMoney(summary.profit || 0), formatMoney(summary.feeExpected || 0), formatMoney(summary.feeCollected || 0), formatMoney(summary.feePending || 0)],
+    }],
+  });
 
   return (
     <div className="space-y-5">
@@ -1046,8 +1106,9 @@ function FinancialPnlReport({ year }: { year: number }) {
           <CardTitle className="text-sm font-semibold flex items-center gap-2"><Activity className="h-4 w-4 text-purple-500" /> P&L Trend — {year}</CardTitle>
           <ExportButtons data={months} sheetName="PnL" fileName={`PnL_${year}`}
             pdfTitle={`Profit & Loss - ${year}`}
-            headers={['Month', 'Income', 'Expense', 'Profit', 'Fee Expected', 'Fee Collected', 'Fee Pending']}
-            rows={months.map((m: any) => [m.month, m.income.toLocaleString(), m.expense.toLocaleString(), m.profit.toLocaleString(), m.feeExpected.toLocaleString(), m.feeCollected.toLocaleString(), m.feePending.toLocaleString()])}
+            headers={pdfHeaders}
+            rows={pdfRows}
+            onPrint={handlePrint}
             landscape />
         </CardHeader>
         <CardContent className="px-4 pb-4">
@@ -1124,30 +1185,60 @@ function FinancialPnlReport({ year }: { year: number }) {
 function FinancialCategoryReport() {
   const { data, isLoading } = useGetReportFinancialCategoriesQuery({});
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: catData } = data;
   const income = catData.income || [];
   const expense = catData.expense || [];
 
+  const pdfHeaders = ['Category', 'Type', 'Transactions', 'Total'];
+  const pdfRows = [
+    ...income.map((c: any) => [c.name, 'Income', String(c.count), c.total.toLocaleString()]),
+    ...expense.map((c: any) => [c.name, 'Expense', String(c.count), c.total.toLocaleString()]),
+  ];
+  const excelData = [
+    ...income.map((c: any) => ({ Category: c.name, Type: 'Income', Transactions: c.count, Total: c.total })),
+    ...expense.map((c: any) => ({ Category: c.name, Type: 'Expense', Transactions: c.count, Total: c.total })),
+  ];
+  const handlePrint = () => printReport(org, {
+    title: 'Category-wise Report',
+    periodLabel: 'All Time',
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Total Income', value: formatMoney(summary.totalIncome || 0) },
+        { label: 'Total Expense', value: formatMoney(summary.totalExpense || 0) },
+        { label: 'Net Profit', value: formatMoney(summary.profit || 0) },
+      ],
+    }, { type: 'table', heading: 'Category Breakdown', headers: pdfHeaders, rows: pdfRows }],
+  });
+
   return (
     <div className="space-y-5">
       {/* KPI Row */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
-          <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Total Income</p>
-          <p className="text-2xl font-bold text-emerald-700">{formatMoney((summary.totalIncome || 0))}</p>
-          <p className="text-[11px] text-emerald-600 mt-1">{income.length} categor{income.length === 1 ? 'y' : 'ies'}</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="grid grid-cols-3 gap-4 flex-1 min-w-[280px]">
+          <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
+            <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Total Income</p>
+            <p className="text-2xl font-bold text-emerald-700">{formatMoney((summary.totalIncome || 0))}</p>
+            <p className="text-[11px] text-emerald-600 mt-1">{income.length} categor{income.length === 1 ? 'y' : 'ies'}</p>
+          </div>
+          <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
+            <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Total Expense</p>
+            <p className="text-2xl font-bold text-red-700">{formatMoney((summary.totalExpense || 0))}</p>
+            <p className="text-[11px] text-red-600 mt-1">{expense.length} categor{expense.length === 1 ? 'y' : 'ies'}</p>
+          </div>
+          <div className={`rounded-xl border-2 p-4 ${summary.profit >= 0 ? 'border-blue-100 bg-blue-50' : 'border-orange-100 bg-orange-50'}`}>
+            <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${summary.profit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Net Profit</p>
+            <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatMoney((summary.profit || 0))}</p>
+          </div>
         </div>
-        <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
-          <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Total Expense</p>
-          <p className="text-2xl font-bold text-red-700">{formatMoney((summary.totalExpense || 0))}</p>
-          <p className="text-[11px] text-red-600 mt-1">{expense.length} categor{expense.length === 1 ? 'y' : 'ies'}</p>
-        </div>
-        <div className={`rounded-xl border-2 p-4 ${summary.profit >= 0 ? 'border-blue-100 bg-blue-50' : 'border-orange-100 bg-orange-50'}`}>
-          <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${summary.profit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Net Profit</p>
-          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatMoney((summary.profit || 0))}</p>
-        </div>
+        <ExportButtons data={excelData} sheetName="Categories" fileName="Category_Report"
+          pdfTitle="Category-wise Report"
+          headers={pdfHeaders}
+          rows={pdfRows}
+          onPrint={handlePrint} />
       </div>
 
       {/* Charts side by side */}
@@ -1426,10 +1517,19 @@ function FinancialExpenseDetailReport({ year, month }: { year: number; month: st
 
 function StudentListReport({ classId }: { classId?: string }) {
   const { data, isLoading } = useGetReportStudentListQuery(classId ? { classId } : {});
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: classList } = data;
   const allStudents = classList.flatMap((c: any) => c.students);
+  const pdfHeaders = ['Name', 'Adm#', 'Roll#', 'Class', 'Father', 'Phone', 'Gender'];
+  const pdfRows = allStudents.map((s: any) => [s.name, s.admissionNumber, s.rollNumber, s.className, s.fatherName, s.phone, s.gender]);
+  const handlePrint = () => printReport(org, {
+    title: 'Student List Report',
+    periodLabel: `${summary.totalStudents} students across ${summary.totalClasses} classes`,
+    generatedByName,
+    sections: [{ type: 'table', heading: 'Students', headers: pdfHeaders, rows: pdfRows }],
+  });
 
   return (
     <div className="space-y-5">
@@ -1447,8 +1547,9 @@ function StudentListReport({ classId }: { classId?: string }) {
         </div>
         <ExportButtons data={allStudents} sheetName="Students" fileName="Student_List"
           pdfTitle="Student List Report"
-          headers={['Name', 'Adm#', 'Roll#', 'Class', 'Father', 'Phone', 'Gender']}
-          rows={allStudents.map((s: any) => [s.name, s.admissionNumber, s.rollNumber, s.className, s.fatherName, s.phone, s.gender])} />
+          headers={pdfHeaders}
+          rows={pdfRows}
+          onPrint={handlePrint} />
       </div>
 
       {classList.map((cls: any) => (
@@ -1518,6 +1619,7 @@ function StudentLeftReport({ classId }: { classId?: string }) {
     ...(reason !== 'all' ? { reason } : {}),
   });
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
 
   const reasonSelect = (
     <Select value={reason} onValueChange={setReason}>
@@ -1531,6 +1633,26 @@ function StudentLeftReport({ classId }: { classId?: string }) {
   if (isLoading) return <div className="space-y-4">{reasonSelect}<Loading /></div>;
   if (!data) return <EmptyState />;
   const { summary, data: students, chartData } = data;
+  const pdfHeaders = ['Name', 'Adm#', 'Class', 'Left Date', 'Reason', 'TC#', 'Dues at Leaving', 'Pending Now'];
+  const pdfRows = students.map((s: any) => [
+    s.name, s.admissionNumber, s.className,
+    s.leftDate ? new Date(s.leftDate).toLocaleDateString() : '-',
+    s.reasonLabel, s.tcNumber || '-',
+    s.outstandingDuesAtLeaving.toLocaleString(), s.currentPendingAmount.toLocaleString(),
+  ]);
+  const handlePrint = () => printReport(org, {
+    title: 'Left / Struck-Off Students Report',
+    periodLabel: reason !== 'all' ? (LEAVING_REASONS.find((r) => r.value === reason)?.label || 'All Reasons') : 'All Reasons',
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Total Left', value: String(summary.totalLeft) },
+        { label: 'Dues Cleared', value: String(summary.clearedCount) },
+        { label: 'Still Owing', value: String(summary.pendingCount) },
+        { label: 'Outstanding Now', value: formatMoney(summary.totalOutstandingNow || 0) },
+      ],
+    }, { type: 'table', heading: 'Students', headers: pdfHeaders, rows: pdfRows }],
+  });
 
   return (
     <div className="space-y-5">
@@ -1538,13 +1660,9 @@ function StudentLeftReport({ classId }: { classId?: string }) {
         {reasonSelect}
         <ExportButtons data={students} sheetName="Left Students" fileName="Left_Struck_Off_Students"
           pdfTitle="Left / Struck-Off Students Report"
-          headers={['Name', 'Adm#', 'Class', 'Left Date', 'Reason', 'TC#', 'Dues at Leaving', 'Pending Now']}
-          rows={students.map((s: any) => [
-            s.name, s.admissionNumber, s.className,
-            s.leftDate ? new Date(s.leftDate).toLocaleDateString() : '-',
-            s.reasonLabel, s.tcNumber || '-',
-            s.outstandingDuesAtLeaving.toLocaleString(), s.currentPendingAmount.toLocaleString(),
-          ])}
+          headers={pdfHeaders}
+          rows={pdfRows}
+          onPrint={handlePrint}
           landscape
         />
       </div>
@@ -1637,14 +1755,41 @@ function StudentLeftReport({ classId }: { classId?: string }) {
 function StudentFeeStatusReport({ year, month, classId }: { year: number; month: string; classId?: string }) {
   const { data, isLoading } = useGetReportStudentFeeStatusQuery({ year, month, ...(classId ? { classId } : {}) });
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: students, chartData } = data;
   const totalCollected = students.reduce((s: number, st: any) => s + (st.paidAmount || 0), 0);
   const totalPending = students.reduce((s: number, st: any) => s + (st.pending || 0), 0);
+  const pdfHeaders = ['Student', 'Class', 'Net Amount', 'Paid', 'Pending', 'Status'];
+  const pdfRows = students.map((s: any) => [s.name, s.className, formatMoney(s.netAmount), formatMoney(s.paidAmount), s.pending > 0 ? formatMoney(s.pending) : '-', s.status]);
+  const handlePrint = () => printReport(org, {
+    title: 'Student Fee Status Report',
+    periodLabel: `${month} ${year}`,
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Students', value: String(summary.totalStudents) },
+        { label: 'Paid', value: String(summary.paid) },
+        { label: 'Unpaid', value: String(summary.unpaid) },
+        { label: 'Expected', value: formatMoney(summary.totalExpected || 0) },
+        { label: 'Collection Rate', value: `${summary.collectionRate}%` },
+      ],
+    }, {
+      type: 'table', heading: 'Students', headers: pdfHeaders, rows: pdfRows,
+      footer: ['Total', '', formatMoney(summary.totalExpected || 0), formatMoney(totalCollected), formatMoney(totalPending), ''],
+    }],
+  });
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-end">
+        <ExportButtons data={students} sheetName="Fee Status" fileName={`Fee_Status_${month}_${year}`}
+          pdfTitle={`Student Fee Status - ${month} ${year}`}
+          headers={pdfHeaders}
+          rows={pdfRows}
+          onPrint={handlePrint} />
+      </div>
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="rounded-xl border-2 border-blue-100 bg-blue-50 p-3 text-center">
@@ -1750,10 +1895,30 @@ function StudentFeeStatusReport({ year, month, classId }: { year: number; month:
 
 function StudentAttendanceReport({ year, month, classId }: { year: number; month: string; classId?: string }) {
   const { data, isLoading } = useGetReportStudentAttendanceQuery({ year, month, ...(classId ? { classId } : {}) });
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: students, chartData } = data;
   const avgRate = students.length > 0 ? Math.round(students.reduce((s: number, st: any) => s + (st.attendanceRate || 0), 0) / students.length) : 0;
+  const pdfHeaders = ['Name', 'Class', 'Roll#', 'Present', 'Absent', 'Late', 'Leave', 'Rate'];
+  const pdfRows = students.map((s: any) => [s.name, s.className, s.rollNumber, String(s.present), String(s.absent), String(s.late), String(s.leave), `${s.attendanceRate}%`]);
+  const handlePrint = () => printReport(org, {
+    title: 'Student Attendance Report',
+    periodLabel: `${month} ${year}`,
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Students', value: String(summary.totalStudents) },
+        { label: 'Present', value: String(summary.totalPresent) },
+        { label: 'Absent', value: String(summary.totalAbsent) },
+        { label: 'Late', value: String(summary.totalLate) },
+        { label: 'Avg Rate', value: `${avgRate}%` },
+      ],
+    }, {
+      type: 'table', heading: 'Attendance', headers: pdfHeaders, rows: pdfRows,
+      footer: ['Total', '', '', String(summary.totalPresent), String(summary.totalAbsent), String(summary.totalLate), String(summary.totalLeave), `${avgRate}%`],
+    }],
+  });
 
   return (
     <div className="space-y-5">
@@ -1801,8 +1966,9 @@ function StudentAttendanceReport({ year, month, classId }: { year: number; month
             <span className="text-xs text-muted-foreground">{month} {year} attendance</span>
             <ExportButtons data={students} sheetName="Attendance" fileName={`Attendance_${month}_${year}`}
               pdfTitle={`Attendance Summary - ${month} ${year}`}
-              headers={['Name', 'Class', 'Roll#', 'Present', 'Absent', 'Late', 'Leave', 'Rate']}
-              rows={students.map((s: any) => [s.name, s.className, s.rollNumber, String(s.present), String(s.absent), String(s.late), String(s.leave), `${s.attendanceRate}%`])} />
+              headers={pdfHeaders}
+              rows={pdfRows}
+              onPrint={handlePrint} />
           </div>
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-xs">
@@ -1859,9 +2025,36 @@ function StudentAttendanceReport({ year, month, classId }: { year: number; month
 function TeacherSalaryReport({ year }: { year: number }) {
   const { data, isLoading } = useGetReportTeacherSalaryQuery({ year });
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: teachers, chartData } = data;
+  const pdfHeaders = ['Name', 'Emp ID', ...MONTHS.map((m) => m.slice(0, 3)), 'Paid', 'Pending'];
+  const pdfRows = teachers.map((t: any) => [t.name, t.employeeId || '', ...MONTHS.map((_: any, i: number) => (t.months[i + 1] || 0).toLocaleString()), t.totalPaid.toLocaleString(), (t.totalPending || 0).toLocaleString()]);
+  const excelData = teachers.map((t: any) => {
+    const row: any = { Name: t.name, EmpID: t.employeeId, Basic: t.basicSalary };
+    MONTHS.forEach((m, i) => {
+      const amount = t.months[i + 1] || 0;
+      const status = t.monthStatuses?.[i + 1] || '';
+      row[m.slice(0, 3)] = amount > 0 ? `${amount} (${status})` : '-';
+    });
+    row['Paid'] = t.totalPaid;
+    row['Pending'] = t.totalPending;
+    return row;
+  });
+  const handlePrint = () => printReport(org, {
+    title: `Teacher Salary Report - ${year}`,
+    periodLabel: `Year ${year}`,
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Total Teachers', value: String(summary.totalTeachers) },
+        { label: 'Total Paid', value: formatMoney(summary.totalSalaryPaid || 0) },
+        { label: 'Pending (Draft)', value: formatMoney(summary.totalPending || 0) },
+        { label: 'Total Payable', value: formatMoney(summary.totalPayable || 0) },
+      ],
+    }, { type: 'table', heading: 'Monthly Salary', headers: pdfHeaders, rows: pdfRows }],
+  });
 
   return (
     <div className="space-y-5">
@@ -1891,20 +2084,11 @@ function TeacherSalaryReport({ year }: { year: number }) {
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Briefcase className="h-4 w-4 text-indigo-500" /> Monthly Salary — Paid vs Pending — {year}
           </CardTitle>
-          <ExportButtons data={teachers.map((t: any) => {
-            const row: any = { Name: t.name, EmpID: t.employeeId, Basic: t.basicSalary };
-            MONTHS.forEach((m, i) => {
-              const amount = t.months[i + 1] || 0;
-              const status = t.monthStatuses?.[i + 1] || '';
-              row[m.slice(0, 3)] = amount > 0 ? `${amount} (${status})` : '-';
-            });
-            row['Paid'] = t.totalPaid;
-            row['Pending'] = t.totalPending;
-            return row;
-          })} sheetName="Salary" fileName={`Teacher_Salary_${year}`}
+          <ExportButtons data={excelData} sheetName="Salary" fileName={`Teacher_Salary_${year}`}
             pdfTitle={`Teacher Salary - ${year}`}
-            headers={['Name', 'Emp ID', ...MONTHS.map((m) => m.slice(0, 3)), 'Paid', 'Pending']}
-            rows={teachers.map((t: any) => [t.name, t.employeeId || '', ...MONTHS.map((_: any, i: number) => (t.months[i + 1] || 0).toLocaleString()), t.totalPaid.toLocaleString(), (t.totalPending || 0).toLocaleString()])}
+            headers={pdfHeaders}
+            rows={pdfRows}
+            onPrint={handlePrint}
             landscape />
         </CardHeader>
         <CardContent className="px-4 pb-4">
@@ -2003,9 +2187,18 @@ function TeacherSalaryReport({ year }: { year: number }) {
 
 function TeacherWorkloadReport() {
   const { data, isLoading } = useGetReportTeacherWorkloadQuery({});
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: teachers, chartData } = data;
+  const pdfHeaders = ['Name', 'Emp ID', 'Total Periods', 'Days', 'Classes', 'Subjects'];
+  const pdfRows = teachers.map((t: any) => [t.name, t.employeeId || '', String(t.totalPeriods), String(t.totalDays), String(t.totalClasses), String(t.totalSubjects)]);
+  const handlePrint = () => printReport(org, {
+    title: 'Teacher Workload Report',
+    periodLabel: `${summary.totalTeachers} teachers`,
+    generatedByName,
+    sections: [{ type: 'table', heading: 'Workload', headers: pdfHeaders, rows: pdfRows }],
+  });
 
   return (
     <div className="space-y-4">
@@ -2013,8 +2206,9 @@ function TeacherWorkloadReport() {
         <SummaryCard label="Total Teachers" value={summary.totalTeachers} color="text-blue-600" raw />
         <ExportButtons data={teachers} sheetName="Workload" fileName="Teacher_Workload"
           pdfTitle="Teacher Workload Report"
-          headers={['Name', 'Emp ID', 'Total Periods', 'Days', 'Classes', 'Subjects']}
-          rows={teachers.map((t: any) => [t.name, t.employeeId || '', String(t.totalPeriods), String(t.totalDays), String(t.totalClasses), String(t.totalSubjects)])} />
+          headers={pdfHeaders}
+          rows={pdfRows}
+          onPrint={handlePrint} />
       </div>
 
       <Card><CardContent className="pt-5">
@@ -2054,12 +2248,31 @@ function TeacherWorkloadReport() {
 function VoucherReport({ year, month, status, classId }: { year: number; month: string; status?: string; classId?: string }) {
   const { data, isLoading } = useGetReportVouchersQuery({ year, month, ...(status ? { status } : {}), ...(classId ? { classId } : {}) });
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data?.summary) return <EmptyState />;
   const vouchers: any[] = data.data || [];
   const summary = data.summary;
   const chartData: any[] = data.chartData || [];
   const collRate = summary.totalAmount > 0 ? Math.round((summary.totalPaid / summary.totalAmount) * 100) : 0;
+  const pdfHeaders = ['V#', 'Student', 'Class', 'Amount', 'Paid', 'Pending', 'Status'];
+  const pdfRows = vouchers.map((v: any) => [v.voucherNumber || '', v.name, v.className, v.netAmount?.toLocaleString(), v.paidAmount?.toLocaleString(), v.pending?.toLocaleString(), v.status]);
+  const handlePrint = () => printReport(org, {
+    title: `Voucher Report - ${month} ${year}`,
+    periodLabel: `${month} ${year}${status ? ` · ${status}` : ''}`,
+    generatedByName,
+    sections: [{
+      type: 'summary', items: [
+        { label: 'Total Vouchers', value: String(summary.totalVouchers) },
+        { label: 'Total Amount', value: formatMoney(summary.totalAmount || 0) },
+        { label: 'Total Paid', value: formatMoney(summary.totalPaid || 0) },
+        { label: 'Total Pending', value: formatMoney(summary.totalPending || 0) },
+      ],
+    }, {
+      type: 'table', heading: 'Vouchers', headers: pdfHeaders, rows: pdfRows,
+      footer: [`Total (${vouchers.length})`, '', '', formatMoney(summary.totalAmount || 0), formatMoney(summary.totalPaid || 0), formatMoney(summary.totalPending || 0), `${collRate}%`],
+    }],
+  });
 
   return (
     <div className="space-y-5">
@@ -2134,8 +2347,9 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
           <span className="text-sm font-semibold">{vouchers.length} Vouchers</span>
           <ExportButtons data={vouchers} sheetName="Vouchers" fileName={`Vouchers_${month}_${year}`}
             pdfTitle={`Voucher Report - ${month} ${year}`}
-            headers={['V#', 'Student', 'Class', 'Amount', 'Paid', 'Pending', 'Status']}
-            rows={vouchers.map((v: any) => [v.voucherNumber || '', v.name, v.className, v.netAmount?.toLocaleString(), v.paidAmount?.toLocaleString(), v.pending?.toLocaleString(), v.status])} />
+            headers={pdfHeaders}
+            rows={pdfRows}
+            onPrint={handlePrint} />
         </div>
         <table className="w-full text-xs">
           <thead>
@@ -2191,6 +2405,7 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
 function AnalyticsTab({ year }: { year: number }) {
   const { data, isLoading } = useGetReportAnalyticsQuery({ year });
   const formatMoney = useFormatMoney();
+  const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { incomeVsExpense, feeCollectionTrend, expenseBreakdown } = data.chartData;
@@ -2201,6 +2416,33 @@ function AnalyticsTab({ year }: { year: number }) {
   const totalCollected = feeCollectionTrend.reduce((s: number, r: any) => s + (r.collected || 0), 0);
   const netProfit = totalIncome - totalExpense;
   const collRate = totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0;
+
+  const incomeExpenseHeaders = ['Month', 'Income', 'Expense'];
+  const incomeExpenseRows = incomeVsExpense.map((r: any) => [r.name, r.income?.toLocaleString(), r.expense?.toLocaleString()]);
+  const printIncomeExpense = () => printReport(org, {
+    title: `Monthly Income vs Expense - ${year}`,
+    periodLabel: `Year ${year}`,
+    generatedByName,
+    sections: [{ type: 'table', heading: 'Income vs Expense', headers: incomeExpenseHeaders, rows: incomeExpenseRows }],
+  });
+
+  const feeTrendHeaders = ['Month', 'Expected', 'Collected', 'Rate %'];
+  const feeTrendRows = feeCollectionTrend.map((r: any) => [r.name, r.expected?.toLocaleString(), r.collected?.toLocaleString(), `${r.rate}%`]);
+  const printFeeTrend = () => printReport(org, {
+    title: `Fee Collection Trend - ${year}`,
+    periodLabel: `Year ${year}`,
+    generatedByName,
+    sections: [{ type: 'table', heading: 'Fee Collection Trend', headers: feeTrendHeaders, rows: feeTrendRows }],
+  });
+
+  const expenseBreakdownHeaders = ['Category', 'Total'];
+  const expenseBreakdownRows = (expenseBreakdown || []).map((e: any) => [e.name, e.total?.toLocaleString()]);
+  const printExpenseBreakdown = () => printReport(org, {
+    title: `Expense Breakdown - ${year}`,
+    periodLabel: `Year ${year}`,
+    generatedByName,
+    sections: [{ type: 'table', heading: 'Expense Breakdown', headers: expenseBreakdownHeaders, rows: expenseBreakdownRows }],
+  });
 
   return (
     <div className="space-y-5">
@@ -2243,8 +2485,9 @@ function AnalyticsTab({ year }: { year: number }) {
           </CardTitle>
           <ExportButtons data={incomeVsExpense} sheetName="IncomeVsExpense" fileName={`IncomeVsExpense_${year}`}
             pdfTitle={`Income vs Expense - ${year}`}
-            headers={['Month', 'Income', 'Expense']}
-            rows={incomeVsExpense.map((r: any) => [r.name, r.income?.toLocaleString(), r.expense?.toLocaleString()])} />
+            headers={incomeExpenseHeaders}
+            rows={incomeExpenseRows}
+            onPrint={printIncomeExpense} />
         </CardHeader>
         <CardContent className="pt-0 pb-4">
           <ResponsiveContainer width="100%" height={280}>
@@ -2269,8 +2512,9 @@ function AnalyticsTab({ year }: { year: number }) {
           </CardTitle>
           <ExportButtons data={feeCollectionTrend} sheetName="FeeTrend" fileName={`FeeTrend_${year}`}
             pdfTitle={`Fee Collection Trend - ${year}`}
-            headers={['Month', 'Expected', 'Collected', 'Rate %']}
-            rows={feeCollectionTrend.map((r: any) => [r.name, r.expected?.toLocaleString(), r.collected?.toLocaleString(), `${r.rate}%`])} />
+            headers={feeTrendHeaders}
+            rows={feeTrendRows}
+            onPrint={printFeeTrend} />
         </CardHeader>
         <CardContent className="pt-0 pb-4">
           <ResponsiveContainer width="100%" height={280}>
@@ -2296,8 +2540,9 @@ function AnalyticsTab({ year }: { year: number }) {
           {expenseBreakdown?.length > 0 && (
             <ExportButtons data={expenseBreakdown} sheetName="ExpenseBreakdown" fileName={`ExpenseBreakdown_${year}`}
               pdfTitle={`Expense Breakdown - ${year}`}
-              headers={['Category', 'Total']}
-              rows={expenseBreakdown.map((e: any) => [e.name, e.total?.toLocaleString()])} />
+              headers={expenseBreakdownHeaders}
+              rows={expenseBreakdownRows}
+              onPrint={printExpenseBreakdown} />
           )}
         </CardHeader>
         <CardContent className="pt-0 pb-4">
@@ -2394,7 +2639,7 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function ExportButtons({ data, sheetName, fileName, pdfTitle, headers, rows, landscape }: any) {
+export function ExportButtons({ data, sheetName, fileName, pdfTitle, headers, rows, landscape, onPrint }: any) {
   return (
     <div className="flex gap-1.5 shrink-0">
       <Button variant="outline" size="sm" onClick={() => exportToExcel(data, sheetName, fileName)} disabled={!data?.length}>
@@ -2403,6 +2648,11 @@ export function ExportButtons({ data, sheetName, fileName, pdfTitle, headers, ro
       <Button variant="outline" size="sm" onClick={() => exportToPDF(pdfTitle, headers, rows, fileName, landscape)} disabled={!rows?.length}>
         <Download className="mr-1 h-3 w-3" /> PDF
       </Button>
+      {onPrint && (
+        <Button variant="outline" size="sm" onClick={onPrint} disabled={!rows?.length}>
+          <Printer className="mr-1 h-3 w-3" /> Print
+        </Button>
+      )}
     </div>
   );
 }

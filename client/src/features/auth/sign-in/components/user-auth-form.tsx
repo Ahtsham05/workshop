@@ -199,7 +199,7 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
 
         <Button
           type='submit'
-          className='h-11 w-full rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 text-sm text-white shadow-lg shadow-indigo-600/25 transition-all hover:from-indigo-600 hover:via-blue-600 hover:to-violet-600 hover:shadow-xl hover:brightness-110 dark:shadow-indigo-950/40'
+          className='h-11 w-full rounded-xl bg-neutral-900 text-sm text-white shadow-lg shadow-black/20 transition-all hover:bg-black hover:shadow-xl'
           disabled={isLoading}
         >
           {isLoading ? (

@@ -78,7 +78,9 @@ export default function ImageUpload({
           ? 'categories/fetch-image-from-search'
           : searchContext === 'subcategory'
             ? 'sub-categories/fetch-image-from-search'
-            : 'products/fetch-image-from-search'
+            : searchContext === 'brand'
+              ? 'brands/fetch-image-from-search'
+              : 'products/fetch-image-from-search'
 
       const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/${slug}`, {
         method: 'POST',

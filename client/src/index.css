@@ -216,13 +216,101 @@ body {
   --row-alt: var(--row-alt-dark, oklch(0.88 0.02 257 / 5%));
   --row-hover: var(--row-hover-dark, oklch(0.92 0.026 257 / 10%));
   --row-head: var(--row-head-dark, oklch(0.88 0.02 257 / 4%));
+
+  /* Re-declared here (identical formulas to the :root block above) so these
+     recompute wherever `.dark` matches nearest — not just on <html>. `:root` and
+     `.dark` both target the SAME element only when the class sits on <html>; there
+     `var(--background-base)` etc. already resolve correctly through plain same-
+     element cascade, with nothing here to override. But a `.dark` class nested
+     deeper in the tree (e.g. a subtree pinned to dark regardless of the page's own
+     mode) has no element matching `:root`, so without this block it would just
+     inherit whatever <html> already computed and never re-mix using its own
+     (dark) *-base tokens. Keep in sync with the :root copies above if either changes. */
+  --background: color-mix(in oklab, var(--branch-color) var(--branch-tint-bg), var(--background-base));
+  --card: color-mix(in oklab, var(--branch-color) var(--branch-tint-card), var(--card-base));
+  --sidebar-base-themed: color-mix(in oklab, var(--theme-color) var(--sidebar-theme-tint), var(--sidebar-base));
+  --sidebar: color-mix(in oklab, var(--branch-color) var(--branch-tint-sidebar), var(--sidebar-base-themed));
+  --accent: color-mix(in oklab, var(--theme-color) var(--accent-theme-tint), var(--accent-base));
+}
+
+/* Mirror of `.dark` above, for the opposite case: a subtree that must render LIGHT
+ * regardless of what `<html>` is set to (e.g. a panel deliberately pinned to a white
+ * background even while the rest of the app defaults to dark). `:root`'s bare
+ * declarations only apply to <html> itself, so without this class a nested light
+ * scope would just inherit <html>'s already-resolved dark values, the same gap
+ * `.dark` had before its own copies were added. Values here are literal duplicates
+ * of :root's — keep both in sync if either changes. Deliberately does not redeclare
+ * --branch-color / --theme-color / --sidebar-theme-tint / --accent-theme-tint: those
+ * are only ever set once, as an inline style on <html> by applyAppearance(), and a
+ * personal theme colour is designed to read the same regardless of light or dark
+ * (see THEME_COLORS in appearance.ts) — leaving them undeclared here lets them keep
+ * inheriting that single inline value instead of forking it. */
+.light {
+  --background-base: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card-base: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent-base: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+  --input-ring: oklch(0.704 0.04 256.788);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  --sidebar-base: oklch(0.245 0.072 264.2);
+  --sidebar-foreground: oklch(0.96 0.018 255.2);
+  --sidebar-primary: oklch(0.68 0.16 252);
+  --sidebar-primary-foreground: oklch(0.18 0.04 265);
+  --sidebar-accent: oklch(0.36 0.11 250.5);
+  --sidebar-accent-foreground: oklch(0.98 0.012 255);
+  --sidebar-border: oklch(1 0 0 / 14%);
+  --sidebar-ring: oklch(0.68 0.14 252);
+
+  --wa-panel: #f0f2f5;
+  --wa-hover: #f5f6f6;
+  --wa-active: #f0f2f5;
+  --wa-wallpaper: #efeae2;
+  --wa-bubble-out: #d9fdd3;
+  --wa-bubble-in: #ffffff;
+  --wa-muted: #667781;
+  --wa-accent: #00a884;
+
+  --branch-tint-bg: var(--branch-tint-bg-light, 0%);
+  --branch-tint-card: var(--branch-tint-card-light, 0%);
+  --branch-tint-sidebar: var(--branch-tint-sidebar-light, 0%);
+
+  --row-base: var(--row-base-light, transparent);
+  --row-alt: var(--row-alt-light, oklch(0.45 0.03 257 / 6%));
+  --row-hover: var(--row-hover-light, oklch(0.45 0.042 257 / 11%));
+  --row-head: var(--row-head-light, oklch(0.45 0.03 257 / 5%));
+
+  --background: color-mix(in oklab, var(--branch-color) var(--branch-tint-bg), var(--background-base));
+  --card: color-mix(in oklab, var(--branch-color) var(--branch-tint-card), var(--card-base));
+  --sidebar-base-themed: color-mix(in oklab, var(--theme-color) var(--sidebar-theme-tint), var(--sidebar-base));
+  --sidebar: color-mix(in oklab, var(--branch-color) var(--branch-tint-sidebar), var(--sidebar-base-themed));
+  --accent: color-mix(in oklab, var(--theme-color) var(--accent-theme-tint), var(--accent-base));
 }
 
 /* The branch tint is a screen affordance for spotting which branch you are in —
    never spend printer ink on it. Row stripes stay: they help on paper too. */
 @media print {
   :root,
-  .dark {
+  .dark,
+  .light {
     --branch-tint-bg: 0%;
     --branch-tint-card: 0%;
     --branch-tint-sidebar: 0%;

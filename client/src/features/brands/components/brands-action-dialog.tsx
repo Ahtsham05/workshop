@@ -325,6 +325,15 @@ export function BrandsActionDialog() {
                           currentImageUrl={field.value?.url || ''}
                           layout='compact'
                           uploadSlug='brands/upload-image'
+                          searchContext='brand'
+                          previewAlt='Brand logo'
+                          getSearchQuery={() => {
+                            const name = form.getValues('name')?.trim()
+                            if (!name) return ''
+                            // A bare brand name mostly returns product photos, not the
+                            // mark itself — "logo" steers every provider toward it.
+                            return /\blogo\b/i.test(name) ? name : `${name} logo`
+                          }}
                         />
                       </FormControl>
                       <FormMessage />

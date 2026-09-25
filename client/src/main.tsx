@@ -8,7 +8,7 @@ import { RouterProvider, createRouter, createHashHistory } from '@tanstack/react
 // import { useAuthStore } from '@/stores/authStore'
 // import { handleServerError } from '@/utils/handle-server-error'
 import { FontProvider } from './context/font-context'
-import { ThemeProvider } from './context/theme-context'
+import { ThemeProvider, applyStoredTheme } from './context/theme-context'
 import { AppearanceProvider } from './context/appearance-context'
 import { LanguageProvider } from './context/language-context'
 import { UrduDisplayProvider } from './context/urdu-display-context'
@@ -20,6 +20,10 @@ applyLanguageToDocument(getStoredLanguage())
 // known values so the first frame is already correct.
 import { applyStoredAppearance } from './lib/appearance'
 applyStoredAppearance()
+// Same idea for dark/light mode itself — paint the last known theme class before
+// React mounts so a full page load (e.g. the hard reload on logout) never flashes
+// the light tokens first. Kept in sync with the <ThemeProvider> props below.
+applyStoredTheme('dark', 'vite-ui-theme')
 import { AuthProvider } from './context/auth-context'
 import { PermissionWrapper } from './context/permission-wrapper'
 import { AuthErrorBoundary } from './components/auth-error-boundary'
@@ -59,7 +63,7 @@ if (!rootElement.innerHTML) {
         <AuthErrorBoundary>
           <AuthProvider>
             <PermissionWrapper>
-              <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
+              <ThemeProvider defaultTheme='dark' storageKey='vite-ui-theme'>
                 <AppearanceProvider>
                   <LanguageProvider>
                     <FontProvider>
