@@ -148,7 +148,7 @@ export function QuickLinksVoiceWidget() {
         <button
           type='button'
           title={`${t('Quick links & voice assistant')} (⌘.)`}
-          className='fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-violet-500 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95'
+          className='fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95'
           aria-label={t('Quick links & voice assistant')}
         >
           <Sparkles className='h-6 w-6' />
@@ -216,7 +216,7 @@ export function QuickLinksVoiceWidget() {
                   onClick={voice.startListening}
                   title={t('Start voice command')}
                   aria-label={t('Start voice command')}
-                  className='flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-violet-500 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95'
+                  className='flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95'
                 >
                   <Mic className='h-8 w-8' />
                 </button>

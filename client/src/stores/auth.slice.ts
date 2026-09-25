@@ -52,6 +52,22 @@ function loadInitialAuthData(): any | null {
   return null
 }
 
+/**
+ * Mirrors a field change onto the `user` blob cached in localStorage, which is what
+ * `loadInitialAuthData` reads back on the next boot. Without this, anything the user
+ * changes about themselves (photo, appearance) would revert on reload.
+ */
+function patchStoredUser(patch: Record<string, unknown>) {
+  const existingUser = localStorage.getItem('user')
+  if (!existingUser) return
+  try {
+    const parsedUser = JSON.parse(existingUser)
+    localStorage.setItem('user', JSON.stringify({ ...parsedUser, ...patch }))
+  } catch (error) {
+    console.warn('Failed to persist user changes in localStorage', error)
+  }
+}
+
 const initialState: AuthState = {
   data: loadInitialAuthData(),
   activeBranchId: localStorage.getItem('activeBranchId') || null,
@@ -127,6 +143,19 @@ const authSlice = createSlice({
         }
       }
     },
+    setUserPhoto(state, action: PayloadAction<{ url: string; publicId: string }>) {
+      if (state.data?.user) {
+        state.data.user.photo = action.payload
+        patchStoredUser({ photo: action.payload })
+      }
+    },
+    setUiPreferences(state, action: PayloadAction<object>) {
+      if (state.data?.user) {
+        const merged = { ...(state.data.user.uiPreferences ?? {}), ...action.payload }
+        state.data.user.uiPreferences = merged
+        patchStoredUser({ uiPreferences: merged })
+      }
+    },
     setActiveBranch(state, action: PayloadAction<{ id: string; name: string } | null>) {
       if (action.payload) {
         state.activeBranchId = action.payload.id;
@@ -177,6 +206,7 @@ const authSlice = createSlice({
   },
 });
 
-export const { setUser, setPreferredLanguage, setActiveBranch } = authSlice.actions;
+export const { setUser, setPreferredLanguage, setActiveBranch, setUserPhoto, setUiPreferences } =
+  authSlice.actions;
 
 export default authSlice.reducer;

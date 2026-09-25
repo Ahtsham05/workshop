@@ -74,6 +74,8 @@ module.exports.schoolTransactionService = require('./schoolTransaction.service.j
 module.exports.schoolRecurringExpenseService = require('./schoolRecurringExpense.service.js');
 module.exports.feeStructureService = require('./feeStructure.service.js');
 module.exports.feeVoucherService = require('./feeVoucher.service.js');
+module.exports.feePaymentService = require('./feePayment.service.js');
+module.exports.feeCollectionReportService = require('./feeCollectionReport.service.js');
 module.exports.feePaymentRequestService = require('./feePaymentRequest.service.js');
 module.exports.schoolAccountingService = require('./schoolAccounting.service.js');
 module.exports.schoolReportsService = require('./schoolReports.service.js');
@@ -123,6 +125,7 @@ module.exports.agentBillService = require('./agentBill.service.js');
 module.exports.recurringExpenseService = require('./recurringExpense.service.js');
 module.exports.communicationLogService = require('./communicationLog.service.js');
 module.exports.reminderService = require('./reminder.service.js');
+module.exports.noteService = require('./note.service.js');
 module.exports.leadService = require('./lead.service.js');
 module.exports.quickLinksService = require('./quickLinks.service.js');
 

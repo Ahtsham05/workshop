@@ -37,6 +37,8 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '@/stores/store';
 import { toast } from 'sonner';
 import { useFormatMoney } from '@/lib/format-money';
+import ReceiptRegister from './receipt-register';
+import FeeCollectionReports from './fee-collection-reports';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const PIE_COLORS = ['#10b981', '#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -45,7 +47,7 @@ const PIE_COLORS = ['#10b981', '#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4
 // ─── Exports ──────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 
-function exportToExcel(data: any[], sheetName: string, fileName: string) {
+export function exportToExcel(data: any[], sheetName: string, fileName: string) {
   import('xlsx').then((XLSX) => {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -55,7 +57,7 @@ function exportToExcel(data: any[], sheetName: string, fileName: string) {
   });
 }
 
-function exportToPDF(title: string, headers: string[], rows: string[][], fileName: string, landscape = false) {
+export function exportToPDF(title: string, headers: string[], rows: string[][], fileName: string, landscape = false) {
   import('jspdf').then(({ jsPDF }) => {
     import('jspdf-autotable').then(() => {
       const doc = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
@@ -81,6 +83,8 @@ function exportToPDF(title: string, headers: string[], rows: string[][], fileNam
 
 type TabKey =
   | 'fee-collection'
+  | 'collection-reports'
+  | 'receipt-register'
   | 'financial-monthly'
   | 'financial-daily'
   | 'financial-expense'
@@ -99,6 +103,8 @@ const DEFAULT_TAB: TabKey = 'fee-collection';
 
 const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: 'fee-collection', label: 'Fee Collection', icon: FileText },
+  { key: 'collection-reports', label: 'Collection Reports', icon: PieChart },
+  { key: 'receipt-register', label: 'Receipt Register', icon: Receipt },
   { key: 'financial-monthly', label: 'Monthly Income/Expense', icon: DollarSign },
   { key: 'financial-daily', label: 'Daily Collection', icon: CalendarClock },
   { key: 'financial-expense', label: 'Expense Report', icon: Receipt },
@@ -192,6 +198,14 @@ export default function FeeReports() {
         <TabsContent value="fee-collection" className="mt-4">
           <FeeCollectionTab year={year} month={month} classFilter={classFilter}
             setClassFilter={setClassFilter} classes={classes} orgName={org?.name || 'School'} />
+        </TabsContent>
+
+        <TabsContent value="collection-reports" className="mt-4">
+          <FeeCollectionReports />
+        </TabsContent>
+
+        <TabsContent value="receipt-register" className="mt-4">
+          <ReceiptRegister />
         </TabsContent>
 
         <TabsContent value="financial-monthly" className="mt-4">
@@ -2324,7 +2338,7 @@ function AnalyticsTab({ year }: { year: number }) {
 // ─── Shared Components ────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 
-function SummaryCard({ label, value, color, raw }: { label: string; value: any; color: string; raw?: boolean }) {
+export function SummaryCard({ label, value, color, raw }: { label: string; value: any; color: string; raw?: boolean }) {
   const formatMoney = useFormatMoney();
   return (
     <Card><CardContent className="pt-4 pb-3">
@@ -2336,7 +2350,7 @@ function SummaryCard({ label, value, color, raw }: { label: string; value: any; 
   );
 }
 
-function ReportTable({ headers, rows, footer }: { headers: string[]; rows: any[][]; footer?: any[] }) {
+export function ReportTable({ headers, rows, footer }: { headers: string[]; rows: any[][]; footer?: any[] }) {
   return (
     <div className="rounded-md border overflow-x-auto">
       <table className="w-full text-sm">
@@ -2366,7 +2380,7 @@ function ReportTable({ headers, rows, footer }: { headers: string[]; rows: any[]
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     paid: 'bg-green-100 text-green-700',
     unpaid: 'bg-red-100 text-red-700',
@@ -2380,7 +2394,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function ExportButtons({ data, sheetName, fileName, pdfTitle, headers, rows, landscape }: any) {
+export function ExportButtons({ data, sheetName, fileName, pdfTitle, headers, rows, landscape }: any) {
   return (
     <div className="flex gap-1.5 shrink-0">
       <Button variant="outline" size="sm" onClick={() => exportToExcel(data, sheetName, fileName)} disabled={!data?.length}>
@@ -2393,11 +2407,11 @@ function ExportButtons({ data, sheetName, fileName, pdfTitle, headers, rows, lan
   );
 }
 
-function Loading() {
+export function Loading() {
   return <div className="text-center py-16 text-muted-foreground text-sm">Loading report...</div>;
 }
 
-function EmptyState({ text }: { text?: string }) {
+export function EmptyState({ text }: { text?: string }) {
   return <div className="text-center py-16 text-muted-foreground text-sm">{text || 'No data available'}</div>;
 }
 

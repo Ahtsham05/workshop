@@ -64,9 +64,9 @@ body {
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
+  --background-base: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
+  --card-base: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.129 0.042 264.695);
@@ -76,12 +76,19 @@ body {
   --secondary-foreground: oklch(0.208 0.042 265.755);
   --muted: oklch(0.968 0.007 247.896);
   --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
+  /* Renamed to -base: --accent itself is derived further down (Appearance engine) as a
+     subtle theme-colour tint over this, so every Select/Command/DropdownMenu hover and
+     selected-item state follows the theme app-wide without each component changing. */
+  --accent-base: oklch(0.968 0.007 247.896);
   --accent-foreground: oklch(0.208 0.042 265.755);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
   --ring: oklch(0.704 0.04 256.788);
+  /* Text fields (Input/Textarea/Select) focus on this instead of --ring on purpose: --ring is
+     the theme colour once one is picked, which reads as too loud on a form field's own border —
+     see Settings → Appearance. --input-ring never changes with the theme. */
+  --input-ring: oklch(0.704 0.04 256.788);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -89,7 +96,7 @@ body {
   --chart-5: oklch(0.769 0.188 70.08);
 
   /* Sidebar: deep indigo panel (contrasts with white main area) + vivid hover/active */
-  --sidebar: oklch(0.245 0.072 264.2);
+  --sidebar-base: oklch(0.245 0.072 264.2);
   --sidebar-foreground: oklch(0.96 0.018 255.2);
   --sidebar-primary: oklch(0.68 0.16 252);
   --sidebar-primary-foreground: oklch(0.18 0.04 265);
@@ -110,9 +117,9 @@ body {
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
+  --background-base: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.14 0.04 259.21);
+  --card-base: oklch(0.14 0.04 259.21);
   --card-foreground: oklch(0.984 0.003 247.858);
   --popover: oklch(0.208 0.042 265.755);
   --popover-foreground: oklch(0.984 0.003 247.858);
@@ -122,19 +129,20 @@ body {
   --secondary-foreground: oklch(0.984 0.003 247.858);
   --muted: oklch(0.279 0.041 260.031);
   --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
+  --accent-base: oklch(0.279 0.041 260.031);
   --accent-foreground: oklch(0.984 0.003 247.858);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);
+  --input-ring: oklch(0.551 0.027 264.364);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
 
-  --sidebar: oklch(0.2 0.055 264.5);
+  --sidebar-base: oklch(0.2 0.055 264.5);
   --sidebar-foreground: oklch(0.96 0.016 255);
   --sidebar-primary: oklch(0.72 0.14 248);
   --sidebar-primary-foreground: oklch(0.16 0.045 265);
@@ -151,6 +159,74 @@ body {
   --wa-bubble-in: #202c33;
   --wa-muted: #8696a0;
   --wa-accent: #00a884;
+}
+
+/* ── Appearance engine ───────────────────────────────────────────────────────
+ *
+ * `src/lib/appearance.ts` writes the *-light / *-dark pairs below onto <html>;
+ * these rules pick the right half of each pair off the theme class, so switching
+ * day/night needs no JavaScript. Defaults here keep the app looking exactly as it
+ * did before anyone touched Settings → Appearance.
+ *
+ *  --branch-color      the active branch's colour (transparent = no branch colour)
+ *  --branch-tint-*     how much of it is mixed into each surface
+ *  --row-*             the table row / alternating row / hover / header colours
+ *  --theme-color       the signed-in user's own theme colour (transparent = default)
+ *  --sidebar-theme-tint how much of it washes the sidebar panel itself
+ * ──────────────────────────────────────────────────────────────────────────── */
+:root {
+  --branch-color: transparent;
+  --branch-tint-bg: var(--branch-tint-bg-light, 0%);
+  --branch-tint-card: var(--branch-tint-card-light, 0%);
+  --branch-tint-sidebar: var(--branch-tint-sidebar-light, 0%);
+
+  --theme-color: transparent;
+  --sidebar-theme-tint: 0%;
+  --accent-theme-tint: 0%;
+
+  --row-base: var(--row-base-light, transparent);
+  --row-alt: var(--row-alt-light, oklch(0.45 0.03 257 / 6%));
+  --row-hover: var(--row-hover-light, oklch(0.45 0.042 257 / 11%));
+  --row-head: var(--row-head-light, oklch(0.45 0.03 257 / 5%));
+
+  /* The branch colour is mixed into the three surfaces that frame the app. Text,
+     borders, inputs and buttons stay untouched so contrast never degrades. */
+  --background: color-mix(in oklab, var(--branch-color) var(--branch-tint-bg), var(--background-base));
+  --card: color-mix(in oklab, var(--branch-color) var(--branch-tint-card), var(--card-base));
+  /* The sidebar panel picks up the user's own theme colour first (a personal,
+     strong wash — this is the surface that panel, not just its active item, is
+     meant to visibly "be" the chosen colour), then the branch's identity colour
+     mixes in on top of that at its usual subtle strength, so both compose. */
+  --sidebar-base-themed: color-mix(in oklab, var(--theme-color) var(--sidebar-theme-tint), var(--sidebar-base));
+  --sidebar: color-mix(in oklab, var(--branch-color) var(--branch-tint-sidebar), var(--sidebar-base-themed));
+
+  /* Every Select/Command/DropdownMenu item's hover and selected-item background reads
+     --accent — a deliberately light wash (10%), not a solid fill, so a long options list
+     doesn't turn into a wall of saturated colour. Text stays on --accent-foreground
+     unchanged; a 10% tint never needs a different foreground to stay readable. */
+  --accent: color-mix(in oklab, var(--theme-color) var(--accent-theme-tint), var(--accent-base));
+}
+
+.dark {
+  --branch-tint-bg: var(--branch-tint-bg-dark, 0%);
+  --branch-tint-card: var(--branch-tint-card-dark, 0%);
+  --branch-tint-sidebar: var(--branch-tint-sidebar-dark, 0%);
+
+  --row-base: var(--row-base-dark, transparent);
+  --row-alt: var(--row-alt-dark, oklch(0.88 0.02 257 / 5%));
+  --row-hover: var(--row-hover-dark, oklch(0.92 0.026 257 / 10%));
+  --row-head: var(--row-head-dark, oklch(0.88 0.02 257 / 4%));
+}
+
+/* The branch tint is a screen affordance for spotting which branch you are in —
+   never spend printer ink on it. Row stripes stay: they help on paper too. */
+@media print {
+  :root,
+  .dark {
+    --branch-tint-bg: 0%;
+    --branch-tint-card: 0%;
+    --branch-tint-sidebar: 0%;
+  }
 }
 
 @theme inline {
@@ -179,6 +255,7 @@ body {
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-input-ring: var(--input-ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -209,6 +286,27 @@ body {
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
+  /* WebKit fallback for the rule above: some Chromium builds ignore
+   * scrollbar-width/scrollbar-color and fall back to the classic OS
+   * scrollbar, whose square arrow buttons poke past rounded containers
+   * (e.g. the floating sidebar). Defining ::-webkit-scrollbar opts back
+   * into custom styling so the buttons can be switched off explicitly. */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
   html {
     @apply overflow-x-hidden;
   }
@@ -219,6 +317,27 @@ body {
   button:not(:disabled),
   [role='button']:not(:disabled) {
     cursor: pointer;
+  }
+
+  /* ── Table row colours ──────────────────────────────────────────────────
+   * Applies the user's row scheme to every table in the app at once (all of
+   * them render through <Table>, which stamps these data-slots).
+   *
+   * These live in @layer base ON PURPOSE: Tailwind utilities sit in a later
+   * layer, so any row that paints itself — a status colour, a selected row,
+   * a totals row — still wins over the scheme. The scheme only fills the rows
+   * nobody else has an opinion about.
+   * ─────────────────────────────────────────────────────────────────────── */
+  [data-slot='table-body'] > tr {
+    background-color: var(--row-base);
+  }
+
+  :root[data-row-zebra='on'] [data-slot='table-body'] > tr:nth-child(even) {
+    background-color: var(--row-alt);
+  }
+
+  [data-slot='table-header'] > tr {
+    background-color: var(--row-head);
   }
 
   /* Prevent focus zoom on mobile devices */
@@ -234,6 +353,25 @@ body {
 @utility container {
   margin-inline: auto;
   padding-inline: 2rem;
+}
+
+/* A popover/dropdown that visually belongs to the sidebar (the profile menu, the team
+ * switcher, the branch switcher, a collapsed group's flyout submenu) rather than to the
+ * main content area — so it should pick up the sidebar's own colours (including the
+ * user's theme tint) instead of the generic white popover. Every Radix primitive that
+ * reads --popover/--accent/--border for its background, hover state and outline picks
+ * this up automatically from any depth, with no per-item className changes needed. */
+@utility sidebar-popover-theme {
+  --popover: var(--sidebar);
+  --popover-foreground: var(--sidebar-foreground);
+  /* Several shared primitives (e.g. cmdk's CommandGroup) set their text colour from
+     --foreground directly rather than --popover-foreground — remap it too, or their text
+     stays the app's normal dark colour instead of following the sidebar. */
+  --foreground: var(--sidebar-foreground);
+  --accent: var(--sidebar-accent);
+  --accent-foreground: var(--sidebar-accent-foreground);
+  --border: var(--sidebar-border);
+  --muted-foreground: var(--sidebar-foreground);
 }
 
 @utility no-scrollbar {
@@ -365,4 +503,120 @@ body {
     size: A4 landscape;
     margin: 10mm;
   }
+}
+
+/* ── Notepad editor content ────────────────────────────────────────────────
+   Styling for the contentEditable body in features/notepad. Tailwind classes
+   cannot reach markup that document.execCommand generates at runtime (h1, ul,
+   blockquote, pre …), so those elements are styled here against the theme
+   tokens, which keeps them correct in both light and dark mode. */
+.notepad-content {
+  word-break: break-word;
+}
+
+.notepad-content h1 {
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.6em 0 0.3em;
+}
+
+.notepad-content h2 {
+  font-size: 1.22em;
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 0.55em 0 0.25em;
+}
+
+.notepad-content ul,
+.notepad-content ol {
+  padding-inline-start: 1.5em;
+  margin: 0.25em 0;
+}
+
+.notepad-content ul {
+  list-style: disc;
+}
+
+.notepad-content ol {
+  list-style: decimal;
+}
+
+.notepad-content li {
+  margin: 0.12em 0;
+}
+
+.notepad-content blockquote {
+  border-inline-start: 3px solid var(--border);
+  padding-inline-start: 0.9em;
+  margin: 0.4em 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.notepad-content pre {
+  background: var(--muted);
+  border-radius: 0.5rem;
+  padding: 0.6em 0.8em;
+  margin: 0.4em 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+}
+
+.notepad-content hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0.9em 0;
+}
+
+.notepad-content a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+/* Checklist lines. The tick box is a ::before marker rather than a real input:
+   an <input> inside contentEditable is selectable, deletable and copied into
+   the text, while a marker cannot be broken by typing. editor-commands.ts
+   toggles data-checked when a click lands in this 26px gutter. */
+.notepad-content [data-note-check] {
+  position: relative;
+  padding-inline-start: 1.75rem;
+  min-height: 1.5em;
+}
+
+.notepad-content [data-note-check]::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0.1rem;
+  top: 0.28em;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid var(--muted-foreground);
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+.notepad-content [data-note-check][data-checked='true']::before {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+/* The tick itself — a rotated L drawn over the filled box. */
+.notepad-content [data-note-check][data-checked='true']::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0.42rem;
+  top: 0.42em;
+  width: 0.3rem;
+  height: 0.6rem;
+  border-inline-end: 2px solid var(--primary-foreground);
+  border-bottom: 2px solid var(--primary-foreground);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.notepad-content [data-note-check][data-checked='true'] {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
 }

@@ -39,7 +39,7 @@ export function ProfitTrendChart({ args }: { args: Record<string, unknown> }) {
             }}
             contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', fontSize: 12 }}
           />
-          <Line type='monotone' dataKey='profit' stroke='#8b5cf6' strokeWidth={2} dot={false} />
+          <Line type='monotone' dataKey='profit' stroke='var(--chart-theme-primary, #8b5cf6)' strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>

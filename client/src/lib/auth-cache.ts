@@ -1,5 +1,6 @@
 import { getElectronAPI, isElectronApp } from '@/lib/sync/electron'
 import { ENCRYPTED_TOKEN_PREFIX, looksLikeJwt } from '@/lib/auth-token'
+import { clearStoredAppearance } from '@/lib/appearance'
 
 export const AUTH_CACHE_KEYS = {
   user: 'cached_user',
@@ -92,6 +93,10 @@ export function clearAllAuthStorage(): void {
   localStorage.removeItem('activeBranchId')
   localStorage.removeItem('activeBranchName')
   localStorage.removeItem('offlineMode')
+  // The appearance cache belongs to the person who just signed out — leaving it
+  // behind would paint the next user's first screens with someone else's colours.
+  // Their own copy is restored from their account when they sign in.
+  clearStoredAppearance()
   clearAuthCache()
 }
 

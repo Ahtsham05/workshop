@@ -73,9 +73,9 @@ export function RevenueChart({ dateRange }: Props) {
               contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
             />
             <Legend />
-            <Bar 
-              dataKey='revenue' 
-              fill='#3b82f6' 
+            <Bar
+              dataKey='revenue'
+              fill='var(--chart-theme-primary, #3b82f6)'
               radius={[8, 8, 0, 0]}
               name={t('Revenue')}
             />

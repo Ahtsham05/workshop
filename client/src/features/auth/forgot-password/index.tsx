@@ -1,44 +1,26 @@
 import { Link } from '@tanstack/react-router'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import AuthLayout from '../auth-layout'
 import { ForgotPasswordForm } from './components/forgot-password-form'
 
 export default function ForgotPassword() {
   return (
-    <AuthLayout>
-      <Card className='gap-4'>
-        <CardHeader>
-          <CardTitle className='text-lg tracking-tight'>
-            Forgot Password
-          </CardTitle>
-          <CardDescription>
-            Enter your registered email and <br /> we will send you a link to
-            reset your password.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ForgotPasswordForm />
-        </CardContent>
-        <CardFooter>
-          <p className='text-muted-foreground px-8 text-center text-sm'>
-            Don't have an account?{' '}
-            <Link
-              to='/sign-up'
-              className='hover:text-primary underline underline-offset-4'
-            >
-              Sign up
-            </Link>
-            .
-          </p>
-        </CardFooter>
-      </Card>
+    <AuthLayout
+      title='Forgot your password?'
+      description='Enter your registered email and we will send you a link to reset it.'
+      footer={
+        <p className='text-center text-sm'>
+          <span className='text-muted-foreground'>Remembered it? </span>
+          <Link
+            to='/sign-in'
+            search={{ redirect: '/' }}
+            className='text-primary font-medium underline-offset-4 hover:underline'
+          >
+            Back to sign in
+          </Link>
+        </p>
+      }
+    >
+      <ForgotPasswordForm />
     </AuthLayout>
   )
 }

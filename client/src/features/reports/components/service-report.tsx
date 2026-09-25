@@ -313,7 +313,7 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
                       <XAxis dataKey='_id' tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip formatter={(v: number) => fmt(v)} />
-                      <Bar dataKey='totalAmount' name='Revenue' fill='#3b82f6' radius={[3, 3, 0, 0]} />
+                      <Bar dataKey='totalAmount' name='Revenue' fill='var(--chart-theme-primary, #3b82f6)' radius={[3, 3, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>

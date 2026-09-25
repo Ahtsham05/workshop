@@ -6,16 +6,23 @@ import { Button } from './ui/button'
 type PasswordInputProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   'type'
->
+> & {
+  /** Classes for the <input> itself. `className` styles the wrapper, which cannot
+   *  change the field's height or padding — auth screens need both. */
+  inputClassName?: string
+}
 
 const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
-  ({ className, disabled, ...props }, ref) => {
+  ({ className, inputClassName, disabled, ...props }, ref) => {
     const [showPassword, setShowPassword] = React.useState(false)
     return (
       <div className={cn('relative rounded-md', className)}>
         <input
           type={showPassword ? 'text' : 'password'}
-          className='border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50'
+          className={cn(
+            'border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+            inputClassName
+          )}
           ref={ref}
           disabled={disabled}
           {...props}

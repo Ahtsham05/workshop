@@ -15,7 +15,7 @@ import { formatBusinessDate } from '@/lib/business-timezone'
 import { cn } from '@/lib/utils'
 import type { ProductAnalyticsResponse } from '@/stores/productAnalytics.api'
 import { MovementBadge, AbcBadge } from '../../analytics/components/analytics-badges'
-import { ProductThumb } from '../../analytics/components/product-thumb'
+import { ImageGalleryViewer } from '@/components/image-gallery-viewer'
 import { formatPct, formatQty } from '../../analytics/lib/analytics-format'
 import { suggestReorderQuantity } from '../lib/reorder'
 
@@ -110,7 +110,7 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit }: Props) {
         {/* Identity + actions */}
         <div className='flex flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-start md:justify-between'>
           <div className='flex min-w-0 items-start gap-4'>
-            <ProductThumb url={product.image?.url} name={product.name} size='lg' />
+            <ImageGalleryViewer images={product.images ?? []} fallbackUrl={product.image?.url} name={product.name} size='lg' />
             <div className='min-w-0 space-y-2'>
               <div>
                 <div className='flex min-w-0 flex-wrap items-center gap-2'>

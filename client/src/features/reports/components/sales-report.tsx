@@ -552,7 +552,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 <YAxis />
                 <Tooltip formatter={(value: number) => formatCurrency(value)} />
                 <Legend />
-                <Bar dataKey='totalSales' fill='#3b82f6' name={t('sales')} />
+                <Bar dataKey='totalSales' fill='var(--chart-theme-primary, #3b82f6)' name={t('sales')} />
                 <Bar dataKey='totalProfit' fill='#10b981' name={t('profit')} />
               </BarChart>
             </ResponsiveContainer>

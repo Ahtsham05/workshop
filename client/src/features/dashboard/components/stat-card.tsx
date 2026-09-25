@@ -86,6 +86,9 @@ function StatCardContent({
   inlineHeaderOnMobile = false,
   interactive = false,
 }: Omit<StatCardProps, 'isLoading' | 'link' | 'onClick'> & { interactive?: boolean }) {
+  // Dashboard cards keep each tone's own distinct colour on purpose — user tried the
+  // theme-follows-everything version and asked for these specifically to stay as they
+  // were (2026-09-24). Do not wrap this in --chart-theme-primary again.
   const color = toneColor(tone)
   const isPositive = trend === 'up' || (change !== undefined && change >= 0)
   const displayValue = formatValue(value, valuePrefix, valueSuffix)

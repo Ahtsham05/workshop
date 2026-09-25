@@ -30,6 +30,15 @@ export const productSchema = z.object({
     url: z.string(),
     publicId: z.string(),
   }).optional(), // product image is optional
+  // Ordered photo gallery; images[0] is the same photo as `image` above.
+  images: z.array(z.object({
+    url: z.string(),
+    publicId: z.string().optional(),
+    source: z.string().optional(),
+    sourceUrl: z.string().optional(),
+    width: z.number().nullable().optional(),
+    height: z.number().nullable().optional(),
+  })).optional(),
   categories: z.array(z.object({
     _id: z.string(),
     name: z.string(),

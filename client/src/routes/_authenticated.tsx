@@ -22,6 +22,8 @@ import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 import { useReminderWatchdog } from '@/hooks/use-reminder-watchdog'
 import { ReminderAlarmSplash } from '@/components/reminder-alarm-splash'
 import { QuickLinksVoiceWidget } from '@/components/quick-links-voice-widget'
+import { NotepadProvider } from '@/features/notepad/context/notepad-context'
+import { NotepadWindow } from '@/features/notepad/components/notepad-window'
 
 /**
  * Authenticated layout component.
@@ -68,9 +70,12 @@ function AuthenticatedLayout() {
       <TrialExpirationBoundary>
         <PermissionWrapper>
           <WhatsAppProvider>
-            <PortalShell>
-              <Outlet />
-            </PortalShell>
+            <NotepadProvider>
+              <PortalShell>
+                <Outlet />
+              </PortalShell>
+              <NotepadWindow />
+            </NotepadProvider>
           </WhatsAppProvider>
         </PermissionWrapper>
       </TrialExpirationBoundary>
@@ -81,22 +86,27 @@ function AuthenticatedLayout() {
     <TrialExpirationBoundary>
       <PermissionWrapper>
         <WhatsAppProvider>
-          <SidebarProvider>
-          <AppSidebar />
-          <div className="min-w-0 flex-1 overflow-hidden flex flex-col">
-            <AuthenticatedHeader showSearch={!isTeacher} />
-            <PushNotificationPrompt message="Enable browser notifications so reminder alarms reach you even when this tab is in the background." />
-            <LocalDatabaseSetupBanner />
-            <Main
-              className={cn(
-                'min-h-0 flex-1 overflow-auto',
-                isWhatsAppInbox && 'peer-[.header-fixed]/header:mt-0',
-              )}
-            >
-              <Outlet />
-            </Main>
-          </div>
-        </SidebarProvider>
+          {/* Mounted around the shell, not inside a page: the notepad has to stay
+              alive across navigation so an open note survives changing screens. */}
+          <NotepadProvider>
+            <SidebarProvider>
+              <AppSidebar />
+              <div className="min-w-0 flex-1 overflow-hidden flex flex-col">
+                <AuthenticatedHeader showSearch={!isTeacher} />
+                <PushNotificationPrompt message="Enable browser notifications so reminder alarms reach you even when this tab is in the background." />
+                <LocalDatabaseSetupBanner />
+                <Main
+                  className={cn(
+                    'min-h-0 flex-1 overflow-auto',
+                    isWhatsAppInbox && 'peer-[.header-fixed]/header:mt-0',
+                  )}
+                >
+                  <Outlet />
+                </Main>
+              </div>
+            </SidebarProvider>
+            <NotepadWindow />
+          </NotepadProvider>
         </WhatsAppProvider>
       </PermissionWrapper>
       {ringingReminder && (

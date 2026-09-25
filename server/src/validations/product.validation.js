@@ -75,6 +75,21 @@ const createProduct = {
       url: Joi.string(),
       publicId: Joi.string(),
     }).optional(),
+    // Ordered gallery; images[0] is the primary and is mirrored back into `image` by the
+    // Product schema hooks — see product.model.js. Capped to match MAX_PRODUCT_IMAGES.
+    images: Joi.array()
+      .items(
+        Joi.object().keys({
+          url: Joi.string().required(),
+          publicId: Joi.string().allow('').optional(),
+          source: Joi.string().allow('').max(40).optional(),
+          sourceUrl: Joi.string().allow('').max(500).optional(),
+          width: Joi.number().allow(null).optional(),
+          height: Joi.number().allow(null).optional(),
+        }),
+      )
+      .max(8)
+      .optional(),
     unit: Joi.string().allow('').optional(),
     unitConversions: Joi.array().items(unitConversionSchema).optional(),
     hasVariants: Joi.boolean().optional(),
@@ -256,6 +271,21 @@ const updateProduct = {
       url: Joi.string(),
       publicId: Joi.string(),
     }).optional(),
+    // Ordered gallery; images[0] is the primary and is mirrored back into `image` by the
+    // Product schema hooks — see product.model.js. Capped to match MAX_PRODUCT_IMAGES.
+    images: Joi.array()
+      .items(
+        Joi.object().keys({
+          url: Joi.string().required(),
+          publicId: Joi.string().allow('').optional(),
+          source: Joi.string().allow('').max(40).optional(),
+          sourceUrl: Joi.string().allow('').max(500).optional(),
+          width: Joi.number().allow(null).optional(),
+          height: Joi.number().allow(null).optional(),
+        }),
+      )
+      .max(8)
+      .optional(),
     unit: Joi.string().allow(''),
     unitConversions: Joi.array().items(unitConversionSchema),
     hasVariants: Joi.boolean().optional(),

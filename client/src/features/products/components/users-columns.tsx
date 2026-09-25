@@ -4,8 +4,9 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Package, ShieldCheck, Fingerprint, Layers, Clock, MapPin } from 'lucide-react'
+import { ShieldCheck, Fingerprint, Layers, Clock, MapPin } from 'lucide-react'
 import LongText from '@/components/long-text'
+import { ImageGalleryViewer } from '@/components/image-gallery-viewer'
 import { ColorDot } from '@/components/color-swatch-picker'
 import { FlagBadge } from '@/components/flag-badge'
 import { ActiveToggleCell } from './active-toggle-cell'
@@ -64,17 +65,15 @@ export const useProductColumns = (
       const urdu = showUrdu ? product.nameUrdu?.trim() : undefined
       return (
         <div className='flex min-w-0 items-center gap-2'>
-          {product.image?.url ? (
-            <img
-              src={product.image.url}
-              alt={product.name}
-              className='h-8 w-8 flex-shrink-0 rounded-full object-cover'
-            />
-          ) : (
-            <div className='flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gray-100 to-gray-200'>
-              <Package className='h-4 w-4 text-gray-400' />
-            </div>
-          )}
+          {/* Click opens the full-size viewer — with several photos a shop often needs a
+              closer look to tell two similar products apart from the row alone. */}
+          <ImageGalleryViewer
+            images={product.images ?? []}
+            fallbackUrl={product.image?.url}
+            name={product.name}
+            size='sm'
+            className='rounded-full'
+          />
           <div className='flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5'>
             <ColorDot hex={product.color} />
             <LongText

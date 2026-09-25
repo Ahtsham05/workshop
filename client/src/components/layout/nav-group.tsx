@@ -208,7 +208,7 @@ const SidebarMenuCollapsedDropdown = ({
             <ChevronRight className='ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90' />
           </SidebarMenuButton>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side='right' align='start' sideOffset={4}>
+        <DropdownMenuContent side='right' align='start' sideOffset={4} className='sidebar-popover-theme'>
           <DropdownMenuLabel>
             {t(item.title)} {item.badge ? `(${item.badge})` : ''}
           </DropdownMenuLabel>

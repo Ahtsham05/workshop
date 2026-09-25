@@ -113,6 +113,12 @@ export interface SetupOrganizationRequest {
   taxNumber?: string;
   website?: string;
   description?: string;
+  /** Picked during onboarding (or derived from the chosen country) so money, dates and
+   *  tax start out right instead of defaulting to US settings. */
+  baseCurrency?: string;
+  locale?: string;
+  dateFormat?: string;
+  taxSystem?: string;
   logoFile?: File | null;
 }
 
@@ -137,6 +143,10 @@ export const organizationApi = createApi({
         if (body.taxNumber) formData.append('taxNumber', body.taxNumber);
         if (body.website) formData.append('website', body.website);
         if (body.description) formData.append('description', body.description);
+        if (body.baseCurrency) formData.append('baseCurrency', body.baseCurrency);
+        if (body.locale) formData.append('locale', body.locale);
+        if (body.dateFormat) formData.append('dateFormat', body.dateFormat);
+        if (body.taxSystem) formData.append('taxSystem', body.taxSystem);
         if (body.logoFile) formData.append('logo', body.logoFile);
 
         return {

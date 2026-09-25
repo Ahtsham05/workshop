@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useSearch, useNavigate } from '@tanstack/react-router'
-import { IconBrandFacebook, IconBrandGithub } from '@tabler/icons-react'
+import { ArrowRight, Loader2, Lock, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,8 +14,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
-import { PasswordInput } from '@/components/password-input'
+import { AuthInput, AuthPasswordInput } from '../../components/auth-fields'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { signinWithEmailPassword, setActiveBranch } from '@/stores/auth.slice'
@@ -134,11 +133,13 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
       }
 
       const err = error as { response?: { data?: { message?: string } }; message?: string }
-      const message =
-        err?.response?.data?.message ||
-        err?.message ||
-        'Incorrect email/user ID or password. Please try again.'
-      toast.error(message)
+      // The global error slice (utils/errorHandler -> setError) already toasts the
+      // server's message, so only fill the gap when there isn't one.
+      if (!err?.response?.data?.message) {
+        toast.error(
+          err?.message || 'Incorrect email/user ID or password. Please try again.'
+        )
+      }
     } finally {
       setIsLoading(false)
     }
@@ -148,7 +149,7 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className={cn('grid gap-3', className)}
+        className={cn('grid gap-5', className)}
         {...props}
       >
         <FormField
@@ -158,7 +159,12 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
             <FormItem>
               <FormLabel>Email or User ID</FormLabel>
               <FormControl>
-                <Input placeholder='name@example.com or 100001' {...field} />
+                <AuthInput
+                  icon={User}
+                  autoComplete='username'
+                  placeholder='name@example.com or 100001'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -168,44 +174,46 @@ export function UserAuthForm({ className, ...props }: UserAuthFormProps) {
           control={form.control}
           name='password'
           render={({ field }) => (
-            <FormItem className='relative'>
-              <FormLabel>Password</FormLabel>
+            <FormItem>
+              <div className='flex items-center justify-between'>
+                <FormLabel>Password</FormLabel>
+                <Link
+                  to='/forgot-password'
+                  className='text-muted-foreground hover:text-foreground text-xs font-medium'
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <FormControl>
-                <PasswordInput placeholder='********' {...field} />
+                <AuthPasswordInput
+                  icon={Lock}
+                  autoComplete='current-password'
+                  placeholder='Enter your password'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
-              <Link
-                to='/forgot-password'
-                className='text-muted-foreground absolute -top-0.5 right-0 text-sm font-medium hover:opacity-75'
-              >
-                Forgot password?
-              </Link>
             </FormItem>
           )}
         />
-        <Button type='submit' className='mt-2' disabled={isLoading}>
-          Login
+
+        <Button
+          type='submit'
+          className='h-11 w-full rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-violet-600 text-sm text-white shadow-lg shadow-indigo-600/25 transition-all hover:from-indigo-600 hover:via-blue-600 hover:to-violet-600 hover:shadow-xl hover:brightness-110 dark:shadow-indigo-950/40'
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className='h-4 w-4 animate-spin' />
+              Signing in…
+            </>
+          ) : (
+            <>
+              Sign in
+              <ArrowRight className='h-4 w-4' />
+            </>
+          )}
         </Button>
-
-        <div className='relative my-2'>
-          <div className='absolute inset-0 flex items-center'>
-            <span className='w-full border-t' />
-          </div>
-          <div className='relative flex justify-center text-xs uppercase'>
-            <span className='bg-background text-muted-foreground px-2'>
-              Or continue with
-            </span>
-          </div>
-        </div>
-
-        <div className='grid grid-cols-2 gap-2'>
-          <Button variant='outline' type='button' disabled={isLoading}>
-            <IconBrandGithub className='h-4 w-4' /> GitHub
-          </Button>
-          <Button variant='outline' type='button' disabled={isLoading}>
-            <IconBrandFacebook className='h-4 w-4' /> Facebook
-          </Button>
-        </div>
       </form>
     </Form>
   )

@@ -376,7 +376,7 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(value: number) => fmt(value)} />
                   <Legend />
-                  <Bar dataKey='Bill Amt' fill='#3b82f6' radius={[3, 3, 0, 0]} />
+                  <Bar dataKey='Bill Amt' fill='var(--chart-theme-primary, #3b82f6)' radius={[3, 3, 0, 0]} />
                   <Bar dataKey='Service Charges' fill='#10b981' radius={[3, 3, 0, 0]} />
                   <Bar dataKey='Collection' fill='#8b5cf6' radius={[3, 3, 0, 0]} />
                 </BarChart>

@@ -369,7 +369,7 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
                     formatter={(value: number, name: string) => [fmt(value), name]}
                   />
                   <Legend />
-                  <Bar dataKey='investment' name='Investment' fill='#3b82f6' radius={[4, 4, 0, 0]} />
+                  <Bar dataKey='investment' name='Investment' fill='var(--chart-theme-primary, #3b82f6)' radius={[4, 4, 0, 0]} />
                   <Bar dataKey='profit' name='Profit' fill='#22c55e' radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -396,7 +396,7 @@ export const RoiReport = forwardRef<{ exportToExcel: () => void }, RoiReportProp
                     type='monotone'
                     dataKey='roi'
                     name='ROI %'
-                    stroke='#8b5cf6'
+                    stroke='var(--chart-theme-primary, #8b5cf6)'
                     strokeWidth={2}
                     dot={{ r: 4 }}
                     activeDot={{ r: 6 }}

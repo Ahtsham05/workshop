@@ -1133,6 +1133,11 @@ const getProductAnalytics = async ({ organizationId, branchId, productId, query 
       nameUrdu: product.nameUrdu || '',
       description: product.description || '',
       image: product.image && product.image.url ? product.image : null,
+      // Full gallery for the detail page's photo viewer; falls back to the single
+      // legacy `image` above for products created before galleries existed.
+      images: Array.isArray(product.images)
+        ? product.images.filter((entry) => entry && entry.url).map((entry) => ({ url: entry.url, sourceUrl: entry.sourceUrl || '' }))
+        : [],
       barcode: product.barcode || '',
       sku: product.sku || '',
       unit: product.unit,

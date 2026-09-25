@@ -299,7 +299,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                 <XAxis dataKey='date' />
                 <YAxis />
                 <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                <Bar dataKey='amount' fill='#f97316' name={t('amount')} />
+                <Bar dataKey='amount' fill='var(--chart-theme-primary, #f97316)' name={t('amount')} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

@@ -1,48 +1,38 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Link } from '@tanstack/react-router'
 import AuthLayout from '../auth-layout'
 import { UserAuthForm } from './components/user-auth-form'
 
 export default function SignIn() {
   return (
-    <AuthLayout>
-      <Card className='gap-4'>
-        <CardHeader>
-          <CardTitle className='text-lg tracking-tight'>Login</CardTitle>
-          <CardDescription>
-            Enter your email and password below to <br />
-            log into your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UserAuthForm />
-        </CardContent>
-        <CardFooter>
-          <p className='text-muted-foreground px-8 text-center text-sm'>
-            By clicking login, you agree to our{' '}
-            <a
-              href='/terms'
-              className='hover:text-primary underline underline-offset-4'
+    <AuthLayout
+      title='Welcome back'
+      description='Sign in to your Logix Plus account to pick up where you left off.'
+      footer={
+        <div className='space-y-4 text-center'>
+          <p className='text-sm'>
+            <span className='text-muted-foreground'>New to Logix Plus? </span>
+            <Link
+              to='/sign-up'
+              className='text-primary font-medium underline-offset-4 hover:underline'
             >
+              Create an account
+            </Link>
+          </p>
+          <p className='text-muted-foreground text-xs'>
+            By signing in you agree to our{' '}
+            <a href='/terms' className='underline underline-offset-4 hover:text-foreground'>
               Terms of Service
             </a>{' '}
             and{' '}
-            <a
-              href='/privacy'
-              className='hover:text-primary underline underline-offset-4'
-            >
+            <a href='/privacy' className='underline underline-offset-4 hover:text-foreground'>
               Privacy Policy
             </a>
             .
           </p>
-        </CardFooter>
-      </Card>
+        </div>
+      }
+    >
+      <UserAuthForm />
     </AuthLayout>
   )
 }

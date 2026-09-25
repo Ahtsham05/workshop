@@ -63,18 +63,23 @@ const PRICE_TONE_TEXT: Record<string, string> = {
 // (see invoice-panel.tsx): a light tint + thin border, not a filled/shadowed badge.
 const PURCHASE_TYPE_STYLES: Record<'cash' | 'credit', { active: string; icon: string }> = {
   cash: {
-    active: 'border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400',
-    icon: 'text-green-600 dark:text-green-400',
+    active:
+      'border-[var(--chart-theme-primary,var(--color-green-300))] bg-[var(--chart-theme-primary-tint,var(--color-green-50))] text-[var(--chart-theme-primary,var(--color-green-700))] dark:border-[var(--chart-theme-primary,var(--color-green-800))] dark:bg-[var(--chart-theme-primary,var(--color-green-950))]/30 dark:text-[var(--chart-theme-primary,var(--color-green-400))]',
+    icon: 'text-[var(--chart-theme-primary,var(--color-green-600))] dark:text-[var(--chart-theme-primary,var(--color-green-400))]',
   },
   credit: {
-    active: 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400',
-    icon: 'text-blue-600 dark:text-blue-400',
+    active:
+      'border-[var(--chart-theme-primary,var(--color-blue-300))] bg-[var(--chart-theme-primary-tint,var(--color-blue-50))] text-[var(--chart-theme-primary,var(--color-blue-700))] dark:border-[var(--chart-theme-primary,var(--color-blue-800))] dark:bg-[var(--chart-theme-primary,var(--color-blue-950))]/30 dark:text-[var(--chart-theme-primary,var(--color-blue-400))]',
+    icon: 'text-[var(--chart-theme-primary,var(--color-blue-600))] dark:text-[var(--chart-theme-primary,var(--color-blue-400))]',
   },
 }
 
 // Solid badge color for the Summary card's Purchase Type tag — mirrors InvoicePanel's
 // own getTypeColor (see invoice-panel.tsx).
-const getPurchaseTypeColor = (type: string) => (type === 'credit' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800')
+const getPurchaseTypeColor = (type: string) =>
+  type === 'credit'
+    ? 'bg-[var(--chart-theme-primary-tint,var(--color-blue-100))] text-[var(--chart-theme-primary,var(--color-blue-800))]'
+    : 'bg-[var(--chart-theme-primary-tint,var(--color-green-100))] text-[var(--chart-theme-primary,var(--color-green-800))]'
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
 // array every render while the query is loading.

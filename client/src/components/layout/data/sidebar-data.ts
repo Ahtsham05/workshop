@@ -35,7 +35,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -67,6 +67,13 @@ export const sidebarData: SidebarData = {
         //   url: '/users',
         //   icon: IconUsers,
         // },
+        {
+          // No permission gate and no business-type filter: the notepad is
+          // personal scratch space every signed-in user gets, like /profile.
+          title: 'Notes',
+          url: '/notes',
+          icon: StickyNote,
+        },
         {
           title: 'AI Tools',
           icon: Bot,

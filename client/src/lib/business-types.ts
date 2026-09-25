@@ -13,6 +13,31 @@ export const BUSINESS_TYPE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ] as const
 
+/**
+ * What a brand-new account picks during onboarding. Deliberately three choices, not
+ * twelve: the value only decides which module set you get, and there are exactly three
+ * of those — the mobile-dealer tools, the school tools, and the standard ERP everyone
+ * else uses. The full BUSINESS_TYPE_OPTIONS list above still exists for accounts created
+ * before this and for editing the business profile later.
+ */
+export const ONBOARDING_BUSINESS_TYPES = [
+  {
+    value: 'retail',
+    label: 'Retail & Commerce',
+    description: 'Stores, wholesalers and service businesses — invoicing, inventory, purchasing and accounting.',
+  },
+  {
+    value: 'mobile_shop',
+    label: 'Mobile & Communication',
+    description: 'Phone dealers — IMEI/serial tracking, SIM sales, device trade-ins and carrier load.',
+  },
+  {
+    value: 'school',
+    label: 'Education',
+    description: 'Schools and academies — students, tuition billing, attendance, exams and the parent portal.',
+  },
+] as const
+
 const BUSINESS_TYPE_ALIASES: Record<string, string> = {
   mobileshope: 'mobile_shop',
   'mobile shop': 'mobile_shop',

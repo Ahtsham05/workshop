@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const { FeePaymentRequest, FeeVoucher } = require('../models');
 const ApiError = require('../utils/ApiError');
-const feeVoucherService = require('./feeVoucher.service');
+const feePaymentService = require('./feePayment.service');
 
 const getTenantFilter = (scope = {}) => {
   const filter = {};
@@ -96,9 +96,10 @@ const countPending = async (scope = {}) =>
   FeePaymentRequest.countDocuments({ ...getTenantFilter(scope), status: 'pending' });
 
 /**
- * Approve a payment request: mark every still-payable voucher as paid
- * (reusing feeVoucherService.payVoucher so transactions + accounting post),
- * then flag the request approved.
+ * Approve a payment request: mark every still-payable voucher as paid,
+ * as a single receipt (one FeePayment covering every voucher the parent's
+ * transfer settled, via feePaymentService.recordFeePayment), then flag the
+ * request approved.
  */
 const approveRequest = async (id, scope = {}, reviewer = {}) => {
   const request = await FeePaymentRequest.findOne({
@@ -117,6 +118,8 @@ const approveRequest = async (id, scope = {}, reviewer = {}) => {
     createdBy: reviewer.userId,
   };
 
+  const payableVoucherIds = [];
+  let totalRemaining = 0;
   for (const voucherId of request.voucherIds) {
     const voucher = await FeeVoucher.findOne({ _id: voucherId, organizationId: request.organizationId });
     if (!voucher) continue;
@@ -126,10 +129,16 @@ const approveRequest = async (id, scope = {}, reviewer = {}) => {
     const remaining = Math.max(0, net - (voucher.paidAmount || 0));
     if (remaining <= 0) continue;
 
-    await feeVoucherService.payVoucher(
-      voucher._id.toString(),
+    payableVoucherIds.push(voucher._id);
+    totalRemaining += remaining;
+  }
+
+  if (payableVoucherIds.length) {
+    await feePaymentService.recordFeePayment(
+      request.studentId,
       {
-        amount: remaining,
+        amount: totalRemaining,
+        voucherIds: payableVoucherIds,
         paymentMethod: 'bank_transfer',
         remarks: `Online payment approved${request.transactionRef ? ` (Ref: ${request.transactionRef})` : ''}`,
       },

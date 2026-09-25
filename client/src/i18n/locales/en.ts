@@ -978,9 +978,9 @@ const en: Record<string, string> = {
     
     // Image upload functionality
     "product_image": "Product Image",
-    "product_photo_section_title": "Product photo",
+    "product_photo_section_title": "Product photos",
     "product_photo_section_description":
-      "Optional — use Find from name to search Pexels manually from the product name, or upload from your device, drag and drop, or use the camera.",
+      "Optional — search the web by name or barcode, upload from this device, drag and drop, or use the camera. The first photo is the main one shown in lists, the POS and on prints.",
     "upload_image": "Upload Image",
     "remove_image": "Remove Image",
     "drag_drop_image": "Drag & drop an image here",
@@ -996,6 +996,9 @@ const en: Record<string, string> = {
     "select_file": "Select File",
     "choose_photo_from_device": "Choose photo",
     "find_image_from_name": "Find from name",
+    "find_image_from_web": "Find from web",
+    "product_photos": "Photos",
+    "photo_gallery_main_badge": "Main",
     "searching_stock_photo": "Searching stock photos…",
     "stock_search_need_name": "Enter at least 2 characters in the name field above first.",
     "stock_search_failed": "Could not fetch a stock photo. Try different wording or upload an image.",

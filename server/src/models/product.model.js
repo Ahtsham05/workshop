@@ -118,6 +118,32 @@ const ProductSchema = new mongoose.Schema({
         url: { type: String }, // Cloudinary URL
         publicId: { type: String } // Cloudinary public ID for deletion
     },
+    /**
+     * Ordered image gallery (max MAX_PRODUCT_IMAGES). `images[0]` IS the primary photo
+     * and is mirrored into the legacy `image` field above by the hooks below — every
+     * existing read path (product list rows, POS tiles, invoices, reports, analytics,
+     * branch sync) still reads `image` and keeps working untouched, while anything that
+     * wants the full set reads `images`.
+     *
+     * Never write one of the two without the other: go through the hooks (a normal
+     * save/update) rather than $set-ing a raw field, or the two drift apart.
+     */
+    images: {
+        type: [
+            new mongoose.Schema({
+                url: { type: String, required: true },
+                publicId: { type: String, default: '' },
+                // Where it came from: 'upload' | 'camera' | a webImageSearch provider key
+                // ('google', 'openfoodfacts', …). Shown as provenance in the gallery UI.
+                source: { type: String, trim: true, default: '' },
+                // The page the image was found on, for attribution/verification.
+                sourceUrl: { type: String, trim: true, default: '' },
+                width: { type: Number, default: null },
+                height: { type: Number, default: null },
+            }, { _id: false }),
+        ],
+        default: [],
+    },
     // Universal Product Architecture migration (see docs/architecture/universal-product-migration.md):
     // schemaVersion 1 = legacy flat product. 2 = a default ProductVariant + Inventory row
     // have been backfilled for this product. hasVariants stays false until a user opts a
@@ -160,6 +186,95 @@ const ProductSchema = new mongoose.Schema({
 },{
     timestamps: true,
     keepTimestampsInJSON: true,
+});
+
+/**
+ * Keeps `image` (legacy single primary) and `images` (ordered gallery) consistent no
+ * matter which one a caller happened to set — and there are many callers: the product
+ * dialog sends the gallery, while Excel import, the AI scan, price-list updates,
+ * branch sync and the multipart PATCH all still send a single `image`. Doing this in
+ * the schema rather than in one service is the only way every path stays in sync.
+ *
+ * Rules:
+ *   - gallery changed  → primary becomes images[0] (or is cleared when empty)
+ *   - only primary set → it moves to the FRONT of the gallery, deduped, so replacing
+ *                        the main photo never silently drops the rest
+ */
+const MAX_PRODUCT_IMAGES = 8;
+
+const sameImage = (a, b) =>
+    Boolean(a && b && ((a.publicId && a.publicId === b.publicId) || a.url === b.url));
+
+const normalizeImagePair = ({ image, images, imagesTouched, imageTouched }) => {
+    let gallery = Array.isArray(images) ? images.filter((entry) => entry && entry.url) : [];
+
+    if (imagesTouched) {
+        // Dedupe by publicId/url, keeping first occurrence (the user's chosen order).
+        gallery = gallery.filter((entry, index) => gallery.findIndex((other) => sameImage(entry, other)) === index);
+        gallery = gallery.slice(0, MAX_PRODUCT_IMAGES);
+        return { image: gallery[0] ? { url: gallery[0].url, publicId: gallery[0].publicId || '' } : undefined, images: gallery };
+    }
+
+    if (imageTouched) {
+        if (!image || !image.url) return { image: undefined, images: [] };
+        const rest = gallery.filter((entry) => !sameImage(entry, image));
+        return { image, images: [{ ...image, publicId: image.publicId || '' }, ...rest].slice(0, MAX_PRODUCT_IMAGES) };
+    }
+
+    return null;
+};
+
+ProductSchema.pre('save', function(next) {
+    const imagesTouched = this.isModified('images');
+    const imageTouched = this.isModified('image');
+    if (!imagesTouched && !imageTouched) return next();
+
+    const normalized = normalizeImagePair({
+        image: this.image && this.image.url ? { url: this.image.url, publicId: this.image.publicId || '' } : undefined,
+        images: (this.images || []).map((entry) => (entry.toObject ? entry.toObject() : entry)),
+        imagesTouched,
+        imageTouched,
+    });
+    if (normalized) {
+        this.image = normalized.image;
+        this.images = normalized.images;
+    }
+    return next();
+});
+
+ProductSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], function(next) {
+    const update = this.getUpdate();
+    if (!update || Array.isArray(update)) return next();
+
+    const set = update.$set || {};
+    const hasImages = Object.prototype.hasOwnProperty.call(update, 'images') || Object.prototype.hasOwnProperty.call(set, 'images');
+    const hasImage = Object.prototype.hasOwnProperty.call(update, 'image') || Object.prototype.hasOwnProperty.call(set, 'image');
+    if (!hasImages && !hasImage) return next();
+
+    const rawImages = hasImages ? (Object.prototype.hasOwnProperty.call(update, 'images') ? update.images : set.images) : [];
+    const rawImage = hasImage ? (Object.prototype.hasOwnProperty.call(update, 'image') ? update.image : set.image) : undefined;
+
+    const normalized = normalizeImagePair({
+        image: rawImage && rawImage.url ? rawImage : undefined,
+        images: rawImages,
+        imagesTouched: hasImages,
+        // A bare `image` update can't see the existing gallery from here (no document is
+        // loaded in a query-level hook), so it replaces it outright — which is exactly
+        // what the single-image callers listed above mean by setting it.
+        imageTouched: hasImage && !hasImages,
+    });
+    if (!normalized) return next();
+
+    delete update.image;
+    delete update.images;
+    update.$set = { ...set, images: normalized.images };
+    if (normalized.image) {
+        update.$set.image = normalized.image;
+    } else {
+        delete update.$set.image;
+        update.$unset = { ...(update.$unset || {}), image: '' };
+    }
+    return next();
 });
 
 // Pre-save middleware to handle empty barcode/sku values
@@ -226,3 +341,4 @@ ProductSchema.index(
 const Product = mongoose.model('Product', ProductSchema);
 
 module.exports = Product;
+module.exports.MAX_PRODUCT_IMAGES = MAX_PRODUCT_IMAGES;

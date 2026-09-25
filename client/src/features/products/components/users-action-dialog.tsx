@@ -59,7 +59,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import MobileCameraScanner from '@/components/mobile-camera-scanner'
-import ImageUpload from '@/components/image-upload'
+import ProductImageGallery from '@/components/product-image-gallery'
 import { Camera } from 'lucide-react'
 import { getAllUnits, DEFAULT_UNIT } from '@/lib/units'
 import { isWholesaleRetailBusiness, isMobileShopBusiness } from '@/lib/business-types'
@@ -126,6 +126,16 @@ const formSchema = z.object({
     url: z.string(),
     publicId: z.string(),
   }).optional(),
+  // Ordered photo gallery; images[0] IS `image` above (the server mirrors the two — see
+  // product.model.js), so the form only ever edits this array and derives `image` on save.
+  images: z.array(z.object({
+    url: z.string(),
+    publicId: z.string().optional(),
+    source: z.string().optional(),
+    sourceUrl: z.string().optional(),
+    width: z.number().nullable().optional(),
+    height: z.number().nullable().optional(),
+  })).optional(),
   categories: z.array(z.object({
     _id: z.string(),
     name: z.string(),
@@ -203,6 +213,38 @@ function isEnterValueEmpty(id: EnterFieldId, value: unknown): boolean {
   return false
 }
 
+/**
+ * Seeds the gallery when the dialog opens on an existing product. Products saved before
+ * the gallery existed only have the single legacy `image`, so it becomes the one-entry
+ * gallery rather than showing an empty photo section for a product that clearly has one.
+ */
+type GalleryEntry = { url: string; publicId?: string; source?: string; sourceUrl?: string }
+
+function galleryFrom(
+  row: { image?: Partial<GalleryEntry> | null; images?: Partial<GalleryEntry>[] | null } | null | undefined,
+): GalleryEntry[] {
+  const gallery = (row?.images ?? []).filter((entry): entry is GalleryEntry => Boolean(entry?.url))
+  if (gallery.length > 0) return gallery
+  return row?.image?.url ? [row.image as GalleryEntry] : []
+}
+
+/**
+ * `activeRow` comes from the paginated product list, whose query populates `brandId`
+ * into `{ _id, name, logo }` (see product.service.js's `populate('brandId', ...)`), while
+ * BrandSelector and the form schema both need a plain string id. Without this, editing a
+ * product with a brand already set shows the picker as empty and fails validation with
+ * "Expected string, received object".
+ */
+function normalizeBrandId(brandId: unknown): string | undefined {
+  if (!brandId) return undefined
+  if (typeof brandId === 'string') return brandId
+  if (typeof brandId === 'object') {
+    const id = (brandId as { _id?: string; id?: string })._id ?? (brandId as { _id?: string; id?: string }).id
+    return id || undefined
+  }
+  return undefined
+}
+
 interface Props {
   currentRow?: any
   open: boolean
@@ -222,8 +264,6 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const isEdit = !!activeRow
   const { t, isRTL } = useLanguage()
   const { showUrduInput } = useUrduDisplay()
-  const [imageKey, setImageKey] = useState(0) // Force image component re-render
-  const [imageRemoved, setImageRemoved] = useState(false) // Track if image was manually removed
   const [categoriesOpen, setCategoriesOpen] = useState(false)
   const [categorySearchQuery, setCategorySearchQuery] = useState('')
   const [isCreatingCategory, setIsCreatingCategory] = useState(false)
@@ -293,7 +333,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: activeRow?.nameUrdu || '',
         description: activeRow?.description || '',
         sku: activeRow?.sku || '',
-        brandId: activeRow?.brandId || undefined,
+        brandId: normalizeBrandId(activeRow?.brandId),
         taxCategoryId: activeRow?.taxCategoryId || undefined,
         barcode: activeRow?.barcode || '',
         hasVariants: activeRow?.hasVariants || false,
@@ -310,6 +350,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         unit: activeRow?.unit || DEFAULT_UNIT,
         unitConversions: activeRow?.unitConversions || [],
         image: activeRow?.image || undefined,
+        images: galleryFrom(activeRow),
         categories: activeRow?.categories || [],
         subCategories: activeRow?.subCategories || [],
         tags: activeRow?.tags || [],
@@ -339,6 +380,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         unit: DEFAULT_UNIT,
         unitConversions: [],
         image: undefined,
+        images: [],
         categories: [],
         subCategories: [],
         tags: [],
@@ -356,7 +398,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         nameUrdu: activeRow.nameUrdu || '',
         description: activeRow.description || '',
         sku: activeRow.sku || '',
-        brandId: activeRow.brandId || undefined,
+        brandId: normalizeBrandId(activeRow.brandId),
         taxCategoryId: activeRow.taxCategoryId || undefined,
         barcode: activeRow.barcode || '',
         hasVariants: activeRow.hasVariants || false,
@@ -373,6 +415,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         unit: activeRow.unit || DEFAULT_UNIT,
         unitConversions: activeRow.unitConversions || [],
         image: activeRow.image || undefined,
+        images: galleryFrom(activeRow),
         categories: activeRow.categories || [],
         subCategories: activeRow.subCategories || [],
         tags: activeRow.tags || [],
@@ -402,6 +445,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         unit: DEFAULT_UNIT,
         unitConversions: [],
         image: undefined,
+        images: [],
         categories: [],
         subCategories: [],
         tags: [],
@@ -409,7 +453,6 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         shelfLocation: '',
       })
     }
-    setImageRemoved(false)
     setDraftVariants([])
   }, [open, activeRow, isEdit, form])
 
@@ -429,7 +472,33 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     if (!open || !isEdit || !freshProduct) return
     form.setValue('trackBatch', !!freshProduct.trackBatch)
     form.setValue('trackExpiry', !!freshProduct.trackExpiry)
+    // freshProduct's brandId is unpopulated (a plain id string) unlike the list row's,
+    // which is populated into an object — see normalizeBrandId above.
+    form.setValue('brandId', normalizeBrandId(freshProduct.brandId))
   }, [open, isEdit, freshProduct, form])
+
+  // Same reasoning as trackBatch/trackExpiry above, and it matters more here: a caller
+  // that opens this dialog with a partial product row (anything but the full list row)
+  // would otherwise seed a one-photo gallery from the legacy `image` alone, and saving
+  // would then delete the product's other photos. Hydrating from the single-product GET
+  // makes that impossible. Runs once per opened product, and never over an edit the
+  // user has already made.
+  const galleryHydratedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!open) {
+      galleryHydratedFor.current = null
+      return
+    }
+    if (!isEdit || !freshProduct || !editingProductId) return
+    if (galleryHydratedFor.current === editingProductId) return
+    if (form.getFieldState('images').isDirty) return
+    galleryHydratedFor.current = editingProductId
+    const gallery = galleryFrom(freshProduct)
+    if (gallery.length) {
+      form.setValue('images', gallery)
+      form.setValue('image', gallery[0] as productForm['image'])
+    }
+  }, [open, isEdit, freshProduct, editingProductId, form])
   // Everything currently in stock for this product — opening stock AND purchase-received —
   // so the Serial Numbers / IMEI Numbers editor shows (and counts) the product's real
   // inventory instead of only the units entered directly as opening stock.
@@ -521,15 +590,15 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   }
 
 
-  const onSubmit = async (values: productForm) => {
-    if (values.trackImei || values.trackSerial) {
-      const label = values.trackSerial ? 'serial' : 'IMEI'
+  const onSubmit = async (rawValues: productForm) => {
+    if (rawValues.trackImei || rawValues.trackSerial) {
+      const label = rawValues.trackSerial ? 'serial' : 'IMEI'
       // Purchase-received units count toward the total even though they aren't part of
-      // values.imeis (that field only carries the editable opening-stock subset — see
+      // rawValues.imeis (that field only carries the editable opening-stock subset — see
       // the in-stock-IMEIs effect above).
-      const imeiCount = (values.imeis || []).length + purchasedImeis.length
-      if (imeiCount !== values.stockQuantity) {
-        toast.error(`Enter ${values.stockQuantity} ${label} number(s) — ${imeiCount} entered`)
+      const imeiCount = (rawValues.imeis || []).length + purchasedImeis.length
+      if (imeiCount !== rawValues.stockQuantity) {
+        toast.error(`Enter ${rawValues.stockQuantity} ${label} number(s) — ${imeiCount} entered`)
         return
       }
     }
@@ -537,11 +606,30 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     // product that already has stock (same gate the batch number field itself uses —
     // see freshProduct?.defaultVariantId above) — once a default variant exists, further
     // batches are received through ProductDefaultVariantBatchPanel instead, not this field.
-    if ((values.trackBatch || values.trackExpiry) && values.stockQuantity > 0 && !freshProduct?.defaultVariantId && !values.batchNumber) {
+    if ((rawValues.trackBatch || rawValues.trackExpiry) && rawValues.stockQuantity > 0 && !freshProduct?.defaultVariantId && !rawValues.batchNumber) {
       toast.error('Enter a batch number for the existing stock before turning on batch tracking')
       return
     }
     setIsSubmitting(true)
+    // images[0] is the primary photo. The server mirrors this itself (product.model.js),
+    // but sending both keeps the payload unambiguous — and an explicitly empty `images`
+    // is what tells the server the last photo was removed (an undefined `image` would
+    // simply be dropped from the JSON body and the old one kept).
+    //
+    // `image` only ever accepts { url, publicId } server-side — strip the gallery-only
+    // provenance fields (source/sourceUrl/width/height) picked up from the web search
+    // when mirroring images[0] into it, or the update is rejected as an unknown key.
+    const primaryImage = rawValues.images?.[0]
+    const values = {
+      ...rawValues,
+      image: primaryImage ? { url: primaryImage.url, publicId: primaryImage.publicId } : undefined,
+      images: rawValues.images ?? [],
+      // Same reasoning as `image` above: clearing the brand leaves rawValues.brandId
+      // `undefined`, which JSON.stringify drops from the request body entirely — the
+      // server then sees no `brandId` key at all and keeps the old one. Send an explicit
+      // `null` so "removed" actually clears it (updateProductById assigns it as-is).
+      brandId: rawValues.brandId || null,
+    }
     try {
       if (isEdit) {
         const productId = activeRow?.id || activeRow?._id
@@ -782,7 +870,6 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       open={open}
       onOpenChange={(state) => {
         form.reset()
-        setImageRemoved(false) // Reset image removed flag when dialog opens/closes
         setDraftVariants([])
         setScannedProduct(null)
         onOpenChange(state)
@@ -1985,34 +2072,31 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                 tone='amber'
                 className='p-3 sm:p-4'
                 title={t('product_photo_section_title')}
+                description={t('product_photo_section_description')}
               >
               <FormField
                 control={form.control}
-                name='image'
+                name='images'
                 render={({ field }) => (
                   <FormItem className='space-y-0'>
                     <FormControl>
-                      <ImageUpload
-                        key={`product-image-${imageKey}`}
-                        onImageUpload={(imageData) => {
-                          setImageRemoved(false)
-                          field.onChange(imageData)
-                          setImageKey((k) => k + 1)
+                      <ProductImageGallery
+                        value={field.value ?? []}
+                        onChange={(next) => {
+                          field.onChange(next)
+                          // Keep the mirrored primary in step while the form is open so
+                          // anything reading form state (not just the save payload) sees
+                          // the right main photo.
+                          form.setValue('image', next[0] as productForm['image'], { shouldDirty: true })
                         }}
-                        onImageRemove={() => {
-                          setImageRemoved(true)
-                          field.onChange(undefined)
-                          form.setValue('image', undefined, { shouldValidate: true, shouldDirty: true })
-                          form.resetField('image', { defaultValue: undefined })
-                          form.trigger('image')
-                          setImageKey((prev) => prev + 1)
-                        }}
-                        currentImageUrl={imageRemoved ? undefined : field.value?.url}
-                        className='w-full'
-                        layout='comfortable'
-                        autoSearchFromText={nameWatch}
+                        disabled={isSubmitting}
+                        label=''
+                        // Read at click time, not render time: the user usually types the
+                        // name/barcode and then goes looking for a photo.
                         getSearchQuery={() => String(form.getValues('name') ?? '').trim()}
-                        searchContext='product'
+                        getBarcode={() => String(form.getValues('barcode') ?? '').trim()}
+                        context='product'
+                        className='w-full'
                       />
                     </FormControl>
                     <FormMessage />

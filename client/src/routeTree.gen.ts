@@ -20,6 +20,7 @@ import { Route as AuthenticatedStockAdjustmentsImport } from './routes/_authenti
 import { Route as AuthenticatedSchoolImport } from './routes/_authenticated/school'
 import { Route as AuthenticatedReportsImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedPurchaseSuggestionsImport } from './routes/_authenticated/purchase-suggestions'
+import { Route as AuthenticatedProfileImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedPriceUpdatesImport } from './routes/_authenticated/price-updates'
 import { Route as AuthenticatedPriceCheckerImport } from './routes/_authenticated/price-checker'
 import { Route as AuthenticatedPaymentVouchersImport } from './routes/_authenticated/payment-vouchers'
@@ -66,6 +67,7 @@ import { Route as AuthenticatedPurchaseOrdersIndexImport } from './routes/_authe
 import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_authenticated/purchase-invoice/index'
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedPartnersIndexImport } from './routes/_authenticated/partners/index'
+import { Route as AuthenticatedNotesIndexImport } from './routes/_authenticated/notes/index'
 import { Route as AuthenticatedLeadsIndexImport } from './routes/_authenticated/leads/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
 import { Route as AuthenticatedHrIndexImport } from './routes/_authenticated/hr/index'
@@ -242,6 +244,12 @@ const AuthenticatedPurchaseSuggestionsRoute =
     path: '/purchase-suggestions',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+
+const AuthenticatedProfileRoute = AuthenticatedProfileImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 const AuthenticatedPriceUpdatesRoute = AuthenticatedPriceUpdatesImport.update({
   id: '/price-updates',
@@ -546,6 +554,12 @@ const AuthenticatedPartnersIndexRoute = AuthenticatedPartnersIndexImport.update(
     getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
+
+const AuthenticatedNotesIndexRoute = AuthenticatedNotesIndexImport.update({
+  id: '/notes/',
+  path: '/notes/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 const AuthenticatedLeadsIndexRoute = AuthenticatedLeadsIndexImport.update({
   id: '/leads/',
@@ -1554,6 +1568,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPriceUpdatesImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/purchase-suggestions': {
       id: '/_authenticated/purchase-suggestions'
       path: '/purchase-suggestions'
@@ -2035,6 +2056,13 @@ declare module '@tanstack/react-router' {
       path: '/leads'
       fullPath: '/leads'
       preLoaderRoute: typeof AuthenticatedLeadsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/notes/': {
+      id: '/_authenticated/notes/'
+      path: '/notes'
+      fullPath: '/notes'
+      preLoaderRoute: typeof AuthenticatedNotesIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/partners/': {
@@ -2828,6 +2856,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPaymentVouchersRoute: typeof AuthenticatedPaymentVouchersRoute
   AuthenticatedPriceCheckerRoute: typeof AuthenticatedPriceCheckerRoute
   AuthenticatedPriceUpdatesRoute: typeof AuthenticatedPriceUpdatesRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedPurchaseSuggestionsRoute: typeof AuthenticatedPurchaseSuggestionsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSchoolRoute: typeof AuthenticatedSchoolRouteWithChildren
@@ -2873,6 +2902,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedHrIndexRoute: typeof AuthenticatedHrIndexRoute
   AuthenticatedInvoiceIndexRoute: typeof AuthenticatedInvoiceIndexRoute
   AuthenticatedLeadsIndexRoute: typeof AuthenticatedLeadsIndexRoute
+  AuthenticatedNotesIndexRoute: typeof AuthenticatedNotesIndexRoute
   AuthenticatedPartnersIndexRoute: typeof AuthenticatedPartnersIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedPurchaseInvoiceIndexRoute: typeof AuthenticatedPurchaseInvoiceIndexRoute
@@ -2920,6 +2950,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPaymentVouchersRoute: AuthenticatedPaymentVouchersRoute,
   AuthenticatedPriceCheckerRoute: AuthenticatedPriceCheckerRoute,
   AuthenticatedPriceUpdatesRoute: AuthenticatedPriceUpdatesRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedPurchaseSuggestionsRoute: AuthenticatedPurchaseSuggestionsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSchoolRoute: AuthenticatedSchoolRouteWithChildren,
@@ -2971,6 +3002,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHrIndexRoute: AuthenticatedHrIndexRoute,
   AuthenticatedInvoiceIndexRoute: AuthenticatedInvoiceIndexRoute,
   AuthenticatedLeadsIndexRoute: AuthenticatedLeadsIndexRoute,
+  AuthenticatedNotesIndexRoute: AuthenticatedNotesIndexRoute,
   AuthenticatedPartnersIndexRoute: AuthenticatedPartnersIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedPurchaseInvoiceIndexRoute:
@@ -3037,6 +3069,7 @@ export interface FileRoutesByFullPath {
   '/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/price-checker': typeof AuthenticatedPriceCheckerRoute
   '/price-updates': typeof AuthenticatedPriceUpdatesRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/school': typeof AuthenticatedSchoolRouteWithChildren
@@ -3106,6 +3139,7 @@ export interface FileRoutesByFullPath {
   '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/leads': typeof AuthenticatedLeadsIndexRoute
+  '/notes': typeof AuthenticatedNotesIndexRoute
   '/partners': typeof AuthenticatedPartnersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
@@ -3210,6 +3244,7 @@ export interface FileRoutesByTo {
   '/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/price-checker': typeof AuthenticatedPriceCheckerRoute
   '/price-updates': typeof AuthenticatedPriceUpdatesRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/stock-adjustments': typeof AuthenticatedStockAdjustmentsRoute
@@ -3277,6 +3312,7 @@ export interface FileRoutesByTo {
   '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/leads': typeof AuthenticatedLeadsIndexRoute
+  '/notes': typeof AuthenticatedNotesIndexRoute
   '/partners': typeof AuthenticatedPartnersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/purchase-invoice': typeof AuthenticatedPurchaseInvoiceIndexRoute
@@ -3383,6 +3419,7 @@ export interface FileRoutesById {
   '/_authenticated/payment-vouchers': typeof AuthenticatedPaymentVouchersRoute
   '/_authenticated/price-checker': typeof AuthenticatedPriceCheckerRoute
   '/_authenticated/price-updates': typeof AuthenticatedPriceUpdatesRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/purchase-suggestions': typeof AuthenticatedPurchaseSuggestionsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/school': typeof AuthenticatedSchoolRouteWithChildren
@@ -3452,6 +3489,7 @@ export interface FileRoutesById {
   '/_authenticated/hr/': typeof AuthenticatedHrIndexRoute
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
   '/_authenticated/leads/': typeof AuthenticatedLeadsIndexRoute
+  '/_authenticated/notes/': typeof AuthenticatedNotesIndexRoute
   '/_authenticated/partners/': typeof AuthenticatedPartnersIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/purchase-invoice/': typeof AuthenticatedPurchaseInvoiceIndexRoute
@@ -3560,6 +3598,7 @@ export interface FileRouteTypes {
     | '/payment-vouchers'
     | '/price-checker'
     | '/price-updates'
+    | '/profile'
     | '/purchase-suggestions'
     | '/reports'
     | '/school'
@@ -3629,6 +3668,7 @@ export interface FileRouteTypes {
     | '/hr'
     | '/invoice'
     | '/leads'
+    | '/notes'
     | '/partners'
     | '/products'
     | '/purchase-invoice'
@@ -3732,6 +3772,7 @@ export interface FileRouteTypes {
     | '/payment-vouchers'
     | '/price-checker'
     | '/price-updates'
+    | '/profile'
     | '/purchase-suggestions'
     | '/reports'
     | '/stock-adjustments'
@@ -3799,6 +3840,7 @@ export interface FileRouteTypes {
     | '/hr'
     | '/invoice'
     | '/leads'
+    | '/notes'
     | '/partners'
     | '/products'
     | '/purchase-invoice'
@@ -3903,6 +3945,7 @@ export interface FileRouteTypes {
     | '/_authenticated/payment-vouchers'
     | '/_authenticated/price-checker'
     | '/_authenticated/price-updates'
+    | '/_authenticated/profile'
     | '/_authenticated/purchase-suggestions'
     | '/_authenticated/reports'
     | '/_authenticated/school'
@@ -3972,6 +4015,7 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/'
     | '/_authenticated/invoice/'
     | '/_authenticated/leads/'
+    | '/_authenticated/notes/'
     | '/_authenticated/partners/'
     | '/_authenticated/products/'
     | '/_authenticated/purchase-invoice/'
@@ -4126,6 +4170,7 @@ export const routeTree = rootRoute
         "/_authenticated/payment-vouchers",
         "/_authenticated/price-checker",
         "/_authenticated/price-updates",
+        "/_authenticated/profile",
         "/_authenticated/purchase-suggestions",
         "/_authenticated/reports",
         "/_authenticated/school",
@@ -4171,6 +4216,7 @@ export const routeTree = rootRoute
         "/_authenticated/hr/",
         "/_authenticated/invoice/",
         "/_authenticated/leads/",
+        "/_authenticated/notes/",
         "/_authenticated/partners/",
         "/_authenticated/products/",
         "/_authenticated/purchase-invoice/",
@@ -4318,6 +4364,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/price-updates": {
       "filePath": "_authenticated/price-updates.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/profile": {
+      "filePath": "_authenticated/profile.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/purchase-suggestions": {
@@ -4642,6 +4692,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/leads/": {
       "filePath": "_authenticated/leads/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/notes/": {
+      "filePath": "_authenticated/notes/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/partners/": {

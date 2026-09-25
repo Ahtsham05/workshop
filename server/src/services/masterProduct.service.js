@@ -832,6 +832,16 @@ const importMasterProductsUnlocked = async ({ organizationId, branchId, createdB
       })),
       brandId: master.brandId || null,
       image: master.image,
+      // insertMany below bypasses the Product schema's image/images mirroring hooks
+      // (see product.model.js), so the pair is written consistently here instead. A
+      // branch-sync push carries the source product's whole gallery via `overrides`; a
+      // plain master import only ever has the master's single snapshot image.
+      images:
+        Array.isArray(master.images) && master.images.length
+          ? master.images
+          : master.image && master.image.url
+            ? [master.image]
+            : [],
       hasVariants: !!master.hasVariants,
       masterProductId: master._id,
       taxCategoryId: entry.taxCategoryId,

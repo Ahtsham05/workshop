@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { LogOut, GraduationCap } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { RootState } from '@/stores/store'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { UserAvatar } from '@/components/user-avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -23,16 +23,6 @@ import { useLogout } from '@/hooks/use-logout'
 import { NotificationBell } from '@/components/notification-bell'
 import { PORTAL_NOTIFICATION_POLL_OPTIONS } from '@/stores/notification-query-options'
 import { PushNotificationPrompt } from '@/components/push-notification-prompt'
-
-function initials(name?: string): string {
-  if (!name) return 'U'
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() || '')
-    .join('')
-}
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const user = useSelector((state: RootState) => state.auth.data?.user)
@@ -81,12 +71,11 @@ export function PortalShell({ children }: { children: ReactNode }) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 px-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.photoUrl?.url} alt={user?.name} />
-                  <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-semibold">
-                    {initials(user?.name)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  name={user?.name}
+                  email={user?.email}
+                  photoUrl={user?.photo?.url ?? user?.photoUrl?.url}
+                />
                 <span className="hidden sm:block max-w-[140px] truncate text-sm font-medium">
                   {user?.name || 'Student'}
                 </span>

@@ -46,6 +46,18 @@ const branchSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    /**
+     * Colour identity for this branch. The app tints its background, cards and sidebar
+     * with it so staff can tell at a glance which branch they are posting to — main vs
+     * sub-branch mix-ups are the expensive kind. Empty = no tint (app default colours).
+     */
+    appearance: {
+      colorKey: {
+        type: String,
+        enum: ['', 'slate', 'blue', 'indigo', 'violet', 'teal', 'emerald', 'amber', 'orange', 'rose'],
+        default: '',
+      },
+    },
     /** Shown at bottom of thermal/HTML receipts & invoices for this branch */
     invoiceNote: {
       type: String,

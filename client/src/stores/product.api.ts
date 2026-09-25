@@ -35,6 +35,11 @@ export interface ProductWithTracking {
   trackBatch?: boolean
   trackExpiry?: boolean
   defaultVariantId?: string
+  /** Unpopulated — a plain Brand id string, unlike the list query's populated object. */
+  brandId?: string | null
+  /** Primary photo — always images[0], mirrored server-side (product.model.js). */
+  image?: { url: string; publicId?: string }
+  images?: { url: string; publicId?: string; source?: string; sourceUrl?: string }[]
 }
 
 export interface ProductSearchResult {

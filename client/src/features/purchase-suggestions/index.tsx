@@ -327,8 +327,8 @@ export default function PurchaseSuggestionsPage() {
           icon={AlertTriangle}
           label='Stockout Risks'
           value={allStockouts.length}
-          gradient='from-red-500/10 to-red-500/0'
-          iconWrap='bg-red-500/15 text-red-600 dark:text-red-400'
+          gradient='from-[var(--chart-theme-primary,var(--color-red-500))]/10 to-[var(--chart-theme-primary,var(--color-red-500))]/0'
+          iconWrap='bg-[var(--chart-theme-primary,var(--color-red-500))]/15 text-[var(--chart-theme-primary,var(--color-red-600))] dark:text-[var(--chart-theme-primary,var(--color-red-400))]'
           isLoading={stockoutPredictions.isLoading}
         />
         <SummaryTile
@@ -336,8 +336,8 @@ export default function PurchaseSuggestionsPage() {
           label='Demand Growth'
           value={risingCount}
           sub='products trending up'
-          gradient='from-emerald-500/10 to-emerald-500/0'
-          iconWrap='bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+          gradient='from-[var(--chart-theme-primary,var(--color-emerald-500))]/10 to-[var(--chart-theme-primary,var(--color-emerald-500))]/0'
+          iconWrap='bg-[var(--chart-theme-primary,var(--color-emerald-500))]/15 text-[var(--chart-theme-primary,var(--color-emerald-600))] dark:text-[var(--chart-theme-primary,var(--color-emerald-400))]'
           isLoading={demandTrends.isLoading}
         />
         <SummaryTile
@@ -345,16 +345,16 @@ export default function PurchaseSuggestionsPage() {
           label='Top Supplier Score'
           value={bestSupplier ? `${Math.round(bestSupplier.overallScore)}/100` : 'No data yet'}
           sub={bestSupplier?.supplierName}
-          gradient='from-amber-500/10 to-amber-500/0'
-          iconWrap='bg-amber-500/15 text-amber-600 dark:text-amber-400'
+          gradient='from-[var(--chart-theme-primary,var(--color-amber-500))]/10 to-[var(--chart-theme-primary,var(--color-amber-500))]/0'
+          iconWrap='bg-[var(--chart-theme-primary,var(--color-amber-500))]/15 text-[var(--chart-theme-primary,var(--color-amber-600))] dark:text-[var(--chart-theme-primary,var(--color-amber-400))]'
           isLoading={purchaseSuggestions.isLoading}
         />
         <SummaryTile
           icon={Wallet}
           label='Inventory Value'
           value={dashboardStats.data ? formatMoney(dashboardStats.data.totalInventoryValue, currencyMeta) : '—'}
-          gradient='from-blue-500/10 to-blue-500/0'
-          iconWrap='bg-blue-500/15 text-blue-600 dark:text-blue-400'
+          gradient='from-[var(--chart-theme-primary,var(--color-blue-500))]/10 to-[var(--chart-theme-primary,var(--color-blue-500))]/0'
+          iconWrap='bg-[var(--chart-theme-primary,var(--color-blue-500))]/15 text-[var(--chart-theme-primary,var(--color-blue-600))] dark:text-[var(--chart-theme-primary,var(--color-blue-400))]'
           isLoading={dashboardStats.isLoading}
         />
       </div>

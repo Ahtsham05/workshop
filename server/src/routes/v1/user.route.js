@@ -4,6 +4,7 @@ const validate = require('../../middlewares/validate');
 const userValidation = require('../../validations/user.validation');
 const userController = require('../../controllers/user.controller');
 const { checkPermission } = require('../../middlewares/permission');
+const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
 
@@ -15,6 +16,30 @@ router
 router
   .route('/language')
   .patch(auth(), validate(userValidation.updateLanguage), userController.updateLanguage);
+
+// ── Self-service: a signed-in person managing their own account ──────────────
+// All declared before '/:userId' so 'me' is never read as an id, and none of them
+// require the editUsers permission — that one governs editing OTHER people.
+router
+  .route('/me')
+  .get(auth(), userController.getMe)
+  .patch(auth(), validate(userValidation.updateMe), userController.updateMe);
+
+router
+  .route('/me/password')
+  .post(auth(), validate(userValidation.changeMyPassword), userController.changeMyPassword);
+
+// Self-service profile photo — any signed-in user may change their own picture.
+// Declared before '/:userId' so 'me' is never read as an id.
+router
+  .route('/me/photo')
+  .post(auth(), upload.single('image'), userController.uploadMyPhoto)
+  .delete(auth(), userController.deleteMyPhoto);
+
+// Self-service appearance preferences (row colours, alternating rows, branch tint)
+router
+  .route('/me/ui-preferences')
+  .patch(auth(), validate(userValidation.updateUiPreferences), userController.updateUiPreferences);
 
 router
   .route('/:userId')

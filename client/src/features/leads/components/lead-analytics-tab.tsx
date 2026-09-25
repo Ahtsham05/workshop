@@ -22,8 +22,10 @@ import { useFormatMoney } from '@/lib/format-money'
 
 // Same fixed cycled palette used by the Reports module's charts (see expense-report.tsx) —
 // kept identical so leads analytics reads as part of the same platform, not a bolt-on.
+// COLORS[0] doubles as the single "Leads" count bar's colour (not just a pipeline-stage
+// pie slice), so it follows the user's theme colour; the rest stay fixed categorical hues.
 const COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+  'var(--chart-theme-primary, #3b82f6)', '#10b981', '#f59e0b', '#ef4444',
   '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
   '#6366f1', '#94a3b8',
 ]

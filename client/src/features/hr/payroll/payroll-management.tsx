@@ -704,7 +704,7 @@ export default function PayrollManagement() {
                   <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} width={70} tickFormatter={(v) => new Intl.NumberFormat('en-PK', { notation: 'compact' }).format(v)} />
                   <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
-                  <Bar dataKey="payable" name={t('Payable')} fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="payable" name={t('Payable')} fill="var(--chart-theme-primary, #2563eb)" radius={[4, 4, 0, 0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -732,7 +732,7 @@ export default function PayrollManagement() {
                 <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => new Intl.NumberFormat('en-PK', { notation: 'compact' }).format(v)} />
                 <YAxis type="category" dataKey="department" tick={{ fontSize: 12 }} width={120} />
                 <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
-                <Bar dataKey="payable" name={t('Payable')} fill="#2563eb" radius={[0, 4, 4, 0]} maxBarSize={24} />
+                <Bar dataKey="payable" name={t('Payable')} fill="var(--chart-theme-primary, #2563eb)" radius={[0, 4, 4, 0]} maxBarSize={24} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

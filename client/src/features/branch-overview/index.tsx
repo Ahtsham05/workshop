@@ -119,7 +119,7 @@ export default function BranchOverviewPage() {
                 />
                 <Tooltip formatter={(value: number) => formatCurrency(Number(value))} contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
                 <Legend />
-                <Bar dataKey='totalSales' fill='#3b82f6' radius={[8, 8, 0, 0]} name={t('Revenue')} />
+                <Bar dataKey='totalSales' fill='var(--chart-theme-primary, #3b82f6)' radius={[8, 8, 0, 0]} name={t('Revenue')} />
                 <Bar dataKey='netProfit' fill='#10b981' radius={[8, 8, 0, 0]} name={t('Net Profit')} />
               </BarChart>
             </ResponsiveContainer>

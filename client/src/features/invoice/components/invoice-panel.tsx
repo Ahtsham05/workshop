@@ -70,22 +70,36 @@ const MAX_VISIBLE_DROPDOWN_RESULTS = 50
 // Per-type accent for the Invoice Type buttons — same cash=green/credit=blue/
 // pending=amber/quotation=violet mapping as the "New Invoice" title badge (getTypeColor).
 // Kept subtle: a light tint + thin border, not a filled/shadowed badge.
+//
+// Whichever type is selected is this control's "active" indicator — the same role a tab
+// plays in a tab bar — so like TabsTrigger, each colour is wrapped in
+// `var(--chart-theme-primary, <its own original colour>)`: untouched by default, and all
+// four collapse to the same theme colour once one is picked (Settings → Appearance),
+// rather than only ever being green/blue/amber/violet regardless of which is selected.
+// The *background* specifically uses `--chart-theme-primary-tint` (a pre-diluted version),
+// not the same solid `--chart-theme-primary` the text/border use — text and background
+// were always two different literal shades (e.g. green-50 bg vs green-700 text), so once
+// themed they still need to differ, or the text disappears into its own background.
 const INVOICE_TYPE_STYLES: Record<'cash' | 'credit' | 'pending' | 'quotation', { active: string; icon: string }> = {
   cash: {
-    active: 'border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400',
-    icon: 'text-green-600 dark:text-green-400',
+    active:
+      'border-[var(--chart-theme-primary,var(--color-green-300))] bg-[var(--chart-theme-primary-tint,var(--color-green-50))] text-[var(--chart-theme-primary,var(--color-green-700))] dark:border-[var(--chart-theme-primary,var(--color-green-800))] dark:bg-[var(--chart-theme-primary,var(--color-green-950))]/30 dark:text-[var(--chart-theme-primary,var(--color-green-400))]',
+    icon: 'text-[var(--chart-theme-primary,var(--color-green-600))] dark:text-[var(--chart-theme-primary,var(--color-green-400))]',
   },
   credit: {
-    active: 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400',
-    icon: 'text-blue-600 dark:text-blue-400',
+    active:
+      'border-[var(--chart-theme-primary,var(--color-blue-300))] bg-[var(--chart-theme-primary-tint,var(--color-blue-50))] text-[var(--chart-theme-primary,var(--color-blue-700))] dark:border-[var(--chart-theme-primary,var(--color-blue-800))] dark:bg-[var(--chart-theme-primary,var(--color-blue-950))]/30 dark:text-[var(--chart-theme-primary,var(--color-blue-400))]',
+    icon: 'text-[var(--chart-theme-primary,var(--color-blue-600))] dark:text-[var(--chart-theme-primary,var(--color-blue-400))]',
   },
   pending: {
-    active: 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400',
-    icon: 'text-amber-600 dark:text-amber-400',
+    active:
+      'border-[var(--chart-theme-primary,var(--color-amber-300))] bg-[var(--chart-theme-primary-tint,var(--color-amber-50))] text-[var(--chart-theme-primary,var(--color-amber-700))] dark:border-[var(--chart-theme-primary,var(--color-amber-800))] dark:bg-[var(--chart-theme-primary,var(--color-amber-950))]/30 dark:text-[var(--chart-theme-primary,var(--color-amber-400))]',
+    icon: 'text-[var(--chart-theme-primary,var(--color-amber-600))] dark:text-[var(--chart-theme-primary,var(--color-amber-400))]',
   },
   quotation: {
-    active: 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-400',
-    icon: 'text-violet-600 dark:text-violet-400',
+    active:
+      'border-[var(--chart-theme-primary,var(--color-violet-300))] bg-[var(--chart-theme-primary-tint,var(--color-violet-50))] text-[var(--chart-theme-primary,var(--color-violet-700))] dark:border-[var(--chart-theme-primary,var(--color-violet-800))] dark:bg-[var(--chart-theme-primary,var(--color-violet-950))]/30 dark:text-[var(--chart-theme-primary,var(--color-violet-400))]',
+    icon: 'text-[var(--chart-theme-primary,var(--color-violet-600))] dark:text-[var(--chart-theme-primary,var(--color-violet-400))]',
   },
 }
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
@@ -1893,12 +1907,15 @@ export function InvoicePanel({
     savingType !== null,
   )
 
+  // Same "active selection, not simultaneous categories" reasoning as INVOICE_TYPE_STYLES
+  // above: this badge only ever shows the current invoice's own type, one at a time, so it
+  // follows the theme colour too instead of staying fixed per type.
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'cash': return 'bg-green-100 text-green-800'
-      case 'credit': return 'bg-blue-100 text-blue-800'
-      case 'pending': return 'bg-yellow-100 text-yellow-800'
-      case 'quotation': return 'bg-violet-100 text-violet-800'
+      case 'cash': return 'bg-[var(--chart-theme-primary-tint,var(--color-green-100))] text-[var(--chart-theme-primary,var(--color-green-800))]'
+      case 'credit': return 'bg-[var(--chart-theme-primary-tint,var(--color-blue-100))] text-[var(--chart-theme-primary,var(--color-blue-800))]'
+      case 'pending': return 'bg-[var(--chart-theme-primary-tint,var(--color-yellow-100))] text-[var(--chart-theme-primary,var(--color-yellow-800))]'
+      case 'quotation': return 'bg-[var(--chart-theme-primary-tint,var(--color-violet-100))] text-[var(--chart-theme-primary,var(--color-violet-800))]'
       default: return 'bg-gray-100 text-gray-800'
     }
   }

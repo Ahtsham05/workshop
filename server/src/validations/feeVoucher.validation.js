@@ -86,6 +86,9 @@ const payVoucher = {
     paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'cheque', 'online', 'other', 'credit_wallet'),
     categoryId: Joi.string().custom(objectId).allow(null, ''),
     remarks: Joi.string().allow('', null),
+    // Collection date, when different from today (e.g. entering a payment
+    // received yesterday) — defaults server-side to now when omitted.
+    paymentDate: Joi.date().iso(),
   }),
 };
 
@@ -130,6 +133,7 @@ const bulkPayStudentVouchers = {
     // When provided, payment is applied ONLY to these vouchers (in chronological
     // order among themselves) instead of every pending voucher oldest-first.
     voucherIds: Joi.array().items(Joi.string().custom(objectId)).min(1),
+    paymentDate: Joi.date().iso(),
   }),
 };
 

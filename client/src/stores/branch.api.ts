@@ -1,5 +1,6 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
+import type { BranchColorKey } from '@/lib/appearance';
 
 export interface BranchBankAccount {
   _id?: string;
@@ -46,6 +47,8 @@ export interface Branch {
   invoiceNote?: string;
   /** Default print paper size for this branch */
   printSettings?: BranchPrintSettings;
+  /** Colour identity — tints the app so staff can see which branch they are in */
+  appearance?: { colorKey?: BranchColorKey };
   /** Fee-collection bank accounts shown to parents/students in the portal */
   bankAccounts?: BranchBankAccount[];
   createdAt: string;
@@ -67,6 +70,7 @@ export interface CreateBranchRequest {
   isActive?: boolean;
   invoiceNote?: string;
   printSettings?: BranchPrintSettings;
+  appearance?: { colorKey?: BranchColorKey };
   bankAccounts?: BranchBankAccount[];
 }
 

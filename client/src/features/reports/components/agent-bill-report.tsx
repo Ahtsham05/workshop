@@ -312,7 +312,7 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(value: number) => fmt(value)} />
                   <Legend />
-                  <Bar dataKey='Collection' fill='#3b82f6' radius={[3, 3, 0, 0]} />
+                  <Bar dataKey='Collection' fill='var(--chart-theme-primary, #3b82f6)' radius={[3, 3, 0, 0]} />
                   <Bar dataKey='Profit' fill='#10b981' radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -342,7 +342,7 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
                     <YAxis type='category' dataKey='_id' tick={{ fontSize: 11 }} width={80} />
                     <Tooltip formatter={(value: number) => fmt(value)} />
                     <Bar dataKey='totalProfit' name='Profit' fill='#10b981' radius={[0, 3, 3, 0]} />
-                    <Bar dataKey='totalCollection' name='Collection' fill='#3b82f6' radius={[0, 3, 3, 0]} />
+                    <Bar dataKey='totalCollection' name='Collection' fill='var(--chart-theme-primary, #3b82f6)' radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
                 <Table className='mt-3'>

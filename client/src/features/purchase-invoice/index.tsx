@@ -183,8 +183,8 @@ type ViewType = 'create' | 'list' | 'details';
 // duplicated locally (it's 2 lines) rather than exported/prop-drilled, since the header
 // title bar needs it independently of PurchasePanel actually being mounted below.
 const PURCHASE_TYPE_BADGE_COLOR: Record<string, string> = {
-  cash: 'bg-green-100 text-green-800',
-  credit: 'bg-blue-100 text-blue-800',
+  cash: 'bg-[var(--chart-theme-primary-tint,var(--color-green-100))] text-[var(--chart-theme-primary,var(--color-green-800))]',
+  credit: 'bg-[var(--chart-theme-primary-tint,var(--color-blue-100))] text-[var(--chart-theme-primary,var(--color-blue-800))]',
 }
 
 const PURCHASE_SHOW_CATALOG_KEY = 'purchaseShowProductCatalog';

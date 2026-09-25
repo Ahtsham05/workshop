@@ -9,12 +9,17 @@ import { RouterProvider, createRouter, createHashHistory } from '@tanstack/react
 // import { handleServerError } from '@/utils/handle-server-error'
 import { FontProvider } from './context/font-context'
 import { ThemeProvider } from './context/theme-context'
+import { AppearanceProvider } from './context/appearance-context'
 import { LanguageProvider } from './context/language-context'
 import { UrduDisplayProvider } from './context/urdu-display-context'
 import { ProductDisplayProvider } from './context/product-display-context'
 // Apply stored language to <html> before first render to avoid layout flash
 import { getStoredLanguage, applyLanguageToDocument } from './i18n'
 applyLanguageToDocument(getStoredLanguage())
+// Same idea for the colour scheme: paint the branch tint / row colours from the last
+// known values so the first frame is already correct.
+import { applyStoredAppearance } from './lib/appearance'
+applyStoredAppearance()
 import { AuthProvider } from './context/auth-context'
 import { PermissionWrapper } from './context/permission-wrapper'
 import { AuthErrorBoundary } from './components/auth-error-boundary'
@@ -55,16 +60,18 @@ if (!rootElement.innerHTML) {
           <AuthProvider>
             <PermissionWrapper>
               <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
-                <LanguageProvider>
-                  <FontProvider>
-                    <UrduDisplayProvider>
-                      <ProductDisplayProvider>
-                        <RouterProvider router={router} />
-                        <Toaster />
-                      </ProductDisplayProvider>
-                    </UrduDisplayProvider>
-                  </FontProvider>
-                </LanguageProvider>
+                <AppearanceProvider>
+                  <LanguageProvider>
+                    <FontProvider>
+                      <UrduDisplayProvider>
+                        <ProductDisplayProvider>
+                          <RouterProvider router={router} />
+                          <Toaster />
+                        </ProductDisplayProvider>
+                      </UrduDisplayProvider>
+                    </FontProvider>
+                  </LanguageProvider>
+                </AppearanceProvider>
               </ThemeProvider>
             </PermissionWrapper>
           </AuthProvider>

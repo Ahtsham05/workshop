@@ -51,14 +51,17 @@ export type SchoolRole = keyof typeof SCHOOL_PERMISSIONS
 export const TEACHER_ALLOWED_PATHS: string[] = [
   '/school/portals/teacher',
   '/school/teacher-leave',
+  '/profile',
 ]
 
 export const PARENT_ALLOWED_PATHS: string[] = [
   '/school/portals/parent',
+  '/profile',
 ]
 
 export const STUDENT_ALLOWED_PATHS: string[] = [
   '/school/portals/student',
+  '/profile',
 ]
 
 // ── Home routes per role ──────────────────────────────────────────────────────

@@ -89,6 +89,7 @@ module.exports.SchoolTransaction = require('./schoolTransaction.model');
 module.exports.SchoolRecurringExpense = require('./schoolRecurringExpense.model');
 module.exports.FeeStructure = require('./feeStructure.model');
 module.exports.FeeVoucher = require('./feeVoucher.model');
+module.exports.FeePayment = require('./feePayment.model');
 module.exports.FeePaymentRequest = require('./feePaymentRequest.model');
 module.exports.StudentCreditLedger = require('./studentCreditLedger.model');
 
@@ -159,6 +160,9 @@ module.exports.SchoolSmsTemplate = require('./schoolSmsTemplate.model');
 // Communication Log + Tasks & Reminders
 module.exports.CommunicationLog = require('./communicationLog.model');
 module.exports.Reminder = require('./reminder.model');
+
+// Notepad — personal / shared quick notes
+module.exports.Note = require('./note.model');
 
 // CRM Leads
 module.exports.Lead = require('./lead.model');

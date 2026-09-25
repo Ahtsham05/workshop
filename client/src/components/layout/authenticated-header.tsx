@@ -8,6 +8,7 @@ import { SyncStatusBadge } from '@/components/layout/sync-status-badge'
 import { BranchIndicator } from '@/components/layout/branch-indicator'
 import { HeaderClock } from '@/components/layout/header-clock'
 import { ScreenCaptureButton } from '@/components/layout/screen-capture-button'
+import { NotepadButton } from '@/components/layout/notepad-button'
 
 type AuthenticatedHeaderProps = {
   showSearch?: boolean
@@ -25,6 +26,9 @@ export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderPr
         {/* Hidden on phones so the branch name gets the room (sm = 640px) */}
         {showSearch ? <Search className='hidden sm:inline-flex' /> : null}
         <WhatsAppHeaderButton className='hidden sm:inline-flex' />
+        {/* Always visible, phones included — jotting something down is the one tool
+            you never want to hunt for in a menu. */}
+        <NotepadButton />
         <ScreenCaptureButton className='hidden @min-[880px]/header:inline-flex' />
         <LanguageSwitch className='hidden sm:inline-flex' />
         <ThemeSwitch />

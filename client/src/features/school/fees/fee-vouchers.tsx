@@ -31,7 +31,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html';
 import { useFormatMoney, useCurrencyMeta, FALLBACK_CURRENCY } from '@/lib/format-money';
-import { BUSINESS_TIMEZONE, formatBusinessDate, formatBusinessDateTimeShort } from '@/lib/business-timezone';
+import { BUSINESS_TIMEZONE, formatBusinessDate, formatBusinessDateTimeShort, getBusinessToday } from '@/lib/business-timezone';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/stores/store';
 import { toast } from 'sonner';
@@ -90,7 +90,7 @@ function maxMonthYearInList(list: { month: string; year: number }[]): { month: s
 }
 
 /** Label a fee line item with its billing month */
-function feeItemLabel(name: string, month?: string, year?: number | string): string {
+export function feeItemLabel(name: string, month?: string, year?: number | string): string {
   const base = String(name || 'Fee').trim();
   const period = month && year ? `${month} ${year}` : month || '';
   if (!period) return base;
@@ -310,7 +310,7 @@ export default function FeeVouchers() {
   const [advanceForm, setAdvanceForm] = useState({ amount: '', paymentMethod: 'cash', remarks: '' });
   const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [payForm, setPayForm] = useState({ amount: '', paymentMethod: 'cash', remarks: '' });
+  const [payForm, setPayForm] = useState({ amount: '', paymentMethod: 'cash', remarks: '', paymentDate: getBusinessToday() });
   /** Which pending month(s)/voucher(s) the user has explicitly chosen to collect for in the Pay dialog */
   const [selectedMonthIds, setSelectedMonthIds] = useState<string[]>([]);
   const [genForm, setGenForm] = useState({
@@ -617,7 +617,7 @@ export default function FeeVouchers() {
     // Default selection: just the clicked voucher's own month — explicit, no guessing.
     // The user can add more months (or switch to "All Arrears") from the checklist below.
     setSelectedMonthIds([v.id || v._id]);
-    setPayForm({ amount: String(remaining), paymentMethod: 'cash', remarks: '' });
+    setPayForm({ amount: String(remaining), paymentMethod: 'cash', remarks: '', paymentDate: getBusinessToday() });
     setPayDialog(true);
   };
 
@@ -638,6 +638,7 @@ export default function FeeVouchers() {
         paymentMethod: payForm.paymentMethod,
         remarks: payForm.remarks,
         voucherIds: selectedMonthIds,
+        paymentDate: payForm.paymentDate,
       }).unwrap();
       const paidList = result?.vouchersPaid || [];
       const count = paidList.length;
@@ -681,8 +682,8 @@ export default function FeeVouchers() {
           // (and reprintable later from the Student Fee Ledger) rather than auto-printed.
           const primary = rawRows[0];
           receiptData = {
-            receiptNumber: `RCP-${Date.now()}`,
-            paidDate: primary?.paidDate || new Date().toISOString(),
+            receiptNumber: result?.feePayment?.receiptNumber || `RCP-${Date.now()}`,
+            paidDate: result?.feePayment?.paymentDate || primary?.paidDate || new Date().toISOString(),
             studentName: `${primary?.studentId?.firstName || ''} ${primary?.studentId?.lastName || ''}`.trim(),
             fatherName: primary?.studentId?.parent?.fatherName || primary?.studentId?.parent?.guardianName || '—',
             admissionNumber: primary?.studentId?.admissionNumber || '—',
@@ -1951,6 +1952,18 @@ export default function FeeVouchers() {
                 )}
               </div>
 
+              {/* ── Collection date ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Collected On</Label>
+                <Input
+                  type="date"
+                  className="h-8 text-sm w-40"
+                  max={getBusinessToday()}
+                  value={payForm.paymentDate}
+                  onChange={(e) => setPayForm({ ...payForm, paymentDate: e.target.value })}
+                />
+              </div>
+
               {/* ── Payment method ── */}
               <div className="space-y-1.5">
                 <Label>Payment Method</Label>
@@ -2950,7 +2963,7 @@ function receiptCopyHTML(payment: any, schoolName: string, copyLabel: string, cu
 </div>`;
 }
 
-function buildReceiptPrintHTML(payment: any, schoolName: string, currencySymbol: string = FALLBACK_CURRENCY.symbol): string {
+export function buildReceiptPrintHTML(payment: any, schoolName: string, currencySymbol: string = FALLBACK_CURRENCY.symbol): string {
   const selectedSize = { baseFont: 10, schoolFont: 14, rowGap: 3.8, scale: 1.08 };
   const rowHtml = `
     <div class="row">

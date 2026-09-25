@@ -97,13 +97,17 @@ export function AppearanceForm() {
                 Select the theme for the dashboard.
               </FormDescription>
               <FormMessage />
+              {/* The radio itself is sr-only, which means position:absolute. Each label is
+                  `relative` so the hidden control is positioned against the label rather
+                  than the viewport — otherwise it escapes the settings panel's overflow
+                  clip and stretches the page's scroll area down to its own offset. */}
               <RadioGroup
                 onValueChange={field.onChange}
                 defaultValue={field.value}
                 className='grid max-w-md grid-cols-2 gap-8 pt-2'
               >
                 <FormItem>
-                  <FormLabel className='[&:has([data-state=checked])>div]:border-primary'>
+                  <FormLabel className='relative [&:has([data-state=checked])>div]:border-primary'>
                     <FormControl>
                       <RadioGroupItem value='light' className='sr-only' />
                     </FormControl>
@@ -129,7 +133,7 @@ export function AppearanceForm() {
                   </FormLabel>
                 </FormItem>
                 <FormItem>
-                  <FormLabel className='[&:has([data-state=checked])>div]:border-primary'>
+                  <FormLabel className='relative [&:has([data-state=checked])>div]:border-primary'>
                     <FormControl>
                       <RadioGroupItem value='dark' className='sr-only' />
                     </FormControl>

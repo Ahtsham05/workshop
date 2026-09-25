@@ -836,7 +836,7 @@ const ur: Record<string, string> = {
     
     // Image upload functionality
     "product_image": "پروڈکٹ کی تصویر",
-    "product_photo_section_title": "پروڈکٹ کی تصویر",
+    "product_photo_section_title": "پروڈکٹ کی تصاویر",
     "product_photo_section_description":
       "اختیاری — نام سے تلاش سے دستی طور پر پروڈکٹ نام سے Pexels، یا ڈیوائس سے اپ لوڈ، ڈریگ این ڈراپ، یا کیمرہ۔",
     "upload_image": "تصویر اپ لوڈ کریں",
@@ -853,6 +853,7 @@ const ur: Record<string, string> = {
     "select_file": "فائل منتخب کریں",
     "choose_photo_from_device": "تصویر منتخب کریں",
     "find_image_from_name": "نام سے تلاش",
+    "find_image_from_web": "ویب سے تلاش کریں",
     "searching_stock_photo": "اسٹاک تصاویر تلاش ہو رہی ہیں…",
     "stock_search_need_name": "پہلے اوپر نام کے خانے میں کم از کم 2 حروف درج کریں۔",
     "stock_search_failed": "اسٹاک تصویر نہیں مل سکی۔ الفاظ بدل کر دوبارہ کوشش کریں یا تصویر اپ لوڈ کریں۔",

@@ -48,7 +48,7 @@ export function VoiceOrb({
       {state === 'speaking' && <span className='absolute inset-0 rounded-full bg-violet-500/15 motion-safe:animate-pulse' />}
 
       <span
-        className='relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-violet-500 text-primary-foreground shadow-lg transition-transform duration-100 ease-out'
+        className='relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg transition-transform duration-100 ease-out'
         style={{ transform: `scale(${scale})` }}
       >
         <Icon className='h-8 w-8' />

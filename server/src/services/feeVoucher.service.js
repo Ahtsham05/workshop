@@ -649,14 +649,18 @@ const cleanupOrphanVouchers = async (scope = {}) => {
 };
 
 /**
- * Record fee payment:
- *  1. Update voucher paidAmount / status
- *  2. Create a SchoolTransaction (INCOME) linked to this voucher
+ * Applies exactly `amount` to one already-loaded voucher document's paidAmount,
+ * saves it, and posts the corresponding SchoolTransaction + double-entry
+ * accounting line (fire-and-forget). Returns the created transaction, or null
+ * when amount is 0.
+ *
+ * `amount` is never capped here — the caller (feePayment.service's
+ * recordFeePayment) is responsible for ensuring it does not exceed the
+ * voucher's remaining balance; any leftover cash is handled once at the
+ * receipt level (credit wallet), not per voucher.
  */
-const payVoucher = async (id, paymentData, scope = {}) => {
-  const voucher = await getVoucherById(id, scope);
-  if (!voucher) throw new ApiError(httpStatus.NOT_FOUND, 'Voucher not found');
-  if (voucher.status === 'cancelled') throw new ApiError(httpStatus.BAD_REQUEST, 'Voucher is cancelled');
+const applyPaymentToVoucher = async (voucher, amount, opts = {}, scope = {}) => {
+  const { paymentMethod = 'cash', paymentDate, remarks, categoryId } = opts;
 
   // If netAmount is missing/zero (stale data from insertMany bypass), recompute it now
   if (!voucher.netAmount || voucher.netAmount === 0) {
@@ -665,75 +669,83 @@ const payVoucher = async (id, paymentData, scope = {}) => {
     voucher.netAmount = Math.max(0, computed - (voucher.discount || 0) + (voucher.fine || 0));
   }
 
-  const prevPaid  = voucher.paidAmount || 0;
-  const remaining = Math.max(0, voucher.netAmount - prevPaid);
-
-  // Cash being applied to this specific voucher (never exceed remaining)
-  const applyToCurrent = Math.min(paymentData.amount, remaining);
-  // Any excess becomes credit in the student wallet
-  const excessCredit   = Math.max(0, paymentData.amount - remaining);
-
-  voucher.paidAmount    = prevPaid + applyToCurrent;
-  voucher.paymentMethod = paymentData.paymentMethod || 'cash';
-  voucher.paidDate      = new Date();
-  if (paymentData.remarks) voucher.remarks = paymentData.remarks;
+  const when = paymentDate ? new Date(paymentDate) : new Date();
+  voucher.paidAmount    = (voucher.paidAmount || 0) + amount;
+  voucher.paymentMethod = paymentMethod;
+  voucher.paidDate      = when;
+  if (remarks) voucher.remarks = remarks;
 
   // Status is auto-set by pre-save hook
   await voucher.save();
 
-  // Record in unified transaction ledger
-  let categoryId = paymentData.categoryId;
-  if (!categoryId) {
+  if (amount <= 0) return null;
+
+  let resolvedCategoryId = categoryId;
+  if (!resolvedCategoryId) {
     // Auto-upsert default income category so income always appears in reports
     const cat = await FeeCategory.findOneAndUpdate(
       { ...getTenantFilter(scope), name: 'Tuition Fee', type: 'INCOME' },
       { $setOnInsert: { ...getTenantFilter(scope), name: 'Tuition Fee', type: 'INCOME' } },
       { upsert: true, new: true }
     );
-    categoryId = cat._id;
-  }
-  if (applyToCurrent > 0) {
-    const txn = await SchoolTransaction.create({
-      organizationId: scope.organizationId,
-      branchId:       scope.branchId,
-      type:           'INCOME',
-      categoryId,
-      amount:         applyToCurrent,
-      date:           new Date(),
-      referenceId:    voucher._id,
-      referenceModel: 'FeeVoucher',
-      description:    `Fee payment — ${voucher.month} ${voucher.year} | Voucher ${voucher.voucherNumber}`,
-      paymentMethod:  paymentData.paymentMethod || 'cash',
-      createdBy:      scope.createdBy,
-    });
-    await FeeVoucher.findByIdAndUpdate(voucher._id, { transactionId: txn._id });
-
-    // Auto-post to double-entry accounting (fire-and-forget)
-    accountsSystemService.postFeePayment(scope, {
-      amount: applyToCurrent,
-      paymentMethod: paymentData.paymentMethod || 'cash',
-      voucherId: voucher._id.toString(),
-      description: `Fee payment — ${voucher.month} ${voucher.year} | Voucher ${voucher.voucherNumber}`,
-    }).catch(() => {});
+    resolvedCategoryId = cat._id;
   }
 
-  // If excess → add to student credit wallet
-  if (excessCredit > 0) {
-    await adjustCredit(
-      voucher.studentId._id || voucher.studentId,
-      excessCredit,
-      'overpayment',
-      {
-        voucherId:     voucher._id,
-        description:   `Overpayment on voucher ${voucher.voucherNumber} (${voucher.month} ${voucher.year})`,
-        paymentMethod: paymentData.paymentMethod || 'cash',
-        createdBy:     scope.createdBy,
-      },
-      scope
-    );
+  const txn = await SchoolTransaction.create({
+    organizationId: scope.organizationId,
+    branchId:       scope.branchId,
+    type:           'INCOME',
+    categoryId:     resolvedCategoryId,
+    amount,
+    date:           when,
+    referenceId:    voucher._id,
+    referenceModel: 'FeeVoucher',
+    description:    `Fee payment — ${voucher.month} ${voucher.year} | Voucher ${voucher.voucherNumber}`,
+    paymentMethod,
+    feePaymentId:   opts.feePaymentId || undefined,
+    createdBy:      scope.createdBy,
+  });
+  await FeeVoucher.findByIdAndUpdate(voucher._id, { transactionId: txn._id });
+
+  // Auto-post to double-entry accounting (fire-and-forget)
+  accountsSystemService.postFeePayment(scope, {
+    amount,
+    paymentMethod,
+    voucherId: voucher._id.toString(),
+    description: `Fee payment — ${voucher.month} ${voucher.year} | Voucher ${voucher.voucherNumber}`,
+  }).catch(() => {});
+
+  return txn;
+};
+
+/**
+ * Given a pool of money (cash handed over + available wallet credit) and a set
+ * of already-loaded pending voucher documents, walks them oldest-first and
+ * decides how much to apply to each — capped at that voucher's own remaining
+ * balance — plus how much of the pool is left over once every voucher in the
+ * set is fully satisfied. Pure: does not save anything.
+ */
+const distributeAmountAcrossVouchers = (pendingDocs, pool) => {
+  const sorted = [...pendingDocs].sort((a, b) => {
+    if (a.year !== b.year) return a.year - b.year;
+    return MONTH_ORDER.indexOf(a.month) - MONTH_ORDER.indexOf(b.month);
+  });
+
+  const allocations = [];
+  let remainingPool = pool;
+  for (const voucher of sorted) {
+    if (remainingPool <= 0) break;
+    const net         = effectiveNet(voucher);
+    const alreadyPaid = voucher.paidAmount || 0;
+    const vRemaining  = net - alreadyPaid;
+    if (vRemaining <= 0) continue;
+
+    const applyAmount = Math.min(remainingPool, vRemaining);
+    allocations.push({ voucher, applyAmount });
+    remainingPool -= applyAmount;
   }
 
-  return getVoucherById(id, scope);
+  return { allocations, leftoverPool: remainingPool };
 };
 
 const updateVoucherById = async (id, updateBody, scope = {}) => {
@@ -1446,125 +1458,6 @@ const getStudentBalances = async (studentIds, scope = {}, currentMonth, currentY
  * Reconcile all vouchers that have netAmount=0 or no voucherNumber.
  * Runs save() on each so pre-save hooks recompute totalAmount, netAmount, status, voucherNumber.
  */
-/**
- * Bulk-pay a student's outstanding vouchers with a single lump-sum amount.
- * Applies available credit wallet balance first, then cash.
- * Distributes oldest-first until the combined amount is exhausted.
- */
-const bulkPayStudentVouchers = async (studentId, paymentData, scope = {}) => {
-  const student = await Student.findOne({ _id: studentId, ...getTenantFilter(scope) });
-  if (!student) throw new ApiError(httpStatus.NOT_FOUND, 'Student not found');
-
-  const pendingQuery = {
-    ...getTenantFilter(scope),
-    studentId,
-    status: { $in: ['unpaid', 'partial', 'overdue'] },
-  };
-  // When the caller explicitly picked which month(s)/voucher(s) to collect for,
-  // restrict allocation to exactly those — never silently spill onto other months.
-  if (Array.isArray(paymentData.voucherIds) && paymentData.voucherIds.length) {
-    pendingQuery._id = { $in: paymentData.voucherIds };
-  }
-
-  const pendingDocs = await FeeVoucher.find(pendingQuery);
-
-  // Sort oldest first
-  pendingDocs.sort((a, b) => {
-    if (a.year !== b.year) return a.year - b.year;
-    return MONTH_ORDER.indexOf(a.month) - MONTH_ORDER.indexOf(b.month);
-  });
-
-  // Available credit from wallet
-  const creditAvailable = Math.max(0, student.creditBalance || 0);
-  let creditUsed = 0;
-  let cashUsed   = 0;
-  const paid     = [];
-
-  // Pool = cash from user + available credit
-  let pool = paymentData.amount + creditAvailable;
-
-  for (const v of pendingDocs) {
-    if (pool <= 0) break;
-    const net         = effectiveNet(v);
-    const alreadyPaid = v.paidAmount || 0;
-    const vRemaining  = net - alreadyPaid;
-    if (vRemaining <= 0) continue;
-
-    const applyAmount = Math.min(pool, vRemaining);
-
-    // Determine how much of this comes from credit vs cash
-    const applyFromCredit = Math.min(applyAmount, creditAvailable - creditUsed);
-    const applyFromCash   = applyAmount - applyFromCredit;
-
-    // Reuse single-voucher pay (handles transaction ledger, status, overpayment→credit)
-    await payVoucher(v._id.toString(), {
-      amount:        applyFromCash > 0 ? applyAmount : 0, // payVoucher will handle residual
-      paymentMethod: paymentData.paymentMethod || 'cash',
-      remarks:       paymentData.remarks,
-      categoryId:    paymentData.categoryId,
-    }, scope);
-
-    // If credit was used, consume it from the wallet
-    if (applyFromCredit > 0) {
-      await adjustCredit(
-        studentId,
-        -applyFromCredit,
-        'applied',
-        {
-          voucherId:   v._id,
-          description: `Credit applied to ${v.month} ${v.year} voucher`,
-          createdBy:   scope.createdBy,
-        },
-        scope
-      );
-      creditUsed += applyFromCredit;
-    }
-    cashUsed += applyFromCash;
-    pool     -= applyAmount;
-
-    paid.push({
-      voucherId:     v._id,
-      month:         v.month,
-      year:          v.year,
-      applied:       applyAmount,
-      fromCredit:    applyFromCredit,
-      fromCash:      applyFromCash,
-    });
-  }
-
-  // If there is remaining pool (cash paid > total outstanding), save excess as advance credit
-  let excessDeposited = 0;
-  if (pool > 0 && pool > creditAvailable - creditUsed) {
-    const excessCash = Math.max(0, pool - (creditAvailable - creditUsed));
-    if (excessCash > 0) {
-      excessDeposited = excessCash;
-      await adjustCredit(
-        studentId,
-        excessCash,
-        'advance',
-        {
-          description:   `Advance payment — surplus after clearing all outstanding`,
-          paymentMethod: paymentData.paymentMethod || 'cash',
-          createdBy:     scope.createdBy,
-        },
-        scope
-      );
-    }
-  }
-
-  const updatedStudent = await Student.findById(studentId).lean();
-
-  return {
-    totalCash:       paymentData.amount,
-    totalCreditUsed: creditUsed,
-    totalApplied:    creditUsed + cashUsed,
-    newCreditBalance: updatedStudent?.creditBalance ?? 0,
-    vouchersPaid:    paid,
-    /** Cash added to the credit wallet this request (for advance / future-month receipts) */
-    excessDeposited,
-  };
-};
-
 const reconcileVouchers = async (scope = {}) => {
   // Seed the sequence counter to max existing voucher sequence so new numbers
   // assigned during reconcile don't collide with already-numbered vouchers.
@@ -1937,8 +1830,11 @@ module.exports = {
   cleanupOrphanVouchers,
   getStudentFeeSummary,
   getStudentFeeLedger,
-  payVoucher,
-  bulkPayStudentVouchers,
+  applyPaymentToVoucher,
+  distributeAmountAcrossVouchers,
+  adjustCredit,
+  effectiveNet,
+  MONTH_ORDER,
   recordAdvancePayment,
   getStudentCreditHistory,
   getStudentBalances,

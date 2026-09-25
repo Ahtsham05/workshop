@@ -1,29 +1,12 @@
 const config = require('../../config/config');
 const logger = require('../../config/logger');
-const { createGeminiApiError } = require('../../utils/geminiVisionHelpers');
+const geminiClient = require('../ai/geminiClient');
 const { buildToolset } = require('./tools');
 
 // Bumped from 4: entity lookups (search_customer etc.) often need one round to find the
 // record and a second to act on it, so multi-step questions ("what does Ali owe, and is
 // he in the low-stock list too?") need more headroom than a single-tool question.
 const MAX_TOOL_ROUNDS = 6;
-
-// Each Gemini model has its own separate free-tier daily quota, so falling
-// back to a different model (not just retrying the same one) is what
-// actually recovers from a `RESOURCE_EXHAUSTED` / 429 on the configured model.
-// gemini-2.0-flash(-lite) were retired by Google ("no longer available") — dropped in
-// favor of gemini-3.1-flash-lite, matching the fallback list the vision services
-// (purchaseVision/customerVision/productVision/supplierVision) already settled on.
-const PREFERRED_CHAT_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.1-flash-lite'];
-
-function resolveModelsToTry() {
-  const fromEnv = [
-    (config.gemini.chatModel || '').trim(),
-    ...(config.gemini.fallbackModels || '').split(',').map((m) => m.trim()).filter(Boolean),
-    ...PREFERRED_CHAT_MODELS,
-  ];
-  return [...new Set(fromEnv.filter(Boolean))];
-}
 
 const SYSTEM_INSTRUCTION = `You are the AI Business Assistant inside an ERP system. You answer the business owner's
 questions about their own data (sales, profit, customers, suppliers, inventory, purchases, expenses, cash & bank,
@@ -47,54 +30,8 @@ function toGeminiHistory(messages) {
   }));
 }
 
-async function callGeminiModel(model, contents, businessContext, toolDeclarations) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.gemini.apiKey}`;
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: {
-        parts: [{ text: `${SYSTEM_INSTRUCTION}\n\nBusiness context: ${JSON.stringify(businessContext)}` }],
-      },
-      contents,
-      tools: [{ functionDeclarations: toolDeclarations }],
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    let message = `Gemini request failed (${res.status})`;
-    try {
-      message = JSON.parse(text)?.error?.message || message;
-    } catch {
-      // keep default message
-    }
-    throw createGeminiApiError(message, res.status);
-  }
-  return res.json();
-}
-
-/** Tries each model in `resolveModelsToTry()` order, moving on immediately on quota/availability errors. */
-async function callGenerateContent(contents, businessContext, toolDeclarations) {
-  const models = resolveModelsToTry();
-  let lastError;
-  for (const model of models) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      return await callGeminiModel(model, contents, businessContext, toolDeclarations);
-    } catch (err) {
-      lastError = err;
-      if (!err.isRetryable) throw err;
-      logger.warn(`AI assistant: model "${model}" unavailable (${err.message}) — trying next fallback model`);
-    }
-  }
-  throw lastError;
-}
-
-function extractParts(body) {
-  return body?.candidates?.[0]?.content?.parts || [];
-}
+const buildSystemInstruction = (businessContext) =>
+  `${SYSTEM_INSTRUCTION}\n\nBusiness context: ${JSON.stringify(businessContext)}`;
 
 // Human-friendly status shown while a tool call is in flight — never expose the raw
 // function name/args to the user (see business-response.tsx's "never show function_call" rule).
@@ -119,107 +56,6 @@ const TOOL_STATUS_LABELS = {
   search_imei: 'Looking up that IMEI…',
 };
 const friendlyToolStatus = (name) => TOOL_STATUS_LABELS[name] || 'Checking your business data…';
-
-/**
- * Same request as callGeminiModel but against the `streamGenerateContent` endpoint, parsing
- * the SSE frames Google sends (`data: {...}\n\n`, same wire shape this app already uses for
- * whatsappInbox.controller.js's live-events stream) as they arrive. Text parts are incremental
- * deltas — each is forwarded to `onText` the moment it's parsed. functionCall parts arrive whole
- * (never split across chunks), so they're just collected and returned once the round ends.
- */
-async function callGeminiModelStream(model, contents, businessContext, toolDeclarations, onText, signal) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${config.gemini.apiKey}`;
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: {
-        parts: [{ text: `${SYSTEM_INSTRUCTION}\n\nBusiness context: ${JSON.stringify(businessContext)}` }],
-      },
-      contents,
-      tools: [{ functionDeclarations: toolDeclarations }],
-    }),
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    let message = `Gemini request failed (${res.status})`;
-    try {
-      message = JSON.parse(text)?.error?.message || message;
-    } catch {
-      // keep default message
-    }
-    throw createGeminiApiError(message, res.status);
-  }
-
-  const functionCallParts = [];
-  let accumulatedText = '';
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  for (;;) {
-    // eslint-disable-next-line no-await-in-loop
-    const { done, value } = await reader.read();
-    if (done) break;
-    // Google's SSE frames are CRLF-terminated (`\r\n\r\n`) even though this app's own SSE
-    // writer (controllers/aiAssistant.controller.js, whatsappInbox.controller.js) emits plain
-    // `\n\n` — normalize here so the same `\n\n` boundary search below works for either.
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
-
-    let boundary = buffer.indexOf('\n\n');
-    while (boundary !== -1) {
-      const frame = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      boundary = buffer.indexOf('\n\n');
-
-      const dataLine = frame.split('\n').find((l) => l.startsWith('data:'));
-      if (!dataLine) continue; // eslint-disable-line no-continue
-      const jsonStr = dataLine.slice(5).trim();
-      if (!jsonStr) continue; // eslint-disable-line no-continue
-
-      let chunk;
-      try {
-        chunk = JSON.parse(jsonStr);
-      } catch {
-        continue; // eslint-disable-line no-continue
-      }
-
-      const chunkParts = chunk?.candidates?.[0]?.content?.parts || [];
-      for (const part of chunkParts) {
-        if (typeof part.text === 'string' && part.text) {
-          accumulatedText += part.text;
-          onText(part.text);
-        } else if (part.functionCall) {
-          functionCallParts.push(part);
-        }
-      }
-    }
-  }
-
-  const parts = accumulatedText ? [{ text: accumulatedText }, ...functionCallParts] : functionCallParts;
-  return parts;
-}
-
-/** Streaming counterpart to callGenerateContent — same per-model fallback behavior. */
-async function streamGenerateContent(contents, businessContext, toolDeclarations, onText, signal) {
-  const models = resolveModelsToTry();
-  let lastError;
-  for (const model of models) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      return await callGeminiModelStream(model, contents, businessContext, toolDeclarations, onText, signal);
-    } catch (err) {
-      if (err.name === 'AbortError') throw err;
-      lastError = err;
-      if (!err.isRetryable) throw err;
-      logger.warn(`AI assistant (stream): model "${model}" unavailable (${err.message}) — trying next fallback model`);
-    }
-  }
-  throw lastError;
-}
 
 /**
  * Runs one tool call with timing + one structured-ish log line per call (name/durationMs/ok),
@@ -282,6 +118,7 @@ async function runConversationStream(history, ctx, businessContext = {}, onEvent
   }
 
   const contents = toGeminiHistory(history);
+  const systemInstruction = buildSystemInstruction(businessContext);
   const toolCalls = [];
   let fullText = '';
 
@@ -289,10 +126,17 @@ async function runConversationStream(history, ctx, businessContext = {}, onEvent
     let modelParts;
     try {
       // eslint-disable-next-line no-await-in-loop
-      modelParts = await streamGenerateContent(contents, businessContext, TOOL_DECLARATIONS, (chunk) => {
-        fullText += chunk;
-        onEvent({ type: 'delta', text: chunk });
-      }, signal);
+      modelParts = await geminiClient.generateContentStream({
+        systemInstruction,
+        contents,
+        tools: TOOL_DECLARATIONS,
+        onText: (chunk) => {
+          fullText += chunk;
+          onEvent({ type: 'delta', text: chunk });
+        },
+        signal,
+        logLabel: 'AI assistant',
+      });
     } catch (err) {
       if (err.name === 'AbortError') {
         // Client (or server, on disconnect) cancelled generation — preserve whatever streamed
@@ -364,13 +208,19 @@ async function runConversation(history, ctx, businessContext = {}) {
   }
 
   const contents = toGeminiHistory(history);
+  const systemInstruction = buildSystemInstruction(businessContext);
   const toolCalls = [];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     let body;
     try {
       // eslint-disable-next-line no-await-in-loop
-      body = await callGenerateContent(contents, businessContext, TOOL_DECLARATIONS);
+      body = await geminiClient.generateContent({
+        systemInstruction,
+        contents,
+        tools: TOOL_DECLARATIONS,
+        logLabel: 'AI assistant',
+      });
     } catch (err) {
       logger.error('AI assistant Gemini call failed:', err.message);
       const text = err.isQuotaError
@@ -379,7 +229,7 @@ async function runConversation(history, ctx, businessContext = {}) {
       return { text, toolCalls };
     }
 
-    const parts = extractParts(body);
+    const parts = geminiClient.extractParts(body);
     const functionCalls = parts.filter((p) => p.functionCall);
 
     if (functionCalls.length === 0) {

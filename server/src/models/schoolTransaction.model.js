@@ -43,6 +43,14 @@ const schoolTransactionSchema = mongoose.Schema(
       type: String,
       enum: ['Student', 'Teacher', 'FeeVoucher', 'SchoolFee', 'SchoolRecurringExpense', null],
     },
+    // The FeePayment (receipt) this row was posted as part of, when it came
+    // through the fee-collection flow — optional so pre-existing rows and
+    // rows from other flows (expenses, payroll, etc.) simply leave it unset.
+    feePaymentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FeePayment',
+      index: true,
+    },
     description: {
       type: String,
       trim: true,

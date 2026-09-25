@@ -48,6 +48,8 @@ const envVarsSchema = Joi.object()
     CLOUDINARY_API_KEY: Joi.string().description('Cloudinary API key'),
     CLOUDINARY_API_SECRET: Joi.string().description('Cloudinary API secret'),
     PEXELS_API_KEY: Joi.string().allow('').description('Pexels API key for product/category image search'),
+    GOOGLE_CSE_API_KEY: Joi.string().allow('').description('Google Programmable Search API key for "Find from web" product images'),
+    GOOGLE_CSE_CX: Joi.string().allow('').description('Google Programmable Search engine id (cx) with image search enabled'),
     GEMINI_API_KEY: Joi.string().allow('').description('Google Gemini API key for customer image AI scan'),
     GEMINI_VISION_MODEL: Joi.string().allow('').description('Gemini vision model (default gemini-2.5-flash-lite, API v1)'),
     GEMINI_FALLBACK_MODELS: Joi.string().allow('').description('Comma-separated fallback models if quota hit'),
@@ -117,6 +119,14 @@ module.exports = {
   },
   pexels: {
     apiKey: envVars.PEXELS_API_KEY || '',
+  },
+  // Optional, and the only key worth adding for "Find from web": Google Programmable
+  // Search returns the real product shot for a typed name far more reliably than the
+  // keyless providers. Everything still works without it — see
+  // services/webImageSearch.service.js for the full provider tier list.
+  googleCse: {
+    apiKey: envVars.GOOGLE_CSE_API_KEY || '',
+    cx: envVars.GOOGLE_CSE_CX || '',
   },
   gemini: {
     apiKey: envVars.GEMINI_API_KEY || '',

@@ -79,6 +79,40 @@ const userSchema = mongoose.Schema(
       enum: ['en', 'ur'],
       default: 'en',
     },
+    /** Profile photo shown wherever the logged-in user appears (header, sidebar, audit trails). */
+    photo: {
+      url: { type: String, trim: true, default: '' },
+      publicId: { type: String, trim: true, default: '' },
+    },
+    /**
+     * Per-user appearance choices (table row colours, branch tint strength). Stored on the
+     * user rather than the browser so the same eye-comfort setup follows them to every
+     * device they log in from.
+     */
+    uiPreferences: {
+      rowScheme: {
+        type: String,
+        enum: ['default', 'slate', 'sky', 'mint', 'sand', 'lavender', 'rose', 'paper'],
+        default: 'default',
+      },
+      alternateRows: { type: Boolean, default: true },
+      branchTint: {
+        type: String,
+        enum: ['off', 'subtle', 'medium', 'strong'],
+        default: 'subtle',
+      },
+      themeColor: {
+        type: String,
+        enum: [
+          'default', 'graphite', 'stone',
+          'navy', 'blue', 'sky', 'cyan',
+          'teal', 'emerald', 'green', 'forest', 'lime',
+          'yellow', 'amber', 'orange', 'bronze', 'red', 'maroon',
+          'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose',
+        ],
+        default: 'default',
+      },
+    },
     // School portal links
     linkedTeacherId: {
       type: mongoose.Schema.Types.ObjectId,

@@ -67,7 +67,10 @@ export function DashboardDateFilter({
             className={cn(
               'inline-flex h-7 w-full items-center justify-center whitespace-nowrap rounded-md px-1.5 text-sm font-medium transition-colors sm:w-auto sm:px-3',
               value.period === preset.id
-                ? 'bg-background text-foreground shadow-sm'
+                // Same convention as ui/tabs.tsx's active pill: the var()'s own fallback
+                // reproduces today's exact plain-background pill, and once a theme colour
+                // is picked both light and dark switch to that solid colour + its foreground.
+                ? 'bg-[var(--chart-theme-primary,var(--background))] text-[var(--chart-theme-primary-foreground,var(--foreground))] shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >

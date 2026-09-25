@@ -193,6 +193,7 @@ const toImportItem = (product, defaultVariant, realVariants) => ({
     subCategories: product.subCategories,
     brandId: product.brandId,
     image: product.image,
+    images: product.images,
     hasVariants: !!product.hasVariants,
     tags: product.tags,
     color: product.color,

@@ -54,7 +54,21 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // sanitize request data
-app.use(xss());
+//
+// Notes' rich-text `content` field is intentionally real HTML (the editor's own output) —
+// sanitized for XSS by note.service.js's own sanitizeContent(), which allows safe formatting
+// tags (<div>/<b>/<ul>/...) while stripping the actual attack surface (script/iframe/on*
+// handlers/javascript: URLs). xss-clean's blanket HTML-entity-encoding instead corrupts it:
+// `<div>` becomes literal `&lt;div&gt;` TEXT in the stored document. Worse, note.service.js's
+// toPlainText() strips tags BEFORE decoding entities (so it can also clean genuinely-escaped
+// paste residue), so on an xss-clean'd note the decode step runs on content that was never
+// really HTML by the time it got there — the tags reappear as visible garbage text in any
+// plain-text view (list previews, search snippets, AI note excerpts/titles) instead of being
+// stripped. Every other route in this app needs the blanket protection; only Notes doesn't.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/v1/notes')) return next();
+  return xss()(req, res, next);
+});
 app.use(mongoSanitize());
 
 // gzip compression — excluding SSE (text/event-stream falls through `compressible`'s default

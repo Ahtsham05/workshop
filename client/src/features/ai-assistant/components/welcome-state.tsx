@@ -13,8 +13,8 @@ const SUGGESTIONS: { icon: typeof DollarSign; category: string; text: string; to
 export function WelcomeState({ onSelect }: { onSelect: (text: string) => void }) {
   return (
     <div className='flex h-full flex-col items-center justify-center gap-6 px-4 py-10 text-center'>
-      <div className='relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20'>
-        <span className='absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 to-violet-500/10 motion-safe:animate-pulse' />
+      <div className='relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5'>
+        <span className='absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 to-transparent motion-safe:animate-pulse' />
         <Sparkles className='relative h-7 w-7 text-primary' />
       </div>
 

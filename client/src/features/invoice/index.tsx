@@ -58,10 +58,10 @@ const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
 // exported/prop-drilled, since the header title bar needs it independently of that
 // component actually being mounted below.
 const INVOICE_TYPE_BADGE_COLOR: Record<string, string> = {
-  cash: 'bg-green-100 text-green-800',
-  credit: 'bg-blue-100 text-blue-800',
-  pending: 'bg-yellow-100 text-yellow-800',
-  quotation: 'bg-violet-100 text-violet-800',
+  cash: 'bg-[var(--chart-theme-primary-tint,var(--color-green-100))] text-[var(--chart-theme-primary,var(--color-green-800))]',
+  credit: 'bg-[var(--chart-theme-primary-tint,var(--color-blue-100))] text-[var(--chart-theme-primary,var(--color-blue-800))]',
+  pending: 'bg-[var(--chart-theme-primary-tint,var(--color-yellow-100))] text-[var(--chart-theme-primary,var(--color-yellow-800))]',
+  quotation: 'bg-[var(--chart-theme-primary-tint,var(--color-violet-100))] text-[var(--chart-theme-primary,var(--color-violet-800))]',
 }
 
 const getInitialUrduOnlyPreference = (): boolean => {

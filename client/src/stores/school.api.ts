@@ -177,6 +177,7 @@ export const schoolApi = createApi({
     'FeeCategory',
     'FeeStructure',
     'FeeVoucher',
+    'FeePayment',
     'SchoolTransaction',
     'SchoolRecurringExpense',
     'FeeAccountingDashboard',
@@ -1062,7 +1063,7 @@ export const schoolApi = createApi({
     }),
     payFeeVoucher: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/fee-vouchers/${id}/pay`, method: 'POST', body: data }),
-      invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard', 'SchoolTransaction'],
+      invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard', 'SchoolTransaction', 'FeePayment'],
     }),
     updateFeeVoucher: builder.mutation({
       query: ({ id, ...data }) => ({ url: `/fee-vouchers/${id}`, method: 'PATCH', body: data }),
@@ -1101,7 +1102,7 @@ export const schoolApi = createApi({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard', 'SchoolTransaction'],
+      invalidatesTags: ['FeeVoucher', 'FeeAccountingDashboard', 'SchoolTransaction', 'FeePayment'],
     }),
     recordStudentAdvancePayment: builder.mutation({
       query: ({ studentId, ...data }) => ({
@@ -1119,6 +1120,62 @@ export const schoolApi = createApi({
       query: ({ ids, month, year }: { ids: string[]; month?: string; year?: number }) =>
         ({ url: '/fee-vouchers/student-balances', params: { ids: ids.join(','), month, year } }),
       providesTags: ['FeeVoucher'],
+    }),
+    getFeeReceipts: builder.query({
+      query: (params) => ({ url: '/fee-payments', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeReceipt: builder.query({
+      query: (id: string) => `/fee-payments/${id}`,
+      providesTags: ['FeePayment'],
+    }),
+    cancelFeeReceipt: builder.mutation({
+      query: ({ id, reason }: { id: string; reason?: string }) => ({
+        url: `/fee-payments/${id}/cancel`,
+        method: 'POST',
+        body: { reason },
+      }),
+      invalidatesTags: ['FeePayment', 'FeeVoucher', 'FeeAccountingDashboard', 'SchoolTransaction'],
+    }),
+    backfillFeeReceipts: builder.mutation({
+      query: () => ({ url: '/fee-payments/backfill', method: 'POST' }),
+      invalidatesTags: ['FeePayment'],
+    }),
+    getFeeCollectionDashboard: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/dashboard', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeCollectionMonthly: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/monthly', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeCollectionDaily: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/daily', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeCollectionYearly: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/yearly', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeCollectionTransactions: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/transactions', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeCollectionPaymentMethods: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/payment-methods', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeCollectionStaff: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/staff', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeCollectionDiscounts: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/discounts', params }),
+      providesTags: ['FeePayment'],
+    }),
+    getFeeCollectionRefunds: builder.query({
+      query: (params) => ({ url: '/fee-payments/reports/refunds', params }),
+      providesTags: ['FeePayment'],
     }),
     getReceivableSummary: builder.query({
       query: (params: { month: string; year: number; classId?: string }) => {
@@ -1776,6 +1833,20 @@ export const {
   useRecordStudentAdvancePaymentMutation,
   useGetStudentCreditHistoryQuery,
   useGetStudentBalancesQuery,
+  // Fee Payments (Receipts)
+  useGetFeeReceiptsQuery,
+  useGetFeeReceiptQuery,
+  useCancelFeeReceiptMutation,
+  useBackfillFeeReceiptsMutation,
+  useGetFeeCollectionDashboardQuery,
+  useGetFeeCollectionMonthlyQuery,
+  useGetFeeCollectionDailyQuery,
+  useGetFeeCollectionYearlyQuery,
+  useGetFeeCollectionTransactionsQuery,
+  useGetFeeCollectionPaymentMethodsQuery,
+  useGetFeeCollectionStaffQuery,
+  useGetFeeCollectionDiscountsQuery,
+  useGetFeeCollectionRefundsQuery,
   useGetReceivableSummaryQuery,
   useGetYearlyFeeReportQuery,
   // School Transactions

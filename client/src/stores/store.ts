@@ -44,6 +44,7 @@ import { restaurantApi } from './restaurant.api';
 import { whatsappApi } from './whatsapp.api';
 import { whatsappCloudApi } from './whatsappCloud.api';
 import { smsGatewayApi } from './smsGateway.api';
+import { imageSearchApi } from './imageSearch.api';
 import { cashRegisterApi } from './cashRegister.api';
 import { imeiApi } from './imei.api';
 import { usedPhoneBuybackApi } from './usedPhoneBuyback.api';
@@ -70,6 +71,7 @@ import { recurringExpenseApi } from './recurringExpense.api';
 import { expenseApi } from './expense.api';
 import { communicationLogApi } from './communicationLog.api';
 import { reminderApi } from './reminder.api';
+import { noteApi } from './note.api';
 import { leadApi } from './lead.api';
 import { quickLinksApi } from './quickLinks.api';
 import { localizationApi } from './localization.api';
@@ -127,6 +129,7 @@ export const store = configureStore({
     [whatsappApi.reducerPath]: whatsappApi.reducer,
     [whatsappCloudApi.reducerPath]: whatsappCloudApi.reducer,
     [smsGatewayApi.reducerPath]: smsGatewayApi.reducer,
+    [imageSearchApi.reducerPath]: imageSearchApi.reducer,
     [cashRegisterApi.reducerPath]: cashRegisterApi.reducer,
     [imeiApi.reducerPath]: imeiApi.reducer,
     [usedPhoneBuybackApi.reducerPath]: usedPhoneBuybackApi.reducer,
@@ -153,6 +156,7 @@ export const store = configureStore({
     [expenseApi.reducerPath]: expenseApi.reducer,
     [communicationLogApi.reducerPath]: communicationLogApi.reducer,
     [reminderApi.reducerPath]: reminderApi.reducer,
+    [noteApi.reducerPath]: noteApi.reducer,
     [leadApi.reducerPath]: leadApi.reducer,
     [quickLinksApi.reducerPath]: quickLinksApi.reducer,
     [localizationApi.reducerPath]: localizationApi.reducer,
@@ -203,6 +207,7 @@ export const store = configureStore({
       whatsappApi.middleware,
       whatsappCloudApi.middleware,
       smsGatewayApi.middleware,
+      imageSearchApi.middleware,
       cashRegisterApi.middleware,
       imeiApi.middleware,
       usedPhoneBuybackApi.middleware,
@@ -229,6 +234,7 @@ export const store = configureStore({
       expenseApi.middleware,
       communicationLogApi.middleware,
       reminderApi.middleware,
+      noteApi.middleware,
       leadApi.middleware,
       quickLinksApi.middleware,
       localizationApi.middleware,

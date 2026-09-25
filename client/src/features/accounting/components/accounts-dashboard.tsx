@@ -326,7 +326,7 @@ export function AccountsDashboard({ refreshTrigger = 0 }: AccountsDashboardProps
                   <YAxis />
                   <Tooltip formatter={(value: number) => formatMoney(value)} />
                   <Legend />
-                  <Line type="monotone" dataKey="amount" stroke="#8884d8" activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="amount" stroke="var(--chart-theme-primary, #8884d8)" activeDot={{ r: 8 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (

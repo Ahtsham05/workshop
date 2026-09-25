@@ -7,6 +7,7 @@ const masterProductRoute = require('./masterProduct.route');
 const categoryRoute = require('./category.route');
 const subCategoryRoute = require('./subCategory.route');
 const brandRoute = require('./brand.route');
+const imageSearchRoute = require('./imageSearch.route');
 const priceCheckerRoute = require('./priceChecker.route');
 const priceUpdateRoute = require('./priceUpdate.route');
 const productAttributeRoute = require('./productAttribute.route');
@@ -36,6 +37,7 @@ const customerAccountTypeRoute = require('./customerAccountType.route');
 const customerLedgerRoute = require('./customerLedger.route');
 const communicationLogRoute = require('./communicationLog.route');
 const reminderRoute = require('./reminder.route');
+const noteRoute = require('./note.route');
 const leadRoute = require('./lead.route');
 const quickLinksRoute = require('./quickLinks.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
@@ -131,6 +133,7 @@ const schoolTransactionRoute = require('./schoolTransaction.route');
 const schoolRecurringExpenseRoute = require('./schoolRecurringExpense.route');
 const feeStructureRoute = require('./feeStructure.route');
 const feeVoucherRoute = require('./feeVoucher.route');
+const feePaymentRoute = require('./feePayment.route');
 const feePaymentRequestRoute = require('./feePaymentRequest.route');
 const schoolAccountingRoute = require('./schoolAccounting.route');
 const schoolReportsEngineRoute = require('./schoolReportsEngine.route');
@@ -185,6 +188,10 @@ const defaultRoutes = [
   {
     path: '/brands',
     route: brandRoute,
+  },
+  {
+    path: '/image-search',
+    route: imageSearchRoute,
   },
   {
     path: '/price-checker',
@@ -317,6 +324,10 @@ const defaultRoutes = [
   {
     path: '/reminders',
     route: reminderRoute
+  },
+  {
+    path: '/notes',
+    route: noteRoute
   },
   {
     path: '/leads',
@@ -610,6 +621,10 @@ const defaultRoutes = [
   {
     path: '/fee-vouchers',
     route: feeVoucherRoute,
+  },
+  {
+    path: '/fee-payments',
+    route: feePaymentRoute,
   },
   {
     path: '/fee-payment-requests',

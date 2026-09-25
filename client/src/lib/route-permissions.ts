@@ -107,6 +107,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/subscription', systemRoles: ['superAdmin', 'system_admin'] },
 
   // Settings
+  // Your own account — every signed-in person, whatever their role.
+  { prefix: '/profile', allowAllAuthenticated: true },
   { prefix: '/settings/account', allowAllAuthenticated: true },
   { prefix: '/settings/display', allowAllAuthenticated: true },
   { prefix: '/settings/offline', allowAllAuthenticated: true },
@@ -156,6 +158,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/accounting', anyPermission: ['viewAccounting', 'viewCustomers', 'viewSuppliers'] },
   { prefix: '/cash-register', anyPermission: ['viewCashRegister'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/reminders', anyPermission: ['viewReminders'] },
+  // Personal notepad — every signed-in user, no role permission needed.
+  { prefix: '/notes', allowAllAuthenticated: true },
   { prefix: '/leads', anyPermission: ['viewLeads'] },
   {
     prefix: '/reports',

@@ -44,6 +44,7 @@ import { recurringExpenseApi } from './recurringExpense.api'
 import { expenseApi } from './expense.api'
 import { communicationLogApi } from './communicationLog.api'
 import { reminderApi } from './reminder.api'
+import { noteApi } from './note.api'
 import { leadApi } from './lead.api'
 
 // Every RTK Query slice registered in store.ts — kept as a flat list so this stays a
@@ -59,7 +60,7 @@ const ALL_APIS = [
   insightApi, purchaseSuggestionsApi, productAttributeApi, productVariantApi,
   productApi, inventoryApi, batchApi, brandApi, purchaseCatalogApi,
   inventoryTransferApi, stockAdjustmentApi, auditLogApi, aiAssistantApi,
-  recurringExpenseApi, expenseApi, communicationLogApi, reminderApi, leadApi,
+  recurringExpenseApi, expenseApi, communicationLogApi, reminderApi, noteApi, leadApi,
   productAnalyticsApi,
 ]
 

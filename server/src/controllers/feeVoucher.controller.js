@@ -2,7 +2,7 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { feeVoucherService, feeStructureService } = require('../services');
+const { feeVoucherService, feeStructureService, feePaymentService } = require('../services');
 const { Student } = require('../models');
 
 const createVoucher = catchAsync(async (req, res) => {
@@ -177,8 +177,13 @@ const payVoucher = catchAsync(async (req, res) => {
     branchId: req.branchId,
     createdBy: req.user._id,
   };
-  const voucher = await feeVoucherService.payVoucher(req.params.voucherId, req.body, scope);
-  res.send(voucher);
+  const result = await feePaymentService.recordFeePayment(
+    null,
+    { ...req.body, voucherIds: [req.params.voucherId] },
+    scope
+  );
+  const voucher = await feeVoucherService.getVoucherById(req.params.voucherId, scope);
+  res.send({ ...result, voucher });
 });
 
 const updateVoucher = catchAsync(async (req, res) => {
@@ -255,7 +260,7 @@ const bulkPayStudentVouchers = catchAsync(async (req, res) => {
     branchId: req.branchId,
     createdBy: req.user._id,
   };
-  const result = await feeVoucherService.bulkPayStudentVouchers(
+  const result = await feePaymentService.recordFeePayment(
     req.params.studentId,
     req.body,
     scope

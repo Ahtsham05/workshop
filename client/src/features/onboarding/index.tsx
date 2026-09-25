@@ -1,40 +1,41 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
-import { useForm } from 'react-hook-form'
+import { useForm, type UseFormReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
-import { useSetupOrganizationMutation, useLazyGetMyOrganizationQuery } from '@/stores/organization.api'
-import { useGetCountriesQuery } from '@/stores/localization.api'
-import { setActiveBranch, setUser } from '@/stores/auth.slice'
 import { useDispatch, useSelector } from 'react-redux'
-import { AppDispatch, RootState } from '@/stores/store'
 import toast from 'react-hot-toast'
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Form } from '@/components/ui/form'
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
+  useSetupOrganizationMutation,
+  useLazyGetMyOrganizationQuery,
+} from '@/stores/organization.api'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { SearchableSelect } from '@/components/ui/searchable-select'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Building2, ArrowRight, CheckCircle2 } from 'lucide-react'
-import { BUSINESS_TYPE_OPTIONS } from '@/lib/business-types'
+  useGetCountriesQuery,
+  useGetCurrenciesQuery,
+  useLazyGetCountryDefaultsQuery,
+} from '@/stores/localization.api'
+import { setActiveBranch, setUser } from '@/stores/auth.slice'
+import { AppDispatch, RootState } from '@/stores/store'
 import { useAutoUrduNameFromEnglish } from '@/hooks/use-auto-urdu-name-from-english'
-import { useUrduDisplay } from '@/context/urdu-display-context'
+import { cn } from '@/lib/utils'
+import { ONBOARDING_BUSINESS_TYPES } from '@/lib/business-types'
+import { countryFlagEmoji } from '@/lib/country-flag'
+import { OnboardingShell, type OnboardingStep } from './components/onboarding-shell'
+import {
+  BrandStep,
+  BusinessStep,
+  CTA_BUTTON_CLASS,
+  LocationStep,
+  SuccessStep,
+  WelcomeStep,
+  type OnboardingFormValues,
+} from './components/onboarding-steps'
 
 const formSchema = z.object({
-  name: z.string().min(2, 'Company name must be at least 2 characters'),
+  name: z.string().min(2, 'Business name must be at least 2 characters'),
   nameUrdu: z.string().optional(),
   businessType: z.string().min(1, 'Please select a business type'),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -43,24 +44,64 @@ const formSchema = z.object({
   city: z.string().optional(),
   country: z.string().optional(),
   countryCode: z.string().optional(),
+  baseCurrency: z.string().optional(),
   taxNumber: z.string().optional(),
   website: z.string().optional(),
   description: z.string().optional(),
 })
 
-type FormValues = z.infer<typeof formSchema>
+/** Welcome is index 0; the rail only lists the steps that ask for something. */
+const STEPS: OnboardingStep[] = [
+  { key: 'welcome', title: 'Welcome', description: 'What setup involves' },
+  { key: 'business', title: 'Your business', description: 'Name, type and contact' },
+  { key: 'location', title: 'Location & currency', description: 'Where you trade' },
+  { key: 'brand', title: 'Logo & review', description: 'Finish setting up' },
+  { key: 'done', title: 'All set', description: 'Start using Logix Plus' },
+]
+
+/**
+ * Keeps the Urdu business name in step with the English one. Lives in its own component
+ * so the hook (and the translation request it makes) only runs for accounts that asked
+ * for Urdu input — a hook cannot be called conditionally, a component can be rendered
+ * conditionally.
+ */
+function AutoUrduBusinessName({ form }: { form: UseFormReturn<OnboardingFormValues> }) {
+  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
+  return null
+}
 
 export default function OnboardingPage() {
-  const { showUrduInput } = useUrduDisplay()
+  // The Urdu display default is "on" app-wide, which would put an Urdu name box in front
+  // of every new account. Onboarding shows it only when someone has explicitly turned it
+  // on in Display settings.
+  const urduInputEnabled = localStorage.getItem('vite-ui-show-urdu-input') === 'true'
   const navigate = useNavigate()
   const dispatch = useDispatch<AppDispatch>()
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(0)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [setupOrganization, { isLoading }] = useSetupOrganizationMutation()
   const [fetchMyOrganization] = useLazyGetMyOrganizationQuery()
+  const [fetchCountryDefaults] = useLazyGetCountryDefaultsQuery()
   const { data: countries } = useGetCountriesQuery()
+  const { data: currencies = [] } = useGetCurrenciesQuery()
+  const [localeDefaults, setLocaleDefaults] = useState<{
+    locale?: string
+    dateFormat?: string
+    taxSystem?: string
+  }>({})
+
   const countryOptions = useMemo(
-    () => (countries || []).map((c) => ({ value: c.code, label: c.name })),
+    () =>
+      (countries || []).map((c) => {
+        const flag = countryFlagEmoji(c.code)
+        return {
+          value: c.code,
+          // The flag sits in the label so it shows both in the list and on the closed
+          // trigger; the code stays visible for platforms that don't draw flag emoji.
+          label: flag ? `${flag}  ${c.name}` : c.name,
+          sublabel: c.code,
+        }
+      }),
     [countries]
   )
   const authData = useSelector((state: RootState) => state.auth.data)
@@ -72,7 +113,10 @@ export default function OnboardingPage() {
   // onboarded yet (show the form).
   const [readyToOnboard, setReadyToOnboard] = useState<boolean | null>(null)
 
-  function applyOnboardedUser(organization: { id: string; businessType: string }, branch?: { id?: string; _id?: string; name: string } | null) {
+  function applyOnboardedUser(
+    organization: { id: string; businessType: string },
+    branch?: { id?: string; _id?: string; name: string } | null
+  ) {
     const existingUser = authData?.user || JSON.parse(localStorage.getItem('user') || '{}')
     const updatedUser = {
       ...existingUser,
@@ -116,40 +160,91 @@ export default function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const form = useForm<FormValues>({
+  const form = useForm<OnboardingFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
       nameUrdu: '',
       businessType: '',
-      email: '',
+      // Prefilled with the address they just signed up with — almost always the same
+      // one the business uses, and easy to change.
+      email: authData?.user?.email ?? '',
       phone: '',
       address: '',
       city: '',
       country: '',
       countryCode: '',
+      baseCurrency: '',
       taxNumber: '',
       website: '',
       description: '',
     },
   })
 
-  useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu')
+  // Default to the United States — that is who this is built for — so the currency,
+  // date format and tax system are already right for most accounts. Runs once, and only
+  // while the country is still untouched.
+  const appliedDefaultCountry = useRef(false)
+  useEffect(() => {
+    if (appliedDefaultCountry.current) return
+    if (!countries?.length || form.getValues('countryCode')) return
+    if (!countries.some((c) => c.code === 'US')) return
+    appliedDefaultCountry.current = true
+    void handleCountryChange('US')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countries])
 
   const logoPreviewUrl = useMemo(() => (logoFile ? URL.createObjectURL(logoFile) : ''), [logoFile])
-  useEffect(() => () => {
-    if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl)
-  }, [logoPreviewUrl])
+  useEffect(
+    () => () => {
+      if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl)
+    },
+    [logoPreviewUrl]
+  )
 
-  async function onSubmit(data: FormValues) {
+  /** Picking a country preloads the money/date/tax settings for that country. */
+  async function handleCountryChange(code: string) {
+    const selected = countries?.find((c) => c.code === code)
+    form.setValue('countryCode', code, { shouldDirty: true })
+    form.setValue('country', selected?.name || '', { shouldDirty: true })
+    try {
+      const defaults = await fetchCountryDefaults(code).unwrap()
+      if (defaults.defaultCurrency) {
+        // Always follow the country, don't just fill a blank: picking a new country and
+        // being left with the previous country's currency is worse than no default.
+        form.setValue('baseCurrency', defaults.defaultCurrency, { shouldDirty: true })
+      }
+      setLocaleDefaults({
+        locale: defaults.locale,
+        dateFormat: defaults.dateFormat,
+        taxSystem: defaults.taxSystem,
+      })
+    } catch {
+      // Reference data is a convenience — the user can still pick a currency by hand.
+    }
+  }
+
+  async function goNext() {
+    if (step === 1) {
+      const valid = await form.trigger(['name', 'businessType', 'email'])
+      if (!valid) return
+    }
+    setStep((current) => Math.min(current + 1, STEPS.length - 1))
+  }
+
+  async function onSubmit(data: OnboardingFormValues) {
     try {
       const nu = data.nameUrdu?.trim()
       const defaultBranchNameUrdu = nu ? `${nu} — مین برانچ` : ''
-      const result = await setupOrganization({ ...data, defaultBranchNameUrdu, logoFile }).unwrap()
+      const result = await setupOrganization({
+        ...data,
+        ...localeDefaults,
+        defaultBranchNameUrdu,
+        logoFile,
+      }).unwrap()
 
       applyOnboardedUser(result.organization, result.branch)
-      toast.success('Company setup complete! Welcome aboard 🎉')
-      navigate({ to: '/', replace: true })
+      setStep(STEPS.length - 1)
     } catch (error: any) {
       // The server already has this account marked onboarded (most likely: an earlier
       // submit succeeded server-side but the response never made it back before the
@@ -171,292 +266,124 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleFormSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
-    // Step 1 submit should only move to next step, never call setup API
-    if (step === 1) {
-      const valid = await form.trigger(['name', 'businessType'])
-      if (valid) {
-        setStep(2)
-      }
-      return
-    }
-
-    // Step 2 submit performs final onboarding submit
-    await form.handleSubmit(onSubmit)(event)
-  }
-
   if (readyToOnboard === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <div className='flex min-h-svh items-center justify-center'>
+        <Loader2 className='text-primary h-8 w-8 animate-spin' />
       </div>
     )
   }
 
+  const values = form.watch()
+  const businessTypeLabel =
+    ONBOARDING_BUSINESS_TYPES.find((bt) => bt.value === values.businessType)?.label || '—'
+  const summary = [
+    { label: 'Organization', value: values.name || '—' },
+    { label: 'Main branch', value: values.name ? `${values.name} - Main Branch` : '—' },
+    { label: 'Business type', value: businessTypeLabel },
+    {
+      label: 'Currency',
+      value: values.baseCurrency || 'Not set (you can pick one later)',
+    },
+  ]
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 rounded-full bg-primary/10">
-              <Building2 className="h-8 w-8 text-primary" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">Set Up Your Company</h1>
-          <p className="text-muted-foreground mt-2">
-            Tell us about your business to get started. This takes less than 2 minutes.
-          </p>
-        </div>
+    <OnboardingShell steps={STEPS} current={step}>
+      {step === 0 && (
+        <WelcomeStep name={authData?.user?.name} onStart={() => setStep(1)} />
+      )}
 
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {[1, 2].map((s) => (
-            <div key={s} className="flex items-center gap-2">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                  step >= s ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                }`}
+      {step === STEPS.length - 1 && (
+        <SuccessStep
+          businessName={values.name || 'Your business'}
+          onContinue={() => navigate({ to: '/', replace: true })}
+        />
+      )}
+
+      {step > 0 && step < STEPS.length - 1 && (
+        <Form {...form}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (step === STEPS.length - 2) {
+                void form.handleSubmit(onSubmit)(event)
+              } else {
+                void goNext()
+              }
+            }}
+            className='space-y-8'
+          >
+            <div className='space-y-1.5'>
+              <p className='text-muted-foreground text-xs font-semibold tracking-wider uppercase'>
+                Step {step} of {STEPS.length - 2}
+              </p>
+              <h1 className='text-2xl font-semibold tracking-tight'>{STEPS[step].title}</h1>
+              <p className='text-muted-foreground text-sm'>
+                {step === 1 && 'Tell us who you are. Only the name and type are required.'}
+                {step === 2 && 'Where you trade, and the currency you keep your books in.'}
+                {step === 3 && 'Add your logo, then check everything before we create it.'}
+              </p>
+            </div>
+
+            {step === 1 && (
+              <>
+                {urduInputEnabled && <AutoUrduBusinessName form={form} />}
+                <BusinessStep form={form} showUrduInput={urduInputEnabled} />
+              </>
+            )}
+            {step === 2 && (
+              <LocationStep
+                form={form}
+                countryOptions={countryOptions}
+                currencies={currencies}
+                onCountryChange={handleCountryChange}
+              />
+            )}
+            {step === 3 && (
+              <BrandStep
+                form={form}
+                logoPreviewUrl={logoPreviewUrl}
+                onLogoChange={setLogoFile}
+                summary={summary}
+              />
+            )}
+
+            <div className='flex items-center justify-between gap-3 border-t pt-6'>
+              <Button
+                type='button'
+                variant='ghost'
+                onClick={() => setStep((current) => Math.max(current - 1, 0))}
+                disabled={isLoading}
               >
-                {step > s ? <CheckCircle2 className="h-4 w-4" /> : s}
-              </div>
-              {s < 2 && <div className={`w-12 h-0.5 ${step > s ? 'bg-primary' : 'bg-muted'}`} />}
-            </div>
-          ))}
-        </div>
+                <ArrowLeft className='mr-1 h-4 w-4' />
+                Back
+              </Button>
 
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>
-              {step === 1 ? 'Basic Information' : 'Contact & Location'}
-            </CardTitle>
-            <CardDescription>
-              {step === 1
-                ? 'Enter your company name and type'
-                : 'Add contact details and address (optional)'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={handleFormSubmit} className="space-y-4">
-                {step === 1 && (
-                  <>
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Company Name *</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. Acme Corporation" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    {showUrduInput && (
-                      <FormField
-                        control={form.control}
-                        name="nameUrdu"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Company Name (Urdu)</FormLabel>
-                            <FormControl>
-                              <Input placeholder="اردو میں نام" dir="rtl" className="text-right" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    )}
-                    <FormField
-                      control={form.control}
-                      name="businessType"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Business Type *</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select your business type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {BUSINESS_TYPE_OPTIONS.map((bt) => (
-                                <SelectItem key={bt.value} value={bt.value}>
-                                  {bt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Business Email</FormLabel>
-                          <FormControl>
-                            <Input placeholder="company@example.com" type="email" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Brief description of your business" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="space-y-2">
-                      <FormLabel>Company Logo</FormLabel>
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] ?? null
-                          setLogoFile(file)
-                        }}
-                      />
-                      {logoPreviewUrl ? (
-                        <img
-                          src={logoPreviewUrl}
-                          alt="Company logo preview"
-                          className="h-20 w-20 rounded-md border object-cover"
-                        />
-                      ) : null}
-                    </div>
-                  </>
-                )}
-
-                {step === 2 && (
-                  <>
-                    <FormField
-                      control={form.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Phone Number</FormLabel>
-                          <FormControl>
-                            <Input placeholder="+1 (555) 000-0000" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="city"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>City</FormLabel>
-                            <FormControl>
-                              <Input placeholder="New York" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormItem>
-                        <FormLabel>Country</FormLabel>
-                        <SearchableSelect
-                          options={countryOptions}
-                          value={form.watch('countryCode') || ''}
-                          onValueChange={(value) => {
-                            const selectedCountry = countries?.find((c) => c.code === value)
-                            form.setValue('countryCode', value, { shouldDirty: true })
-                            form.setValue('country', selectedCountry?.name || '', { shouldDirty: true })
-                          }}
-                          placeholder="Select country"
-                          searchPlaceholder="Search countries..."
-                        />
-                        <FormMessage />
-                      </FormItem>
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name="address"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Address</FormLabel>
-                          <FormControl>
-                            <Input placeholder="123 Main St" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="taxNumber"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tax / VAT Number</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Optional" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="website"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Website</FormLabel>
-                          <FormControl>
-                            <Input placeholder="https://yourcompany.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </>
-                )}
-
-                <div className="flex justify-between pt-4">
-                  {step === 2 && (
-                    <Button type="button" variant="outline" onClick={() => setStep(1)}>
-                      Back
-                    </Button>
-                  )}
-                  {step === 1 ? (
-                    <Button
-                      type="submit"
-                      className="ml-auto"
-                    >
-                      Next <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
+              {step === STEPS.length - 2 ? (
+                <Button
+                  type='submit'
+                  className={cn('h-11', CTA_BUTTON_CLASS)}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className='h-4 w-4 animate-spin' />
+                      Setting up…
+                    </>
                   ) : (
-                    <Button type="submit" disabled={isLoading} className="ml-auto">
-                      {isLoading ? 'Setting up...' : 'Complete Setup'}
-                    </Button>
+                    'Complete setup'
                   )}
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
-
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          You can update these details anytime from Settings.
-        </p>
-      </div>
-    </div>
+                </Button>
+              ) : (
+                <Button type='submit' className={cn('h-11', CTA_BUTTON_CLASS)}>
+                  Continue
+                  <ArrowRight className='ml-1 h-4 w-4' />
+                </Button>
+              )}
+            </div>
+          </form>
+        </Form>
+      )}
+    </OnboardingShell>
   )
 }

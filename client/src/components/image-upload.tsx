@@ -4,9 +4,11 @@ import React, { useCallback, useState, useRef, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { useLanguage } from '@/context/language-context'
-import { Upload, X, ImageIcon, Loader2, Camera, Sparkles } from 'lucide-react'
+import { Upload, X, ImageIcon, Loader2, Camera, Sparkles, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { ImageSearchContext } from '@/stores/imageSearch.api'
 import CameraCapture from './camera-capture'
+import WebImageSearchDialog from './web-image-search-dialog'
 
 interface ImageUploadProps {
   onImageUpload: (imageData: { url: string; publicId: string }) => void
@@ -23,7 +25,9 @@ interface ImageUploadProps {
   autoSearchFromText?: string
   /** Enables the banner when provided; used with “Find from name” for the search query. */
   getSearchQuery?: () => string
-  searchContext?: 'product' | 'category' | 'subcategory'
+  searchContext?: 'product' | 'category' | 'subcategory' | 'brand'
+  /** Optional code to include in the web search — unlocks the exact-match providers. */
+  getBarcode?: () => string
   /** When set, uploads to this path under VITE_BACKEND_URL (e.g. customers/upload-image). */
   uploadSlug?: string
   /** Alt text for the preview image */
@@ -40,6 +44,7 @@ export default function ImageUpload({
   autoSearchFromText,
   getSearchQuery,
   searchContext = 'product',
+  getBarcode,
   uploadSlug,
   previewAlt,
 }: ImageUploadProps) {
@@ -48,6 +53,7 @@ export default function ImageUpload({
   const [stockSearching, setStockSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [imageKey, setImageKey] = useState(0)
+  const [webSearchOpen, setWebSearchOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isComfortable = layout === 'comfortable'
@@ -298,12 +304,29 @@ export default function ImageUpload({
 
         <div className={isCompact ? 'space-y-2' : 'space-y-5'}>
           {showLocalPhotoBanner ? (
-            <div className='flex flex-wrap items-center gap-3'>
+            <div className='flex flex-wrap items-center gap-2'>
+              {/* Opens the full picker (web + barcode + stock providers, several
+                  candidates to choose from). The one-click button beside it is the older
+                  "first Pexels hit, no questions asked" shortcut, kept because for a
+                  category banner that is genuinely all that's wanted. */}
+              <Button
+                type='button'
+                size='default'
+                className='h-11 gap-2 shadow-sm sm:min-w-[10rem]'
+                disabled={disabled || uploading || stockSearching}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setWebSearchOpen(true)
+                }}
+              >
+                <Globe className='h-4 w-4 shrink-0' />
+                {t('find_image_from_web') || 'Find from web'}
+              </Button>
               <Button
                 type='button'
                 size='default'
                 variant='outline'
-                className='h-11 gap-2 shadow-sm sm:min-w-[11rem]'
+                className='h-11 gap-2 shadow-sm'
                 disabled={disabled || uploading || stockSearching}
                 onClick={(e) => {
                   e.stopPropagation()
@@ -417,6 +440,19 @@ export default function ImageUpload({
           <p className='mt-4 text-center text-sm font-medium text-destructive'>{error}</p>
         ) : null}
       </div>
+
+      <WebImageSearchDialog
+        open={webSearchOpen}
+        onOpenChange={setWebSearchOpen}
+        context={searchContext as ImageSearchContext}
+        defaultQuery={(getSearchQuery?.() ?? autoSearchFromText ?? '').trim()}
+        defaultBarcode={getBarcode?.() ?? ''}
+        maxSelectable={1}
+        onSelect={(images) => {
+          const picked = images[0]
+          if (picked?.url) onImageUpload({ url: picked.url, publicId: picked.publicId ?? '' })
+        }}
+      />
     </div>
   )
 }

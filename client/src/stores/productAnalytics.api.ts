@@ -251,6 +251,8 @@ export interface ProductAnalyticsResponse {
     nameUrdu: string
     description: string
     image: { url: string } | null
+    /** Ordered gallery; images[0] is the same photo as `image` above. */
+    images: { url: string; sourceUrl?: string }[]
     barcode: string
     sku: string
     unit?: string
