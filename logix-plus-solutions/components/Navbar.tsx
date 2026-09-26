@@ -1,107 +1,164 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Menu, X } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
+import { LANDING_PAGES } from "@/lib/landing-pages";
+import { LOGIN_URL, SIGNUP_URL } from "@/lib/site";
 
-const navLinks = [
-  { label: "Home", href: "#home" },
-  { label: "Expertise", href: "#expertise" },
-  { label: "Services", href: "#services" },
-  { label: "About", href: "#about" },
-  { label: "Contact", href: "#contact" },
+const products = LANDING_PAGES.filter((p) => p.group === "product");
+const industries = LANDING_PAGES.filter((p) => p.group === "industry");
+const regions = LANDING_PAGES.filter((p) => p.group === "region");
+
+const mainLinks = [
+  { label: "Features", href: "/#features" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "FAQ", href: "/#faq" },
+  { label: "Contact", href: "/#contact" },
 ];
 
-export default function Navbar() {
-  const [isOpen, setIsOpen] = useState(false);
+export default function Navbar({ alwaysSolid = false }: { alwaysSolid?: boolean }) {
+  const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 12);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    const onScroll = () => setScrolled(window.scrollY > 16);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  const solid = alwaysSolid || scrolled || open;
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? "bg-stone-50/95 backdrop-blur-md border-b border-stone-200 shadow-sm"
-          : "bg-transparent"
+      className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${
+        solid ? "bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm" : "bg-transparent"
       }`}
     >
-      <nav className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 md:h-[4.25rem]">
-          <Link href="#home" className="flex items-center">
-            <Image
-              src="/logo-dark.png"
-              alt="Logix Plus Solutions"
-              width={160}
-              height={60}
-              className="h-10 md:h-11 w-auto object-contain"
-              priority
-            />
-          </Link>
+      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:h-[4.5rem] lg:px-8" aria-label="Main">
+        <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="Logix Plus home">
+          <span className={`flex h-10 items-center rounded-lg px-1.5 ${solid ? "" : "bg-white"}`}>
+            <Image src="/logo-dark.png" alt="Logix Plus Solutions" width={112} height={80} className="h-9 w-auto" priority />
+          </span>
+        </Link>
 
-          <ul className="hidden md:flex items-center gap-0.5">
-            {navLinks.map((link) => (
-              <li key={link.href}>
-                <a
-                  href={link.href}
-                  className="px-3 py-2 text-sm font-medium text-stone-600 hover:text-stone-900 rounded-md transition-colors"
+        <ul className={`hidden items-center gap-1 lg:flex ${solid ? "text-slate-700" : "text-slate-200"}`}>
+          <li className="group relative">
+            <button
+              type="button"
+              className={`flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                solid ? "hover:text-slate-950" : "hover:text-white"
+              }`}
+              aria-haspopup="true"
+            >
+              Solutions <ChevronDown className="h-4 w-4 transition-transform group-hover:rotate-180" />
+            </button>
+            <div className="invisible absolute left-1/2 top-full w-[40rem] -translate-x-1/2 pt-3 opacity-0 transition-all duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+              <div className="grid grid-cols-3 gap-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 shadow-2xl">
+                {[
+                  { title: "Software", items: products },
+                  { title: "Industries", items: industries },
+                  { title: "Regions", items: regions },
+                ].map((col) => (
+                  <div key={col.title}>
+                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">{col.title}</p>
+                    <ul className="space-y-1">
+                      {col.items.map((p) => (
+                        <li key={p.slug}>
+                          <Link
+                            href={`/${p.slug}`}
+                            className="block rounded-md px-2 py-1.5 text-sm font-medium hover:bg-blue-50 hover:text-blue-700"
+                          >
+                            {p.navLabel}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </li>
+          {mainLinks.map((l) => (
+            <li key={l.href}>
+              <Link
+                href={l.href}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                  solid ? "hover:text-slate-950" : "hover:text-white"
+                }`}
+              >
+                {l.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+
+        <div className="hidden items-center gap-2 lg:flex">
+          <a
+            href={LOGIN_URL}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+              solid ? "text-slate-700 hover:text-slate-950" : "text-slate-200 hover:text-white"
+            }`}
+          >
+            Log in
+          </a>
+          <a href={SIGNUP_URL} className="btn btn-brand px-5 py-2.5 text-sm">
+            Start free trial
+          </a>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`rounded-lg p-2 lg:hidden ${solid ? "text-slate-800" : "text-white"}`}
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+        >
+          {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+        </button>
+      </nav>
+
+      {open && (
+        <div className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-slate-200 bg-white px-4 pb-6 pt-2 lg:hidden">
+          <ul className="space-y-1">
+            {mainLinks.map((l) => (
+              <li key={l.href}>
+                <Link
+                  href={l.href}
+                  onClick={() => setOpen(false)}
+                  className="block rounded-lg px-3 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50"
                 >
-                  {link.label}
-                </a>
+                  {l.label}
+                </Link>
               </li>
             ))}
           </ul>
-
-          <div className="hidden md:flex items-center">
-            <a
-              href="#contact"
-              className="btn-primary px-5 py-2.5 rounded-lg text-sm"
-            >
-              Start a project
-            </a>
-          </div>
-
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 rounded-md text-stone-700 hover:bg-stone-100 transition-colors"
-            aria-label="Toggle menu"
-            type="button"
-          >
-            {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
-
-        <div
-          className={`md:hidden overflow-hidden transition-all duration-300 ${
-            isOpen ? "max-h-96 pb-4" : "max-h-0"
-          }`}
-        >
-          <div className="surface-card p-4 mt-2 flex flex-col gap-1">
-            {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                onClick={() => setIsOpen(false)}
-                className="px-3 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-50 rounded-md transition-colors"
-              >
-                {link.label}
-              </a>
+          <p className="mb-2 mt-4 px-3 text-xs font-bold uppercase tracking-wider text-slate-400">Solutions</p>
+          <ul className="grid grid-cols-1 gap-1 min-[400px]:grid-cols-2">
+            {[...products, ...industries, ...regions].map((p) => (
+              <li key={p.slug}>
+                <Link
+                  href={`/${p.slug}`}
+                  onClick={() => setOpen(false)}
+                  className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  {p.navLabel}
+                </Link>
+              </li>
             ))}
-            <a
-              href="#contact"
-              onClick={() => setIsOpen(false)}
-              className="btn-primary mt-2 px-5 py-3 rounded-lg text-sm text-center"
-            >
-              Start a project
+          </ul>
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <a href={LOGIN_URL} className="btn btn-ghost py-3 text-sm">
+              Log in
+            </a>
+            <a href={SIGNUP_URL} className="btn btn-brand py-3 text-sm">
+              Start free trial
             </a>
           </div>
         </div>
-      </nav>
+      )}
     </header>
   );
 }

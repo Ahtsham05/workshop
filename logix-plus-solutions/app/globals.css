@@ -3,84 +3,189 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: "Source Sans 3", system-ui, sans-serif;
-  --font-serif: "Source Serif 4", Georgia, serif;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+  --ink: #0b1533;
+  --brand: #1d4ed8;
+  --brand-bright: #2563eb;
+  --cyan: #06b6d4;
 }
 
 html {
   scroll-behavior: smooth;
-}
-
-.whatsapp-fab {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background-color: #128c7e;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.12);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.whatsapp-fab:hover {
-  transform: scale(1.05);
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+  scroll-padding-top: 5rem;
 }
 
 body {
-  font-family: var(--font-sans);
-  background-color: #fafaf9;
-  color: #1c1917;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  background-color: #ffffff;
+  color: #0f172a;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar — restrained */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #f5f5f4;
-}
-::-webkit-scrollbar-thumb {
-  background: #a8a29e;
-  border-radius: 4px;
+::selection {
+  background: #bfdbfe;
+  color: #0b1533;
 }
 
-/* Editorial surface cards */
+/* ─── Buttons ─────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  border-radius: 0.75rem;
+  transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn-brand {
+  background: var(--brand-bright);
+  color: #fff;
+  box-shadow: 0 8px 24px -8px rgba(37, 99, 235, 0.6);
+}
+.btn-brand:hover {
+  background: var(--brand);
+  box-shadow: 0 12px 28px -8px rgba(37, 99, 235, 0.7);
+}
+.btn-ghost {
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+}
+.btn-ghost:hover {
+  border-color: #94a3b8;
+}
+.btn-ghost-dark {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.btn-ghost-dark:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.btn-whatsapp {
+  background: #16a34a;
+  color: #fff;
+}
+.btn-whatsapp:hover {
+  background: #15803d;
+}
+
+/* ─── Text helpers ────────────────────────────────────────── */
+.text-gradient {
+  background: linear-gradient(90deg, #2563eb 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.text-gradient-light {
+  background: linear-gradient(90deg, #60a5fa 0%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-bright);
+}
+
+/* ─── Surfaces ────────────────────────────────────────────── */
+.card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+.card-hover:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 20px 40px -20px rgba(15, 23, 42, 0.18);
+  transform: translateY(-2px);
+}
+.bg-ink {
+  background-color: var(--ink);
+}
+.hero-bg {
+  background-color: var(--ink);
+  background-image:
+    radial-gradient(ellipse 70% 55% at 85% 10%, rgba(37, 99, 235, 0.35), transparent 60%),
+    radial-gradient(ellipse 50% 45% at 5% 90%, rgba(6, 182, 212, 0.18), transparent 60%);
+}
+.dot-grid {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ─── Scroll reveal (hidden only once JS confirms it can reveal) ── */
+.reveal-ready .reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal-ready .reveal.visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ─── FAQ (native details) ────────────────────────────────── */
+.faq summary {
+  list-style: none;
+  cursor: pointer;
+}
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+.faq[open] .faq-icon {
+  transform: rotate(45deg);
+}
+
+/* ─── Floating WhatsApp ───────────────────────────────────── */
+.whatsapp-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #16a34a;
+  box-shadow: 0 10px 30px -6px rgba(22, 163, 74, 0.55);
+  transition: transform 0.2s ease;
+}
+.whatsapp-fab:hover {
+  transform: scale(1.06);
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee {
+  animation: marquee 40s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* ─── Legacy classes used by the legal pages ──────────────── */
 .surface-card {
   background: #ffffff;
   border: 1px solid #e7e5e4;
   border-radius: 0.75rem;
   box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-
-.surface-card:hover {
-  border-color: #d6d3d1;
-  box-shadow: 0 12px 40px rgba(28, 25, 23, 0.06);
-}
-
-/* Accent underline for headlines */
-.accent-underline {
-  text-decoration: underline;
-  text-decoration-color: #0f766e;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 6px;
-}
-
-/* Primary CTA */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -89,65 +194,32 @@ body {
   background: #0f172a;
   color: #fafaf9;
   font-weight: 600;
-  transition: background 0.2s ease, transform 0.15s ease;
+  transition: background 0.2s ease;
 }
-
 .btn-primary:hover {
   background: #1e293b;
 }
-
-/* Secondary outline */
 .btn-outline {
   border: 1px solid #d6d3d1;
   background: #ffffff;
   color: #1c1917;
   font-weight: 600;
-  transition: border-color 0.2s ease, background 0.2s ease;
 }
-
 .btn-outline:hover {
   border-color: #a8a29e;
-  background: #fafaf9;
 }
-
-/* Section fade-in */
-.reveal {
-  opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.65s ease, transform 0.65s ease;
-}
-
-.reveal.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Stat emphasis — no neon gradients */
-.stat-number {
-  font-family: var(--font-serif);
-  font-size: 2.25rem;
-  font-weight: 600;
-  color: #0f172a;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-
-/* Legal document pages */
 .legal-prose {
   color: #44403c;
   font-size: 1rem;
   line-height: 1.75;
 }
-
 .legal-prose h2 {
-  font-family: var(--font-serif);
   font-size: 1.375rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #1c1917;
   margin-top: 2.5rem;
   margin-bottom: 0.75rem;
 }
-
 .legal-prose h3 {
   font-size: 1.0625rem;
   font-weight: 600;
@@ -155,55 +227,40 @@ body {
   margin-top: 1.75rem;
   margin-bottom: 0.5rem;
 }
-
 .legal-prose p {
   margin-bottom: 1rem;
 }
-
 .legal-prose ul,
 .legal-prose ol {
   margin: 0 0 1rem 1.25rem;
+  list-style: disc;
 }
-
+.legal-prose ol {
+  list-style: decimal;
+}
 .legal-prose li {
   margin-bottom: 0.5rem;
 }
-
 .legal-prose a {
-  color: #0f766e;
+  color: #1d4ed8;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-
-.legal-prose a:hover {
-  color: #0d9488;
-}
-
 .legal-prose strong {
   color: #1c1917;
   font-weight: 600;
 }
-
 .legal-prose hr {
   border: none;
   border-top: 1px solid #e7e5e4;
   margin: 2rem 0;
 }
-
 .legal-action-card {
   background: #ffffff;
   border: 1px solid #e7e5e4;
   border-radius: 0.75rem;
   padding: 1.25rem 1.5rem;
-  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-
-.legal-action-card:hover {
-  border-color: #d6d3d1;
-  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.06);
-}
-
 .legal-step-num {
   display: flex;
   align-items: center;
@@ -211,13 +268,12 @@ body {
   width: 2rem;
   height: 2rem;
   border-radius: 9999px;
-  background: #0f766e;
-  color: #fafaf9;
+  background: #1d4ed8;
+  color: #fff;
   font-size: 0.875rem;
   font-weight: 700;
   flex-shrink: 0;
 }
-
 .legal-badge {
   display: inline-flex;
   align-items: center;
@@ -226,54 +282,7 @@ body {
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: #ccfbf1;
-  color: #0f766e;
-  border: 1px solid #99f6e4;
-}
-
-/* Section rule */
-.section-rule {
-  width: 48px;
-  height: 3px;
-  background: #0f766e;
-  border-radius: 1px;
-}
-
-/* Back-compat: map old glass-card to light surface */
-.glass-card {
-  background: #ffffff;
-  border: 1px solid #e7e5e4;
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.glass-card:hover {
-  border-color: #d6d3d1;
-  box-shadow: 0 12px 40px rgba(28, 25, 23, 0.06);
-  transform: none;
-}
-
-/* Hero subtle mesh */
-.hero-panel {
-  background-color: #fafaf9;
-  background-image: radial-gradient(
-      ellipse 90% 60% at 50% -30%,
-      rgba(15, 118, 110, 0.06),
-      transparent 55%
-    ),
-    linear-gradient(to bottom, #fafaf9 0%, #f5f5f4 100%);
-}
-
-.grid-pattern-light {
-  background-size: 72px 72px;
-  background-image: linear-gradient(to right, rgb(231 229 228 / 0.6) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(231 229 228 / 0.6) 1px, transparent 1px);
-}
-
-/* Gradient text — single restrained tone */
-.gradient-text {
-  color: #0f766e;
-  font-style: italic;
-  font-family: var(--font-serif);
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "logix-plus-site-v1";
+const CACHE_NAME = "logix-plus-site-v2";
 const OFFLINE_ASSETS = ["/", "/favicon.png", "/logo-dark.png"];
 
 self.addEventListener("install", (event) => {

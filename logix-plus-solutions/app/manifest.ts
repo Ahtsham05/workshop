@@ -2,17 +2,17 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Logix Plus Solutions",
+    name: "Logix Plus — ERP & POS Software",
     short_name: "Logix Plus",
     description:
-      "Custom CMS platforms, SaaS development, and corporate websites — senior-led engineering studio.",
+      "All-in-one ERP, POS and accounting software for small and medium businesses.",
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#fafaf9",
-    theme_color: "#fafaf9",
-    categories: ["business", "productivity", "developer tools"],
+    background_color: "#0b1533",
+    theme_color: "#0b1533",
+    categories: ["business", "productivity", "finance"],
     icons: [
       {
         src: "/favicon-192.png",
@@ -32,24 +32,9 @@ export default function manifest(): MetadataRoute.Manifest {
       },
     ],
     shortcuts: [
-      {
-        name: "Home",
-        short_name: "Home",
-        description: "Open Logix Plus website",
-        url: "/#home",
-      },
-      {
-        name: "Expertise",
-        short_name: "Expertise",
-        description: "What we deliver",
-        url: "/#expertise",
-      },
-      {
-        name: "Contact",
-        short_name: "Contact",
-        description: "Start a project",
-        url: "/#contact",
-      },
+      { name: "Pricing", short_name: "Pricing", description: "Plans and prices", url: "/pricing" },
+      { name: "Features", short_name: "Features", description: "What Logix Plus does", url: "/#features" },
+      { name: "Contact", short_name: "Contact", description: "Get a free demo", url: "/#contact" },
     ],
   };
 }

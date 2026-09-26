@@ -1,53 +1,82 @@
-const footerLinks = [
-  { label: "Expertise", href: "/#expertise" },
-  { label: "Services", href: "/#services" },
-  { label: "About", href: "/#about" },
-  { label: "Contact", href: "/#contact" },
-  { label: "Privacy Policy", href: "/privacy-policy" },
-  { label: "Terms", href: "/terms-and-conditions" },
-  { label: "Data Deletion", href: "/data-deletion" },
+import Link from "next/link";
+import Image from "next/image";
+import { LANDING_PAGES } from "@/lib/landing-pages";
+import { COMPANY, EMAIL, LOGIN_URL, PHONE_DISPLAY, PHONE_TEL, SIGNUP_URL } from "@/lib/site";
+
+const byGroup = (g: "product" | "industry" | "region") =>
+  LANDING_PAGES.filter((p) => p.group === g).map((p) => ({ label: p.navLabel, href: `/${p.slug}` }));
+
+const columns = [
+  { title: "Software", links: byGroup("product") },
+  { title: "Industries", links: byGroup("industry") },
+  {
+    title: "Company",
+    links: [
+      { label: "Pricing", href: "/pricing" },
+      ...LANDING_PAGES.filter((p) => p.group === "region").map((p) => ({ label: `POS & ERP — ${p.navLabel}`, href: `/${p.slug}` })),
+      { label: "Privacy Policy", href: "/privacy-policy" },
+      { label: "Terms & Conditions", href: "/terms-and-conditions" },
+      { label: "Data Deletion", href: "/data-deletion" },
+    ],
+  },
 ];
 
 export default function Footer() {
   return (
-    <footer className="border-t border-stone-200 bg-stone-100">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-14">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
-          <div>
-            <p className="font-serif text-lg font-semibold text-stone-900">Logix Plus Solutions</p>
-            <p className="text-stone-600 text-sm mt-1 max-w-md">
-              Custom CMS, SaaS, and website delivery for teams that value clarity and long-term
-              maintainability.
+    <footer className="bg-ink text-slate-400">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-5">
+          <div className="lg:col-span-2">
+            <Link href="/" className="inline-flex rounded-lg bg-white px-2 py-1.5">
+              <Image src="/logo-dark.png" alt="Logix Plus Solutions" width={112} height={80} className="h-10 w-auto" />
+            </Link>
+            <p className="mt-5 max-w-sm leading-relaxed">
+              Cloud ERP, POS and accounting software for small and medium businesses in the USA, the UK and
+              worldwide.
             </p>
-          </div>
-          <nav className="flex flex-wrap gap-x-6 gap-y-2" aria-label="Footer">
-            {footerLinks.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                className="text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors"
-              >
-                {l.label}
+            <div className="mt-6 space-y-1.5 text-sm">
+              <p>
+                <a href={`tel:${PHONE_TEL}`} className="hover:text-white">
+                  {PHONE_DISPLAY}
+                </a>
+              </p>
+              <p>
+                <a href={`mailto:${EMAIL}`} className="break-all hover:text-white">
+                  {EMAIL}
+                </a>
+              </p>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <a href={SIGNUP_URL} className="btn btn-brand px-5 py-2.5 text-sm">
+                Start free trial
               </a>
-            ))}
-            <a
-              href="https://www.linkedin.com/company/logixplussolutions"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors"
-            >
-              LinkedIn
-            </a>
-          </nav>
+              <a href={LOGIN_URL} className="btn btn-ghost-dark px-5 py-2.5 text-sm">
+                Log in
+              </a>
+            </div>
+          </div>
+
+          {columns.map((col) => (
+            <nav key={col.title} aria-label={col.title}>
+              <p className="mb-4 text-sm font-bold uppercase tracking-wider text-white">{col.title}</p>
+              <ul className="space-y-2.5 text-sm">
+                {col.links.map((l) => (
+                  <li key={l.href}>
+                    <Link href={l.href} className="transition-colors hover:text-white">
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
         </div>
-        <div className="mt-10 pt-8 border-t border-stone-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-stone-500">
-          <p>© {new Date().getFullYear()} Logix Plus Solutions. All rights reserved.</p>
+
+        <div className="mt-14 flex flex-col gap-3 border-t border-white/10 pt-8 text-xs sm:flex-row sm:items-center sm:justify-between">
           <p>
-            Serving clients in Europe, the UK, and globally ·{" "}
-            <a href="mailto:info@logixplussolutions.com" className="underline hover:text-stone-700">
-              info@logixplussolutions.com
-            </a>
+            © {new Date().getFullYear()} {COMPANY}. All rights reserved.
           </p>
+          <p>ERP · POS · Accounting · Inventory · School · Restaurant software</p>
         </div>
       </div>
     </footer>
