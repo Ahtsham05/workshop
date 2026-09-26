@@ -29,6 +29,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const partnerSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -109,6 +111,12 @@ export function PartnerDialog({ open, onOpenChange, partner, onSuccess }: Partne
     }
   }, [partner, open, form]);
 
+  const draft = useFormDraft(form, {
+    key: 'partner',
+    enabled: open && !isEdit,
+    label: 'partner',
+  });
+
   const onSubmit: SubmitHandler<PartnerFormValues> = async (data) => {
     try {
       const body = {
@@ -127,6 +135,7 @@ export function PartnerDialog({ open, onOpenChange, partner, onSuccess }: Partne
         toast.success(t('partner_updated_successfully') || 'Partner updated successfully');
       } else {
         await createPartner(body).unwrap();
+        draft.clear();
         toast.success(t('partner_created_successfully') || 'Partner created successfully');
       }
       onSuccess();
@@ -152,6 +161,7 @@ export function PartnerDialog({ open, onOpenChange, partner, onSuccess }: Partne
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormDraftNotice draft={draft} />
             <FormField
               control={form.control}
               name="name"

@@ -87,6 +87,8 @@ import { useGetDistinctProductTagsQuery } from '@/stores/product.api'
 import { MarkupPercentInput } from './markup-percent-input'
 import { SyncToBranchesOption } from './sync-to-branches-option'
 import { summarizeBranchSync, useBranchSyncRunner, useSyncTargetBranches } from '../hooks/use-branch-sync'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -522,6 +524,13 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     form.setValue('name', defaultName.trim())
   }, [open, isEdit, defaultName, form])
 
+  // A quick-create from a picker (defaultName) starts from the typed name, never a draft.
+  const draft = useFormDraft(form, {
+    key: 'product',
+    enabled: open && !isEdit && !defaultName?.trim(),
+    label: 'product',
+  })
+
   // Creates the new ProductVariant + Inventory rows for any draft variants generated in
   // this session. Runs after the product itself is saved, since the variant-create
   // endpoint needs a real productId. Failures here are reported but don't roll back the
@@ -644,6 +653,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         })
       } else {
         const created = await dispatch(addProduct(values)).unwrap()
+        draft.clear()
         toast.success(t('product_created_successfully'))
         if (values.hasVariants && draftVariants.length > 0) {
           await createPendingVariants(created?.id || created?._id)
@@ -704,6 +714,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         // Ignore a stale response for a code the user has since changed/cleared.
         if (lastCommittedCodeRef.current !== trimmed) return
         if (result.found && result.product) {
+          // The typed code belongs to an existing product — not a new-product draft.
+          draft.clear()
           setScannedProduct(result.product)
           toast.success(`Found existing product "${result.product.name}" — opened it for editing`)
         }
@@ -892,6 +904,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         <div className='min-h-0 flex-1 overflow-y-auto px-6 py-4'>
           <Form {...form}>
             <form ref={formRef} id='user-form' onSubmit={form.handleSubmit(onSubmit, onInvalid)} onKeyDown={handleFormEnterKeyDown} className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+              <FormDraftNotice draft={draft} className='col-span-full' />
               <EntityFormSection
                 icon={<Barcode />}
                 tone='violet'
@@ -1310,19 +1323,19 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                               role="combobox"
                               aria-expanded={categoriesOpen}
                               data-enter-field='categories'
-                              className="w-full justify-between min-h-[2.5rem] h-auto py-0"
+                              className="w-full justify-between min-h-[2.5rem] h-auto py-1 overflow-hidden [contain:inline-size]"
                             >
-                              <div className="flex items-center gap-2 flex-1">
+                              <div className="flex min-w-0 items-center gap-2 flex-1">
                                 <Search className="w-4 h-4 flex-shrink-0" />
                                 {field.value && field.value.length > 0 ? (
-                                  <div className="flex flex-wrap items-center gap-1 flex-1">
+                                  <div className="flex min-w-0 flex-wrap items-center gap-1 flex-1">
                                     {field.value.map((category) => (
-                                      <Badge key={category._id} variant="secondary" className="flex items-center gap-1">
+                                      <Badge key={category._id} variant="secondary" title={category.name} className="flex min-w-0 max-w-full shrink justify-start items-center gap-1">
                                         {category.image?.url ? (
                                           <img 
                                             src={category.image.url} 
                                             alt={category.name}
-                                            className="w-3 h-3 rounded-full object-cover"
+                                            className="w-3 h-3 shrink-0 rounded-full object-cover"
                                           />
                                         ) : (
                                           <div className="w-3 h-3 rounded-full bg-gray-400 flex items-center justify-center flex-shrink-0">
@@ -1331,7 +1344,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                             </span>
                                           </div>
                                         )}
-                                        <span className="text-xs">{category.name}</span>
+                                        <span className="min-w-0 truncate text-xs">{category.name}</span>
                                         <button
                                           type="button"
                                           onClick={(e) => {
@@ -1339,7 +1352,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                             const newCategories = field.value?.filter(c => c._id !== category._id) || []
                                             field.onChange(newCategories)
                                           }}
-                                          className="ml-1 hover:bg-gray-200 rounded-full p-0.5"
+                                          className="ml-1 shrink-0 hover:bg-gray-200 rounded-full p-0.5"
                                         >
                                           <X className="w-2 h-2" />
                                         </button>
@@ -1489,19 +1502,19 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                               aria-expanded={subCategoriesOpen}
                               disabled={selectedCategoryIds.length === 0}
                               data-enter-field='subCategories'
-                              className='w-full justify-between min-h-[2.5rem] h-auto py-0'
+                              className='w-full justify-between min-h-[2.5rem] h-auto py-1 overflow-hidden [contain:inline-size]'
                             >
-                              <div className='flex items-center gap-2 flex-1'>
+                              <div className='flex min-w-0 items-center gap-2 flex-1'>
                                 <Search className='w-4 h-4 flex-shrink-0' />
                                 {field.value && field.value.length > 0 ? (
-                                  <div className='flex flex-wrap items-center gap-1 flex-1'>
+                                  <div className='flex min-w-0 flex-wrap items-center gap-1 flex-1'>
                                     {field.value.map((subCategory) => (
-                                      <Badge key={subCategory._id} variant='secondary' className='flex items-center gap-1'>
+                                      <Badge key={subCategory._id} variant='secondary' title={subCategory.name} className='flex min-w-0 max-w-full shrink justify-start items-center gap-1'>
                                         {subCategory.image?.url ? (
                                           <img
                                             src={subCategory.image.url}
                                             alt={subCategory.name}
-                                            className='w-3 h-3 rounded-full object-cover'
+                                            className='w-3 h-3 shrink-0 rounded-full object-cover'
                                           />
                                         ) : (
                                           <div className='w-3 h-3 rounded-full bg-gray-400 flex items-center justify-center flex-shrink-0'>
@@ -1510,7 +1523,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                             </span>
                                           </div>
                                         )}
-                                        <span className='text-xs'>{subCategory.name}</span>
+                                        <span className='min-w-0 truncate text-xs'>{subCategory.name}</span>
                                         <button
                                           type='button'
                                           onClick={(e) => {
@@ -1518,7 +1531,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                                             const next = field.value?.filter((sc) => sc._id !== subCategory._id) || []
                                             field.onChange(next)
                                           }}
-                                          className='ml-1 hover:bg-gray-200 rounded-full p-0.5'
+                                          className='ml-1 shrink-0 hover:bg-gray-200 rounded-full p-0.5'
                                         >
                                           <X className='w-2 h-2' />
                                         </button>

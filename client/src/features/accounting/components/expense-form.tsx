@@ -50,6 +50,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 interface ExpenseFormProps {
   expense?: any
@@ -118,6 +120,15 @@ export function ExpenseForm({
     vendor: expense?.vendor || '',
     reference: expense?.reference || '',
     notes: expense?.notes || '',
+  })
+
+  // The form is mounted only while it's shown, so "enabled" is simply "creating". The date is
+  // not restored — a draft picked up on a later day is dated that day.
+  const draft = useStateDraft(formData, setFormData, {
+    key: 'expense',
+    enabled: !isEdit,
+    label: 'expense',
+    exclude: defaultCategory ? ['date', 'category'] : ['date'],
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -243,6 +254,7 @@ export function ExpenseForm({
         toast.success(t('Expense updated successfully'))
       } else {
         await Axios({ ...summery.addExpense, data: payload })
+        draft.clear()
         toast.success(t('Expense created successfully'))
       }
       dispatch(mobileShopApi.util.invalidateTags(['CashBook', 'MobileDashboard']))
@@ -260,6 +272,7 @@ export function ExpenseForm({
         <CardTitle>{isEdit ? t('Edit Expense') : t('Create New Expense')}</CardTitle>
       </CardHeader>
       <CardContent>
+        <FormDraftNotice draft={draft} className='mb-4' />
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 

@@ -30,6 +30,8 @@ import { useLanguage } from '@/context/language-context';
 import { cn } from '@/lib/utils';
 import { RootState } from '@/stores/store';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const roleSchema = z.object({
   name: z.string().min(1, 'Role name is required'),
@@ -91,6 +93,12 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
     }
   }, [role, form]);
 
+  const draft = useFormDraft(form, {
+    key: 'role',
+    enabled: open && !isEdit,
+    label: 'role',
+  });
+
   const onSubmit: SubmitHandler<RoleFormValues> = async (data) => {
     try {
       if (isEdit && role) {
@@ -98,6 +106,7 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
         toast.success(t('role_updated_successfully') || 'Role updated successfully');
       } else {
         await createRole(data).unwrap();
+        draft.clear();
         toast.success(t('role_created_successfully') || 'Role created successfully');
       }
       onSuccess();
@@ -122,6 +131,7 @@ export function RoleDialog({ open, onOpenChange, role, onSuccess }: RoleDialogPr
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormDraftNotice draft={draft} />
             <FormField
               control={form.control}
               name="name"

@@ -36,6 +36,8 @@ import {
   type ReminderRepeat,
   type ReminderChannel,
 } from '@/stores/reminder.api'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const PRIORITIES: ReminderPriority[] = ['low', 'medium', 'high', 'urgent']
 const REPEATS: ReminderRepeat[] = ['none', 'daily', 'weekly', 'monthly']
@@ -135,6 +137,23 @@ export function ReminderMutateDialog({ open, onOpenChange, reminder }: ReminderM
     }
   }, [open, reminder])
 
+  const draft = useStateDraft(
+    { title, description, dueDate, dueTime, priority, repeat, related, notifyPush, notifyWhatsapp, whatsappPhone },
+    (values) => {
+      setTitle(values.title)
+      setDescription(values.description)
+      setDueDate(values.dueDate)
+      setDueTime(values.dueTime)
+      setPriority(values.priority)
+      setRepeat(values.repeat)
+      setRelated(values.related)
+      setNotifyPush(values.notifyPush)
+      setNotifyWhatsapp(values.notifyWhatsapp)
+      setWhatsappPhone(values.whatsappPhone)
+    },
+    { key: 'reminder', enabled: open && !isEdit, label: 'reminder' },
+  )
+
   useEffect(() => {
     if (related?.whatsapp || related?.phone) {
       setWhatsappPhone(related.whatsapp || related.phone || '')
@@ -199,6 +218,7 @@ export function ReminderMutateDialog({ open, onOpenChange, reminder }: ReminderM
         toast.success(t('Reminder updated'))
       } else {
         await createReminder(payload).unwrap()
+        draft.clear()
         toast.success(t('Reminder created'))
       }
       onOpenChange(false)
@@ -218,6 +238,7 @@ export function ReminderMutateDialog({ open, onOpenChange, reminder }: ReminderM
             {isEdit ? t('Edit Reminder') : t('New Reminder')}
           </DialogTitle>
         </DialogHeader>
+        <FormDraftNotice draft={draft} />
         <div className="max-h-[70vh] space-y-5 overflow-y-auto px-0.5 py-1">
           <div className="space-y-1.5">
             <Label>{t('Title')} *</Label>

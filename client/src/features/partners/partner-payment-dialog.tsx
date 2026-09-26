@@ -33,6 +33,8 @@ import {
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const paymentSchema = z
   .object({
@@ -106,6 +108,13 @@ export function PartnerPaymentDialog({
     }
   }, [open, balance, form]);
 
+  // Scoped per partner — a half-typed payment to one partner never shows up on another's.
+  const draft = useFormDraft(form, {
+    key: `partner-payment:${partnerId}`,
+    enabled: open,
+    label: 'payment',
+  });
+
   const onSubmit: SubmitHandler<PaymentFormValues> = async (data) => {
     if (data.amount > balance) {
       form.setError('amount', { message: `Cannot exceed the outstanding balance of ${formatMoney(balance)}` });
@@ -121,6 +130,7 @@ export function PartnerPaymentDialog({
         notes: data.notes,
       }).unwrap();
       toast.success(t('partner_payment_recorded') || 'Partner payment recorded');
+      draft.clear();
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
@@ -140,6 +150,7 @@ export function PartnerPaymentDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormDraftNotice draft={draft} />
             <FormField
               control={form.control}
               name="amount"

@@ -15,6 +15,8 @@ import {
   useSeedFeeCategoriesMutation,
 } from '@/stores/school.api';
 import { toast } from 'sonner';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 const emptyForm = { name: '', type: 'INCOME' as 'INCOME' | 'EXPENSE', description: '' };
 
@@ -36,10 +38,17 @@ export default function FeeCategories() {
   const openCreate = () => { setForm({ ...emptyForm }); setDialog('create'); };
   const openEdit = (cat: any) => { setSelected(cat); setForm({ name: cat.name, type: cat.type, description: cat.description || '' }); setDialog('edit'); };
 
+  const draft = useStateDraft(form, setForm, {
+    key: 'school-fee-category',
+    enabled: dialog === 'create',
+    label: 'fee category',
+  });
+
   const handleSave = async () => {
     try {
       if (dialog === 'create') {
         await createCategory(form).unwrap();
+        draft.clear();
         toast.success('Category created');
       } else {
         await updateCategory({ id: selected.id, ...form }).unwrap();
@@ -163,6 +172,7 @@ export default function FeeCategories() {
           <DialogHeader>
             <DialogTitle>{dialog === 'create' ? 'Add Category' : 'Edit Category'}</DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label>Name</Label>

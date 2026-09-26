@@ -43,6 +43,8 @@ import {
   useDeleteTaxJurisdictionMutation,
   type TaxJurisdiction,
 } from '@/stores/taxJurisdiction.api'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const LEVELS = ['COUNTRY', 'STATE', 'COUNTY', 'CITY', 'DISTRICT', 'CUSTOM'] as const
 type Level = (typeof LEVELS)[number]
@@ -143,6 +145,8 @@ function TaxJurisdictionDialog({
       : emptyValues,
   })
 
+  const draft = useFormDraft(form, { key: 'tax-jurisdiction', enabled: open && !jurisdiction, label: 'tax jurisdiction' })
+
   useEffect(() => {
     form.reset(
       jurisdiction
@@ -182,6 +186,7 @@ function TaxJurisdictionDialog({
         toast.success(`Tax jurisdiction "${values.name}" updated`)
       } else {
         await createTaxJurisdiction(body).unwrap()
+        draft.clear()
         toast.success(`Tax jurisdiction "${values.name}" created`)
       }
       onOpenChange(false)
@@ -199,6 +204,7 @@ function TaxJurisdictionDialog({
             A geographic scope a tax rate can be attached to — e.g. a US state, county, or city.
           </DialogDescription>
         </DialogHeader>
+        <FormDraftNotice draft={draft} />
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} onKeyDown={handleFormEnterKeyDown} className='space-y-4'>
             <FormField

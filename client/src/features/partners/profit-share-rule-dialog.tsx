@@ -39,6 +39,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const ruleSchema = z
   .object({
@@ -239,6 +241,12 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
     }
   }, [rule, open, form]);
 
+  const draft = useFormDraft(form, {
+    key: 'profit-share-rule',
+    enabled: open && !isEdit,
+    label: 'profit-share rule',
+  });
+
   const onSubmit: SubmitHandler<RuleFormValues> = async (data) => {
     try {
       if (isEdit && rule) {
@@ -270,6 +278,7 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
           notes: data.notes,
         }).unwrap();
         toast.success(t('profit_share_rule_created_successfully') || 'Profit-share rule created successfully');
+        draft.clear();
       }
       onSuccess();
       onOpenChange(false);
@@ -294,6 +303,7 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormDraftNotice draft={draft} />
             <FormField
               control={form.control}
               name="partnerId"

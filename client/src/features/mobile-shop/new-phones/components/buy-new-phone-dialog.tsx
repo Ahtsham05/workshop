@@ -25,6 +25,8 @@ import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalo
 import { isUsedPhonesBucketProduct } from '../../old-phones/constants'
 import type { RootState, AppDispatch } from '@/stores/store'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 /** Real IMEIs are always 15 digits — strips anything a scanner/paste adds (spaces, dashes). */
 const sanitizeImei = (raw: string) => raw.replace(/\D/g, '').slice(0, 15)
@@ -169,6 +171,17 @@ export function BuyNewPhoneDialog({
     setSelectedSupplierId('')
   }
 
+
+  // The purchase date/time is not restored — a draft picked up later is stamped with "now".
+  const draft = useStateDraft(
+    { ...form, selectedProductId, selectedSupplierId },
+    ({ selectedProductId: productId, selectedSupplierId: supplierId, ...values }) => {
+      setForm(values)
+      setSelectedProductId(productId)
+      setSelectedSupplierId(supplierId)
+    },
+    { key: 'new-phone-purchase', enabled: open, label: 'phone purchase', exclude: ['purchaseDate'] },
+  )
   const handleQuickCreated = (type: 'product' | 'supplier' | 'customer', entity: { id?: string; _id?: string }) => {
     if (type === 'product') {
       dispatch(fetchAllProducts({}) as unknown as never)
@@ -209,6 +222,7 @@ export function BuyNewPhoneDialog({
         notes: form.notes.trim() || undefined,
       }).unwrap()
       toast.success('Phone stocked in — added to new-phone inventory')
+      draft.clear()
       resetForm()
       onOpenChange(false)
       onSuccess?.()
@@ -227,6 +241,7 @@ export function BuyNewPhoneDialog({
             <ShoppingBag className='h-5 w-5 text-primary' /> Buy New Phone
           </DialogTitle>
         </DialogHeader>
+        <FormDraftNotice draft={draft} />
         <form className='grid gap-4' onSubmit={handleSubmit} onKeyDown={handleFormEnterKeyDown}>
           <FormSection icon={<Package className='h-4 w-4' />} title='Phone Model' tone='blue'>
             <div className='space-y-1'>

@@ -47,6 +47,8 @@ import {
   useDeleteTaxCategoryMutation,
   type TaxCategory,
 } from '@/stores/taxCategory.api'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -77,6 +79,8 @@ function TaxCategoryDialog({
       : emptyValues,
   })
 
+  const draft = useFormDraft(form, { key: 'tax-category', enabled: open && !category, label: 'tax category' })
+
   const onSubmit = async (values: FormValues) => {
     try {
       if (category) {
@@ -84,6 +88,7 @@ function TaxCategoryDialog({
         toast.success(`Tax category "${values.name}" updated`)
       } else {
         await createTaxCategory(values).unwrap()
+        draft.clear()
         toast.success(`Tax category "${values.name}" created`)
       }
       onOpenChange(false)
@@ -102,6 +107,7 @@ function TaxCategoryDialog({
             product directly.
           </DialogDescription>
         </DialogHeader>
+        <FormDraftNotice draft={draft} />
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} onKeyDown={handleFormEnterKeyDown} className='space-y-4'>
             <FormField

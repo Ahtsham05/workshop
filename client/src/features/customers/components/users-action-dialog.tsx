@@ -46,6 +46,8 @@ import {
   MapPin,
   Receipt,
 } from 'lucide-react'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const imageRefSchema = z
   .object({
@@ -128,6 +130,13 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
     form.setValue('name', defaultName.trim())
   }, [open, isEdit, defaultName, form])
 
+  // A quick-create from a picker (defaultName) starts from the typed name, never a draft.
+  const draft = useFormDraft(form, {
+    key: 'customer',
+    enabled: open && !isEdit && !defaultName?.trim(),
+    label: 'customer',
+  })
+
   const dispatch = useDispatch<AppDispatch>()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -172,6 +181,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
         setFetch?.((prev: any) => !prev)
       } else {
         const created = await dispatch(addCustomer(payload)).unwrap()
+        draft.clear()
         toast.success(
           created?.offlinePending
             ? 'Customer saved offline — will sync when you are back online'
@@ -219,6 +229,7 @@ export function CustomersActionDialog({ currentRow, open, onOpenChange, setFetch
               onKeyDown={handleFormEnterKeyDown}
               className='space-y-4'
             >
+              <FormDraftNotice draft={draft} />
               <EntityFormSection
                 icon={<User />}
                 tone='sky'

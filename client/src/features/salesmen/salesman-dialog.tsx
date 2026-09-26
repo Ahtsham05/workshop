@@ -63,6 +63,8 @@ import {
   BarChart3,
   type LucideIcon,
 } from 'lucide-react';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const salesmanSchema = z
   .object({
@@ -228,6 +230,12 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
     }
   }, [profile, open, form, fetchModuleRates]);
 
+  const draft = useFormDraft(form, {
+    key: 'salesman',
+    enabled: open && !isEdit,
+    label: 'salesman',
+  });
+
   /** After the profile is saved, reconcile the 5 module-rate fields against whatever
    * salesman-specific rules already exist — create/replace when a field has a new value,
    * deactivate the existing rule when a field that had one is cleared back to blank. */
@@ -279,6 +287,7 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
         }).unwrap();
         await syncModuleRates(created.id, data.moduleRates);
         toast.success(t('salesman_created_successfully') || 'Salesman created successfully');
+        draft.clear();
       }
       onSuccess();
       onOpenChange(false);
@@ -313,6 +322,7 @@ export function SalesmanDialog({ open, onOpenChange, profile, existingUserIds, o
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3">
           <Form {...form}>
             <form id="salesman-form" onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 lg:grid-cols-2 lg:items-start">
+              <FormDraftNotice draft={draft} className='lg:col-span-2' />
               <div className="space-y-4">
                 <EntityFormSection
                   icon={<UserCog />}

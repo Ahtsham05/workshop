@@ -21,6 +21,8 @@ import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import { CategoryCombobox } from './category-combobox';
 import { printExpenseVoucher } from './print-expense-voucher';
 import { onEnterAdvance, afterPaint, focusField } from '@/lib/invoice-form-keyboard';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -68,6 +70,16 @@ export function BulkExpensesDialog({
   const removeRow = (id: string) => setRows((r) => r.filter((row) => row.id !== id));
 
   const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  // The voucher date isn't restored — a draft picked up on a later day is dated that day.
+  const draft = useStateDraft(
+    { paymentMethod, rows },
+    (values) => {
+      setPaymentMethod(values.paymentMethod);
+      setRows(values.rows);
+    },
+    { key: 'school-bulk-expenses', enabled: open, label: 'expense voucher' },
+  );
 
   const reset = () => {
     setDate(today());
@@ -134,6 +146,7 @@ export function BulkExpensesDialog({
           description: r.description.trim() || 'Expense',
         })),
       }).unwrap();
+      draft.clear();
 
       toast.success(`Voucher ${result.voucherNumber} created — ${items.length} expenses, ${formatMoney(result.totalAmount)}`, {
         action: {
@@ -155,6 +168,7 @@ export function BulkExpensesDialog({
           <DialogTitle>Bulk Expense Voucher</DialogTitle>
           <DialogDescription>Record several expenses at once — they'll share one voucher number you can print. Press Enter to move field to field.</DialogDescription>
         </DialogHeader>
+        <FormDraftNotice draft={draft} />
         <div className="space-y-4 py-2">
           <div className="flex flex-wrap items-end gap-4">
             <div className="w-44">

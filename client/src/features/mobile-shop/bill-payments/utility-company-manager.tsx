@@ -38,6 +38,8 @@ import {
   type UtilityCompanyRecord,
   BILL_TYPES,
 } from '@/stores/mobile-shop.api'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 type FormState = {
   name: string
@@ -95,6 +97,12 @@ export function UtilityCompanyManager() {
     setDialogOpen(true)
   }
 
+  const draft = useStateDraft(form, setForm, {
+    key: 'utility-company',
+    enabled: dialogOpen && !editTarget,
+    label: 'company',
+  })
+
   const handleSubmit = async () => {
     if (!form.name.trim()) return toast.error('Company name is required')
     if (!form.billType) return toast.error('Bill type is required')
@@ -113,6 +121,7 @@ export function UtilityCompanyManager() {
         toast.success('Company updated')
       } else {
         await createCompany(payload).unwrap()
+        draft.clear()
         toast.success('Company added')
       }
       setDialogOpen(false)
@@ -195,6 +204,7 @@ export function UtilityCompanyManager() {
           <DialogHeader>
             <DialogTitle>{editTarget ? 'Edit Company' : 'Add Company'}</DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className='space-y-4'>
             <div>
               <Label>Company Name *</Label>

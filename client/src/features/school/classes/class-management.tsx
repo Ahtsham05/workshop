@@ -9,6 +9,8 @@ import { Plus, Pencil, Trash2, BookOpen, Users } from 'lucide-react';
 import { useGetSchoolClassesQuery, useCreateSchoolClassMutation, useUpdateSchoolClassMutation, useDeleteSchoolClassMutation, useGetAllSectionsQuery } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 const CLASS_COLORS = [
   'from-blue-500 to-blue-600', 'from-emerald-500 to-emerald-600',
@@ -29,6 +31,14 @@ export default function ClassManagement() {
   const [deleteClass] = useDeleteSchoolClassMutation();
 
   const resetForm = () => { setForm({ name: '', code: '', description: '', order: '' }); setEditing(null); };
+
+  // `order` is recomputed as "next number" on every open, so it's never restored from a draft.
+  const draft = useStateDraft(form, setForm, {
+    key: 'school-class',
+    enabled: dialogOpen && !editing,
+    label: 'class',
+    exclude: ['order'],
+  });
 
   const openAdd = () => {
     resetForm();
@@ -56,6 +66,7 @@ export default function ClassManagement() {
         toast.success(`Class "${form.name}" updated`);
       } else {
         await createClass(body).unwrap();
+        draft.clear();
         toast.success(`Class "${form.name}" created`);
       }
       setDialogOpen(false); resetForm();
@@ -149,6 +160,7 @@ export default function ClassManagement() {
           <DialogHeader>
             <DialogTitle>{editing ? `Edit — ${editing.name}` : 'Add New Class'}</DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">

@@ -45,6 +45,8 @@ import {
   useDeleteTaxRateMutation,
   type TaxRate,
 } from '@/stores/taxRate.api'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const formSchema = z.object({
   taxCategoryId: z.string().min(1, 'Tax category is required'),
@@ -105,6 +107,8 @@ function TaxRateDialog({
       : emptyValues,
   })
 
+  const draft = useFormDraft(form, { key: 'tax-rate', enabled: open && !rate, label: 'tax rate' })
+
   const rateType = form.watch('rateType')
   const categoryOptions = (categoriesData?.results || []).map((c) => ({ value: c._id, label: c.name }))
   const jurisdictionOptions = (jurisdictionsData?.results || []).map((j) => ({ value: j._id, label: j.name }))
@@ -121,6 +125,7 @@ function TaxRateDialog({
         toast.success(`Tax rate "${values.name}" updated`)
       } else {
         await createTaxRate(body).unwrap()
+        draft.clear()
         toast.success(`Tax rate "${values.name}" created`)
       }
       onOpenChange(false)
@@ -136,6 +141,7 @@ function TaxRateDialog({
           <DialogTitle>{rate ? 'Edit Tax Rate' : 'New Tax Rate'}</DialogTitle>
           <DialogDescription>A dated rate attached to a tax category, optionally scoped to a jurisdiction.</DialogDescription>
         </DialogHeader>
+        <FormDraftNotice draft={draft} />
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} onKeyDown={handleFormEnterKeyDown} className='space-y-4'>
             <FormField

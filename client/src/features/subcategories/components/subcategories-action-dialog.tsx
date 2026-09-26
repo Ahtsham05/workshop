@@ -35,6 +35,8 @@ import { CategoryPickerField } from './category-picker-field'
 import { SubCategoryNameRow } from './subcategory-name-row'
 import { Plus, FolderTree, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const subCategoryFormSchema = z.object({
   category: z.string().min(1, 'Please select a main category'),
@@ -112,6 +114,14 @@ export function SubCategoriesActionDialog({ setFetch, categories }: SubCategorie
     }
   }, [state.open, state.currentSubCategory, state.defaultCategoryId, form])
 
+  // Opened from a category row (defaultCategoryId) → that category wins over a draft's.
+  const draft = useFormDraft(form, {
+    key: 'subcategory',
+    enabled: state.open && !isEditMode,
+    label: 'sub-category',
+    exclude: state.defaultCategoryId ? ['category'] : undefined,
+  })
+
   const selectedCategoryId = form.watch('category')
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId)
   const nameWatch = form.watch('items.0.name')
@@ -168,6 +178,7 @@ export function SubCategoriesActionDialog({ setFetch, categories }: SubCategorie
 
       contextDispatch({ type: 'SET_OPEN', payload: false })
       contextDispatch({ type: 'SET_SUBCATEGORY', payload: null })
+      draft.clear()
       setFetch((previous) => !previous)
     } catch (error) {
       toast.error(state.currentSubCategory ? t('subcategory_update_failed') : t('subcategory_creation_failed'))
@@ -223,6 +234,7 @@ export function SubCategoriesActionDialog({ setFetch, categories }: SubCategorie
             className="flex min-h-0 flex-1 flex-col"
           >
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain py-5 pl-6 pr-4 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/60">
+              <FormDraftNotice draft={draft} />
               <FormField
                 control={form.control}
                 name="category"

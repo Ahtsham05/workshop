@@ -42,6 +42,8 @@ import {
   useDeleteExchangeRateMutation,
   type ExchangeRate,
 } from '@/stores/exchangeRate.api'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const formSchema = z
   .object({
@@ -86,11 +88,14 @@ function ExchangeRateDialog({
       : emptyValues,
   })
 
+  const draft = useFormDraft(form, { key: 'exchange-rate', enabled: open && !rate, label: 'exchange rate' })
+
   const currencyOptions = (currencies || []).map((c) => ({ value: c.code, label: `${c.code} — ${c.name}` }))
 
   const onSubmit = async (values: FormValues) => {
     try {
       await createOrUpdateExchangeRate(values).unwrap()
+      if (!rate) draft.clear()
       toast.success(`Exchange rate ${values.fromCurrency} → ${values.toCurrency} saved`)
       onOpenChange(false)
     } catch (err) {
@@ -108,6 +113,7 @@ function ExchangeRateDialog({
             never retroactively affects past transactions.
           </DialogDescription>
         </DialogHeader>
+        <FormDraftNotice draft={draft} />
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} onKeyDown={handleFormEnterKeyDown} className='space-y-4'>
             <div className='grid grid-cols-2 gap-4'>

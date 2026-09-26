@@ -44,6 +44,8 @@ import {
   useDeleteTaxExemptionMutation,
   type TaxExemption,
 } from '@/stores/taxExemption.api'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 interface CustomerOption {
   _id?: string
@@ -104,6 +106,8 @@ function TaxExemptionDialog({
       : emptyValues,
   })
 
+  const draft = useFormDraft(form, { key: 'tax-exemption', enabled: open && !exemption, label: 'tax exemption' })
+
   const customers: CustomerOption[] = Array.isArray(customersData) ? customersData : []
   const customerOptions = customers.map((c) => ({ value: c._id || c.id || '', label: c.name }))
   const categoryOptions = (categoriesData?.results || []).map((c) => ({ value: c._id, label: c.name }))
@@ -120,6 +124,7 @@ function TaxExemptionDialog({
         toast.success('Tax exemption updated')
       } else {
         await createTaxExemption(body).unwrap()
+        draft.clear()
         toast.success('Tax exemption created')
       }
       onOpenChange(false)
@@ -137,6 +142,7 @@ function TaxExemptionDialog({
             A recorded, auditable exemption for a customer — not just a yes/no flag.
           </DialogDescription>
         </DialogHeader>
+        <FormDraftNotice draft={draft} />
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} onKeyDown={handleFormEnterKeyDown} className='space-y-4'>
             <FormField

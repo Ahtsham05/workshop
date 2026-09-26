@@ -61,6 +61,8 @@ import { endOfMonth, format, startOfMonth } from 'date-fns';
 import { getEntityId } from '@/lib/entity-id';
 import { usePermissions } from '@/context/permission-context';
 import { useFormatMoney } from '@/lib/format-money';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 export default function LeaveManagement() {
   const { t } = useLanguage();
@@ -116,6 +118,13 @@ export default function LeaveManagement() {
     isHalfDay: false,
   });
 
+  // The Apply dialog opens blank (see the Apply Leave button); Edit uses its own dialog.
+  const draft = useStateDraft(formData, setFormData, {
+    key: 'hr-leave',
+    enabled: showApplyDialog,
+    label: 'leave request',
+  });
+
   const reportStartDate = useMemo(
     () => format(startOfMonth(new Date(reportYear, reportMonth - 1, 1)), 'yyyy-MM-dd'),
     [reportMonth, reportYear]
@@ -150,6 +159,7 @@ export default function LeaveManagement() {
   const handleApplyLeave = async () => {
     try {
       await createLeave({ ...formData, reason: formData.reason.trim() }).unwrap();
+      draft.clear();
       toast.success(t('Leave application submitted'));
       setShowApplyDialog(false);
       setFormData({
@@ -470,7 +480,13 @@ export default function LeaveManagement() {
           <div className="flex items-center justify-between">
             <CardTitle>{t('Leave Requests')}</CardTitle>
             {canCreate && (
-              <Button onClick={() => setShowApplyDialog(true)}>
+              <Button
+                onClick={() => {
+                  // Start blank — the Edit dialog shares formData and may have left a leave in it.
+                  setFormData({ employee: '', leaveType: 'Sick', startDate: '', endDate: '', reason: '', isHalfDay: false });
+                  setShowApplyDialog(true);
+                }}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 {t('Apply Leave')}
               </Button>
@@ -795,6 +811,7 @@ export default function LeaveManagement() {
           <DialogHeader>
             <DialogTitle>{t('Apply for Leave')}</DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>{t('Employee')}</Label>

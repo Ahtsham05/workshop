@@ -77,6 +77,8 @@ import { BulkCategoriesDialog } from './bulk-categories-dialog';
 import { ExpenseCategoryImportDialog } from './expense-category-import-dialog';
 import { BulkExpensesDialog } from './bulk-expenses-dialog';
 import { printExpenseVoucher } from './print-expense-voucher';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -263,6 +265,14 @@ function ExpensesTab() {
   };
   const closeExpenseDialog = () => { setExpenseDialog(null); setEditTarget(null); setForm(emptyForm()); };
 
+  // The date is not restored — a draft picked up on a later day is dated that day.
+  const draft = useStateDraft(form, setForm, {
+    key: 'school-expense',
+    enabled: expenseDialog === 'create',
+    label: 'expense',
+    exclude: ['date'],
+  });
+
   const handleSave = async () => {
     if (!form.amount || Number(form.amount) <= 0) return toast.error('Amount must be greater than 0');
     if (!form.date) return toast.error('Date is required');
@@ -280,6 +290,7 @@ function ExpensesTab() {
 
       if (expenseDialog === 'create') {
         await createTxn(body).unwrap();
+        draft.clear();
         toast.success('Expense recorded');
       } else {
         await updateTxn({ id: editTarget.id || editTarget._id, ...body }).unwrap();
@@ -735,6 +746,7 @@ function ExpensesTab() {
               {expenseDialog === 'create' ? 'Record a new school expense.' : 'Update the expense details.'}
             </DialogDescription>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">

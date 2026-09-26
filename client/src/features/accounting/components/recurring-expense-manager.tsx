@@ -42,6 +42,8 @@ import {
 import { useGetPendingExpensesQuery, usePayExpenseMutation } from '@/stores/expense.api'
 import { getBusinessToday, formatBusinessDate } from '@/lib/business-timezone'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Sunday' },
@@ -161,6 +163,12 @@ export function RecurringExpenseManager() {
 
   const set = (k: keyof FormState, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
+  const draft = useStateDraft(form, setForm, {
+    key: 'recurring-expense',
+    enabled: formOpen && !editingId,
+    label: 'recurring expense',
+  })
+
   const openCreate = () => {
     setEditingId(null)
     setForm(emptyForm())
@@ -211,6 +219,7 @@ export function RecurringExpenseManager() {
         )
       } else {
         const result = await createRule(payload).unwrap()
+        draft.clear()
         toast.success(
           result.pendingCount
             ? `Rule created — ${result.pendingCount} day(s) pending catch-up, click "Run Now" to generate them`
@@ -488,6 +497,7 @@ export function RecurringExpenseManager() {
           <DialogHeader>
             <DialogTitle>{editingId ? 'Edit Recurring Rule' : 'New Recurring Expense'}</DialogTitle>
           </DialogHeader>
+<FormDraftNotice draft={draft} />
 
           <div className='space-y-4 pt-2'>
             <div>

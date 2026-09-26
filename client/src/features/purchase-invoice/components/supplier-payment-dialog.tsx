@@ -35,6 +35,8 @@ import {
 } from '@/components/ui/dialog'
 import { AlertTriangle, ArrowRight, Banknote, Coins, HandCoins, Loader2, Wallet } from 'lucide-react'
 import { normalizeSuppliersList } from '../utils/catalog-helpers'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 /** Allocation strategies the dialog offers, in the order an ERP user expects them. */
 const ALLOCATION_MODES: { value: AllocationMode; label: string; hint: string }[] = [
@@ -113,6 +115,24 @@ export function SupplierPaymentDialog({ open, onOpenChange, defaultSupplierId, o
     setManualAmounts({})
     setPreview(null)
   }, [open, defaultSupplierId])
+
+  // Scoped per pre-selected supplier, so a half-typed payment on one supplier's page never appears
+  // on another's. The payment date is deliberately not kept: a restored draft is dated today.
+  const draft = useStateDraft(
+    { supplierId, direction, amount, paymentMethod, walletType, referenceNumber, notes, allocationMode, manualAmounts },
+    (values) => {
+      setSupplierId(values.supplierId)
+      setDirection(values.direction)
+      setAmount(values.amount)
+      setPaymentMethod(values.paymentMethod)
+      setWalletType(values.walletType)
+      setReferenceNumber(values.referenceNumber)
+      setNotes(values.notes)
+      setAllocationMode(values.allocationMode)
+      setManualAmounts(values.manualAmounts)
+    },
+    { key: `supplier-payment:${defaultSupplierId || 'any'}`, enabled: open, label: 'payment' },
+  )
 
   const numericAmount = Number(amount) || 0
 
@@ -205,6 +225,7 @@ export function SupplierPaymentDialog({ open, onOpenChange, defaultSupplierId, o
       }).unwrap()
 
       const settledCount = payment.allocations?.length || 0
+      draft.clear()
       toast.success(
         direction === 'refund' ? t('Refund recorded') : t('Payment recorded'),
         {
@@ -239,6 +260,7 @@ export function SupplierPaymentDialog({ open, onOpenChange, defaultSupplierId, o
         </DialogHeader>
 
         <ScrollArea className='min-h-0 flex-1'>
+          <FormDraftNotice draft={draft} className='mx-6 mt-4' />
           <div className='grid gap-6 p-6 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]'>
             {/* Payment details */}
             <div className='space-y-4'>

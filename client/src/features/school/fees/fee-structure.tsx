@@ -25,6 +25,8 @@ import {
 } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { useFormatMoney } from '@/lib/format-money';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 type FeeItem = { name: string; amount: number | string; categoryId?: string };
 type FormState = {
@@ -117,6 +119,12 @@ export default function FeeStructures() {
   const clearFilters = () => { setSearch(''); setClassFilter('all'); setFrequencyFilter('all'); setStatusFilter('all'); };
 
   // ---- Dialog open helpers ----
+
+  const draft = useStateDraft(form, setForm, {
+    key: 'school-fee-structure',
+    enabled: dialog === 'create',
+    label: 'fee structure',
+  });
   const openCreate = () => { setSelected(null); setForm({ ...emptyForm, feeItems: [{ ...emptyForm.feeItems[0] }] }); setDialog('create'); };
 
   const openEdit = (s: any) => {
@@ -211,6 +219,7 @@ export default function FeeStructures() {
       if (dialog === 'create') {
         const payload: any = classCount > 1 ? { ...base, classIds: form.classIds } : { ...base, classId: form.classIds[0] };
         const result: any = await createStructure(payload).unwrap();
+        draft.clear();
         if (result && typeof result.total === 'number') {
           const skipped = result.skippedCount || 0;
           toast.success(
@@ -471,6 +480,7 @@ export default function FeeStructures() {
               {dialog === 'create' ? 'Pick one class, several, or all — and define every fund this structure collects.' : 'Update the fee items and settings for this class.'}
             </p>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="col-span-2 md:col-span-4 space-y-1.5">

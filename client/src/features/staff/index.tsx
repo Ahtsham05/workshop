@@ -51,6 +51,8 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const ROLE_LABELS: Record<string, string> = {
   superAdmin: 'Super Admin',
@@ -125,6 +127,13 @@ export default function StaffPage() {
     setDialogOpen(true)
   }
 
+  // The password is never part of a draft (see use-form-draft's SENSITIVE_FIELD).
+  const draft = useStateDraft(createForm, setCreateForm, {
+    key: 'staff-member',
+    enabled: dialogOpen && dialogMode === 'create',
+    label: 'staff member',
+  })
+
   const handleCreateStaff = async () => {
     if (!createForm.name || !createForm.email || !createForm.password || !createForm.branchId) {
       toast.error('Please fill in all required fields')
@@ -132,6 +141,7 @@ export default function StaffPage() {
     }
     try {
       await createStaff(createForm).unwrap()
+      draft.clear()
       toast.success('Staff member created and assigned to branch')
       setDialogOpen(false)
       setCreateForm({ name: '', email: '', password: '', branchId: isSuperAdmin ? '' : (activeBranchId ?? ''), role: 'staff' })
@@ -481,6 +491,7 @@ export default function StaffPage() {
                 : 'Select an existing user and assign them to a branch.'}
             </DialogDescription>
           </DialogHeader>
+<FormDraftNotice draft={draft} />
 
           {dialogMode === 'create' ? (
             /* ── CREATE NEW STAFF ── */

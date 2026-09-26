@@ -35,6 +35,8 @@ import { useCreateBrandMutation, useUpdateBrandMutation } from '@/stores/brand.a
 import ImageUpload from '@/components/image-upload'
 import { EntityFormSection } from '@/components/entity-form-section'
 import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 import {
   Building2,
   Globe,
@@ -105,6 +107,12 @@ export function BrandsActionDialog() {
     }
   }, [state.open, state.currentBrand, form])
 
+  const draft = useFormDraft(form, {
+    key: 'brand',
+    enabled: state.open && !state.currentBrand,
+    label: 'brand',
+  })
+
   const handleClose = () => {
     contextDispatch({ type: 'SET_OPEN', payload: false })
     contextDispatch({ type: 'SET_BRAND', payload: null })
@@ -119,6 +127,7 @@ export function BrandsActionDialog() {
         toast.success(`Brand "${data.name}" updated`)
       } else {
         await createBrand(data).unwrap()
+        draft.clear()
         toast.success(`Brand "${data.name}" created`)
       }
       handleClose()
@@ -152,6 +161,7 @@ export function BrandsActionDialog() {
               onKeyDown={handleFormEnterKeyDown}
               className='space-y-4'
             >
+              <FormDraftNotice draft={draft} />
               <EntityFormSection
                 icon={<Building2 />}
                 tone='sky'

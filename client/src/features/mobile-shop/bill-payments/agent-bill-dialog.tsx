@@ -46,6 +46,8 @@ import { openAgentBillsBatchPrint, openAgentBillPrintWindow } from './agent-bill
 import { getBusinessToday } from '@/lib/business-timezone'
 import { usePermissions } from '@/context/permission-context'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -224,6 +226,19 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
     setPaymentMethodOption('cash')
   }
 
+  // The collection date isn't restored — a draft picked up on a later day is collected that day.
+  const draft = useStateDraft(
+    { companyId, companyName, dueDate, paymentMethodOption, rows },
+    (values) => {
+      setCompanyId(values.companyId)
+      setCompanyName(values.companyName)
+      setDueDate(values.dueDate)
+      setPaymentMethodOption(values.paymentMethodOption)
+      setRows(values.rows)
+    },
+    { key: 'agent-bills', enabled: open && !isEditMode, label: 'bills' },
+  )
+
   const handleSave = async () => {
     const validRows = rows.filter(
       (r) =>
@@ -299,6 +314,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
         }).unwrap()
 
         toast.success(`${saved.length} bill(s) saved`)
+        draft.clear()
 
         openAgentBillsBatchPrint(saved, {
           orgName: orgData?.name,
@@ -329,6 +345,7 @@ export function AgentBillDialog({ open, onOpenChange, editBill }: AgentBillDialo
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Edit Agent Bill' : 'Agent Bill Collection'}</DialogTitle>
         </DialogHeader>
+<FormDraftNotice draft={draft} />
 
         <div className='space-y-4'>
           {/* ── Header ── */}

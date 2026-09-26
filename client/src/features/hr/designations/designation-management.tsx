@@ -55,6 +55,8 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { getEntityId } from '@/lib/entity-id';
 import { usePermissions } from '@/context/permission-context';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 const NO_DEPARTMENT = '__none__';
 
@@ -92,6 +94,12 @@ export default function DesignationManagement() {
   };
   const [formData, setFormData] = useState(emptyForm);
 
+  const draft = useStateDraft(formData, setFormData, {
+    key: 'hr-designation',
+    enabled: showDialog && !editingDesignation,
+    label: 'designation',
+  });
+
   const handleSubmit = async () => {
     try {
       const payload = {
@@ -103,6 +111,7 @@ export default function DesignationManagement() {
         toast.success(t('Designation updated successfully'));
       } else {
         await createDesignation(payload).unwrap();
+        draft.clear();
         toast.success(t('Designation created successfully'));
       }
       setShowDialog(false);
@@ -337,6 +346,7 @@ export default function DesignationManagement() {
               {editingDesignation ? t('Edit Designation') : t('Add Designation')}
             </DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>{t('Designation Title')} *</Label>

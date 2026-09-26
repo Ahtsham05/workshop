@@ -34,6 +34,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   upcoming: { label: 'Upcoming', color: 'bg-blue-100 text-blue-700' },
@@ -192,6 +194,21 @@ export default function ExamManagement() {
     setDialogOpen(true);
   };
 
+
+  // Opened from a class view, the class comes from that view rather than the draft.
+  const draft = useStateDraft(
+    { ...form, subjectRows },
+    ({ subjectRows: rows, ...values }) => {
+      setForm(values);
+      setSubjectRows(rows);
+    },
+    {
+      key: 'school-exam',
+      enabled: dialogOpen && !editing,
+      label: 'exam',
+      exclude: selectedViewClass ? ['classIds'] : undefined,
+    },
+  );
   const openEdit = (e: any) => {
     setEditing(e);
     setForm({
@@ -297,9 +314,11 @@ export default function ExamManagement() {
         toast.success('Exam updated');
       } else if (form.classIds.length === 1) {
         await createExam({ ...body, classId: form.classIds[0] }).unwrap();
+        draft.clear();
         toast.success('Exam created');
       } else {
         const result = await createExam({ ...body, classIds: form.classIds }).unwrap();
+        draft.clear();
         toast.success(`${result.total ?? form.classIds.length} exams created`);
       }
       setDialogOpen(false);
@@ -741,6 +760,7 @@ export default function ExamManagement() {
           <DialogHeader>
             <DialogTitle>{editing ? `Edit — ${editing.name}` : 'Create Exam'}</DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <ScrollArea className="flex-1 pr-4">
             <div className="space-y-5 py-2">
               {/* Basic info */}

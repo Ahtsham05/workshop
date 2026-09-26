@@ -46,6 +46,8 @@ import {
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { usePermissions } from '@/context/permission-context';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 export default function DepartmentManagement() {
   const { t } = useLanguage();
@@ -76,6 +78,12 @@ export default function DepartmentManagement() {
     isActive: true,
   });
 
+  const draft = useStateDraft(formData, setFormData, {
+    key: 'hr-department',
+    enabled: showDialog && !editingDept,
+    label: 'department',
+  });
+
   const handleSubmit = async () => {
     try {
       if (editingDept) {
@@ -83,6 +91,7 @@ export default function DepartmentManagement() {
         toast.success(t('Department updated successfully'));
       } else {
         await createDepartment(formData).unwrap();
+        draft.clear();
         toast.success(t('Department created successfully'));
       }
       setShowDialog(false);
@@ -323,6 +332,7 @@ export default function DepartmentManagement() {
               {editingDept ? t('Edit Department') : t('Add Department')}
             </DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>{t('Department Name')} *</Label>

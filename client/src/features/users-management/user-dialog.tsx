@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 interface UserDialogProps {
   open: boolean;
@@ -61,14 +63,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
   const [updateUser, { isLoading: isUpdating }] = useUpdateUserMutation();
   const [addMember] = useAddMemberMutation();
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    setValue,
-    watch,
-  } = useForm<UserFormValues>({
+  const form = useForm<UserFormValues>({
     resolver: zodResolver(isEdit ? userUpdateSchema : userSchema),
     defaultValues: {
       name: '',
@@ -78,6 +73,14 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
       isActive: true,
     },
   });
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+    setValue,
+    watch,
+  } = form;
 
   useEffect(() => {
     if (user) {
@@ -100,6 +103,9 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
       setAssignSystemRole('staff');
     }
   }, [user, reset]);
+
+  // The password is never part of a draft (see use-form-draft's SENSITIVE_FIELD).
+  const draft = useFormDraft(form, { key: 'user', enabled: open && !isEdit, label: 'user' });
 
   const onSubmit: SubmitHandler<UserFormValues> = async (data) => {
     try {
@@ -124,6 +130,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
           isActive: data.isActive,
         };
         const newUser = await createUser(createData).unwrap();
+        draft.clear();
 
         // If a branch was selected, also assign the user to that branch
         if (assignBranchId && assignBranchId !== 'none') {
@@ -164,6 +171,7 @@ export function UserDialog({ open, onOpenChange, user, onSuccess }: UserDialogPr
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <FormDraftNotice draft={draft} />
           <div className="space-y-2">
             <Label htmlFor="name">{t('name') || 'Name'}</Label>
             <Input

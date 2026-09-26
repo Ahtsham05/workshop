@@ -30,6 +30,8 @@ import {
   type LeadUserRef,
 } from '@/stores/lead.api'
 import { SOURCES, SOURCE_LABELS } from '../utils/stage-config'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 function SectionLabel({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return (
@@ -106,6 +108,22 @@ export function LeadMutateDialog({ open, onOpenChange, lead }: LeadMutateDialogP
     }
   }, [open, lead])
 
+  const draft = useStateDraft(
+    { name, companyName, email, phone, whatsapp, address, source, estimatedValue, assignedTo },
+    (values) => {
+      setName(values.name)
+      setCompanyName(values.companyName)
+      setEmail(values.email)
+      setPhone(values.phone)
+      setWhatsapp(values.whatsapp)
+      setAddress(values.address)
+      setSource(values.source)
+      setEstimatedValue(values.estimatedValue)
+      setAssignedTo(values.assignedTo)
+    },
+    { key: 'lead', enabled: open && !isEdit, label: 'lead' },
+  )
+
   const runDuplicateCheck = () => {
     if (!phone.trim() && !whatsapp.trim() && !email.trim()) return
     setDismissedDuplicates(false)
@@ -143,6 +161,7 @@ export function LeadMutateDialog({ open, onOpenChange, lead }: LeadMutateDialogP
         toast.success(t('Lead updated'))
       } else {
         await createLead(payload).unwrap()
+        draft.clear()
         toast.success(t('Lead created'))
       }
       onOpenChange(false)
@@ -162,6 +181,7 @@ export function LeadMutateDialog({ open, onOpenChange, lead }: LeadMutateDialogP
             {isEdit ? t('Edit Lead') : t('New Lead')}
           </DialogTitle>
         </DialogHeader>
+<FormDraftNotice draft={draft} />
 
         <div className="max-h-[65vh] space-y-4 overflow-y-auto px-0.5 py-1">
           <SectionLabel icon={UserCog}>{t('Contact Information')}</SectionLabel>

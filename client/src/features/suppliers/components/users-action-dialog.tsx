@@ -45,6 +45,8 @@ import {
   MapPin,
   Receipt,
 } from 'lucide-react'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const imageRefSchema = z
   .object({
@@ -128,6 +130,13 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
     form.setValue('name', defaultName.trim())
   }, [open, isEdit, defaultName, form])
 
+  // A quick-create from a picker (defaultName) starts from the typed name, never a draft.
+  const draft = useFormDraft(form, {
+    key: 'supplier',
+    enabled: open && !isEdit && !defaultName?.trim(),
+    label: 'supplier',
+  })
+
   const dispatch = useDispatch<AppDispatch>()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -155,6 +164,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
         })
       } else {
         const created = await dispatch(addSupplier(payload)).unwrap()
+        draft.clear()
         toast.success(t('supplier_created_success'))
         setFetch?.((prev: any) => !prev)
         onCreated?.(created)
@@ -198,6 +208,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
               onKeyDown={handleFormEnterKeyDown}
               className='space-y-4'
             >
+              <FormDraftNotice draft={draft} />
               <EntityFormSection
                 icon={<User />}
                 tone='sky'

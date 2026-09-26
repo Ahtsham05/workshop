@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle } from 'lucide-react';
 import { useCreateVisitorMutation, useUpdateVisitorMutation, useCheckVisitorDuplicateQuery } from '@/stores/school.api';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -82,13 +84,14 @@ export default function VisitorForm({ open, onClose, visitor, prefill }: Props) 
     { skip: phoneInput.length < 7 }
   );
 
-  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<VisitorFormData>({
+  const form = useForm<VisitorFormData>({
     defaultValues: {
       studentName: '', gender: 'male', dateOfBirth: '', desiredClass: '', previousSchool: '',
       parentName: '', phone: '', alternatePhone: '', email: '', address: '',
       source: 'walk_in', referredBy: '', notes: '', status: 'new', nextFollowUpDate: '',
     },
   });
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = form;
 
   const phone = watch('phone');
   const source = watch('source');
@@ -129,6 +132,9 @@ export default function VisitorForm({ open, onClose, visitor, prefill }: Props) 
     }
   }, [open, visitor, prefill, reset]);
 
+  // A prefilled inquiry (converted from elsewhere) starts from its prefill, never a draft.
+  const draft = useFormDraft(form, { key: 'school-visitor', enabled: open && !isEdit && !prefill, label: 'inquiry' });
+
   const onSubmit = async (data: VisitorFormData) => {
     if (dupCheck?.isDuplicate && !isEdit) {
       toast.error('A visitor with this phone number already exists.');
@@ -146,6 +152,7 @@ export default function VisitorForm({ open, onClose, visitor, prefill }: Props) 
         toast.success('Visitor updated');
       } else {
         await createVisitor(payload).unwrap();
+        draft.clear();
         toast.success('Visitor added');
       }
       onClose();
@@ -163,6 +170,7 @@ export default function VisitorForm({ open, onClose, visitor, prefill }: Props) 
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <FormDraftNotice draft={draft} />
           {/* ── Student / Child ── */}
           <fieldset className="space-y-3 border rounded-lg p-4">
             <legend className="text-xs font-semibold uppercase tracking-wide text-blue-700 px-1">Student / Child Information</legend>

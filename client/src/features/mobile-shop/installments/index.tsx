@@ -68,6 +68,8 @@ import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { useStateDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -309,6 +311,12 @@ export default function InstallmentsPage() {
     return ''
   }, [planForm.totalAmount, planForm.downPayment, planForm.totalInstallments])
 
+  const draft = useStateDraft(planForm, setPlanForm, {
+    key: 'installment-plan',
+    enabled: planDialogOpen && !editingPlan,
+    label: 'installment plan',
+  })
+
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   const openCreateDialog = () => {
@@ -456,6 +464,7 @@ export default function InstallmentsPage() {
           notes: planForm.notes.trim() || undefined,
         }).unwrap()
         toast.success('Installment plan created!')
+        draft.clear()
       }
       setPlanDialogOpen(false)
       setEditingPlan(null)
@@ -770,6 +779,7 @@ export default function InstallmentsPage() {
               {editingPlan ? 'Edit Installment Plan' : 'New Installment Plan'}
             </DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <form ref={planFormRef} onSubmit={handlePlanSubmit} className='space-y-4'>
 
             {/* Customer Info */}

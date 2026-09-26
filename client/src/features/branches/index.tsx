@@ -51,6 +51,8 @@ import { useUrduDisplay } from '@/context/urdu-display-context'
 import { usePermissions } from '@/context/permission-context'
 import { cn } from '@/lib/utils'
 import { getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const branchDialogSchema = z.object({
   name: z.string().min(1, 'Branch name is required'),
@@ -189,6 +191,12 @@ export default function BranchesPage() {
     }
   }, [dialogOpen, selectedBranch?.id, showUrduInput])
 
+  const draft = useFormDraft(branchForm, {
+    key: 'branch',
+    enabled: dialogOpen && !selectedBranch,
+    label: 'branch',
+  })
+
   const handleCreate = () => {
     setSelectedBranch(null)
     setDialogOpen(true)
@@ -211,6 +219,7 @@ export default function BranchesPage() {
         toast.success('Branch updated successfully')
       } else {
         await createBranch(values).unwrap()
+        draft.clear()
         toast.success('Branch created successfully')
       }
       setDialogOpen(false)
@@ -487,6 +496,7 @@ export default function BranchesPage() {
           </DialogHeader>
           <Form {...branchForm}>
             <form id="branch-dialog-form" onSubmit={branchForm.handleSubmit(onBranchDialogSubmit)} className="space-y-4">
+              <FormDraftNotice draft={draft} />
               <FormField
                 control={branchForm.control}
                 name="name"

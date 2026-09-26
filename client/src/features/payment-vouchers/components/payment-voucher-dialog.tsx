@@ -37,6 +37,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { makeEnterChain, MOBILE_FORM_KEYBOARD_HINT, useCtrlEnterSubmit } from '@/lib/mobile-form-keyboard'
 import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const lineSchema = z
   .object({
@@ -173,6 +175,8 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
     }
   }, [open, voucher, form])
 
+  const draft = useFormDraft(form, { key: 'payment-voucher', enabled: open && !isEdit, label: 'payment voucher' })
+
   const lines = form.watch('lines')
   const totalAmount = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
   const hasChanges = isEdit && fingerprint(form.watch()) !== initialFingerprint
@@ -270,6 +274,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
           lines: payload.lines.map(({ id: _id, ...line }) => line),
         }).unwrap()
         toast.success(`Payment voucher ${created.voucherNumber} created`)
+        draft.clear()
         onCreated?.(created.id)
       }
       onOpenChange(false)
@@ -300,6 +305,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(onSubmit)} className='flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 sm:overflow-hidden'>
+          <FormDraftNotice draft={draft} className='shrink-0' />
           {isEdit && (
             <Alert className='shrink-0 border-amber-500/30 bg-amber-500/5'>
               <Info className='h-4 w-4' />

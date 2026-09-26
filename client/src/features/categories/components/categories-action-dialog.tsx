@@ -38,6 +38,8 @@ import { SubCategoriesProvider } from '@/features/subcategories/context/subcateg
 import { Check, FolderTree, Layers, Plus } from 'lucide-react'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const categoryFormSchema = z.object({
   name: z.string().min(1, 'Category name is required'),
@@ -106,6 +108,13 @@ export function CategoriesActionDialog({ setFetch, defaultName, onCreated }: Cat
     }
   }, [state.open, state.currentCategory, defaultName, form])
 
+  // A quick-create from a picker (defaultName) starts from the typed name, never a draft.
+  const draft = useFormDraft(form, {
+    key: 'category',
+    enabled: state.open && !state.currentCategory && !defaultName,
+    label: 'category',
+  })
+
   // Load this category's existing sub-categories for display/removal — fetched directly
   // (not via the redux thunk) so we don't clobber the global sub-category list that the
   // Sub Categories page and product form pickers rely on.
@@ -158,6 +167,7 @@ export function CategoriesActionDialog({ setFetch, defaultName, onCreated }: Cat
           image: data.image,
         })).unwrap()
         categoryId = created.id
+        draft.clear()
         toast.success(t('category_created_successfully'))
         onCreated?.(created)
       }
@@ -257,6 +267,7 @@ export function CategoriesActionDialog({ setFetch, defaultName, onCreated }: Cat
             className="flex min-h-0 flex-1 flex-col"
           >
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+              <FormDraftNotice draft={draft} />
               <div className="flex flex-col gap-4">
                 <FormField
                   control={form.control}

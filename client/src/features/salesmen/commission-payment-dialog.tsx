@@ -33,6 +33,8 @@ import {
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const paymentSchema = z
   .object({
@@ -106,6 +108,13 @@ export function CommissionPaymentDialog({
     }
   }, [open, balance, form]);
 
+  // Scoped per salesman — a half-typed payout to one salesman never shows up on another's.
+  const draft = useFormDraft(form, {
+    key: `commission-payment:${salesmanId}`,
+    enabled: open,
+    label: 'payment',
+  });
+
   const onSubmit: SubmitHandler<PaymentFormValues> = async (data) => {
     if (data.amount > balance) {
       form.setError('amount', { message: `Cannot exceed the outstanding balance of ${formatMoney(balance)}` });
@@ -121,6 +130,7 @@ export function CommissionPaymentDialog({
         notes: data.notes,
       }).unwrap();
       toast.success(t('commission_payment_recorded') || 'Commission payment recorded');
+      draft.clear();
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
@@ -140,6 +150,7 @@ export function CommissionPaymentDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormDraftNotice draft={draft} />
             <FormField
               control={form.control}
               name="amount"

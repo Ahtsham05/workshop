@@ -8,6 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAddVisitorFollowUpMutation } from '@/stores/school.api';
 import { STATUS_OPTIONS } from './visitor-form';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 interface Props {
   visitorId: string;
@@ -23,9 +25,13 @@ interface FollowUpData {
 
 export default function FollowUpDialog({ visitorId, open, onClose }: Props) {
   const [addFollowUp, { isLoading }] = useAddVisitorFollowUpMutation();
-  const { register, handleSubmit, setValue, watch, reset } = useForm<FollowUpData>({
+  const form = useForm<FollowUpData>({
     defaultValues: { note: '', statusAfter: '', nextFollowUpDate: '' },
   });
+  const { register, handleSubmit, setValue, watch, reset } = form;
+
+  // Scoped per visitor — a half-written note about one family never shows on another's.
+  const draft = useFormDraft(form, { key: `school-follow-up:${visitorId}`, enabled: open, label: 'follow-up' });
 
   const statusAfter = watch('statusAfter');
   const NONE = 'no_change';
@@ -37,6 +43,7 @@ export default function FollowUpDialog({ visitorId, open, onClose }: Props) {
       if (data.nextFollowUpDate) payload.nextFollowUpDate = data.nextFollowUpDate;
 
       await addFollowUp({ id: visitorId, ...payload }).unwrap();
+      draft.clear();
       toast.success('Follow-up recorded');
       reset();
       onClose();
@@ -52,6 +59,7 @@ export default function FollowUpDialog({ visitorId, open, onClose }: Props) {
           <DialogTitle>Add Follow-up</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <FormDraftNotice draft={draft} />
           <div className="space-y-1">
             <Label>Note <span className="text-destructive">*</span></Label>
             <Textarea {...register('note', { required: true })} rows={3} placeholder="What happened / what was discussed?" />

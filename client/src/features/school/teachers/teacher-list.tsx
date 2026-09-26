@@ -11,6 +11,8 @@ import { useGetTeachersQuery, useCreateTeacherMutation, useUpdateTeacherMutation
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useCurrencyMeta } from '@/lib/format-money';
+import { useStateDraft } from '@/hooks/use-form-draft';
+import { FormDraftNotice } from '@/components/form-draft-notice';
 
 
 const GRADIENT_COLORS = [
@@ -64,6 +66,12 @@ export default function TeacherList() {
     setEditingTeacher(null);
   };
 
+  const draft = useStateDraft(form, setForm, {
+    key: 'school-teacher',
+    enabled: dialogOpen && !editingTeacher,
+    label: 'teacher',
+  });
+
   const openAdd = () => { resetForm(); setDialogOpen(true); };
 
   const openEdit = (teacher: any) => {
@@ -89,6 +97,7 @@ export default function TeacherList() {
         toast.success('Teacher updated');
       } else {
         await createTeacher(form).unwrap();
+        draft.clear();
         toast.success('Teacher added');
       }
       setDialogOpen(false);
@@ -242,6 +251,7 @@ export default function TeacherList() {
           <DialogHeader>
             <DialogTitle>{editingTeacher ? `Edit — ${editingTeacher.firstName} ${editingTeacher.lastName}` : 'Add Teacher'}</DialogTitle>
           </DialogHeader>
+          <FormDraftNotice draft={draft} />
           <div className="grid grid-cols-2 gap-4 py-2">
             <div>
               <Label>Employee ID</Label>

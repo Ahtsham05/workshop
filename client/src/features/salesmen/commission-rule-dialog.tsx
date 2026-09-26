@@ -37,6 +37,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
+import { useFormDraft } from '@/hooks/use-form-draft'
+import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const ruleSchema = z
   .object({
@@ -135,6 +137,12 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
     }
   }, [rule, form]);
 
+  const draft = useFormDraft(form, {
+    key: 'commission-rule',
+    enabled: open && !isEdit,
+    label: 'commission rule',
+  });
+
   const onSubmit: SubmitHandler<RuleFormValues> = async (data) => {
     try {
       if (isEdit && rule) {
@@ -162,6 +170,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
           notes: data.notes,
         }).unwrap();
         toast.success(t('commission_rule_created_successfully') || 'Commission rule created successfully');
+        draft.clear();
       }
       onSuccess();
       onOpenChange(false);
@@ -186,6 +195,7 @@ export function CommissionRuleDialog({ open, onOpenChange, rule, onSuccess }: Co
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormDraftNotice draft={draft} />
             <FormField
               control={form.control}
               name="scope"
