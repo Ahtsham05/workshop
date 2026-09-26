@@ -64,6 +64,14 @@ export function PlanGrid({ summary }: { summary: BillingSummary }) {
   const [changeCardPlan, { isLoading: changing }] = useChangeCardPlanMutation()
   const busy = previewing || checkingOut || changing
 
+  // Mirrors the server's MANUAL_TIME_REMAINING rule: no card subscription while manually
+  // paid time is still running (it would charge twice for the same period).
+  const manualTimeLeft =
+    summary.paymentSource === 'manual' &&
+    summary.plan.key !== 'trial' &&
+    (summary.status === 'active' || summary.status === 'canceled') &&
+    Boolean(summary.currentPeriodEnd && new Date(summary.currentPeriodEnd) > new Date())
+  const cardBlocked = source === 'polar' && manualTimeLeft
   const canPay = summary.isOwner && routing.allowed.length > 0
   // A card subscription renews itself; renewing it "again" makes no sense.
   const renewDisabled = (plan: BillingPlan) =>
@@ -150,6 +158,17 @@ export function PlanGrid({ summary }: { summary: BillingSummary }) {
         </Alert>
       )}
 
+      {cardBlocked && (
+        <Alert>
+          <Info className='h-4 w-4' />
+          <AlertTitle>You're already paid until {formatDate(summary.currentPeriodEnd)}</AlertTitle>
+          <AlertDescription>
+            Your current period was paid by bank / wallet. You can switch to card payment when it ends, so you're never
+            charged twice for the same days.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {source === 'polar' && !cardReady && (
         <Alert>
           <Info className='h-4 w-4' />
@@ -206,7 +225,7 @@ export function PlanGrid({ summary }: { summary: BillingSummary }) {
                   <Button
                     className='w-full sm:w-auto'
                     variant={isCurrent ? 'outline' : 'default'}
-                    disabled={busy || cardUnavailable || renewDisabled(plan)}
+                    disabled={busy || cardUnavailable || cardBlocked || renewDisabled(plan)}
                     onClick={() => handleSelect(plan)}
                   >
                     {cardUnavailable

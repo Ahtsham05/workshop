@@ -14,7 +14,8 @@ const logger = require('../../config/logger');
 const planService = require('./plan.service');
 const billingAudit = require('./billingAudit.service');
 const { applySubscriptionPatch } = require('./subscriptionWriter');
-const { comparePlans, findLimitOverages } = require('./subscriptionState');
+const { comparePlans, findLimitOverages, hasPaidTimeLeft } = require('./subscriptionState');
+const entitlementService = require('../entitlement.service');
 
 let client = null;
 
@@ -175,8 +176,28 @@ const planForProduct = async (productId, product) => {
 
 // ── Checkout / portal / plan change ──────────────────────────────────────────────────
 
-const createCheckout = async ({ org, user, planKey }) => {
+const createCheckout = async ({ org, user, planKey, now = new Date() }) => {
   const plan = await planService.getPurchasablePlanOrThrow(planKey);
+  // A card subscription starts billing immediately. If the org already paid manually for
+  // time that hasn't run out, a checkout now would charge twice for the same period (and the
+  // card period would replace the longer manual one). They can switch once it ends — the
+  // grace period is the natural moment.
+  const { state } = await entitlementService.getEntitlement(org, { now });
+  if (state.paymentSource === 'manual' && hasPaidTimeLeft(state, now)) {
+    const until = new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Karachi',
+    }).format(state.currentPeriodEnd);
+    const err = new ApiError(
+      httpStatus.CONFLICT,
+      `Your plan is already paid by bank / wallet until ${until}. You can switch to card payment when that period ends.`
+    );
+    err.errorCode = 'MANUAL_TIME_REMAINING';
+    err.details = { paidUntil: state.currentPeriodEnd };
+    throw err;
+  }
   const productId = await resolveProductId(plan);
   if (!productId) {
     const err = new ApiError(

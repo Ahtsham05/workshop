@@ -162,6 +162,15 @@ describe('Polar webhook', () => {
     expect((await entitlementService.canUseModule(orgId, 'hr')).allowed).toBe(true);
   });
 
+  test('also accepts deliveries on /api/webhooks/polar (the path set in the Polar dashboard)', async () => {
+    await makeOrg();
+    const req = signedRequest(SECRET, event('subscription.active', sub()));
+    await request(app).post('/api/webhooks/polar').set(req.headers).send(req.body).expect(httpStatus.ACCEPTED);
+    expect((await getOrg()).subscription.planType).toBe('growth');
+    const bad = signedRequest('whsec_wrong', event('subscription.active', sub()));
+    await request(app).post('/api/webhooks/polar').set(bad.headers).send(bad.body).expect(httpStatus.FORBIDDEN);
+  });
+
   test('a duplicate delivery (same webhook-id) is acknowledged but processed only once', async () => {
     await makeOrg();
     const req = signedRequest(SECRET, event('subscription.active', sub()), { id: 'msg_dup_1' });
@@ -345,6 +354,30 @@ describe('Polar checkout', () => {
     };
     const res = await checkout(ownerId).expect(httpStatus.SERVICE_UNAVAILABLE);
     expect(res.body.errorCode).toBe('CARD_NOT_AVAILABLE');
+  });
+
+  test('refuses card checkout while manually paid time is still running (no double billing)', async () => {
+    const paidUntil = addDays(new Date(), 40);
+    await makeOrg({
+      countryCode: 'PK',
+      subscription: { planType: 'growth', status: 'active', paymentSource: 'manual', currentPeriodEnd: paidUntil },
+    });
+    const res = await checkout(ownerId).expect(httpStatus.CONFLICT);
+    expect(res.body.errorCode).toBe('MANUAL_TIME_REMAINING');
+    expect(created).toHaveLength(0);
+  });
+
+  test('allows switching to card once the manual period has ended (grace period)', async () => {
+    await makeOrg({
+      countryCode: 'PK',
+      subscription: {
+        planType: 'growth',
+        status: 'active',
+        paymentSource: 'manual',
+        currentPeriodEnd: addDays(new Date(), -1),
+      },
+    });
+    await checkout(ownerId).expect(httpStatus.CREATED);
   });
 
   test('only the owner may start a checkout', async () => {

@@ -49,8 +49,9 @@ app.use(
 
 // Polar billing webhook — the signature is computed over the exact bytes Polar sent, so this
 // must see the raw body (and run before express.json below consumes it).
+// Both paths are accepted: /api/webhooks/polar is what the Polar dashboard endpoint is set to.
 app.post(
-  '/v1/billing/polar/webhook',
+  ['/v1/billing/polar/webhook', '/api/webhooks/polar'],
   express.raw({ type: () => true, limit: '1mb' }),
   require('./controllers/billing.controller').polarWebhook
 );
