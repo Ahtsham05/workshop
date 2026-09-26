@@ -304,7 +304,7 @@ export default function BranchesPage() {
               Upgrade to add more locations.
             </span>
           </div>
-          <Link to="/subscription/pricing">
+          <Link to="/settings/billing">
             <Button size="sm" variant="outline" className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-700 dark:hover:bg-amber-900/50">
               <ArrowUpRight className="mr-1 h-3.5 w-3.5" />
               Upgrade Plan

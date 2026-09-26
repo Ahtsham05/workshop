@@ -72,6 +72,11 @@ const envVarsSchema = Joi.object()
     VAPID_PUBLIC_KEY: Joi.string().allow('').description('Web Push VAPID public key'),
     VAPID_PRIVATE_KEY: Joi.string().allow('').description('Web Push VAPID private key'),
     VAPID_SUBJECT: Joi.string().allow('').description('Web Push VAPID subject (mailto: or https:)'),
+    POLAR_ACCESS_TOKEN: Joi.string().allow('').description('Polar organization access token (billing)'),
+    POLAR_WEBHOOK_SECRET: Joi.string().allow('').description('Polar webhook signing secret'),
+    POLAR_SERVER: Joi.string().valid('sandbox', 'production').default('sandbox').description('Polar environment'),
+    BILLING_CRON_SECRET: Joi.string().allow('').description('Shared secret for POST /v1/billing/cron/run'),
+    BILLING_SCHEDULER_ENABLED: Joi.boolean().default(true).description('Run the in-process billing scheduler'),
   })
   .unknown();
 
@@ -114,6 +119,16 @@ module.exports = {
       },
     },
     from: envVars.EMAIL_FROM,
+  },
+  billing: {
+    polar: {
+      accessToken: envVars.POLAR_ACCESS_TOKEN || '',
+      webhookSecret: envVars.POLAR_WEBHOOK_SECRET || '',
+      server: envVars.POLAR_SERVER,
+    },
+    cronSecret: envVars.BILLING_CRON_SECRET || '',
+    schedulerEnabled: envVars.BILLING_SCHEDULER_ENABLED,
+    frontendUrl: (envVars.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
   },
   cloudinary: {
     cloudName: envVars.CLOUDINARY_CLOUD_NAME,

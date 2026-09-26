@@ -47,6 +47,14 @@ app.use(
   require('./routes/v1/whatsappWebhook.route'),
 );
 
+// Polar billing webhook — the signature is computed over the exact bytes Polar sent, so this
+// must see the raw body (and run before express.json below consumes it).
+app.post(
+  '/v1/billing/polar/webhook',
+  express.raw({ type: () => true, limit: '1mb' }),
+  require('./controllers/billing.controller').polarWebhook
+);
+
 // parse json request body
 app.use(express.json({ limit: '15mb' }));
 

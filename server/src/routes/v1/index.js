@@ -82,7 +82,7 @@ const repairStockItemRoute = require('./repairStockItem.route');
 const installmentRoute = require('./installment.route');
 const auditLogRoute = require('./auditLog.route');
 const aiAssistantRoute = require('./aiAssistant.route');
-const { trialGuard, enforceTrialStatus } = require('../../middlewares/trialGuard');
+const { readOnlyGate } = require('../../middlewares/entitlement');
 
 // Localization / Currency / Tax engine Routes
 const taxCategoryRoute = require('./taxCategory.route');
@@ -149,6 +149,7 @@ const restaurantPublicRoute = require('./restaurantPublic.route');
 // Subscription & Admin Routes
 const paymentRoute = require('./payment.route');
 const adminRoute = require('./admin.route');
+const billingRoute = require('./billing.route');
 
 const translateRoute = require('./translate.route');
 const syncRoute = require('./sync.route');
@@ -677,6 +678,10 @@ const defaultRoutes = [
     route: adminRoute,
   },
   {
+    path: '/billing',
+    route: billingRoute,
+  },
+  {
     path: '/audit-logs',
     route: auditLogRoute,
   },
@@ -838,12 +843,11 @@ const protectedPaths = [
   '/tax',
 ];
 
-// Apply trial guard + enforcement to protected routes
+// Lapsed plans make business routes read-only: reads and exports always pass, mutations get
+// 402 SUBSCRIPTION_READ_ONLY. See middlewares/entitlement.js#readOnlyGate.
 router.use((req, res, next) => {
-  if (protectedPaths.some(path => req.path.startsWith(path))) {
-    return trialGuard(req, res, () => {
-      enforceTrialStatus(req, res, next);
-    });
+  if (protectedPaths.some((path) => req.path.startsWith(path))) {
+    return readOnlyGate(req, res, next);
   }
   next();
 });

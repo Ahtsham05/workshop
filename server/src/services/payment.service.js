@@ -95,37 +95,37 @@ const approvePayment = async (paymentId, adminUserId) => {
     throw new ApiError(httpStatus.BAD_REQUEST, `Payment is already ${payment.status}`);
   }
 
-  const plan = PLANS[payment.planType];
-  if (!plan) {
-    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Invalid plan type in payment record');
-  }
+  // Legacy (pre-v2) bank-transfer claim: apply it through the same state machine and writer
+  // as ManualPayment approvals so the subscription lands in the v2 shape.
+  const { resolvePlanKey, computeManualApproval } = require('./billing/subscriptionState');
+  const { applySubscriptionPatch } = require('./billing/subscriptionWriter');
+  const planService = require('./billing/plan.service');
+  const entitlementService = require('./entitlement.service');
 
-  // Mark payment as approved
-  payment.status = 'approved';
-  payment.approvedBy = adminUserId;
-  payment.approvedAt = new Date();
-  await payment.save();
+  const now = new Date();
+  const claimed = await Payment.findOneAndUpdate(
+    { _id: paymentId, status: 'pending' },
+    { $set: { status: 'approved', approvedBy: adminUserId, approvedAt: now } },
+    { new: true }
+  );
+  if (!claimed) throw new ApiError(httpStatus.CONFLICT, 'Payment was already reviewed');
 
-  // Calculate subscription window (months × 30 days)
-  const startDate = new Date();
-  const endDate = new Date(startDate.getTime() + payment.months * 30 * 24 * 60 * 60 * 1000);
-
-  // Activate organization subscription
-  await Organization.findByIdAndUpdate(payment.organizationId, {
-    subscription: {
-      planType: payment.planType,
-      status: 'active',
-      isTrial: false,
-      startDate,
-      endDate,
-      limits: {
-        maxBranches: plan.maxBranches,
-        maxUsers: plan.maxUsers,
-      },
+  const org = await Organization.findById(payment.organizationId).select('name owner email subscription').lean();
+  const ent = await entitlementService.getEntitlement(org, { now });
+  const targetPlan = await planService.getPlanOrThrow(resolvePlanKey(payment.planType));
+  const result = computeManualApproval({ state: ent.state, currentPlan: ent.plan, targetPlan, months: payment.months, now });
+  await applySubscriptionPatch({
+    org,
+    patch: result.patch,
+    now,
+    audit: {
+      actorType: 'admin',
+      actorId: adminUserId,
+      action: 'manual_payment.approved',
+      meta: { legacyPaymentId: payment._id, appliedAs: result.appliedAs },
     },
   });
-
-  return payment;
+  return claimed;
 };
 
 /**
@@ -159,22 +159,17 @@ const rejectPayment = async (paymentId, adminUserId, rejectionReason) => {
  * @returns {Promise<{subscription, branchesUsed, usersUsed}>}
  */
 const getSubscriptionUsage = async (organizationId) => {
-  const { Branch, User } = require('../models');
-  const [org, branchesUsed, usersUsed] = await Promise.all([
-    Organization.findById(organizationId).select('subscription name'),
-    Branch.countDocuments({ organizationId, isActive: true }),
-    // Student/parent portal logins are not billable team members.
-    User.countDocuments({ organizationId, isActive: true, schoolRole: { $nin: ['student', 'parent'] } }),
-  ]);
-
+  const entitlementService = require('./entitlement.service');
+  const org = await Organization.findById(organizationId).select('subscription name countryCode country').lean();
   if (!org) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
   }
-
+  const summary = await entitlementService.getSummary(org);
   return {
     subscription: org.subscription,
-    branchesUsed,
-    usersUsed,
+    branchesUsed: summary.usage.branches,
+    usersUsed: summary.usage.users,
+    entitlement: summary,
   };
 };
 

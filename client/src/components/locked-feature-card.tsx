@@ -70,7 +70,7 @@ export function LockedFeatureCard({
             See What's Included
           </Button>
           <Button variant='outline' className='w-full' asChild>
-            <Link to='/subscription/pricing'>View Pricing Plans</Link>
+            <Link to='/settings/billing'>View Plans</Link>
           </Button>
         </CardFooter>
       </Card>

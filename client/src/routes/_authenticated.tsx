@@ -66,8 +66,10 @@ function AuthenticatedLayout() {
   const isTeacher = schoolRole === 'teacher'
 
   if (isPortalUser) {
+    // No billing banner for students/parents — they can't renew the school's plan.
+    // (A lapsed plan is still read-only for them; the server enforces that.)
     return (
-      <TrialExpirationBoundary>
+      <>
         <PermissionWrapper>
           <WhatsAppProvider>
             <NotepadProvider>
@@ -78,7 +80,7 @@ function AuthenticatedLayout() {
             </NotepadProvider>
           </WhatsAppProvider>
         </PermissionWrapper>
-      </TrialExpirationBoundary>
+      </>
     )
   }
 

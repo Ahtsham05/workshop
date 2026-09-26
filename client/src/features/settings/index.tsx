@@ -21,6 +21,7 @@ import {
   IconListNumbers,
   IconPalette,
   IconTextSize,
+  IconCreditCard,
 } from '@tabler/icons-react'
 import { Separator } from '@/components/ui/separator'
 import SidebarNav, { type SettingsNavGroup } from './components/sidebar-nav'
@@ -99,6 +100,11 @@ const sidebarNavGroups: { label: string; items: SettingsNavItem[] }[] = [
   {
     label: 'Business',
     items: [
+      {
+        title: 'Billing & Plan',
+        icon: <IconCreditCard size={18} />,
+        href: '/settings/billing',
+      },
       {
         title: 'Business Profile',
         icon: <IconBuilding size={18} />,

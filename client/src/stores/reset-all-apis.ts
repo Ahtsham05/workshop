@@ -13,6 +13,7 @@ import { organizationApi } from './organization.api'
 import { branchApi } from './branch.api'
 import { membershipApi } from './membership.api'
 import { subscriptionApi } from './subscription.api'
+import { billingApi } from './billing.api'
 import { userPreferencesApi } from './user-preferences.api'
 import { mobileShopApi } from './mobile-shop.api'
 import { returnsApi } from './returns.api'
@@ -54,7 +55,7 @@ import { leadApi } from './lead.api'
 const ALL_APIS = [
   invoiceApi, customerApi, purchaseApi, purchaseOrderApi, dashboardApi, reportsApi,
   companyApi, rolesApi, usersApi, hrApi, organizationApi, branchApi, membershipApi,
-  subscriptionApi, userPreferencesApi, mobileShopApi, returnsApi, schoolApi,
+  subscriptionApi, billingApi, userPreferencesApi, mobileShopApi, returnsApi, schoolApi,
   expenseCategoryApi, customerAccountTypeApi, restaurantApi, whatsappApi,
   whatsappCloudApi, smsGatewayApi, cashRegisterApi, imeiApi, usedPhoneBuybackApi,
   insightApi, purchaseSuggestionsApi, productAttributeApi, productVariantApi,

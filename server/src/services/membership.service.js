@@ -1,23 +1,11 @@
 const httpStatus = require('http-status');
-const { Membership, User, Branch, Organization } = require('../models');
+const { Membership, Branch } = require('../models');
 const ApiError = require('../utils/ApiError');
+const entitlementService = require('./entitlement.service');
 
-const ensureUserLimitNotExceeded = async (organizationId) => {
-  const org = await Organization.findById(organizationId).select('subscription');
-  const maxUsers = org?.subscription?.limits?.maxUsers;
-
-  if (maxUsers == null) {
-    return;
-  }
-
-  const currentUsers = await User.countDocuments({ organizationId, isActive: true });
-  if (currentUsers >= maxUsers) {
-    throw new ApiError(
-      httpStatus.FORBIDDEN,
-      `User limit reached. Your plan allows ${maxUsers} user(s). Please upgrade your subscription.`
-    );
-  }
-};
+// Plan user limit + read-only check — see entitlement.service#canAddUser. (This used to count
+// student/parent portal logins as seats, unlike user.service; both now share one rule.)
+const ensureUserLimitNotExceeded = (organizationId) => entitlementService.assertCanAddUser(organizationId);
 
 /**
  * Add a member to a branch (invite/create staff)

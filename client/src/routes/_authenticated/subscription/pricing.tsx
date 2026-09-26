@@ -1,6 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import PricingPage from '@/features/subscription/pricing'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// Superseded by Settings → Billing & Plan; kept so old links and bookmarks still land somewhere useful.
 export const Route = createFileRoute('/_authenticated/subscription/pricing')({
-  component: PricingPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/settings/billing' })
+  },
 })

@@ -231,6 +231,12 @@ async function startApplication() {
         } catch (schedulerError) {
           logger.warn('Reminder scheduler skipped:', schedulerError.message);
         }
+        try {
+          const { startBillingScheduler } = require('./jobs/billingScheduler');
+          startBillingScheduler();
+        } catch (schedulerError) {
+          logger.warn('Billing scheduler skipped:', schedulerError.message);
+        }
         resolve(server);
       });
       server.on('error', reject);

@@ -107,6 +107,7 @@ import { Route as AuthenticatedSettingsDemoDataImport } from './routes/_authenti
 import { Route as AuthenticatedSettingsCurrencyImport } from './routes/_authenticated/settings/currency'
 import { Route as AuthenticatedSettingsCacheImport } from './routes/_authenticated/settings/cache'
 import { Route as AuthenticatedSettingsBusinessProfileImport } from './routes/_authenticated/settings/business-profile'
+import { Route as AuthenticatedSettingsBillingImport } from './routes/_authenticated/settings/billing'
 import { Route as AuthenticatedSettingsBackupImport } from './routes/_authenticated/settings/backup'
 import { Route as AuthenticatedSettingsAppearanceImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountImport } from './routes/_authenticated/settings/account'
@@ -824,6 +825,13 @@ const AuthenticatedSettingsBusinessProfileRoute =
   AuthenticatedSettingsBusinessProfileImport.update({
     id: '/business-profile',
     path: '/business-profile',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsBillingRoute =
+  AuthenticatedSettingsBillingImport.update({
+    id: '/billing',
+    path: '/billing',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -1785,6 +1793,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsBackupImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/billing': {
+      id: '/_authenticated/settings/billing'
+      path: '/billing'
+      fullPath: '/settings/billing'
+      preLoaderRoute: typeof AuthenticatedSettingsBillingImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/business-profile': {
       id: '/_authenticated/settings/business-profile'
       path: '/business-profile'
@@ -2606,6 +2621,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
   AuthenticatedSettingsBackupRoute: typeof AuthenticatedSettingsBackupRoute
+  AuthenticatedSettingsBillingRoute: typeof AuthenticatedSettingsBillingRoute
   AuthenticatedSettingsBusinessProfileRoute: typeof AuthenticatedSettingsBusinessProfileRoute
   AuthenticatedSettingsCacheRoute: typeof AuthenticatedSettingsCacheRoute
   AuthenticatedSettingsCurrencyRoute: typeof AuthenticatedSettingsCurrencyRoute
@@ -2634,6 +2650,7 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
     AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
     AuthenticatedSettingsBackupRoute: AuthenticatedSettingsBackupRoute,
+    AuthenticatedSettingsBillingRoute: AuthenticatedSettingsBillingRoute,
     AuthenticatedSettingsBusinessProfileRoute:
       AuthenticatedSettingsBusinessProfileRoute,
     AuthenticatedSettingsCacheRoute: AuthenticatedSettingsCacheRoute,
@@ -3100,6 +3117,7 @@ export interface FileRoutesByFullPath {
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/settings/billing': typeof AuthenticatedSettingsBillingRoute
   '/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
@@ -3273,6 +3291,7 @@ export interface FileRoutesByTo {
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/settings/billing': typeof AuthenticatedSettingsBillingRoute
   '/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
@@ -3450,6 +3469,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/backup': typeof AuthenticatedSettingsBackupRoute
+  '/_authenticated/settings/billing': typeof AuthenticatedSettingsBillingRoute
   '/_authenticated/settings/business-profile': typeof AuthenticatedSettingsBusinessProfileRoute
   '/_authenticated/settings/cache': typeof AuthenticatedSettingsCacheRoute
   '/_authenticated/settings/currency': typeof AuthenticatedSettingsCurrencyRoute
@@ -3629,6 +3649,7 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/backup'
+    | '/settings/billing'
     | '/settings/business-profile'
     | '/settings/cache'
     | '/settings/currency'
@@ -3801,6 +3822,7 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/backup'
+    | '/settings/billing'
     | '/settings/business-profile'
     | '/settings/cache'
     | '/settings/currency'
@@ -3976,6 +3998,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/backup'
+    | '/_authenticated/settings/billing'
     | '/_authenticated/settings/business-profile'
     | '/_authenticated/settings/cache'
     | '/_authenticated/settings/currency'
@@ -4254,6 +4277,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/account",
         "/_authenticated/settings/appearance",
         "/_authenticated/settings/backup",
+        "/_authenticated/settings/billing",
         "/_authenticated/settings/business-profile",
         "/_authenticated/settings/cache",
         "/_authenticated/settings/currency",
@@ -4536,6 +4560,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/backup": {
       "filePath": "_authenticated/settings/backup.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/billing": {
+      "filePath": "_authenticated/settings/billing.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/business-profile": {

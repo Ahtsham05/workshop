@@ -28,6 +28,8 @@ const errorHandler = (err, req, res, next) => {
   const response = {
     code: statusCode,
     message,
+    // Machine-readable reason (e.g. SUBSCRIPTION_READ_ONLY, LIMIT_USERS) — see entitlement.service.
+    ...(err.isOperational && err.errorCode && { errorCode: err.errorCode, details: err.details || {} }),
     ...(config.env === 'development' && { stack: err.stack }),
   };
 

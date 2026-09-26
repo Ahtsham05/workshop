@@ -23,7 +23,6 @@ import {
   IconBuildingStore,
   IconCreditCard,
   IconChartBar,
-  IconCrown,
   IconSchool,
   IconBook,
   IconClipboardCheck,
@@ -958,20 +957,8 @@ export const sidebarData: SidebarData = {
       title: 'Subscription',
       items: [
         {
-          title: 'My Subscription',
-          url: '/subscription',
-          icon: IconCrown,
-          systemRole: ['superAdmin', 'system_admin'],
-        },
-        {
-          title: 'Pricing & Plans',
-          url: '/subscription/pricing',
-          icon: IconChartBar,
-          systemRole: ['superAdmin', 'system_admin'],
-        },
-        {
-          title: 'Buy / Renew Plan',
-          url: '/subscription/payment',
+          title: 'Billing & Plan',
+          url: '/settings/billing',
           icon: IconCreditCard,
           systemRole: ['superAdmin', 'system_admin'],
         },

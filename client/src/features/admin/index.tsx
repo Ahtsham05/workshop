@@ -52,6 +52,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ManualPaymentsQueue } from './billing/manual-payments-queue'
+import { BillingConfig } from './billing/billing-config'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -970,8 +972,10 @@ function UsersTab() {
 }
 
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
+type AdminTab = 'manual' | 'billing-config' | 'payments' | 'organizations' | 'users'
+
 export default function AdminPaymentsPage() {
-  const [activeTab, setActiveTab] = useState<'payments' | 'organizations' | 'users'>('payments')
+  const [activeTab, setActiveTab] = useState<AdminTab>('manual')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
@@ -1074,10 +1078,16 @@ export default function AdminPaymentsPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'payments' | 'organizations' | 'users')}>
-        <TabsList>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdminTab)}>
+        <TabsList className='h-auto flex-wrap'>
+          <TabsTrigger value='manual' className='flex items-center gap-1'>
+            <CreditCard className='h-3.5 w-3.5' /> Manual Payments
+          </TabsTrigger>
+          <TabsTrigger value='billing-config' className='flex items-center gap-1'>
+            <TrendingUp className='h-3.5 w-3.5' /> Plans & Settings
+          </TabsTrigger>
           <TabsTrigger value='payments' className='flex items-center gap-1'>
-            <CreditCard className='h-3.5 w-3.5' /> Payment Requests
+            <Clock className='h-3.5 w-3.5' /> Legacy Requests
           </TabsTrigger>
           <TabsTrigger value='organizations' className='flex items-center gap-1'>
             <Building2 className='h-3.5 w-3.5' /> Organizations
@@ -1087,7 +1097,15 @@ export default function AdminPaymentsPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ── Payments tab ── */}
+        <TabsContent value='manual' className='mt-4'>
+          <ManualPaymentsQueue />
+        </TabsContent>
+
+        <TabsContent value='billing-config' className='mt-4'>
+          <BillingConfig />
+        </TabsContent>
+
+        {/* ── Legacy (pre-v2) bank-transfer requests ── */}
         <TabsContent value='payments' className='mt-4'>
           <Card>
             <CardHeader>

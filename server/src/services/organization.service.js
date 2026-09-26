@@ -29,7 +29,8 @@ const {
   Token,
 } = require('../models');
 const ApiError = require('../utils/ApiError');
-const { PLANS } = require('../config/plans');
+const planService = require('./billing/plan.service');
+const { addDays, legacyMirror } = require('./billing/subscriptionState');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const demoDataService = require('./demoData.service');
 const logger = require('../config/logger');
@@ -50,20 +51,21 @@ const setupOrganization = async (userId, orgData) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Onboarding already completed');
   }
 
+  const now = new Date();
+  const trialPlan = await planService.getPlan('trial');
+  const trialEnd = addDays(now, trialPlan?.trialDays ?? 14);
   const organization = await Organization.create({
     ...orgData,
     businessType: normalizeBusinessType(orgData.businessType),
     owner: userId,
     subscription: {
       planType: 'trial',
-      status: 'active',
-      isTrial: true,
-      startDate: new Date(),
-      endDate: new Date(Date.now() + PLANS.trial.durationDays * 24 * 60 * 60 * 1000),
-      limits: {
-        maxBranches: PLANS.trial.maxBranches,
-        maxUsers: PLANS.trial.maxUsers,
-      },
+      status: 'trialing',
+      paymentSource: null,
+      currentPeriodStart: now,
+      currentPeriodEnd: trialEnd,
+      statusChangedAt: now,
+      ...legacyMirror('trial', trialPlan, now, trialEnd, 'trialing'),
     },
   });
 

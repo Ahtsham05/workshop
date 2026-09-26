@@ -1,9 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import PaymentFormPage from '@/features/subscription/payment-form'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// Superseded by Settings → Billing & Plan; kept so old links and bookmarks still land somewhere useful.
 export const Route = createFileRoute('/_authenticated/subscription/payment')({
-  validateSearch: (search: Record<string, unknown>): { planType?: 'single' | 'multi' | 'starter' | 'growth' | 'business' | 'enterprise' } => ({
-    planType: search.planType as 'single' | 'multi' | 'starter' | 'growth' | 'business' | 'enterprise' | undefined,
-  }),
-  component: PaymentFormPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/settings/billing' })
+  },
 })

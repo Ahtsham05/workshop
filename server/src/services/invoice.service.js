@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { Invoice, Product, Customer, CustomerLedger, Organization, Batch } = require('../models');
 const batchService = require('./batch.service');
 const ApiError = require('../utils/ApiError');
+const entitlementService = require('./entitlement.service');
 const { resolveInvoiceLedgerInvoiceType } = require('../utils/ledgerInvoiceType');
 const { buildCustomerSaleLedgerEntries } = require('../utils/ledgerSettlement');
 const customerLedgerService = require('./customerLedger.service');
@@ -292,6 +293,13 @@ const syncWalkInInvoiceCashEntry = (invoice) =>
  * @returns {Promise<Invoice>}
  */
 const createInvoice = async (invoiceBody, userId) => {
+  // Plan invoice quota + read-only check. Every invoice path funnels through here (routes, AI
+  // assistant actions, desktop sync, phone sales, duplication). Trial demo data and
+  // quotations don't count toward the monthly invoice limit.
+  if (!invoiceBody.isDemo) {
+    if (invoiceBody.type === 'quotation') await entitlementService.assertCanWrite(invoiceBody.organizationId);
+    else await entitlementService.assertCanCreateInvoice(invoiceBody.organizationId);
+  }
   console.log('=== Creating Invoice ===');
   console.log('Invoice type:', invoiceBody.type);
   console.log('Number of items:', invoiceBody.items?.length);

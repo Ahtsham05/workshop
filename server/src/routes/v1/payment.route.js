@@ -1,15 +1,13 @@
 const express = require('express');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
-const { trialGuard } = require('../../middlewares/trialGuard');
 const paymentValidation = require('../../validations/payment.validation');
 const paymentController = require('../../controllers/payment.controller');
 const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
 
-// Apply trial guard to all routes so controllers have trial status
-router.use(auth(), trialGuard);
+router.use(auth());
 
 // GET /v1/payments/bank-details — public info about bank transfer (auth still required for security)
 router.get('/bank-details', paymentController.getBankDetails);

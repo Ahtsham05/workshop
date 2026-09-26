@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
-const { Branch, Membership, User, Organization } = require('../models');
+const { Branch, Membership, User } = require('../models');
 const ApiError = require('../utils/ApiError');
+const entitlementService = require('./entitlement.service');
 
 /**
  * Create a branch under an organization
@@ -9,20 +10,8 @@ const ApiError = require('../utils/ApiError');
  * @returns {Promise<Branch>}
  */
 const createBranch = async (organizationId, branchData) => {
-  // Enforce subscription branch limit
-  const org = await Organization.findById(organizationId).select('subscription');
-  if (org && org.subscription && org.subscription.limits) {
-    const maxBranches = org.subscription.limits.maxBranches;
-    if (maxBranches != null) {
-      const currentCount = await Branch.countDocuments({ organizationId, isActive: true });
-      if (currentCount >= maxBranches) {
-        throw new ApiError(
-          httpStatus.FORBIDDEN,
-          `Branch limit reached. Your plan allows ${maxBranches} branch(es). Please upgrade your subscription.`
-        );
-      }
-    }
-  }
+  // Plan branch limit + read-only check — see entitlement.service#canAddBranch.
+  await entitlementService.assertCanAddBranch(organizationId);
   return Branch.create({ ...branchData, organizationId });
 };
 

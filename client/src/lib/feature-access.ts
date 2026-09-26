@@ -1,96 +1,79 @@
 /**
- * Feature Access Control – mirrors the backend plan definitions.
+ * Feature Access Control — a mirror of the server's entitlement rules for *display only*
+ * (locked cards, disabled buttons). The server is the enforcement point: see
+ * server/src/services/entitlement.service.js and server/src/config/billing.js.
  *
- * Plans (planType from Organization.subscription.planType):
- *   trial      → basic only
- *   starter    → basic only (PKR 999)
- *   growth     → mobile shop + advanced reports (PKR 2,499)
- *   business   → HR, admin, multi-branch (PKR 4,999)
- *   enterprise → all features, unlimited users/branches
- *
- * Legacy keys (single = starter, multi = growth) kept for backward compat.
+ * Plans and their modules live in the database and come from GET /v1/billing/summary;
+ * legacy feature keys used around the app map onto those modules here.
  */
+import type { BillingModule } from '@/stores/billing.api'
 
-/** Features available on every plan including trial. */
-export const BASE_FEATURES = [
-  'inventory',
-  'sales',
-  'invoicing',
-  'basic_reports',
-  'school_management',
-  'cash_book',
-  'cash_register',
-  'reports',
-] as const
-
-/** Mobile shop and advanced report features — Growth plan and above. */
-export const MOBILE_SHOP_FEATURES = [
-  'advanced_reports',
-  'profit_loss',
-  'roi',
-  'load',
-  'repair',
-  'bill_payment',
-  'wallet',
-  'customer_ledger',
-  'supplier_ledger',
-  'used_phones',
-] as const
-
-/** HR, admin, and multi-branch features — Business plan and above. */
-export const BUSINESS_FEATURES = [
-  'hr_management',
-  'multi_branch',
-  'roles_permissions',
-  'advanced_analytics',
-  'staff_management',
-] as const
-
-export type FeatureKey =
-  | (typeof BASE_FEATURES)[number]
-  | (typeof MOBILE_SHOP_FEATURES)[number]
-  | (typeof BUSINESS_FEATURES)[number]
-  | string
-
-/** Map each plan type to its allowed feature keys. */
-const PLAN_FEATURE_KEYS: Record<string, readonly string[]> = {
-  trial:      [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES],
-  starter:    BASE_FEATURES,
-  growth:     [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES, 'hr_management'],
-  business:   [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES, ...BUSINESS_FEATURES],
-  enterprise: ['all_features'],
-  // legacy
-  single:     BASE_FEATURES,
-  multi:      [...BASE_FEATURES, ...MOBILE_SHOP_FEATURES, ...BUSINESS_FEATURES, 'analytics'],
+/** Legacy feature keys → plan module. Keep in sync with server config/billing.js FEATURE_TO_MODULE. */
+export const FEATURE_TO_MODULE: Record<string, BillingModule> = {
+  inventory: 'inventory',
+  sales: 'invoicing',
+  invoicing: 'invoicing',
+  basic_reports: 'reports',
+  reports: 'reports',
+  cash_book: 'invoicing',
+  cash_register: 'invoicing',
+  school_management: 'school',
+  advanced_reports: 'advanced_reports',
+  profit_loss: 'advanced_reports',
+  roi: 'advanced_reports',
+  load: 'mobile_shop',
+  repair: 'mobile_shop',
+  bill_payment: 'mobile_shop',
+  used_phones: 'mobile_shop',
+  new_phones: 'mobile_shop',
+  wallet: 'accounting',
+  customer_ledger: 'accounting',
+  supplier_ledger: 'accounting',
+  hr_management: 'hr',
+  staff_management: 'roles_permissions',
+  multi_branch: 'multi_branch',
+  roles_permissions: 'roles_permissions',
+  advanced_analytics: 'analytics',
+  analytics: 'analytics',
 }
 
-/**
- * Returns true if the feature is accessible for the given plan.
- */
-export function isFeatureAllowed(
-  planType: string | undefined | null,
-  featureName: FeatureKey
-): boolean {
+export type FeatureKey = keyof typeof FEATURE_TO_MODULE | BillingModule | string
+
+/** Modules each plan had before billing v2 — used only until the billing summary loads. */
+const FALLBACK_PLAN_MODULES: Record<string, BillingModule[]> = {
+  trial: ['invoicing', 'inventory', 'reports', 'school'],
+  starter: ['invoicing', 'inventory', 'reports', 'school'],
+  growth: ['invoicing', 'inventory', 'reports', 'school', 'accounting', 'advanced_reports', 'mobile_shop', 'hr'],
+  business: [
+    'invoicing', 'inventory', 'reports', 'school', 'accounting', 'advanced_reports', 'mobile_shop', 'hr',
+    'multi_branch', 'roles_permissions', 'analytics',
+  ],
+}
+FALLBACK_PLAN_MODULES.single = FALLBACK_PLAN_MODULES.starter
+FALLBACK_PLAN_MODULES.multi = FALLBACK_PLAN_MODULES.growth
+
+export function moduleForFeature(featureName: FeatureKey): BillingModule | undefined {
+  return (FEATURE_TO_MODULE[featureName] ?? featureName) as BillingModule
+}
+
+/** True when the given plan modules include the module behind `featureName`. */
+export function isFeatureInModules(modules: readonly string[], featureName: FeatureKey): boolean {
+  const module = moduleForFeature(featureName)
+  return Boolean(module && modules.includes(module))
+}
+
+/** Pre-summary fallback by plan key (enterprise = everything). */
+export function isFeatureAllowed(planType: string | undefined | null, featureName: FeatureKey): boolean {
   const plan = planType ?? 'trial'
-  const keys = PLAN_FEATURE_KEYS[plan] ?? BASE_FEATURES
-  if (keys.includes('all_features')) return true
-  return keys.includes(featureName)
+  if (plan === 'enterprise') return true
+  return isFeatureInModules(FALLBACK_PLAN_MODULES[plan] ?? FALLBACK_PLAN_MODULES.starter, featureName)
 }
 
-/** Returns true when the plan has unlimited branches/users (enterprise). */
 export function isUnlimitedPlan(planType: string | undefined | null): boolean {
   return (planType ?? 'trial') === 'enterprise'
 }
 
-/** Returns which plan first unlocks a given feature. */
-export function getRequiredPlan(featureName: FeatureKey): string {
-  if (featureName === 'hr_management') return 'growth'
-  if ((BUSINESS_FEATURES as readonly string[]).includes(featureName)) return 'business'
-  if ((MOBILE_SHOP_FEATURES as readonly string[]).includes(featureName)) return 'growth'
-  return 'starter'
-}
-
-/** Human-readable plan label. */
+/** Human-readable plan label (fallback when the summary's plan name isn't at hand). */
 export function getPlanLabel(planType: string | undefined | null): string {
   switch (planType) {
     case 'trial':      return 'Free Trial'
@@ -98,17 +81,22 @@ export function getPlanLabel(planType: string | undefined | null): string {
     case 'growth':     return 'Growth Plan'
     case 'business':   return 'Business Plan'
     case 'enterprise': return 'Enterprise Plan'
-    // legacy
     case 'single':     return 'Starter Plan'
     case 'multi':      return 'Growth Plan'
     default:           return 'Free Trial'
   }
 }
 
-/** Human-readable label for the plan that unlocks a feature. */
+/** Which plan first unlocks a feature, by the fallback table. */
+export function getRequiredPlan(featureName: FeatureKey): string {
+  for (const plan of ['starter', 'growth', 'business'] as const) {
+    if (isFeatureInModules(FALLBACK_PLAN_MODULES[plan], featureName)) return plan
+  }
+  return 'enterprise'
+}
+
 export function getRequiredPlanLabel(featureName: FeatureKey): string {
   return getPlanLabel(getRequiredPlan(featureName))
 }
 
-export const UPGRADE_MESSAGE =
-  'Upgrade your plan to unlock this feature.'
+export const UPGRADE_MESSAGE = 'Upgrade your plan to unlock this feature.'

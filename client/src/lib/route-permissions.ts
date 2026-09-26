@@ -119,6 +119,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/settings/cache', allowAllAuthenticated: true },
   { prefix: '/settings/notifications', allowAllAuthenticated: true },
   { prefix: '/settings/appearance', allowAllAuthenticated: true },
+  // Everyone may see the plan and usage; paying is owner-only (enforced server-side).
+  { prefix: '/settings/billing', allowAllAuthenticated: true },
   { prefix: '/settings/language', allowAllAuthenticated: true },
   { prefix: '/settings/whatsapp', anyPermission: ['viewSettings', 'editSettings'] },
   { prefix: '/settings/business-profile', anyPermission: ['viewBusinessProfile'] },
@@ -201,6 +203,7 @@ export const ALWAYS_ALLOWED_PREFIXES = [
   '/settings/notifications',
   '/settings/appearance',
   '/settings/language',
+  '/settings/billing',
 ];
 
 function normalizePath(pathname: string): string {

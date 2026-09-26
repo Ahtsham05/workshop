@@ -31,14 +31,12 @@ const uploadScreenshot = catchAsync(async (req, res) => {
  * POST /v1/payments
  * Submit a payment request (bank transfer proof).
  */
-const submitPayment = catchAsync(async (req, res) => {
-  const organizationId = req.user.organizationId;
-  if (!organizationId) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'User has no organization. Complete onboarding first.');
-  }
-
-  const payment = await paymentService.createPayment(organizationId, req.user._id, req.body);
-  res.status(httpStatus.CREATED).send(payment);
+const submitPayment = catchAsync(async () => {
+  // Superseded by POST /v1/billing/manual/intents + /v1/billing/manual/payments (payment
+  // reference, locked PKR quote, private proof storage, duplicate-transaction protection).
+  const err = new ApiError(httpStatus.GONE, 'This payment form has moved. Please pay from Settings → Billing.');
+  err.errorCode = 'USE_BILLING_V2';
+  throw err;
 });
 
 /**
@@ -105,17 +103,15 @@ const getSubscriptionUsage = catchAsync(async (req, res) => {
  * Return trial/subscription status: is trial expired and days remaining
  */
 const getTrialStatus = catchAsync(async (req, res) => {
-  const organizationId = req.user.organizationId;
-  
-  // Attach trial status from middleware
-  const trialExpired = req.trialExpired || false;
-  const daysRemaining = req.daysRemaining || 0;
-  const subscription = req.subscription || null;
-
+  // Kept for older clients / shipped desktop builds. "trialExpired" now means read-only.
+  if (!req.user.organizationId) return res.send({ trialExpired: false, daysRemaining: null, subscription: null });
+  const entitlementService = require('../services/entitlement.service'); // eslint-disable-line global-require
+  const summary = await entitlementService.getSummary(req.user.organizationId);
   res.send({
-    trialExpired,
-    daysRemaining,
-    subscription,
+    trialExpired: summary.mode === 'readOnly',
+    daysRemaining: summary.daysRemaining,
+    subscription: { planType: summary.plan.key, status: summary.status, endDate: summary.currentPeriodEnd },
+    entitlement: summary,
   });
 });
 

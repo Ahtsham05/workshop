@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const { User, Role, Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { normalizeBusinessType } = require('../config/businessTypes');
+const entitlementService = require('./entitlement.service');
 
 /**
  * Create a user — auto-assigns the Admin role if no role is specified
@@ -27,22 +28,12 @@ const createUser = async (userBody) => {
     // Users added to an existing org skip onboarding
     newUserBody.onboardingComplete = true;
 
-    if (org && org.subscription && org.subscription.limits) {
-      const maxUsers = org.subscription.limits.maxUsers;
-      if (maxUsers != null) {
-        const currentCount = await User.countDocuments({
-          organizationId: newUserBody.organizationId,
-          isActive: true,
-          // Student/parent portal logins don't count toward the plan's user limit.
-          schoolRole: { $nin: ['student', 'parent'] },
-        });
-        if (currentCount >= maxUsers) {
-          throw new ApiError(
-            httpStatus.FORBIDDEN,
-            `User limit reached. Your plan allows ${maxUsers} user(s). Please upgrade your subscription.`
-          );
-        }
-      }
+    // Plan user limit + read-only check. Student/parent portal logins are not billable
+    // seats, so they only need the account to be writable.
+    if (['student', 'parent'].includes(newUserBody.schoolRole)) {
+      await entitlementService.assertCanWrite(newUserBody.organizationId);
+    } else {
+      await entitlementService.assertCanAddUser(newUserBody.organizationId);
     }
   }
 

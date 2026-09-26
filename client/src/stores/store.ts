@@ -34,6 +34,7 @@ import { branchApi } from './branch.api';
 import { branchOverviewApi } from './branchOverview.api';
 import { membershipApi } from './membership.api';
 import { subscriptionApi } from './subscription.api';
+import { billingApi } from './billing.api';
 import { userPreferencesApi } from './user-preferences.api';
 import { mobileShopApi } from './mobile-shop.api';
 import { returnsApi } from './returns.api';
@@ -119,6 +120,7 @@ export const store = configureStore({
     [branchOverviewApi.reducerPath]: branchOverviewApi.reducer,
     [membershipApi.reducerPath]: membershipApi.reducer,
     [subscriptionApi.reducerPath]: subscriptionApi.reducer,
+    [billingApi.reducerPath]: billingApi.reducer,
     [userPreferencesApi.reducerPath]: userPreferencesApi.reducer,
     [mobileShopApi.reducerPath]: mobileShopApi.reducer,
     [returnsApi.reducerPath]: returnsApi.reducer,
@@ -197,6 +199,7 @@ export const store = configureStore({
       branchOverviewApi.middleware,
       membershipApi.middleware,
       subscriptionApi.middleware,
+      billingApi.middleware,
       userPreferencesApi.middleware,
       mobileShopApi.middleware,
       returnsApi.middleware,

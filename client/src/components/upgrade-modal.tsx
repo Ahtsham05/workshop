@@ -36,7 +36,7 @@ export function UpgradeModal({ open, onClose, requiredPlan = 'growth' }: Upgrade
   const showBusiness = requiredPlan === 'business'
   const features = showBusiness ? BUSINESS_FEATURES : GROWTH_FEATURES
   const planLabel = showBusiness ? 'Business Plan' : 'Growth Plan'
-  const planRoute = '/subscription/pricing'
+  const planRoute = '/settings/billing'
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>

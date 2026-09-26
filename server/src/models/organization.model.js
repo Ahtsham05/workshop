@@ -156,9 +156,45 @@ const organizationSchema = mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // Entitlement source of truth for BOTH payment paths (Polar webhooks and manual approval
+    // write the same fields). Never read these directly to make an access decision — go
+    // through services/entitlement.service.js, which also resolves time-based transitions
+    // (period end → grace → read-only) that the scheduler may not have persisted yet.
     subscription: {
-      planType: { type: String, enum: ['trial', 'single', 'multi', 'starter', 'growth', 'business', 'enterprise'], default: 'trial' },
-      status: { type: String, enum: ['active', 'expired', 'pending'], default: 'pending' },
+      // Plan.key of the current plan (the brief's "planId"). Legacy values single/multi are
+      // aliased to starter/growth by the entitlement service until migrated.
+      planType: { type: String, trim: true, default: 'trial' },
+      // 'pending' and legacy 'active'-while-isTrial are pre-billing-v2 values, normalized by
+      // the entitlement service and rewritten by scripts/billing/migrateSubscriptions.js.
+      status: {
+        type: String,
+        enum: ['trialing', 'active', 'pastDue', 'gracePeriod', 'canceled', 'expired', 'pending'],
+        default: 'trialing',
+      },
+      paymentSource: { type: String, enum: ['polar', 'manual', null], default: null },
+      currentPeriodStart: { type: Date, default: null },
+      currentPeriodEnd: { type: Date, default: null },
+      graceEndsAt: { type: Date, default: null },
+      statusChangedAt: { type: Date, default: null },
+      // Scheduled downgrade: the plan switches to pendingPlanType at pendingPlanEffectiveAt.
+      pendingPlanType: { type: String, trim: true, default: null },
+      pendingPlanEffectiveAt: { type: Date, default: null },
+      cancelAtPeriodEnd: { type: Boolean, default: false },
+      polar: {
+        customerId: { type: String, default: null },
+        subscriptionId: { type: String, default: null },
+        productId: { type: String, default: null },
+        status: { type: String, default: null },
+        // Timestamp of the newest subscription state applied — older (out-of-order) webhook
+        // deliveries are ignored rather than overwriting fresher state.
+        lastSyncedAt: { type: Date, default: null },
+      },
+      // Which renewal reminders (days-before) were already sent for which period end.
+      reminders: {
+        periodEnd: { type: Date, default: null },
+        sentDays: { type: [Number], default: [] },
+      },
+      // ── Legacy mirrors, kept in sync for older clients / shipped desktop builds ──
       startDate: { type: Date },
       endDate: { type: Date },
       isTrial: { type: Boolean, default: true },
