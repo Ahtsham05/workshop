@@ -63,16 +63,16 @@ export function BrandSelector({ value, onChange, onSelected, 'data-enter-field':
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} data-enter-field={dataEnterField} className="w-full justify-between">
-          <div className="flex flex-1 items-center gap-2">
+        <Button variant="outline" role="combobox" aria-expanded={open} data-enter-field={dataEnterField} className="w-full justify-between overflow-hidden [contain:inline-size]">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
             {selected ? (
-              <Badge variant="secondary" className="gap-1 pr-1">
+              <Badge variant="secondary" title={selected.name} className="min-w-0 max-w-full shrink justify-start gap-1 pr-1">
                 {selected.logo?.url ? (
                   <img
                     src={selected.logo.url}
                     alt={selected.name}
-                    className="h-3 w-3 rounded-full object-cover"
+                    className="h-3 w-3 shrink-0 rounded-full object-cover"
                   />
                 ) : (
                   <div className="flex h-3 w-3 flex-shrink-0 items-center justify-center rounded-full bg-gray-400">
@@ -81,14 +81,14 @@ export function BrandSelector({ value, onChange, onSelected, 'data-enter-field':
                     </span>
                   </div>
                 )}
-                {selected.name}
+                <span className="min-w-0 truncate">{selected.name}</span>
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation()
                     onChange(undefined)
                   }}
-                  className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
+                  className="ml-1 shrink-0 rounded-full p-0.5 hover:bg-muted-foreground/20"
                 >
                   <X className="h-3 w-3" />
                 </button>

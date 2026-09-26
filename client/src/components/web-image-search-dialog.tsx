@@ -121,6 +121,7 @@ export default function WebImageSearchDialog({
   const [providers, setProviders] = useState<WebImageProviderStatus[]>([])
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
+  const [looseMatches, setLooseMatches] = useState(false)
   const [selected, setSelected] = useState<WebImageResult[]>([])
   const [broken, setBroken] = useState<Record<string, true>>({})
   const [error, setError] = useState<string | null>(null)
@@ -156,6 +157,7 @@ export default function WebImageSearchDialog({
         setPage(nextPage)
         setProviders(response.providers)
         setHasMore(response.hasMore)
+        if (nextPage === 1) setLooseMatches(Boolean(response.looseMatches))
         setResults((prev) => {
           if (nextPage === 1) return response.results
           // "Load more" appends — keep what the user is already looking at, and never
@@ -192,6 +194,7 @@ export default function WebImageSearchDialog({
     setSearched(false)
     setPage(1)
     setHasMore(false)
+    setLooseMatches(false)
     setShowPaste(false)
     setPasteUrl('')
     setPreview(null)
@@ -251,6 +254,7 @@ export default function WebImageSearchDialog({
           token: s.token,
           provider: s.provider,
           sourceUrl: s.sourceUrl,
+          mirrors: s.mirrors,
         })),
       }).unwrap()
 
@@ -286,6 +290,18 @@ export default function WebImageSearchDialog({
       toast.error((e as { data?: { message?: string } })?.data?.message || 'That image link could not be used.')
     }
   }
+
+  // Warm the images either side of the one being viewed, so the arrows feel instant.
+  useEffect(() => {
+    if (preview === null || visible.length < 2) return
+    ;[preview + 1, preview - 1].forEach((i) => {
+      const neighbour = visible[(i + visible.length) % visible.length]
+      if (!neighbour) return
+      const img = new Image()
+      img.referrerPolicy = 'no-referrer'
+      img.src = neighbour.previewUrl || neighbour.url
+    })
+  }, [preview, visible])
 
   const busy = searching || importing
   const previewed = preview !== null ? visible[preview] : null
@@ -457,6 +473,12 @@ export default function WebImageSearchDialog({
             </div>
           ) : (
             <>
+              {looseMatches ? (
+                <p className='mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300'>
+                  <AlertCircle className='mt-px h-3.5 w-3.5 shrink-0' />
+                  No close match for this name — these only partly match. Try the brand plus model, or scan the barcode.
+                </p>
+              ) : null}
               <div className='grid grid-cols-2 gap-3 @[30rem]:grid-cols-3 @[44rem]:grid-cols-4 @[60rem]:grid-cols-5'>
                 {visible.map((result, index) => {
                   const isSelected = selectedIds.has(result.id)
@@ -620,17 +642,8 @@ export default function WebImageSearchDialog({
             </div>
 
             <div className='relative flex min-h-0 flex-1 items-center justify-center px-4'>
-              <img
-                src={previewed.url}
-                alt={previewed.title || 'Full size preview'}
-                referrerPolicy='no-referrer'
-                onError={(e) => {
-                  // Some hosts block hotlinking the full-size file but not the thumb.
-                  const img = e.currentTarget
-                  if (img.src !== previewed.thumbUrl) img.src = previewed.thumbUrl
-                }}
-                className='max-h-full max-w-full object-contain'
-              />
+              {/* key: a fresh loader per image, so the next one never flashes the last one's state */}
+              <ProgressivePreview key={previewed.id} result={previewed} />
               {visible.length > 1 ? (
                 <>
                   <button
@@ -690,5 +703,67 @@ export default function WebImageSearchDialog({
         ) : null}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * The full-size viewer's image, built so it is never an empty box:
+ *   1. the grid thumbnail — already in the browser cache — shows instantly, scaled up;
+ *   2. the ~1200px CDN copy loads over it (about a second);
+ *   3. only if that fails, the original from the source site (which can take 10s+);
+ *   4. if everything fails, the thumbnail stays, with a note saying so.
+ */
+function ProgressivePreview({ result }: { result: WebImageResult }) {
+  const sources = useMemo(
+    () => [result.previewUrl, result.url].filter((s, i, all): s is string => Boolean(s) && all.indexOf(s) === i),
+    [result.previewUrl, result.url],
+  )
+  const [index, setIndex] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+  const failed = index >= sources.length
+
+  return (
+    <div className='relative h-full w-full'>
+      {!loaded ? (
+        <img
+          src={result.thumbUrl}
+          alt=''
+          aria-hidden
+          referrerPolicy='no-referrer'
+          className={cn('absolute inset-0 h-full w-full object-contain', !failed && 'blur-sm')}
+        />
+      ) : null}
+      {!failed ? (
+        <img
+          // key: a new element per source, so a slow earlier source can't fire onLoad late
+          key={sources[index]}
+          src={sources[index]}
+          alt={result.title || 'Full size preview'}
+          referrerPolicy='no-referrer'
+          decoding='async'
+          onLoad={() => setLoaded(true)}
+          onError={() => setIndex((i) => i + 1)}
+          className={cn(
+            'absolute inset-0 h-full w-full object-contain transition-opacity duration-300',
+            loaded ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+      ) : null}
+      {!loaded ? (
+        <span className='pointer-events-none absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-[11px] text-white/85 backdrop-blur-sm'>
+          {failed ? (
+            <>
+              <AlertCircle className='h-3 w-3' />
+              Full size unavailable — showing the preview
+            </>
+          ) : (
+            <>
+              <Loader2 className='h-3 w-3 animate-spin' />
+              Loading full quality…
+            </>
+          )}
+        </span>
+      ) : null}
+    </div>
   )
 }

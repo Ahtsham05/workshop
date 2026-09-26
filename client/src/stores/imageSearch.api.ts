@@ -8,7 +8,9 @@ export type ImageProviderKey =
   | 'openfoodfacts'
   | 'upcitemdb'
   | 'google'
+  | 'yandex'
   | 'duckduckgo'
+  | 'openverse'
   | 'wikimedia'
   | 'pexels'
 
@@ -19,6 +21,8 @@ export interface WebImageResult {
   providerLabel: string
   url: string
   thumbUrl: string
+  /** ~1200px CDN-resized copy for the full-size viewer — loads in ~1s where origins can take 10s+. */
+  previewUrl?: string
   width: number | null
   height: number | null
   title: string
@@ -28,6 +32,10 @@ export interface WebImageResult {
   exactMatch: boolean
   /** HMAC proving this server produced the URL — passed straight back on import. */
   token: string
+  /** The same picture on other hosts, tried server-side if the original refuses the download. */
+  mirrors?: { url: string; token: string }[]
+  /** 0..1 — how much of the typed name this candidate's title/page/file name matches. */
+  relevance?: number
 }
 
 export interface WebImageProviderStatus {
@@ -43,6 +51,8 @@ export interface WebImageSearchResponse {
   providers: WebImageProviderStatus[]
   page: number
   hasMore: boolean
+  /** Nothing matched the name well, so these are only partial matches. */
+  looseMatches?: boolean
 }
 
 /** A stored image: already uploaded to Cloudinary and safe to save on a record. */
@@ -76,7 +86,16 @@ export const imageSearchApi = createApi({
     }),
     importWebImages: builder.mutation<
       ImportImagesResponse,
-      { images: { url: string; token?: string; provider?: string; sourceUrl?: string }[]; context?: ImageSearchContext }
+      {
+        images: {
+          url: string
+          token?: string
+          provider?: string
+          sourceUrl?: string
+          mirrors?: { url: string; token: string }[]
+        }[]
+        context?: ImageSearchContext
+      }
     >({
       query: (body) => ({ url: '/image-search/import', method: 'POST', body }),
     }),

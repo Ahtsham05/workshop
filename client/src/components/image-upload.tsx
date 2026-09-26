@@ -4,7 +4,7 @@ import React, { useCallback, useState, useRef, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { useLanguage } from '@/context/language-context'
-import { Upload, X, ImageIcon, Loader2, Camera, Sparkles, Globe } from 'lucide-react'
+import { Upload, X, ImageIcon, Loader2, Camera, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ImageSearchContext } from '@/stores/imageSearch.api'
 import CameraCapture from './camera-capture'
@@ -19,11 +19,11 @@ interface ImageUploadProps {
   /** 'comfortable' = larger drop zone and preview. 'compact' = smaller, for tight grids (e.g. a 3-up ID photo row) where the dialog must fit without scrolling. */
   layout?: 'default' | 'comfortable' | 'compact'
   /**
-   * When set together with getSearchQuery, shows the top banner for products/categories:
-   * manual “Find from name” (Pexels via API) plus device upload. No automatic fetch.
+   * When set (or getSearchQuery is), the empty state becomes the same card the product
+   * photo gallery uses: Find from web, Upload and Camera. Also the fallback search query.
    */
   autoSearchFromText?: string
-  /** Enables the banner when provided; used with “Find from name” for the search query. */
+  /** Read at click time to prefill the web picker's search. */
   getSearchQuery?: () => string
   searchContext?: 'product' | 'category' | 'subcategory' | 'brand'
   /** Optional code to include in the web search — unlocks the exact-match providers. */
@@ -50,7 +50,6 @@ export default function ImageUpload({
 }: ImageUploadProps) {
   const { t } = useLanguage()
   const [uploading, setUploading] = useState(false)
-  const [stockSearching, setStockSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [imageKey, setImageKey] = useState(0)
   const [webSearchOpen, setWebSearchOpen] = useState(false)
@@ -60,64 +59,6 @@ export default function ImageUpload({
   const isCompact = layout === 'compact'
 
   const showLocalPhotoBanner = Boolean(getSearchQuery) || autoSearchFromText !== undefined
-
-  const fetchStockImageFromName = useCallback(async () => {
-    const fromGetter = getSearchQuery?.()
-    const query = (fromGetter ?? autoSearchFromText ?? '').trim()
-    if (query.length < 2) {
-      setError(t('stock_search_need_name'))
-      return
-    }
-
-    setStockSearching(true)
-    setError(null)
-
-    try {
-      const slug =
-        searchContext === 'category'
-          ? 'categories/fetch-image-from-search'
-          : searchContext === 'subcategory'
-            ? 'sub-categories/fetch-image-from-search'
-            : searchContext === 'brand'
-              ? 'brands/fetch-image-from-search'
-              : 'products/fetch-image-from-search'
-
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/${slug}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-        body: JSON.stringify({ query }),
-      })
-
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        const msg =
-          typeof data.message === 'string' && data.message.trim()
-            ? data.message
-            : t('stock_search_failed')
-        throw new Error(msg)
-      }
-
-      if (data?.url && data?.publicId) {
-        onImageUpload({ url: data.url, publicId: data.publicId })
-      } else {
-        throw new Error(t('stock_search_failed'))
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('stock_search_failed'))
-    } finally {
-      setStockSearching(false)
-    }
-  }, [
-    autoSearchFromText,
-    getSearchQuery,
-    onImageUpload,
-    searchContext,
-    t,
-  ])
 
   useEffect(() => {
     if (currentImageUrl) {
@@ -210,19 +151,128 @@ export default function ImageUpload({
     [uploadImage],
   )
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open: openFilePicker } = useDropzone({
     onDrop,
     accept: {
       'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.webp'],
     },
     maxFiles: 1,
     maxSize: 5 * 1024 * 1024,
-    disabled: disabled || uploading || stockSearching,
+    disabled: disabled || uploading,
+    // The product-style card has its own Upload button; a click anywhere else on it
+    // shouldn't pop the file picker.
+    noClick: showLocalPhotoBanner,
+    noKeyboard: showLocalPhotoBanner,
   })
 
   const handleRemoveImage = () => {
     setError(null)
     onImageRemove()
+  }
+
+  const busy = disabled || uploading
+  const emptyTitle =
+    searchContext === 'brand'
+      ? 'Add a logo for this brand'
+      : searchContext === 'category'
+        ? 'Add an image for this category'
+        : searchContext === 'subcategory'
+          ? 'Add an image for this sub-category'
+          : 'Add a photo'
+
+  const webSearchDialog = (
+    <WebImageSearchDialog
+      open={webSearchOpen}
+      onOpenChange={setWebSearchOpen}
+      context={searchContext as ImageSearchContext}
+      defaultQuery={(getSearchQuery?.() ?? autoSearchFromText ?? '').trim()}
+      defaultBarcode={getBarcode?.() ?? ''}
+      maxSelectable={1}
+      onSelect={(images) => {
+        const picked = images[0]
+        if (picked?.url) onImageUpload({ url: picked.url, publicId: picked.publicId ?? '' })
+      }}
+    />
+  )
+
+  // Compact banner (brand logo): a small thumbnail with the actions beside it, so the
+  // dialog around it fits without scrolling. Handles both the empty and the filled state.
+  if (showLocalPhotoBanner && isCompact) {
+    return (
+      <div
+        {...getRootProps()}
+        className={cn(
+          'flex min-w-0 items-center gap-3 rounded-xl border border-border/80 bg-gradient-to-b from-card to-muted/20 p-2.5 shadow-sm ring-1 ring-black/[0.04] transition-colors dark:ring-white/[0.06]',
+          isDragActive && 'border-primary bg-primary/[0.05] ring-primary/30',
+          className,
+        )}
+      >
+        <input {...getInputProps()} />
+        <div className='group relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border/70 bg-white dark:bg-zinc-900'>
+          {uploading ? (
+            <span className='flex h-full w-full items-center justify-center'>
+              <Loader2 className='h-5 w-5 animate-spin text-primary' />
+            </span>
+          ) : currentImageUrl ? (
+            <>
+              <img
+                key={imageKey}
+                src={currentImageUrl}
+                alt={(previewAlt ?? t('product_image')) || 'Image'}
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+                className='h-full w-full object-contain p-1'
+              />
+              <button
+                type='button'
+                title={t('remove_image') || 'Remove'}
+                aria-label={t('remove_image') || 'Remove'}
+                disabled={disabled}
+                onClick={handleRemoveImage}
+                className='absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/55 text-white hover:bg-destructive'
+              >
+                <X className='h-3 w-3' />
+              </button>
+            </>
+          ) : (
+            <span className='flex h-full w-full items-center justify-center bg-muted text-muted-foreground'>
+              {isDragActive ? <Upload className='h-6 w-6 text-primary' /> : <ImageIcon className='h-6 w-6' />}
+            </span>
+          )}
+        </div>
+        <div className='min-w-0 flex-1 space-y-1.5'>
+          <div className='flex flex-wrap gap-1.5'>
+            <Button type='button' size='sm' disabled={busy} onClick={() => setWebSearchOpen(true)} className='h-8'>
+              <Globe className='mr-1.5 h-3.5 w-3.5' />
+              {t('find_image_from_web') || 'Find from web'}
+            </Button>
+            <Button type='button' size='sm' variant='outline' disabled={busy} onClick={() => openFilePicker()} className='h-8'>
+              <Upload className='mr-1.5 h-3.5 w-3.5' />
+              Upload
+            </Button>
+            <CameraCapture
+              onCapture={handleCameraCapture}
+              disabled={busy}
+              trigger={
+                <Button type='button' size='sm' variant='outline' disabled={busy} className='h-8'>
+                  <Camera className='mr-1.5 h-3.5 w-3.5' />
+                  Camera
+                </Button>
+              }
+            />
+          </div>
+          <p className={cn('text-[11px] leading-snug', error ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+            {error ??
+              (uploading
+                ? t('uploading_image') || 'Uploading image…'
+                : isDragActive
+                  ? t('drop_image_here') || 'Drop image here'
+                  : 'Drag & drop works too — PNG, JPG, WebP, GIF up to 5MB')}
+          </p>
+        </div>
+        {webSearchDialog}
+      </div>
+    )
   }
 
   const previewHeight = isComfortable ? 280 : isCompact ? 110 : 192
@@ -288,6 +338,77 @@ export default function ImageUpload({
     )
   }
 
+  // Same empty state as the product photo gallery (product-image-gallery.tsx), so every
+  // "add an image" box in the catalog looks and behaves alike.
+  if (showLocalPhotoBanner) {
+    return (
+      <div
+        {...getRootProps()}
+        className={cn(
+          '@container rounded-2xl border border-border/80 bg-gradient-to-b from-card to-muted/20 p-3 shadow-sm ring-1 ring-black/[0.04] transition-colors dark:ring-white/[0.06]',
+          isDragActive && 'border-primary bg-primary/[0.05] ring-primary/30',
+          className,
+        )}
+      >
+        <input {...getInputProps()} />
+        <div className='flex flex-col items-center gap-4 px-3 py-6 text-center sm:py-8'>
+          <span className='flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground'>
+            {uploading ? (
+              <Loader2 className='h-7 w-7 animate-spin text-primary' />
+            ) : isDragActive ? (
+              <Upload className='h-7 w-7 text-primary' />
+            ) : (
+              <ImageIcon className='h-7 w-7' />
+            )}
+          </span>
+          <div>
+            <p className='text-sm font-medium'>
+              {uploading
+                ? t('uploading_image') || 'Uploading image…'
+                : isDragActive
+                  ? t('drop_image_here') || 'Drop image here'
+                  : emptyTitle}
+            </p>
+            <p className='mt-1 text-xs text-muted-foreground'>
+              Search the web by name, upload from this device, or take a photo.
+              <br className='hidden sm:block' /> Drag & drop works too — PNG, JPG, WebP, GIF up to 5MB.
+            </p>
+          </div>
+          <div className='w-full max-w-sm space-y-2 @[26rem]:flex @[26rem]:max-w-lg @[26rem]:gap-2 @[26rem]:space-y-0'>
+            <Button type='button' disabled={busy} onClick={() => setWebSearchOpen(true)} className='h-10 w-full @[26rem]:flex-1'>
+              <Globe className='mr-2 h-4 w-4' />
+              {t('find_image_from_web') || 'Find from web'}
+            </Button>
+            <div className='grid grid-cols-2 gap-2 @[26rem]:flex @[26rem]:flex-1'>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={busy}
+                onClick={() => openFilePicker()}
+                className='h-10 w-full @[26rem]:flex-1'
+              >
+                <Upload className='mr-2 h-4 w-4' />
+                Upload
+              </Button>
+              <CameraCapture
+                onCapture={handleCameraCapture}
+                disabled={busy}
+                trigger={
+                  <Button type='button' variant='outline' disabled={busy} className='h-10 w-full @[26rem]:flex-1'>
+                    <Camera className='mr-2 h-4 w-4' />
+                    Camera
+                  </Button>
+                }
+              />
+            </div>
+          </div>
+          {error ? <p className='text-center text-sm font-medium text-destructive'>{error}</p> : null}
+        </div>
+        {webSearchDialog}
+      </div>
+    )
+  }
+
   return (
     <div
       className={cn(
@@ -305,55 +426,6 @@ export default function ImageUpload({
         />
 
         <div className={isCompact ? 'space-y-2' : 'space-y-5'}>
-          {showLocalPhotoBanner ? (
-            <div className='flex flex-wrap items-center gap-2'>
-              {/* Opens the full picker (web + barcode + stock providers, several
-                  candidates to choose from). The one-click button beside it is the older
-                  "first Pexels hit, no questions asked" shortcut, kept because for a
-                  category banner that is genuinely all that's wanted. */}
-              <Button
-                type='button'
-                size='default'
-                className='h-11 gap-2 shadow-sm sm:min-w-[10rem]'
-                disabled={disabled || uploading || stockSearching}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setWebSearchOpen(true)
-                }}
-              >
-                <Globe className='h-4 w-4 shrink-0' />
-                {t('find_image_from_web') || 'Find from web'}
-              </Button>
-              <Button
-                type='button'
-                size='default'
-                variant='outline'
-                className='h-11 gap-2 shadow-sm'
-                disabled={disabled || uploading || stockSearching}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void fetchStockImageFromName()
-                }}
-              >
-                {stockSearching ? (
-                  <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
-                ) : (
-                  <Sparkles className='h-4 w-4 shrink-0' />
-                )}
-                {t('find_image_from_name')}
-              </Button>
-            </div>
-          ) : null}
-
-          {showLocalPhotoBanner ? (
-            <div className='relative'>
-              <div className='absolute inset-x-0 top-1/2 border-t border-border/60' aria-hidden />
-              <span className='relative mx-auto block w-fit bg-gradient-to-b from-card to-muted/20 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-                {t('or_upload')}
-              </span>
-            </div>
-          ) : null}
-
           <div
             {...getRootProps()}
             className={cn(
@@ -364,18 +436,16 @@ export default function ImageUpload({
                   ? 'min-h-[4.5rem] p-2'
                   : 'min-h-[10rem] p-4 sm:min-h-[11rem] sm:p-6',
               isDragActive ? 'border-primary bg-primary/[0.07] shadow-inner' : 'border-muted-foreground/30 bg-muted/20',
-              disabled || uploading || stockSearching ? 'cursor-not-allowed opacity-50' : 'hover:border-primary/60 hover:bg-primary/[0.04]',
+              disabled || uploading ? 'cursor-not-allowed opacity-50' : 'hover:border-primary/60 hover:bg-primary/[0.04]',
             )}
           >
             <input {...getInputProps()} />
 
-            {uploading || stockSearching ? (
+            {uploading ? (
               <div className={cn('flex flex-col items-center', isCompact ? 'gap-1.5' : 'gap-3')}>
                 <Loader2 className={cn('animate-spin text-primary', isComfortable ? 'h-10 w-10' : isCompact ? 'h-5 w-5' : 'h-8 w-8')} />
                 <p className={cn('font-medium text-muted-foreground', isCompact ? 'text-xs' : 'text-sm')}>
-                  {stockSearching
-                    ? t('searching_stock_photo')
-                    : t('uploading_image') || 'Uploading image…'}
+                  {t('uploading_image') || 'Uploading image…'}
                 </p>
               </div>
             ) : (
@@ -413,7 +483,7 @@ export default function ImageUpload({
                 e.stopPropagation()
                 handleFileSelect()
               }}
-              disabled={disabled || uploading || stockSearching}
+              disabled={disabled || uploading}
               className={isCompact ? 'h-7 flex-1 border-border/80 bg-background/80 px-2 text-xs' : 'h-11 w-full border-border/80 bg-background/80'}
             >
               <Upload className={isCompact ? 'mr-1 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
@@ -421,13 +491,13 @@ export default function ImageUpload({
             </Button>
             <CameraCapture
               onCapture={handleCameraCapture}
-              disabled={disabled || uploading || stockSearching}
+              disabled={disabled || uploading}
               trigger={
                 <Button
                   type='button'
                   variant='outline'
                   size={isComfortable ? 'default' : 'sm'}
-                  disabled={disabled || uploading || stockSearching}
+                  disabled={disabled || uploading}
                   className={isCompact ? 'h-7 flex-1 border-border/80 bg-background/80 px-2 text-xs' : 'h-11 w-full border-border/80 bg-background/80'}
                 >
                   <Camera className={isCompact ? 'mr-1 h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
@@ -443,18 +513,7 @@ export default function ImageUpload({
         ) : null}
       </div>
 
-      <WebImageSearchDialog
-        open={webSearchOpen}
-        onOpenChange={setWebSearchOpen}
-        context={searchContext as ImageSearchContext}
-        defaultQuery={(getSearchQuery?.() ?? autoSearchFromText ?? '').trim()}
-        defaultBarcode={getBarcode?.() ?? ''}
-        maxSelectable={1}
-        onSelect={(images) => {
-          const picked = images[0]
-          if (picked?.url) onImageUpload({ url: picked.url, publicId: picked.publicId ?? '' })
-        }}
-      />
+      {webSearchDialog}
     </div>
   )
 }

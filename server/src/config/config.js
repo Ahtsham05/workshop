@@ -50,6 +50,9 @@ const envVarsSchema = Joi.object()
     PEXELS_API_KEY: Joi.string().allow('').description('Pexels API key for product/category image search'),
     GOOGLE_CSE_API_KEY: Joi.string().allow('').description('Google Programmable Search API key for "Find from web" product images'),
     GOOGLE_CSE_CX: Joi.string().allow('').description('Google Programmable Search engine id (cx) with image search enabled'),
+    WEB_IMAGE_PROXY: Joi.string()
+      .allow('')
+      .description('Resizing image CDN for "Find from web" previews/imports (default https://wsrv.nl, "off" to disable)'),
     GEMINI_API_KEY: Joi.string().allow('').description('Google Gemini API key for customer image AI scan'),
     GEMINI_VISION_MODEL: Joi.string().allow('').description('Gemini vision model (default gemini-2.5-flash-lite, API v1)'),
     GEMINI_FALLBACK_MODELS: Joi.string().allow('').description('Comma-separated fallback models if quota hit'),
@@ -128,6 +131,7 @@ module.exports = {
     apiKey: envVars.GOOGLE_CSE_API_KEY || '',
     cx: envVars.GOOGLE_CSE_CX || '',
   },
+  webImageProxy: envVars.WEB_IMAGE_PROXY === 'off' ? '' : envVars.WEB_IMAGE_PROXY || 'https://wsrv.nl',
   gemini: {
     apiKey: envVars.GEMINI_API_KEY || '',
     model: envVars.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite',

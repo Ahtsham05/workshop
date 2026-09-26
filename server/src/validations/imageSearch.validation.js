@@ -1,7 +1,7 @@
 const Joi = require('joi');
 
 const CONTEXTS = ['product', 'category', 'subcategory', 'brand'];
-const PROVIDERS = ['openfoodfacts', 'upcitemdb', 'google', 'duckduckgo', 'openverse', 'wikimedia', 'pexels'];
+const PROVIDERS = ['openfoodfacts', 'upcitemdb', 'google', 'yandex', 'duckduckgo', 'openverse', 'wikimedia', 'pexels'];
 
 const searchImages = {
   body: Joi.object()
@@ -28,6 +28,17 @@ const importImages = {
           provider: Joi.string().allow('').max(40).optional(),
           sourceUrl: Joi.string().allow('').max(500).optional(),
           title: Joi.string().allow('').max(200).optional(),
+          // Copies of the same picture on other hosts, tried in order if the original
+          // refuses the download (hotlink protection, removed listing).
+          mirrors: Joi.array()
+            .items(
+              Joi.object().keys({
+                url: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
+                token: Joi.string().allow('').optional(),
+              }),
+            )
+            .max(4)
+            .optional(),
         }),
       )
       .min(1)

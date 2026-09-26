@@ -48,7 +48,8 @@ to be the *real* product:
 | Open Food Facts | — | barcode | Keyless. Groceries, drinks, household, cosmetics. The actual packaging photo. |
 | UPCitemdb (trial) | — | barcode | Keyless, rate-limited per IP. General merchandise, electronics, phones. |
 | Google Programmable Search | `GOOGLE_CSE_API_KEY` + `GOOGLE_CSE_CX` | name | **The one worth configuring.** Best name-based results by a wide margin. |
-| DuckDuckGo images | — | name | Keyless but undocumented; answers 403 from some networks. Best-effort. |
+| Yandex Images ("Web") | — | name | **The keyless workhorse.** Real web results (manufacturer and shop photos) plus `dups` — the same picture on other hosts, used as import fallbacks. Undocumented page; needs the browser-ordered TLS ciphers (`browserTlsAgent`) or it answers every request with a captcha. |
+| DuckDuckGo images | — | name | Keyless but undocumented; i.js answers 403 from some networks (even with browser TLS). Best-effort. |
 | Openverse | — | name | Keyless, stable. Aggregates Flickr, Wikimedia, museums. |
 | Wikimedia Commons | — | name | Keyless, freely licensed. Good on brands. |
 | Pexels | `PEXELS_API_KEY` | name | Stock photography. Presentable, generic; ranked last. |
@@ -57,12 +58,26 @@ to be the *real* product:
 reported back in `providers[]` (and shown as a chip in the dialog) and skipped — it never
 fails the search. The picker works with zero API keys configured.
 
+Keyless engines tried and rejected (2026-09-26, from a dev machine): Google (serves
+"browser not supported" to non-JS clients), Bing (async endpoint returns random decoy
+images), Brave / Qwant / Startpage / Mojeek (captcha).
+
+### Relevance
+
+Every candidate gets `relevance` (0..1): the weighted share of query terms found in its
+title, source page URL, image file name and domain. Model codes (`A2724`, `A15`) weigh 8,
+specs and numbers (`40w`, `128gb`) 2, plain words 1 — so the SKU in a manufacturer's file
+name (`A2724013_ND01.png`) counts for more than "car charger". Candidates below the bar are
+**dropped**, not just ranked low: 0.25 for web/barcode engines, 0.5 for Openverse,
+Wikimedia and Pexels (caption keyword matches — "car charger" returns electric cars). If
+nothing clears the bar, partial matches are returned with `looseMatches: true` and the
+dialog says so.
+
 ### Ranking
 
 `scoreResult()` is deliberately simple and explainable:
 
-1. Provider tier dominates — a barcode hit is the real product, a web hit probably is, a
-   stock photo is a stand-in.
+1. A barcode hit first, then relevance, then provider tier.
 2. Then "is this shaped like a product shot": roughly square and decently sized scores
    higher, because a 1600×400 banner crop looks wrong in every grid, list row and receipt
    this app renders a product image into.
@@ -184,3 +199,13 @@ Covered by `server/tests/unit/models/product.images.test.js` (13 cases) and
 Both new grids use **container queries** (`@container`, `@[30rem]:…`), not viewport
 breakpoints: the photo section is one narrow column of a four-column form, so `sm:`/`md:`
 would fire on a wide desktop while the card itself is 350px.
+
+## Fast previews and imports (slow source sites)
+
+Web originals live on whatever host the shop used; measured 3–28s for a ~100KB photo on
+far-away hosts. So every result also carries `previewUrl`, a 1200px copy through a
+caching resize CDN (`WEB_IMAGE_PROXY`, default `https://wsrv.nl`, set `off` to disable),
+which arrives in ~1s. The full-size viewer shows the cached grid thumbnail instantly,
+swaps in the CDN copy, falls back to the original, and preloads the images either side.
+Imports race the CDN copy (capped at 1600px, source format kept) against the original,
+and try mirrors after 2.5s of silence. Whichever valid image arrives first is stored.

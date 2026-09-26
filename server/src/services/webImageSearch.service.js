@@ -39,6 +39,29 @@ const DEFAULT_TIMEOUT_MS = 8000;
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36';
 
+// Some search engines fingerprint the TLS handshake, not the headers: Node's default
+// cipher order is recognisably "a script", and Yandex answers it with a captcha redirect
+// on every request whatever the User-Agent says. The same request offering ciphers in
+// the order a browser does is served normally (verified 4/4 each way, 2026-09-26).
+const BROWSER_CIPHERS = [
+  'TLS_AES_128_GCM_SHA256',
+  'TLS_AES_256_GCM_SHA384',
+  'TLS_CHACHA20_POLY1305_SHA256',
+  'ECDHE-ECDSA-AES128-GCM-SHA256',
+  'ECDHE-RSA-AES128-GCM-SHA256',
+  'ECDHE-ECDSA-AES256-GCM-SHA384',
+  'ECDHE-RSA-AES256-GCM-SHA384',
+  'ECDHE-ECDSA-CHACHA20-POLY1305',
+  'ECDHE-RSA-CHACHA20-POLY1305',
+  'ECDHE-RSA-AES128-SHA',
+  'ECDHE-RSA-AES256-SHA',
+  'AES128-GCM-SHA256',
+  'AES256-GCM-SHA384',
+  'AES128-SHA',
+  'AES256-SHA',
+].join(':');
+const browserTlsAgent = new https.Agent({ keepAlive: true, maxSockets: 8, ciphers: BROWSER_CIPHERS });
+
 // Cloudinary folder per entity the picker can be opened from. Anything unknown falls
 // back to `products` rather than letting a caller write to an arbitrary folder name.
 const FOLDERS = {
@@ -124,7 +147,10 @@ const assertFetchableUrl = async (urlString) => {
  * HTTP helpers
  * ------------------------------------------------------------------ */
 
-const httpGetRaw = (urlString, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, maxBytes = 2 * 1024 * 1024, depth = 0 } = {}) =>
+const httpGetRaw = (
+  urlString,
+  { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, maxBytes = 2 * 1024 * 1024, depth = 0, browserTls = false } = {},
+) =>
   new Promise((resolve, reject) => {
     if (depth > 5) {
       reject(new Error('Too many redirects'));
@@ -140,12 +166,15 @@ const httpGetRaw = (urlString, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS, m
     const lib = parsed.protocol === 'https:' ? https : http;
     const req = lib.get(
       urlString,
-      { headers: { 'User-Agent': BROWSER_UA, Accept: '*/*', ...headers } },
+      {
+        headers: { 'User-Agent': BROWSER_UA, Accept: '*/*', ...headers },
+        ...(browserTls && lib === https ? { agent: browserTlsAgent } : {}),
+      },
       (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume();
           const next = new URL(res.headers.location, urlString).href;
-          httpGetRaw(next, { headers, timeoutMs, maxBytes, depth: depth + 1 }).then(resolve, reject);
+          httpGetRaw(next, { headers, timeoutMs, maxBytes, depth: depth + 1, browserTls }).then(resolve, reject);
           return;
         }
         const chunks = [];
@@ -245,6 +274,58 @@ const sniffImageFormat = (buffer) => {
   return null;
 };
 
+const IMPORT_MAX_EDGE = 1600;
+const RACE_STAGGER_MS = 2500;
+
+/**
+ * Downloads the first candidate that yields a real image, "happy eyeballs" style: the
+ * first `initial` start at once (CDN copy + original — neither is reliably faster: the
+ * CDN costs a steady ~0.4s, an origin anywhere from 0.1s to 28s), and each further one
+ * starts when a running one fails or all have been silent for RACE_STAGGER_MS. So a slow
+ * origin can no longer hold the dialog for 15s per mirror in sequence, and the mirrors
+ * are only touched when both front-runners are in trouble.
+ */
+const raceDownloads = (candidates, initial = 2) =>
+  new Promise((resolve, reject) => {
+    let next = 0;
+    let running = 0;
+    let settled = false;
+    let lastError = null;
+    let timer = null;
+
+    const launch = () => {
+      clearTimeout(timer);
+      if (settled || next >= candidates.length) {
+        if (!settled && running === 0) {
+          settled = true;
+          reject(lastError || new ApiError(httpStatus.BAD_GATEWAY, 'Could not download image.'));
+        }
+        return;
+      }
+      const candidate = candidates[next];
+      next += 1;
+      running += 1;
+      downloadImage(candidate)
+        .then(({ buffer }) => {
+          if (!sniffImageFormat(buffer)) throw new ApiError(httpStatus.BAD_REQUEST, 'That link is not an image file.');
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            resolve(buffer);
+          }
+        })
+        .catch((e) => {
+          lastError = e;
+        })
+        .finally(() => {
+          running -= 1;
+          if (!settled) launch();
+        });
+      timer = setTimeout(launch, RACE_STAGGER_MS);
+    };
+    for (let i = 0; i < Math.max(1, initial); i += 1) launch();
+  });
+
 /* ------------------------------------------------------------------ *
  * Result tokens
  * ------------------------------------------------------------------ */
@@ -272,14 +353,43 @@ const verifyUrlToken = (url, token) => {
 
 const clean = (value) => String(value || '').trim();
 
-const makeResult = ({ provider, url, thumbUrl, width, height, title, sourceUrl, author, exactMatch = false }) => {
+/**
+ * A resized copy of a remote image through a caching image CDN (wsrv.nl by default).
+ *
+ * Why: web originals live on whatever host the shop used — a 70KB photo on a far-away
+ * WordPress box measured 7–28s to arrive, while the same image via the CDN took
+ * 0.6–2s cold and ~0.65s warm, at a third of the bytes (2026-09-26). The CDN fetches
+ * from its own well-connected network, so the SSRF concern stays with them, not us.
+ * `we` = never enlarge; no `output` keeps the source format (PNG transparency survives).
+ * Returns '' when disabled (WEB_IMAGE_PROXY=off) so callers fall back to the original.
+ */
+const proxiedImageUrl = (url, size, extra = '') => {
+  const base = clean(config.webImageProxy).replace(/\/+$/, '');
+  if (!base || !/^https?:\/\//i.test(clean(url))) return '';
+  return `${base}/?url=${encodeURIComponent(clean(url))}&w=${size}&h=${size}&fit=inside&we${extra}`;
+};
+
+const makeResult = ({ provider, url, thumbUrl, width, height, title, sourceUrl, author, exactMatch = false, mirrors = [] }) => {
   const full = clean(url);
   if (!full || !/^https?:\/\//i.test(full)) return null;
+  // Other copies of the *same* image on other hosts. Web originals are often
+  // hotlink-protected or gone by the time the user presses Add, so the import walks
+  // these in order before giving up. Each is signed like the main URL.
+  const mirrorList = [...new Set(mirrors.map(clean))]
+    .filter((m) => m !== full && /^https?:\/\//i.test(m))
+    .slice(0, 4)
+    .map((m) => ({ url: m, token: signUrl(m) }));
+  const thumb = clean(thumbUrl);
   return {
     id: crypto.createHash('sha1').update(full).digest('hex').slice(0, 16),
     provider,
     url: full,
-    thumbUrl: clean(thumbUrl) || full,
+    // A provider that has no thumbnail would otherwise make the grid download the
+    // full-size original for a 200px tile.
+    thumbUrl: thumb && thumb !== full ? thumb : proxiedImageUrl(full, 400, '&output=webp&q=80') || full,
+    // What the full-size viewer shows first: big enough to judge the photo, small and
+    // CDN-served so it appears in about a second instead of however long the origin takes.
+    previewUrl: proxiedImageUrl(full, 1200, '&output=webp&q=85'),
     width: Number(width) || null,
     height: Number(height) || null,
     title: clean(title).slice(0, 160),
@@ -287,6 +397,7 @@ const makeResult = ({ provider, url, thumbUrl, width, height, title, sourceUrl, 
     author: clean(author).slice(0, 80),
     exactMatch,
     token: signUrl(full),
+    mirrors: mirrorList,
   };
 };
 
@@ -426,6 +537,103 @@ const searchDuckDuckGo = async ({ query, page }) => {
     .filter(Boolean);
 };
 
+/** Decodes the HTML entities a JSON blob picks up when it is embedded in an attribute. */
+const decodeEntities = (text) =>
+  text.replace(/&(#x[0-9a-f]+|#\d+|quot|amp|lt|gt|apos|nbsp);/gi, (match, entity) => {
+    const lower = entity.toLowerCase();
+    if (lower[0] === '#') {
+      const code = lower[1] === 'x' ? parseInt(lower.slice(2), 16) : parseInt(lower.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    return { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", nbsp: ' ' }[lower];
+  });
+
+const absoluteUrl = (value) => {
+  const v = clean(value);
+  return v.startsWith('//') ? `https:${v}` : v;
+};
+
+/**
+ * Pulls the result list out of a Yandex Images page. The page ships its whole state as
+ * JSON in a `data-state` attribute; `serpList.items` holds one entity per image with the
+ * original URL, its real size, the page it came from, and `dups` — the same picture
+ * found on other hosts, which is what makes a hotlink-blocked original still importable.
+ */
+const parseYandexImages = (html) => {
+  const blocks = html.match(/data-state="[^"]*serpList[^"]*"/g) || [];
+  for (const block of blocks) {
+    let state;
+    try {
+      state = JSON.parse(decodeEntities(block.slice('data-state="'.length, -1)));
+    } catch (e) {
+      continue; // eslint-disable-line no-continue
+    }
+    const items = state?.initialState?.serpList?.items;
+    const entities = items?.entities;
+    if (entities && typeof entities === 'object') {
+      const order = Array.isArray(items.keys) && items.keys.length ? items.keys : Object.keys(entities);
+      return order.map((key) => entities[key]).filter(Boolean);
+    }
+  }
+  return null;
+};
+
+/**
+ * Yandex Images — the keyless *web* image search that actually answers a server.
+ * Measured 2026-09-26 from this machine: Google serves "browser not supported" to any
+ * non-JS client, Bing's async endpoint returns random decoy images (garden hoses for a
+ * car charger), DuckDuckGo's i.js answers 403, Brave/Qwant/Startpage/Mojeek captcha.
+ * Yandex returned the manufacturer's own product shot as result #1, which is the whole
+ * point of "Find from web" for a shop catalog. Undocumented page, so any change in its
+ * shape surfaces as "provider unavailable", never a broken dialog.
+ */
+const searchYandex = async ({ query, page }) => {
+  if (!query) return [];
+  const url =
+    `https://yandex.com/images/search?text=${encodeURIComponent(query)}` +
+    `&p=${Math.max(0, page - 1)}`;
+  const res = await httpGetRaw(url, {
+    headers: {
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    maxBytes: 6 * 1024 * 1024,
+    timeoutMs: 10000,
+    browserTls: true,
+  });
+  if (res.statusCode !== 200) throw new Error(`HTTP ${res.statusCode}`);
+  const html = res.body.toString('utf8');
+  const entities = parseYandexImages(html);
+  if (!entities) {
+    throw new Error(/captcha/i.test(html) ? 'Yandex asked for a captcha' : 'Unrecognised Yandex results page');
+  }
+
+  return entities
+    .filter((item) => item && !item.censored && item.origUrl)
+    .map((item) => {
+      const viewer = item.viewerData || {};
+      const snippet = item.snippet || viewer.snippet || {};
+      // Biggest copies first: a mirror is only useful if it is at least as good.
+      const mirrors = [...(viewer.dups || []), ...(viewer.preview || [])]
+        .filter((d) => d && d.url && (!d.fileSizeInBytes || d.fileSizeInBytes <= DOWNLOAD_MAX_BYTES))
+        .sort((a, b) => (b.w || 0) * (b.h || 0) - (a.w || 0) * (a.h || 0))
+        .map((d) => d.url);
+      return makeResult({
+        provider: 'yandex',
+        url: item.origUrl,
+        // Yandex's own thumbnail always loads; the original host may refuse hotlinks.
+        thumbUrl: absoluteUrl(item.image || viewer.thumb?.url) || item.origUrl,
+        width: item.origWidth || item.width,
+        height: item.origHeight || item.height,
+        title: clean(snippet.title || item.alt).replace(/<[^>]+>/g, ''),
+        sourceUrl: snippet.url,
+        author: snippet.domain,
+        mirrors,
+      });
+    })
+    .filter(Boolean);
+};
+
 /**
  * Openverse (the WordPress Foundation's openly-licensed media search) — keyless, stable,
  * and aggregates Flickr, Wikimedia, museums and more. This is the workhorse name-based
@@ -505,15 +713,33 @@ const searchPexels = async ({ query, page, perPage }) => {
     .filter(Boolean);
 };
 
-// Ordered worst-to-best so the score below can just read the index: a barcode hit is the
-// real product, a web hit is probably the real product, a stock photo is a stand-in.
-const PROVIDER_RANK = ['pexels', 'openverse', 'wikimedia', 'duckduckgo', 'upcitemdb', 'google', 'openfoodfacts'];
+// How much a provider's hit is worth before relevance is considered: a barcode hit is
+// the real product, a web hit is usually a photo of the product someone is selling,
+// an open-licence/stock photo is at best a stand-in.
+const PROVIDER_TIER = {
+  openfoodfacts: 120,
+  upcitemdb: 110,
+  google: 90,
+  yandex: 80,
+  duckduckgo: 80,
+  wikimedia: 20,
+  openverse: 10,
+  pexels: 0,
+};
+
+// Stock/open-licence libraries match keywords against photo captions, so "car charger"
+// returns an electric car at a charging station. They must clear a much higher
+// relevance bar than a web engine, whose results are already about the query.
+const LOOSE_PROVIDERS = new Set(['openverse', 'wikimedia', 'pexels']);
+const MIN_RELEVANCE_WEB = 0.25;
+const MIN_RELEVANCE_LOOSE = 0.5;
 
 const PROVIDER_LABELS = {
   openfoodfacts: 'Barcode match',
   upcitemdb: 'Barcode match',
-  google: 'Web',
-  duckduckgo: 'Web',
+  google: 'Google',
+  yandex: 'Web',
+  duckduckgo: 'DuckDuckGo',
   wikimedia: 'Wikimedia',
   openverse: 'Open licence',
   pexels: 'Stock photo',
@@ -523,21 +749,87 @@ const PROVIDER_DEFS = [
   { key: 'openfoodfacts', run: searchOpenFoodFacts, needs: 'barcode', configured: () => true },
   { key: 'upcitemdb', run: searchUpcItemDb, needs: 'barcode', configured: () => true },
   { key: 'google', run: searchGoogleCse, needs: 'query', configured: () => Boolean(config.googleCse?.apiKey && config.googleCse?.cx) },
+  { key: 'yandex', run: searchYandex, needs: 'query', configured: () => true },
   { key: 'duckduckgo', run: searchDuckDuckGo, needs: 'query', configured: () => true },
   { key: 'openverse', run: searchOpenverse, needs: 'query', configured: () => true },
   { key: 'wikimedia', run: searchWikimedia, needs: 'query', configured: () => true },
   { key: 'pexels', run: searchPexels, needs: 'query', configured: () => Boolean(clean(config.pexels?.apiKey)) },
 ];
 
+/* ------------------------------------------------------------------ *
+ * Relevance
+ * ------------------------------------------------------------------ */
+
+const STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'for', 'with', 'of', 'in', 'on', 'to', 'by', 'from',
+  'new', 'original', 'genuine', 'pcs', 'pc', 'pack', 'piece', 'set', 'buy', 'best', 'price',
+]);
+
+const words = (text) => String(text || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+
+// A number followed by a unit is a spec shared by many products ("128gb", "40w",
+// "950g"), not a model code, however much it looks like one.
+const SPEC_TERM = /^\d+(gb|tb|mb|kb|w|kw|mah|ah|v|a|ml|l|ltr|kg|g|gm|mg|mm|cm|m|hz|khz|mhz|ghz|in|inch|mp|pcs|pc|x|p|k)$/;
+
 /**
- * Ranks a candidate. Deliberately simple and explainable — provider tier dominates,
- * then "is this shaped like a product shot" (roughly square, decently sized), because a
- * 1600x400 banner crop looks wrong in every grid, list row and receipt this app renders
- * a product image into.
+ * Splits a query into weighted terms. A model code ("A2724", "A15", "SM-A155F" →
+ * "a155f") is what tells one product from its siblings, so it outweighs everything; a
+ * spec or bare number ("40w", "128gb", "15") comes next; plain words ("car",
+ * "charger") are the weakest evidence because every neighbouring product shares them.
+ */
+const queryTerms = (query) =>
+  [...new Set(words(query))]
+    .filter((w) => !STOPWORDS.has(w) && (w.length >= 2 || /\d/.test(w)))
+    .map((term) => {
+      const hasDigit = /\d/.test(term);
+      const hasLetter = /[a-z]/.test(term);
+      let weight = 1;
+      if (hasDigit && hasLetter && !SPEC_TERM.test(term)) weight = 8;
+      else if (hasDigit) weight = 2;
+      return { term, weight };
+    });
+
+const safeDecode = (value) => {
+  try {
+    return decodeURIComponent(value);
+  } catch (e) {
+    return value;
+  }
+};
+
+/**
+ * 0..1 — the weighted share of query terms found in what we know about a candidate:
+ * its title, the page it came from, and the image file name (manufacturers name files
+ * after the SKU, e.g. A2724013_ND01.png). Matching is on whole words, plus a squashed
+ * form for longer terms so "USB-C" satisfies "usbc" and "A2724013" satisfies "a2724".
+ */
+const relevanceOf = (result, terms) => {
+  if (!terms.length) return 1;
+  const haystack = [result.title, safeDecode(result.sourceUrl), safeDecode(result.url), result.author].join(' ');
+  const wordSet = new Set(words(haystack));
+  const squashed = words(haystack).join('');
+  let total = 0;
+  let matched = 0;
+  terms.forEach(({ term, weight }) => {
+    total += weight;
+    // Squashed matching only for long or numeric terms: "car" must not match "cardigan".
+    if (wordSet.has(term) || ((term.length >= 4 || /\d/.test(term)) && squashed.includes(term))) {
+      matched += weight;
+    }
+  });
+  return total ? matched / total : 1;
+};
+
+/**
+ * Ranks a candidate. Deliberately simple and explainable — a barcode hit first, then
+ * how well it matches what was typed, then the provider tier, then "is this shaped like
+ * a product shot" (roughly square, decently sized), because a 1600x400 banner crop looks
+ * wrong in every grid, list row and receipt this app renders a product image into.
  */
 const scoreResult = (result) => {
-  let score = PROVIDER_RANK.indexOf(result.provider) * 100;
-  if (result.exactMatch) score += 400;
+  let score = PROVIDER_TIER[result.provider] || 0;
+  if (result.exactMatch) score += 1000;
+  if (typeof result.relevance === 'number') score += Math.round(result.relevance * 500);
 
   const { width, height } = result;
   if (width && height) {
@@ -606,6 +898,7 @@ const search = async ({ query, barcode, page = 1, perPage = 24, providers: only 
     }),
   );
 
+  const terms = queryTerms(q);
   const seen = new Set();
   const merged = [];
   settled.forEach((entry) => {
@@ -613,14 +906,29 @@ const search = async ({ query, barcode, page = 1, perPage = 24, providers: only 
       const key = dedupeKey(result);
       if (seen.has(key)) return;
       seen.add(key);
-      merged.push({ ...result, providerLabel: PROVIDER_LABELS[result.provider] || result.provider });
+      merged.push({
+        ...result,
+        providerLabel: PROVIDER_LABELS[result.provider] || result.provider,
+        relevance: Math.round(relevanceOf(result, terms) * 100) / 100,
+      });
     });
   });
 
-  merged.sort((a, b) => scoreResult(b) - scoreResult(a));
+  // Drop what is clearly about something else rather than padding the grid with it —
+  // a picker full of unrelated photos is worse than a short one.
+  const passes = (r) =>
+    r.exactMatch || r.relevance >= (LOOSE_PROVIDERS.has(r.provider) ? MIN_RELEVANCE_LOOSE : MIN_RELEVANCE_WEB);
+  let kept = merged.filter(passes);
+  // Nothing matched well (unusual local product, or every web source down): show the
+  // partial matches, flagged, instead of an empty grid — but never zero-overlap ones.
+  const looseMatches = !kept.length && merged.some((r) => r.relevance > 0);
+  if (looseMatches) kept = merged.filter((r) => r.relevance > 0);
+
+  kept.sort((a, b) => scoreResult(b) - scoreResult(a));
 
   return {
-    results: merged.slice(0, perPage * 2),
+    results: kept.slice(0, perPage * 2),
+    looseMatches,
     providers: settled.map(({ key, status, count, error }) => ({
       key,
       label: PROVIDER_LABELS[key] || key,
@@ -660,12 +968,14 @@ const importImages = async ({ items, context = 'product', publicIdPrefix = 'prod
         // downloadImage is what makes a hand-pasted link safe to fetch.
         const trusted = verifyUrlToken(url, item?.token);
 
-        const { buffer } = await downloadImage(url);
-        const format = sniffImageFormat(buffer);
-        if (!format) {
-          throw new ApiError(httpStatus.BAD_REQUEST, 'That link is not an image file.');
-        }
-
+        // The same picture from several places: a CDN-resized copy of the original
+        // (fast, capped at 1600px — plenty for a product photo), the original itself, then
+        // mirrors on other hosts. Every candidate still goes through the SSRF guard.
+        const originals = [url, ...(Array.isArray(item?.mirrors) ? item.mirrors : []).map((m) => clean(m?.url))]
+          .filter(Boolean)
+          .slice(0, 5);
+        const candidates = [proxiedImageUrl(url, IMPORT_MAX_EDGE), ...originals].filter(Boolean);
+        const buffer = await raceDownloads(candidates);
         const uploaded = await uploadToCloudinary(buffer, {
           folder,
           public_id: `${publicIdPrefix}_web_${Date.now()}_${index}`,
@@ -710,4 +1020,9 @@ module.exports = {
   isBlockedAddress,
   sniffImageFormat,
   scoreResult,
+  queryTerms,
+  relevanceOf,
+  parseYandexImages,
+  proxiedImageUrl,
+  raceDownloads,
 };
