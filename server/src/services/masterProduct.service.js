@@ -26,6 +26,42 @@ const isMasterProductRolloutEnabledForOrg = (organizationId) => {
 };
 
 /**
+ * The template fields a MasterProduct copies from `product`, as plain values. A hydrated
+ * Product must not be copied field by field: after its save hook clears the photo
+ * (`image = undefined`, which is what every product saved without one goes through),
+ * `product.image` reads back as an empty Mongoose sub-document that MasterProduct refuses
+ * ("Cast to Object failed") — which left every photo-less product unlinked from the catalog
+ * and made each import/sync request re-link them.
+ */
+const masterTemplateFor = (product, { trackBatch = false, trackExpiry = false } = {}) => {
+  const p = typeof product.toObject === 'function' ? product.toObject() : product;
+  const photo = p.image && p.image.url ? p.image : (p.images || []).find((entry) => entry && entry.url);
+  return {
+    organizationId: p.organizationId,
+    createdBy: p.createdBy,
+    name: p.name,
+    nameUrdu: p.nameUrdu,
+    description: p.description,
+    barcode: p.barcode || undefined,
+    unit: p.unit,
+    unitConversions: p.unitConversions,
+    trackImei: p.trackImei,
+    trackSerial: p.trackSerial,
+    trackBatch,
+    trackExpiry,
+    warrantyMonths: p.warrantyMonths,
+    category: p.category,
+    categories: p.categories,
+    subCategories: p.subCategories,
+    brandId: p.brandId,
+    image: photo ? { url: photo.url, publicId: photo.publicId } : undefined,
+    defaultPrice: p.price,
+    defaultCost: p.cost,
+    hasVariants: false,
+  };
+};
+
+/**
  * Finds the MasterProduct this product belongs to, by the same org-scoped
  * barcode-first-then-exact-name identity used everywhere else in this migration
  * (productMatchKey.js#findBestMatch) — or creates one from the product's template
@@ -35,8 +71,11 @@ const isMasterProductRolloutEnabledForOrg = (organizationId) => {
  * Trying name even when the product has a barcode still matters: a barcode-less product
  * (or one entered slightly differently) still needs the name fallback to join the right
  * MasterProduct instead of spinning up a duplicate one.
+ *
+ * `tracking` ({ trackBatch, trackExpiry }) may be passed when the caller already knows it
+ * (a product being created right now), which saves reading the default variant.
  */
-const findOrCreateMasterProductForProduct = async (product, session) => {
+const findOrCreateMasterProductForProduct = async (product, session, tracking) => {
   const existing = await findBestMatch({ Model: MasterProduct, scope: { organizationId: product.organizationId }, product, session });
 
   // trackBatch/trackExpiry never live on Product itself — for a non-hasVariants product
@@ -45,7 +84,9 @@ const findOrCreateMasterProductForProduct = async (product, session) => {
   // tracking is per real variant instead (MasterProductVariant.trackBatch/trackExpiry),
   // so this only matters for the simple-product case.
   let defaultTracking = { trackBatch: false, trackExpiry: false };
-  if (!product.hasVariants) {
+  if (!product.hasVariants && tracking) {
+    defaultTracking = { trackBatch: !!tracking.trackBatch, trackExpiry: !!tracking.trackExpiry };
+  } else if (!product.hasVariants) {
     const defaultVariant = await ProductVariant.findOne({ productId: product._id, isDefault: true })
       .select('trackBatch trackExpiry')
       .session(session || null)
@@ -67,33 +108,38 @@ const findOrCreateMasterProductForProduct = async (product, session) => {
     return existing;
   }
 
-  const [created] = await MasterProduct.create(
-    [{
-      organizationId: product.organizationId,
-      createdBy: product.createdBy,
-      name: product.name,
-      nameUrdu: product.nameUrdu,
-      description: product.description,
-      barcode: product.barcode || undefined,
-      unit: product.unit,
-      unitConversions: product.unitConversions,
-      trackImei: product.trackImei,
-      trackSerial: product.trackSerial,
-      trackBatch: defaultTracking.trackBatch,
-      trackExpiry: defaultTracking.trackExpiry,
-      warrantyMonths: product.warrantyMonths,
-      category: product.category,
-      categories: product.categories,
-      subCategories: product.subCategories,
-      brandId: product.brandId,
-      image: product.image,
-      defaultPrice: product.price,
-      defaultCost: product.cost,
-      hasVariants: false,
-    }],
-    { session },
-  );
+  const [created] = await MasterProduct.create([masterTemplateFor(product, defaultTracking)], { session });
   return created;
+};
+
+/**
+ * The catalog entry a product that is about to be created belongs to — found or created
+ * BEFORE the product is written, so the product can be inserted already linked instead of
+ * being saved a second time afterwards. `draft` is an unsaved Product document (casting
+ * only, no database). Never throws: on any problem it returns null and the product is
+ * created unlinked, to be linked by the next linkUnlinkedProductsForOrg pass — the same
+ * "never block a product save over catalog bookkeeping" rule as linkProductToMasterProduct.
+ *
+ * If the product write then fails (a duplicate barcode, say), a newly created entry is left
+ * without a product. That is harmless: the catalog is only ever read through products that
+ * point at it, and the next product with the same barcode or name reuses the entry.
+ */
+const resolveMasterForNewProduct = async (draft, tracking) => {
+  try {
+    return (await findOrCreateMasterProductForProduct(draft, null, tracking))._id;
+  } catch (err) {
+    // Another request created the same entry a moment ago (unique barcode) — use theirs.
+    if (err && err.code === 11000) {
+      try {
+        const winner = await findBestMatch({ Model: MasterProduct, scope: { organizationId: draft.organizationId }, product: draft });
+        if (winner) return winner._id;
+      } catch (_) {
+        // fall through to "leave unlinked"
+      }
+    }
+    logger.error(`[masterProduct] Could not resolve a catalog entry for new product "${draft.name}" — it will be linked on the next backfill.`, err);
+    return null;
+  }
 };
 
 /**
@@ -240,29 +286,7 @@ const linkProductsToMasterProductsBulk = async (products) => {
         return;
       }
       createIndexByKey.set(key, createDocs.length);
-      createDocs.push({
-        organizationId: product.organizationId,
-        createdBy: product.createdBy,
-        name: product.name,
-        nameUrdu: product.nameUrdu,
-        description: product.description,
-        barcode: product.barcode || undefined,
-        unit: product.unit,
-        unitConversions: product.unitConversions,
-        trackImei: product.trackImei,
-        trackSerial: product.trackSerial,
-        trackBatch: false,
-        trackExpiry: false,
-        warrantyMonths: product.warrantyMonths,
-        category: product.category,
-        categories: product.categories,
-        subCategories: product.subCategories,
-        brandId: product.brandId,
-        image: product.image,
-        defaultPrice: product.price,
-        defaultCost: product.cost,
-        hasVariants: false,
-      });
+      createDocs.push(masterTemplateFor(product));
     });
 
     // 3. One insert for every new MasterProduct, then resolve the pending keys to ids.
@@ -297,6 +321,10 @@ const linkProductsToMasterProductsBulk = async (products) => {
   }
 };
 
+// Cursor batch size for reads that want their whole result in one reply (see
+// findImportableCandidates). The server still caps a reply at 16 MB.
+const LARGE_BATCH = 100000;
+
 const toObjectId = (id) => (id instanceof mongoose.Types.ObjectId ? id : new mongoose.Types.ObjectId(String(id)));
 
 // Every open of the import dialog (and the empty-branch banner, which asks for the same
@@ -315,6 +343,8 @@ const linkInFlightByOrg = new Map();
  * anywhere else" (see docs/architecture/master-product-migration.md). Cheap after the
  * first call — once linked, a product never needs relinking, so this is a single
  * indexed query that comes back empty on every later open.
+ *
+ * Resolves to whether there was anything to link.
  */
 const linkUnlinkedProductsForOrg = (organizationId) => {
   const key = String(organizationId);
@@ -322,7 +352,7 @@ const linkUnlinkedProductsForOrg = (organizationId) => {
 
   const run = (async () => {
     const unlinked = await Product.find({ organizationId, masterProductId: null });
-    if (!unlinked.length) return;
+    if (!unlinked.length) return false;
     // Bulk path only ever creates hasVariants:false masters (see its docblock) — fine
     // for simple products, wrong for variant ones, so those go through the per-item
     // path instead, which creates/matches MasterProductVariant rows correctly.
@@ -331,6 +361,7 @@ const linkUnlinkedProductsForOrg = (organizationId) => {
     for (const product of unlinked.filter((p) => p.hasVariants)) {
       await linkProductToMasterProduct(product);
     }
+    return true;
   })().finally(() => linkInFlightByOrg.delete(key));
 
   linkInFlightByOrg.set(key, run);
@@ -351,21 +382,30 @@ const nameCollator = new Intl.Collator(undefined, { sensitivity: 'base', numeric
  * over the wire on every dialog open, and again after every import chunk.
  */
 const findImportableCandidates = async ({ organizationId, branchId, search = '' }) => {
-  await linkUnlinkedProductsForOrg(organizationId);
-
-  const groups = await Product.aggregate([
-    { $match: { organizationId: toObjectId(organizationId), masterProductId: { $ne: null } } },
-    {
-      $group: {
-        _id: '$masterProductId',
-        branchIds: { $addToSet: '$branchId' },
-        samplePrice: { $first: '$price' },
-        sampleCost: { $first: '$cost' },
+  const groupByMasterAcrossBranches = () =>
+    Product.aggregate([
+      { $match: { organizationId: toObjectId(organizationId), masterProductId: { $ne: null } } },
+      {
+        $group: {
+          _id: '$masterProductId',
+          branchIds: { $addToSet: '$branchId' },
+          samplePrice: { $first: '$price' },
+          sampleCost: { $first: '$cost' },
+        },
       },
-    },
-    // On an array field, $ne means "no element equals" — i.e. not carried here yet.
-    { $match: { branchIds: { $ne: toObjectId(branchId) } } },
-  ]).allowDiskUse(true);
+      // On an array field, $ne means "no element equals" — i.e. not carried here yet.
+      { $match: { branchIds: { $ne: toObjectId(branchId) } } },
+    ])
+      .allowDiskUse(true)
+      // One reply for the whole result instead of a first batch of 101 plus a round trip
+      // per further batch (the default) — each round trip is a full trip to Atlas.
+      .option({ batchSize: LARGE_BATCH });
+
+  // The heal pass and the grouping run side by side. The heal pass almost always finds
+  // nothing (products are linked when they are created); only when it did link something
+  // is the grouping run again, so it sees those products too.
+  const [healed, firstGroups] = await Promise.all([linkUnlinkedProductsForOrg(organizationId), groupByMasterAcrossBranches()]);
+  const groups = healed ? await groupByMasterAcrossBranches() : firstGroups;
   if (!groups.length) return [];
 
   const branchIds = [...new Set(groups.flatMap((g) => g.branchIds.map(String)))];
@@ -373,7 +413,10 @@ const findImportableCandidates = async ({ organizationId, branchId, search = '' 
   // document is only fetched for the one page being returned.
   const [branches, searchable] = await Promise.all([
     Branch.find({ _id: { $in: branchIds } }).select('name').lean(),
-    MasterProduct.find({ _id: { $in: groups.map((g) => g._id) }, organizationId }).select('name nameUrdu barcode category').lean(),
+    MasterProduct.find({ _id: { $in: groups.map((g) => g._id) }, organizationId })
+      .select('name nameUrdu barcode category')
+      .batchSize(LARGE_BATCH)
+      .lean(),
   ]);
   const branchNameById = new Map(branches.map((b) => [String(b._id), b.name]));
   const groupByMaster = new Map(groups.map((g) => [String(g._id), g]));
@@ -502,7 +545,12 @@ const resolveMasterImportCategories = async (masters, { organizationId, branchId
   // none of this batch does, same short-circuit as resolveImportCategories.
   if (categoryNameByLower.size === 0) return { resolvedCategoryByMaster, resolvedSubsByMaster };
 
-  const existingCategories = await Category.find({ organizationId, branchId }).select('_id name image').lean();
+  // Both lists are small per branch, so the sub-categories are read in the same round as
+  // the categories (all of this branch's) instead of waiting to filter them by category.
+  const [existingCategories, branchSubCategories] = await Promise.all([
+    Category.find({ organizationId, branchId }).select('_id name image').lean(),
+    SubCategory.find({ organizationId, branchId }).select('_id name category image').lean(),
+  ]);
   const categoryByLower = new Map(existingCategories.map((c) => [c.name.trim().toLowerCase(), c]));
 
   const missingCategoryLowers = [...categoryNameByLower.keys()].filter((lower) => !categoryByLower.has(lower));
@@ -543,10 +591,8 @@ const resolveMasterImportCategories = async (masters, { organizationId, branchId
     });
   });
 
-  const categoryIds = [...categoryByLower.values()].map((c) => c._id);
-  const existingSubCategories = categoryIds.length
-    ? await SubCategory.find({ organizationId, branchId, category: { $in: categoryIds } }).select('_id name category image').lean()
-    : [];
+  const categoryIds = new Set([...categoryByLower.values()].map((c) => String(c._id)));
+  const existingSubCategories = branchSubCategories.filter((sub) => categoryIds.has(String(sub.category)));
   const subByKey = new Map(existingSubCategories.map((s) => [`${s.category}::${s.name.trim().toLowerCase()}`, s]));
 
   const missingSubKeys = [...subOriginalByKey.keys()].filter((key) => !subByKey.has(key));
@@ -693,12 +739,13 @@ const importMasterProductsUnlocked = async ({ organizationId, branchId, createdB
   const masterIds = [...itemByMasterId.keys()];
 
   const [masters, alreadyHere, sourceProducts] = await Promise.all([
-    MasterProduct.find({ _id: { $in: masterIds }, organizationId }).lean(),
-    Product.find({ organizationId, branchId, masterProductId: { $in: masterIds } }).select('masterProductId').lean(),
+    MasterProduct.find({ _id: { $in: masterIds }, organizationId }).batchSize(LARGE_BATCH).lean(),
+    Product.find({ organizationId, branchId, masterProductId: { $in: masterIds } }).select('masterProductId').batchSize(LARGE_BATCH).lean(),
     // Price/cost fallbacks for a master with no defaultPrice/defaultCost, and the tax
     // category the product already uses elsewhere (TaxCategory is org-level, not branch).
     Product.find({ organizationId, branchId: { $ne: branchId }, masterProductId: { $in: masterIds } })
       .select('masterProductId price cost taxCategoryId')
+      .batchSize(LARGE_BATCH)
       .lean(),
   ]);
 
@@ -727,13 +774,23 @@ const importMasterProductsUnlocked = async ({ organizationId, branchId, createdB
   const barcodes = pending.map((p) => p.master.barcode).filter(Boolean);
   const productSkus = pending.map((p) => p.master.sku).filter(Boolean);
   const variantBarcodes = pending.flatMap((p) => (p.item.variants || []).map((v) => v.barcode)).filter(Boolean);
-  const [masterVariants, barcodesInUse, productSkusInUse, variantBarcodesInUse] = await Promise.all([
+  const [masterVariants, barcodesInUse, productSkusInUse, variantBarcodesInUse, categoryResolution] = await Promise.all([
     variantMasterIds.length ? MasterProductVariant.find({ masterProductId: { $in: variantMasterIds } }).lean() : [],
     barcodes.length ? Product.find({ organizationId, branchId, barcode: { $in: barcodes } }).select('barcode').lean() : [],
     productSkus.length ? Product.find({ organizationId, branchId, sku: { $in: productSkus } }).select('sku').lean() : [],
     variantBarcodes.length
       ? ProductVariant.find({ organizationId, branchId, barcode: { $in: variantBarcodes } }).select('barcode').lean()
       : [],
+    // Resolved alongside the checks above rather than after them — see
+    // resolveMasterImportCategories's docblock for why categories can't be copied as-is. It
+    // covers every pending product; one that then fails validation below may leave behind a
+    // category it would have used, which a retry would create anyway.
+    pending.length
+      ? resolveMasterImportCategories(
+          pending.map((p) => p.master),
+          { organizationId, branchId, createdBy },
+        )
+      : { resolvedCategoryByMaster: new Map(), resolvedSubsByMaster: new Map() },
   ]);
   const takenBarcodes = new Set(barcodesInUse.map((p) => p.barcode));
   const takenProductSkus = new Set(productSkusInUse.map((p) => p.sku));
@@ -792,13 +849,8 @@ const importMasterProductsUnlocked = async ({ organizationId, branchId, createdB
 
   // Variant SKUs are unique per branch too — dropped (not failed) where one is taken here.
   const variantSkus = [...new Set(entries.flatMap((e) => e.variants.map((v) => v.sku?.trim()).filter(Boolean)))];
-  const [{ resolvedCategoryByMaster, resolvedSubsByMaster }, skusInUse] = await Promise.all([
-    // See resolveMasterImportCategories's docblock for why this can't just copy
-    // master.categories/subCategories as-is.
-    resolveMasterImportCategories(
-      entries.map((e) => e.master),
-      { organizationId, branchId, createdBy },
-    ),
+  const { resolvedCategoryByMaster, resolvedSubsByMaster } = categoryResolution;
+  const [skusInUse] = await Promise.all([
     variantSkus.length ? ProductVariant.find({ organizationId, branchId, sku: { $in: variantSkus } }).select('sku').lean() : [],
     // Once per request, not once per product as createProduct would.
     productService.ensureProductIndexes(),
@@ -1120,6 +1172,7 @@ const importMasterProducts = (args) => {
 module.exports = {
   isMasterProductRolloutEnabledForOrg,
   findOrCreateMasterProductForProduct,
+  resolveMasterForNewProduct,
   findOrCreateMasterVariantForVariant,
   linkProductToMasterProduct,
   linkProductsToMasterProductsBulk,

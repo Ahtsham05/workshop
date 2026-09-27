@@ -145,6 +145,8 @@ const schoolSmsRoute = require('./schoolSms.route');
 const whatsappEnterpriseRoute = require('./whatsappEnterprise.route');
 const restaurantRoute = require('./restaurant.route');
 const restaurantPublicRoute = require('./restaurantPublic.route');
+const storefrontRoute = require('./storefront.route');
+const websiteConnectionRoute = require('./websiteConnection.route');
 
 // Subscription & Admin Routes
 const paymentRoute = require('./payment.route');
@@ -667,6 +669,15 @@ const defaultRoutes = [
   {
     path: '/public/restaurant',
     route: restaurantPublicRoute,
+  },
+  {
+    // The shop's website reading its inventory by API key — no staff login involved.
+    path: '/storefront',
+    route: storefrontRoute,
+  },
+  {
+    path: '/website-connections',
+    route: websiteConnectionRoute,
   },
   // Subscription & Admin
   {

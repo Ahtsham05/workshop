@@ -75,7 +75,6 @@ import { VariantInventoryTable } from './variants/variant-inventory-table'
 import { ProductDefaultVariantBatchPanel } from './variants/product-default-variant-batch-panel'
 import type { VariantDraftRow } from './variants/generate-variant-combinations'
 import { generateBatchNumber } from './variants/generate-variant-combinations'
-import { useCreateProductVariantMutation } from '@/stores/productVariant.api'
 import { BrandSelector } from './brand-selector'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { useGetTaxCategoriesQuery } from '@/stores/taxCategory.api'
@@ -86,7 +85,8 @@ import { ColorSwatchPicker } from '@/components/color-swatch-picker'
 import { useGetDistinctProductTagsQuery } from '@/stores/product.api'
 import { MarkupPercentInput } from './markup-percent-input'
 import { SyncToBranchesOption } from './sync-to-branches-option'
-import { summarizeBranchSync, useBranchSyncRunner, useSyncTargetBranches } from '../hooks/use-branch-sync'
+import { useSyncTargetBranches } from '../hooks/use-branch-sync'
+import { startProductSaveFollowUps } from '../lib/product-save-followups'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 
@@ -256,6 +256,37 @@ interface Props {
   defaultName?: string
 }
 
+// A blank Add Product form (also what "Save & add another" starts the next product from).
+const newProductValues = () => ({
+  name: '',
+  nameUrdu: '',
+  description: '',
+  sku: '',
+  brandId: undefined,
+  taxCategoryId: undefined,
+  barcode: '',
+  hasVariants: false,
+  trackImei: false,
+  trackSerial: false,
+  trackBatch: false,
+  trackExpiry: false,
+  batchNumber: '',
+  expiryDate: '',
+  warrantyMonths: 0,
+  stockQuantity: 0,
+  price: 0,
+  cost: 0,
+  unit: DEFAULT_UNIT,
+  unitConversions: [],
+  image: undefined,
+  images: [],
+  categories: [],
+  subCategories: [],
+  tags: [],
+  color: null,
+  shelfLocation: '',
+})
+
 export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
   // A product discovered mid-session by scanning/typing its SKU/barcode in "Add
   // Product" mode (see handleCodeCommitted below) — switches this same dialog into
@@ -287,12 +318,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const tagsInputRef = useRef<HTMLInputElement>(null)
 
   const dispatch = useDispatch<AppDispatch>()
-  const [createProductVariant] = useCreateProductVariantMutation()
   // "Also add to my other branches" — ticked by default for a new product. `null` ids means
   // every other branch; the picker narrows it. See sync-to-branches-option.tsx.
   const { targets: syncTargets } = useSyncTargetBranches()
-  const runBranchSync = useBranchSyncRunner()
   const [syncToBranches, setSyncToBranches] = useState(true)
+  // Set by "Save & add another": keep the dialog open on a blank form for the next product.
+  const addAnotherRef = useRef(false)
   const [syncBranchIds, setSyncBranchIds] = useState<string[] | null>(null)
   const { categories } = useSelector((state: RootState) => state.category)
   const { subCategories } = useSelector((state: RootState) => state.subCategory)
@@ -425,35 +456,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         shelfLocation: activeRow.shelfLocation || '',
       })
     } else {
-      form.reset({
-        name: '',
-        nameUrdu: '',
-        description: '',
-        sku: '',
-        brandId: undefined,
-        taxCategoryId: undefined,
-        barcode: '',
-        hasVariants: false,
-        trackImei: false,
-        trackSerial: false,
-        trackBatch: false,
-        trackExpiry: false,
-        batchNumber: '',
-        expiryDate: '',
-        warrantyMonths: 0,
-        stockQuantity: 0,
-        price: 0,
-        cost: 0,
-        unit: DEFAULT_UNIT,
-        unitConversions: [],
-        image: undefined,
-        images: [],
-        categories: [],
-        subCategories: [],
-        tags: [],
-        color: null,
-        shelfLocation: '',
-      })
+      form.reset(newProductValues())
     }
     setDraftVariants([])
   }, [open, activeRow, isEdit, form])
@@ -531,64 +534,29 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     label: 'product',
   })
 
-  // Creates the new ProductVariant + Inventory rows for any draft variants generated in
-  // this session. Runs after the product itself is saved, since the variant-create
-  // endpoint needs a real productId. Failures here are reported but don't roll back the
-  // product save — the product is already valid and usable without variants.
-  const createPendingVariants = async (productId: string) => {
-    if (draftVariants.length === 0) return
-    let failures = 0
-    for (const row of draftVariants) {
-      try {
-        await createProductVariant({
-          productId,
-          data: {
-            sku: row.sku || undefined,
-            barcode: row.barcode || undefined,
-            attributes: row.attributes,
-            price: row.price,
-            cost: row.cost,
-            quantity: row.quantity,
-            trackBatch: row.trackBatchOrExpiry,
-            trackExpiry: row.trackBatchOrExpiry,
-            batchNumber: row.trackBatchOrExpiry ? (row.batchNumber || undefined) : undefined,
-            expiryDate: row.trackBatchOrExpiry ? (row.expiryDate || undefined) : undefined,
-          },
-        }).unwrap()
-      } catch {
-        failures++
-      }
-    }
-    if (failures > 0) {
-      toast.error(`${failures} of ${draftVariants.length} variant(s) failed to save — edit the product to retry.`)
-    } else {
-      toast.success(`${draftVariants.length} variant(s) saved.`)
-    }
-  }
+  // The draft variants generated in this session, in the variant endpoint's shape. They are
+  // created after the product itself is saved (the endpoint needs its id) — in the
+  // background, see startProductSaveFollowUps.
+  const pendingVariantBodies = () =>
+    draftVariants.map((row) => ({
+      sku: row.sku || undefined,
+      barcode: row.barcode || undefined,
+      attributes: row.attributes,
+      price: row.price,
+      cost: row.cost,
+      quantity: row.quantity,
+      trackBatch: row.trackBatchOrExpiry,
+      trackExpiry: row.trackBatchOrExpiry,
+      batchNumber: row.trackBatchOrExpiry ? (row.batchNumber || undefined) : undefined,
+      expiryDate: row.trackBatchOrExpiry ? (row.expiryDate || undefined) : undefined,
+    }))
 
-  // Adds the just-created product to the other branches the user ticked. Runs LAST —
-  // after any variants were saved — so the variants come across too. It can never fail the
-  // save: the product already exists here, so a problem is reported as a warning that says
-  // where to retry, not as an error.
-  const syncCreatedProduct = async (productId: string) => {
-    const branchIds = (syncBranchIds === null ? syncTargets : syncTargets.filter((b) => syncBranchIds.includes(b.id))).map((b) => b.id)
-    if (branchIds.length === 0) return
-    const run = await runBranchSync({ productIds: [productId], branchIds })
-    const { created, failed, branchesReached } = summarizeBranchSync(run.result)
-    const firstFailure = run.result.branches.flatMap((b) => (b.error ? [b.error] : b.failed.map((f) => f.error)))[0]
-    const problem = run.errorMessage ?? firstFailure ?? run.result.skipped[0]?.reason
-    if (run.stoppedEarly || failed > 0 || run.result.skipped.length > 0 || problem) {
-      // react-hot-toast has no warning variant or description line — one longer-lived message.
-      toast(
-        `${t('Saved here, but not added to every branch')}${problem ? `: ${problem}` : ''}. ${t('Retry from the Products page: Added Today → Sync Across Branches.')}`,
-        { icon: '⚠️', duration: 9000 }
-      )
-    } else if (created > 0) {
-      toast.success(t('Also added to {{count}} other branch(es)', { count: branchesReached }))
-    } else {
-      toast(t('Your other branches already have this product'), { icon: 'ℹ️' })
-    }
-  }
+  // The other branches a just-created product should also be added to ("Also add to my
+  // other branches", ticked by default).
+  const chosenSyncBranchIds = () =>
+    syncToBranches
+      ? (syncBranchIds === null ? syncTargets : syncTargets.filter((b) => syncBranchIds.includes(b.id))).map((b) => b.id)
+      : []
 
   // Without this, pressing Enter (or clicking Save) while a required field is still
   // invalid (e.g. Sale Price left at 0) fails validation completely silently — looks
@@ -640,33 +608,46 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       brandId: rawValues.brandId || null,
     }
     try {
+      // The dialog closes as soon as the product itself is saved. What is left — its new
+      // variants, and adding a new product to other branches — finishes in the background
+      // (header indicator + a toast), so the person can go straight on to the next thing.
+      const refreshList = () => {
+        setFetch?.((prev: any) => !prev)
+        dispatch(productApi.util.invalidateTags([{ type: 'Product', id: productId }]))
+      }
+      let productId: string
       if (isEdit) {
-        const productId = activeRow?.id || activeRow?._id
-        await dispatch(updateProduct({ ...values, _id: productId })).then(async () => {
-          toast.success(t('product_updated_successfully'))
-          if (values.hasVariants && draftVariants.length > 0) {
-            await createPendingVariants(productId)
-          }
-          setFetch?.((prev: any) => !prev)
-          dispatch(imeiApi.util.invalidateTags(['Imei']))
-          dispatch(productApi.util.invalidateTags([{ type: 'Product', id: productId }]))
-        })
+        productId = activeRow?.id || activeRow?._id
+        // unwrap(): a failed update (e.g. a barcode another product uses) must keep the
+        // dialog open with the error, not report success.
+        await dispatch(updateProduct({ ...values, _id: productId })).unwrap()
+        toast.success(t('product_updated_successfully'))
       } else {
         const created = await dispatch(addProduct(values)).unwrap()
+        productId = created?.id || created?._id
         draft.clear()
         toast.success(t('product_created_successfully'))
-        if (values.hasVariants && draftVariants.length > 0) {
-          await createPendingVariants(created?.id || created?._id)
-        }
-        setFetch?.((prev: any) => !prev)
-        dispatch(imeiApi.util.invalidateTags(['Imei']))
-        if (syncToBranches && syncTargets.length > 0) {
-          await syncCreatedProduct(created?.id || created?._id)
-        }
         onCreated?.(created)
       }
-      form.reset()
+      refreshList()
+      dispatch(imeiApi.util.invalidateTags(['Imei']))
+      startProductSaveFollowUps(dispatch, {
+        productId,
+        productName: values.name,
+        variants: values.hasVariants ? pendingVariantBodies() : [],
+        branchIds: isEdit ? [] : chosenSyncBranchIds(),
+        onVariantsSaved: refreshList,
+      })
       setScannedProduct(null)
+      if (!isEdit && addAnotherRef.current) {
+        // Straight on to the next product: same dialog, blank form, cursor in the name.
+        form.reset(newProductValues())
+        setDraftVariants([])
+        descriptionAutoSyncRef.current = true
+        requestAnimationFrame(() => form.setFocus('name'))
+        return
+      }
+      form.reset()
       onOpenChange(false)
     } catch {
       return
@@ -2174,7 +2155,19 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
           <Button type='button' variant='outline' onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             {t('cancel')}
           </Button>
-          <Button type='submit' form='user-form' disabled={isSubmitting}>
+          {/* Many products in a row: save this one and start the next without reopening. */}
+          {!isEdit && !onCreated && (
+            <Button
+              type='submit'
+              form='user-form'
+              variant='secondary'
+              disabled={isSubmitting}
+              onClick={() => (addAnotherRef.current = true)}
+            >
+              {t('Save & add another')}
+            </Button>
+          )}
+          <Button type='submit' form='user-form' disabled={isSubmitting} onClick={() => (addAnotherRef.current = false)}>
             {isSubmitting ? 'Saving...' : t('save_changes')}
           </Button>
         </DialogFooter>

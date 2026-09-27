@@ -158,6 +158,19 @@ const QUICK_LINK_ACTIONS = [
     synonyms: ['transfer stock', 'move stock', 'transfer inventory'],
   },
   {
+    // Opens the New stock transfer form over the current screen (client: Quick Stock
+    // Transfer) instead of going to the Stock Transfer page; the route is the fallback.
+    actionKey: 'new_stock_transfer',
+    label: 'New Stock Transfer',
+    iconKey: 'ArrowLeftRight',
+    route: '/stock-transfer',
+    category: 'Catalog & Inventory',
+    color: 'bg-amber-600 hover:bg-amber-700',
+    permission: 'editProducts',
+    excludeBusinessTypes: ['school', 'restaurant'],
+    synonyms: ['new transfer', 'send stock', 'send stock to branch', 'quick transfer'],
+  },
+  {
     actionKey: 'stock_adjustments',
     label: 'Stock Adjustments',
     iconKey: 'ClipboardEdit',
@@ -1914,6 +1927,7 @@ const DEFAULT_ACTION_KEY_ORDER = [
   'new_invoice',
   'new_purchase',
   'stock_transfer',
+  'new_stock_transfer',
   'stock_adjustments',
   'add_product',
   'purchase_orders',

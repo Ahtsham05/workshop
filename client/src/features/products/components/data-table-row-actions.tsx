@@ -2,7 +2,7 @@ import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { Row } from '@tanstack/react-table'
 import { useNavigate } from '@tanstack/react-router'
 import { IconEdit, IconTrash } from '@tabler/icons-react'
-import { BarChart3, ClipboardEdit, DollarSign, Flag, Gauge } from 'lucide-react'
+import { ArrowLeftRight, BarChart3, ClipboardEdit, DollarSign, Flag, Gauge } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useDispatch } from 'react-redux'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,7 @@ import { useUsers } from '../context/users-context'
 import { Product } from '../data/schema'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
+import { useQuickTransfer } from '@/features/stock-transfer/context/quick-transfer-context'
 
 interface DataTableRowActionsProps {
   row: Row<Product>
@@ -41,6 +42,7 @@ export function DataTableRowActions({ row, lowStockThreshold, criticalStockThres
   const { hasPermission } = usePermissions()
   const navigate = useNavigate()
   const dispatch = useDispatch<AppDispatch>()
+  const quickTransfer = useQuickTransfer()
 
   const canEdit = hasPermission('editProducts' as any)
   const canDelete = hasPermission('deleteProducts' as any)
@@ -155,6 +157,17 @@ export function DataTableRowActions({ row, lowStockThreshold, criticalStockThres
               {t('edit')}
               <DropdownMenuShortcut>
                 <IconEdit size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+          {quickTransfer?.canTransfer && (
+            <DropdownMenuItem
+              onPointerEnter={quickTransfer.warmUp}
+              onClick={() => quickTransfer.openQuickTransfer({ fromProductId: productId, fromProductName: row.original.name })}
+            >
+              {t('Transfer stock')}
+              <DropdownMenuShortcut>
+                <ArrowLeftRight size={16} />
               </DropdownMenuShortcut>
             </DropdownMenuItem>
           )}

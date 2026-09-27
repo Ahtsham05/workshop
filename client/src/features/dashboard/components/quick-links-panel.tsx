@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Pencil, Plus, X, RotateCcw, Check, Search, Zap } from 'lucide-react'
-import { useNavigate } from '@tanstack/react-router'
+import { useRunQuickLink } from '@/hooks/use-run-quick-link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -94,7 +94,7 @@ function SortableLinkRow({ action, onRemove }: { action: QuickLinkAction; onRemo
 
 export function QuickLinksPanel() {
   const { t } = useLanguage()
-  const navigate = useNavigate()
+  const runQuickLink = useRunQuickLink()
   const { data: myLinks = [], isLoading } = useGetMyQuickLinksQuery()
   const { data: allActions = [] } = useGetQuickLinkActionsQuery()
   const [updateQuickLinks] = useUpdateQuickLinksMutation()
@@ -217,7 +217,7 @@ export function QuickLinksPanel() {
                 return (
                   <Button
                     key={action.actionKey}
-                    onClick={() => navigate({ to: action.route, search: action.routeSearch })}
+                    onClick={() => runQuickLink(action)}
                     className={`h-auto min-h-24 w-full flex-col gap-2 py-3 text-white ${action.color}`}
                     variant='default'
                   >

@@ -33,24 +33,24 @@ const getOrCreateDefaultVariant = async (productId, session) => {
   const product = await Product.findById(productId).session(session || null).lean();
   if (!product) return null;
 
-  const created = await ProductVariant.create(
-    [{
-      organizationId: product.organizationId,
-      branchId: product.branchId,
-      productId: product._id,
-      isDefault: true,
-      sku: product.sku || undefined,
-      attributes: {},
-      price: product.price,
-      cost: product.cost,
-      unit: product.unit,
-      trackSerial: !!(product.trackImei || product.trackSerial),
-      isActive: true,
-    }],
-    { session },
-  );
+  const created = await ProductVariant.create([buildDefaultVariantDoc(product)], { session });
   return created[0];
 };
+
+/** The hidden default ProductVariant of a simple product, as a document to insert. */
+const buildDefaultVariantDoc = (product) => ({
+  organizationId: product.organizationId,
+  branchId: product.branchId,
+  productId: product._id,
+  isDefault: true,
+  sku: product.sku || undefined,
+  attributes: {},
+  price: product.price,
+  cost: product.cost,
+  unit: product.unit,
+  trackSerial: !!(product.trackImei || product.trackSerial),
+  isActive: true,
+});
 
 const getOrCreateInventory = async (variant, session) => {
   let inventory = await Inventory.findOne({ variantId: variant._id }).session(session || null);
@@ -128,5 +128,6 @@ module.exports = {
   recordStockChange,
   isDualWriteEnabledForOrg,
   getOrCreateDefaultVariant,
+  buildDefaultVariantDoc,
   getOrCreateInventory,
 };

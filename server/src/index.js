@@ -18,6 +18,7 @@ dns.promises.resolveTxt = function patchedResolveTxt(hostname) {
 
 const mongoose = require('mongoose');
 const app = require('./app');
+const { MONGOOSE_CONNECT_OPTIONS, ensureSchemaIndexes } = require('./config/schemaIndexes');
 const config = require('./config/config');
 const logger = require('./config/logger');
 
@@ -135,8 +136,9 @@ async function startApplication() {
     await mongoose.disconnect();
   }
 
-  await mongoose.connect(config.mongoose.url, config.mongoose.options);
+  await mongoose.connect(config.mongoose.url, { ...config.mongoose.options, ...MONGOOSE_CONNECT_OPTIONS });
   logger.info('Connected to MongoDB');
+  ensureSchemaIndexes(); // see config/schemaIndexes.js — replaces the per-connection autoIndex flood
 
   try {
     await runStartupMigrations();

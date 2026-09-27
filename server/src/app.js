@@ -151,8 +151,24 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+// The storefront API (a shop's own website reading its inventory with an API key — see
+// routes/v1/storefront.route.js) is called from any website's domain, so it gets an open,
+// credential-less CORS policy of its own. Everything else keeps the allowlist above.
+const STOREFRONT_PATH = '/v1/storefront';
+const storefrontCors = cors({
+  origin: '*',
+  credentials: false,
+  methods: ['GET', 'OPTIONS'],
+  allowedHeaders: ['X-Api-Key', 'Authorization', 'If-None-Match', 'Content-Type'],
+  exposedHeaders: ['ETag'],
+  maxAge: 86400,
+  optionsSuccessStatus: 204,
+});
+const appCors = cors(corsOptions);
+const pickCors = (req, res, next) => (req.path.startsWith(STOREFRONT_PATH) ? storefrontCors : appCors)(req, res, next);
+
+app.use(pickCors);
+app.options('*', pickCors);
 
 // jwt authentication
 app.use(passport.initialize());

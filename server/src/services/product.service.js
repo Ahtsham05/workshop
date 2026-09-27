@@ -6,13 +6,14 @@ const ApiError = require('../utils/ApiError');
 const { toImportText, parseImportNumber } = require('../utils/importRow');
 const imeiService = require('./imei.service');
 const batchService = require('./batch.service');
-const { getOrCreateDefaultVariant, getOrCreateInventory } = require('./inventorySync.service');
+const { getOrCreateDefaultVariant, getOrCreateInventory, buildDefaultVariantDoc } = require('./inventorySync.service');
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { UNITS, DEFAULT_UNIT } = require('../config/units');
 const masterProductService = require('./masterProduct.service');
 const { extractDuplicateFieldFromMessage, labelFor } = require('../utils/duplicateKeyError');
 const logger = require('../config/logger');
 const { addedTodayFilter } = require('../utils/addedToday');
+const { runIndexMigrationOnce } = require('../config/schemaIndexes');
 
 let productIndexesEnsured = false;
 let ensureProductIndexesInFlight = null;
@@ -48,7 +49,10 @@ const ensureProductIndexes = async () => {
   if (productIndexesEnsured) return;
   if (ensureProductIndexesInFlight) return ensureProductIndexesInFlight;
 
-  ensureProductIndexesInFlight = (async () => {
+  // Once per database per version of Product's index definitions, not once per server
+  // instance — see config/schemaIndexes.js#runIndexMigrationOnce. (Per instance, the two
+  // updateMany cleanups below scanned every product of every organization on each cold start.)
+  ensureProductIndexesInFlight = runIndexMigrationOnce(Product, 'product-indexes', async () => {
     const collection = mongoose.connection.collection('products');
     try {
       const indexes = await collection.indexes();
@@ -73,7 +77,7 @@ const ensureProductIndexes = async () => {
 
     try {
       await Product.syncIndexes();
-      productIndexesEnsured = true;
+      return true;
     } catch (err) {
       // Don't let an index-build hiccup (e.g. a duplicate the cleanup above didn't
       // anticipate) masquerade as *this* request's own product having a duplicate
@@ -82,8 +86,15 @@ const ensureProductIndexes = async () => {
       // proceed under whatever indexes are currently actually live; `productIndexesEnsured`
       // stays false, so the next write retries the sync.
       logger.error(`[ensureProductIndexes] syncIndexes failed, will retry on next write: ${err.message}`);
+      return false;
     }
-  })();
+  })
+    .then((ok) => {
+      productIndexesEnsured = ok;
+    })
+    .catch((err) => {
+      logger.warn(`[ensureProductIndexes] could not check index state, will retry on next write: ${err.message}`);
+    });
 
   try {
     await ensureProductIndexesInFlight;
@@ -121,24 +132,49 @@ const assertImeiAllowedForBusinessType = async ({ organizationId, businessType }
  * tracking) or if the product itself has hasVariants=true (tracking for those lives on
  * each real variant instead, managed via the existing variant management UI).
  */
-const syncDefaultVariantTracking = async (product, updateFields, session) => {
+const syncDefaultVariantTracking = async (product, updateFields, session, { isNewProduct = false } = {}) => {
   if (product.hasVariants) return;
   const wantsBatch = Object.prototype.hasOwnProperty.call(updateFields, 'trackBatch');
   const wantsExpiry = Object.prototype.hasOwnProperty.call(updateFields, 'trackExpiry');
   if (!wantsBatch && !wantsExpiry) return;
 
-  const variant = await getOrCreateDefaultVariant(product._id, session);
-  if (!variant) return;
-
-  const wasTracked = !!(variant.trackBatch || variant.trackExpiry);
-  if (wantsBatch) variant.trackBatch = !!updateFields.trackBatch;
-  if (wantsExpiry) variant.trackExpiry = !!updateFields.trackExpiry;
-  await variant.save({ session });
+  // A product created in this same transaction has no default variant or inventory row
+  // yet, so both are inserted straight away rather than looked up first.
+  let variant;
+  let wasTracked = false;
+  if (isNewProduct) {
+    [variant] = await ProductVariant.create(
+      [{ ...buildDefaultVariantDoc(product), trackBatch: !!updateFields.trackBatch, trackExpiry: !!updateFields.trackExpiry }],
+      { session },
+    );
+  } else {
+    variant = await getOrCreateDefaultVariant(product._id, session);
+    if (!variant) return;
+    wasTracked = !!(variant.trackBatch || variant.trackExpiry);
+    if (wantsBatch) variant.trackBatch = !!updateFields.trackBatch;
+    if (wantsExpiry) variant.trackExpiry = !!updateFields.trackExpiry;
+    // Saving an unchanged document still costs a round trip (an existence check).
+    if (variant.isModified()) await variant.save({ session });
+  }
 
   const nowTracked = !!(variant.trackBatch || variant.trackExpiry);
   if (!nowTracked) return;
 
-  const inventory = await getOrCreateInventory(variant, session);
+  const inventory = isNewProduct
+    ? (
+        await Inventory.create(
+          [{
+            organizationId: variant.organizationId,
+            branchId: variant.branchId,
+            productId: variant.productId,
+            variantId: variant._id,
+            quantity: 0,
+            averageCost: variant.cost,
+          }],
+          { session },
+        )
+      )[0]
+    : await getOrCreateInventory(variant, session);
   // First time tracking turns on for a product that already has stock: seed one
   // opening batch so that existing stock doesn't vanish from the batch-aware views.
   // Uses the batch number/expiry/selling price the user entered on the product form,
@@ -268,6 +304,12 @@ const createProduct = async (productBody) => {
     await assertImeiAllowedForBusinessType({ organizationId: productFields.organizationId, businessType });
   }
 
+  // Found (or created) before the product is written, so the product goes in already
+  // linked to the shared catalog — see masterProduct.service.js#resolveMasterForNewProduct.
+  // Never throws; on a problem the product is created unlinked and healed later.
+  const draft = new Product(productFields);
+  const masterProductId = productFields.masterProductId || (await masterProductService.resolveMasterForNewProduct(draft, { trackBatch, trackExpiry }));
+
   // Everything that follows must succeed together: a duplicate serial/IMEI number (or
   // any other failure in variant/batch setup) must roll back the product itself, not
   // leave a half-created product sitting in the database while the UI reports failure.
@@ -275,7 +317,7 @@ const createProduct = async (productBody) => {
   let product;
   try {
     await session.withTransaction(async () => {
-      const created = await Product.create([productFields], { session });
+      const created = await Product.create([{ ...productFields, masterProductId: masterProductId || null }], { session });
       product = created[0];
 
       if ((product.trackImei || product.trackSerial) && imeis && imeis.length > 0) {
@@ -293,17 +335,11 @@ const createProduct = async (productBody) => {
         });
       }
 
-      await syncDefaultVariantTracking(product, productBody, session);
+      await syncDefaultVariantTracking(product, productBody, session, { isNewProduct: true });
     });
   } finally {
     await session.endSession();
   }
-
-  // Master Product Catalog migration (see docs/architecture/master-product-migration.md):
-  // auto-link every new product to the shared org-level catalog. Runs after the
-  // transaction commits (never inside it) and never throws — a failure here must not
-  // affect the product creation every existing flow depends on.
-  await masterProductService.linkProductToMasterProduct(product);
 
   return product;
 };
@@ -802,9 +838,11 @@ const findProductByCode = async ({ organizationId, branchId, code }) => {
  * @param {Object} updateBody
  * @returns {Promise<Product>}
  */
-const updateProductById = async (productId, updateBody) => {
+const updateProductById = async (productId, updateBody, { existing } = {}) => {
   await ensureProductIndexes();
-  const product = await getProductById(productId);
+  // `existing`: the caller already loaded this product (to snapshot it for the audit log),
+  // so it is not read a second time.
+  const product = existing || (await getProductById(productId));
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }

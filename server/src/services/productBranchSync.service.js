@@ -27,6 +27,13 @@ const masterProductService = require('./masterProduct.service');
  * reporting instead of duplicating them.
  */
 
+// Target branches written at the same time by one sync request.
+const BRANCH_CONCURRENCY = 4;
+
+// Cursor batch size for reads wanted in one reply (a request covers at most a few hundred
+// products); the default first batch of 101 costs an extra round trip per read.
+const LARGE_BATCH = 5000;
+
 // --- who and what -------------------------------------------------------------------------
 
 /**
@@ -107,15 +114,16 @@ const planSources = (products) => {
 const previewBranchSync = async ({ userId, organizationId, branchId, productIds, scope }) => {
   // Presence is decided by catalog identity, so anything never linked (older products,
   // on either side) has to be linked first or it would look "missing" and be duplicated.
-  await masterProductService.linkUnlinkedProductsForOrg(organizationId);
-
-  const [products, targets] = await Promise.all([
-    Product.find(sourceFilter({ organizationId, branchId, productIds, scope }))
-      .select('name masterProductId')
-      .sort({ createdAt: 1, _id: 1 })
-      .lean(),
+  // Listing the branches doesn't depend on it, so that runs alongside.
+  const [, targets] = await Promise.all([
+    masterProductService.linkUnlinkedProductsForOrg(organizationId),
     listTargetBranches({ userId, organizationId, sourceBranchId: branchId }),
   ]);
+  const products = await Product.find(sourceFilter({ organizationId, branchId, productIds, scope }))
+    .select('name masterProductId')
+    .sort({ createdAt: 1, _id: 1 })
+    .batchSize(LARGE_BATCH)
+    .lean();
   const { unique, skipped } = planSources(products);
   const masterIds = unique.map((product) => product.masterProductId);
 
@@ -234,12 +242,17 @@ const groupBy = (rows, key) => {
  * }>}
  */
 const syncProductsToBranches = async ({ userId, organizationId, branchId, productIds, branchIds }) => {
-  const targets = await resolveTargets({ userId, organizationId, sourceBranchId: branchId, branchIds });
-
-  await masterProductService.linkUnlinkedProductsForOrg(organizationId);
+  // Checking the targets and the heal pass (see previewBranchSync) are independent. A bad
+  // target still rejects the request before anything is written: the heal pass only links
+  // products to the catalog, which every later request would do anyway.
+  const [targets] = await Promise.all([
+    resolveTargets({ userId, organizationId, sourceBranchId: branchId, branchIds }),
+    masterProductService.linkUnlinkedProductsForOrg(organizationId),
+  ]);
 
   const products = await Product.find(sourceFilter({ organizationId, branchId, productIds }))
     .sort({ createdAt: 1, _id: 1 })
+    .batchSize(LARGE_BATCH)
     .lean();
 
   // A variant product's variants are only linked to the catalog when the product is — but
@@ -256,10 +269,15 @@ const syncProductsToBranches = async ({ userId, organizationId, branchId, produc
   const variantIds = unique.filter((product) => product.hasVariants).map((product) => product._id);
   const [defaultVariants, realVariants] = await Promise.all([
     simpleIds.length
-      ? ProductVariant.find({ productId: { $in: simpleIds }, isDefault: true }).select('productId trackBatch trackExpiry').lean()
+      ? ProductVariant.find({ productId: { $in: simpleIds }, isDefault: true })
+          .select('productId trackBatch trackExpiry')
+          .batchSize(LARGE_BATCH)
+          .lean()
       : [],
     // A variant switched off at the source stays off — it is not brought back elsewhere.
-    variantIds.length ? ProductVariant.find({ productId: { $in: variantIds }, isDefault: false, isActive: { $ne: false } }).lean() : [],
+    variantIds.length
+      ? ProductVariant.find({ productId: { $in: variantIds }, isDefault: false, isActive: { $ne: false } }).batchSize(LARGE_BATCH).lean()
+      : [],
   ]);
   const defaultVariantByProduct = new Map(defaultVariants.map((variant) => [String(variant.productId), variant]));
   const realVariantsByProduct = groupBy(realVariants, (variant) => variant.productId);
@@ -276,35 +294,41 @@ const syncProductsToBranches = async ({ userId, organizationId, branchId, produc
     productByMaster.set(String(product.masterProductId), product);
   }
 
-  const branches = [];
-  for (const target of targets) {
+  // Each branch is written independently (importMasterProducts serialises per target
+  // branch, never across branches), so they run side by side: a sync to three branches
+  // takes about as long as a sync to one.
+  const syncToBranch = async (target) => {
     const row = { branchId: String(target._id), branchName: target.name, syncedCount: 0, alreadyPresentCount: 0, failedCount: 0, failed: [] };
-    if (items.length) {
-      try {
-        const result = await masterProductService.importMasterProducts({
-          organizationId,
-          branchId: target._id,
-          createdBy: userId,
-          items,
-        });
-        row.syncedCount = result.importedCount;
-        row.alreadyPresentCount = result.alreadyImportedCount;
-        row.failedCount = result.failedCount;
-        row.failed = result.failed.map((failure) => {
-          const product = productByMaster.get(failure.masterProductId);
-          return { productId: product ? String(product._id) : null, name: failure.name || product?.name || null, error: failure.error };
-        });
-      } catch (error) {
-        logger.error(`[productBranchSync] Sync of ${items.length} product(s) to branch ${target._id} failed`, error);
-        row.error = 'Could not sync to this branch — please try again';
-        row.failedCount = items.length;
-        row.failed = items.map((item) => {
-          const product = productByMaster.get(String(item.masterProductId));
-          return { productId: product ? String(product._id) : null, name: product?.name || null, error: row.error };
-        });
-      }
+    if (!items.length) return row;
+    try {
+      const result = await masterProductService.importMasterProducts({
+        organizationId,
+        branchId: target._id,
+        createdBy: userId,
+        items,
+      });
+      row.syncedCount = result.importedCount;
+      row.alreadyPresentCount = result.alreadyImportedCount;
+      row.failedCount = result.failedCount;
+      row.failed = result.failed.map((failure) => {
+        const product = productByMaster.get(failure.masterProductId);
+        return { productId: product ? String(product._id) : null, name: failure.name || product?.name || null, error: failure.error };
+      });
+    } catch (error) {
+      logger.error(`[productBranchSync] Sync of ${items.length} product(s) to branch ${target._id} failed`, error);
+      row.error = 'Could not sync to this branch — please try again';
+      row.failedCount = items.length;
+      row.failed = items.map((item) => {
+        const product = productByMaster.get(String(item.masterProductId));
+        return { productId: product ? String(product._id) : null, name: product?.name || null, error: row.error };
+      });
     }
-    branches.push(row);
+    return row;
+  };
+
+  const branches = [];
+  for (let i = 0; i < targets.length; i += BRANCH_CONCURRENCY) {
+    branches.push(...(await Promise.all(targets.slice(i, i + BRANCH_CONCURRENCY).map(syncToBranch))));
   }
 
   return {

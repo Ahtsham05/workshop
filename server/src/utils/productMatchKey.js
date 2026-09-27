@@ -41,13 +41,23 @@ const buildMatchQuery = (scope, product) => {
  * combined query, kept deliberately simple for the lower-stakes suggestion/lookup
  * features that use it (see this file's top docblock).
  */
-const findBestMatch = async ({ Model, scope, product, session }) => {
-  if (product.barcode) {
-    const byBarcode = await Model.findOne({ ...scope, barcode: product.barcode }).session(session || null);
-    if (byBarcode) return byBarcode;
-  }
+const findBestMatch = async ({ Model, scope, product, session, codeFields = ['barcode'] }) => {
   const nameQuery = { name: { $regex: `^${escapeRegex(product.name.trim())}$`, $options: 'i' } };
-  return Model.findOne({ ...scope, ...nameQuery }).session(session || null);
+  // Exact codes the product carries, strongest first (a barcode, then e.g. an SKU) — each
+  // wins over any code after it and over the name.
+  const codes = codeFields.filter((field) => product[field]).map((field) => [field, product[field]]);
+  if (!codes.length) return Model.findOne({ ...scope, ...nameQuery }).session(session || null);
+  // One round trip for every candidate instead of a lookup per code and then by name.
+  // Oldest first, so a tie between same-name entries resolves the same way every time.
+  const candidates = await Model.find({ ...scope, $or: [...codes.map(([field, value]) => ({ [field]: value })), nameQuery] })
+    .sort({ _id: 1 })
+    .limit(20)
+    .session(session || null);
+  for (const [field, value] of codes) {
+    const byCode = candidates.find((doc) => doc[field] === value);
+    if (byCode) return byCode;
+  }
+  return candidates[0] || null;
 };
 
 module.exports = { matchKeyFor, escapeRegex, buildMatchQuery, findBestMatch };

@@ -19,6 +19,7 @@ import { AlertCircle, CheckCircle2, Info, Loader2, RefreshCw } from 'lucide-reac
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { getErrorMessage } from '@/lib/get-error-message'
+import { runBackgroundTask, type BackgroundTaskContext, type BackgroundTaskOutcome } from '@/lib/background-tasks'
 import {
   usePreviewBranchSyncMutation,
   type BranchSyncBranchResult,
@@ -72,11 +73,16 @@ export function SyncBranchesDialog({ open, onOpenChange, selectedProducts, added
   const [progress, setProgress] = useState({ processed: 0, total: 0 })
   const [run, setRun] = useState<BranchSyncRun | null>(null)
   const previewSeq = useRef(0)
+  // Set once the person sends a running sync to the background — see sendSyncToBackground.
+  const backgroundRef = useRef<{ ctx: BackgroundTaskContext; finish: (outcome: BackgroundTaskOutcome) => void } | null>(null)
+  const phaseRef = useRef<Phase>('choose')
+  phaseRef.current = phase
 
   // Opening the dialog starts from what is most likely wanted: the rows the user ticked,
   // else everything added today.
   useEffect(() => {
-    if (!open) return
+    // Reopened while a sync still runs in the background: show its progress, not a new form.
+    if (!open || phaseRef.current === 'running') return
     const preferred = initialSource ?? (hasSelection ? 'selected' : 'addedToday')
     setSource(preferred === 'addedToday' && !hasAddedToday ? 'selected' : preferred)
     setPhase('choose')
@@ -139,15 +145,58 @@ export function SyncBranchesDialog({ open, onOpenChange, selectedProducts, added
     const outcome = await runSync({
       productIds: preview.productIds,
       branchIds: [...chosenBranchIds],
-      onProgress: (processed, total) => setProgress({ processed, total }),
+      onProgress: (processed, total) => {
+        setProgress({ processed, total })
+        backgroundRef.current?.ctx.update({ detail: syncProgressText(processed, total), progress: { done: processed, total } })
+      },
     })
     setRun(outcome)
     setPhase('done')
+    const background = backgroundRef.current
+    backgroundRef.current = null
+    if (background) {
+      // The dialog is closed; report the outcome from the header's task list instead.
+      const { created, failed, branchesReached } = summarizeBranchSync(outcome.result)
+      const problem = outcome.errorMessage ?? outcome.result.branches.find((b) => b.error)?.error
+      const summary = t('{{created}} product(s) added across {{branches}} branch(es)', { created, branches: branchesReached })
+      if (outcome.stoppedEarly || failed > 0) {
+        background.finish({
+          status: outcome.stoppedEarly ? 'error' : 'warning',
+          message: `${summary}. ${failed > 0 ? t('{{count}} could not be added.', { count: failed }) : ''} ${problem ?? ''} ${t('Open Sync Across Branches to retry.')}`.replace(/\s+/g, ' ').trim(),
+        })
+      } else {
+        background.finish({ status: 'success', message: summary })
+      }
+    }
+  }
+
+  const syncProgressText = (processed: number, total: number) =>
+    t('{{processed}} of {{total}} product(s) done', { processed, total })
+
+  // The sync keeps going on its own; this only hands its progress to the header's task list
+  // so the person can close the dialog and carry on.
+  const sendSyncToBackground = () => {
+    if (!backgroundRef.current) {
+      const current = progress
+      runBackgroundTask({
+        title: t('Syncing products to your other branches'),
+        run: (ctx) =>
+          new Promise<BackgroundTaskOutcome>((finish) => {
+            backgroundRef.current = { ctx, finish }
+            ctx.update({ detail: syncProgressText(current.processed, current.total), progress: { done: current.processed, total: current.total } })
+          }),
+      })
+    }
+    onOpenChange(false)
   }
 
   const handleOpenChange = (next: boolean) => {
-    // A request in flight cannot be recalled — closing would only lose track of how far it got.
-    if (!next && phase === 'running') return
+    // A request in flight cannot be recalled, so closing mid-sync means "carry on without
+    // me": progress moves to the header's task list rather than being lost.
+    if (!next && phase === 'running') {
+      sendSyncToBackground()
+      return
+    }
     onOpenChange(next)
   }
 
@@ -311,7 +360,7 @@ export function SyncBranchesDialog({ open, onOpenChange, selectedProducts, added
                 aria-label={t('Sync progress')}
               />
               <p className='text-xs text-muted-foreground'>
-                {t('{{processed}} of {{total}} product(s) done. Keep this window open until it finishes.', progress)}
+                {t('{{processed}} of {{total}} product(s) done. You can continue in the background and keep working.', progress)}
               </p>
             </div>
           )}
@@ -337,9 +386,8 @@ export function SyncBranchesDialog({ open, onOpenChange, selectedProducts, added
             </>
           )}
           {phase === 'running' && (
-            <Button type='button' disabled>
-              <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-              {t('Syncing…')}
+            <Button type='button' variant='outline' onClick={sendSyncToBackground}>
+              {t('Continue in background')}
             </Button>
           )}
           {phase === 'done' && (

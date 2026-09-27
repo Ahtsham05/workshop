@@ -326,6 +326,12 @@ const PERMISSION_GROUPS = [
     permissions: ['viewSmsLog'],
   },
   {
+    // API keys that let the shop's own website read its inventory (routes/v1/storefront.route.js).
+    id: 'website_connections',
+    label: 'Website Connections',
+    permissions: ['manageWebsiteConnections'],
+  },
+  {
     id: 'ai_assistant',
     label: 'AI Assistant',
     permissions: ['viewAiAssistant'],
@@ -373,6 +379,7 @@ const PERMISSION_TAB_GROUPS = {
     'reminders',
     'whatsapp',
     'sms',
+    'website_connections',
     'ai_assistant',
     'insights',
     'purchase_suggestions',

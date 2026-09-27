@@ -2,6 +2,7 @@ import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   IconArrowRightDashed,
+  IconArrowsExchange,
   IconDeviceLaptop,
   IconMoon,
   IconSun,
@@ -17,9 +18,11 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
+  CommandShortcut,
 } from '@/components/ui/command'
 import { ScrollArea } from './ui/scroll-area'
 import { useFilteredNavGroups } from '@/hooks/use-filtered-nav-groups'
+import { QUICK_TRANSFER_SHORTCUT_LABEL, useQuickTransfer } from '@/features/stock-transfer/context/quick-transfer-context'
 
 export function CommandMenu() {
   const navigate = useNavigate()
@@ -27,6 +30,7 @@ export function CommandMenu() {
   const { open, setOpen } = useSearch()
   const { t } = useLanguage()
   const filteredNavGroups = useFilteredNavGroups()
+  const quickTransfer = useQuickTransfer()
 
   // Navigation translations mapping
   const getNavTranslation = (title: string) => {
@@ -56,6 +60,19 @@ export function CommandMenu() {
       <CommandList>
         <ScrollArea type='hover' className='h-72 pr-1'>
           <CommandEmpty>{t('no_results_found')}</CommandEmpty>
+          {/* Actions that open over the current page instead of navigating away from it. */}
+          {quickTransfer?.canTransfer && (
+            <CommandGroup heading={t('Quick actions')}>
+              <CommandItem
+                value='New stock transfer move stock branch'
+                onSelect={() => runCommand(() => quickTransfer.openQuickTransfer())}
+              >
+                <IconArrowsExchange className='text-muted-foreground' />
+                <span>{t('New stock transfer')}</span>
+                <CommandShortcut>{QUICK_TRANSFER_SHORTCUT_LABEL}</CommandShortcut>
+              </CommandItem>
+            </CommandGroup>
+          )}
           {filteredNavGroups.map((group) => (
             <CommandGroup key={group.title} heading={getNavTranslation(group.title)}>
               {group.items.map((navItem, i) => {

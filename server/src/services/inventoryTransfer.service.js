@@ -4,7 +4,6 @@ const ApiError = require('../utils/ApiError');
 const { Product, Branch, ProductVariant, Inventory, Batch, InventoryTransaction, InventoryTransfer, Imei, User } = require('../models');
 const inventorySyncService = require('./inventorySync.service');
 const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
-const masterProductService = require('./masterProduct.service');
 const { findBestMatch } = require('../utils/productMatchKey');
 
 /**
@@ -52,6 +51,25 @@ const generateTransferNumber = async (organizationId) => {
   return `TRF-${Date.now()}`;
 };
 
+/** Whether another document at the destination branch already uses this barcode/SKU. */
+const codeTakenAtBranch = async (Model, { organizationId, toBranchId, field, value, session }) =>
+  !!(await Model.exists({ organizationId, branchId: toBranchId, [field]: value }).session(session || null));
+
+/**
+ * The source variant's SKU/barcode, minus any the destination branch already gives to
+ * another variant (both are unique per branch) — dropped rather than failing the transfer.
+ */
+const freeVariantCodes = async ({ sourceVariant, organizationId, toBranchId, session }) => {
+  const [skuTaken, barcodeTaken] = await Promise.all([
+    sourceVariant.sku ? codeTakenAtBranch(ProductVariant, { organizationId, toBranchId, field: 'sku', value: sourceVariant.sku, session }) : false,
+    sourceVariant.barcode ? codeTakenAtBranch(ProductVariant, { organizationId, toBranchId, field: 'barcode', value: sourceVariant.barcode, session }) : false,
+  ]);
+  return {
+    sku: (!skuTaken && sourceVariant.sku) || undefined,
+    barcode: (!barcodeTaken && sourceVariant.barcode) || undefined,
+  };
+};
+
 /**
  * Products are branch-scoped documents (no shared catalog id across branches), so
  * the destination branch may not yet carry the item being transferred. Find a match by
@@ -65,16 +83,25 @@ const generateTransferNumber = async (organizationId) => {
  * destination branch should find this product, not come up empty.
  */
 const findOrCreateDestinationProduct = async ({ sourceProduct, organizationId, toBranchId, session }) => {
-  // Master Product Catalog migration (see docs/architecture/master-product-migration.md):
-  // an exact masterProductId match is strictly more reliable than the barcode/name
-  // heuristic below, but stays gated per-org during rollout like every other
-  // behavior-changing use of masterProductId.
-  if (sourceProduct.masterProductId && masterProductService.isMasterProductRolloutEnabledForOrg(organizationId)) {
-    const existingByMaster = await Product.findOne({ organizationId, branchId: toBranchId, masterProductId: sourceProduct.masterProductId }).session(session || null);
-    if (existingByMaster) return existingByMaster;
-  }
-
-  const existing = await findBestMatch({ Model: Product, scope: { organizationId, branchId: toBranchId }, product: sourceProduct, session });
+  // The same item at the destination, most reliable identity first:
+  //   1. the shared catalog link (masterProductId) — what Import from other branches and
+  //      Sync Across Branches already go by, so a product they copied is always found;
+  //   2. then barcode, then SKU (unique per branch, and copies carry the source's), then
+  //      the exact name.
+  // Missing the SKU step used to make a transfer try to create a second product with an
+  // SKU the destination already had, and fail on the unique index.
+  const existingByMaster = sourceProduct.masterProductId
+    ? await Product.findOne({ organizationId, branchId: toBranchId, masterProductId: sourceProduct.masterProductId }).session(session || null)
+    : null;
+  const existing =
+    existingByMaster ||
+    (await findBestMatch({
+      Model: Product,
+      scope: { organizationId, branchId: toBranchId },
+      product: sourceProduct,
+      session,
+      codeFields: ['barcode', 'sku'],
+    }));
   if (existing) {
     // Heals a destination product created by an earlier transfer before trackImei/
     // trackSerial were copied below — without them, units landing here show up as plain
@@ -99,13 +126,24 @@ const findOrCreateDestinationProduct = async ({ sourceProduct, organizationId, t
       existing.trackSerial = existing.trackSerial || sourceProduct.trackSerial;
       existing.warrantyMonths = existing.warrantyMonths || sourceProduct.warrantyMonths;
       existing.masterProductId = existing.masterProductId || sourceProduct.masterProductId;
-      existing.barcode = existing.barcode || sourceProduct.barcode;
+      // Only a barcode no other product here uses — barcodes are unique per branch, and a
+      // clash would fail the whole transfer over bookkeeping.
+      if (!existing.barcode && sourceProduct.barcode && !(await codeTakenAtBranch(Product, { organizationId, toBranchId, field: 'barcode', value: sourceProduct.barcode, session }))) {
+        existing.barcode = sourceProduct.barcode;
+      }
       existing.taxCategoryId = existing.taxCategoryId || sourceProduct.taxCategoryId;
       await existing.save({ session });
     }
     return existing;
   }
 
+  // Nothing here matched by barcode or SKU, so both are normally free; checked anyway so a
+  // code another product here took in the meantime is left off rather than failing the
+  // transfer (the unique index would reject the insert and abort the whole transaction).
+  const [barcodeTaken, skuTaken] = await Promise.all([
+    sourceProduct.barcode ? codeTakenAtBranch(Product, { organizationId, toBranchId, field: 'barcode', value: sourceProduct.barcode, session }) : false,
+    sourceProduct.sku ? codeTakenAtBranch(Product, { organizationId, toBranchId, field: 'sku', value: sourceProduct.sku, session }) : false,
+  ]);
   const [created] = await Product.create(
     [{
       organizationId,
@@ -114,13 +152,13 @@ const findOrCreateDestinationProduct = async ({ sourceProduct, organizationId, t
       name: sourceProduct.name,
       nameUrdu: sourceProduct.nameUrdu,
       description: sourceProduct.description,
-      barcode: sourceProduct.barcode || undefined,
+      barcode: (!barcodeTaken && sourceProduct.barcode) || undefined,
       price: sourceProduct.price,
       cost: sourceProduct.cost,
       taxCategoryId: sourceProduct.taxCategoryId,
       stockQuantity: 0,
       unit: sourceProduct.unit,
-      sku: sourceProduct.sku,
+      sku: (!skuTaken && sourceProduct.sku) || undefined,
       category: sourceProduct.category,
       categories: sourceProduct.categories,
       subCategories: sourceProduct.subCategories,
@@ -152,14 +190,15 @@ const findOrCreateDestinationVariant = async ({ sourceVariant, toProduct, organi
   if (sourceVariant.isDefault) {
     const existingDefault = await ProductVariant.findOne({ productId: toProduct._id, isDefault: true }).session(session || null);
     if (existingDefault) return existingDefault;
+    const codes = await freeVariantCodes({ sourceVariant, organizationId, toBranchId, session });
     const [created] = await ProductVariant.create(
       [{
         organizationId,
         branchId: toBranchId,
         productId: toProduct._id,
         isDefault: true,
-        sku: sourceVariant.sku,
-        barcode: sourceVariant.barcode || undefined,
+        sku: codes.sku,
+        barcode: codes.barcode,
         attributes: {},
         price: sourceVariant.price,
         cost: sourceVariant.cost,
@@ -175,7 +214,7 @@ const findOrCreateDestinationVariant = async ({ sourceVariant, toProduct, organi
     return created;
   }
 
-  if (sourceVariant.masterVariantId && masterProductService.isMasterProductRolloutEnabledForOrg(organizationId)) {
+  if (sourceVariant.masterVariantId) {
     const existingByMaster = await ProductVariant.findOne({ productId: toProduct._id, masterVariantId: sourceVariant.masterVariantId }).session(session || null);
     if (existingByMaster) return existingByMaster;
   }
@@ -193,14 +232,15 @@ const findOrCreateDestinationVariant = async ({ sourceVariant, toProduct, organi
     return match;
   }
 
+  const codes = await freeVariantCodes({ sourceVariant, organizationId, toBranchId, session });
   const [created] = await ProductVariant.create(
     [{
       organizationId,
       branchId: toBranchId,
       productId: toProduct._id,
       isDefault: false,
-      sku: sourceVariant.sku,
-      barcode: sourceVariant.barcode || undefined,
+      sku: codes.sku,
+      barcode: codes.barcode,
       attributes: sourceVariant.attributes,
       price: sourceVariant.price,
       cost: sourceVariant.cost,

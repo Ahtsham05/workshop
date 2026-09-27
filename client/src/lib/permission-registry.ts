@@ -66,6 +66,7 @@ export type PermissionKey =
   | 'viewLeads' | 'viewAllLeads' | 'createLeads' | 'editLeads' | 'deleteLeads' | 'convertLeads'
   | 'viewWhatsapp' | 'manageWhatsapp'
   | 'viewSmsLog'
+  | 'manageWebsiteConnections'
   | 'viewAiAssistant'
   | 'viewInsights'
   | 'viewPurchaseSuggestions'
@@ -159,6 +160,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'partner_profit_share_ledger', label: 'Partner Ledger & Payouts', permissions: ['viewPartnerProfitShareLedger', 'managePartnerPayments'] },
   { id: 'whatsapp', label: 'WhatsApp', permissions: ['viewWhatsapp', 'manageWhatsapp'] },
   { id: 'sms', label: 'SMS', permissions: ['viewSmsLog'] },
+  { id: 'website_connections', label: 'Website Connections', permissions: ['manageWebsiteConnections'] },
   { id: 'ai_assistant', label: 'AI Assistant', permissions: ['viewAiAssistant'] },
   { id: 'insights', label: 'Insights', permissions: ['viewInsights'] },
   { id: 'purchase_suggestions', label: 'Purchase Suggestions', permissions: ['viewPurchaseSuggestions'] },
@@ -171,7 +173,7 @@ export const PERMISSION_TAB_GROUPS = {
   business: [
     'products', 'imei_tracking', 'price_checker', 'price_updates', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
     'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system', 'leads',
-    'communication_log', 'reminders', 'whatsapp', 'sms', 'ai_assistant', 'insights', 'purchase_suggestions', 'barcode',
+    'communication_log', 'reminders', 'whatsapp', 'sms', 'website_connections', 'ai_assistant', 'insights', 'purchase_suggestions', 'barcode',
   ],
   mobile_shop: [
     'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones',

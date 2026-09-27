@@ -11,6 +11,7 @@ import {
   Loader2,
   Package,
   Plus,
+  Printer,
   Search,
   Send,
   Trash2,
@@ -18,7 +19,9 @@ import {
 
 import type { RootState } from '@/stores/store'
 import { useGetMyBranchesQuery } from '@/stores/branch.api'
-import { useCreateBulkTransferMutation, type BulkTransferLineInput } from '@/stores/inventoryTransfer.api'
+import { useCreateBulkTransferMutation, useLazyGetTransferGroupQuery, type BulkTransferLineInput } from '@/stores/inventoryTransfer.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { buildTransferPrintData, generateTransferHTML, openPendingTransferPrintWindow } from '../utils/print-utils'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem, type PurchaseCatalogBatch } from '@/stores/purchaseCatalog.api'
 import type { TransferSuggestion } from '@/stores/purchaseSuggestions.api'
 import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
@@ -402,12 +405,35 @@ interface BulkTransferPanelProps {
   // since a suggestion group is already scoped to one destination.
   initialToBranchId?: string
   initialSuggestions?: TransferSuggestion[]
+  /**
+   * 'dialog': shown by Quick Stock Transfer over another screen (quick-transfer-context.tsx)
+   * — the dialog supplies the title, so the page header ("Back to list") is left out, the
+   * first product search opens straight away, and the only other branch is pre-selected.
+   */
+  variant?: 'page' | 'dialog'
+  /** Starts with this product already on the first row ("Transfer stock" on a product). */
+  initialProductId?: string
+  /** Whether anything has been entered yet — so a host can warn before discarding it. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function BulkTransferPanel({ onDone, onCancel, initialToBranchId, initialSuggestions }: BulkTransferPanelProps) {
-  const { t } = useLanguage()
+export function BulkTransferPanel({
+  onDone,
+  onCancel,
+  initialToBranchId,
+  initialSuggestions,
+  variant = 'page',
+  initialProductId,
+  onDirtyChange,
+}: BulkTransferPanelProps) {
+  const { t, language } = useLanguage()
   const isPhone = useIsPhone()
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
+  const user = useSelector((s: RootState) => s.auth.data?.user)
+  const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const [fetchGroup] = useLazyGetTransferGroupQuery()
+  // Which button is sending — so only that one shows the spinner.
+  const [sendingWith, setSendingWith] = useState<'print' | 'plain' | null>(null)
 
   const { data: catalog = [], isLoading: catalogLoading } = useGetPurchasableCatalogQuery()
   const { data: branches = [] } = useGetMyBranchesQuery()
@@ -435,6 +461,12 @@ export function BulkTransferPanel({ onDone, onCancel, initialToBranchId, initial
   )
 
   const transferableCatalog = useMemo(() => catalog.filter((c) => c.stockQuantity > 0), [catalog])
+
+  // With a single other branch there is nothing to choose — fill it in (also once the
+  // branch list arrives after opening).
+  useEffect(() => {
+    if (!toBranchId && branchOptions.length === 1) setToBranchId(branchOptions[0].value)
+  }, [toBranchId, branchOptions])
 
   // Seeds rows from selected suggestions exactly once, as soon as the catalog is loaded —
   // gated by a ref (not a dependency-array trick) so it can't re-run and clobber the
@@ -466,6 +498,34 @@ export function BulkTransferPanel({ onDone, onCancel, initialToBranchId, initial
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSuggestions, catalogLoading, transferableCatalog])
 
+  // "Transfer stock" on a product: that product on the first row, cursor in its quantity.
+  // A product with nothing in stock here can't be sent — say so, and leave the rows empty.
+  const seededFromProduct = useRef(false)
+  useEffect(() => {
+    if (seededFromProduct.current || !initialProductId || catalogLoading) return
+    seededFromProduct.current = true
+    const item =
+      transferableCatalog.find((c) => c.productId === initialProductId && !c.variantId) ??
+      transferableCatalog.find((c) => c.productId === initialProductId)
+    if (!item) {
+      toast.info(t('That product has no stock in this branch to transfer'))
+      return
+    }
+    const firstRowId = lines[0].rowId
+    selectProductForRow(firstRowId, item)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialProductId, catalogLoading, transferableCatalog])
+
+  // Opened as a quick dialog with nothing preset: straight into the first product search,
+  // so typing finds the product. (Waits a frame so the dialog's own focus handling runs first.)
+  useEffect(() => {
+    if (variant !== 'dialog' || initialProductId || initialSuggestions?.length) return
+    const firstRowId = lines[0].rowId
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => setProductSelectOpen(firstRowId)))
+    return () => cancelAnimationFrame(frame)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // One row per product — a quantity that outgrows a single batch is handled by splitting
   // allocations *within* that row (see recomputeAllocation), not by adding the product again.
   const addedIds = useMemo(() => new Set(lines.filter((l) => l.item).map((l) => l.item!.id)), [lines])
@@ -482,6 +542,9 @@ export function BulkTransferPanel({ onDone, onCancel, initialToBranchId, initial
   const totalQuantity = filledLines.reduce((sum, l) => sum + (lineNeedsSerials(l.item) ? l.imeis.length : l.quantity), 0)
   const hasInvalidLine = filledLines.some((l) => !lineIsValid(l))
   const canSubmit = Boolean(toBranchId) && filledLines.length > 0 && !hasInvalidLine && !isSubmitting
+
+  const isDirty = filledLines.length > 0 || !!reason.trim() || !!notes.trim()
+  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange])
 
   const focusNextEmptyRow = () => {
     setLines((prev) => {
@@ -548,8 +611,15 @@ export function BulkTransferPanel({ onDone, onCancel, initialToBranchId, initial
 
   const activeSerialLine = lines.find((l) => l.rowId === serialRowId) || null
 
-  const handleSubmit = async () => {
+  /**
+   * Sends the transfer; with `print`, the transfer slip opens for printing as soon as it is
+   * saved (the print window is opened during the click — see openPendingTransferPrintWindow).
+   */
+  const handleSubmit = async (print = false) => {
     if (!canSubmit) return
+    const printWindow = print ? openPendingTransferPrintWindow() : null
+    if (print && !printWindow) toast.warning(t('Your browser blocked the print window — the transfer will still be sent. Print it later from the transfers list.'))
+    setSendingWith(print ? 'print' : 'plain')
     try {
       const items: BulkTransferLineInput[] = filledLines.flatMap((l): BulkTransferLineInput[] => {
         const needsSerials = lineNeedsSerials(l.item)
@@ -578,25 +648,50 @@ export function BulkTransferPanel({ onDone, onCancel, initialToBranchId, initial
         notes: notes.trim() || undefined,
       }).unwrap()
       toast.success(t('Bulk transfer {{n}} created — {{count}} product(s) left the source branch', { n: result.transferNumber, count: String(filledLines.length) }))
+      if (printWindow) {
+        try {
+          // The saved group, with branch names filled in, is what the slip shows.
+          const saved = await fetchGroup(result.groupId).unwrap()
+          printWindow.show(
+            generateTransferHTML(
+              buildTransferPrintData(saved, {
+                companyName: orgData?.name,
+                companyAddress: [orgData?.address, orgData?.city].filter(Boolean).join(', '),
+                companyPhone: orgData?.phone,
+                companyLogo: orgData?.logo?.url,
+                language: language === 'ur' ? 'ur' : 'en',
+              })
+            )
+          )
+        } catch {
+          printWindow.close()
+          toast.error(t('Transfer sent, but the slip could not be prepared — print it from the transfers list.'))
+        }
+      }
       onDone()
     } catch (err) {
+      printWindow?.close()
       const message = (err as { data?: { message?: string } })?.data?.message
       toast.error(message || t('Failed to create bulk transfer'))
+    } finally {
+      setSendingWith(null)
     }
   }
 
   return (
     <div className='space-y-4'>
-      <div className='flex items-center justify-between'>
-        <h2 className='flex items-center gap-2 text-base font-semibold'>
-          <Layers className='h-4 w-4 text-primary' />
-          {t('New Bulk Stock Transfer')}
-        </h2>
-        <Button variant='ghost' size='sm' onClick={onCancel}>
-          <ArrowLeft className='mr-2 h-3.5 w-3.5' />
-          {t('Back to list')}
-        </Button>
-      </div>
+      {variant === 'page' && (
+        <div className='flex items-center justify-between'>
+          <h2 className='flex items-center gap-2 text-base font-semibold'>
+            <Layers className='h-4 w-4 text-primary' />
+            {t('New Bulk Stock Transfer')}
+          </h2>
+          <Button variant='ghost' size='sm' onClick={onCancel}>
+            <ArrowLeft className='mr-2 h-3.5 w-3.5' />
+            {t('Back to list')}
+          </Button>
+        </div>
+      )}
 
       {/* Invoice's 3-column layout: details left, items middle, summary+action right — both
           side columns are `sticky`, and the middle column scrolls internally (below), so
@@ -882,18 +977,13 @@ export function BulkTransferPanel({ onDone, onCancel, initialToBranchId, initial
                 <span className='font-semibold'>{totalQuantity}</span>
               </div>
               <Separator />
-              <Button className='w-full' onClick={handleSubmit} disabled={!canSubmit}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                    {t('Sending...')}
-                  </>
-                ) : (
-                  <>
-                    <Send className='mr-2 h-4 w-4' />
-                    {t('Send bulk transfer')}
-                  </>
-                )}
+              <Button className='w-full' onClick={() => void handleSubmit(true)} disabled={!canSubmit}>
+                {sendingWith === 'print' ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Printer className='mr-2 h-4 w-4' />}
+                {sendingWith === 'print' ? t('Sending...') : t('Send & Print')}
+              </Button>
+              <Button variant='secondary' className='w-full' onClick={() => void handleSubmit(false)} disabled={!canSubmit}>
+                {sendingWith === 'plain' ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Send className='mr-2 h-4 w-4' />}
+                {sendingWith === 'plain' ? t('Sending...') : t('Send only')}
               </Button>
               <Button variant='outline' className='w-full' onClick={onCancel} disabled={isSubmitting}>
                 {t('Cancel')}

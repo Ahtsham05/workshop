@@ -9,6 +9,8 @@ import { BranchIndicator } from '@/components/layout/branch-indicator'
 import { HeaderClock } from '@/components/layout/header-clock'
 import { ScreenCaptureButton } from '@/components/layout/screen-capture-button'
 import { NotepadButton } from '@/components/layout/notepad-button'
+import { BackgroundTasksIndicator } from '@/components/layout/background-tasks-indicator'
+import { QuickTransferButton } from '@/components/layout/quick-transfer-button'
 
 type AuthenticatedHeaderProps = {
   showSearch?: boolean
@@ -23,12 +25,18 @@ export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderPr
       <HeaderClock />
       <div className='ml-auto flex items-center space-x-4'>
         <SyncStatusBadge />
+        {/* Only visible while something is finishing in the background (or just finished). */}
+        <BackgroundTasksIndicator />
         {/* Hidden on phones so the branch name gets the room (sm = 640px) */}
         {showSearch ? <Search className='hidden sm:inline-flex' /> : null}
         <WhatsAppHeaderButton className='hidden sm:inline-flex' />
         {/* Always visible, phones included — jotting something down is the one tool
             you never want to hunt for in a menu. */}
         <NotepadButton />
+        {/* Stock Transfer from any screen, without leaving it (also Ctrl+Alt+S). From 640px
+            up only: on phones it would squeeze out the branch name — there it is on the
+            dashboard's quick links, the floating quick-links button and each product's menu. */}
+        <QuickTransferButton className='hidden sm:inline-flex' />
         <ScreenCaptureButton className='hidden @min-[880px]/header:inline-flex' />
         <LanguageSwitch className='hidden sm:inline-flex' />
         <ThemeSwitch />

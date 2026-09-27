@@ -23,6 +23,7 @@ import { useReminderWatchdog } from '@/hooks/use-reminder-watchdog'
 import { ReminderAlarmSplash } from '@/components/reminder-alarm-splash'
 import { QuickLinksVoiceWidget } from '@/components/quick-links-voice-widget'
 import { NotepadProvider } from '@/features/notepad/context/notepad-context'
+import { QuickTransferProvider } from '@/features/stock-transfer/context/quick-transfer-context'
 import { NotepadWindow } from '@/features/notepad/components/notepad-window'
 
 /**
@@ -91,6 +92,8 @@ function AuthenticatedLayout() {
           {/* Mounted around the shell, not inside a page: the notepad has to stay
               alive across navigation so an open note survives changing screens. */}
           <NotepadProvider>
+            {/* Quick Stock Transfer: opens over any page (header button / Ctrl+Alt+S / Ctrl+K). */}
+            <QuickTransferProvider>
             <SidebarProvider>
               <AppSidebar />
               <div className="min-w-0 flex-1 overflow-hidden flex flex-col">
@@ -107,6 +110,7 @@ function AuthenticatedLayout() {
                 </Main>
               </div>
             </SidebarProvider>
+            </QuickTransferProvider>
             <NotepadWindow />
           </NotepadProvider>
         </WhatsAppProvider>

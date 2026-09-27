@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const app = require('../src/app');
 const config = require('../src/config/config');
+const { MONGOOSE_CONNECT_OPTIONS, ensureSchemaIndexes } = require('../src/config/schemaIndexes');
 
 let isConnected = false;
 
@@ -30,6 +31,15 @@ function isAllowedOrigin(origin) {
 }
 
 function setCorsHeaders(req, res) {
+  // Storefront API: any website may call it with its API key (see src/app.js).
+  if ((req.url || '').startsWith('/v1/storefront')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'X-Api-Key,Authorization,If-None-Match,Content-Type');
+    res.setHeader('Access-Control-Expose-Headers', 'ETag');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    return;
+  }
   const origin = req.headers.origin;
   if (isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin || '*');
@@ -50,8 +60,11 @@ async function connectToDatabase() {
 
   if (mongoose.connection.readyState === 0) {
     try {
-      await mongoose.connect(config.mongoose.url);
+      await mongoose.connect(config.mongoose.url, MONGOOSE_CONNECT_OPTIONS);
       isConnected = true;
+      // Not awaited: one read when the indexes are current; a background build after a
+      // deploy that changed them. See config/schemaIndexes.js.
+      ensureSchemaIndexes();
       console.log('MongoDB connected');
     } catch (error) {
       console.error('MongoDB connection error:', error);

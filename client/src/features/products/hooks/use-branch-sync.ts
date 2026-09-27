@@ -1,9 +1,9 @@
 import { useCallback, useMemo } from 'react'
-import { useSelector } from 'react-redux'
-import type { RootState } from '@/stores/store'
+import { useDispatch, useSelector } from 'react-redux'
+import type { AppDispatch, RootState } from '@/stores/store'
 import { useGetMyBranchesQuery } from '@/stores/branch.api'
 import {
-  useSyncProductsToBranchesMutation,
+  productBranchSyncApi,
   type BranchSyncBranchResult,
   type BranchSyncResult,
 } from '@/stores/productBranchSync.api'
@@ -83,43 +83,48 @@ export interface BranchSyncRun {
  * problem with one product or one branch is inside the result (the server answers 200);
  * only a failed request ends the run, and it is reported as `stoppedEarly` with everything
  * done so far — running the same sync again picks up where it left off.
+ *
+ * Takes the store's `dispatch` rather than being a hook, so it can keep running after the
+ * screen that started it has closed (see lib/background-tasks.ts).
  */
-export function useBranchSyncRunner() {
-  const [syncChunk] = useSyncProductsToBranchesMutation()
-
-  return useCallback(
-    async ({
-      productIds,
-      branchIds,
-      onProgress,
-    }: {
-      productIds: string[]
-      branchIds: string[]
-      onProgress?: (processed: number, total: number) => void
-    }): Promise<BranchSyncRun> => {
-      const total = productIds.length
-      const results: BranchSyncResult[] = []
-      let processed = 0
-      for (let i = 0; i < productIds.length; i += SYNC_CHUNK_SIZE) {
-        const chunk = productIds.slice(i, i + SYNC_CHUNK_SIZE)
-        try {
-          results.push(await syncChunk({ productIds: chunk, branchIds }).unwrap())
-        } catch (error) {
-          return {
-            result: mergeBranchSyncResults(results),
-            processed,
-            total,
-            stoppedEarly: true,
-            errorMessage: isRequestTimeoutError(error)
-              ? getTimeoutErrorMessage('sync these products')
-              : getErrorMessage(error, 'Could not reach the server — please try again'),
-          }
-        }
-        processed += chunk.length
-        onProgress?.(processed, total)
+export async function runBranchSync(
+  dispatch: AppDispatch,
+  {
+    productIds,
+    branchIds,
+    onProgress,
+  }: {
+    productIds: string[]
+    branchIds: string[]
+    onProgress?: (processed: number, total: number) => void
+  }
+): Promise<BranchSyncRun> {
+  const total = productIds.length
+  const results: BranchSyncResult[] = []
+  let processed = 0
+  for (let i = 0; i < productIds.length; i += SYNC_CHUNK_SIZE) {
+    const chunk = productIds.slice(i, i + SYNC_CHUNK_SIZE)
+    try {
+      results.push(await dispatch(productBranchSyncApi.endpoints.syncProductsToBranches.initiate({ productIds: chunk, branchIds })).unwrap())
+    } catch (error) {
+      return {
+        result: mergeBranchSyncResults(results),
+        processed,
+        total,
+        stoppedEarly: true,
+        errorMessage: isRequestTimeoutError(error)
+          ? getTimeoutErrorMessage('sync these products')
+          : getErrorMessage(error, 'Could not reach the server — please try again'),
       }
-      return { result: mergeBranchSyncResults(results), processed, total, stoppedEarly: false }
-    },
-    [syncChunk]
-  )
+    }
+    processed += chunk.length
+    onProgress?.(processed, total)
+  }
+  return { result: mergeBranchSyncResults(results), processed, total, stoppedEarly: false }
+}
+
+/** `runBranchSync` bound to this app's store. */
+export function useBranchSyncRunner() {
+  const dispatch = useDispatch<AppDispatch>()
+  return useCallback((args: Parameters<typeof runBranchSync>[1]) => runBranchSync(dispatch, args), [dispatch])
 }

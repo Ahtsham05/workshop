@@ -180,6 +180,12 @@ const sidebarNavGroups: { label: string; items: SettingsNavItem[] }[] = [
         href: '/settings/sms-gateway',
       },
       {
+        title: 'Website Connections',
+        icon: <IconWorld size={18} />,
+        href: '/settings/website-connections',
+        anyPermission: ['manageWebsiteConnections'],
+      },
+      {
         title: 'Printing',
         icon: <IconPrinter size={18} />,
         href: '/settings/printing',

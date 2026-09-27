@@ -31,8 +31,9 @@ import { SerialPickDialog } from '@/components/serial-pick-dialog'
 export interface TransferPrefill {
   fromProductId: string
   fromProductName: string
-  toBranchId: string
-  quantity: number
+  /** Optional: "Transfer stock" on a product only knows the product. */
+  toBranchId?: string
+  quantity?: number
   reason?: string
 }
 
@@ -40,9 +41,15 @@ interface CreateTransferDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   prefill?: TransferPrefill | null
+  /** Offered on the success toast, to go straight into the next transfer. */
+  onTransferAnother?: () => void
 }
 
-export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTransferDialogProps) {
+// The picker shows this many matches at a time; typing narrows it. Rendering a big shop's
+// whole in-stock catalog (thousands of rows with photos) made the list slow to open.
+const PICKER_LIMIT = 50
+
+export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAnother }: CreateTransferDialogProps) {
   const { t } = useLanguage()
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
 
@@ -70,10 +77,15 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
   // Transferable: only needs to be in stock — IMEI/serial-tracked products are included
   // too now, just routed through the serial picker below instead of a plain quantity.
   const transferableCatalog = useMemo(() => catalog.filter((c) => c.stockQuantity > 0), [catalog])
-  const filteredCatalog = useMemo(
+  const matchingCatalog = useMemo(
     () => transferableCatalog.filter((c) => matchesBilingualSearch(searchQuery, c.name, c.nameUrdu, c.barcode, c.brand?.name)),
     [transferableCatalog, searchQuery]
   )
+  const filteredCatalog = useMemo(() => matchingCatalog.slice(0, PICKER_LIMIT), [matchingCatalog])
+  // Keyboard: ↑/↓ move through the matches, Enter takes the highlighted one.
+  const [highlight, setHighlight] = useState(0)
+  useEffect(() => setHighlight(0), [searchQuery, pickerOpen])
+  const quantityRef = useRef<HTMLInputElement>(null)
 
   // Closes the inline product picker on an outside click — there's no Popover/Portal
   // doing this for free anymore (see the comment on the picker markup below for why).
@@ -86,27 +98,58 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [pickerOpen])
 
+  // With a single other branch there is nothing to choose — it is filled in.
+  const onlyOtherBranchId = useMemo(() => {
+    const others = branches.filter((b) => b.id !== activeBranchId)
+    return others.length === 1 ? others[0].id : ''
+  }, [branches, activeBranchId])
+
+  // A fresh form every time it opens. Deliberately not re-run when the catalog finishes
+  // loading: someone who opened it and started typing a product name straight away keeps
+  // what they typed.
   useEffect(() => {
     if (!open) return
-    if (prefill) {
-      const match = transferableCatalog.find((c) => c.type === 'product' && c.productId === prefill.fromProductId)
-      setSelectedItem(match || null)
-      setSelectedBatchId(null)
-      setToBranchId(prefill.toBranchId)
-      setQuantity(String(prefill.quantity))
-      setReason(prefill.reason || '')
-    } else {
-      setSelectedItem(null)
-      setSelectedBatchId(null)
-      setToBranchId('')
-      setQuantity('')
-      setReason('')
-    }
+    setSelectedItem(null)
+    setSelectedBatchId(null)
+    setToBranchId(prefill?.toBranchId || onlyOtherBranchId)
+    setQuantity(prefill?.quantity ? String(prefill.quantity) : '')
+    setReason(prefill?.reason || '')
+    // No product given: straight into the product search, so typing finds it.
+    setPickerOpen(!prefill)
     setSearchQuery('')
     setSelectedImeis([])
     setSerialDialogOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, prefill, catalogLoading])
+  }, [open, prefill])
+
+  // The branch list can arrive after the form opened.
+  useEffect(() => {
+    if (open && !toBranchId && onlyOtherBranchId) setToBranchId(onlyOtherBranchId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, onlyOtherBranchId])
+
+  // A product given up front is picked as soon as the catalog has it.
+  useEffect(() => {
+    if (!open || !prefill || selectedItem) return
+    const match = transferableCatalog.find((c) => c.type === 'product' && c.productId === prefill.fromProductId)
+    if (!match) {
+      // Not in stock here: show the search for it, which says so, rather than a blank field.
+      if (!catalogLoading) {
+        setSearchQuery(prefill.fromProductName)
+        setPickerOpen(true)
+      }
+      return
+    }
+    setSelectedItem(match)
+    setSelectedBatchId(match.trackBatch && match.batches?.length ? match.batches[0].id : null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, prefill, transferableCatalog, catalogLoading])
+
+  // A product given up front (Transfer stock on a product): the quantity is next.
+  useEffect(() => {
+    if (open && prefill && selectedItem && !quantity) requestAnimationFrame(() => quantityRef.current?.focus())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, prefill, selectedItem])
 
   const handleSelectItem = (item: PurchaseCatalogItem) => {
     setSelectedItem(item)
@@ -114,6 +157,8 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
     setSelectedImeis([])
     setPickerOpen(false)
     setSearchQuery('')
+    // Next field: how many. (After the picker has closed and the input is enabled.)
+    requestAnimationFrame(() => requestAnimationFrame(() => quantityRef.current?.focus()))
   }
 
   const branchOptions: SearchableSelectOption[] = useMemo(
@@ -140,7 +185,10 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
         ...(needsSerials ? { imeis: selectedImeis } : { quantity: qtyNum }),
         reason: reason.trim() || undefined,
       }).unwrap()
-      toast.success(t('Transfer created — stock has left the source branch'))
+      toast.success(t('Transfer created — stock has left the source branch'), {
+        description: `${selectedItem.name} → ${branches.find((b) => b.id === toBranchId)?.name ?? ''}`,
+        ...(onTransferAnother ? { action: { label: t('New transfer'), onClick: onTransferAnother } } : {}),
+      })
       onOpenChange(false)
     } catch (err) {
       const message = (err as { data?: { message?: string } })?.data?.message
@@ -191,7 +239,26 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
                     placeholder={t('Search products...')}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Escape') setPickerOpen(false) }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        // Only closes the list (the dialog stays) — unless nothing is chosen yet.
+                        if (selectedItem) {
+                          e.stopPropagation()
+                          setPickerOpen(false)
+                        }
+                      } else if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setHighlight((h) => Math.min(h + 1, filteredCatalog.length - 1))
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        setHighlight((h) => Math.max(h - 1, 0))
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const item = filteredCatalog[highlight]
+                        if (item) handleSelectItem(item)
+                      }
+                    }}
+                    aria-label={t('Search products...')}
                     className='pl-8 pr-8'
                   />
                   <div className='absolute right-2 top-1/2 -translate-y-1/2 z-10'>
@@ -211,12 +278,20 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
                     ) : filteredCatalog.length === 0 ? (
                       <p className='py-6 text-center text-sm text-muted-foreground'>{t('No in-stock products found')}</p>
                     ) : (
-                      filteredCatalog.map((item) => (
+                      filteredCatalog.map((item, index) => (
                         <button
                           key={item.id}
                           type='button'
                           onClick={() => handleSelectItem(item)}
-                          className='flex w-full items-center gap-2 rounded-sm p-3 text-left hover:bg-accent hover:text-accent-foreground'
+                          // Movement only: rows appearing under a resting pointer must not
+                          // steal the keyboard's highlight.
+                          onMouseMove={() => index !== highlight && setHighlight(index)}
+                          ref={index === highlight ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+                          aria-selected={index === highlight}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-sm p-3 text-left hover:bg-accent hover:text-accent-foreground',
+                            index === highlight && 'bg-accent text-accent-foreground'
+                          )}
                         >
                           <div className='flex items-center gap-3 flex-1 min-w-0'>
                             {item.image?.url ? (
@@ -269,6 +344,11 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
                         </button>
                       ))
                     )}
+                    {!catalogLoading && matchingCatalog.length > filteredCatalog.length && (
+                      <p className='px-3 py-2 text-center text-xs text-muted-foreground'>
+                        {t('Showing {{shown}} of {{total}} — type to narrow down', { shown: filteredCatalog.length, total: matchingCatalog.length })}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -319,17 +399,23 @@ export function CreateTransferDialog({ open, onOpenChange, prefill }: CreateTran
           <div className='space-y-1.5'>
             <Label>{needsSerials ? t('How many units?') : t('Quantity')}</Label>
             <Input
+              ref={quantityRef}
               type='number'
               min={1}
               max={available || undefined}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               onKeyDown={(e) => {
+                if (e.key !== 'Enter') return
                 // Mirrors Invoice: Enter after typing the quantity opens the serial
                 // picker next, instead of a separate click being the only way in.
-                if (e.key === 'Enter' && needsSerials && qtyValid) {
+                if (needsSerials && qtyValid) {
                   e.preventDefault()
                   setSerialDialogOpen(true)
+                } else if (canSubmit) {
+                  // Everything is filled in — Enter sends it.
+                  e.preventDefault()
+                  void handleSubmit()
                 }
               }}
               placeholder={needsSerials ? t('Type a number to pick serials') : t('How many units?')}

@@ -182,3 +182,4 @@ module.exports.ManualPaymentIntent = require('./manualPaymentIntent.model');
 module.exports.ManualPayment = require('./manualPayment.model');
 module.exports.WebhookEvent = require('./webhookEvent.model');
 module.exports.BillingAudit = require('./billingAudit.model');
+module.exports.WebsiteConnection = require('./websiteConnection.model');

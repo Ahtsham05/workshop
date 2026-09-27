@@ -13,7 +13,7 @@ import { CategoryBreakdown, type CategoryBreakdownRow } from './components/categ
 import { ProductFiltersPanel, ALL_SUBCATEGORIES, ALL_BRANDS, NO_QUANTITY_OP, type QuantityFilter, type RangeFilter, type TrackingFilter } from './components/product-filters-panel'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import type { SortingState } from '@tanstack/react-table'
 import { fetchProducts, bulkUpdateProducts, fetchProductStats, fetchCategoryBreakdown } from '@/stores/product.slice'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
@@ -52,6 +52,8 @@ const SEARCH_DEBOUNCE_MS = 400
 const ALL_STATUS = 'all'
 // Active products first, inactive last; newest-first within each group.
 const PRODUCTS_SORT_BY = 'isActive:desc,createdAt:desc'
+// How long after a save the 1000-product low-stock data is refreshed (see its effect below).
+const ALL_PRODUCTS_REFRESH_DELAY_MS = 2500
 
 // Column ids the backend can sort by. `name`/`description`/`shelfLocation`/`barcode`/
 // `isActive`/`createdAt` map 1:1 onto a plain, indexable Product field (see
@@ -208,42 +210,73 @@ export default function Products() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryFilter])
 
-  // Fetch ALL products for low stock alert (runs once on mount and when fetch changes)
+  // Up to 1000 products for the low-stock card, the "Brought Forward" row and the
+  // empty-branch banner — the heaviest request on this page. It loads when the page opens;
+  // after a save it is refreshed a moment later, quietly (the cards keep their numbers
+  // meanwhile), instead of competing with the save, the table's own refresh and whatever
+  // the person does next. A burst of saves refreshes it once.
+  const allProductsLoadedRef = useRef(false)
   useEffect(() => {
-    setLoadingAllProducts(true)
-    dispatch(fetchProducts({ page: 1, limit: 1000, sortBy: PRODUCTS_SORT_BY }))
-      .then((data) => {
-        if (data.payload?.results) {
-          setAllProducts(data.payload.results)
-        }
-        setLoadingAllProducts(false)
-      })
-      .catch((error) => {
-        console.error('Error fetching all products:', error)
-        setLoadingAllProducts(false)
-      })
+    let cancelled = false
+    const load = () => {
+      if (!allProductsLoadedRef.current) setLoadingAllProducts(true)
+      dispatch(fetchProducts({ page: 1, limit: 1000, sortBy: PRODUCTS_SORT_BY }))
+        .then((data) => {
+          if (cancelled) return
+          if (data.payload?.results) {
+            setAllProducts(data.payload.results)
+            allProductsLoadedRef.current = true
+          }
+          setLoadingAllProducts(false)
+        })
+        .catch((error) => {
+          console.error('Error fetching all products:', error)
+          if (!cancelled) setLoadingAllProducts(false)
+        })
+    }
+    if (!allProductsLoadedRef.current) {
+      load()
+      return () => {
+        cancelled = true
+      }
+    }
+    const timer = setTimeout(load, ALL_PRODUCTS_REFRESH_DELAY_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [fetch, dispatch])
 
   // Header badge totals (total product count, total stock quantity, total stock
   // value) — computed by the database over the WHOLE catalog (or just the selected
   // category, when one is chosen), not derived from `allProducts` above, which is
   // capped at 1000 rows and would silently under-report once the catalog grows past that.
+  // A refresh after a save keeps the current numbers on screen until the new ones arrive;
+  // only a different view (category / Added Today) shows the loading state.
+  const statsViewRef = useRef<string | null>(null)
   useEffect(() => {
-    setLoadingStats(true)
+    const view = `${isSingleCategorySelected ? categoryFilter : ''}|${addedTodayOnly}`
+    if (statsViewRef.current !== view) setLoadingStats(true)
+    let cancelled = false
     dispatch(fetchProductStats({
       ...(isSingleCategorySelected ? { category: categoryFilter } : {}),
       ...(addedTodayOnly ? { addedToday: true } : {}),
     }))
       .then((data) => {
+        if (cancelled) return
         if (data.payload) {
           setProductStats(data.payload)
+          statsViewRef.current = view
         }
         setLoadingStats(false)
       })
       .catch((error) => {
         console.error('Error fetching product stats:', error)
-        setLoadingStats(false)
+        if (!cancelled) setLoadingStats(false)
       })
+    return () => {
+      cancelled = true
+    }
   }, [fetch, dispatch, categoryFilter, isSingleCategorySelected, addedTodayOnly])
 
   useEffect(() => {

@@ -385,3 +385,26 @@ export const openTransferPrintWindow = (htmlContent: string): void => {
   }
   printWindow.addEventListener('load', () => URL.revokeObjectURL(blobUrl), { once: true })
 }
+
+/**
+ * A print window opened NOW, during the click, and filled in later. Browsers only allow a
+ * pop-up straight from a click; one opened after waiting for the server (e.g. "Send &
+ * Print", which must save the transfer first) is blocked. So the window opens immediately
+ * with a short "Preparing…" note, then shows the slip — or closes if saving failed.
+ * Returns null when the browser blocked even that.
+ */
+export const openPendingTransferPrintWindow = (): { show: (htmlContent: string) => void; close: () => void } | null => {
+  const printWindow = window.open('', '_blank', 'width=400,height=700,scrollbars=yes,resizable=yes')
+  if (!printWindow) return null
+  printWindow.document.write(
+    '<!doctype html><title>Preparing…</title><body style="font-family:system-ui,sans-serif;display:grid;place-items:center;height:90vh;color:#555">Preparing transfer slip…</body>'
+  )
+  return {
+    show: (htmlContent: string) => {
+      const blobUrl = URL.createObjectURL(new Blob([htmlContent], { type: 'text/html;charset=utf-8' }))
+      printWindow.location.href = blobUrl
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+    },
+    close: () => printWindow.close(),
+  }
+}

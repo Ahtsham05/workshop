@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useRunQuickLink } from '@/hooks/use-run-quick-link'
 import { IconArrowRightDashed } from '@tabler/icons-react'
 import { Mic, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,7 @@ const PILL_INACTIVE = 'border-border/80 bg-background text-foreground hover:bg-m
  */
 export function QuickLinksVoiceWidget() {
   const { t } = useLanguage()
-  const navigate = useNavigate()
+  const runQuickLink = useRunQuickLink()
   const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -66,7 +66,7 @@ export function QuickLinksVoiceWidget() {
   }
 
   const handleSelect = (action: QuickLinkAction) => {
-    navigate({ to: action.route, search: action.routeSearch })
+    runQuickLink(action)
     closeWidget()
   }
 

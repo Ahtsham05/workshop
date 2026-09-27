@@ -4,6 +4,7 @@ const { Product, ProductVariant, Inventory } = require('../models');
 const ApiError = require('../utils/ApiError');
 const batchService = require('./batch.service');
 const logger = require('../config/logger');
+const { runIndexMigrationOnce } = require('../config/schemaIndexes');
 
 let variantIndexesEnsured = false;
 
@@ -18,40 +19,48 @@ let variantIndexesEnsured = false;
  */
 const ensureProductVariantIndexes = async () => {
   if (variantIndexesEnsured) return;
-
-  const collection = mongoose.connection.collection('productvariants');
+  // Once per database per version of the index definitions, not per server instance —
+  // see config/schemaIndexes.js#runIndexMigrationOnce.
   try {
-    const indexes = await collection.indexes();
-    const legacyBarcodeIndex = indexes.find(
-      (idx) => idx.key?.barcode === 1 && Object.keys(idx.key).length === 1 && idx.unique
-    );
-    if (legacyBarcodeIndex) {
-      await collection.dropIndex(legacyBarcodeIndex.name);
-    }
-    const legacySkuIndex = indexes.find(
-      (idx) => idx.key?.organizationId === 1 && idx.key?.branchId === 1 && idx.key?.sku === 1 && !idx.unique
-    );
-    if (legacySkuIndex) {
-      await collection.dropIndex(legacySkuIndex.name);
-    }
-  } catch (err) {
-    if (err.codeName !== 'IndexNotFound') {
-      logger.warn(`[ensureProductVariantIndexes] failed to drop legacy index: ${err.message}`);
-    }
-  }
+    variantIndexesEnsured = await runIndexMigrationOnce(ProductVariant, 'productvariant-indexes', async () => {
+      const collection = mongoose.connection.collection('productvariants');
+      try {
+        const indexes = await collection.indexes();
+        const legacyBarcodeIndex = indexes.find(
+          (idx) => idx.key?.barcode === 1 && Object.keys(idx.key).length === 1 && idx.unique
+        );
+        if (legacyBarcodeIndex) {
+          await collection.dropIndex(legacyBarcodeIndex.name);
+        }
+        const legacySkuIndex = indexes.find(
+          (idx) => idx.key?.organizationId === 1 && idx.key?.branchId === 1 && idx.key?.sku === 1 && !idx.unique
+        );
+        if (legacySkuIndex) {
+          await collection.dropIndex(legacySkuIndex.name);
+        }
+      } catch (err) {
+        if (err.codeName !== 'IndexNotFound') {
+          logger.warn(`[ensureProductVariantIndexes] failed to drop legacy index: ${err.message}`);
+        }
+      }
 
-  try {
-    await collection.updateMany({ sku: { $in: ['', null] } }, { $unset: { sku: '' } });
-    await collection.updateMany({ barcode: { $in: ['', null] } }, { $unset: { barcode: '' } });
-  } catch (err) {
-    logger.warn(`[ensureProductVariantIndexes] failed to clean up empty sku/barcode values: ${err.message}`);
-  }
+      try {
+        await collection.updateMany({ sku: { $in: ['', null] } }, { $unset: { sku: '' } });
+        await collection.updateMany({ barcode: { $in: ['', null] } }, { $unset: { barcode: '' } });
+      } catch (err) {
+        logger.warn(`[ensureProductVariantIndexes] failed to clean up empty sku/barcode values: ${err.message}`);
+      }
 
-  try {
-    await ProductVariant.syncIndexes();
-    variantIndexesEnsured = true;
+      try {
+        await ProductVariant.syncIndexes();
+        return true;
+      } catch (err) {
+        logger.error(`[ensureProductVariantIndexes] syncIndexes failed, will retry on next write: ${err.message}`);
+        return false;
+      }
+    });
   } catch (err) {
-    logger.error(`[ensureProductVariantIndexes] syncIndexes failed, will retry on next write: ${err.message}`);
+    logger.warn(`[ensureProductVariantIndexes] could not check index state, will retry on next write: ${err.message}`);
   }
 };
 

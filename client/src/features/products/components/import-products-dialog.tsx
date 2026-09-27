@@ -35,6 +35,7 @@ import {
   type ImportMasterProductItem,
 } from '@/stores/masterProduct.api'
 import { isRequestTimeoutError, getTimeoutErrorMessage } from '@/lib/api-timeout'
+import { runBackgroundTask, type BackgroundTaskContext, type BackgroundTaskOutcome } from '@/lib/background-tasks'
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -48,7 +49,7 @@ const PAGE_SIZE = 100
 // server time any more — they give a large import visible progress, and mean an
 // interrupted request only costs its own chunk. Retrying is always safe: products already
 // imported are skipped server-side.
-const IMPORT_CHUNK_SIZE = 250
+const IMPORT_CHUNK_SIZE = 500
 
 // Per-device memory of the Active switch, so a shop that always imports straight to
 // sale doesn't have to flip it every time.
@@ -368,6 +369,27 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
   // null when not importing; otherwise how many selected products have been sent so far.
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const isImporting = progress !== null
+  // Set once the person sends a running import to the background ("Continue in
+  // background"): its progress then goes to the header's task indicator and its outcome to
+  // a toast from there, instead of to this dialog — which they have closed to get on with
+  // something else. The import itself keeps running exactly as before.
+  const backgroundRef = useRef<{ ctx: BackgroundTaskContext; finish: (outcome: BackgroundTaskOutcome) => void } | null>(null)
+  const sendImportToBackground = () => {
+    if (!progress) return
+    // Opened again while it runs in the background: the button just closes it again.
+    if (!backgroundRef.current) {
+      const current = progress
+      runBackgroundTask({
+        title: t('Importing products from your other branches'),
+        run: (ctx) =>
+          new Promise<BackgroundTaskOutcome>((finish) => {
+            backgroundRef.current = { ctx, finish }
+            ctx.update({ detail: t('importing_n_of_total', { done: String(current.done), total: String(current.total) }), progress: current })
+          }),
+      })
+    }
+    onOpenChange(false)
+  }
 
   // A selection can span pages and searches, so every row ever shown is kept by id —
   // that's what the import and the serial dialog read from, not just the current page.
@@ -572,6 +594,10 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
           return next
         })
         setProgress({ done: sent, total: items.length })
+        backgroundRef.current?.ctx.update({
+          detail: t('importing_n_of_total', { done: String(sent), total: String(items.length) }),
+          progress: { done: sent, total: items.length },
+        })
       }
     } catch (err) {
       interruption = err
@@ -585,35 +611,47 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
     const failedIds = Object.keys(failures)
     if (failedIds.length) setErrors(failures)
 
+    // Sent to the background: report there (the dialog is closed). Anything that did not
+    // import is still listed — and still selected — when the dialog is opened again.
+    const background = backgroundRef.current
+    backgroundRef.current = null
+    const retryHint = t('Open Import from other branches to retry the rest.')
+
     if (interruption) {
-      if (sent > 0) {
-        toast.error(t('products_import_partial', { done: String(sent), total: String(items.length) }))
-      } else if (isRequestTimeoutError(interruption)) {
-        // Only the client gave up waiting — the server may still finish this chunk.
-        toast.error(getTimeoutErrorMessage('import these products'))
-      } else {
-        toast.error(t('products_import_failed'))
-      }
+      const message =
+        sent > 0
+          ? t('products_import_partial', { done: String(sent), total: String(items.length) })
+          : isRequestTimeoutError(interruption)
+            ? // Only the client gave up waiting — the server may still finish this chunk.
+              getTimeoutErrorMessage('import these products')
+            : t('products_import_failed')
+      if (background) background.finish({ status: 'error', message: `${message} ${retryHint}` })
+      else toast.error(message)
       return
     }
 
     if (failedIds.length) {
       const first = failedIds[0]
-      toast.warning(
-        t('products_import_some_failed', { imported: String(importedCount), failed: String(failedIds.length) }),
-        { description: `${rowCache[first]?.name ?? t('product')}: ${failures[first]}` }
-      )
+      const message = t('products_import_some_failed', { imported: String(importedCount), failed: String(failedIds.length) })
+      const description = `${rowCache[first]?.name ?? t('product')}: ${failures[first]}`
+      if (background) background.finish({ status: 'warning', message: `${message} — ${description}. ${retryHint}` })
+      else toast.warning(message, { description })
       return
     }
 
     if (importedCount > 0) {
-      toast.success(t('products_imported_success', { count: String(importedCount) }), {
-        description: activate ? t('products_imported_active_hint') : t('products_imported_inactive_hint'),
-      })
+      const message = t('products_imported_success', { count: String(importedCount) })
+      const description = activate ? t('products_imported_active_hint') : t('products_imported_inactive_hint')
+      if (background) background.finish({ status: 'success', message: `${message} ${description}` })
+      else toast.success(message, { description })
     } else if (alreadyImportedCount > 0) {
-      toast.info(t('products_already_imported', { count: String(alreadyImportedCount) }))
+      const message = t('products_already_imported', { count: String(alreadyImportedCount) })
+      if (background) background.finish({ status: 'success', message })
+      else toast.info(message)
+    } else {
+      background?.finish({ status: 'success', message: '' })
     }
-    onOpenChange(false)
+    if (!background) onOpenChange(false)
   }
 
   const serialDialogRow = serialDialogRowId ? rowCache[serialDialogRowId] : undefined
@@ -628,9 +666,12 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        // Closing mid-import doesn't stop the request in flight — it only loses track of
-        // how far the import got — so close attempts are ignored until it finishes.
-        if (!next && isImporting) return
+        // Closing mid-import can't stop the request in flight, so it means "carry on without
+        // me": the import continues and its progress moves to the header's task list.
+        if (!next && isImporting) {
+          sendImportToBackground()
+          return
+        }
         onOpenChange(next)
       }}
     >
@@ -771,6 +812,9 @@ export function ImportProductsDialog({ open, onOpenChange, onImported }: ImportP
                   />
                 </div>
               </div>
+              <Button type='button' variant='outline' size='sm' className='shrink-0' onClick={sendImportToBackground}>
+                {t('Continue in background')}
+              </Button>
             </div>
           ) : (
             <>

@@ -196,7 +196,6 @@ const getProduct = catchAsync(async (req, res) => {
 });
 
 const updateProduct = catchAsync(async (req, res) => {
-  console.log("req.params.productId",req.params.productId)
   let productData = req.body;
   
   // Handle image upload if file is provided
@@ -227,7 +226,11 @@ const updateProduct = catchAsync(async (req, res) => {
   try {
     const before = await productService.getProductById(req.params.productId);
     const beforeSnapshot = before ? before.toObject() : null;
-    const product = await productService.updateProductById(req.params.productId, { ...productData, businessType: req.user.businessType });
+    const product = await productService.updateProductById(
+      req.params.productId,
+      { ...productData, businessType: req.user.businessType },
+      { existing: before },
+    );
     await auditLogService.recordAuditLog({
       req,
       action: 'update',

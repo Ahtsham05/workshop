@@ -132,6 +132,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/settings/tax-jurisdictions', anyPermission: ['viewTaxJurisdictions'] },
   { prefix: '/settings/tax-exemptions', anyPermission: ['viewTaxExemptions'] },
   { prefix: '/settings/exchange-rates', anyPermission: ['viewExchangeRates'] },
+  { prefix: '/settings/website-connections', anyPermission: ['manageWebsiteConnections'] },
   { prefix: '/settings', anyPermission: ['viewSettings'] },
 
   // Business modules
