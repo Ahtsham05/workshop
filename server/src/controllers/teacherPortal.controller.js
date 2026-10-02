@@ -281,7 +281,21 @@ const saveBulkMarks = catchAsync(async (req, res) => {
         if (!cfg) return;
         exam.subjects[idx].totalMarks = Number(cfg.totalMarks) || sub.totalMarks;
         exam.subjects[idx].passingMarks = Number(cfg.passingMarks) ?? sub.passingMarks;
+        delete cfgMap[sid];
       });
+      // Class subjects added after the exam was configured join the exam on first save.
+      const newIds = Object.keys(cfgMap);
+      if (newIds.length) {
+        const classSubjects = await Subject.find({ ...scope, _id: { $in: newIds }, classId: exam.classId }).select('_id');
+        classSubjects.forEach((s) => {
+          const cfg = cfgMap[String(s._id)];
+          exam.subjects.push({
+            subjectId: s._id,
+            totalMarks: Number(cfg.totalMarks) || 100,
+            passingMarks: Number.isFinite(Number(cfg.passingMarks)) ? Number(cfg.passingMarks) : 40,
+          });
+        });
+      }
       await exam.save();
     }
   }

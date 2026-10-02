@@ -39,7 +39,7 @@ import { toast } from 'sonner';
 import { useFormatMoney } from '@/lib/format-money';
 import ReceiptRegister from './receipt-register';
 import FeeCollectionReports from './fee-collection-reports';
-import { useOrgAndUser, printReport } from './report-print';
+import { useOrgAndUser, printReport, openReportPrintWindow } from './report-print';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const PIE_COLORS = ['#10b981', '#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -2671,8 +2671,6 @@ export function EmptyState({ text }: { text?: string }) {
 
 function printFeeReport(reportData: any[], schoolName: string, year: number) {
   if (!reportData.length) return;
-  const win = window.open('', '_blank');
-  if (!win) { toast.error('Allow pop-ups to print'); return; }
 
   const classPages = reportData.map((cls: any) => {
     const extraFunds = getClassExtraFunds(cls);
@@ -2721,10 +2719,7 @@ function printFeeReport(reportData: any[], schoolName: string, year: number) {
     return `<div class="page"><div class="header"><h1>${schoolName}</h1><h2>Fee Collection Report - ${year}</h2><h3>Class: ${cls.className} | Students: ${cls.totalStudents}</h3></div><table><thead><tr><th class="sno">#</th><th class="name">Student</th><th>Roll#</th><th>Father</th><th>Phone</th>${monthHeaders}<th class="toth">Paid</th><th class="toth">Pending</th></tr></thead><tbody>${rows}${totalRow}</tbody></table><div class="footer"><span>Printed: ${new Date().toLocaleDateString()}</span><span>${schoolName}</span></div></div>`;
   }).join('');
 
-  win.document.write(`<!DOCTYPE html><html><head><title>Fee Report</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:8px;color:#000;background:#fff}.page{width:297mm;padding:8mm 6mm;page-break-after:always}.page:last-child{page-break-after:auto}.header{text-align:center;margin-bottom:6px}.header h1{font-size:16px;font-weight:900;text-transform:uppercase}.header h2{font-size:11px;font-weight:700}.header h3{font-size:10px;color:#444}table{width:100%;border-collapse:collapse;margin-top:4px}th,td{border:1px solid #999;padding:3px 4px}thead tr{background:#e8e8e8}th{font-size:7.5px;font-weight:700;text-transform:uppercase}th.sno{width:20px;text-align:center}th.name{min-width:100px}th.mh{text-align:center;width:48px}th.toth{text-align:right;width:52px}td.sno{text-align:center;color:#555;font-size:7px}td.name{font-weight:600;white-space:nowrap}td.mc{text-align:center;font-size:7.5px}td.mc.paid{color:#047857;font-weight:700}td.mc.partial{color:#2563eb;font-weight:600}td.mc.unpaid{color:#dc2626;font-weight:700}td.tot{text-align:right;font-weight:700;font-size:8px}td.tot.paid{color:#047857}td.tot.unpaid{color:#dc2626}td.ftlabel{font-weight:800;font-size:8px}td.ftot{text-align:center;font-weight:800;font-size:8px}td.ftot.paid{color:#047857;text-align:right}td.ftot.unpaid{color:#dc2626;text-align:right}tbody tr:nth-child(even){background:#fafafa}tbody tr.frow{background:#f3f3f3;break-inside:avoid}.footer{display:flex;justify-content:space-between;margin-top:6px;font-size:7px;color:#888;border-top:1px solid #ccc;padding-top:3px}@media print{@page{size:A4 landscape;margin:5mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${classPages}</body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 600);
+  openReportPrintWindow(`<!DOCTYPE html><html><head><title>Fee Report</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:8px;color:#000;background:#fff}.page{padding:8mm 6mm;page-break-after:always}.page:last-child{page-break-after:auto}.header{text-align:center;margin-bottom:6px}.header h1{font-size:16px;font-weight:900;text-transform:uppercase}.header h2{font-size:11px;font-weight:700}.header h3{font-size:10px;color:#444}table{width:100%;border-collapse:collapse;margin-top:4px}th,td{border:1px solid #999;padding:3px 4px}thead tr{background:#e8e8e8}th{font-size:7.5px;font-weight:700;text-transform:uppercase}th.sno{width:20px;text-align:center}th.name{min-width:100px}th.mh{text-align:center;width:48px}th.toth{text-align:right;width:52px}td.sno{text-align:center;color:#555;font-size:7px}td.name{font-weight:600;white-space:nowrap}td.mc{text-align:center;font-size:7.5px}td.mc.paid{color:#047857;font-weight:700}td.mc.partial{color:#2563eb;font-weight:600}td.mc.unpaid{color:#dc2626;font-weight:700}td.tot{text-align:right;font-weight:700;font-size:8px}td.tot.paid{color:#047857}td.tot.unpaid{color:#dc2626}td.ftlabel{font-weight:800;font-size:8px}td.ftot{text-align:center;font-weight:800;font-size:8px}td.ftot.paid{color:#047857;text-align:right}td.ftot.unpaid{color:#dc2626;text-align:right}tbody tr:nth-child(even){background:#fafafa}tbody tr.frow{background:#f3f3f3;break-inside:avoid}.footer{display:flex;justify-content:space-between;margin-top:6px;font-size:7px;color:#888;border-top:1px solid #ccc;padding-top:3px}@media print{@page{size:A4 landscape;margin:5mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${classPages}</body></html>`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2736,8 +2731,6 @@ function printExpenseReport(reportData: any, schoolName: string, year: number, m
   const transactions = detail.transactions || [];
   const categories = detail.categories || [];
   if (!transactions.length) return;
-  const win = window.open('', '_blank');
-  if (!win) { toast.error('Allow pop-ups to print'); return; }
 
   const fmt = (n: number) => (n || 0).toLocaleString();
 
@@ -2759,7 +2752,7 @@ function printExpenseReport(reportData: any, schoolName: string, year: number, m
     <td class="r">${fmt(t.amount)}</td>
   </tr>`).join('');
 
-  win.document.write(`<!DOCTYPE html><html><head><title>Expense Report - ${month} ${year}</title><style>
+  openReportPrintWindow(`<!DOCTYPE html><html><head><title>Expense Report - ${month} ${year}</title><style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;font-size:9px;color:#111;background:#fff;padding:10mm}
 .header{text-align:center;margin-bottom:10px;border-bottom:2px solid #111;padding-bottom:8px}
@@ -2809,7 +2802,4 @@ tfoot td{font-weight:800;background:#f0f0f0}
 </table>
 <div class="footer"><span>Printed: ${new Date().toLocaleString()}</span><span>${schoolName} — Expense Report</span></div>
 </body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 600);
 }

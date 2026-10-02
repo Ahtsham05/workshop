@@ -80,25 +80,33 @@ export default function MarksManagement() {
 
   const selectedExamData = examsData?.results?.find((e: any) => (e.id || e._id) === selectedExam);
 
+  // Class subjects (in class order) using the exam's saved total/pass where it has one.
+  // Subjects added to the class after the exam was configured still get a column;
+  // subjects only on the exam (e.g. removed from the class) are kept at the end.
   const baseSubjectColumns: SubjectCol[] = useMemo(() => {
-    if (selectedExamData?.subjects?.length) {
-      return selectedExamData.subjects.map((s: any) => {
-        const id = s.subjectId?._id || s.subjectId?.id || s.subjectId;
-        const fromClass = (subjectsData?.results || []).find((sub: any) => (sub.id || sub._id) === id);
-        return {
-          id,
-          name: s.subjectId?.name || fromClass?.name || 'Subject',
-          totalMarks: s.totalMarks ?? 100,
-          passingMarks: s.passingMarks ?? 40,
-        };
+    const examSubjects = new Map<string, any>(
+      (selectedExamData?.subjects || []).map((s: any) => [String(s.subjectId?._id || s.subjectId?.id || s.subjectId), s]),
+    );
+    const cols: SubjectCol[] = (subjectsData?.results || []).map((sub: any) => {
+      const id = String(sub.id || sub._id);
+      const onExam = examSubjects.get(id);
+      examSubjects.delete(id);
+      return {
+        id,
+        name: sub.name,
+        totalMarks: onExam?.totalMarks ?? 100,
+        passingMarks: onExam?.passingMarks ?? 40,
+      };
+    });
+    examSubjects.forEach((s, id) => {
+      cols.push({
+        id,
+        name: s.subjectId?.name || 'Subject',
+        totalMarks: s.totalMarks ?? 100,
+        passingMarks: s.passingMarks ?? 40,
       });
-    }
-    return (subjectsData?.results || []).map((s: any) => ({
-      id: s.id || s._id,
-      name: s.name,
-      totalMarks: 100,
-      passingMarks: 40,
-    }));
+    });
+    return cols;
   }, [selectedExamData, subjectsData]);
 
   const subjectColumns: SubjectCol[] = useMemo(() => {

@@ -1,0 +1,86 @@
+/* Editable print preview — injected into every Reports Center print window
+   together with report-print-editor.js. Everything except the remarks box is
+   screen-only, so the printed sheet looks exactly like the report itself. */
+
+/* Remarks box (added from the toolbar) — prints. */
+.pe-remarks{margin:14px 0 4px;border:1px solid #bbb;border-radius:4px;padding:8px 10px;break-inside:avoid}
+.pe-remarks-h{font-size:8px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.04em;margin-bottom:4px}
+.pe-remarks-b{font-size:10px;line-height:1.5;min-height:28px;white-space:pre-wrap}
+
+#pe-doc{outline:none!important}
+
+@media print{
+  #pe-bar,#pe-toast{display:none!important}
+}
+
+@media screen{
+  html.pe-ready,html.pe-ready body{background:#e7e9ee!important}
+  html.pe-ready body{padding:calc(var(--pe-bar-h,96px) + 20px) 16px 48px!important;overflow-x:auto}
+  html.pe-ready #pe-doc{
+    background:#fff;margin:0 auto;box-sizing:content-box;
+    width:var(--pe-w,auto);padding:var(--pe-pad,10mm);
+    box-shadow:0 1px 2px rgba(15,23,42,.08),0 10px 30px rgba(15,23,42,.10);border-radius:2px;
+  }
+  /* The fee register prints one sheet per class — show the page breaks. */
+  html.pe-ready #pe-doc .page + .page{border-top:2px dashed #d4d7de;margin-top:10px;padding-top:12px}
+
+  #pe-doc.pe-editing{cursor:text}
+  #pe-doc.pe-editing td:hover,#pe-doc.pe-editing th:hover,
+  #pe-doc.pe-editing h1:hover,#pe-doc.pe-editing h2:hover,#pe-doc.pe-editing h3:hover,#pe-doc.pe-editing h4:hover,
+  #pe-doc.pe-editing .box:hover,#pe-doc.pe-editing .sig-box:hover,#pe-doc.pe-editing .footer:hover,
+  #pe-doc.pe-editing .pe-remarks:hover{outline:1px dashed #9db4d6;outline-offset:-1px}
+  #pe-doc .pe-active-row > td,#pe-doc .pe-active-row > th{background-color:#fff4e8!important}
+  #pe-doc .pe-active-col{background-color:#fff9f2!important}
+  #pe-doc .pe-active-row > .pe-active-col{background-color:#ffe9d2!important}
+  #pe-doc .pe-active-cell{outline:2px solid #ea6a12!important;outline-offset:-2px}
+  #pe-doc .pe-active-block{outline:2px dashed #ea6a12!important;outline-offset:2px}
+  #pe-doc img{cursor:pointer}
+
+  #pe-bar{
+    position:fixed;top:0;left:0;right:0;z-index:2147483000;
+    background:#fff;border-bottom:1px solid #dcdfe5;box-shadow:0 2px 10px rgba(15,23,42,.06);
+    font:13px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2937;
+    -webkit-user-select:none;user-select:none;
+  }
+  #pe-bar .pe-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:8px 16px}
+  #pe-bar .pe-tools{justify-content:flex-start;border-top:1px solid #eef0f3;background:#fafbfc;padding-top:6px;padding-bottom:6px}
+  #pe-bar .pe-title{display:flex;flex-direction:column;min-width:0;flex:1 1 280px}
+  #pe-bar .pe-title strong{font-size:14px;font-weight:700;color:#111827}
+  #pe-bar #pe-hint{font-size:12px;color:#6b7280;margin-top:1px}
+  #pe-bar .pe-group{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+  #pe-bar .pe-tools .pe-group + .pe-group{padding-left:12px;border-left:1px solid #e5e7eb}
+  #pe-bar .pe-label{font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin:0 2px 0 4px}
+  #pe-bar .pe-sep{width:1px;height:18px;background:#e5e7eb;margin:0 4px}
+  #pe-bar .pe-val{min-width:40px;text-align:center;font-variant-numeric:tabular-nums;font-weight:600;font-size:12px}
+
+  #pe-bar .pe-btn{
+    display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;
+    border:1px solid #d6d9df;border-radius:6px;background:#fff;color:#1f2937;
+    font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap;
+  }
+  #pe-bar .pe-btn:hover:not(:disabled){background:#f3f4f6;border-color:#c5c9d1}
+  #pe-bar .pe-btn:focus-visible{outline:2px solid #ea6a12;outline-offset:1px}
+  #pe-bar .pe-btn:disabled{opacity:.42;cursor:default}
+  #pe-bar .pe-btn.pe-sq{width:30px;padding:0;justify-content:center;font-size:16px}
+  #pe-bar .pe-btn.pe-primary{background:#ea6a12;border-color:#ea6a12;color:#fff;font-weight:600;padding:0 16px}
+  #pe-bar .pe-btn.pe-primary:hover{background:#d35d0c;border-color:#d35d0c}
+  #pe-bar .pe-btn.pe-ghost{border-color:transparent;background:transparent}
+  #pe-bar .pe-btn.pe-toggle.on{background:#fff4e8;border-color:#f3b37c;color:#9a3f05}
+  #pe-bar .pe-seg{display:inline-flex}
+  #pe-bar .pe-seg .pe-btn{border-radius:0}
+  #pe-bar .pe-seg .pe-btn:first-child{border-radius:6px 0 0 6px}
+  #pe-bar .pe-seg .pe-btn:last-child{border-radius:0 6px 6px 0;margin-left:-1px}
+  #pe-bar .pe-seg .pe-btn.on{background:#1f2937;border-color:#1f2937;color:#fff}
+
+  #pe-toast{
+    position:fixed;left:50%;bottom:24px;transform:translate(-50%,12px);z-index:2147483001;
+    background:#111827;color:#fff;font:13px system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    padding:8px 14px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;
+  }
+  #pe-toast.show{opacity:1;transform:translate(-50%,0)}
+
+  @media (max-width:640px){
+    #pe-bar .pe-tools .pe-group + .pe-group{padding-left:0;border-left:0}
+    #pe-bar .pe-label{display:none}
+  }
+}

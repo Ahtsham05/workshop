@@ -44,7 +44,15 @@ function infoCell(label: string, value?: string): string {
   return `<div class="ic"><span class="ik">${esc(label)}</span>${v}</div>`;
 }
 
+/**
+ * 'bw' = designed for black & white (laser) printers: white banner, light-grey
+ * headers, black text — no solid dark blocks that eat toner and print muddy.
+ * 'color' = the original green-banner design for colour printers.
+ */
+export type ProgressReportPrintStyle = 'bw' | 'color';
+
 export type ProgressReportPrintInput = {
+  printStyle?: ProgressReportPrintStyle;
   schoolName: string;
   campusName?: string | null;
   examTitle: string;
@@ -93,6 +101,8 @@ function gradeColor(g: string): string {
 
 export function buildProgressReportPrintHtml(data: ProgressReportPrintInput): string {
   const { campusName, examTitle, schoolLogo, student, attendance, exam } = data;
+  const bw = data.printStyle === 'bw';
+  const gradeInk = (g: string) => (bw ? '#000' : gradeColor(g));
   const schoolName = (data.schoolName || '').replace(/\s+/g, ' ').trim();
   const campusLine = campusName?.trim()
     ? `<div class="school-campus">${esc(campusName.trim())}</div>`
@@ -112,10 +122,9 @@ export function buildProgressReportPrintHtml(data: ProgressReportPrintInput): st
     highestInClass !== null && highestInClass !== undefined ? `${highestInClass}%` : blank('16mm');
 
   const subjectRows = subjects.map((sub, i) => {
-    const bg = i % 2 === 0 ? '#fafff8' : '#fff';
-    const gc = gradeColor(sub.grade);
+    const gc = gradeInk(sub.grade);
     return `
-    <tr style="background:${bg}">
+    <tr${i % 2 === 0 ? ' class="alt"' : ''}>
       <td class="sn">${i + 1}</td>
       <td class="sname">${esc(sub.subjectName)}</td>
       <td class="tc">${sub.totalMarks}</td>
@@ -159,7 +168,7 @@ export function buildProgressReportPrintHtml(data: ProgressReportPrintInput): st
 
   const schoolLogoHtml = logoSrc
     ? `<img src="${esc(logoSrc)}" class="logo-img" alt="Logo" />`
-    : `<svg class="logo-ph" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" width="40" height="40"><path d="M12 3L2 9l10 6 10-6-10-6z"/><path d="M2 17l10 6 10-6"/><path d="M2 13l10 6 10-6"/></svg>`;
+    : `<svg class="logo-ph" viewBox="0 0 24 24" fill="none" stroke="${bw ? '#333' : 'rgba(255,255,255,0.6)'}" stroke-width="1.5" width="40" height="40"><path d="M12 3L2 9l10 6 10-6-10-6z"/><path d="M2 17l10 6 10-6"/><path d="M2 13l10 6 10-6"/></svg>`;
 
   const css = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -345,12 +354,12 @@ html, body {
 .ptm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm 4mm; }
 .ptm-field { display: flex; align-items: center; gap: 1mm; }
 .ptm-lbl { font-weight: 600; white-space: nowrap; color: #374151; }
-.ptm-table { width: 44%; border-collapse: collapse; font-size: 8pt; background: #fff; }
+.ptm-table { width: 46%; border-collapse: collapse; font-size: 8pt; background: #fff; }
 .ptc {
   border: 1px solid #86efac;
   padding: 1px 3px;
   text-align: center;
-  height: 7mm;
+  height: 5.4mm;
   vertical-align: middle;
 }
 .ptm-table thead .ptc {
@@ -359,6 +368,14 @@ html, body {
   font-weight: 700;
   height: auto;
   padding: 2px 3px;
+}
+.ptm-table thead .ptc.ptm-cap {
+  background: #dcfce7;
+  color: #14532d;
+  font-size: 7.5pt;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 0.6mm 3px;
 }
 
 /* ── Student Info ──────────────────────────────────────── */
@@ -389,6 +406,8 @@ html, body {
   flex: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(3, auto);
+  grid-auto-flow: column;
   gap: 1.5mm 6mm;
   font-size: 8.5pt;
 }
@@ -425,6 +444,7 @@ table.marks td {
   height: 7mm;
   vertical-align: middle;
 }
+table.marks tr.alt td { background: #fafff8; }
 table.marks td.sn { width: 6%; color: #6b7280; font-size: 8.5pt; }
 table.marks td.sname { text-align: left; font-weight: 500; width: 35%; font-size: 9.5pt; }
 table.marks td.tc { font-size: 9.5pt; }
@@ -543,6 +563,71 @@ table.marks tr.total-row td {
 .sig { flex: 1; text-align: center; font-size: 8pt; padding: 0 3mm; }
 .sig-line { border-top: 1.5px solid #374151; margin-top: 12mm; padding-top: 1.5mm; font-weight: 700; color: #111; }
 
+/* ── Black & white print style ─────────────────────────────
+   Tuned for monochrome laser printers: no solid dark fills (they print as
+   heavy, streaky black and waste toner). Structure comes from crisp black
+   rules; headers get a light 10% grey so they still read as headers. */
+.pr-bw .banner {
+  background: #fff;
+  color: #000;
+  border: 1.6px solid #000;
+  box-shadow: none;
+  padding: 1.1mm;
+}
+.pr-bw .banner::after { display: none; }
+.pr-bw .banner-inner {
+  border: 0.6px solid #000;
+  border-radius: 1.6mm;
+  padding: 3.5mm 6mm;
+}
+.pr-bw .banner-top .logo-img,
+.pr-bw .banner-top .logo-ph { height: 28mm; max-width: 34mm; }
+.pr-bw .banner-top .logo-img { mix-blend-mode: multiply; }
+.pr-bw .school-em { color: #000; text-shadow: none; }
+.pr-bw .school-campus { color: #222; opacity: 1; }
+.pr-bw .banner-divider { background: #000; height: 0.8px; }
+.pr-bw .banner-diamond { color: #000; background: #fff; }
+.pr-bw .report-tag { color: #000; opacity: 1; }
+.pr-bw .exam-pill { color: #000; background: #fff; border: 1.4px solid #000; }
+
+.pr-bw .ptm-wrap { border: 1.2px solid #000; }
+.pr-bw .ptm-left { background: #fff; border-right: 1.2px solid #000; }
+.pr-bw .ptm-title { color: #000; }
+.pr-bw .ptm-lbl { color: #000; }
+.pr-bw .ptc { border-color: #555; }
+.pr-bw .ptm-table thead .ptc { background: #e8e8e8; color: #000; border-color: #000; }
+.pr-bw .ptm-table thead .ptc.ptm-cap { background: #fff; color: #000; }
+
+.pr-bw .student-box { background: #fff; border: 1.2px solid #000; }
+.pr-bw .photo-wrap { border: 1.4px solid #000; background: #f2f2f2; }
+.pr-bw .ik { color: #444; }
+.pr-bw .iv { color: #000; }
+
+.pr-bw table.marks thead tr { background: #e8e8e8; color: #000; }
+.pr-bw table.marks th { border: 1px solid #000; }
+.pr-bw table.marks td { border: 0.8px solid #777; }
+.pr-bw table.marks tr.alt td { background: #fff; }
+.pr-bw table.marks td.sn { color: #333; }
+.pr-bw table.marks tr.total-row td { background: #e8e8e8; border: 1.2px solid #000; }
+
+.pr-bw .sum-box { background: #fff; border: 1.2px solid #000; }
+.pr-bw .sum-lbl { color: #333; }
+.pr-bw .sum-val { color: #000; }
+
+.pr-bw .remarks { border: 1.2px solid #000; }
+.pr-bw .rem-h { background: #e8e8e8; color: #000; border-bottom: 1px solid #000; }
+.pr-bw .rem-line { border-bottom-color: #999; }
+.pr-bw .rem-sigs { border-top-color: #000; }
+.pr-bw .rem-sig { color: #000; }
+.pr-bw .rem-sig::before { border-top-color: #000; }
+
+.pr-bw .habits { border: 1.2px solid #000; }
+.pr-bw .habits-h { background: #e8e8e8; color: #000; border-bottom: 1px solid #000; }
+.pr-bw .habits-leg { background: #fff; color: #000; border-bottom: 0.8px solid #999; }
+.pr-bw .habits-grid { background: #fff; }
+.pr-bw .habit { border: 0.8px solid #555; }
+.pr-bw .habit-h { background: #f2f2f2; color: #000; border-bottom: 0.8px solid #555; }
+
 /* ── Utility ───────────────────────────────────────────── */
 .blank {
   display: inline-block;
@@ -575,7 +660,7 @@ table.marks tr.total-row td {
 <style>${css}</style>
 </head>
 <body>
-<div class="page">
+<div class="page${bw ? ' pr-bw' : ''}">
 
   <!-- Banner -->
   <header class="banner">
@@ -595,10 +680,10 @@ table.marks tr.total-row td {
     </div>
   </header>
 
-  <!-- PTM -->
+  <!-- Attendance + PTM -->
   <div class="ptm-wrap">
     <div class="ptm-left">
-      <div class="ptm-title">Parent's Teacher Meeting Record</div>
+      <div class="ptm-title">Attendance Record</div>
       <div class="ptm-grid">
         ${ptmField('Month', undefined, false)}
         ${ptmField('Class Strength', data.classStrength, classHas)}
@@ -607,10 +692,13 @@ table.marks tr.total-row td {
       </div>
     </div>
     <table class="ptm-table">
-      <thead><tr>
+      <thead>
+      <tr><td class="ptc ptm-cap" colspan="4">Parent's Teacher Meeting Record</td></tr>
+      <tr>
         <td class="ptc">Sr.</td><td class="ptc">Date</td>
         <td class="ptc">Att.</td><td class="ptc">Name</td>
-      </tr></thead>
+      </tr>
+      </thead>
       <tbody>${ptmRows}</tbody>
     </table>
   </div>
@@ -620,10 +708,10 @@ table.marks tr.total-row td {
     <div class="photo-wrap">${photoBlock}</div>
     <div class="info-grid">
       ${infoCell('Student Name', fullName)}
-      ${infoCell('Roll No.', student.rollNumber)}
+      ${infoCell("Father's Name", student.parent?.fatherName)}
       ${infoCell('Admission No.', student.admissionNumber)}
       ${infoCell('Class', classLabel)}
-      ${infoCell("Father's Name", student.parent?.fatherName)}
+      ${infoCell('Roll No.', student.rollNumber)}
       ${infoCell('Contact', student.parent?.phone)}
     </div>
   </div>
@@ -650,7 +738,7 @@ table.marks tr.total-row td {
             <td class="tc">${examMax}</td>
             <td class="tc">${examObtained}</td>
             <td class="tc">${examPct}%</td>
-            <td class="tc grade-cell" style="color:${gradeColor(examGrade)};font-weight:800">${esc(examGrade)}</td>
+            <td class="tc grade-cell" style="color:${gradeInk(examGrade)};font-weight:800">${esc(examGrade)}</td>
           </tr>
         </tbody>
       </table>
@@ -662,7 +750,7 @@ table.marks tr.total-row td {
         </div>
         <div class="sum-box">
           <div class="sum-lbl">Grade</div>
-          <div class="sum-val" style="color:${gradeColor(examGrade)}">${esc(examGrade)}</div>
+          <div class="sum-val" style="color:${gradeInk(examGrade)}">${esc(examGrade)}</div>
         </div>
         <div class="sum-box">
           <div class="sum-lbl">Highest % in Class</div>
@@ -885,7 +973,7 @@ export async function buildProgressReportPrintHtmlReady(
   data: ProgressReportPrintInput,
 ): Promise<string> {
   let html = buildProgressReportPrintHtml(data);
-  if (data.schoolLogo) {
+  if (data.schoolLogo && data.printStyle !== 'bw') {
     const processed = await processBannerLogoUrl(data.schoolLogo);
     if (processed) {
       html = injectProcessedLogoIntoHtml(html, data.schoolLogo, processed);
@@ -903,13 +991,14 @@ export async function buildBulkProgressReportPrintHtmlReady(
   if (inputs.length === 1) return buildProgressReportPrintHtmlReady(inputs[0]);
 
   const logo = inputs[0]?.schoolLogo;
-  const processed = logo ? await processBannerLogoUrl(logo) : null;
+  const bw = inputs[0]?.printStyle === 'bw';
+  const processed = logo && !bw ? await processBannerLogoUrl(logo) : null;
   const bodies: string[] = [];
   for (const d of inputs) {
     let part = buildProgressReportPrintHtml(d);
     if (processed && d.schoolLogo) {
       part = injectProcessedLogoIntoHtml(part, d.schoolLogo, processed);
-    } else if (d.schoolLogo) {
+    } else if (d.schoolLogo && !bw) {
       part = part.replace('class="logo-img"', 'class="logo-img logo-unprocessed"');
     }
     const body = part.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1]?.trim();

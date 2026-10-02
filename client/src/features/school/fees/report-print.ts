@@ -7,8 +7,11 @@
 // branded, signature-ready print sheet instead of each rolling its own.
 
 import { useSelector } from 'react-redux';
+import { toast } from 'sonner';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import type { RootState } from '@/stores/store';
+import editorCss from './report-print-editor.css?raw';
+import editorJs from './report-print-editor.js?raw';
 
 export type PrintSection =
   | { type: 'summary'; heading?: string; items: { label: string; value: string }[] }
@@ -76,13 +79,28 @@ ${sectionsHtml}
 </body></html>`;
 }
 
+/**
+ * Wraps a complete report HTML document with the editable print preview
+ * (toolbar + editor script). Staff can correct text, drop rows/columns, add
+ * remarks and set orientation before printing; nothing is saved back.
+ */
+export function withPrintEditor(html: string): string {
+  const style = `<style id="pe-style">${editorCss}</style>`;
+  // `</script` inside the injected source would end the tag early.
+  const script = `<script>${editorJs.replace(/<\/script/gi, '<\\/script')}</script>`;
+  const withStyle = html.includes('</head>') ? html.replace('</head>', () => `${style}</head>`) : style + html;
+  const at = withStyle.lastIndexOf('</body>');
+  return at >= 0 ? withStyle.slice(0, at) + script + withStyle.slice(at) : withStyle + script;
+}
+
+/** Opens a report in the editable print preview — the user prints from its toolbar. */
 export function openReportPrintWindow(html: string) {
   const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(html);
+  if (!win) { toast.error('Allow pop-ups for this site to print reports'); return; }
+  win.document.open();
+  win.document.write(withPrintEditor(html));
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 400);
 }
 
 /** Org + current user, for every print header/footer. */

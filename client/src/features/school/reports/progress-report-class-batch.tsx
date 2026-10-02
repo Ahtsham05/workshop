@@ -23,6 +23,7 @@ import {
   buildBulkProgressReportPrintHtmlReady,
   openProgressReportPrint,
   type ProgressReportPrintInput,
+  type ProgressReportPrintStyle,
 } from './progress-report-print-html';
 import { mapReportToPrintInput, studentRowId, type ProgressReportApi } from './progress-report-utils';
 
@@ -30,9 +31,10 @@ type Props = {
   schoolName: string;
   schoolLogo?: string | null;
   campusName?: string | null;
+  printStyle: ProgressReportPrintStyle;
 };
 
-export default function ClassBatchProgressReports({ schoolName, schoolLogo, campusName }: Props) {
+export default function ClassBatchProgressReports({ schoolName, schoolLogo, campusName, printStyle }: Props) {
   const dispatch = useDispatch<AppDispatch>();
 
   const [classId, setClassId] = useState('');
@@ -138,7 +140,7 @@ export default function ClassBatchProgressReports({ schoolName, schoolLogo, camp
 
         const inputs = (bulk.reports ?? [])
           .map((report: ProgressReportApi) =>
-            mapReportToPrintInput(report, schoolName, examTitle, schoolLogo, campusName),
+            mapReportToPrintInput(report, schoolName, examTitle, schoolLogo, campusName, printStyle),
           )
           .filter((r: ProgressReportPrintInput | null): r is ProgressReportPrintInput => r !== null);
 
@@ -163,7 +165,7 @@ export default function ClassBatchProgressReports({ schoolName, schoolLogo, camp
         setPrinting(false);
       }
     },
-    [dispatch, classId, examId, sectionFilter, schoolName, examTitle]
+    [dispatch, classId, examId, sectionFilter, schoolName, examTitle, schoolLogo, campusName, printStyle]
   );
 
   const selectedIds = roster

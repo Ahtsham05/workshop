@@ -20,7 +20,14 @@ import { formatMoneyWithMeta, FALLBACK_CURRENCY, useCurrencyMeta } from '@/lib/f
 import type { CurrencyOption } from '@/stores/localization.api';
 import StudentSearchPicker from '../components/student-search-picker';
 import { buildProgressReportPrintHtmlReady, openProgressReportPrint } from './progress-report-print-html';
-import { mapReportToPrintInput, parseCampusFromBranchName, type ProgressReportExamResult } from './progress-report-utils';
+import {
+  mapReportToPrintInput,
+  parseCampusFromBranchName,
+  readPrintStyle,
+  savePrintStyle,
+  type ProgressReportExamResult,
+} from './progress-report-utils';
+import type { ProgressReportPrintStyle } from './progress-report-print-html';
 import ClassBatchProgressReports from './progress-report-class-batch';
 
 const GRADE_COLOR: Record<string, string> = {
@@ -81,6 +88,11 @@ export default function ProgressReportPage() {
   const [mode, setMode] = useState<'single' | 'class'>('single');
   const [selectedStudent, setSelectedStudent] = useState('');
   const [selectedExam, setSelectedExam] = useState('all');
+  const [printStyle, setPrintStyle] = useState<ProgressReportPrintStyle>(readPrintStyle);
+  const changePrintStyle = (style: ProgressReportPrintStyle) => {
+    setPrintStyle(style);
+    savePrintStyle(style);
+  };
   const user = useSelector((state: RootState) => state.auth.data?.user);
   const activeBranchName = useSelector((state: RootState) => state.auth.activeBranchName);
 
@@ -111,11 +123,11 @@ export default function ProgressReportPage() {
     const printExam = reportData.exams[0];
     if (!printExam) return;
 
-    const input = mapReportToPrintInput(reportData, schoolName, examTitle, schoolLogo, campusName);
+    const input = mapReportToPrintInput(reportData, schoolName, examTitle, schoolLogo, campusName, printStyle);
     if (!input) return;
     const html = await buildProgressReportPrintHtmlReady(input);
     openProgressReportPrint(html);
-  }, [reportData, schoolName, examTitle, schoolLogo, campusName]);
+  }, [reportData, schoolName, examTitle, schoolLogo, campusName, printStyle]);
 
   const exams = examsData?.results ?? [];
   const loading = reportLoading || isFetching;
@@ -129,11 +141,14 @@ export default function ProgressReportPage() {
             Print one student or an entire class. Fee status is screen-only (not on printed cards).
           </p>
         </div>
-        {mode === 'single' && reportData && reportData.exams.length > 0 && (
-          <Button onClick={handlePrint} size="sm" className="gap-2 bg-emerald-700 hover:bg-emerald-800">
-            <Printer className="h-4 w-4" /> Print A4 Report
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <PrintStyleToggle value={printStyle} onChange={changePrintStyle} />
+          {mode === 'single' && reportData && reportData.exams.length > 0 && (
+            <Button onClick={handlePrint} size="sm" className="gap-2 bg-emerald-700 hover:bg-emerald-800">
+              <Printer className="h-4 w-4" /> Print A4 Report
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs value={mode} onValueChange={(v) => setMode(v as 'single' | 'class')}>
@@ -298,9 +313,47 @@ export default function ProgressReportPage() {
         </TabsContent>
 
         <TabsContent value="class" className="mt-4">
-          <ClassBatchProgressReports schoolName={schoolName} schoolLogo={schoolLogo} campusName={campusName} />
+          <ClassBatchProgressReports
+            schoolName={schoolName}
+            schoolLogo={schoolLogo}
+            campusName={campusName}
+            printStyle={printStyle}
+          />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+const PRINT_STYLE_OPTIONS: Array<{ value: ProgressReportPrintStyle; label: string; hint: string }> = [
+  { value: 'bw', label: 'Black & White', hint: 'Ink-saving layout for black & white printers' },
+  { value: 'color', label: 'Colour', hint: 'Green banner design for colour printers' },
+];
+
+function PrintStyleToggle({
+  value,
+  onChange,
+}: {
+  value: ProgressReportPrintStyle;
+  onChange: (style: ProgressReportPrintStyle) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label="Print style" className="inline-flex rounded-md border bg-muted/40 p-0.5">
+      {PRINT_STYLE_OPTIONS.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          title={o.hint}
+          onClick={() => onChange(o.value)}
+          className={`h-7 rounded px-2.5 text-xs font-medium transition-colors ${
+            value === o.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }

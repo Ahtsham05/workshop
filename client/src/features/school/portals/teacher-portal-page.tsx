@@ -306,26 +306,28 @@ export default function TeacherPortalPage() {
     const subjectLookup = new Map(
       (subjects as any[]).map((s) => [String(s._id || s.id), s.name])
     );
-    if (exam?.subjects?.length) {
-      return exam.subjects.map((s: any) => {
-        const id = String(s.subjectId?._id || s.subjectId?.id || s.subjectId);
-        return {
-          id,
-          name: s.subjectId?.name || subjectLookup.get(id) || 'Subject',
-          totalMarks: s.totalMarks ?? 100,
-          passingMarks: s.passingMarks ?? 40,
-        };
-      });
-    }
-    const classId = exam?.classId ? String(exam.classId) : '';
-    return (subjects as any[])
+    const examCols: TeacherSubjectCol[] = (exam?.subjects || []).map((s: any) => {
+      const id = String(s.subjectId?._id || s.subjectId?.id || s.subjectId);
+      return {
+        id,
+        name: s.subjectId?.name || subjectLookup.get(id) || 'Subject',
+        totalMarks: s.totalMarks ?? 100,
+        passingMarks: s.passingMarks ?? 40,
+      };
+    });
+    // Class subjects added after the exam was configured still get a column.
+    const classId = exam?.classId ? String(exam.classId?._id || exam.classId) : '';
+    const onExam = new Set(examCols.map((c) => c.id));
+    const extraCols = (subjects as any[])
       .filter((s) => !classId || String(s.classId?._id || s.classId) === classId)
+      .filter((s) => !onExam.has(String(s._id || s.id)))
       .map((s) => ({
         id: String(s._id || s.id),
         name: s.name,
         totalMarks: 100,
         passingMarks: 40,
       }));
+    return [...examCols, ...extraCols];
   }, [examStudentsData, subjects]);
 
   // Clear editable total/pass when switching exams (defaults come from column headers).

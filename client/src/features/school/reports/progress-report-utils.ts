@@ -1,4 +1,4 @@
-import type { ProgressReportPrintInput } from './progress-report-print-html';
+import type { ProgressReportPrintInput, ProgressReportPrintStyle } from './progress-report-print-html';
 
 /** Campus label after "School Name - Campus Name" branch naming. */
 export function parseCampusFromBranchName(branchName?: string | null): string | null {
@@ -32,11 +32,13 @@ export function mapReportToPrintInput(
   examTitle: string,
   schoolLogo?: string | null,
   campusName?: string | null,
+  printStyle: ProgressReportPrintStyle = 'bw',
 ): ProgressReportPrintInput | null {
   const printExam = report.exams?.[0];
   if (!printExam) return null;
 
   return {
+    printStyle,
     schoolName,
     campusName: campusName ?? null,
     examTitle,
@@ -57,4 +59,23 @@ export function mapReportToPrintInput(
 
 export function studentRowId(s: { id?: string; _id?: string }): string {
   return String(s.id || s._id || '');
+}
+
+const PRINT_STYLE_KEY = 'progressReport.printStyle';
+
+/** Remembered per browser; defaults to black & white (most schools print mono). */
+export function readPrintStyle(): ProgressReportPrintStyle {
+  try {
+    return localStorage.getItem(PRINT_STYLE_KEY) === 'color' ? 'color' : 'bw';
+  } catch {
+    return 'bw';
+  }
+}
+
+export function savePrintStyle(style: ProgressReportPrintStyle): void {
+  try {
+    localStorage.setItem(PRINT_STYLE_KEY, style);
+  } catch {
+    /* storage blocked — choice just isn't remembered */
+  }
 }
