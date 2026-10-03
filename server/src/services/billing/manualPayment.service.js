@@ -128,7 +128,8 @@ const createIntent = async ({ org, user, planKey, months, now = new Date() }) =>
 const submit = async ({ org, user, body, file, now = new Date() }) => {
   assertManualAllowed(org);
   assertNoLivePolarSubscription(org);
-  const { mimeType, bytes } = proofStorage.validateProofFile(file);
+  // The proof is optional: a reviewer can still verify against the bank/wallet statement.
+  const proofMeta = file ? proofStorage.validateProofFile(file) : null;
 
   const intent = await ManualPaymentIntent.findOne({ reference: body.reference, organizationId: org._id }).lean();
   if (!intent) throw new ApiError(httpStatus.NOT_FOUND, 'Payment reference not found. Start again from the billing page.');
@@ -163,7 +164,7 @@ const submit = async ({ org, user, body, file, now = new Date() }) => {
 
   let storageKey;
   try {
-    storageKey = await proofStorage.save(file.buffer, { organizationId: String(org._id), mimeType });
+    if (proofMeta) storageKey = await proofStorage.save(file.buffer, { organizationId: String(org._id), mimeType: proofMeta.mimeType });
     const payment = await ManualPayment.create({
       organizationId: org._id,
       submittedBy: user._id || user.id,
@@ -180,7 +181,7 @@ const submit = async ({ org, user, body, file, now = new Date() }) => {
       transactionIdNorm,
       payerName: body.payerName,
       paidOn: body.paidOn,
-      proof: { storageKey, mimeType, bytes },
+      ...(proofMeta && { proof: { storageKey, mimeType: proofMeta.mimeType, bytes: proofMeta.bytes } }),
     });
     await billingAudit.record({
       organizationId: org._id,
@@ -254,8 +255,10 @@ const adminGet = async (id) => {
     .populate('reviewedBy', 'name email');
   if (!payment) throw new ApiError(httpStatus.NOT_FOUND, 'Payment not found');
   const json = payment.toJSON();
-  json.proofUrl = proofStorage.signedUrl(payment.proof.storageKey);
-  json.proofUrlExpiresInSeconds = PROOF_UPLOAD.signedUrlTtlSeconds;
+  if (payment.proof?.storageKey) {
+    json.proofUrl = proofStorage.signedUrl(payment.proof.storageKey);
+    json.proofUrlExpiresInSeconds = PROOF_UPLOAD.signedUrlTtlSeconds;
+  }
   json.amountMismatch = payment.paidAmountPkr < payment.amountPkr;
   return json;
 };

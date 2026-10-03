@@ -140,6 +140,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/products', anyPermission: ['viewProducts'] },
   { prefix: '/stock-transfer', anyPermission: ['viewProducts'] },
   { prefix: '/stock-adjustments', anyPermission: ['viewProducts'] },
+  { prefix: '/stock-counts', anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
   { prefix: '/sub-categories', anyPermission: ['viewCategories'] },
   { prefix: '/categories', anyPermission: ['viewCategories'] },
   { prefix: '/brands', anyPermission: ['viewBrands'] },

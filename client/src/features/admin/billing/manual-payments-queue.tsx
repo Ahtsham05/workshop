@@ -133,6 +133,12 @@ function ReviewDialog({ id, onClose }: { id: string; onClose: () => void }) {
                 </div>
               )}
             </div>
+            {!p.proof?.mimeType && (
+              <p className='rounded-md border border-dashed p-3 text-sm text-amber-600'>
+                No proof was attached — verify this payment against your bank / wallet statement.
+              </p>
+            )}
+            {p.proof?.mimeType && (
             <div className='space-y-2'>
               <div className='flex items-center justify-between gap-2'>
                 <p className='text-sm font-medium'>Proof</p>
@@ -171,6 +177,7 @@ function ReviewDialog({ id, onClose }: { id: string; onClose: () => void }) {
                 This link is private and expires in {Math.round((p.proofUrlExpiresInSeconds ?? 300) / 60)} minutes.
               </p>
             </div>
+            )}
           </div>
         )}
         {p?.status === 'pending' && (

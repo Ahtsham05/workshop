@@ -20,7 +20,7 @@ const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfil
   }
 }
 
-export type AdjustmentType = 'damage' | 'theft' | 'expired' | 'lost' | 'found' | 'correction' | 'other'
+export type AdjustmentType = 'damage' | 'theft' | 'expired' | 'lost' | 'found' | 'correction' | 'count' | 'other'
 export type AdjustmentDirection = 'increase' | 'decrease'
 export type AdjustmentStatus = 'completed' | 'reversed'
 
@@ -46,6 +46,8 @@ export interface StockAdjustment {
   status: AdjustmentStatus
   reversalOf?: string
   reversedBy?: string
+  // Posted from a stock count (cycle count, audit, initial count).
+  stockCountId?: string
   createdBy?: { id: string; name: string } | string
   createdAt: string
   updatedAt: string

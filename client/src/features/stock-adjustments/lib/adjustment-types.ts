@@ -1,4 +1,4 @@
-import { AlertTriangle, ShieldAlert, Clock, PackageX, PackageSearch, RefreshCcw, HelpCircle } from 'lucide-react'
+import { AlertTriangle, ShieldAlert, Clock, PackageX, PackageSearch, RefreshCcw, HelpCircle, ClipboardCheck } from 'lucide-react'
 import type { AdjustmentDirection, AdjustmentType } from '@/stores/stockAdjustment.api'
 import type { StatCardTone } from '@/lib/stat-card-tones'
 
@@ -14,7 +14,10 @@ export interface AdjustmentTypeMeta {
   reasonPlaceholder: string
 }
 
-export const ADJUSTMENT_TYPE_ORDER: AdjustmentType[] = ['damage', 'theft', 'expired', 'lost', 'found', 'correction', 'other']
+export const ADJUSTMENT_TYPE_ORDER: AdjustmentType[] = ['damage', 'theft', 'expired', 'lost', 'found', 'correction', 'count', 'other']
+
+/** What a person can pick by hand — 'count' entries are only ever posted by a stock count. */
+export const MANUAL_ADJUSTMENT_TYPES: AdjustmentType[] = ADJUSTMENT_TYPE_ORDER.filter((type) => type !== 'count')
 
 export const ADJUSTMENT_TYPE_META: Record<AdjustmentType, AdjustmentTypeMeta> = {
   damage: {
@@ -75,6 +78,15 @@ export const ADJUSTMENT_TYPE_META: Record<AdjustmentType, AdjustmentTypeMeta> = 
     badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     description: 'Manual correction after a physical recount',
     reasonPlaceholder: 'e.g. Recount correction',
+  },
+  count: {
+    value: 'count',
+    label: 'Stock Count',
+    icon: ClipboardCheck,
+    tone: 'sky',
+    badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+    description: 'Difference found by a posted stock count',
+    reasonPlaceholder: '',
   },
   other: {
     value: 'other',

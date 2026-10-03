@@ -67,6 +67,7 @@ import { productBranchSyncApi } from './productBranchSync.api';
 import { websiteConnectionApi } from './websiteConnection.api';
 import { inventoryTransferApi } from './inventoryTransfer.api';
 import { stockAdjustmentApi } from './stockAdjustment.api';
+import { stockCountApi } from './stockCount.api';
 import { auditLogApi } from './auditLog.api';
 import { aiAssistantApi } from './aiAssistant.api';
 import { recurringExpenseApi } from './recurringExpense.api';
@@ -154,6 +155,7 @@ export const store = configureStore({
     [websiteConnectionApi.reducerPath]: websiteConnectionApi.reducer,
     [inventoryTransferApi.reducerPath]: inventoryTransferApi.reducer,
     [stockAdjustmentApi.reducerPath]: stockAdjustmentApi.reducer,
+    [stockCountApi.reducerPath]: stockCountApi.reducer,
     [auditLogApi.reducerPath]: auditLogApi.reducer,
     [aiAssistantApi.reducerPath]: aiAssistantApi.reducer,
     [recurringExpenseApi.reducerPath]: recurringExpenseApi.reducer,
@@ -234,6 +236,7 @@ export const store = configureStore({
       websiteConnectionApi.middleware,
       inventoryTransferApi.middleware,
       stockAdjustmentApi.middleware,
+      stockCountApi.middleware,
       auditLogApi.middleware,
       aiAssistantApi.middleware,
       recurringExpenseApi.middleware,

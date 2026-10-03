@@ -23,6 +23,8 @@ const IMEI_STATUS_BY_ADJUSTMENT_TYPE = {
   expired: 'scrapped',
   lost: 'lost',
   correction: 'scrapped',
+  // A unit a stock count couldn't find on the shelf.
+  count: 'lost',
   other: 'scrapped',
 };
 
@@ -217,6 +219,7 @@ const createAdjustment = async ({
   quantity,
   reason,
   notes,
+  stockCountId,
   createdBy,
 }) => {
   if (type === 'other' && !reason?.trim()) {
@@ -271,6 +274,7 @@ const createAdjustment = async ({
     newQuantity,
     reason: reason?.trim() || undefined,
     notes: notes?.trim() || undefined,
+    stockCountId,
     createdBy,
   });
 

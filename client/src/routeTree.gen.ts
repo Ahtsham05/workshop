@@ -54,6 +54,7 @@ import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/
 import { Route as AuthenticatedSuppliersIndexImport } from './routes/_authenticated/suppliers/index'
 import { Route as AuthenticatedSubscriptionIndexImport } from './routes/_authenticated/subscription/index'
 import { Route as AuthenticatedSubCategoriesIndexImport } from './routes/_authenticated/sub-categories/index'
+import { Route as AuthenticatedStockCountsIndexImport } from './routes/_authenticated/stock-counts/index'
 import { Route as AuthenticatedStaffIndexImport } from './routes/_authenticated/staff/index'
 import { Route as AuthenticatedSettingsIndexImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedSchoolIndexImport } from './routes/_authenticated/school/index'
@@ -86,6 +87,7 @@ import { Route as AuthenticatedWhatsappMessagesImport } from './routes/_authenti
 import { Route as AuthenticatedWhatsappAnalyticsImport } from './routes/_authenticated/whatsapp/analytics'
 import { Route as AuthenticatedSubscriptionPricingImport } from './routes/_authenticated/subscription/pricing'
 import { Route as AuthenticatedSubscriptionPaymentImport } from './routes/_authenticated/subscription/payment'
+import { Route as AuthenticatedStockCountsCountIdImport } from './routes/_authenticated/stock-counts/$countId'
 import { Route as AuthenticatedSmsLogImport } from './routes/_authenticated/sms/log'
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
 import { Route as AuthenticatedSettingsWebsiteConnectionsImport } from './routes/_authenticated/settings/website-connections'
@@ -465,6 +467,13 @@ const AuthenticatedSubCategoriesIndexRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedStockCountsIndexRoute =
+  AuthenticatedStockCountsIndexImport.update({
+    id: '/stock-counts/',
+    path: '/stock-counts/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedStaffIndexRoute = AuthenticatedStaffIndexImport.update({
   id: '/staff/',
   path: '/staff/',
@@ -680,6 +689,13 @@ const AuthenticatedSubscriptionPaymentRoute =
   AuthenticatedSubscriptionPaymentImport.update({
     id: '/subscription/payment',
     path: '/subscription/payment',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
+const AuthenticatedStockCountsCountIdRoute =
+  AuthenticatedStockCountsCountIdImport.update({
+    id: '/stock-counts/$countId',
+    path: '/stock-counts/$countId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -1962,6 +1978,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSmsLogImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/stock-counts/$countId': {
+      id: '/_authenticated/stock-counts/$countId'
+      path: '/stock-counts/$countId'
+      fullPath: '/stock-counts/$countId'
+      preLoaderRoute: typeof AuthenticatedStockCountsCountIdImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/subscription/payment': {
       id: '/_authenticated/subscription/payment'
       path: '/subscription/payment'
@@ -2184,6 +2207,13 @@ declare module '@tanstack/react-router' {
       path: '/staff'
       fullPath: '/staff'
       preLoaderRoute: typeof AuthenticatedStaffIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/stock-counts/': {
+      id: '/_authenticated/stock-counts/'
+      path: '/stock-counts'
+      fullPath: '/stock-counts'
+      preLoaderRoute: typeof AuthenticatedStockCountsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/sub-categories/': {
@@ -2919,6 +2949,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedRestaurantReservationsRoute: typeof AuthenticatedRestaurantReservationsRoute
   AuthenticatedRestaurantTablesRoute: typeof AuthenticatedRestaurantTablesRoute
   AuthenticatedSmsLogRoute: typeof AuthenticatedSmsLogRoute
+  AuthenticatedStockCountsCountIdRoute: typeof AuthenticatedStockCountsCountIdRoute
   AuthenticatedSubscriptionPaymentRoute: typeof AuthenticatedSubscriptionPaymentRoute
   AuthenticatedSubscriptionPricingRoute: typeof AuthenticatedSubscriptionPricingRoute
   AuthenticatedWhatsappAnalyticsRoute: typeof AuthenticatedWhatsappAnalyticsRoute
@@ -2949,6 +2980,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSalesReturnsIndexRoute: typeof AuthenticatedSalesReturnsIndexRoute
   AuthenticatedSalesmenIndexRoute: typeof AuthenticatedSalesmenIndexRoute
   AuthenticatedStaffIndexRoute: typeof AuthenticatedStaffIndexRoute
+  AuthenticatedStockCountsIndexRoute: typeof AuthenticatedStockCountsIndexRoute
   AuthenticatedSubCategoriesIndexRoute: typeof AuthenticatedSubCategoriesIndexRoute
   AuthenticatedSubscriptionIndexRoute: typeof AuthenticatedSubscriptionIndexRoute
   AuthenticatedSuppliersIndexRoute: typeof AuthenticatedSuppliersIndexRoute
@@ -3019,6 +3051,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedRestaurantReservationsRoute,
   AuthenticatedRestaurantTablesRoute: AuthenticatedRestaurantTablesRoute,
   AuthenticatedSmsLogRoute: AuthenticatedSmsLogRoute,
+  AuthenticatedStockCountsCountIdRoute: AuthenticatedStockCountsCountIdRoute,
   AuthenticatedSubscriptionPaymentRoute: AuthenticatedSubscriptionPaymentRoute,
   AuthenticatedSubscriptionPricingRoute: AuthenticatedSubscriptionPricingRoute,
   AuthenticatedWhatsappAnalyticsRoute: AuthenticatedWhatsappAnalyticsRoute,
@@ -3051,6 +3084,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSalesReturnsIndexRoute: AuthenticatedSalesReturnsIndexRoute,
   AuthenticatedSalesmenIndexRoute: AuthenticatedSalesmenIndexRoute,
   AuthenticatedStaffIndexRoute: AuthenticatedStaffIndexRoute,
+  AuthenticatedStockCountsIndexRoute: AuthenticatedStockCountsIndexRoute,
   AuthenticatedSubCategoriesIndexRoute: AuthenticatedSubCategoriesIndexRoute,
   AuthenticatedSubscriptionIndexRoute: AuthenticatedSubscriptionIndexRoute,
   AuthenticatedSuppliersIndexRoute: AuthenticatedSuppliersIndexRoute,
@@ -3158,6 +3192,7 @@ export interface FileRoutesByFullPath {
   '/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
+  '/stock-counts/$countId': typeof AuthenticatedStockCountsCountIdRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
@@ -3190,6 +3225,7 @@ export interface FileRoutesByFullPath {
   '/school/': typeof AuthenticatedSchoolIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
+  '/stock-counts': typeof AuthenticatedStockCountsIndexRoute
   '/sub-categories': typeof AuthenticatedSubCategoriesIndexRoute
   '/subscription': typeof AuthenticatedSubscriptionIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
@@ -3333,6 +3369,7 @@ export interface FileRoutesByTo {
   '/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
+  '/stock-counts/$countId': typeof AuthenticatedStockCountsCountIdRoute
   '/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
@@ -3365,6 +3402,7 @@ export interface FileRoutesByTo {
   '/school': typeof AuthenticatedSchoolIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/staff': typeof AuthenticatedStaffIndexRoute
+  '/stock-counts': typeof AuthenticatedStockCountsIndexRoute
   '/sub-categories': typeof AuthenticatedSubCategoriesIndexRoute
   '/subscription': typeof AuthenticatedSubscriptionIndexRoute
   '/suppliers': typeof AuthenticatedSuppliersIndexRoute
@@ -3512,6 +3550,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/_authenticated/sms/log': typeof AuthenticatedSmsLogRoute
+  '/_authenticated/stock-counts/$countId': typeof AuthenticatedStockCountsCountIdRoute
   '/_authenticated/subscription/payment': typeof AuthenticatedSubscriptionPaymentRoute
   '/_authenticated/subscription/pricing': typeof AuthenticatedSubscriptionPricingRoute
   '/_authenticated/whatsapp/analytics': typeof AuthenticatedWhatsappAnalyticsRoute
@@ -3544,6 +3583,7 @@ export interface FileRoutesById {
   '/_authenticated/school/': typeof AuthenticatedSchoolIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/staff/': typeof AuthenticatedStaffIndexRoute
+  '/_authenticated/stock-counts/': typeof AuthenticatedStockCountsIndexRoute
   '/_authenticated/sub-categories/': typeof AuthenticatedSubCategoriesIndexRoute
   '/_authenticated/subscription/': typeof AuthenticatedSubscriptionIndexRoute
   '/_authenticated/suppliers/': typeof AuthenticatedSuppliersIndexRoute
@@ -3693,6 +3733,7 @@ export interface FileRouteTypes {
     | '/settings/website-connections'
     | '/settings/whatsapp'
     | '/sms/log'
+    | '/stock-counts/$countId'
     | '/subscription/payment'
     | '/subscription/pricing'
     | '/whatsapp/analytics'
@@ -3725,6 +3766,7 @@ export interface FileRouteTypes {
     | '/school/'
     | '/settings/'
     | '/staff'
+    | '/stock-counts'
     | '/sub-categories'
     | '/subscription'
     | '/suppliers'
@@ -3867,6 +3909,7 @@ export interface FileRouteTypes {
     | '/settings/website-connections'
     | '/settings/whatsapp'
     | '/sms/log'
+    | '/stock-counts/$countId'
     | '/subscription/payment'
     | '/subscription/pricing'
     | '/whatsapp/analytics'
@@ -3899,6 +3942,7 @@ export interface FileRouteTypes {
     | '/school'
     | '/settings'
     | '/staff'
+    | '/stock-counts'
     | '/sub-categories'
     | '/subscription'
     | '/suppliers'
@@ -4044,6 +4088,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/website-connections'
     | '/_authenticated/settings/whatsapp'
     | '/_authenticated/sms/log'
+    | '/_authenticated/stock-counts/$countId'
     | '/_authenticated/subscription/payment'
     | '/_authenticated/subscription/pricing'
     | '/_authenticated/whatsapp/analytics'
@@ -4076,6 +4121,7 @@ export interface FileRouteTypes {
     | '/_authenticated/school/'
     | '/_authenticated/settings/'
     | '/_authenticated/staff/'
+    | '/_authenticated/stock-counts/'
     | '/_authenticated/sub-categories/'
     | '/_authenticated/subscription/'
     | '/_authenticated/suppliers/'
@@ -4245,6 +4291,7 @@ export const routeTree = rootRoute
         "/_authenticated/restaurant/reservations",
         "/_authenticated/restaurant/tables",
         "/_authenticated/sms/log",
+        "/_authenticated/stock-counts/$countId",
         "/_authenticated/subscription/payment",
         "/_authenticated/subscription/pricing",
         "/_authenticated/whatsapp/analytics",
@@ -4275,6 +4322,7 @@ export const routeTree = rootRoute
         "/_authenticated/sales-returns/",
         "/_authenticated/salesmen/",
         "/_authenticated/staff/",
+        "/_authenticated/stock-counts/",
         "/_authenticated/sub-categories/",
         "/_authenticated/subscription/",
         "/_authenticated/suppliers/",
@@ -4679,6 +4727,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/sms/log.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/stock-counts/$countId": {
+      "filePath": "_authenticated/stock-counts/$countId.tsx",
+      "parent": "/_authenticated"
+    },
     "/_authenticated/subscription/payment": {
       "filePath": "_authenticated/subscription/payment.tsx",
       "parent": "/_authenticated"
@@ -4805,6 +4857,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/staff/": {
       "filePath": "_authenticated/staff/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/stock-counts/": {
+      "filePath": "_authenticated/stock-counts/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/sub-categories/": {

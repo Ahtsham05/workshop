@@ -6,7 +6,8 @@ const { toJSON, paginate } = require('./plugins');
 // can never end up with e.g. a "damage" entry that increased stock.
 const DECREASE_ONLY_TYPES = ['damage', 'theft', 'expired', 'lost'];
 const INCREASE_ONLY_TYPES = ['found'];
-const FLEXIBLE_TYPES = ['correction', 'other'];
+// 'count': the variance a posted stock count found (stockCount.service.js#postCount).
+const FLEXIBLE_TYPES = ['correction', 'count', 'other'];
 const ADJUSTMENT_TYPES = [...DECREASE_ONLY_TYPES, ...INCREASE_ONLY_TYPES, ...FLEXIBLE_TYPES];
 
 const ADJUSTMENT_DIRECTIONS = ['increase', 'decrease'];
@@ -27,7 +28,8 @@ const StockAdjustmentSchema = new mongoose.Schema(
 
     type: { type: String, enum: ADJUSTMENT_TYPES, required: true, index: true },
     direction: { type: String, enum: ADJUSTMENT_DIRECTIONS, required: true },
-    quantity: { type: Number, required: true, min: 1 },
+    // Positive; fractional only for loose goods counted by weight/length (stock counts of kg/m items).
+    quantity: { type: Number, required: true, validate: { validator: (v) => v > 0, message: 'quantity must be positive' } },
 
     unitCost: { type: Number, default: 0 },
     totalValue: { type: Number, default: 0 }, // quantity * unitCost — the reportable loss/gain
@@ -45,9 +47,12 @@ const StockAdjustmentSchema = new mongoose.Schema(
     reversalOf: { type: mongoose.Schema.Types.ObjectId, ref: 'StockAdjustment' },
     reversedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'StockAdjustment' },
 
+    // Set when the adjustment was posted from a stock count (cycle count, audit, initial count).
+    stockCountId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockCount', index: true },
+
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
-  { timestamps: true }
+  { timestamps: true, keepTimestampsInJSON: true }
 );
 
 StockAdjustmentSchema.index({ organizationId: 1, branchId: 1, createdAt: -1 });

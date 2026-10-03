@@ -1561,5 +1561,6 @@ module.exports = {
   getMetricsForProducts,
   getProductAnalytics,
   getProductActivity,
+  getBranchAnalytics,
   clearAnalyticsCache,
 };

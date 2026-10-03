@@ -1,0 +1,369 @@
+{
+  "quarantined": {
+    "customerledgers": [
+      {
+        "why": "customer no longer exists",
+        "row": {
+          "_id": "6999ea6f83da1813dc683676",
+          "customer": "6999e7219144255ff0fa5269",
+          "transactionType": "payment_received",
+          "transactionDate": "2026-02-21T17:24:50.624Z",
+          "description": "new1",
+          "debit": 0,
+          "credit": 75,
+          "balance": 0,
+          "paymentMethod": "Cash",
+          "createdAt": "2026-02-21T17:25:03.542Z",
+          "updatedAt": "2026-02-21T17:25:03.542Z",
+          "__v": 0
+        }
+      }
+    ],
+    "supplierledgers": [
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a46c52a681755bd44dc7c1",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-01T00:00:00.000Z",
+          "reference": "INV-5001",
+          "referenceId": "69a46c50a681755bd44dc7ac",
+          "description": "Purchase Invoice #INV-5001",
+          "debit": 0,
+          "credit": 5830,
+          "balance": 5830,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T16:41:54.700Z",
+          "updatedAt": "2026-03-01T16:41:55.082Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a46d2ba681755bd44dc7fa",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-01T00:00:00.000Z",
+          "reference": "INV-5002",
+          "referenceId": "69a46d29a681755bd44dc7e5",
+          "description": "Purchase Invoice #INV-5002",
+          "debit": 0,
+          "credit": 6680,
+          "balance": 12510,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T16:45:31.850Z",
+          "updatedAt": "2026-03-01T16:45:32.227Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a46db1eb91adb991a87526",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-01T00:00:00.000Z",
+          "reference": "INV-5003",
+          "referenceId": "69a46db0eb91adb991a8751d",
+          "description": "Purchase Invoice #INV-5003",
+          "debit": 0,
+          "credit": 5970,
+          "balance": 18480,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 2 items",
+          "createdAt": "2026-03-01T16:47:45.971Z",
+          "updatedAt": "2026-03-01T16:47:46.350Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a46f28be32d168440646f3",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-04T00:00:00.000Z",
+          "reference": "INV-5004",
+          "referenceId": "69a46f25be32d168440646de",
+          "description": "Purchase Invoice #INV-5004",
+          "debit": 0,
+          "credit": 9220,
+          "balance": 27700,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T16:54:00.499Z",
+          "updatedAt": "2026-03-01T16:54:00.890Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a4714d89fd8ecfa73cb678",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-04T00:00:00.000Z",
+          "reference": "INV-5005",
+          "referenceId": "69a4714a89fd8ecfa73cb663",
+          "description": "Purchase Invoice #INV-5005",
+          "debit": 0,
+          "credit": 5230,
+          "balance": 32930,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T17:03:09.171Z",
+          "updatedAt": "2026-03-01T17:03:09.547Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a471a889fd8ecfa73cb6bc",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-04T00:00:00.000Z",
+          "reference": "INV-5006",
+          "referenceId": "69a471a789fd8ecfa73cb6b0",
+          "description": "Purchase Invoice #INV-5006",
+          "debit": 0,
+          "credit": 4100,
+          "balance": 37030,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 3 items",
+          "createdAt": "2026-03-01T17:04:40.634Z",
+          "updatedAt": "2026-03-01T17:04:41.010Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a473e3bebf236f3f43730d",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-04T00:00:00.000Z",
+          "reference": "INV-5007",
+          "referenceId": "69a473e0bebf236f3f4372f8",
+          "description": "Purchase Invoice #INV-5007",
+          "debit": 0,
+          "credit": 4300,
+          "balance": 41330,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T17:14:11.617Z",
+          "updatedAt": "2026-03-01T17:14:11.994Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a4748dbebf236f3f437363",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5008",
+          "referenceId": "69a4748bbebf236f3f43734e",
+          "description": "Purchase Invoice #INV-5008",
+          "debit": 0,
+          "credit": 12980,
+          "balance": 54310,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T17:17:01.918Z",
+          "updatedAt": "2026-03-01T17:17:02.294Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a474ffbebf236f3f437409",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5009",
+          "referenceId": "69a474febebf236f3f4373fd",
+          "description": "Purchase Invoice #INV-5009",
+          "debit": 0,
+          "credit": 14100,
+          "balance": 68410,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 3 items",
+          "createdAt": "2026-03-01T17:18:55.870Z",
+          "updatedAt": "2026-03-01T17:18:56.292Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a475f495e13f85630ec434",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5010",
+          "referenceId": "69a475f195e13f85630ec41f",
+          "description": "Purchase Invoice #INV-5010",
+          "debit": 0,
+          "credit": 14810,
+          "balance": 83220,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T17:23:00.095Z",
+          "updatedAt": "2026-03-01T17:23:00.503Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a4767e95e13f85630ec499",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5011",
+          "referenceId": "69a4767c95e13f85630ec484",
+          "description": "Purchase Invoice #INV-5011",
+          "debit": 0,
+          "credit": 29000,
+          "balance": 112220,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T17:25:18.930Z",
+          "updatedAt": "2026-03-01T17:25:19.307Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a476d995e13f85630ec4f2",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5012",
+          "referenceId": "69a476d895e13f85630ec4e9",
+          "description": "Purchase Invoice #INV-5012",
+          "debit": 0,
+          "credit": 6300,
+          "balance": 118520,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 2 items",
+          "createdAt": "2026-03-01T17:26:49.161Z",
+          "updatedAt": "2026-03-01T17:26:49.538Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a4784995e13f85630ec553",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5013",
+          "referenceId": "69a4784695e13f85630ec53e",
+          "description": "Purchase Invoice #INV-5013",
+          "debit": 0,
+          "credit": 10550,
+          "balance": 129070,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T17:32:57.518Z",
+          "updatedAt": "2026-03-01T17:32:57.894Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a4796e95e13f85630ec5b5",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5014",
+          "referenceId": "69a4796b95e13f85630ec5a3",
+          "description": "Purchase Invoice #INV-5014",
+          "debit": 0,
+          "credit": 9040,
+          "balance": 138110,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 5 items",
+          "createdAt": "2026-03-01T17:37:50.149Z",
+          "updatedAt": "2026-03-01T17:37:50.525Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a47b199df56f99927f19cc",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5015",
+          "referenceId": "69a47b179df56f99927f19bd",
+          "description": "Purchase Invoice #INV-5015",
+          "debit": 0,
+          "credit": 6000,
+          "balance": 144110,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 4 items",
+          "createdAt": "2026-03-01T17:44:57.287Z",
+          "updatedAt": "2026-03-01T17:44:57.665Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a47c809df56f99927f1a4c",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5016",
+          "referenceId": "69a47c7d9df56f99927f1a37",
+          "description": "Purchase Invoice #INV-5016",
+          "debit": 0,
+          "credit": 5630,
+          "balance": 149740,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T17:50:56.503Z",
+          "updatedAt": "2026-03-01T17:50:56.882Z",
+          "__v": 0
+        }
+      },
+      {
+        "why": "supplier no longer exists",
+        "row": {
+          "_id": "69a47e75d4cc0cc4301e0533",
+          "supplier": "699c8ac6b2cec9abe3907d00",
+          "transactionType": "purchase",
+          "transactionDate": "2026-02-12T00:00:00.000Z",
+          "reference": "INV-5017",
+          "referenceId": "69a47e72d4cc0cc4301e051e",
+          "description": "Purchase Invoice #INV-5017",
+          "debit": 0,
+          "credit": 7930,
+          "balance": 157670,
+          "paymentMethod": "Cash",
+          "notes": "Purchase of 6 items",
+          "createdAt": "2026-03-01T17:59:17.301Z",
+          "updatedAt": "2026-03-01T17:59:17.681Z",
+          "__v": 0
+        }
+      }
+    ]
+  },
+  "notes": [
+    "253 invoices: legacy status \"draft\" mapped to paid/finalized by balance."
+  ],
+  "validationErrors": []
+}

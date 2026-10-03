@@ -34,7 +34,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, ClipboardCheck, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -99,7 +99,7 @@ export const sidebarData: SidebarData = {
         {
           title: 'Catalog & Inventory',
           icon: IconPackages,
-          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'viewImeiTracking', 'viewPriceChecker', 'viewPriceUpdates', 'managePriceUpdates'],
+          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'countStock', 'approveStockCounts', 'viewImeiTracking', 'viewPriceChecker', 'viewPriceUpdates', 'managePriceUpdates'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
             { title: 'Categories', url: '/categories', icon: IconCategory, permission: 'viewCategories' },
@@ -107,6 +107,7 @@ export const sidebarData: SidebarData = {
             { title: 'Products', url: '/products', icon: IconPackages, permission: 'viewProducts' },
             { title: 'Stock Transfer', url: '/stock-transfer', icon: IconTransfer, permission: 'viewProducts' },
             { title: 'Stock Adjustments', url: '/stock-adjustments', icon: ClipboardEdit, permission: 'viewProducts' },
+            { title: 'Stock Counts', url: '/stock-counts', icon: ClipboardCheck, anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
             { title: 'IMEI / Serial Tracking', url: '/mobile-shop/imei-tracking', icon: ShieldCheck, permission: 'viewImeiTracking' },
             { title: 'Price Checker', url: '/price-checker', icon: DollarSign, permission: 'viewPriceChecker' },
             { title: 'Price Updates', url: '/price-updates', icon: TrendingUp, anyPermission: ['viewPriceUpdates', 'managePriceUpdates'] },
@@ -1025,6 +1026,7 @@ export const sidebarData: SidebarData = {
             { title: 'Batch & Expiry Report', url: '/reports?tab=batch-expiry' as never, icon: IconClock, permission: 'viewInventoryReports' },
             { title: 'Stock Adjustments Report', url: '/reports?tab=stock-adjustments' as never, icon: ClipboardEdit, permission: 'viewInventoryReports' },
             { title: 'Stock Transfers Report', url: '/reports?tab=stock-transfers' as never, icon: IconTransfer, permission: 'viewInventoryReports' },
+            { title: 'Stock Count Accuracy', url: '/stock-counts?tab=reports' as never, icon: ClipboardCheck, anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
           ],
         },
         {

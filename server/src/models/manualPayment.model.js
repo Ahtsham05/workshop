@@ -34,9 +34,10 @@ const manualPaymentSchema = mongoose.Schema(
     payerName: { type: String, required: true, trim: true },
     paidOn: { type: Date, required: true },
     proof: {
-      storageKey: { type: String, required: true },
-      mimeType: { type: String, required: true },
-      bytes: { type: Number, required: true },
+      // Optional — a payment may be submitted without a screenshot.
+      storageKey: { type: String },
+      mimeType: { type: String },
+      bytes: { type: Number },
     },
     status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
     reviewedBy: { type: mongoose.SchemaTypes.ObjectId, ref: 'User', default: null },

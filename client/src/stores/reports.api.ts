@@ -422,7 +422,7 @@ export interface StockAdjustmentReportLineItem {
   id: string
   date: string
   productName: string
-  type: 'damage' | 'theft' | 'expired' | 'lost' | 'found' | 'correction' | 'other'
+  type: 'damage' | 'theft' | 'expired' | 'lost' | 'found' | 'correction' | 'count' | 'other'
   direction: 'increase' | 'decrease'
   quantity: number
   previousQuantity: number

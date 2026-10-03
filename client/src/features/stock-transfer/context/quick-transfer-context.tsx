@@ -1,9 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { toast } from 'sonner'
 import type { AppDispatch, RootState } from '@/stores/store'
 import { useGetMyBranchesQuery } from '@/stores/branch.api'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import { usePermissions } from '@/context/permission-context'
+import { isQuickTransferShortcut } from '../lib/quick-transfer-shortcut'
 
 /**
  * "Quick Stock Transfer": the Bulk Transfer form (one or many products), reachable from every screen without
@@ -50,11 +52,13 @@ const getCurrent = () => current
 
 export function QuickTransferProvider({ children }: { children: ReactNode }) {
   const dispatch = useDispatch<AppDispatch>()
-  const { hasPermission } = usePermissions()
+  const { permissions, hasPermission } = usePermissions()
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
-  const { data: branches = [] } = useGetMyBranchesQuery()
+  const { data: branches, isError: branchesFailed, refetch: refetchBranches } = useGetMyBranchesQuery()
   // Creating a transfer needs editProducts on the server (inventoryTransfer.route.js).
-  const canTransfer = hasPermission('editProducts') && branches.some((b) => b.id !== activeBranchId)
+  const canTransfer = hasPermission('editProducts') && (branches ?? []).some((b) => b.id !== activeBranchId)
+  // Until the branch list and permissions have arrived, "can't transfer" only means "don't know yet".
+  const stillLoading = !canTransfer && (!permissions || !activeBranchId || branches === undefined)
 
   const [open, setOpen] = useState(false)
   const [everOpened, setEverOpened] = useState(false)
@@ -72,32 +76,62 @@ export function QuickTransferProvider({ children }: { children: ReactNode }) {
   const isOpenRef = useRef(open)
   isOpenRef.current = open
 
-  const openQuickTransfer = useCallback(
+  const show = useCallback(
     (next?: QuickTransferPrefill) => {
-      if (!canTransfer || isOpenRef.current) return
       warmUp()
       setPrefill(next ?? null)
       setSessionKey((k) => k + 1)
       setEverOpened(true)
       setOpen(true)
     },
-    [canTransfer, warmUp]
+    [warmUp]
+  )
+
+  // Asked for before the branch list / permissions arrived (right after a reload, a branch
+  // switch, or a slow network): open as soon as they do instead of silently doing nothing.
+  const pendingRef = useRef<{ prefill?: QuickTransferPrefill; at: number } | null>(null)
+  useEffect(() => {
+    const pending = pendingRef.current
+    if (!pending || stillLoading) return
+    pendingRef.current = null
+    toast.dismiss('quick-transfer')
+    if (canTransfer && !isOpenRef.current && Date.now() - pending.at < 20_000) show(pending.prefill)
+  }, [canTransfer, stillLoading, show])
+
+  const openQuickTransfer = useCallback(
+    (next?: QuickTransferPrefill) => {
+      if (isOpenRef.current) return
+      if (canTransfer) return show(next)
+      if (stillLoading) {
+        pendingRef.current = { prefill: next, at: Date.now() }
+        if (branchesFailed) void refetchBranches()
+        toast('Opening stock transfer…', { id: 'quick-transfer', duration: 3000 })
+        return
+      }
+      toast.info(
+        hasPermission('editProducts')
+          ? 'Stock transfer needs another branch to send to.'
+          : "Your role doesn't allow stock transfers (needs Edit Products).",
+        { id: 'quick-transfer' }
+      )
+    },
+    [canTransfer, stillLoading, branchesFailed, refetchBranches, hasPermission, show]
   )
 
   // Ctrl/Cmd + Alt + S from anywhere — including while typing in a field, since the whole
-  // point is to get there mid-task. Matching on the produced key (not the physical one)
-  // means a keyboard layout that types a character with Ctrl+Alt+S (AltGr) is left alone.
+  // point is to get there mid-task. Listened for in the capture phase, so a field or popover
+  // that stops its keydown from bubbling can't swallow it.
   const openRef = useRef(openQuickTransfer)
   openRef.current = openQuickTransfer
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!event.altKey || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.repeat) return
-      if (event.key?.toLowerCase() !== 's') return
+      if (!isQuickTransferShortcut(event)) return
       event.preventDefault()
+      if (event.repeat) return
       openRef.current()
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [])
 
   const value = useMemo(() => ({ canTransfer, openQuickTransfer, warmUp }), [canTransfer, openQuickTransfer, warmUp])

@@ -10,6 +10,13 @@ const PERMISSION_GROUPS = [
     permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'],
   },
   {
+    // Initial counts, A/B/C cycle counts, surprise audits (routes/v1/stockCount.route.js).
+    // Roles with editProducts can already count and approve; these split the two duties.
+    id: 'stock_counts',
+    label: 'Stock Counts',
+    permissions: ['countStock', 'approveStockCounts'],
+  },
+  {
     id: 'imei_tracking',
     label: 'IMEI / Serial Tracking',
     permissions: ['viewImeiTracking', 'manageImeiTracking'],
@@ -358,6 +365,7 @@ const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissio
 const PERMISSION_TAB_GROUPS = {
   business: [
     'products',
+    'stock_counts',
     'imei_tracking',
     'price_updates',
     'invoices',

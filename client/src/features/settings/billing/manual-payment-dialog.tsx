@@ -139,15 +139,14 @@ export function ManualPaymentDialog({ plan, open, onOpenChange }: Props) {
     if (payerName.trim().length < 2) errors.payerName = 'Enter the name of the account that paid'
     if (!(Number(paidAmount) > 0)) errors.paidAmount = 'Enter the amount you sent'
     if (!paidOn) errors.paidOn = 'Enter the payment date'
-    if (!file) errors.file = 'Attach a screenshot or PDF of the payment'
-    else if (file.size > MAX_BYTES) errors.file = 'File is larger than 5 MB'
-    else if (!ACCEPT.split(',').includes(file.type)) errors.file = 'Use a JPG, PNG, WEBP or PDF file'
+    if (file && file.size > MAX_BYTES) errors.file = 'File is larger than 5 MB'
+    else if (file && !ACCEPT.split(',').includes(file.type)) errors.file = 'Use a JPG, PNG, WEBP or PDF file'
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
 
   const handleSubmit = async () => {
-    if (!intent || !validate() || !file) return
+    if (!intent || !validate()) return
     const form = new FormData()
     form.append('reference', intent.reference)
     form.append('method', method)
@@ -156,7 +155,7 @@ export function ManualPaymentDialog({ plan, open, onOpenChange }: Props) {
     form.append('paidAmountPkr', paidAmount)
     // Noon PKT on the chosen day, so no timezone shift can move it to another date.
     form.append('paidOn', new Date(`${paidOn}T12:00:00+05:00`).toISOString())
-    form.append('proof', file)
+    if (file) form.append('proof', file)
     try {
       await submitPayment(form).unwrap()
       setStep('done')
@@ -309,14 +308,14 @@ export function ManualPaymentDialog({ plan, open, onOpenChange }: Props) {
               </p>
             )}
             <div className='space-y-1.5'>
-              <Label htmlFor='mp-proof'>Screenshot or PDF of the payment</Label>
+              <Label htmlFor='mp-proof'>Screenshot or PDF of the payment <span className='text-muted-foreground font-normal'>(optional)</span></Label>
               <label
                 htmlFor='mp-proof'
                 className='hover:bg-muted/50 flex cursor-pointer items-center gap-3 rounded-md border border-dashed p-3'
               >
                 {file ? <FileCheck2 className='h-5 w-5 shrink-0 text-emerald-600' /> : <Upload className='h-5 w-5 shrink-0' />}
                 <span className='min-w-0 truncate text-sm'>
-                  {file ? `${file.name} (${(file.size / 1024).toFixed(0)} KB)` : 'Choose a JPG, PNG, WEBP or PDF — up to 5 MB'}
+                  {file ? `${file.name} (${(file.size / 1024).toFixed(0)} KB)` : 'Optional — JPG, PNG, WEBP or PDF, up to 5 MB'}
                 </span>
               </label>
               <input

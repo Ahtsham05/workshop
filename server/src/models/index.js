@@ -68,6 +68,9 @@ module.exports.PurchaseReturn = require('./purchaseReturn.model');
 module.exports.SeasonalFactor = require('./seasonalFactor.model');
 module.exports.InventoryTransfer = require('./inventoryTransfer.model');
 module.exports.StockAdjustment = require('./stockAdjustment.model');
+module.exports.StockCount = require('./stockCount.model');
+module.exports.StockCountLine = require('./stockCountLine.model');
+module.exports.StockCountPolicy = require('./stockCountPolicy.model');
 
 // Universal Product Architecture (see docs/architecture/universal-product-migration.md)
 module.exports.ProductAttribute = require('./productAttribute.model');

@@ -8,7 +8,7 @@ import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/store
 import { useLanguage } from '@/context/language-context'
 import { matchesBilingualSearch, getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
-import { ADJUSTMENT_TYPE_ORDER, ADJUSTMENT_TYPE_META } from '../lib/adjustment-types'
+import { MANUAL_ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_META } from '../lib/adjustment-types'
 import { SerialPickDialog } from '@/components/serial-pick-dialog'
 
 import {
@@ -331,7 +331,7 @@ export function CreateAdjustmentDialog({ open, onOpenChange, prefill }: CreateAd
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ADJUSTMENT_TYPE_ORDER.filter((value) => !(isSerialized && value === 'found')).map((value) => {
+                {MANUAL_ADJUSTMENT_TYPES.filter((value) => !(isSerialized && value === 'found')).map((value) => {
                   const m = ADJUSTMENT_TYPE_META[value]
                   const Icon = m.icon
                   return (
