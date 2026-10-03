@@ -688,7 +688,7 @@ table.marks tr.total-row td {
         ${ptmField('Month', undefined, false)}
         ${ptmField('Class Strength', data.classStrength, classHas)}
         ${ptmField('Working Days', attendance.total, attHas)}
-        ${ptmField('Days Present', attendance.present, attHas)}
+        ${ptmField('Present Days', attendance.present, attHas)}
       </div>
     </div>
     <table class="ptm-table">
@@ -711,7 +711,7 @@ table.marks tr.total-row td {
       ${infoCell("Father's Name", student.parent?.fatherName)}
       ${infoCell('Admission No.', student.admissionNumber)}
       ${infoCell('Class', classLabel)}
-      ${infoCell('Roll No.', student.rollNumber)}
+      ${infoCell('Roll No.', student.rollNumber?.replace(/^roll[-\s_]*/i, ''))}
       ${infoCell('Contact', student.parent?.phone)}
     </div>
   </div>
