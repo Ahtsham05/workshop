@@ -587,6 +587,10 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       toast.error('Enter a batch number for the existing stock before turning on batch tracking')
       return
     }
+    // Sale price below the purchase price is almost always the two fields swapped.
+    if (!rawValues.hasVariants && rawValues.cost > rawValues.price && !window.confirm(t('Purchase price ({{cost}}) is higher than the sale price ({{price}}). Save anyway?', { cost: rawValues.cost, price: rawValues.price }))) {
+      return
+    }
     setIsSubmitting(true)
     // images[0] is the primary photo. The server mirrors this itself (product.model.js),
     // but sending both keeps the payload unambiguous — and an explicitly empty `images`
@@ -1727,6 +1731,11 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   )}
                 />
               </div>
+              )}
+              {!hasVariantsWatch && (costWatch || 0) > 0 && (priceWatch || 0) > 0 && (costWatch || 0) > (priceWatch || 0) && (
+                <p role='alert' className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200'>
+                  {t('Purchase price is higher than the sale price — you would sell at a loss. Did you enter the sale price in the purchase price field?')}
+                </p>
               )}
               {!hasVariantsWatch && (
                 <MarkupPercentInput
