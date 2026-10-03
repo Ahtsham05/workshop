@@ -1,3 +1,4 @@
+import { catalogInvalidationMiddleware } from './catalog-invalidation.middleware';
 import { configureStore } from '@reduxjs/toolkit';
 import errorReducer from './error.slice';
 import authReducer from './auth.slice';
@@ -253,6 +254,7 @@ export const store = configureStore({
       taxExemptionApi.middleware,
       taxCalculatorApi.middleware,
       exchangeRateApi.middleware,
+      catalogInvalidationMiddleware,
     ),
 });
 export type RootState = ReturnType<typeof store.getState>;
