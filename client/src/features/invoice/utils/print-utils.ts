@@ -1098,6 +1098,18 @@ ${itemizedTotalsTable}
   </div>
 `
 
+  const pagingConfigAttr = encodeURIComponent(
+    JSON.stringify({
+      printNumber: String(printNumber),
+      continuation: urduTexts.continuation,
+      prevLabel: urduTexts.previous_pages_items_total,
+      thisLabel: urduTexts.this_page_items_total,
+      runLabel: urduTexts.running_items_total,
+      pageTpl: urduTexts.page_indicator,
+      cur: data.currencyMeta ?? { symbol: 'Rs', decimalPlaces: 2, symbolPosition: 'before' },
+    }),
+  )
+
   let runningItemsSum = 0
   const totalPages = chunks.length
 
@@ -1121,7 +1133,7 @@ ${itemizedTotalsTable}
               .map((item, idx) => {
                 const index = rowStart + idx
                 return `
-        <tr>
+        <tr data-sub="${Number(item.subtotal) || 0}">
           <td class="text-center"><strong>${index + 1}</strong></td>
           <td class="text-left"><strong>${formatPrintItemCell(item, language)}</strong></td>
           <td class="text-center"><strong>${item.quantity}</strong></td>
@@ -1767,7 +1779,7 @@ ${itemizedTotalsTable}
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div id="invoice-print-root">
+  <div id="invoice-print-root" data-paging="${pagingConfigAttr}">
   ${pagesHtml}
   </div>
   ${printActions}
@@ -1775,6 +1787,178 @@ ${itemizedTotalsTable}
 </html>
   `.trim()
 }
+
+/**
+ * Runs inside half-sheet / two-up print windows. The server-side split (e.g. 32 rows per page) is
+ * tuned for a full portrait A4, but these layouts print into half of a landscape sheet that is far
+ * shorter — so a "page" overflows and spills a stray sheet. This re-paginates each invoice column
+ * by actually measuring rendered heights (after web fonts load) so every logical page fits one sheet.
+ */
+const HALF_SHEET_REPAGINATE_SCRIPT = `
+(function () {
+  var done = false;
+  function fmt(cfg, n) {
+    var c = cfg.cur;
+    var v = (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: c.decimalPlaces, maximumFractionDigits: c.decimalPlaces });
+    return c.symbolPosition === 'after' ? v + ' ' + c.symbol : c.symbol + v;
+  }
+  function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+  function repaginate(root, budget) {
+    var cfg;
+    try { cfg = JSON.parse(decodeURIComponent(root.getAttribute('data-paging'))); } catch (e) { return 0; }
+    var pages = Array.prototype.slice.call(root.querySelectorAll(':scope > .invoice-print-page'));
+    if (!pages.length) return 0;
+    var first = pages[0], last = pages[pages.length - 1];
+    var header = first.querySelector('.invoice-header');
+    var tableEl = first.querySelector('.items-table');
+    if (!header || !tableEl) return 0;
+    var thead = tableEl.querySelector('thead').outerHTML;
+    var tail = [];
+    var seenTable = false;
+    Array.prototype.forEach.call(last.children, function (el) {
+      if (el.classList.contains('items-table')) { seenTable = true; return; }
+      if (seenTable && !el.classList.contains('page-items-summary')) tail.push(el);
+    });
+    var rows = [];
+    pages.forEach(function (pg) {
+      Array.prototype.forEach.call(pg.querySelectorAll('.items-table tbody tr'), function (tr) { rows.push(tr); });
+    });
+    if (!rows.length) return 0;
+    var realRows = rows.filter(function (tr) { return tr.hasAttribute('data-sub'); });
+    if (realRows.length !== rows.length) return 0;
+    // everything above the table on the first sheet: letterhead + customer/invoice details
+    var headNodes = [];
+    for (var k = 0; k < first.children.length; k++) {
+      var ch = first.children[k];
+      if (ch === tableEl) break;
+      if (!ch.classList.contains('continuation-banner')) headNodes.push(ch.cloneNode(true));
+    }
+    pages.forEach(function (pg) { root.removeChild(pg); });
+
+    var built = [];
+    function newPage() {
+      var pg = document.createElement('div');
+      pg.className = 'invoice-print-page';
+      if (built.length > 0) {
+        var ban = document.createElement('div');
+        ban.className = 'continuation-banner';
+        ban.innerHTML = '<strong>#' + esc(cfg.printNumber) + '</strong> — ' + esc(cfg.continuation) + ' (' + esc(cfg.pageTpl.replace('{page}', '99').replace('{total}', '99')) + ')';
+        pg.appendChild(ban);
+      }
+      // continuation sheets carry the invoice number in the banner; skipping the letterhead and details block keeps the invoice within two sheets
+      if (built.length === 0) headNodes.forEach(function (n) { pg.appendChild(n.cloneNode(true)); });
+      var tmp = document.createElement('div');
+      tmp.innerHTML = '<table class="items-table">' + thead + '<tbody></tbody></table>';
+      pg.appendChild(tmp.firstChild);
+      var sum = document.createElement('div');
+      sum.className = 'page-items-summary';
+      sum.innerHTML = '<span>' + esc(cfg.prevLabel) + ': ' + fmt(cfg, 999999999.99) + '</span><span>' + esc(cfg.thisLabel) + ': ' + fmt(cfg, 999999999.99) + '</span><span>' + esc(cfg.runLabel) + ': ' + fmt(cfg, 999999999.99) + '</span><span>' + esc(cfg.pageTpl.replace('{page}', '99').replace('{total}', '99')) + '</span>';
+      pg.appendChild(sum);
+      root.appendChild(pg);
+      built.push(pg);
+      return pg;
+    }
+    var cur = newPage();
+    var body = function (pg) { return pg.querySelector('tbody'); };
+    rows.forEach(function (tr) {
+      body(cur).appendChild(tr);
+      if (cur.offsetHeight > budget && body(cur).children.length > 1) {
+        body(cur).removeChild(tr);
+        cur = newPage();
+        body(cur).appendChild(tr);
+      }
+    });
+    // the totals / footer block must fit on the final page too
+    tail.forEach(function (el) { cur.appendChild(el); });
+    var guard = 0;
+    while (cur.offsetHeight > budget && body(cur).children.length > 1 && guard++ < 500) {
+      var moved = body(cur).lastElementChild;
+      var prevPage = cur;
+      tail.forEach(function (el) { prevPage.removeChild(el); });
+      cur = newPage();
+      body(cur).appendChild(moved);
+      tail.forEach(function (el) { cur.appendChild(el); });
+    }
+
+    var total = built.length;
+    var running = 0;
+    built.forEach(function (pg, i) {
+      var sums = Array.prototype.map.call(body(pg).children, function (tr) { return Number(tr.getAttribute('data-sub')) || 0; });
+      var pageSum = sums.reduce(function (a, b) { return a + b; }, 0);
+      var prev = running;
+      running += pageSum;
+      var ind = cfg.pageTpl.replace('{page}', String(i + 1)).replace('{total}', String(total));
+      var sumEl = pg.querySelector('.page-items-summary');
+      if (total > 1) {
+        sumEl.innerHTML =
+          (i > 0 ? '<span>' + esc(cfg.prevLabel) + ': ' + fmt(cfg, prev) + '</span>' : '') +
+          '<span>' + esc(cfg.thisLabel) + ': ' + fmt(cfg, pageSum) + '</span>' +
+          '<span>' + esc(cfg.runLabel) + ': ' + fmt(cfg, running) + '</span>' +
+          '<span>' + esc(ind) + '</span>';
+        if (i > 0) {
+          pg.querySelector('.continuation-banner').innerHTML = '<strong>#' + esc(cfg.printNumber) + '</strong> — ' + esc(cfg.continuation) + ' (' + esc(ind) + ')';
+        }
+      } else {
+        pg.removeChild(sumEl);
+      }
+      if (i < total - 1) pg.className += ' invoice-print-page-break';
+    });
+    // renumber rows sequentially
+    var idx = 0;
+    Array.prototype.forEach.call(root.querySelectorAll('.items-table tbody tr'), function (tr) {
+      idx++;
+      var c = tr.children[0] && tr.children[0].querySelector('strong');
+      if (c) c.textContent = String(idx);
+    });
+    return total;
+  }
+  // progressively tighter spacing, used only when the roomier layout still needs extra sheets
+  var TIGHT_CSS = [
+    '',
+    'body.tight1 .company-name{font-size:26px!important}body.tight1 .items-table td{padding:2px 5px!important}body.tight1 .items-table th{padding:3px 5px!important}body.tight1 .invoice-header{margin-bottom:6px!important;padding-bottom:4px!important}body.tight1 .invoice-info{margin-bottom:6px!important;padding:5px 8px!important}body.tight1 .totals-wrapper{margin-top:4px!important;margin-bottom:4px!important;padding-top:4px!important}body.tight1 .footer{margin-top:4px!important;padding-top:4px!important}body.tight1 .page-items-summary{margin:3px 0 2px!important}body.tight1 .continuation-banner{margin-bottom:4px!important;padding:4px 8px!important}',
+    'body.tight2 .company-name{font-size:20px!important}body.tight2 .company-details,body.tight2 .invoice-meta{font-size:10px!important}body.tight2 .items-table td{padding:1px 4px!important;font-size:11px!important}body.tight2 .items-table th{padding:2px 4px!important;font-size:11px!important}body.tight2 .invoice-header{margin-bottom:4px!important;padding-bottom:2px!important}body.tight2 .invoice-info{margin-bottom:4px!important;padding:3px 6px!important}body.tight2 .totals-wrapper{margin:2px 0!important;padding-top:2px!important}body.tight2 .totals-table td{padding:2px 6px!important}body.tight2 .footer{margin-top:2px!important;padding-top:2px!important}body.tight2 .page-items-summary{margin:2px 0!important}body.tight2 .continuation-banner{margin-bottom:3px!important;padding:2px 6px!important}'
+  ];
+  function layoutAll(budget, level) {
+    document.body.className = (document.body.className || '').replace(/\\btight\\d\\b/g, '').trim() + (level ? ' tight' + level : '');
+    var n = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-paging]'), function (r) { n = Math.max(n, repaginate(r, budget)); });
+    return n;
+  }
+  function run() {
+    if (done) return;
+    done = true;
+    var MM = 96 / 25.4;
+    // measure at the exact print width: A4 landscape minus 8mm margins, body padding 12px
+    var st = document.createElement('style');
+    st.textContent = 'body{width:calc(281mm - 24px)!important;max-width:none!important;margin:0!important;box-sizing:content-box!important}';
+    document.head.appendChild(st);
+    var budget = 194 * MM - 24 - 18;
+    var tightStyle = document.createElement('style');
+    tightStyle.textContent = TIGHT_CSS.join("\\n");
+    document.head.appendChild(tightStyle);
+    try {
+      var roots = Array.prototype.slice.call(document.querySelectorAll('[data-paging]'));
+      var snaps = roots.map(function (r) { return r.innerHTML; });
+      var restore = function () { roots.forEach(function (r, i) { r.innerHTML = snaps[i]; }); };
+      var bestLevel = 0, bestPages = layoutAll(budget, 0);
+      for (var lvl = 1; lvl <= 2 && bestPages > 1; lvl++) {
+        restore();
+        var n = layoutAll(budget, lvl);
+        if (n < bestPages) { bestPages = n; bestLevel = lvl; }
+      }
+      restore();
+      layoutAll(budget, bestLevel);
+    } catch (e) { console.error('repaginate failed', e); }
+    document.head.removeChild(st);
+  }
+  function start() {
+    var fonts = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    Promise.race([fonts, new Promise(function (r) { setTimeout(r, 1000); })]).then(run, run);
+  }
+  if (document.readyState === 'complete') start(); else window.addEventListener('load', start);
+  window.addEventListener('beforeprint', run);
+})();
+`
 
 export function extractA4PrintBodyInner(html: string): string {
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)
@@ -1839,6 +2023,7 @@ export function buildA4TwoUpPageHTML(headSource: string, leftBodyHtml: string, r
     <div class="a4-two-up-col">${leftBodyHtml}</div>
     <div class="a4-two-up-col">${rightBodyHtml}</div>
   </div>
+  <script>${HALF_SHEET_REPAGINATE_SCRIPT}</script>
   <div class="no-print">
     <div style="margin-bottom: 15px; font-weight: bold; font-size: 16px;">${noPrintLabel}</div>
     <div class="print-actions">
