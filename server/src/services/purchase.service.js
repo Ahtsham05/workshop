@@ -33,6 +33,7 @@ const { applySupplierLinkedListSearch } = require('../utils/listSearchFilter');
 const { resolvePurchaseInvoiceBalance } = require('../utils/purchaseBalance');
 const { buildSettlementAddFieldsStage } = require('../utils/purchaseSettlement');
 const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
+const { tokenizeSearch, tokenSearchClauses } = require('../utils/searchQuery');
 const Money = require('../utils/money');
 
 /**
@@ -1668,13 +1669,7 @@ const resolveProductIds = async ({ organizationId, branchId, term, categoryId })
   if (branchId) productFilter.branchId = toFilterObjectId(branchId);
 
   if (term) {
-    const escaped = escapeRegexLiteral(term);
-    productFilter.$or = [
-      { name: { $regex: escaped, $options: 'i' } },
-      { nameUrdu: { $regex: escaped, $options: 'i' } },
-      { barcode: { $regex: escaped, $options: 'i' } },
-      { sku: { $regex: escaped, $options: 'i' } },
-    ];
+    productFilter.$and = [...(productFilter.$and || []), ...tokenSearchClauses(term, ['name', 'nameUrdu', 'barcode', 'sku'])];
   }
   if (categoryId) {
     // Products carry the newer multi-category refs (`categories[]._id`) AND a legacy
@@ -1702,14 +1697,7 @@ const resolveProductIds = async ({ organizationId, branchId, term, categoryId })
 
 /** Suppliers whose name/urdu name/phone matches a free-text term. */
 const resolveSupplierIdsByTerm = async ({ organizationId, branchId, term }) => {
-  const escaped = escapeRegexLiteral(term);
-  const supplierFilter = {
-    $or: [
-      { name: { $regex: escaped, $options: 'i' } },
-      { nameUrdu: { $regex: escaped, $options: 'i' } },
-      { phone: { $regex: escaped, $options: 'i' } },
-    ],
-  };
+  const supplierFilter = { $and: tokenSearchClauses(term, ['name', 'nameUrdu', 'phone']) };
   if (organizationId) supplierFilter.organizationId = toFilterObjectId(organizationId);
   if (branchId) supplierFilter.branchId = toFilterObjectId(branchId);
   const suppliers = await Supplier.find(supplierFilter).select('_id').lean();
@@ -1788,41 +1776,46 @@ const buildPurchaseListMatch = async (filter = {}, options = {}) => {
 
   const term = options.search ? String(options.search).trim() : '';
   if (term) {
-    const escaped = escapeRegexLiteral(term);
     const searchBy = String(options.searchBy || 'all').toLowerCase();
-    const byField = {
-      invoice: () => [{ invoiceNumber: { $regex: escaped, $options: 'i' } }],
-      vendorbill: () => [{ vendorBillNumber: { $regex: escaped, $options: 'i' } }],
-      notes: () => [{ notes: { $regex: escaped, $options: 'i' } }],
-      // "Reference" covers whatever else identifies the document on paper: our own number,
-      // the supplier's bill number, or the purchase order it came from.
-      reference: () => [
-        { invoiceNumber: { $regex: escaped, $options: 'i' } },
-        { vendorBillNumber: { $regex: escaped, $options: 'i' } },
-      ],
+    // Every word of the search must match (any order / any field), see utils/searchQuery.js.
+    const conditionsForWord = async (word) => {
+      const escaped = escapeRegexLiteral(word);
+      const byField = {
+        invoice: () => [{ invoiceNumber: { $regex: escaped, $options: 'i' } }],
+        vendorbill: () => [{ vendorBillNumber: { $regex: escaped, $options: 'i' } }],
+        notes: () => [{ notes: { $regex: escaped, $options: 'i' } }],
+        // "Reference" covers whatever else identifies the document on paper: our own number,
+        // the supplier's bill number, or the purchase order it came from.
+        reference: () => [
+          { invoiceNumber: { $regex: escaped, $options: 'i' } },
+          { vendorBillNumber: { $regex: escaped, $options: 'i' } },
+        ],
+      };
+
+      let conditions = byField[searchBy] ? byField[searchBy]() : [];
+
+      if (searchBy === 'supplier' || searchBy === 'all') {
+        const supplierIds = await resolveSupplierIdsByTerm({ organizationId, branchId, term: word });
+        if (supplierIds.length > 0) conditions.push({ supplier: { $in: supplierIds } });
+        else if (searchBy === 'supplier') conditions.push({ supplier: null });
+      }
+      if (searchBy === 'product' || searchBy === 'all') {
+        const productIds = await resolveProductIds({ organizationId, branchId, term: word });
+        if (productIds.length > 0) conditions.push({ 'items.product': { $in: productIds } });
+        else if (searchBy === 'product') conditions.push({ 'items.product': null });
+      }
+      if (searchBy === 'all') {
+        conditions = conditions.concat([
+          { invoiceNumber: { $regex: escaped, $options: 'i' } },
+          { vendorBillNumber: { $regex: escaped, $options: 'i' } },
+          { notes: { $regex: escaped, $options: 'i' } },
+        ]);
+      }
+      return { $or: conditions.length > 0 ? conditions : [{ _id: null }] };
     };
 
-    let conditions = byField[searchBy] ? byField[searchBy]() : [];
-
-    if (searchBy === 'supplier' || searchBy === 'all') {
-      const supplierIds = await resolveSupplierIdsByTerm({ organizationId, branchId, term });
-      if (supplierIds.length > 0) conditions.push({ supplier: { $in: supplierIds } });
-      else if (searchBy === 'supplier') conditions.push({ supplier: null });
-    }
-    if (searchBy === 'product' || searchBy === 'all') {
-      const productIds = await resolveProductIds({ organizationId, branchId, term });
-      if (productIds.length > 0) conditions.push({ 'items.product': { $in: productIds } });
-      else if (searchBy === 'product') conditions.push({ 'items.product': null });
-    }
-    if (searchBy === 'all') {
-      conditions = conditions.concat([
-        { invoiceNumber: { $regex: escaped, $options: 'i' } },
-        { vendorBillNumber: { $regex: escaped, $options: 'i' } },
-        { notes: { $regex: escaped, $options: 'i' } },
-      ]);
-    }
-
-    match.$and = [...(match.$and || []), { $or: conditions.length > 0 ? conditions : [{ _id: null }] }];
+    const wordClauses = await Promise.all(tokenizeSearch(term).map(conditionsForWord));
+    match.$and = [...(match.$and || []), ...wordClauses];
   }
 
   return match;

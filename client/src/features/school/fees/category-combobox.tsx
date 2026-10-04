@@ -15,6 +15,7 @@ import { Check, ChevronsUpDown, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useCreateFeeCategoryMutation } from '@/stores/school.api';
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 export const ROTATING_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#0ea5e9', '#6366f1', '#a855f7', '#ec4899'];
 export const nextCategoryColor = (existingCount: number) => ROTATING_COLORS[existingCount % ROTATING_COLORS.length];
@@ -106,8 +107,7 @@ export const CategoryCombobox = forwardRef<HTMLButtonElement, CategoryComboboxPr
           <CommandList className="max-h-56 overflow-y-auto">
             <CommandEmpty className="py-3 text-center text-sm text-muted-foreground">No categories found</CommandEmpty>
             <CommandGroup>
-              {categories
-                .filter((c) => !query || c.name.toLowerCase().includes(query.toLowerCase()))
+              {filterAndRankBySearch(categories, query, (c) => [c.name])
                 .map((cat) => {
                   const id = cat.id || cat._id;
                   return (

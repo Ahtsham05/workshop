@@ -23,6 +23,7 @@ import {
 import { apiError, fmtQty, INTERVAL_PRESETS } from '../lib/labels'
 import { useStockCountAccess } from '../lib/use-stock-count-access'
 import { ClassBadge } from './count-badges'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 const PAGE_SIZE = 50
 type PolicyDraft = Omit<StockCountPolicy, 'id' | 'overrides'>
@@ -251,7 +252,7 @@ function ItemsCard({ editable }: { editable: boolean }) {
     return items.filter(
       (item) =>
         (cls === 'all' || item.cls === cls || (cls === 'due' && ['due', 'never'].includes(statusOf(item, intervals)))) &&
-        (!q || `${item.name} ${item.variantLabel ?? ''} ${item.barcode ?? ''}`.toLowerCase().includes(q))
+        (!q || matchesBilingualSearch(q, item.name, item.variantLabel, item.barcode))
     )
   }, [items, search, cls, intervals])
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

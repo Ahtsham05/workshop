@@ -17,6 +17,7 @@ import { Check, ChevronsUpDown, SlidersHorizontal, X } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import { useGetDistinctProductTagsQuery } from '@/stores/product.api'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 export const ALL_SUBCATEGORIES = 'all'
 export const ALL_BRANDS = 'all'
@@ -101,7 +102,7 @@ function FilterCombobox({
 
   const selected = options.find((o) => o.value === value)
   const filtered = query.trim()
-    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
+    ? filterAndRankBySearch(options, query, (o) => [o.label])
     : options
 
   const handleSelect = (next: string) => {

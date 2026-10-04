@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { SubCategory, Category } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { addTokenSearch, rankDocuments } = require('../utils/searchQuery');
 
 /**
  * Create a sub-category
@@ -71,10 +72,11 @@ const getAllSubCategories = async (filter) => {
   let query = { ...rest };
 
   if (search && fieldName) {
-    query[fieldName] = { $regex: search, $options: 'i' };
+    addTokenSearch(query, search, fieldName);
   }
 
-  return SubCategory.find(query).populate('category').sort({ name: 1 });
+  const subCategories = await SubCategory.find(query).populate('category').sort({ name: 1 });
+  return search && fieldName ? rankDocuments(subCategories, search, fieldName) : subCategories;
 };
 
 /**

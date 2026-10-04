@@ -18,6 +18,7 @@ import { Search, Check, X, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useGetAllBrandsQuery, useCreateBrandMutation, type Brand } from '@/stores/brand.api'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 interface Props {
   value?: string
@@ -123,8 +124,7 @@ export function BrandSelector({ value, onChange, onSelected, 'data-enter-field':
               </CommandEmpty>
             )}
             <CommandGroup>
-              {brands
-                .filter((b) => !trimmedQuery || b.name.toLowerCase().includes(trimmedQuery.toLowerCase()))
+              {filterAndRankBySearch(brands, trimmedQuery, (b) => [b.name])
                 .map((brand) => {
                   const id = brand._id || brand.id
                   const isSelected = id === value

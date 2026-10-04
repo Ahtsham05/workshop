@@ -110,7 +110,8 @@ export default function Customers() {
     const params = {
       page: currentPage,
       limit,
-      sortBy: CUSTOMERS_SORT_BY,
+      // Searching ranks best match first (server-side relevance).
+      sortBy: q ? 'relevance' : CUSTOMERS_SORT_BY,
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.customer } : {}),
       ...(statusFilter !== ALL_STATUS ? { isActive: statusFilter === 'active' } : {}),
     }

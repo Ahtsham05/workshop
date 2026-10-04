@@ -5,6 +5,7 @@ const { Product, Branch, ProductVariant, Inventory, Batch, InventoryTransaction,
 const inventorySyncService = require('./inventorySync.service');
 const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
 const { findBestMatch } = require('../utils/productMatchKey');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 /**
  * Generates a human-readable, org-scoped, gap-tolerant transfer number ("TRF-1001",
@@ -1057,7 +1058,7 @@ const queryTransfers = async (
   // anyway, since the suggestion engine only knows a quantity, never which specific units).
   // An explicit ?status=suggested still honors it, e.g. for API/debugging use.
   match.status = status || { $ne: 'suggested' };
-  if (search) match.productName = { $regex: search, $options: 'i' };
+  if (search) addTokenSearch(match, search, ['productName']);
 
   const page = Math.max(parseInt(options.page, 10) || 1, 1);
   const limit = Math.max(parseInt(options.limit, 10) || 10, 1);

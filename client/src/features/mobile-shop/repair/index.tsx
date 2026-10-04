@@ -76,6 +76,7 @@ import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { formatMoneyWithMeta, useCurrencyMeta } from '@/lib/format-money'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -483,12 +484,10 @@ export default function RepairPage() {
   const allRepairs = data?.results ?? []
   const filtered = useMemo(() => {
     if (!repairSearch.trim()) return allRepairs
-    const lower = repairSearch.toLowerCase()
     const digits = repairSearch.replace(/\D/g, '')
     return allRepairs.filter(r => {
-      if (r.customerName?.toLowerCase().includes(lower)) return true
+      if (matchesBilingualSearch(repairSearch, r.customerName, r.deviceModel)) return true
       if (digits && r.phone?.replace(/\D/g, '').includes(digits)) return true
-      if (r.deviceModel?.toLowerCase().includes(lower)) return true
       return false
     })
   }, [allRepairs, repairSearch])

@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 interface SuggestedTransfersPanelProps {
   /** A destination-branch group's selected suggestions, ready to seed a bulk transfer. */
@@ -52,7 +53,7 @@ export function SuggestedTransfersPanel({ onTransferSelected }: SuggestedTransfe
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return actionable
-    return actionable.filter((s) => s.productName.toLowerCase().includes(q) || branchName(s.toBranchId).toLowerCase().includes(q))
+    return filterAndRankBySearch(actionable, q, (s) => [s.productName, branchName(s.toBranchId)])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionable, searchQuery, branches])
 

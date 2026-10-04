@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Users, Star, BookOpen, Search } from 'lucide-react';
 import { useGetClassOverviewQuery } from '@/stores/school.api';
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 interface SubjectEntry {
   assignmentId: string;
@@ -38,14 +39,13 @@ export default function ClassOverviewPage() {
   };
 
   const filtered = search.trim()
-    ? classes.filter(
-        (c) =>
-          c.className.toLowerCase().includes(search.toLowerCase()) ||
-          c.sections.some(
-            (s) =>
-              s.classTeacher?.name.toLowerCase().includes(search.toLowerCase()) ||
-              s.subjects.some((sub) => sub.teacherName.toLowerCase().includes(search.toLowerCase()))
-          )
+    ? classes.filter((c) =>
+        matchesBilingualSearch(search, c.className) ||
+        c.sections.some(
+          (s) =>
+            matchesBilingualSearch(search, s.classTeacher?.name) ||
+            s.subjects.some((sub) => matchesBilingualSearch(search, sub.teacherName))
+        )
       )
     : classes;
 

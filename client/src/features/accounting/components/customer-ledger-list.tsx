@@ -21,6 +21,7 @@ import {
   type LedgerListViewMode,
 } from '../utils/ledger-list-view';
 import { usePersistedListState } from '@/hooks/use-persisted-list-state';
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 const VIEW_MODE_KEY = 'customer-ledger-list-view';
 const LIST_STATE_KEY = 'customer-ledger-list-state';
@@ -33,18 +34,7 @@ function ledgerRowMatchesSearch(
   term: string,
   row: { name?: string; nameUrdu?: string; phone?: string },
 ): boolean {
-  const q = term.trim();
-  if (!q) return true;
-  const lower = q.toLowerCase();
-  const name = row.name ?? '';
-  const phone = (row.phone ?? '').toLowerCase();
-  const urdu = row.nameUrdu ?? '';
-  return (
-    name.toLowerCase().includes(lower) ||
-    phone.includes(lower) ||
-    urdu.includes(q) ||
-    urdu.toLowerCase().includes(lower)
-  );
+  return matchesBilingualSearch(term, row.name, row.phone, row.nameUrdu);
 }
 
 export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps) {

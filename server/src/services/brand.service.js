@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Brand } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { addTokenSearch, rankDocuments } = require('../utils/searchQuery');
 
 /**
  * Brands are scoped to the organization (not the branch) — unlike Category/Supplier,
@@ -30,9 +31,10 @@ const queryBrands = async (filter, options) => {
 const getAllBrands = async (filter) => {
   const query = { organizationId: filter.organizationId, status: filter.status || 'active' };
   if (filter.search && filter.fieldName) {
-    query[filter.fieldName] = { $regex: filter.search, $options: 'i' };
+    addTokenSearch(query, filter.search, filter.fieldName);
   }
-  return Brand.find(query).sort({ name: 1 });
+  const brands = await Brand.find(query).sort({ name: 1 });
+  return filter.search && filter.fieldName ? rankDocuments(brands, filter.search, filter.fieldName) : brands;
 };
 
 const getBrandById = async (id) => {

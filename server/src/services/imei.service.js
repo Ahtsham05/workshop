@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { Imei, Product } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const normalizeImei = (value) => String(value || '').trim();
 
@@ -418,11 +419,8 @@ const queryImeis = async (filter, options) => {
       conditions.push({ customerCNIC: { $regex: digits, $options: 'i' } });
     }
     if (search.length >= 2) {
-      conditions.push({ brand: { $regex: search, $options: 'i' } });
-      conditions.push({ model: { $regex: search, $options: 'i' } });
-      conditions.push({ customerName: { $regex: search, $options: 'i' } });
-      conditions.push({ supplierName: { $regex: search, $options: 'i' } });
-      conditions.push({ sellerName: { $regex: search, $options: 'i' } });
+      // Words may be spread over brand + model ("samsung galaxy") — each word just has to hit one field.
+      conditions.push({ $and: tokenSearchClauses(search, ['brand', 'model', 'customerName', 'supplierName', 'sellerName']) });
     }
     if (conditions.length > 0) {
       queryFilter.$or = conditions;

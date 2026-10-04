@@ -41,6 +41,7 @@ import { buildReceiptData } from './utils/build-receipt-data'
 import { catalogItemToCartLine, cartLineKey, normalizePaymentState, type CartLine, type PaymentMethod, type SaleType } from './types'
 import { parseQuantityPrefix } from './utils/quantity-prefix'
 import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 const MAX_RECENT_ITEMS = 10
 
@@ -256,9 +257,7 @@ export default function FastBillingPage() {
         return
       }
       const q = rest.trim().toLowerCase()
-      const nameMatches = catalog.filter(
-        (p) => p.name?.toLowerCase().includes(q) || p.nameUrdu?.toLowerCase().includes(q),
-      )
+      const nameMatches = filterAndRankBySearch(catalog, q, (p) => [p.name, p.nameUrdu])
       if (nameMatches.length === 1) {
         addToCart(nameMatches[0], quantity)
         return

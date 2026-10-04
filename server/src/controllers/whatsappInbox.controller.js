@@ -4,15 +4,12 @@ const ApiError = require('../utils/ApiError');
 const pick = require('../utils/pick');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const { inboxService, messagingService, eventsService } = require('../services/whatsapp');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const listConversations = catchAsync(async (req, res) => {
   const filter = applyBranchFilter(pick(req.query, ['status', 'assignedTo']), req);
   if (req.query.search) {
-    filter.$or = [
-      { contactName: { $regex: req.query.search, $options: 'i' } },
-      { contactPhone: { $regex: req.query.search, $options: 'i' } },
-      { lastMessagePreview: { $regex: req.query.search, $options: 'i' } },
-    ];
+    addTokenSearch(filter, req.query.search, ['contactName', 'contactPhone', 'lastMessagePreview']);
   }
   if (req.query.unreadOnly === 'true') filter.unreadCount = { $gt: 0 };
 

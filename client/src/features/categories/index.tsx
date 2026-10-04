@@ -74,7 +74,8 @@ function CategoryDetailPane({
     const params = {
       page: currentPage,
       limit,
-      sortBy: SUBCATEGORIES_SORT_BY,
+      // Searching ranks best match first (server-side relevance).
+      sortBy: q ? 'relevance' : SUBCATEGORIES_SORT_BY,
       category: category.id,
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.category } : {}),
     }
@@ -227,7 +228,8 @@ export default function CategoriesIndex() {
       limit: limit,
       // Active categories first, inactive last (like Products' isActive:desc sort) —
       // newest-first within each group.
-      sortBy: 'isActive:desc,createdAt:desc',
+      // Searching ranks best match first (server-side relevance).
+      sortBy: q ? 'relevance' : 'isActive:desc,createdAt:desc',
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.category } : {}),
     }
 

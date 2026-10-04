@@ -50,6 +50,7 @@ import { exportPriceChanges } from '../lib/export'
 import { userName } from '../lib/format'
 import { formatNumber } from '../lib/format'
 import { StatusBadge } from './status-badge'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 const CHANGE_STATUS: Record<ChangeStatus, { label: string; icon: LucideIcon; className: string }> = {
   pending: { label: 'Pending', icon: Clock, className: 'border-muted-foreground/30 bg-muted text-muted-foreground' },
@@ -117,7 +118,7 @@ export function BatchSheet({ batchId, onClose }: BatchSheetProps) {
   const items = useMemo(() => {
     const q = query.trim().toLowerCase()
     const all = data?.items || []
-    return q ? all.filter((i) => (i.productName || '').toLowerCase().includes(q) || (i.sku || '').toLowerCase().includes(q) || (i.barcode || '').toLowerCase().includes(q)) : all
+    return q ? filterAndRankBySearch(all, q, (i) => [i.productName, i.sku, i.barcode]) : all
   }, [data, query])
 
   const canUndo = batch && (batch.status === 'applied' || batch.status === 'partially_rolled_back')

@@ -5,6 +5,7 @@ const pick = require('../utils/pick');
 const { supplierPaymentService, auditLogService } = require('../services');
 const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 const { applyBusinessDateRange } = require('../utils/businessTimezone');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const scopeOf = (req) => {
   const scope = {};
@@ -126,15 +127,7 @@ const getPayments = catchAsync(async (req, res) => {
     if (maxAmount) filter.amount.$lte = Number(maxAmount);
   }
   if (search) {
-    const escaped = String(search)
-      .trim()
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.$or = [
-      { paymentNumber: { $regex: escaped, $options: 'i' } },
-      { referenceNumber: { $regex: escaped, $options: 'i' } },
-      { supplierName: { $regex: escaped, $options: 'i' } },
-      { 'allocations.invoiceNumber': { $regex: escaped, $options: 'i' } },
-    ];
+    addTokenSearch(filter, search, ['paymentNumber', 'referenceNumber', 'supplierName', 'allocations.invoiceNumber']);
   }
 
   const options = pick(req.query, ['sortBy', 'limit', 'page']);

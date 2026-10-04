@@ -19,6 +19,7 @@ import type { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { useGetCustomersQuery } from '@/stores/customer.api'
 import type { RelatedRecordType } from '@/stores/communicationLog.api'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 export interface RelatedRecordValue {
   relatedType: RelatedRecordType
@@ -66,9 +67,7 @@ export function RelatedRecordPicker({ value, onChange }: RelatedRecordPickerProp
       dispatch(fetchAllSuppliers({}))
     }
   }, [open, type, allSuppliers.length, dispatch])
-  const filteredSuppliers = allSuppliers.filter((s) =>
-    (s.name || '').toLowerCase().includes(search.toLowerCase()),
-  )
+  const filteredSuppliers = filterAndRankBySearch(allSuppliers, search, (s) => [s.name])
 
   const options = type === 'Customer' ? customers : filteredSuppliers
   const isLoadingOptions = type === 'Customer' ? customersFetching : suppliersLoading && !allSuppliers.length

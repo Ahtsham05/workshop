@@ -38,6 +38,7 @@ import { AGENT_BILL_EMAIL } from '../../mobile-shop/bill-payments'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 interface CompleteReportProps {
   startDate: string
@@ -292,7 +293,7 @@ export const CompleteReport = forwardRef<{ exportToExcel: () => void }, Complete
         margin: p.totalRevenue > 0 ? (p.totalProfit / p.totalRevenue) * 100 : 0,
       }))
       const q = itemSearch.trim().toLowerCase()
-      const filtered = q ? rows.filter((r) => r.productName.toLowerCase().includes(q)) : rows
+      const filtered = q ? filterAndRankBySearch(rows, q, (r) => [r.productName]) : rows
       return filtered.slice().sort((a, b) => b.totalProfit - a.totalProfit)
     }, [productReport, itemSearch])
     const itemTotals = useMemo(

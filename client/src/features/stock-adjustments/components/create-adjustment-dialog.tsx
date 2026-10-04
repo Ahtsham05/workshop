@@ -6,7 +6,7 @@ import { useCreateAdjustmentMutation } from '@/stores/stockAdjustment.api'
 import type { AdjustmentDirection, AdjustmentType } from '@/stores/stockAdjustment.api'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useLanguage } from '@/context/language-context'
-import { matchesBilingualSearch, getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
+import { filterAndRankBySearch, getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { MANUAL_ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_META } from '../lib/adjustment-types'
 import { SerialPickDialog } from '@/components/serial-pick-dialog'
@@ -66,7 +66,7 @@ export function CreateAdjustmentDialog({ open, onOpenChange, prefill }: CreateAd
   const [serialDialogOpen, setSerialDialogOpen] = useState(false)
 
   const filteredCatalog = useMemo(
-    () => catalog.filter((c) => matchesBilingualSearch(searchQuery, c.name, c.nameUrdu, c.barcode, c.brand?.name)),
+    () => filterAndRankBySearch(catalog, searchQuery, (c) => [c.name, c.nameUrdu, c.barcode, c.brand?.name]),
     [catalog, searchQuery]
   )
 

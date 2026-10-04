@@ -41,6 +41,7 @@ import {
   type ExpenseCategory,
   type TransactionCategoryType,
 } from '@/stores/expenseCategory.api'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 type PickerCategory = ExpenseCategory & { fromLedger?: boolean }
 
@@ -191,7 +192,7 @@ export function TransactionCategoryPicker({
   const filteredCategories = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return displayCategories
-    return displayCategories.filter((c) => c.name.toLowerCase().includes(q))
+    return filterAndRankBySearch(displayCategories, q, (c) => [c.name])
   }, [displayCategories, search])
 
   const listLoading = categoriesLoading || (walletMode && fetchingCategories && categories.length === 0)

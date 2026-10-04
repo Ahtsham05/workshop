@@ -3,6 +3,7 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { invoiceService, auditLogService } = require('../services');
+const { tokenizeSearch, escapeRegex } = require('../utils/searchQuery');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 
 const TRACKED_INVOICE_FIELDS = ['status', 'total', 'paidAmount', 'balance', 'discount', 'items', 'tax', 'currency'];
@@ -66,67 +67,34 @@ const getInvoices = catchAsync(async (req, res) => {
     }
   }
   
-  // Enhanced search functionality
+  // Search: every word must match somewhere (customer, invoice number, item, notes) in any order.
   if (req.query.search) {
-    const searchTerm = req.query.search.trim();
-    console.log('Searching for term:', searchTerm);
-    
-    // First, find customers that match the search term
     const { Customer } = require('../models');
-    const matchingCustomers = await Customer.find({
-      $or: [
-        { name: { $regex: searchTerm, $options: 'i' } },
-        { phone: { $regex: searchTerm, $options: 'i' } },
-        { email: { $regex: searchTerm, $options: 'i' } }
-      ]
-    }).select('_id name');
-    
-    console.log('Found matching customers:', matchingCustomers.length);
-    matchingCustomers.forEach(customer => {
-      console.log('Customer:', customer.name, 'ID:', customer._id);
-    });
-    
-    const customerIds = matchingCustomers.map(customer => customer._id);
-    const customerIdsString = customerIds.map(id => id.toString());
-    
-    // Debug: Let's see what invoices exist for this customer
-    if (customerIds.length > 0) {
-      const { Invoice } = require('../models');
-      const allInvoicesForCustomer = await Invoice.find({ 
-        customerId: { $in: customerIds } 
-      }).select('_id invoiceNumber customerId customerName');
-      
-      console.log('All invoices for matching customers (direct ID match):', allInvoicesForCustomer.length);
-      allInvoicesForCustomer.forEach(inv => {
-        console.log('Invoice:', inv.invoiceNumber, 'CustomerID:', inv.customerId, 'CustomerName:', inv.customerName);
-      });
-      
-      // Also check for string version of IDs
-      const allInvoicesForCustomerString = await Invoice.find({ 
-        customerId: { $in: customerIdsString } 
-      }).select('_id invoiceNumber customerId customerName');
-      
-      console.log('All invoices for matching customers (string ID match):', allInvoicesForCustomerString.length);
-    }
-    
-    // Build comprehensive search filter
-    filter.$or = [
-      { invoiceNumber: { $regex: searchTerm, $options: 'i' } },
-      { walkInCustomerName: { $regex: searchTerm, $options: 'i' } },
-      { customerName: { $regex: searchTerm, $options: 'i' } }, // Add direct customer name search
-      { 'items.name': { $regex: searchTerm, $options: 'i' } },
-      { notes: { $regex: searchTerm, $options: 'i' } }
-    ];
-    
-    // Add customer ID search if we found matching customers (try both ObjectId and string versions)
-    if (customerIds.length > 0) {
-      filter.$or.push({ customerId: { $in: customerIds } });
-      filter.$or.push({ customerId: { $in: customerIdsString } });
-    }
-    
-    console.log('Final search filter:', JSON.stringify(filter, null, 2));
+    const wordClauses = await Promise.all(
+      tokenizeSearch(req.query.search).map(async (word) => {
+        const rx = { $regex: escapeRegex(word), $options: 'i' };
+        const customerIds = (
+          await Customer.find({ $or: [{ name: rx }, { nameUrdu: rx }, { phone: rx }, { email: rx }] })
+            .select('_id')
+            .lean()
+        ).map((customer) => customer._id);
+        const conditions = [
+          { invoiceNumber: rx },
+          { walkInCustomerName: rx },
+          { customerName: rx },
+          { 'items.name': rx },
+          { notes: rx },
+        ];
+        // customerId is Mixed: stored as ObjectId or string depending on the writer.
+        if (customerIds.length > 0) {
+          conditions.push({ customerId: { $in: customerIds } }, { customerId: { $in: customerIds.map(String) } });
+        }
+        return { $or: conditions };
+      })
+    );
+    filter.$and = [...(filter.$and || []), ...wordClauses];
   }
-  
+
   const result = await invoiceService.queryInvoices(filter, options);
   console.log('Search results:', {
     total: result.totalResults,

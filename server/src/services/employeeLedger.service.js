@@ -6,6 +6,7 @@ const cashBookService = require('./cashBook.service');
 const expenseService = require('./expense.service');
 const expenseCategoryService = require('./expenseCategory.service');
 const walletEntryService = require('./walletEntry.service');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const EXPENSE_SYNC_TYPES = new Set(['salary_payment']);
 const CASHBOOK_SYNC_TYPES = new Set(['salary_payment', 'advance_payment']);
@@ -270,11 +271,7 @@ const deleteLedgerEntryById = async (ledgerId, scope = {}) => {
 
 const queryLedgerEntries = async (filter, options) => {
   if (options.search) {
-    filter.$or = [
-      { description: { $regex: options.search, $options: 'i' } },
-      { reference: { $regex: options.search, $options: 'i' } },
-      { paymentMethod: { $regex: options.search, $options: 'i' } },
-    ];
+    addTokenSearch(filter, options.search, ['description', 'reference', 'paymentMethod']);
     delete options.search;
   }
 

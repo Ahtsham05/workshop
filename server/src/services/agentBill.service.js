@@ -6,6 +6,7 @@ const cashBookService = require('./cashBook.service');
 const personalLedgerService = require('./personalLedger.service');
 const expenseService = require('./expense.service');
 const ApiError = require('../utils/ApiError');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const toObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id;
@@ -157,8 +158,7 @@ const createAgentBillsBatch = async ({
 
 const getAgentBills = async (filter, options) => {
   if (options.search) {
-    const re = { $regex: options.search, $options: 'i' };
-    filter.$or = [{ customerName: re }, { referenceNumber: re }, { mobileNo: re }];
+    addTokenSearch(filter, options.search, ['customerName', 'referenceNumber', 'mobileNo']);
     delete options.search;
   }
   if (options.startDate || options.endDate) {

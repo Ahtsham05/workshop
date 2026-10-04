@@ -45,6 +45,7 @@ import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import type { AppDispatch, RootState } from '@/stores/store'
 import { useFormatMoney } from '@/lib/format-money'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 type FormMode = 'fromSalesReturn' | 'fromPurchase' | 'freeForm'
 
@@ -288,17 +289,9 @@ export default function PurchaseReturnForm({
   const [productPopoverOpen, setProductPopoverOpen] = useState(false)
   const [productSearchQuery, setProductSearchQuery] = useState('')
 
-  const filteredSuppliers = allSuppliers.filter((s) => {
-    if (!supplierSearchQuery) return true
-    const q = supplierSearchQuery.toLowerCase()
-    return s.name?.toLowerCase().includes(q) || s.phone?.toLowerCase().includes(q)
-  })
+  const filteredSuppliers = filterAndRankBySearch(allSuppliers, supplierSearchQuery, (s) => [s.name, s.phone])
 
-  const filteredProducts = allProducts.filter((p) => {
-    if (!productSearchQuery) return true
-    const q = productSearchQuery.toLowerCase()
-    return p.name?.toLowerCase().includes(q) || p.barcode?.toLowerCase().includes(q)
-  })
+  const filteredProducts = filterAndRankBySearch(allProducts, productSearchQuery, (p) => [p.name, p.barcode])
 
   const handleAddProduct = (product: any) => {
     const existingIndex = returnItems.findIndex((i) => i.productId === (product._id || product.id))

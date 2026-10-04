@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import { useFormatMoney } from '@/lib/format-money';
 import { useStateDraft } from '@/hooks/use-form-draft';
 import { FormDraftNotice } from '@/components/form-draft-notice';
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 type FeeItem = { name: string; amount: number | string; categoryId?: string };
 type FormState = {
@@ -107,7 +108,7 @@ export default function FeeStructures() {
     const q = search.trim().toLowerCase();
     return structures.filter((s: any) => {
       const className = s.classId?.name || '';
-      const matchesSearch = !q || s.name?.toLowerCase().includes(q) || className.toLowerCase().includes(q);
+      const matchesSearch = !q || matchesBilingualSearch(q, s.name, className);
       const matchesClass = classFilter === 'all' || id(s.classId) === classFilter;
       const matchesFrequency = frequencyFilter === 'all' || s.frequency === frequencyFilter;
       const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? s.isActive : !s.isActive);

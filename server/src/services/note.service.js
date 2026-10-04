@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const { Note } = require('../models');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const toObjectId = (id) => (mongoose.Types.ObjectId.isValid(String(id)) ? new mongoose.Types.ObjectId(String(id)) : id);
 
@@ -161,13 +162,11 @@ const listNotes = async (query, scope) => {
   if (query.search) {
     // Regex rather than $text: users search partial words ("inv" → "invoice")
     // while typing, which a text index cannot match.
-    const escaped = String(query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const rx = { $regex: escaped, $options: 'i' };
-    const searchClause = { $or: [{ title: rx }, { plainText: rx }, { tags: rx }] };
+    const searchClauses = tokenSearchClauses(query.search, ['title', 'plainText', 'tags']);
     // Keep the visibility $or intact — combine with $and instead of overwriting.
     const visibilityClause = filter.$or ? { $or: filter.$or } : null;
     delete filter.$or;
-    filter.$and = [searchClause];
+    filter.$and = [...searchClauses];
     if (visibilityClause) filter.$and.push(visibilityClause);
   }
 

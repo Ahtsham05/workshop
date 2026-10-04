@@ -26,6 +26,7 @@ const { computeDiscountAmount } = require('../utils/discount');
 const { resolveTransactionTaxAndCurrency } = require('./transactionTaxSnapshot.service');
 const documentNumberingService = require('./documentNumbering.service');
 const Money = require('../utils/money');
+const { tokenizeSearch, tokenSearchClauses } = require('../utils/searchQuery');
 const { buildSettlementAddFieldsStage } = require('../utils/invoiceSettlement');
 
 /** Sets Invoice.baseCurrencyTotal from the already-computed `total` + currency snapshot. */
@@ -1916,15 +1917,7 @@ const toCustomerIdMatchValues = (id) => {
 
 /** Customers whose name/urdu name/phone/whatsapp matches a free-text term. */
 const resolveCustomerIdsByTerm = async ({ organizationId, branchId, term }) => {
-  const escaped = escapeRegexLiteral(term);
-  const customerFilter = {
-    $or: [
-      { name: { $regex: escaped, $options: 'i' } },
-      { nameUrdu: { $regex: escaped, $options: 'i' } },
-      { phone: { $regex: escaped, $options: 'i' } },
-      { whatsapp: { $regex: escaped, $options: 'i' } },
-    ],
-  };
+  const customerFilter = { $and: tokenSearchClauses(term, ['name', 'nameUrdu', 'phone', 'whatsapp']) };
   if (organizationId) customerFilter.organizationId = toFilterObjectId(organizationId);
   if (branchId) customerFilter.branchId = toFilterObjectId(branchId);
   const customers = await Customer.find(customerFilter).select('_id').lean();
@@ -1989,33 +1982,38 @@ const buildInvoiceListMatch = async (filter = {}, options = {}) => {
 
   const term = options.search ? String(options.search).trim() : '';
   if (term) {
-    const escaped = escapeRegexLiteral(term);
     const searchBy = String(options.searchBy || 'all').toLowerCase();
-    const byField = {
-      invoice: () => [{ invoiceNumber: { $regex: escaped, $options: 'i' } }],
-      billnumber: () => [{ billNumber: { $regex: escaped, $options: 'i' } }],
-      notes: () => [{ notes: { $regex: escaped, $options: 'i' } }],
-      product: () => [{ 'items.name': { $regex: escaped, $options: 'i' } }],
+    // Every word of the search must match (any order / any field), see utils/searchQuery.js.
+    const conditionsForWord = async (word) => {
+      const escaped = escapeRegexLiteral(word);
+      const byField = {
+        invoice: () => [{ invoiceNumber: { $regex: escaped, $options: 'i' } }],
+        billnumber: () => [{ billNumber: { $regex: escaped, $options: 'i' } }],
+        notes: () => [{ notes: { $regex: escaped, $options: 'i' } }],
+        product: () => [{ 'items.name': { $regex: escaped, $options: 'i' } }],
+      };
+
+      let conditions = byField[searchBy] ? byField[searchBy]() : [];
+
+      if (searchBy === 'customer' || searchBy === 'all') {
+        const customerIds = await resolveCustomerIdsByTerm({ organizationId, branchId, term: word });
+        if (customerIds.length > 0) conditions.push({ customerId: { $in: customerIds.flatMap(toCustomerIdMatchValues) } });
+        conditions.push({ customerName: { $regex: escaped, $options: 'i' } });
+        conditions.push({ walkInCustomerName: { $regex: escaped, $options: 'i' } });
+      }
+      if (searchBy === 'all') {
+        conditions = conditions.concat([
+          { invoiceNumber: { $regex: escaped, $options: 'i' } },
+          { billNumber: { $regex: escaped, $options: 'i' } },
+          { 'items.name': { $regex: escaped, $options: 'i' } },
+          { notes: { $regex: escaped, $options: 'i' } },
+        ]);
+      }
+      return { $or: conditions.length > 0 ? conditions : [{ _id: null }] };
     };
 
-    let conditions = byField[searchBy] ? byField[searchBy]() : [];
-
-    if (searchBy === 'customer' || searchBy === 'all') {
-      const customerIds = await resolveCustomerIdsByTerm({ organizationId, branchId, term });
-      if (customerIds.length > 0) conditions.push({ customerId: { $in: customerIds.flatMap(toCustomerIdMatchValues) } });
-      conditions.push({ customerName: { $regex: escaped, $options: 'i' } });
-      conditions.push({ walkInCustomerName: { $regex: escaped, $options: 'i' } });
-    }
-    if (searchBy === 'all') {
-      conditions = conditions.concat([
-        { invoiceNumber: { $regex: escaped, $options: 'i' } },
-        { billNumber: { $regex: escaped, $options: 'i' } },
-        { 'items.name': { $regex: escaped, $options: 'i' } },
-        { notes: { $regex: escaped, $options: 'i' } },
-      ]);
-    }
-
-    match.$and = [...(match.$and || []), { $or: conditions.length > 0 ? conditions : [{ _id: null }] }];
+    const wordClauses = await Promise.all(tokenizeSearch(term).map(conditionsForWord));
+    match.$and = [...(match.$and || []), ...wordClauses];
   }
 
   return match;

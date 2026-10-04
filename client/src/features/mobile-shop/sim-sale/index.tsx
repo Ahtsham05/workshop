@@ -77,6 +77,7 @@ import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 type SimSaleFormState = {
   date: string
@@ -170,10 +171,9 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
 
   const filteredSales = useMemo(() => {
     if (!simSearch.trim()) return sales
-    const lower = simSearch.toLowerCase()
     const digits = simSearch.replace(/\D/g, '')
     return sales.filter(s => {
-      if (s.customerName?.toLowerCase().includes(lower)) return true
+      if (matchesBilingualSearch(simSearch, s.customerName)) return true
       if (digits && s.customerMobile?.replace(/\D/g, '').includes(digits)) return true
       if (digits && s.customerCNIC?.replace(/\D/g, '').includes(digits)) return true
       return false

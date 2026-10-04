@@ -70,6 +70,7 @@ import { useBranchName } from '@/hooks/use-branch-name'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -212,12 +213,7 @@ export default function InstallmentsPage() {
   // Filtered products for search
   const filteredProducts = useMemo(() => {
     if (!productSearch) return allProducts
-    const q = productSearch.toLowerCase()
-    return allProducts.filter((p: any) =>
-      p.name?.toLowerCase().includes(q) ||
-      p.barcode?.toLowerCase().includes(q) ||
-      p.sku?.toLowerCase().includes(q)
-    )
+    return filterAndRankBySearch(allProducts, productSearch, (p: any) => [p.name, p.barcode, p.sku])
   }, [allProducts, productSearch])
 
   // API hooks

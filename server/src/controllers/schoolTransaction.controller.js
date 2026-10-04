@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const catchAsync = require('../utils/catchAsync');
 const { schoolTransactionService } = require('../services');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const createTransaction = catchAsync(async (req, res) => {
   const txn = await schoolTransactionService.createTransaction({
@@ -42,12 +43,7 @@ const getTransactions = catchAsync(async (req, res) => {
     if (req.query.to) filter.date.$lte = new Date(req.query.to);
   }
   if (req.query.search) {
-    filter.$or = [
-      { description: { $regex: req.query.search, $options: 'i' } },
-      { vendor: { $regex: req.query.search, $options: 'i' } },
-      { expenseNumber: { $regex: req.query.search, $options: 'i' } },
-      { reference: { $regex: req.query.search, $options: 'i' } },
-    ];
+    addTokenSearch(filter, req.query.search, ['description', 'vendor', 'expenseNumber', 'reference']);
   }
 
   const options = pick(req.query, ['sortBy', 'limit', 'page']);

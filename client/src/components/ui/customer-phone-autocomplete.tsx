@@ -9,6 +9,7 @@ import {
 } from '@/stores/mobile-shop.api'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 export interface CustomerSuggestion {
   _id?: string
@@ -190,7 +191,6 @@ export function CustomerPhoneAutocomplete({
   const suggestions = useMemo<CustomerSuggestion[]>(() => {
     if (!value || value.length < 2) return []
     const digits = value.replace(/\D/g, '')
-    const lower = value.toLowerCase()
 
     return allSuggestions
       .filter(c => {
@@ -205,7 +205,7 @@ export function CustomerPhoneAutocomplete({
           // In phone mode: match phone, whatsapp, or CNIC digits
           if (digits && (cPhone.includes(digits) || cWA.includes(digits) || cCNIC.includes(digits))) return true
         }
-        if (c.name?.toLowerCase().includes(lower)) return true
+        if (matchesBilingualSearch(value, c.name)) return true
         return false
       })
       .slice(0, 7)

@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useLanguage } from '@/context/language-context'
 import { Category } from '@/stores/category.slice'
-import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
+import { getTextClasses, getUrduSecondaryNameClasses, filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { CategoriesProvider, useCategories } from '@/features/categories/context/categories-context'
 import { CategoriesActionDialog } from '@/features/categories/components/categories-action-dialog'
@@ -59,11 +59,7 @@ function CategoryPickerFieldInner({ categories, value, onValueChange, disabled }
 
   const normalizedQuery = query.trim().toLowerCase()
   const filtered = normalizedQuery
-    ? categories.filter(
-        (c) =>
-          c.name?.toLowerCase().includes(normalizedQuery) ||
-          c.nameUrdu?.toLowerCase().includes(normalizedQuery)
-      )
+    ? filterAndRankBySearch(categories, normalizedQuery, (c) => [c.name, c.nameUrdu])
     : categories
 
   const handleOpenCreateCategory = () => {

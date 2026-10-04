@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 interface LowStockDetailsProps {
   products: Product[];
@@ -68,10 +69,7 @@ export function LowStockDetails({ products, onBack, threshold = 10, criticalThre
     }
 
     if (search) {
-      filtered = filtered.filter(product =>
-        (product.name || '').toLowerCase().includes(search.toLowerCase()) ||
-        product.barcode?.toLowerCase().includes(search.toLowerCase())
-      );
+      filtered = filterAndRankBySearch(filtered, search, (product) => [product.name, product.barcode]);
     }
 
     return filtered.sort((a, b) => getDisplayStock(a) - getDisplayStock(b));

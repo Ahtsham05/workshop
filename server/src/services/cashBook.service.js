@@ -9,6 +9,7 @@ const {
   startOfBusinessDay,
   toBusinessCalendarDate,
 } = require('../utils/businessTimezone');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -263,11 +264,7 @@ const queryEntries = async (filter, options) => {
   const queryOptions = { ...options };
 
   if (queryOptions.search) {
-    queryFilter.$or = [
-      { description: { $regex: queryOptions.search, $options: 'i' } },
-      { notes: { $regex: queryOptions.search, $options: 'i' } },
-      { source: { $regex: queryOptions.search, $options: 'i' } },
-    ];
+    addTokenSearch(queryFilter, queryOptions.search, ['description', 'notes', 'source']);
     delete queryOptions.search;
   }
 

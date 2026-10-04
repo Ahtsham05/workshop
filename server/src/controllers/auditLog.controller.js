@@ -2,14 +2,14 @@ const catchAsync = require('../utils/catchAsync');
 const pick = require('../utils/pick');
 const { auditLogService } = require('../services');
 const { applyBranchFilter } = require('../utils/branchFilter');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const getAuditLogs = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['module', 'action', 'userId', 'entityId']);
   applyBranchFilter(filter, req);
 
   if (req.query.search) {
-    const escaped = String(req.query.search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.$or = [{ entityName: { $regex: escaped, $options: 'i' } }, { userName: { $regex: escaped, $options: 'i' } }];
+    addTokenSearch(filter, req.query.search, ['entityName', 'userName']);
   }
 
   if (req.query.dateFrom || req.query.dateTo) {

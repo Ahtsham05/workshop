@@ -9,6 +9,7 @@ const employeeLedgerService = require('./employeeLedger.service');
 const supplierLedgerService = require('./supplierLedger.service');
 const inventorySyncService = require('./inventorySync.service');
 const commissionEngineService = require('./commissionEngine.service');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const sanitizeId = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -329,7 +330,7 @@ const querySimSales = async (filter, options) => {
       conditions.push({ customerCNIC: { $regex: digits, $options: 'i' } });
     }
     if (search.length >= 2) {
-      conditions.push({ customerName: { $regex: search, $options: 'i' } });
+      conditions.push({ $and: tokenSearchClauses(search, ['customerName']) });
     }
     if (conditions.length > 0) {
       queryFilter.$or = conditions;

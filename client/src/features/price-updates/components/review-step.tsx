@@ -38,6 +38,7 @@ import {
 import { RulePanel } from './rule-panel'
 import { ReviewRow, type RowActions } from './review-row'
 import type { SourceMeta } from './source-step'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 const PAGE_SIZE = 100
 const GRID =
@@ -82,11 +83,7 @@ export function ReviewStep({ analysis, source, listType, onListType, rule, onRul
     return derived.filter((d) => {
       if (!matchesFilter(d, filter)) return false
       if (!q) return true
-      return (
-        d.row.name.toLowerCase().includes(q) ||
-        d.row.raw.toLowerCase().includes(q) ||
-        (d.entry !== null && (d.entry.name.toLowerCase().includes(q) || d.entry.sku.toLowerCase().includes(q) || d.entry.barcode.toLowerCase().includes(q)))
-      )
+      return matchesBilingualSearch(q, d.row.name, d.row.raw, d.entry?.name, d.entry?.sku, d.entry?.barcode)
     })
   }, [derived, filter, query])
 

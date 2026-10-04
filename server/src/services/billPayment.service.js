@@ -11,6 +11,7 @@ const {
   endOfBusinessDay,
   toBusinessCalendarDate,
 } = require('../utils/businessTimezone');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const toObjectId = (id) =>
   id && mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(String(id)) : id;
@@ -330,11 +331,7 @@ const queryBillPayments = async (filter, options) => {
   const queryOptions = { ...options };
 
   if (queryOptions.search) {
-    queryFilter.$or = [
-      { referenceNumber: { $regex: queryOptions.search, $options: 'i' } },
-      { customerName: { $regex: queryOptions.search, $options: 'i' } },
-      { companyName: { $regex: queryOptions.search, $options: 'i' } },
-    ];
+    addTokenSearch(queryFilter, queryOptions.search, ['referenceNumber', 'customerName', 'companyName']);
     delete queryOptions.search;
   }
 

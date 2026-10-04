@@ -1,6 +1,6 @@
 import { isApiUnreachable, isNetworkError } from '@/lib/auth-cache'
 import { getElectronAPI, isElectronApp } from '@/lib/sync/electron'
-import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 type PaginatedParams = {
   page?: number | string
@@ -75,15 +75,15 @@ function filterBySearch(
     .map((field) => field.trim())
     .filter(Boolean)
 
-  return items.filter((item) =>
-    matchesBilingualSearch(query, ...fields.map((field) => item[field] as string | undefined)),
-  )
+  // Word-based match, best match first (ties keep the incoming order, i.e. the requested sort).
+  return filterAndRankBySearch(items, query, (item) => fields.map((field) => item[field] as string | undefined))
 }
 
 function paginateLocal(items: Record<string, unknown>[], params: PaginatedParams = {}): PaginatedResult {
   const page = Math.max(1, Number(params.page) || 1)
   const limit = Math.max(1, Number(params.limit) || 50)
-  const sorted = sortItems(items, params.sortBy)
+  // `relevance` (or no sort while searching) means "best match first" — see filterBySearch.
+  const sorted = sortItems(items, params.sortBy === 'relevance' ? undefined : params.sortBy)
   const filtered = filterBySearch(sorted, params.search, params.fieldName)
   const totalResults = filtered.length
   const totalPages = Math.max(1, Math.ceil(totalResults / limit))

@@ -34,6 +34,7 @@ import {
   type WalletLike,
 } from '@/lib/wallet-payment-options'
 import { SplitPaymentFields, type SplitPaymentValue } from '@/components/split-payment-fields'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 type CustomerRow = {
   _id?: string
@@ -138,9 +139,7 @@ export function PaymentPanel({
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase()
     if (!q) return customers.slice(0, 30)
-    return customers
-      .filter((c) => c.name?.toLowerCase().includes(q) || c.phone?.toLowerCase().includes(q))
-      .slice(0, 30)
+    return filterAndRankBySearch(customers, q, (c) => [c.name, c.phone]).slice(0, 30)
   }, [customers, customerSearch])
 
   // Sale receives money — never show account balances in this dropdown (money-in form),

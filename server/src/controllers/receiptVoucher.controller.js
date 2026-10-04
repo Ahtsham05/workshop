@@ -7,6 +7,7 @@ const { applyBusinessDateRange } = require('../utils/businessTimezone');
 const ApiError = require('../utils/ApiError');
 const { formatMoney } = require('../utils/money');
 const { voucherAuditSnapshot, voucherCreateAuditFields } = require('../utils/voucherAudit');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const createVoucher = catchAsync(async (req, res) => {
   const voucher = await receiptVoucherService.createVoucher({ ...req.body, ...getBranchContext(req) }, req.user.id);
@@ -43,11 +44,7 @@ const getVouchers = catchAsync(async (req, res) => {
     if (req.query.maxAmount) filter.totalAmount.$lte = Number(req.query.maxAmount);
   }
   if (req.query.search) {
-    filter.$or = [
-      { voucherNumber: { $regex: req.query.search, $options: 'i' } },
-      { 'lines.payerName': { $regex: req.query.search, $options: 'i' } },
-      { 'lines.category': { $regex: req.query.search, $options: 'i' } },
-    ];
+    addTokenSearch(filter, req.query.search, ['voucherNumber', 'lines.payerName', 'lines.category']);
   }
 
   const options = pick(req.query, ['sortBy', 'limit', 'page']);

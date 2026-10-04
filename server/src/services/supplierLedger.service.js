@@ -9,6 +9,7 @@ const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
 const logger = require('../config/logger');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 /**
  * Post a manual supplier payment to the double-entry system.
@@ -303,10 +304,7 @@ const createLedgerEntry = async (ledgerBody, options = {}) => {
 const queryLedgerEntries = async (filter, options) => {
   // Handle search query
   if (options.search) {
-    filter.$or = [
-      { reference: { $regex: options.search, $options: 'i' } },
-      { description: { $regex: options.search, $options: 'i' } },
-    ];
+    addTokenSearch(filter, options.search, ['reference', 'description']);
     delete options.search;
   }
 

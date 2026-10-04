@@ -118,7 +118,8 @@ export default function Suppliers() {
     const params = {
       page: currentPage,
       limit: limitValue,
-      sortBy: SUPPLIERS_SORT_BY,
+      // Searching ranks best match first (server-side relevance).
+      sortBy: q ? 'relevance' : SUPPLIERS_SORT_BY,
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.supplier } : {}),
       ...(statusFilter !== ALL_STATUS ? { isActive: statusFilter === 'active' } : {}),
     }

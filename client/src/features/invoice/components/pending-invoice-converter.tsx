@@ -67,7 +67,7 @@ import { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { cn } from '@/lib/utils'
-import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getUrduSecondaryNameClasses, filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { useUrduDisplay } from '@/context/urdu-display-context'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
@@ -282,9 +282,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
   }, [selectedCustomerId, customers, selectedCustomer])
 
   // Filter the pending-invoice customer list by search query
-  const filteredPendingSummary = pendingSummary.filter((row: any) =>
-    matchesBilingualSearch(customerSearchQuery, row.name, row.nameUrdu, row.phone),
-  )
+  const filteredPendingSummary = filterAndRankBySearch(pendingSummary, customerSearchQuery, (row: any) => [row.name, row.nameUrdu, row.phone])
 
   // Convert and merge items from selected invoices
   const convertedItems = useMemo(() => {

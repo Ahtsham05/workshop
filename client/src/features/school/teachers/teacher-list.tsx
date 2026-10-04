@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useCurrencyMeta } from '@/lib/format-money';
 import { useStateDraft } from '@/hooks/use-form-draft';
 import { FormDraftNotice } from '@/components/form-draft-notice';
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 
 const GRADIENT_COLORS = [
@@ -110,7 +111,7 @@ export default function TeacherList() {
   const filtered = useMemo(() => {
     const all = data?.results || [];
     return all.filter((t: any) => {
-      const matchSearch = !search || `${t.firstName} ${t.lastName} ${t.employeeId} ${t.email}`.toLowerCase().includes(search.toLowerCase());
+      const matchSearch = matchesBilingualSearch(search, `${t.firstName} ${t.lastName}`, t.employeeId, t.email);
       const matchStatus = statusFilter === 'all' || t.status === statusFilter;
       return matchSearch && matchStatus;
     });

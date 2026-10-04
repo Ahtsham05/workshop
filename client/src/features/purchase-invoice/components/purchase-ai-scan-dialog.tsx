@@ -62,7 +62,7 @@ import {
   normalizeSuppliersList,
 } from '../utils/catalog-helpers'
 import type { ScannedSupplierHint } from '../utils/scan-matching'
-import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getUrduSecondaryNameClasses, filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 export interface PurchaseScanApplyPayload {
   supplier: Supplier
@@ -150,9 +150,7 @@ function ProductReviewRow({
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const matched = products.find((p) => getProductId(p) === line.matchedProductId)
-  const filtered = products.filter((p) =>
-    matchesBilingualSearch(search, p.name, p.nameUrdu, p.barcode),
-  )
+  const filtered = filterAndRankBySearch(products, search, (p) => [p.name, p.nameUrdu, p.barcode])
 
   return (
     <TableRow className={!line.matchedProductId ? 'bg-destructive/5' : undefined}>
@@ -581,9 +579,7 @@ export function PurchaseAiScanDialog({
     toast.success(t('purchase_scan_applied'))
   }
 
-  const filteredSuppliers = suppliers.filter((s) =>
-    matchesBilingualSearch(supplierSearch, s.name, s.nameUrdu, s.phone),
-  )
+  const filteredSuppliers = filterAndRankBySearch(suppliers, supplierSearch, (s) => [s.name, s.nameUrdu, s.phone])
 
   const selectedSupplier = suppliers.find((s) => getSupplierId(s) === selectedSupplierId)
 

@@ -23,6 +23,7 @@ import { NewChat } from './components/new-chat'
 import { type ChatUser, type Convo } from './data/chat-types'
 // Fake Data
 import { conversations } from './data/convo.json'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 export default function Chats() {
   const [search, setSearch] = useState('')
@@ -34,9 +35,7 @@ export default function Chats() {
     useState(false)
 
   // Filtered data based on the search query
-  const filteredChatList = conversations.filter(({ fullName }) =>
-    fullName.toLowerCase().includes(search.trim().toLowerCase())
-  )
+  const filteredChatList = conversations.filter(({ fullName }) => matchesBilingualSearch(search, fullName))
 
   const currentMessage = selectedUser?.messages.reduce(
     (acc: Record<string, Convo[]>, obj) => {

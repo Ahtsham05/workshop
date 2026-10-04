@@ -27,6 +27,7 @@ import { kpiCardClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import LongText from '@/components/long-text'
 import { useFormatMoney } from '@/lib/format-money'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 interface ProductReportProps {
   startDate: string
@@ -110,15 +111,13 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
       if (!data?.data) return []
       const term = searchTerm.trim().toLowerCase()
       if (!term) return data.data
-      return data.data.filter((product) =>
-        reportEntityName(language, product.productName, product.productNameUrdu)
-          .toLowerCase()
-          .includes(term) ||
+      return filterAndRankBySearch(data.data, term, (product) => [
+        reportEntityName(language, product.productName, product.productNameUrdu),
         // Matches a variant label, batch number, IMEI/serial, or batch expiry date
         // (YYYY-MM-DD) that appeared on a sold line for this product — see
         // getProductReport's searchTags projection.
-        (product.searchTags ?? []).some((tag) => tag.toLowerCase().includes(term))
-      )
+        ...(product.searchTags ?? []),
+      ])
     }, [data?.data, searchTerm, language])
 
     useImperativeHandle(ref, () => ({

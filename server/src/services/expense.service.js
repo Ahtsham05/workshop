@@ -6,6 +6,7 @@ const cashBookService = require('./cashBook.service');
 const walletService = require('./wallet.service');
 const walletEntryService = require('./walletEntry.service');
 const accountsSystemService = require('./accountsSystem.service');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 /** Post (or re-post) the double-entry journal entry for an expense. Fire-and-forget. */
 const postExpenseToAccounts = (expense) => {
@@ -179,12 +180,7 @@ const createExpense = async (expenseBody, options = {}) => {
 const queryExpenses = async (filter, options) => {
   // Handle search query
   if (options.search) {
-    filter.$or = [
-      { expenseNumber: { $regex: options.search, $options: 'i' } },
-      { description: { $regex: options.search, $options: 'i' } },
-      { vendor: { $regex: options.search, $options: 'i' } },
-      { category: { $regex: options.search, $options: 'i' } },
-    ];
+    addTokenSearch(filter, options.search, ['expenseNumber', 'description', 'vendor', 'category']);
     delete options.search;
   }
 

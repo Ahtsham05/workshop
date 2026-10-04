@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const { Category } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { addTokenSearch, rankDocuments } = require('../utils/searchQuery');
 
 /**
  * Create a category
@@ -54,10 +55,11 @@ const getAllCategories = async (filter) => {
   let query = { ...rest };
 
   if (search && fieldName) {
-    query[fieldName] = { $regex: search, $options: 'i' };
+    addTokenSearch(query, search, fieldName);
   }
 
-  return Category.find(query).sort({ name: 1 });
+  const categories = await Category.find(query).sort({ name: 1 });
+  return search && fieldName ? rankDocuments(categories, search, fieldName) : categories;
 };
 
 /**

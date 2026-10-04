@@ -84,10 +84,12 @@ const SERVER_SORTABLE_COLUMNS = new Set([
   'createdAt',
 ])
 
-function buildSortByParam(sorting: SortingState): string {
+function buildSortByParam(sorting: SortingState, searching = false): string {
   const parts = sorting
     .filter((s) => SERVER_SORTABLE_COLUMNS.has(s.id))
     .map((s) => `${s.id}:${s.desc ? 'desc' : 'asc'}`)
+  // While searching, best match first (server ranks it) unless a column header was clicked.
+  if (parts.length === 0 && searching) return 'relevance'
   return parts.length > 0 ? parts.join(',') : PRODUCTS_SORT_BY
 }
 
@@ -311,7 +313,7 @@ export default function Products() {
     const params = {
       page: currentPage,
       limit: limit,
-      sortBy: buildSortByParam(sorting),
+      sortBy: buildSortByParam(sorting, !!q),
       ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.product } : {}),
       ...(isSingleCategorySelected ? { category: categoryFilter } : {}),
       ...(subCategoryFilter !== ALL_SUBCATEGORIES ? { subCategory: subCategoryFilter } : {}),

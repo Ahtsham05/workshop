@@ -27,7 +27,7 @@ import type { TransferSuggestion } from '@/stores/purchaseSuggestions.api'
 import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
 import { useLanguage } from '@/context/language-context'
 import { useIsPhone } from '@/hooks/use-mobile'
-import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { onEnterAdvance } from '@/lib/invoice-form-keyboard'
 import { cn } from '@/lib/utils'
 
@@ -531,9 +531,11 @@ export function BulkTransferPanel({
   const addedIds = useMemo(() => new Set(lines.filter((l) => l.item).map((l) => l.item!.id)), [lines])
   const filteredCatalog = useMemo(
     () =>
-      transferableCatalog
-        .filter((c) => !addedIds.has(c.id))
-        .filter((c) => matchesBilingualSearch(productSearchQuery, c.name, c.nameUrdu, c.barcode, c.brand?.name)),
+      filterAndRankBySearch(
+        transferableCatalog.filter((c) => !addedIds.has(c.id)),
+        productSearchQuery,
+        (c) => [c.name, c.nameUrdu, c.barcode, c.brand?.name],
+      ),
     [transferableCatalog, addedIds, productSearchQuery]
   )
   const visibleCatalog = filteredCatalog.slice(0, MAX_VISIBLE_RESULTS)

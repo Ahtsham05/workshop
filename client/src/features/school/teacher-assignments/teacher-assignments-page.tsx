@@ -24,6 +24,7 @@ import {
 } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 interface Assignment {
   id: string;
@@ -103,12 +104,7 @@ export default function TeacherAssignmentsPage() {
     (sub.classId as string) || '';
 
   const filteredTeachers = useMemo(() => {
-    const q = teacherSearch.toLowerCase();
-    return teachers.filter(
-      (t) =>
-        `${t.firstName} ${t.lastName}`.toLowerCase().includes(q) ||
-        (t.employeeId ?? '').toLowerCase().includes(q),
-    );
+    return filterAndRankBySearch(teachers, teacherSearch, (t) => [`${t.firstName} ${t.lastName}`, t.employeeId]);
   }, [teachers, teacherSearch]);
 
   const selectedTeacher = teachers.find((t) => t.id === teacherId);

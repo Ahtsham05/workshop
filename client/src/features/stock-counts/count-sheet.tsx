@@ -49,6 +49,7 @@ import { printCountSheet } from './lib/print-count-sheet'
 import { useLineSaver } from './lib/use-line-saver'
 import { useCountQueue } from './lib/use-count-queue'
 import { useStockCountAccess } from './lib/use-stock-count-access'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 type Filter = 'all' | 'todo' | 'counted' | 'diff' | 'recount'
 const PAGE = 150
@@ -147,7 +148,7 @@ export default function CountSheetPage({ countId }: { countId: string }) {
       if (filter === 'diff' && !(isCounted(line) && line.variance)) return false
       if (filter === 'recount' && !line.recount) return false
       if (!q) return true
-      return `${line.name} ${line.variantLabel ?? ''} ${line.barcode ?? ''} ${line.sku ?? ''} ${line.category ?? ''}`.toLowerCase().includes(q)
+      return matchesBilingualSearch(q, line.name, line.variantLabel, line.barcode, line.sku, line.category)
     })
   }, [lines, filter, search])
   const shown = visible.slice(0, limit)
@@ -245,7 +246,7 @@ export default function CountSheetPage({ countId }: { countId: string }) {
       setSerialLine(serialHit)
       return
     }
-    const nameHits = lines.filter((l) => `${l.name} ${l.variantLabel ?? ''} ${l.barcode ?? ''}`.toLowerCase().includes(lower))
+    const nameHits = lines.filter((l) => matchesBilingualSearch(lower, l.name, l.variantLabel, l.barcode))
     if (nameHits.length > 0) {
       setSearch(term)
       return

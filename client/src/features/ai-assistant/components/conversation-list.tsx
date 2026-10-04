@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { AiConversation } from '@/stores/aiAssistant.api'
 import { groupConversationsByDate } from '../lib/group-conversations'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 function safeRelativeTime(value: string) {
   const date = new Date(value)
@@ -34,7 +35,7 @@ export function ConversationList({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return q ? conversations.filter((c) => c.title.toLowerCase().includes(q)) : conversations
+    return q ? filterAndRankBySearch(conversations, q, (c) => [c.title]) : conversations
   }, [conversations, search])
 
   const groups = useMemo(() => groupConversationsByDate(filtered), [filtered])

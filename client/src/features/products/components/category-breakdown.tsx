@@ -35,6 +35,7 @@ import LongText from '@/components/long-text'
 import { getDisplayStock, getDisplayStockValue } from '@/lib/product-stock-display'
 import { UNCATEGORIZED_CATEGORY } from './category-filter-combobox'
 import type { Product } from '../data/schema'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 export interface CategoryBreakdownRow {
   categoryId: string | null
@@ -122,7 +123,7 @@ export function CategoryBreakdown({ data, loading, onSelectCategory }: CategoryB
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const rows = q ? data.filter((row) => row.categoryName.toLowerCase().includes(q)) : data
+    const rows = q ? filterAndRankBySearch(data, q, (row) => [row.categoryName]) : data
     const dir = sortDir === 'asc' ? 1 : -1
     return [...rows].sort((a, b) => {
       if (sortKey === 'categoryName') return a.categoryName.localeCompare(b.categoryName) * dir

@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const ApiError = require('../utils/ApiError');
 const { Lead, Customer, CommunicationLog, Reminder, Invoice } = require('../models');
 const customerService = require('./customer.service');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 /** Mongoose auto-casts query filters for find()/countDocuments(), but NOT for the
  * $match stage of aggregate() — that goes to MongoDB's driver largely as-is. A plain
@@ -102,8 +103,7 @@ const listLeads = async (query, scope) => {
   // it is already pinned to themselves above and can't widen it via the query.
   if (query.assignedTo && scope.canViewAll) filter.assignedTo = query.assignedTo;
   if (query.search) {
-    const re = { $regex: query.search, $options: 'i' };
-    filter.$or = [{ name: re }, { companyName: re }, { phone: re }, { whatsapp: re }, { email: re }];
+    addTokenSearch(filter, query.search, ['name', 'companyName', 'phone', 'whatsapp', 'email']);
   }
 
   const options = {

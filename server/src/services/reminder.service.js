@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const { Reminder } = require('../models');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const addInterval = (date, repeat) => {
   const next = new Date(date);
@@ -43,7 +44,7 @@ const listReminders = async (query, { organizationId, branchId }) => {
   if (query.assignedTo) filter.assignedTo = query.assignedTo;
   if (query.relatedType) filter.relatedType = query.relatedType;
   if (query.relatedId) filter.relatedId = query.relatedId;
-  if (query.search) filter.title = { $regex: query.search, $options: 'i' };
+  if (query.search) addTokenSearch(filter, query.search, ['title']);
   if (query.from || query.to) {
     filter.dueAt = {};
     if (query.from) filter.dueAt.$gte = new Date(query.from);

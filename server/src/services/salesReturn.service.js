@@ -15,6 +15,7 @@ const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 const { proportionLineTax, buildReturnTaxLines } = require('../utils/taxReturnProration');
 const Money = require('../utils/money');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 /**
  * Resolves exactly which batches — and, for serial/IMEI-tracked lines, which specific
@@ -491,11 +492,7 @@ const querySalesReturns = async (filter, options) => {
   }
 
   if (queryOptions.search) {
-    queryFilter.$or = [
-      { returnNumber: { $regex: queryOptions.search, $options: 'i' } },
-      { reason: { $regex: queryOptions.search, $options: 'i' } },
-      { customerName: { $regex: queryOptions.search, $options: 'i' } },
-    ];
+    addTokenSearch(queryFilter, queryOptions.search, ['returnNumber', 'reason', 'customerName']);
     delete queryOptions.search;
   }
 

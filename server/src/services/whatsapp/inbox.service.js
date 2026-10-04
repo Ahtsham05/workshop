@@ -6,6 +6,7 @@ const { normalizePhone } = require('../../utils/whatsappPhone');
 const { resolveContactNamesByPhone } = require('../../utils/resolveContactName');
 const eventsService = require('./events.service');
 const mediaService = require('./media.service');
+const { tokenSearchClauses } = require('../../utils/searchQuery');
 
 // $match in an aggregation pipeline does no schema-aware casting (unlike .find()/
 // .countDocuments()), so an organizationId/branchId that arrives as a header string
@@ -190,14 +191,11 @@ async function listAllMessages(organizationId, branchId, filters = {}) {
     if (to) baseMatch.createdAt.$lte = new Date(to);
   }
 
-  if (search) {
+  if (search && String(search).trim()) {
     const conversations = await WhatsAppConversation.find({
       organizationId,
       branchId,
-      $or: [
-        { contactName: { $regex: search, $options: 'i' } },
-        { contactPhone: { $regex: search, $options: 'i' } },
-      ],
+      $and: tokenSearchClauses(search, ['contactName', 'contactPhone']),
     }).select('_id');
     baseMatch.conversationId = { $in: conversations.map((c) => c._id) };
   }

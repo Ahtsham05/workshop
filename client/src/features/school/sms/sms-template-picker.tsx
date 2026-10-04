@@ -16,6 +16,7 @@ import {
 } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { FileText, Loader2, Search, Trash2 } from 'lucide-react';
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 /**
  * Template library. Every card shows the message as a parent receives it — placeholders
@@ -48,9 +49,7 @@ export function SmsTemplatePicker({
     const byCategory = category === 'all' ? forContext : forContext.filter((t) => t.category === category);
     const q = search.trim().toLowerCase();
     if (!q) return byCategory;
-    return byCategory.filter(
-      (t) => t.title.toLowerCase().includes(q) || t.preview.toLowerCase().includes(q)
-    );
+    return filterAndRankBySearch(byCategory, q, (t) => [t.title, t.preview]);
   }, [data, context, category, search]);
 
   const categories = useMemo(() => {

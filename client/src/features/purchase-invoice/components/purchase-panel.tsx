@@ -111,7 +111,7 @@ import { getProductUnitOptions, getUnitAdjustedPrice, resolveUnitConversion } fr
 import { isWholesaleRetailBusiness, isMobileShopBusiness } from '@/lib/business-types'
 import { BuyUsedPhoneDialog } from '@/features/mobile-shop/old-phones/components/buy-used-phone-dialog'
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences'
-import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getUrduSecondaryNameClasses, filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { normalizeSuppliersList } from '../utils/catalog-helpers'
@@ -661,9 +661,7 @@ export default function PurchasePanel({
   )
 
   // Filter suppliers by name, Urdu name, or phone
-  const filteredSuppliers = suppliers.filter((supplier) =>
-    matchesBilingualSearch(supplierSearchQuery, supplier.name, supplier.nameUrdu, supplier.phone),
-  )
+  const filteredSuppliers = filterAndRankBySearch(suppliers, supplierSearchQuery, (supplier) => [supplier.name, supplier.nameUrdu, supplier.phone])
 
   // Flat purchase catalog: one row per non-variant product, and one row per real
   // variant for hasVariants products — each with its own real price/cost/stock, so the
@@ -671,15 +669,7 @@ export default function PurchasePanel({
   // rolled-up product row. See docs/architecture/universal-product-migration.md.
   const { data: purchaseCatalog = EMPTY_PURCHASE_CATALOG, isLoading: purchaseCatalogLoading } = useGetPurchasableCatalogQuery()
 
-  const filteredPurchaseProducts = purchaseCatalog.filter((item) =>
-    matchesBilingualSearch(
-      productSearchQuery,
-      item.name,
-      item.nameUrdu,
-      item.barcode,
-      item.brand?.name,
-    ),
-  )
+  const filteredPurchaseProducts = filterAndRankBySearch(purchaseCatalog, productSearchQuery, (item) => [item.name, item.nameUrdu, item.barcode, item.brand?.name])
   // Capped slice actually rendered — matches Invoice's identical
   // visibleSellableProducts/filteredSellableProducts split.
   const visiblePurchaseProducts = filteredPurchaseProducts.slice(0, MAX_VISIBLE_DROPDOWN_RESULTS)

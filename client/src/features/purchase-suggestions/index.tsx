@@ -39,6 +39,7 @@ import { TransferSuggestionCard } from './components/transfer-suggestion-card'
 import { SupplierSuggestionGroup, type SupplierGroup } from './components/supplier-suggestion-group'
 import { formatMoney } from './utils/format'
 import { useCurrencyMeta } from '@/lib/format-money'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 type TabKey = 'purchase' | 'stockout' | 'demand' | 'deadstock' | 'transfers'
 
@@ -209,7 +210,7 @@ export default function PurchaseSuggestionsPage() {
   const allTransfers = transferSuggestions.data || []
 
   const query = search.trim().toLowerCase()
-  const matchesName = (name: string) => !query || name.toLowerCase().includes(query)
+  const matchesName = (name: string) => matchesBilingualSearch(query, name)
 
   const suggestions = useMemo(() => allSuggestions.filter((s) => matchesName(s.name)), [allSuggestions, query])
   const stockouts = useMemo(() => allStockouts.filter((s) => matchesName(s.name)), [allStockouts, query])

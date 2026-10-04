@@ -4,6 +4,7 @@ const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const { escapeRegex } = require('../utils/productMatchKey');
 const { WebsiteConnection, Branch, Brand, Product, ProductVariant, Inventory } = require('../models');
+const { tokenSearchClauses } = require('../utils/searchQuery');
 
 /**
  * Website Connections: the shop's own website reads live inventory from here instead of
@@ -336,7 +337,7 @@ const listProducts = async (connection, { page = 1, limit = 50, search = '', inS
   const size = Math.min(Math.max(Number(limit) || 50, 1), MAX_PAGE_SIZE);
   const current = Math.max(Number(page) || 1, 1);
   const q = String(search || '').trim();
-  const match = q ? { $or: [{ name: { $regex: escapeRegex(q), $options: 'i' } }, { barcode: q }, { sku: q }] } : {};
+  const match = q ? { $or: [{ $and: tokenSearchClauses(q, ['name']) }, { barcode: q }, { sku: q }] } : {};
   if (inStockOnly) {
     // Whole-catalog pass: whether a variant product is in stock needs its variants' stock.
     const { groups } = await groupProducts(connection, { match, fields: FULL_FIELDS });

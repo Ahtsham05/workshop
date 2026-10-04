@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/language-context'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useAddCountLinesMutation } from '@/stores/stockCount.api'
 import { apiError } from '../lib/labels'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 /** Same identity the server uses (stockCount.service.js#itemKey); serialized products are counted per product. */
 const itemKey = (item: PurchaseCatalogItem) =>
@@ -36,7 +37,11 @@ export function AddItemDialog({ countId, open, initialSearch = '', existingKeys,
     const q = search.trim().toLowerCase()
     if (!q) return []
     const exact = catalog.filter((item) => item.barcode && item.barcode.toLowerCase() === q)
-    const rest = catalog.filter((item) => !exact.includes(item) && `${item.name} ${item.barcode ?? ''}`.toLowerCase().includes(q))
+    const rest = filterAndRankBySearch(
+      catalog.filter((item) => !exact.includes(item)),
+      q,
+      (item) => [item.name, item.barcode],
+    )
     return [...exact, ...rest].slice(0, 30)
   }, [catalog, search])
 

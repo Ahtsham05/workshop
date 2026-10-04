@@ -129,6 +129,7 @@ import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { filterAndRankBySearch, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 type PurchaseFormState = {
   walletId: string
@@ -676,20 +677,15 @@ function LoadManagementPage({
 
   const filteredPurchases = useMemo(() => {
     if (!purchaseSearch.trim()) return purchases
-    const lower = purchaseSearch.toLowerCase()
-    return purchases.filter(p =>
-      p.supplierName?.toLowerCase().includes(lower) ||
-      p.walletType?.toLowerCase().includes(lower)
-    )
+    return filterAndRankBySearch(purchases, purchaseSearch, (p) => [p.supplierName, p.walletType])
   }, [purchases, purchaseSearch])
 
   const filteredTransactions = useMemo(() => {
     if (!salesSearch.trim()) return transactions
-    const lower = salesSearch.toLowerCase()
     const digits = salesSearch.replace(/\D/g, '')
     return transactions.filter(t => {
-      const name = (t.customerName?.trim() || 'Walk-in Customer').toLowerCase()
-      if (name.includes(lower)) return true
+      const name = t.customerName?.trim() || 'Walk-in Customer'
+      if (matchesBilingualSearch(salesSearch, name)) return true
       if (digits && t.mobileNumber?.replace(/\D/g, '').includes(digits)) return true
       return false
     })
@@ -697,11 +693,10 @@ function LoadManagementPage({
 
   const filteredWithdrawals = useMemo(() => {
     if (!withdrawalSearch.trim()) return withdrawals
-    const lower = withdrawalSearch.toLowerCase()
     const digits = withdrawalSearch.replace(/\D/g, '')
     return withdrawals.filter(w => {
-      const name = (w.customerName?.trim() || '').toLowerCase()
-      if (name.includes(lower)) return true
+      const name = w.customerName?.trim() || ''
+      if (matchesBilingualSearch(withdrawalSearch, name)) return true
       if (digits && w.customerNumber?.replace(/\D/g, '').includes(digits)) return true
       return false
     })
@@ -709,8 +704,7 @@ function LoadManagementPage({
 
   const filteredWalletTransfers = useMemo(() => {
     if (!withdrawalSearch.trim()) return walletTransfers
-    const lower = withdrawalSearch.toLowerCase()
-    return walletTransfers.filter((t) => 'my personal account'.includes(lower) || t.walletType.toLowerCase().includes(lower))
+    return walletTransfers.filter((t) => matchesBilingualSearch(withdrawalSearch, 'my personal account', t.walletType))
   }, [walletTransfers, withdrawalSearch])
 
   // "My Account" transfers merged in date-order alongside customer cash withdrawals, so

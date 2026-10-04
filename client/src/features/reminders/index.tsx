@@ -64,6 +64,7 @@ import {
   type ReminderPriority,
 } from '@/stores/reminder.api'
 import { ReminderMutateDialog } from './components/reminder-mutate-dialog'
+import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 const PRIORITY_STYLES: Record<ReminderPriority, string> = {
   low: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
@@ -121,8 +122,7 @@ export default function RemindersPage() {
 
     if (priorityFilter !== 'all') list = list.filter((r) => r.priority === priorityFilter)
     if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      list = list.filter((r) => r.title.toLowerCase().includes(q) || r.description?.toLowerCase().includes(q))
+      list = list.filter((r) => matchesBilingualSearch(search, r.title, r.description))
     }
     return [...list].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
   }, [reminders, statusTab, priorityFilter, search])

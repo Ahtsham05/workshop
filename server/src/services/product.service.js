@@ -13,6 +13,7 @@ const masterProductService = require('./masterProduct.service');
 const { extractDuplicateFieldFromMessage, labelFor } = require('../utils/duplicateKeyError');
 const logger = require('../config/logger');
 const { addedTodayFilter } = require('../utils/addedToday');
+const { buildTokenSearchMatch, tokenizeSearch, escapeRegex } = require('../utils/searchQuery');
 const { runIndexMigrationOnce } = require('../config/schemaIndexes');
 
 let productIndexesEnsured = false;
@@ -605,18 +606,7 @@ const castComputedSortFilter = (filter) => {
  * any $or already on `filter` (e.g. applyCategoryFilter's "uncategorized" sentinel); a
  * separate sequential $match stage ANDs the two instead of one clobbering the other.
  */
-const buildComputedSortSearchMatch = (options) => {
-  if (!options.search || !options.fieldName) return null;
-  const raw = String(options.search).trim();
-  if (!raw) return null;
-  const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const fields = String(options.fieldName)
-    .split(',')
-    .map((f) => f.trim())
-    .filter(Boolean);
-  if (fields.length === 0) return null;
-  return { $or: fields.map((field) => ({ [field]: { $regex: escaped, $options: 'i' } })) };
-};
+const buildComputedSortSearchMatch = (options) => buildTokenSearchMatch(options.search, options.fieldName);
 
 // Field this app's sort keys map to once computed — 'price'/'cost'/'stockQuantity' sort
 // by their variant-aware EFFECTIVE value (see the $addFields below and
@@ -745,7 +735,88 @@ const queryProductsWithComputedSort = async (filter, options) => {
   };
 };
 
+/**
+ * Relevance score for a product-list search, highest first. Name matches dominate (that is what
+ * people type), then barcode/sku exact hits; Urdu name/tags/shelf matches only get the base
+ * "contains every word" credit from the match stage. Built from $regexMatch so it runs in the DB
+ * and pagination stays correct.
+ */
+const buildRelevanceScore = (search) => {
+  const tokens = tokenizeSearch(search);
+  const phrase = escapeRegex(String(search).trim().replace(/\s+/g, ' '));
+  const name = { $ifNull: ['$name', ''] };
+  const re = (regex) => ({ $regexMatch: { input: name, regex, options: 'i' } });
+  const pts = (cond, n) => ({ $cond: [cond, n, 0] });
+  const first = escapeRegex(tokens[0]);
+  const last = escapeRegex(tokens[tokens.length - 1]);
+  const parts = [
+    pts(re(`^${phrase}$`), 1000), // name is exactly what was typed
+    pts(re(`^${phrase}`), 500), // name starts with the whole phrase
+    pts(re(phrase.replace(/ /g, '\\s+')), 300), // whole phrase appears contiguously
+    pts(re(`^${first}`), 120), // starts with the first word ("jbl ...")
+    tokens.length > 1 ? pts(re(`${last}$`), 80) : 0, // ends with the last word ("... speaker")
+    ...tokens.map((t) => pts(re(`(^|[^a-z0-9])${escapeRegex(t)}`), 30)), // word starts with it
+    ...tokens.map((t) => pts(re(`(^|[^a-z0-9])${escapeRegex(t)}([^a-z0-9]|$)`), 20)), // whole-word hit
+    ...tokens.map((t) => pts(re(escapeRegex(t)), 10)), // anywhere in the name
+  ];
+  const code = (field) => ({ $toLower: { $ifNull: [`$${field}`, ''] } });
+  const lower = String(search).trim().toLowerCase();
+  parts.push(pts({ $eq: [code('barcode'), lower] }, 900), pts({ $eq: [code('sku'), lower] }, 900));
+  return { $add: parts };
+};
+
+/**
+ * Search with no explicit column sort: best match first, then alphabetical. Same two-step shape
+ * as queryProductsWithComputedSort (aggregate for ids/order, re-fetch as documents).
+ */
+const queryProductsByRelevance = async (filter, options) => {
+  const castFilter = castComputedSortFilter(filter);
+  const searchMatch = buildComputedSortSearchMatch(options);
+  const limit = options.limit && parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10;
+  const page = options.page && parseInt(options.page, 10) > 0 ? parseInt(options.page, 10) : 1;
+  const skip = (page - 1) * limit;
+
+  const [agg] = await Product.aggregate([
+    { $match: castFilter },
+    { $match: searchMatch },
+    { $addFields: { _score: buildRelevanceScore(options.search) } },
+    { $sort: { _score: -1, name: 1, _id: 1 } },
+    {
+      $facet: {
+        ids: [{ $skip: skip }, { $limit: limit }, { $project: { _id: 1 } }],
+        totalCount: [{ $count: 'count' }],
+      },
+    },
+  ]).allowDiskUse(true);
+  const orderedIds = (agg?.ids || []).map((d) => d._id);
+  const totalResults = agg?.totalCount?.[0]?.count ?? 0;
+
+  const docs = await Product.find({ _id: { $in: orderedIds } }).populate('brandId', 'name logo');
+  const byId = new Map(docs.map((doc) => [doc._id.toString(), doc]));
+  const results = orderedIds.map((id) => byId.get(id.toString())).filter(Boolean);
+
+  return {
+    results: await attachVariantAggregates(results),
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit),
+    totalResults,
+  };
+};
+
+// Relevance is the default order for a search; the client sends sortBy=relevance (or nothing)
+// unless the user clicked a column header.
+const wantsRelevanceSort = (options) =>
+  !!(options.search && options.fieldName && buildComputedSortSearchMatch(options)) &&
+  (!options.sortBy || options.sortBy === 'relevance');
+
 const queryProducts = async (filter, options) => {
+  if (wantsRelevanceSort(options)) {
+    return queryProductsByRelevance(filter, options);
+  }
+  if (options.sortBy === 'relevance') {
+    options = { ...options, sortBy: undefined };
+  }
   if (parseSortFields(options.sortBy).some((field) => COMPUTED_SORT_FIELDS.has(field))) {
     return queryProductsWithComputedSort(filter, options);
   }

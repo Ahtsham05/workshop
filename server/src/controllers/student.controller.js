@@ -7,6 +7,7 @@ const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('.
 const { readSheetRows } = require('../utils/importSheet');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
 const { Organization } = require('../models');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const getScope = (req) => ({
   organizationId: req.organizationId,
@@ -42,16 +43,7 @@ const getStudents = catchAsync(async (req, res) => {
 
   // Free-text search across firstName, lastName, and parent.phone
   if (req.query.search) {
-    const escaped = req.query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.$or = [
-      { firstName: { $regex: escaped, $options: 'i' } },
-      { lastName: { $regex: escaped, $options: 'i' } },
-      { rollNumber: { $regex: escaped, $options: 'i' } },
-      { 'parent.fatherName': { $regex: escaped, $options: 'i' } },
-      { 'parent.phone': { $regex: escaped, $options: 'i' } },
-      { admissionNumber: { $regex: escaped, $options: 'i' } },
-      { studentUserId: { $regex: escaped, $options: 'i' } },
-    ];
+    addTokenSearch(filter, req.query.search, ['firstName', 'lastName', 'rollNumber', 'parent.fatherName', 'parent.phone', 'admissionNumber', 'studentUserId']);
   }
 
   const options = pick(req.query, ['sortBy', 'limit', 'page']);

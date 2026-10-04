@@ -54,6 +54,7 @@ import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { filterAndRankBySearch, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 
 type CatalogForm = {
   serviceName: string
@@ -174,12 +175,10 @@ export default function ServicesPage({
 
   const filteredInvoices = useMemo(() => {
     if (!invoiceSearch.trim()) return invoices
-    const lower = invoiceSearch.toLowerCase()
     const digits = invoiceSearch.replace(/\D/g, '')
     return invoices.filter(inv => {
-      if (inv.customerName?.toLowerCase().includes(lower)) return true
+      if (matchesBilingualSearch(invoiceSearch, inv.customerName, inv.invoiceNumber)) return true
       if (digits && inv.customerPhone?.replace(/\D/g, '').includes(digits)) return true
-      if (inv.invoiceNumber?.toLowerCase().includes(lower)) return true
       return false
     })
   }, [invoices, invoiceSearch])
@@ -189,12 +188,10 @@ export default function ServicesPage({
     if (!serviceSearch.trim()) {
       return services.filter((s) => s.isActive)
     }
-    const query = serviceSearch.toLowerCase()
-    return services.filter(
-      (s) =>
-        s.isActive &&
-        (s.serviceName.toLowerCase().includes(query) ||
-          s.details?.toLowerCase().includes(query))
+    return filterAndRankBySearch(
+      services.filter((s) => s.isActive),
+      serviceSearch,
+      (s) => [s.serviceName, s.details],
     )
   }, [services, serviceSearch])
 

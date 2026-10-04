@@ -53,7 +53,7 @@ import {
 import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalog-helpers'
 import { computeDiscountAmount, type DiscountType } from '@/features/purchase-invoice/utils/discount'
 import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
-import { getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getUrduSecondaryNameClasses, filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { getDisplayStock } from '@/lib/product-stock-display'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
@@ -347,13 +347,9 @@ export default function PurchaseOrderPanel({
     }
   }, [draft.items, editing])
 
-  const filteredSuppliers = suppliers.filter((s) =>
-    matchesBilingualSearch(supplierSearchQuery, s.name, s.nameUrdu, s.phone),
-  )
+  const filteredSuppliers = filterAndRankBySearch(suppliers, supplierSearchQuery, (s) => [s.name, s.nameUrdu, s.phone])
 
-  const filteredCatalogItems = purchasableCatalog.filter((p) =>
-    matchesBilingualSearch(productSearchQuery, p.name, p.nameUrdu, p.barcode, p.brand?.name),
-  )
+  const filteredCatalogItems = filterAndRankBySearch(purchasableCatalog, productSearchQuery, (p) => [p.name, p.nameUrdu, p.barcode, p.brand?.name])
   // Capped slice actually rendered — matches Invoice/Purchase Invoice's identical
   // visible/filtered split, so a large catalog doesn't render hundreds of DOM rows.
   const visibleCatalogItems = filteredCatalogItems.slice(0, MAX_VISIBLE_DROPDOWN_RESULTS)

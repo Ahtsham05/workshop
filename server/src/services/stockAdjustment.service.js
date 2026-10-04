@@ -4,6 +4,7 @@ const ApiError = require('../utils/ApiError');
 const { Product, ProductVariant, Inventory, Batch, InventoryTransaction, StockAdjustment, Imei } = require('../models');
 const inventorySyncService = require('./inventorySync.service');
 const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const { DECREASE_ONLY_TYPES, INCREASE_ONLY_TYPES, TYPES } = StockAdjustment;
 
@@ -411,7 +412,7 @@ const queryAdjustments = async (
   if (type) filter.type = type;
   if (direction) filter.direction = direction;
   if (status) filter.status = status;
-  if (search) filter.productName = { $regex: search, $options: 'i' };
+  if (search) addTokenSearch(filter, search, ['productName']);
   if (dateFrom || dateTo) {
     filter.createdAt = {};
     if (dateFrom) filter.createdAt.$gte = new Date(dateFrom);

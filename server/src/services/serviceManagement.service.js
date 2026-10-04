@@ -12,6 +12,7 @@ const customerLedgerService = require('./customerLedger.service');
 const employeeLedgerService = require('./employeeLedger.service');
 const supplierLedgerService = require('./supplierLedger.service');
 const commissionEngineService = require('./commissionEngine.service');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const sanitizeId = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -153,7 +154,8 @@ const queryServiceDefinitions = async (filter, options) => {
   const queryOptions = { ...options };
 
   if (queryFilter.serviceName) {
-    queryFilter.serviceName = { $regex: queryFilter.serviceName, $options: 'i' };
+    addTokenSearch(queryFilter, queryFilter.serviceName, ['serviceName']);
+    delete queryFilter.serviceName;
   }
 
   if (queryFilter.isActive !== undefined) {
@@ -362,10 +364,12 @@ const queryServiceInvoices = async (filter, options) => {
   const queryOptions = { ...options };
 
   if (queryFilter.customerName) {
-    queryFilter.customerName = { $regex: queryFilter.customerName, $options: 'i' };
+    addTokenSearch(queryFilter, queryFilter.customerName, ['customerName']);
+    delete queryFilter.customerName;
   }
   if (queryFilter.invoiceNumber) {
-    queryFilter.invoiceNumber = { $regex: queryFilter.invoiceNumber, $options: 'i' };
+    addTokenSearch(queryFilter, queryFilter.invoiceNumber, ['invoiceNumber']);
+    delete queryFilter.invoiceNumber;
   }
 
   applyBusinessDateRange(queryOptions, 'date');

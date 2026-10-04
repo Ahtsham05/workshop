@@ -8,6 +8,7 @@ const inventorySyncService = require('./inventorySync.service');
 const invoiceService = require('./invoice.service');
 const { matchesEitherImei } = require('./imei.service');
 const { formatMoney } = require('../utils/money');
+const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const USED_PHONES_PRODUCT_NAME = 'Used Phones';
 
@@ -306,9 +307,7 @@ const queryBuybacks = async (filter, options) => {
       }
     }
     if (search.length >= 2) {
-      conditions.push({ sellerName: { $regex: search, $options: 'i' } });
-      conditions.push({ brand: { $regex: search, $options: 'i' } });
-      conditions.push({ model: { $regex: search, $options: 'i' } });
+      conditions.push({ $and: tokenSearchClauses(search, ['sellerName', 'brand', 'model']) });
     }
     if (conditions.length > 0) queryFilter.$or = conditions;
     delete queryOptions.search;

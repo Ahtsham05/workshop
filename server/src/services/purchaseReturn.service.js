@@ -11,6 +11,7 @@ const { normalizeBusinessType } = require('../config/businessTypes');
 const { getStockQuantityFromItem } = require('../utils/inventoryUnitConversion');
 const { proportionLineTax, buildReturnTaxLines } = require('../utils/taxReturnProration');
 const Money = require('../utils/money');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 const getOrganizationBusinessType = async (organizationId) => {
   if (!organizationId) {
@@ -387,10 +388,7 @@ const queryPurchaseReturns = async (filter, options) => {
   }
 
   if (queryOptions.search) {
-    queryFilter.$or = [
-      { returnNumber: { $regex: queryOptions.search, $options: 'i' } },
-      { reason: { $regex: queryOptions.search, $options: 'i' } },
-    ];
+    addTokenSearch(queryFilter, queryOptions.search, ['returnNumber', 'reason']);
     delete queryOptions.search;
   }
 

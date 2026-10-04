@@ -110,13 +110,15 @@ export default function BarcodeGenerator() {
         ? {
             page,
             limit: LIMIT,
-            sortBy: 'createdAt:desc',
+            // Searching ranks best match first (server-side relevance).
+            sortBy: q ? 'relevance' : 'createdAt:desc',
             ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.product } : {}),
           }
         : {
             page,
             limit: LIMIT,
-            sortBy: 'createdAt:desc',
+            // Searching ranks best match first (server-side relevance).
+            sortBy: q ? 'relevance' : 'createdAt:desc',
             ...(q ? { search: q, fieldName: LIST_SEARCH_FIELDS.customer } : {}),
           }
 

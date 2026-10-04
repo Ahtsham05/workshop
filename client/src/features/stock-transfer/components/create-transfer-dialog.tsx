@@ -8,7 +8,7 @@ import { useGetMyBranchesQuery } from '@/stores/branch.api'
 import { useCreateTransferMutation } from '@/stores/inventoryTransfer.api'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useLanguage } from '@/context/language-context'
-import { matchesBilingualSearch, getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
+import { filterAndRankBySearch, getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 
 import {
@@ -78,7 +78,7 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
   // too now, just routed through the serial picker below instead of a plain quantity.
   const transferableCatalog = useMemo(() => catalog.filter((c) => c.stockQuantity > 0), [catalog])
   const matchingCatalog = useMemo(
-    () => transferableCatalog.filter((c) => matchesBilingualSearch(searchQuery, c.name, c.nameUrdu, c.barcode, c.brand?.name)),
+    () => filterAndRankBySearch(transferableCatalog, searchQuery, (c) => [c.name, c.nameUrdu, c.barcode, c.brand?.name]),
     [transferableCatalog, searchQuery]
   )
   const filteredCatalog = useMemo(() => matchingCatalog.slice(0, PICKER_LIMIT), [matchingCatalog])

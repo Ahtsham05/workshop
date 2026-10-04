@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Check, ChevronsUpDown, LayoutGrid, PackageSearch, PackageX } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 /** No category filter — the plain, unfiltered product list (today's default view). */
 export const NO_CATEGORY_FILTER = 'none'
@@ -54,7 +55,7 @@ export function CategoryFilterCombobox({ value, onChange, categories, className 
           : selectedCategory?.name || t('None')
 
   const filtered = query.trim()
-    ? categories.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()))
+    ? filterAndRankBySearch(categories, query, (c) => [c.name])
     : categories
 
   const handleSelect = (next: string) => {

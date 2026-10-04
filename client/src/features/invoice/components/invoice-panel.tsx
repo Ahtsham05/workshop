@@ -50,7 +50,7 @@ import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 // import { KeyboardLanguageOverride } from '@/components/keyboard-language-override'
 import { cn } from '@/lib/utils'
-import { getTextClasses, getUrduSecondaryNameClasses, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { getTextClasses, getUrduSecondaryNameClasses, filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { purchaseCatalogApi, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { BranchStockTrigger } from '@/components/branch-stock-trigger'
@@ -742,9 +742,7 @@ export function InvoicePanel({
   // re-renders on nearly every keystroke anywhere in the form (qty, discount, etc.),
   // and re-scanning a 1000+ row customer list each time was real, felt input lag.
   const filteredCustomers = useMemo(
-    () => customers.filter((customer) =>
-      matchesBilingualSearch(customerSearchQuery, customer.name, customer.nameUrdu, customer.phone),
-    ),
+    () => filterAndRankBySearch(customers, customerSearchQuery, (customer) => [customer.name, customer.nameUrdu, customer.phone]),
     [customers, customerSearchQuery],
   )
   // What actually renders — capped so opening the dropdown never mounts 1000+ rows.
@@ -761,9 +759,7 @@ export function InvoicePanel({
   // Memoized for the same reason as filteredCustomers — 1500+ rows re-scanned on
   // every unrelated re-render was the biggest single source of the sluggishness.
   const filteredSellableProducts = useMemo(
-    () => sellableCatalog.filter((item) =>
-      matchesBilingualSearch(productSearchQuery, item.name, item.nameUrdu, item.barcode, item.brand?.name),
-    ),
+    () => filterAndRankBySearch(sellableCatalog, productSearchQuery, (item) => [item.name, item.nameUrdu, item.barcode, item.brand?.name]),
     [sellableCatalog, productSearchQuery],
   )
   // What actually renders — capped so opening the dropdown never mounts 1000+ rows.

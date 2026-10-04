@@ -8,6 +8,7 @@ import { LayoutGrid, List, Package, Plus, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useFormatMoney } from '@/lib/format-money'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 type ViewMode = 'grid' | 'list'
 const VIEW_MODE_KEY = 'fastBillingCatalogViewMode'
@@ -68,14 +69,7 @@ export function ProductQuickGrid({ products, searchTerm, onSearchTermChange, onR
 
   const filtered = useMemo(() => {
     if (q) {
-      return products
-        .filter(
-          (p) =>
-            p.name?.toLowerCase().includes(q) ||
-            p.nameUrdu?.toLowerCase().includes(q) ||
-            p.barcode?.toLowerCase().includes(q),
-        )
-        .slice(0, 150)
+      return filterAndRankBySearch(products, q, (p) => [p.name, p.nameUrdu, p.barcode]).slice(0, 150)
     }
     const cat = categories.find((c) => c.id === selectedCategoryId)
     return (cat ? cat.products : products).slice(0, 150)

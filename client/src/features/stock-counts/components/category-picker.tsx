@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 export interface CategoryOption {
   id: string
@@ -32,7 +33,7 @@ export function CategoryPicker({ categories, loading, failed, value, onChange, o
   const [search, setSearch] = useState('')
   const selected = useMemo(() => new Set(value), [value])
   const q = search.trim().toLowerCase()
-  const visible = useMemo(() => (q ? categories.filter((c) => c.name.toLowerCase().includes(q)) : categories), [categories, q])
+  const visible = useMemo(() => (q ? filterAndRankBySearch(categories, q, (c) => [c.name]) : categories), [categories, q])
   const allVisibleSelected = visible.length > 0 && visible.every((c) => selected.has(c.id))
   const byId = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
 

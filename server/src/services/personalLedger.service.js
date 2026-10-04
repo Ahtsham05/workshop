@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const { PersonalLedger } = require('../models');
 const ApiError = require('../utils/ApiError');
 const cashBookService = require('./cashBook.service');
+const { addTokenSearch } = require('../utils/searchQuery');
 
 /**
  * Map My Wallet payment method to cash book paymentMethod (not 'wallet' — that flag is reserved
@@ -148,11 +149,7 @@ const createEntry = async (body) => {
  */
 const queryEntries = async (filter, options) => {
   if (options.search) {
-    filter.$or = [
-      { description: { $regex: options.search, $options: 'i' } },
-      { reference: { $regex: options.search, $options: 'i' } },
-      { category: { $regex: options.search, $options: 'i' } },
-    ];
+    addTokenSearch(filter, options.search, ['description', 'reference', 'category']);
     delete options.search;
   }
 

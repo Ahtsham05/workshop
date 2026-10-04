@@ -24,6 +24,7 @@ import { LeadKanbanBoard } from './components/lead-kanban-board'
 import { LeadDetailSheet } from './components/lead-detail-sheet'
 import { LeadMutateDialog } from './components/lead-mutate-dialog'
 import { LeadAnalyticsTab } from './components/lead-analytics-tab'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 type ViewTab = 'board' | 'analytics'
 
@@ -58,14 +59,7 @@ export default function LeadsPage() {
   const filteredLeads = useMemo(() => {
     let list = leads
     if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      list = list.filter(
-        (l) =>
-          l.name.toLowerCase().includes(q) ||
-          l.companyName?.toLowerCase().includes(q) ||
-          l.phone?.includes(q) ||
-          l.email?.toLowerCase().includes(q),
-      )
+      list = filterAndRankBySearch(list, search, (l) => [l.name, l.companyName, l.phone, l.email])
     }
     if (sourceFilter !== 'all') list = list.filter((l) => l.source === sourceFilter)
     if (repFilter !== 'all') {

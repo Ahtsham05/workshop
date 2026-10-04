@@ -43,6 +43,7 @@ import { NotificationList } from '@/components/notification-list';
 import StudentAvatar from '../components/student-avatar';
 import type { RootState, AppDispatch } from '@/stores/store';
 import { setActiveBranch } from '@/stores/auth.slice';
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -200,8 +201,7 @@ export default function TeacherPortalPage() {
   const filteredStudents = useMemo(() => {
     const all = students as any[];
     if (!studentSearch) return all;
-    const q = studentSearch.toLowerCase();
-    return all.filter(s => `${s.firstName} ${s.lastName} ${s.admissionNumber} ${s.rollNumber}`.toLowerCase().includes(q));
+    return filterAndRankBySearch(all, studentSearch, (s) => [`${s.firstName} ${s.lastName}`, s.admissionNumber, s.rollNumber]);
   }, [students, studentSearch]);
 
   const teacherClasses = useMemo(() => {
@@ -223,8 +223,7 @@ export default function TeacherPortalPage() {
     if (attClassId && attClassId !== 'all') list = list.filter(s => s.classId?._id === attClassId);
     if (attSectionId && attSectionId !== 'all') list = list.filter(s => s.sectionId?._id === attSectionId);
     if (attSearch) {
-      const q = attSearch.toLowerCase();
-      list = list.filter(s => `${s.firstName} ${s.lastName} ${s.rollNumber}`.toLowerCase().includes(q));
+      list = filterAndRankBySearch(list, attSearch, (s) => [`${s.firstName} ${s.lastName}`, s.rollNumber]);
     }
     return list;
   }, [students, attClassId, attSectionId, attSearch]);

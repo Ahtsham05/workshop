@@ -5,6 +5,7 @@ import { Package, ScanBarcode } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { parseQuantityPrefix } from '../utils/quantity-prefix'
+import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
 export type BarcodeScanInputHandle = {
   focus: () => void
@@ -62,12 +63,7 @@ export const BarcodeScanInput = forwardRef<BarcodeScanInputHandle, Props>(functi
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    return catalog.filter(
-      (p) =>
-        p.name?.toLowerCase().includes(q) ||
-        p.nameUrdu?.toLowerCase().includes(q) ||
-        p.barcode?.toLowerCase().includes(q),
-    )
+    return filterAndRankBySearch(catalog, q, (p) => [p.name, p.nameUrdu, p.barcode])
   }, [catalog, query])
 
   const suggestions = useMemo(() => matches.slice(0, MAX_SUGGESTIONS), [matches])
