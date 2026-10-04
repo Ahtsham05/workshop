@@ -1,5 +1,6 @@
 import { DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu'
 import { MixerHorizontalIcon, ResetIcon } from '@radix-ui/react-icons'
+import { useState } from 'react'
 import { Table } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,15 +12,23 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { useLanguage } from '@/context/language-context'
+import { SaveLayoutDialog, TableLayoutMenuItems } from '@/components/data-table/table-layout-menu'
+import type { SavedTableLayoutsApi } from '@/components/data-table/use-saved-table-layouts'
 
 interface DataTableViewOptionsProps<TData> {
   table: Table<TData>
+  /** Saved-layouts API (see useSavedTableLayouts) — omit to show only the column toggles. */
+  layouts?: SavedTableLayoutsApi
+  onResetLayout?: () => void
 }
 
 export function DataTableViewOptions<TData>({
   table,
+  layouts,
+  onResetLayout,
 }: DataTableViewOptionsProps<TData>) {
   const { t } = useLanguage()
+  const [saveOpen, setSaveOpen] = useState(false)
   
   // Column translations mapping — kept in sync with the header titles passed to
   // DataTableColumnHeader in users-columns.tsx, so a column reads the same in the
@@ -46,6 +55,7 @@ export function DataTableViewOptions<TData>({
   }
 
   return (
+    <>
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
@@ -57,7 +67,13 @@ export function DataTableViewOptions<TData>({
           {t('view')}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' className='w-[190px]'>
+      <DropdownMenuContent align='end' className='max-h-[80vh] w-[230px] overflow-y-auto'>
+        {layouts && onResetLayout && (
+          <>
+            <TableLayoutMenuItems api={layouts} onResetToDefault={onResetLayout} onRequestSave={() => setSaveOpen(true)} />
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuLabel>{t('toggle_columns')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {table
@@ -82,5 +98,7 @@ export function DataTableViewOptions<TData>({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    {layouts && <SaveLayoutDialog open={saveOpen} onOpenChange={setSaveOpen} api={layouts} />}
+    </>
   )
 }

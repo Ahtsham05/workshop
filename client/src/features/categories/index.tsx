@@ -26,6 +26,7 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const SEARCH_DEBOUNCE_MS = 400
 // Active sub-categories first, inactive last (like Products' isActive:desc sort) —
@@ -53,7 +54,7 @@ function CategoryDetailPane({
   const [subCategories, setSubCategories] = useState<SubCategory[]>([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('subcategories', 10)
   const [loading, setLoading] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
@@ -169,7 +170,7 @@ export default function CategoriesIndex() {
   const [categories, setCategories] = useState<Category[]>([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('categories', 10)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [searchInput, setSearchInput] = useState('')

@@ -47,10 +47,11 @@ import { AdjustmentTypeBadge } from './components/adjustment-type-badge'
 import { CreateAdjustmentDialog, type AdjustmentPrefill } from './components/create-adjustment-dialog'
 import { ADJUSTMENT_TYPE_ORDER, ADJUSTMENT_TYPE_META } from './lib/adjustment-types'
 import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
-const LIMIT = 15
 
 export default function StockAdjustments() {
+  const [limit, setLimit] = usePersistedPageSize('stock-adjustments', 15)
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const currencyPrefix = useCurrencySymbolPrefix()
@@ -77,7 +78,7 @@ export default function StockAdjustments() {
   const { data: stats } = useGetAdjustmentStatsQuery()
   const { data, isFetching } = useGetAdjustmentsQuery({
     page,
-    limit: LIMIT,
+    limit: limit,
     ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
     ...(directionFilter !== 'all' ? { direction: directionFilter } : {}),
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
@@ -318,7 +319,8 @@ export default function StockAdjustments() {
             currentPage={page}
             totalPages={data?.totalPages || 1}
             totalResults={data?.totalResults}
-            limit={LIMIT}
+            limit={limit}
+            onLimitChange={setLimit}
             onPageChange={setPage}
             className='mt-3'
           />

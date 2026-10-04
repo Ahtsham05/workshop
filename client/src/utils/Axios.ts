@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosAdapter, AxiosInstance, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { createTimeoutSignal, resolveRequestTimeoutMs } from '@/lib/api-timeout';
 import { cacheAxiosGetResponse, shouldUseOfflineFallback, tryOfflineAxiosFallback } from '@/lib/sync/offline-http';
 import { getElectronAPI, isElectronApp } from '@/lib/sync/electron';
@@ -228,5 +228,42 @@ Axios.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ---------------------------------------------------------------------------
+// In-flight GET de-duplication.
+// Several components (and React StrictMode's double mount in development) ask for the very
+// same GET within moments of each other — categories, branch lists, product pages, stats…
+// Identical GETs that are still in flight now share ONE network request, so the server and
+// the connection pool do the work once. Only reads are shared and only while pending:
+// nothing is cached, and any write (POST/PUT/PATCH/DELETE) both starts and ends by clearing
+// the table so a refetch that follows a save can never be handed a pre-save response.
+// ---------------------------------------------------------------------------
+const baseAdapter: AxiosAdapter = axios.getAdapter(Axios.defaults.adapter);
+const inFlightGets = new Map<string, Promise<AxiosResponse>>();
+
+Axios.defaults.adapter = (config) => {
+  const method = (config.method || 'get').toLowerCase();
+  if (method !== 'get') {
+    inFlightGets.clear();
+    return baseAdapter(config).finally(() => inFlightGets.clear());
+  }
+  const shareable =
+    !config.responseType || config.responseType === 'json' || config.responseType === 'text';
+  if (!shareable || config.onDownloadProgress) return baseAdapter(config);
+
+  const headers = config.headers as unknown as { toJSON?: () => Record<string, unknown> };
+  const h = (headers?.toJSON?.() ?? {}) as Record<string, unknown>;
+  const key = [axios.getUri(config), h.Authorization, h['x-branch-id']].join('|');
+  const existing = inFlightGets.get(key);
+  if (existing) return existing;
+
+  const request = baseAdapter(config);
+  inFlightGets.set(key, request);
+  const release = () => {
+    if (inFlightGets.get(key) === request) inFlightGets.delete(key);
+  };
+  request.then(release, release);
+  return request;
+};
 
 export default Axios;

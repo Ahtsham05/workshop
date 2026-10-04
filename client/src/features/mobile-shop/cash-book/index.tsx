@@ -27,6 +27,7 @@ import {
   getBusinessToday,
   shiftBusinessCalendarDate,
 } from '@/lib/business-timezone'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 export default function CashBookPage() {
   const formatMoney = useFormatMoney()
@@ -36,7 +37,7 @@ export default function CashBookPage() {
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [cashBookPage, setCashBookPage] = useState(1)
-  const [cashBookLimit, setCashBookLimit] = useState(10)
+  const [cashBookLimit, setCashBookLimit] = usePersistedPageSize('ms-cash-book-cashBookLimit', 10)
 
   const queryParams = useMemo(() => {
     if (!startDate || !endDate) {

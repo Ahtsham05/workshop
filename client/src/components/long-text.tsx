@@ -32,12 +32,9 @@ export default function LongText({
   const isUrdu = language === 'ur'
 
   useEffect(() => {
-    if (checkOverflow(ref.current)) {
-      setIsOverflown(true)
-      return
-    }
-
-    setIsOverflown(false)
+    // Measured in one shared batch per frame — checking each cell on its own forces a
+    // layout per cell, which made scrolling a long table stall.
+    return scheduleOverflowCheck(ref.current, setIsOverflown)
   }, [])
 
   if (!isOverflown)
@@ -87,4 +84,26 @@ const checkOverflow = (textContainer: HTMLDivElement | null) => {
     )
   }
   return false
+}
+
+// Every LongText mounting in the same tick shares one pass: all the layout reads first, then
+// all the state writes, so the browser lays out once instead of once per cell.
+const pendingChecks = new Map<HTMLDivElement, (overflown: boolean) => void>()
+let checkFrame: number | null = null
+
+function scheduleOverflowCheck(el: HTMLDivElement | null, apply: (overflown: boolean) => void) {
+  if (!el) return undefined
+  pendingChecks.set(el, apply)
+  if (checkFrame === null) {
+    checkFrame = requestAnimationFrame(() => {
+      checkFrame = null
+      const batch = Array.from(pendingChecks.entries())
+      pendingChecks.clear()
+      const results = batch.map(([node]) => (node.isConnected ? checkOverflow(node) : false))
+      batch.forEach(([, cb], i) => cb(results[i]))
+    })
+  }
+  return () => {
+    pendingChecks.delete(el)
+  }
 }

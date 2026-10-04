@@ -1375,9 +1375,48 @@ export default function PurchasePanel({
   // dense-mode table) for manual/unselected rows and rows needing batch/expiry/variant
   // fields, which don't fit in table cells. Mirrors InvoicePanel's renderItemCard split
   // (see invoice-panel.tsx).
+  // Switching a line's unit (e.g. box → pcs): recompute quantity-in-stock and price from the
+  // product's conversion table. Shared by the table row, the desktop card and the phone card.
+  const handleUnitChange = (item: PurchaseItem, index: number, value: string) => {
+    const resolved = resolveUnitConversion({
+      product: item.product,
+      quantity: item.quantity,
+      unit: value,
+    })
+    const adjustedPurchasePrice = getUnitAdjustedPrice({
+      product: item.product,
+      unit: value,
+      basePrice: item.product.cost || item.product.price || item.purchasePrice || 0,
+      conversionFactor: resolved?.conversionFactor,
+    })
+    if (!resolved || adjustedPurchasePrice === null) {
+      toast.error(`Missing conversion for ${item.product.name}`)
+      return
+    }
+    setPurchase((prev) => ({
+      ...prev,
+      items: prev.items.map((purchaseItem, purchaseIndex) =>
+        purchaseIndex === index
+          ? {
+              ...purchaseItem,
+              unit: resolved.lineUnit,
+              conversionFactor: resolved.conversionFactor,
+              stockQuantity: resolved.stockQuantity,
+              purchasePrice: adjustedPurchasePrice,
+            }
+          : purchaseItem
+      ),
+    }))
+  }
+
   const renderPurchaseItemCard = (item: PurchaseItem, index: number) => {
                 const productId = item.product.id || (item.product as any)._id;
                 const compact = !showProductCatalog
+                // Phones get Invoice's card: roomy product row, then a wrapping row of labelled
+                // controls (see renderItemCard in invoice-panel.tsx) instead of fixed-width
+                // columns that scroll sideways.
+                const phone = isPhone
+                const roomy = !compact || phone
 
                 // Show product selector for manual entries
                 if (item.isManualEntry && !productId) {
@@ -1540,16 +1579,16 @@ export default function PurchasePanel({
                         normal), with the delete button pinned to its right edge, so it's
                         always beside the product name rather than orphaned below the
                         controls row. */}
-                    <div className={cn('flex items-start gap-3', compact ? 'gap-2 p-2' : 'p-3')}>
+                    <div className={cn('flex items-start gap-3', roomy ? 'p-3' : 'gap-2 p-2')}>
                       {item.product.image?.url ? (
                         <img
                           src={item.product.image.url}
                           alt={item.product.name}
-                          className={cn('object-cover rounded-lg flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10 mt-0.5')}
+                          className={cn('object-cover rounded-lg flex-shrink-0', roomy ? 'w-10 h-10 mt-0.5' : 'w-8 h-8')}
                         />
                       ) : (
-                        <div className={cn('rounded-lg bg-muted flex items-center justify-center flex-shrink-0', compact ? 'w-8 h-8' : 'w-10 h-10 mt-0.5')}>
-                          <Package className={cn('text-muted-foreground/50', compact ? 'h-4 w-4' : 'h-5 w-5')} />
+                        <div className={cn('rounded-lg bg-muted flex items-center justify-center flex-shrink-0', roomy ? 'w-10 h-10 mt-0.5' : 'w-8 h-8')}>
+                          <Package className={cn('text-muted-foreground/50', roomy ? 'h-5 w-5' : 'h-4 w-4')} />
                         </div>
                       )}
 
@@ -1558,22 +1597,22 @@ export default function PurchasePanel({
                           sell/total controls (siblings on the same flex-wrap line) claim their
                           fixed widths, truncating the name to 2-3 characters. The floor forces
                           those controls to wrap to their own line instead once space is tight. */}
-                      <div className={cn('flex-1', compact ? 'min-w-[110px]' : 'min-w-0')}>
+                      <div className={cn('flex-1', compact && !phone ? 'min-w-[110px]' : 'min-w-0')}>
                         <BilingualName
                           primary={item.product.name}
                           secondary={item.product.nameUrdu}
                           primaryClassName='font-semibold text-sm'
-                          truncate={compact}
+                          truncate={compact || phone}
                         />
                         {/* Stock + serial-entry status live in one wrapping pill row right
                             under the name, matching Invoice's item row — instead of the
                             serial box being its own always-expanded section further down,
                             it's now a status pill here that opens a dialog on click. */}
                         <div className='flex flex-wrap items-center gap-1.5 mt-1'>
-                          {!compact && item.product.barcode && (
+                          {!compact && !phone && item.product.barcode && (
                             <span className='text-xs text-muted-foreground'>{item.product.barcode}</span>
                           )}
-                          {!compact && (
+                          {!compact && !phone && (
                             <span className='text-xs text-muted-foreground'>{formatMoney(item.purchasePrice)} · {item.unit || item.product.unit || 'pcs'}</span>
                           )}
                           {(() => {
@@ -1609,49 +1648,67 @@ export default function PurchasePanel({
                       {deleteButton}
                     </div>
 
-                    {/* Row 2: Controls — one line, fixed widths matching the desktop table's
+                    {phone ? (
+                      // Phone: same shape as Invoice's card — qty, then labelled fields that wrap
+                      // onto a second line when they don't fit, total pinned right.
+                      <div className='flex items-center gap-3 flex-wrap border-t bg-muted/20 px-3 py-2.5'>
+                        <div className='flex shrink-0 items-center gap-1.5'>
+                          {qtyControl}
+                          <span className='text-xs text-muted-foreground'>{item.unit || item.product.unit || 'pcs'}</span>
+                        </div>
+                        {showUnitConversions && (
+                          <div className='w-[90px] shrink-0'>
+                            <Select
+                              value={item.unit || item.product.unit || 'pcs'}
+                              onValueChange={(value) => handleUnitChange(item, index, value)}
+                            >
+                              <SelectTrigger className='h-7 text-xs px-2'>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {getProductUnitOptions(item.product).map((unitOption) => (
+                                  <SelectItem key={unitOption.value} value={unitOption.value}>
+                                    {unitOption.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        <span className='text-muted-foreground/60 text-sm select-none'>×</span>
+                        <div className='flex min-w-0 flex-col gap-0.5'>
+                          <span className='text-[10px] text-muted-foreground leading-none'>{t('Purchase Price')}</span>
+                          {purchasePriceControl}
+                          {priceComparisonIndicator}
+                        </div>
+                        <span className='text-muted-foreground/60 text-sm select-none'>−</span>
+                        <div className='flex flex-col gap-0.5'>
+                          <span className='text-[10px] text-muted-foreground leading-none'>{t('discount') || 'Discount'}</span>
+                          {discountControl}
+                        </div>
+                        <div className='flex flex-col gap-0.5'>
+                          <span className='text-[10px] text-muted-foreground leading-none'>{t('Sale Price')}</span>
+                          {sellingPriceControl}
+                        </div>
+                        <div className='ml-auto flex shrink-0 items-center gap-1.5'>
+                          <span className='text-muted-foreground/60 text-sm select-none'>=</span>
+                          {totalDisplay}
+                        </div>
+                      </div>
+                    ) : (
+                    /* Row 2: Controls — one line, fixed widths matching the desktop table's
                         columns exactly (shares renderPurchaseItemParts so table and card modes
                         stay pixel-identical, no per-field labels needed since the list-level
                         header above already names each column). Falls back to horizontal
                         scroll instead of wrapping on very narrow viewports, same as the
-                        desktop table does. */}
+                        desktop table does. */
                     <div className={cn('flex items-center gap-2 overflow-x-auto', !compact && 'border-t bg-muted/20 px-3 py-2.5', compact && 'px-2 pb-2')}>
                       <div className='flex w-[100px] shrink-0 justify-center'>{qtyControl}</div>
                       {showUnitConversions && (
                         <div className='w-[90px] shrink-0'>
                           <Select
                             value={item.unit || item.product.unit || 'pcs'}
-                            onValueChange={(value) => {
-                              const resolved = resolveUnitConversion({
-                                product: item.product,
-                                quantity: item.quantity,
-                                unit: value,
-                              })
-                              const adjustedPurchasePrice = getUnitAdjustedPrice({
-                                product: item.product,
-                                unit: value,
-                                basePrice: item.product.cost || item.product.price || item.purchasePrice || 0,
-                                conversionFactor: resolved?.conversionFactor,
-                              })
-                              if (!resolved || adjustedPurchasePrice === null) {
-                                toast.error(`Missing conversion for ${item.product.name}`)
-                                return
-                              }
-                              setPurchase((prev) => ({
-                                ...prev,
-                                items: prev.items.map((purchaseItem, purchaseIndex) =>
-                                  purchaseIndex === index
-                                    ? {
-                                        ...purchaseItem,
-                                        unit: resolved.lineUnit,
-                                        conversionFactor: resolved.conversionFactor,
-                                        stockQuantity: resolved.stockQuantity,
-                                        purchasePrice: adjustedPurchasePrice,
-                                      }
-                                    : purchaseItem
-                                ),
-                              }))
-                            }}
+                            onValueChange={(value) => handleUnitChange(item, index, value)}
                           >
                             <SelectTrigger className='h-7 text-xs px-2'>
                               <SelectValue />
@@ -1674,7 +1731,7 @@ export default function PurchasePanel({
                       <div className='flex w-[92px] shrink-0 justify-center'>{discountControl}</div>
                       <div className='ml-auto w-[110px] shrink-0'>{totalDisplay}</div>
                     </div>
-
+                    )}
 
                     {/* Row 4: variant + batch/expiry (only for products with variants) */}
                     <PurchaseItemVariantBatchFields
@@ -2460,7 +2517,7 @@ export default function PurchasePanel({
           {/* Column labels shown once above the whole list — card rows below have no
               per-field labels of their own (see renderPurchaseItemCard), same as the
               desktop table only labels columns in its own header, not every cell. */}
-          {(showProductCatalog || isPhone || isItemsAreaNarrow) && purchase.items.length > 0 && (
+          {(showProductCatalog || isPhone || isItemsAreaNarrow) && !isPhone && purchase.items.length > 0 && (
             // overflow-x-auto: the fixed column widths below add up to ~600px — wider than a phone
             // card. Without this the row doesn't wrap (nothing here can) and just pushes the whole
             // card, and the page, that many px wider instead of scrolling within itself, exactly

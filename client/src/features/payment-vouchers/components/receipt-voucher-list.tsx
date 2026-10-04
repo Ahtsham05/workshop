@@ -79,6 +79,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const formatDate = (value?: string) => {
   if (!value) return '-'
@@ -123,7 +124,7 @@ export function ReceiptVoucherList({ onCreateVoucher }: Props) {
   const [minAmount, setMinAmount] = useState<number | undefined>(undefined)
   const [maxAmount, setMaxAmount] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(20)
+  const [limit, setLimit] = usePersistedPageSize('receipt-vouchers', 20)
   const [voucherToDelete, setVoucherToDelete] = useState<ReceiptVoucherRecord | null>(null)
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')

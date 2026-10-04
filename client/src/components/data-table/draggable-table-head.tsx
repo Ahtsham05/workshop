@@ -35,11 +35,12 @@ export function DraggableTableHead({ id, className, colSpan, children, resizeHan
     transition,
     opacity: isDragging ? 0.7 : 1,
     zIndex: isDragging ? 10 : undefined,
-    position: 'relative',
+    position: 'sticky',
+    top: 0,
   }
 
   return (
-    <TableHead ref={setNodeRef} style={style} colSpan={colSpan} className={cn('group/head relative', className)}>
+    <TableHead ref={setNodeRef} style={style} colSpan={colSpan} className={cn('group/head', className)}>
       <div className='flex items-center gap-1'>
         <button
           type='button'

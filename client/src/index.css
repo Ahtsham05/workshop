@@ -708,3 +708,19 @@ body {
   color: var(--muted-foreground);
   text-decoration: line-through;
 }
+
+/* Tables inside dialogs/sheets/popovers scroll within a smaller box so their sticky header
+   still pins and the dialog itself doesn't have to scroll past a huge table. */
+[data-slot='dialog-content'] [data-slot='table-container'],
+[data-slot='sheet-content'] [data-slot='table-container'] {
+  max-height: min(60vh, 32rem);
+}
+
+/* Column headers stay pinned to the top of the table's scroll box. !important because a few
+   header cells set position:relative (to anchor resize handles) which would otherwise win;
+   sticky is also a positioning context, so those handles keep working. */
+[data-slot='table-container'] thead th {
+  position: sticky !important;
+  top: 0;
+  z-index: 10;
+}

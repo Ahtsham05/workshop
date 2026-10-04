@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { Button } from './button'
+import { DEFAULT_PAGE_SIZE_OPTIONS, formatPageSize, isAllRows } from '@/lib/page-size'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
 
 interface SimplePaginationProps {
@@ -20,13 +21,14 @@ export function SimplePagination({
   limit,
   onPageChange,
   onLimitChange,
-  pageSizeOptions = [10, 20, 30, 50],
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
   className = '',
 }: SimplePaginationProps) {
   if (totalPages <= 1 && !onLimitChange) return null
 
-  const startItem = totalResults != null ? Math.min((currentPage - 1) * limit + 1, totalResults) : undefined
-  const endItem = totalResults != null ? Math.min(currentPage * limit, totalResults) : undefined
+  const pageLimit = isAllRows(limit) && totalResults != null ? Math.max(totalResults, 1) : limit
+  const startItem = totalResults != null ? Math.min((currentPage - 1) * pageLimit + 1, totalResults) : undefined
+  const endItem = totalResults != null ? Math.min(currentPage * pageLimit, totalResults) : undefined
 
   return (
     <div className={`flex flex-wrap items-center justify-between gap-3 pt-3 border-t ${className}`}>
@@ -48,12 +50,12 @@ export function SimplePagination({
               value={String(limit)}
               onValueChange={(v) => { onLimitChange(Number(v)); onPageChange(1) }}
             >
-              <SelectTrigger className='h-8 w-[65px]'>
-                <SelectValue>{limit}</SelectValue>
+              <SelectTrigger className='h-8 w-[75px]'>
+                <SelectValue>{formatPageSize(limit)}</SelectValue>
               </SelectTrigger>
               <SelectContent side='top'>
                 {pageSizeOptions.map((s) => (
-                  <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                  <SelectItem key={s} value={String(s)}>{formatPageSize(s)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -74,6 +74,7 @@ import { formatBusinessDateTime } from '@/lib/business-timezone'
 import { cn } from '@/lib/utils'
 import { CashCountViewDialog } from './cash-count-view-dialog'
 import { CashMovementsPanel } from './cash-movements-panel'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const NOTE_SORT_DIRECTION_STORAGE_KEY = 'cash-register-note-sort-direction'
 type SortDirection = 'asc' | 'desc'
@@ -91,7 +92,7 @@ export default function CashRegisterPage() {
   const [clearRegister, { isLoading: clearing }] = useClearCashRegisterMutation()
   const [deleteHistoryEntry, { isLoading: deleting }] = useDeleteCashRegisterHistoryMutation()
   const [historyPage, setHistoryPage] = useState(1)
-  const [historyLimit, setHistoryLimit] = useState(10)
+  const [historyLimit, setHistoryLimit] = usePersistedPageSize('cash-register-historyLimit', 10)
   const [viewSnapshot, setViewSnapshot] = useState<CashRegisterSnapshot | null>(null)
   const [deleteSnapshot, setDeleteSnapshot] = useState<CashRegisterSnapshot | null>(null)
   const { data: history } = useGetCashRegisterHistoryQuery({

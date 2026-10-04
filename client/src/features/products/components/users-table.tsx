@@ -28,6 +28,7 @@ import { DataTableToolbar } from './data-table-toolbar'
 import { DndTableHeader } from '@/components/data-table/dnd-table-header'
 import { getColumnId, usePersistedColumnOrder } from '@/components/data-table/use-persisted-column-order'
 import { DEFAULT_NARROW_COLUMN_SIZES, usePersistedColumnSizing } from '@/components/data-table/use-persisted-column-sizing'
+import { useSavedTableLayouts, type TableLayoutSnapshot } from '@/components/data-table/use-saved-table-layouts'
 import { TableLoadingOverlay } from '@/components/data-table/table-loading-overlay'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -54,6 +55,7 @@ declare module '@tanstack/react-table' {
 const COLUMN_VISIBILITY_STORAGE_KEY = 'products-table-column-visibility'
 const COLUMN_ORDER_STORAGE_KEY = 'products-table-column-order'
 const COLUMN_SIZING_STORAGE_KEY = 'products-table-column-sizing'
+const SAVED_LAYOUTS_STORAGE_KEY = 'products-table-saved-layouts'
 
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
   description: false,
@@ -78,6 +80,16 @@ function loadColumnVisibility(): VisibilityState {
   }
   return DEFAULT_COLUMN_VISIBILITY
 }
+
+// Row windowing: past this many rows only the rows near the viewport are mounted (plus
+// spacer rows that keep the scrollbar/height true), so "Show All" on thousands of products
+// costs the same to render as one page. Smaller lists render in full, exactly as before.
+const WINDOW_THRESHOLD = 150
+const WINDOW_OVERSCAN = 20
+// The window only moves in steps of this many rows, so a slow scroll doesn't re-render the
+// table on every pixel — only when a few new rows are genuinely needed.
+const WINDOW_STEP_ROWS = 4
+const ESTIMATED_ROW_HEIGHT = 49
 
 interface DataTableProps {
   columns: ColumnDef<Product>[]
@@ -104,6 +116,124 @@ interface DataTableProps {
    *  client-side — set this whenever `sorting`/`onSortingChange` are server-resolved. */
   manualSorting?: boolean
 }
+
+
+const EMPTY_EDIT_VALUE: { price?: number; cost?: number; stockQuantity?: number } = {}
+
+interface ProductRowProps {
+  row: Row<Product>
+  /** Part of the memo key — a row re-renders only when one of these actually changes. */
+  columns: ColumnDef<Product>[]
+  visibleColumnKey: string
+  isSelected: boolean
+  editValue: { price?: number; cost?: number; stockQuantity?: number }
+  inlineEditMode: boolean
+  canEdit: boolean
+  language: string
+  actions: RowActions
+}
+
+/** Callbacks the row needs, behind one stable object (see `rowActions` in ProductTable). */
+interface RowActions {
+  onDoubleClick: (event: React.MouseEvent<HTMLTableRowElement>, product: Product) => void
+  onEditValueChange?: (productId: string, field: string, value: number | undefined) => void
+  registerEditRef: (productId: string, columnId: string, el: HTMLInputElement | null) => void
+  advance: (row: Row<Product>, columnId: string) => void
+  t: (key: string) => string
+  formatCurrency: (value: number) => string
+}
+
+// Memoised: while scrolling a long list the table re-renders on every window shift, and the
+// rows that stay on screen must not be rebuilt each time (each is ~a dozen components).
+const ProductTableRow = React.memo(function ProductTableRow({
+  row,
+  isSelected,
+  editValue,
+  inlineEditMode,
+  canEdit,
+  language,
+  actions,
+}: ProductRowProps) {
+  const { t, formatCurrency, onEditValueChange } = actions
+  const product = row.original
+  const productId = product._id || product.id || ''
+  return (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && 'selected'}
+                    data-windowed-row=''
+                    className={`group/row ${canEdit && !inlineEditMode ? 'cursor-pointer' : ''}`}
+                    onDoubleClick={(event) => actions.onDoubleClick(event, product)}
+                    title={canEdit && !inlineEditMode ? t('double_click_to_edit') : undefined}
+                  >
+                    {row.getVisibleCells().map((cell) => {
+                      const columnId = cell.column.id
+                      
+                      // Show inline editing for price, cost, stockQuantity when selected and in edit mode
+                      if (inlineEditMode && isSelected && ['price', 'cost', 'stockQuantity'].includes(columnId)) {
+                        // Pre-filled with the product's current value rather than left blank —
+                        // a shopkeeper reviewing 200+ selected rows can then just glance and
+                        // move on for the ones that are already correct, and directly edit the
+                        // number (instead of first having to look up "Current: ..." below and
+                        // retype it) for the ones that aren't. Only actually touching the field
+                        // records a real edit (via onEditValueChange) — leaving it alone submits
+                        // no change for that product/field, same as before.
+                        const currentValue = (product[columnId as keyof Product] as number) ?? 0
+                        const placeholderKey = columnId === 'price' ? 'enter_new_price' : columnId === 'cost' ? 'enter_new_cost' : 'enter_new_quantity'
+                        return (
+                          <TableCell
+                            key={cell.id}
+                            className={`${cell.column.columnDef.meta?.className ?? ''} ${
+                              language === 'ur' ? 'text-left' : 'text-left'
+                            }`}
+                          >
+                            <Input
+                              ref={(el) => actions.registerEditRef(productId, columnId, el)}
+                              type="number"
+                              step={columnId === 'stockQuantity' ? '1' : '0.01'}
+                              min="0"
+                              placeholder={t(placeholderKey)}
+                              value={editValue[columnId as keyof typeof editValue] ?? currentValue}
+                              onChange={(e) => {
+                                // Clearing the field reverts to "unedited" (shows the current
+                                // value again, submits no change) rather than coercing to 0 —
+                                // otherwise an accidental backspace-to-empty would silently zero
+                                // out a price on submit.
+                                const raw = e.target.value
+                                const value = raw === '' ? undefined : parseFloat(raw)
+                                onEditValueChange?.(productId, columnId, value === undefined || Number.isNaN(value) ? undefined : value)
+                              }}
+                              onKeyDown={(e) => onEnterAdvance(e, () => actions.advance(row, columnId))}
+                              className="h-8 text-xs"
+                            />
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {t('current')}: {columnId === 'stockQuantity'
+                                ? (product[columnId as keyof Product] as number)?.toString() || '0'
+                                : formatCurrency((product[columnId as keyof Product] as number) || 0)
+                              }
+                            </div>
+                          </TableCell>
+                        )
+                      }
+                      
+                      // Regular cell rendering
+                      return (
+                        <TableCell
+                          key={cell.id}
+                          className={`${cell.column.columnDef.meta?.className ?? ''} ${
+                            language === 'ur' ? 'text-left' : 'text-left'
+                          }`}
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      )
+                    })}
+                  </TableRow>
+  )
+})
 
 export function ProductTable({
   columns,
@@ -139,6 +269,48 @@ export function ProductTable({
   const { hasPermission } = usePermissions()
   const { setOpen, setCurrentRow } = useUsers()
   const canEdit = hasPermission('editProducts' as any)
+
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const rowHeightRef = useRef(ESTIMATED_ROW_HEIGHT)
+  const [viewport, setViewport] = useState({ top: 0, height: 800 })
+  const getScrollBox = () => wrapperRef.current?.querySelector<HTMLElement>('[data-slot="table-container"]') ?? null
+
+  React.useEffect(() => {
+    const box = getScrollBox()
+    if (!box) return
+    let frame: number | null = null
+    const update = () => {
+      frame = null
+      const step = rowHeightRef.current * WINDOW_STEP_ROWS
+      const top = Math.floor(box.scrollTop / step) * step
+      setViewport((prev) => (prev.top === top && prev.height === box.clientHeight ? prev : { top, height: box.clientHeight }))
+    }
+    const schedule = () => {
+      if (frame === null) frame = requestAnimationFrame(update)
+    }
+    update()
+    box.addEventListener('scroll', schedule, { passive: true })
+    const observer = new ResizeObserver(schedule)
+    observer.observe(box)
+    return () => {
+      box.removeEventListener('scroll', schedule)
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [])
+
+  // A new result set (page, sort, filter, limit) starts at the top of the list — but rows
+  // merely being appended to the same list (Show All streaming in) must not move the user.
+  const resultSignature = useRef({ firstId: '', length: 0 })
+  React.useEffect(() => {
+    const firstId = data[0]?._id || data[0]?.id || ''
+    const prev = resultSignature.current
+    resultSignature.current = { firstId, length: data.length }
+    if (firstId !== prev.firstId || data.length < prev.length) {
+      const box = getScrollBox()
+      if (box) box.scrollTop = 0
+    }
+  }, [data])
 
   const handleRowDoubleClick = (event: React.MouseEvent<HTMLTableRowElement>, product: Product) => {
     // Bulk inline-edit mode already puts every selected row's fields into edit inputs —
@@ -177,8 +349,39 @@ export function ProductTable({
         focusField(el)
         return
       }
+      // The next selected row is outside the rendered window (long list) — scroll it into
+      // range, then focus once it has mounted.
+      const box = getScrollBox()
+      if (box) {
+        box.scrollTop = Math.max(0, i * rowHeightRef.current - box.clientHeight / 2)
+        window.setTimeout(() => focusField(editFieldRefs.current[editFieldKey(nextId, 'price')]), 80)
+      }
+      return
     }
   }
+
+  // Named column layouts — applying one pushes its snapshot back through the same
+  // persisted setters the table already uses, so it also survives a reload.
+  const defaultColumnOrder = React.useMemo(() => columns.map(getColumnId), [columns])
+  const currentLayout = React.useMemo<TableLayoutSnapshot>(
+    () => ({ visibility: columnVisibility, order: columnOrder, sizing: columnSizing }),
+    [columnVisibility, columnOrder, columnSizing]
+  )
+  const applyLayoutSnapshot = React.useCallback(
+    (snapshot: TableLayoutSnapshot) => {
+      setColumnVisibility({ ...DEFAULT_COLUMN_VISIBILITY, ...snapshot.visibility })
+      // Same reconciliation as loading a saved order: drop removed columns, append new ones.
+      const valid = snapshot.order.filter((id) => defaultColumnOrder.includes(id))
+      setColumnOrder([...valid, ...defaultColumnOrder.filter((id) => !valid.includes(id))])
+      setColumnSizing({ ...DEFAULT_NARROW_COLUMN_SIZES, ...snapshot.sizing })
+    },
+    [defaultColumnOrder, setColumnOrder, setColumnSizing]
+  )
+  const savedLayouts = useSavedTableLayouts(SAVED_LAYOUTS_STORAGE_KEY, currentLayout, defaultColumnOrder, applyLayoutSnapshot)
+  const resetLayoutToDefault = React.useCallback(
+    () => applyLayoutSnapshot({ visibility: DEFAULT_COLUMN_VISIBILITY, order: defaultColumnOrder, sizing: DEFAULT_NARROW_COLUMN_SIZES }),
+    [applyLayoutSnapshot, defaultColumnOrder]
+  )
 
   // Persist customizations so they survive a reload.
   React.useEffect(() => {
@@ -239,11 +442,64 @@ export function ProductTable({
     getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
+  const allRows = table.getRowModel().rows
+  const windowed = allRows.length > WINDOW_THRESHOLD
+  let startIndex = 0
+  let endIndex = allRows.length
+  if (windowed) {
+    const rowH = rowHeightRef.current
+    startIndex = Math.max(0, Math.floor(viewport.top / rowH) - WINDOW_OVERSCAN)
+    endIndex = Math.min(allRows.length, Math.ceil((viewport.top + viewport.height) / rowH) + WINDOW_OVERSCAN)
+  }
+  const renderedRows = windowed ? allRows.slice(startIndex, endIndex) : allRows
+  const topSpacer = windowed ? startIndex * rowHeightRef.current : 0
+  const bottomSpacer = windowed ? (allRows.length - endIndex) * rowHeightRef.current : 0
+
+  // One stable object for every row: handlers read the latest closures through a ref, so
+  // memoised rows never re-render just because ProductTable did.
+  const latestActions = useRef<RowActions>(null as unknown as RowActions)
+  latestActions.current = {
+    onDoubleClick: handleRowDoubleClick,
+    onEditValueChange,
+    registerEditRef: (productId, columnId, el) => { editFieldRefs.current[editFieldKey(productId, columnId)] = el },
+    advance: focusNextEditField,
+    t,
+    formatCurrency,
+  }
+  const rowActions = React.useMemo<RowActions>(
+    () => ({
+      onDoubleClick: (e, p) => latestActions.current.onDoubleClick(e, p),
+      onEditValueChange: (id, f, v) => latestActions.current.onEditValueChange?.(id, f, v),
+      registerEditRef: (id, c, el) => latestActions.current.registerEditRef(id, c, el),
+      advance: (r, c) => latestActions.current.advance(r, c),
+      t: (k) => latestActions.current.t(k),
+      formatCurrency: (v) => latestActions.current.formatCurrency(v),
+    }),
+    []
+  )
+  const visibleColumnKey = table.getVisibleLeafColumns().map((c) => c.id).join('|')
+
+  // Keep the height estimate honest: measure a real rendered row once windowing is active.
+  React.useEffect(() => {
+    if (!windowed) return
+    const row = wrapperRef.current?.querySelector<HTMLElement>('tbody tr[data-windowed-row]')
+    if (row && row.offsetHeight > 0 && Math.abs(row.offsetHeight - rowHeightRef.current) > 1) {
+      rowHeightRef.current = row.offsetHeight
+      setViewport((v) => ({ ...v }))
+    }
+  })
+
   return (
     <div className='space-y-4'>
-      <DataTableToolbar table={table} leading={toolbarLeading} trailing={toolbarTrailing} />
+      <DataTableToolbar
+        table={table}
+        leading={toolbarLeading}
+        trailing={toolbarTrailing}
+        layouts={savedLayouts}
+        onResetLayout={resetLayoutToDefault}
+      />
       <TableLoadingOverlay loading={loading}>
-        <div className='rounded-md border'>
+        <div ref={wrapperRef} className='rounded-md border'>
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'} className='table-fixed' style={{ minWidth: table.getTotalSize() }}>
           <DndTableHeader
             table={table}
@@ -253,89 +509,36 @@ export function ProductTable({
             extraHeaderClassName='text-left'
           />
           <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => {
-                const product = row.original
-                const productId = product._id || product.id || ''
-                const isSelected = row.getIsSelected()
-                const editValue = editValues[productId] || {}
-                
+            {allRows.length ? (
+              <>
+              {topSpacer > 0 && (
+                <tr aria-hidden style={{ height: topSpacer }}>
+                  <td colSpan={columns.length} className='p-0' />
+                </tr>
+              )}
+              {renderedRows.map((row) => {
+                const productId = row.original._id || row.original.id || ''
                 return (
-                  <TableRow
+                  <ProductTableRow
                     key={row.id}
-                    data-state={row.getIsSelected() && 'selected'}
-                    className={`group/row ${canEdit && !inlineEditMode ? 'cursor-pointer' : ''}`}
-                    onDoubleClick={(event) => handleRowDoubleClick(event, product)}
-                    title={canEdit && !inlineEditMode ? t('double_click_to_edit') : undefined}
-                  >
-                    {row.getVisibleCells().map((cell) => {
-                      const columnId = cell.column.id
-                      
-                      // Show inline editing for price, cost, stockQuantity when selected and in edit mode
-                      if (inlineEditMode && isSelected && ['price', 'cost', 'stockQuantity'].includes(columnId)) {
-                        // Pre-filled with the product's current value rather than left blank —
-                        // a shopkeeper reviewing 200+ selected rows can then just glance and
-                        // move on for the ones that are already correct, and directly edit the
-                        // number (instead of first having to look up "Current: ..." below and
-                        // retype it) for the ones that aren't. Only actually touching the field
-                        // records a real edit (via onEditValueChange) — leaving it alone submits
-                        // no change for that product/field, same as before.
-                        const currentValue = (product[columnId as keyof Product] as number) ?? 0
-                        const placeholderKey = columnId === 'price' ? 'enter_new_price' : columnId === 'cost' ? 'enter_new_cost' : 'enter_new_quantity'
-                        return (
-                          <TableCell
-                            key={cell.id}
-                            className={`${cell.column.columnDef.meta?.className ?? ''} ${
-                              language === 'ur' ? 'text-left' : 'text-left'
-                            }`}
-                          >
-                            <Input
-                              ref={(el) => { editFieldRefs.current[editFieldKey(productId, columnId)] = el }}
-                              type="number"
-                              step={columnId === 'stockQuantity' ? '1' : '0.01'}
-                              min="0"
-                              placeholder={t(placeholderKey)}
-                              value={editValue[columnId as keyof typeof editValue] ?? currentValue}
-                              onChange={(e) => {
-                                // Clearing the field reverts to "unedited" (shows the current
-                                // value again, submits no change) rather than coercing to 0 —
-                                // otherwise an accidental backspace-to-empty would silently zero
-                                // out a price on submit.
-                                const raw = e.target.value
-                                const value = raw === '' ? undefined : parseFloat(raw)
-                                onEditValueChange?.(productId, columnId, value === undefined || Number.isNaN(value) ? undefined : value)
-                              }}
-                              onKeyDown={(e) => onEnterAdvance(e, () => focusNextEditField(row, columnId))}
-                              className="h-8 text-xs"
-                            />
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {t('current')}: {columnId === 'stockQuantity'
-                                ? (product[columnId as keyof Product] as number)?.toString() || '0'
-                                : formatCurrency((product[columnId as keyof Product] as number) || 0)
-                              }
-                            </div>
-                          </TableCell>
-                        )
-                      }
-                      
-                      // Regular cell rendering
-                      return (
-                        <TableCell
-                          key={cell.id}
-                          className={`${cell.column.columnDef.meta?.className ?? ''} ${
-                            language === 'ur' ? 'text-left' : 'text-left'
-                          }`}
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      )
-                    })}
-                  </TableRow>
+                    row={row}
+                    columns={columns}
+                    visibleColumnKey={visibleColumnKey}
+                    isSelected={row.getIsSelected()}
+                    editValue={editValues[productId] ?? EMPTY_EDIT_VALUE}
+                    inlineEditMode={inlineEditMode}
+                    canEdit={canEdit}
+                    language={language}
+                    actions={rowActions}
+                  />
                 )
-              })
+              })}
+              {bottomSpacer > 0 && (
+                <tr aria-hidden style={{ height: bottomSpacer }}>
+                  <td colSpan={columns.length} className='p-0' />
+                </tr>
+              )}
+              </>
             ) : (
               <TableRow>
                 <TableCell

@@ -66,6 +66,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildPurchaseOrderMessage, buildPurchaseOrderItemsSummary } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const STATUS_STYLES: Record<PurchaseOrderStatus, string> = {
   draft: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
@@ -108,7 +109,7 @@ export default function PurchaseOrderList({
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState<string>('all')
   const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('purchase-orders', 10)
   const [poToCancel, setPoToCancel] = useState<PurchaseOrder | null>(null)
   const [poToDelete, setPoToDelete] = useState<PurchaseOrder | null>(null)
   const [cancelReason, setCancelReason] = useState('')

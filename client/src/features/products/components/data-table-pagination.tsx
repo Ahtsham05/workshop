@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE_OPTIONS, formatPageSize, isAllRows } from '@/lib/page-size'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -115,12 +116,12 @@ export function DataTablePagination<TData>({
           }}
         >
           <SelectTrigger className="h-8 w-[100px]">
-            <SelectValue placeholder={limit} />
+            <SelectValue>{formatPageSize(limit)}</SelectValue>
           </SelectTrigger>
           <SelectContent side="top">
-            {[10, 20, 30, 40, 50, 100, 500, 1000].map((pageSize) => (
+            {DEFAULT_PAGE_SIZE_OPTIONS.map((pageSize) => (
               <SelectItem key={pageSize} value={`${pageSize}`}>
-                {pageSize} / {t('page')}
+                {isAllRows(pageSize) ? t('All') : `${pageSize} / ${t('page')}`}
               </SelectItem>
             ))}
           </SelectContent>

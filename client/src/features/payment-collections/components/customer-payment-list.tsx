@@ -36,6 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const formatDate = (value?: string) => {
   if (!value) return '-'
@@ -72,7 +73,7 @@ export function CustomerPaymentList({ initialFilters }: Props) {
   const [minAmount, setMinAmount] = useState<number | undefined>(undefined)
   const [maxAmount, setMaxAmount] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(20)
+  const [limit, setLimit] = usePersistedPageSize('customer-payments', 20)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [paymentToVoid, setPaymentToVoid] = useState<CustomerPaymentRecord | null>(null)
   const [voidReason, setVoidReason] = useState('')

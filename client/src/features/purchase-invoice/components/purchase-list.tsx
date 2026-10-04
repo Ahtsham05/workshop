@@ -71,6 +71,7 @@ import {
   resolvePaymentTypeLabel,
   resolvePurchaseSettlement,
 } from '../utils/purchase-settlement'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 interface PurchaseListProps {
   onBack?: () => void
@@ -153,7 +154,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
   } = usePurchaseFilters()
 
   const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('purchases', 10)
   /** id → invoice number, so a selection survives paging and can be matched to export rows. */
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [viewingPurchase, setViewingPurchase] = useState<any>(null)
@@ -702,7 +703,6 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
               limit={limit}
               onPageChange={setPage}
               onLimitChange={setLimit}
-              pageSizeOptions={[10, 20, 50, 100]}
             />
           </div>
         </CardContent>

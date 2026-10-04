@@ -99,7 +99,7 @@ export function DndTableHeader<TData>({
 
                   if (lockedColumnIds.includes(header.column.id)) {
                     return (
-                      <TableHead key={header.id} colSpan={header.colSpan} className={cn('relative', className)}>
+                      <TableHead key={header.id} colSpan={header.colSpan} className={cn(className)}>
                         {headerContent}
                         {resizeHandle}
                       </TableHead>

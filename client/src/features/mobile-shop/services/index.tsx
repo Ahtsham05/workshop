@@ -53,6 +53,7 @@ import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 type CatalogForm = {
   serviceName: string
@@ -126,9 +127,9 @@ export default function ServicesPage({
   const [invoiceSearch, setInvoiceSearch] = useState('')
 
   const [catalogPage, setCatalogPage] = useState(1)
-  const [catalogLimit, setCatalogLimit] = useState(10)
+  const [catalogLimit, setCatalogLimit] = usePersistedPageSize('ms-services-catalogLimit', 10)
   const [invoicePage, setInvoicePage] = useState(1)
-  const [invoiceLimit, setInvoiceLimit] = useState(10)
+  const [invoiceLimit, setInvoiceLimit] = usePersistedPageSize('ms-services-invoiceLimit', 10)
 
   const [savedReceipt, setSavedReceipt] = useState<MobileReceiptData | null>(null)
   const { data: org } = useGetMyOrganizationQuery()

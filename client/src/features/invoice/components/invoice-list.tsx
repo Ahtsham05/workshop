@@ -91,6 +91,7 @@ import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '../utils/print-pre
 import { formatImeiEntries } from '@/stores/imei.api'
 import { TaxBreakdownSummary } from './tax-breakdown-summary'
 import type { TaxLine } from '@/stores/taxCalculator.api'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 interface InvoiceListProps {
   onBack?: () => void
@@ -193,7 +194,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
 
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
   const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('invoices', 10)
   /** id → invoice number, so a selection survives paging and can be matched to export rows. */
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -1051,7 +1052,6 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
               limit={limit}
               onPageChange={setPage}
               onLimitChange={setLimit}
-              pageSizeOptions={[10, 20, 50, 100]}
             />
           </div>
         </CardContent>

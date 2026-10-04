@@ -462,6 +462,7 @@ export function SmsLogPage() {
 
           {data && (
             <SimplePagination
+              pageSizeOptions={[10, 20, 50, 100]}
               currentPage={data.page}
               totalPages={data.totalPages}
               totalResults={data.totalResults}

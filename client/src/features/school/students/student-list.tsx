@@ -12,11 +12,13 @@ import { useGetStudentsQuery, useDeleteStudentMutation, useGetSchoolClassesQuery
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import StudentStrikeOffDialog from './student-strike-off-dialog';
+import { DEFAULT_PAGE_SIZE_OPTIONS, formatPageSize } from '@/lib/page-size'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 export default function StudentList() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = usePersistedPageSize('school-students', 10);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [classFilter, setClassFilter] = useState('all');
@@ -256,11 +258,11 @@ export default function StudentList() {
                     <span>Rows:</span>
                     <Select value={String(limit)} onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}>
                       <SelectTrigger className="w-[70px] h-8">
-                        <SelectValue />
+                        <SelectValue>{formatPageSize(limit)}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {[10, 20, 30, 50, 100].map((n) => (
-                          <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                        {DEFAULT_PAGE_SIZE_OPTIONS.map((n) => (
+                          <SelectItem key={n} value={String(n)}>{formatPageSize(n)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

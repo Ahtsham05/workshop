@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { usePersistedPageSize } from './use-persisted-page-size'
+import { isAllRows } from '@/lib/page-size'
 
 interface PersistedListState {
   search: string
@@ -65,7 +67,8 @@ export function usePersistedListState(storageKey: string) {
   const initial = useRef(readState(storageKey)).current
   const [search, setSearch] = useState(initial.search)
   const [page, setPage] = useState(initial.page)
-  const [limit, setLimit] = useState(initial.limit)
+  // Page size outlives the session (unlike search/page/scroll, which are session-only).
+  const [limit, setLimit] = usePersistedPageSize(`${storageKey}:limit`, isAllRows(initial.limit) ? DEFAULT_STATE.limit : initial.limit)
   // Single mutable snapshot both effects below write into, so a scroll event landing between
   // two React state updates can never clobber the other with a stale value.
   const stateRef = useRef({ search, page, limit, scrollY: initial.scrollY })

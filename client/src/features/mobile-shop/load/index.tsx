@@ -128,6 +128,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 type PurchaseFormState = {
   walletId: string
@@ -605,13 +606,13 @@ function LoadManagementPage({
 
   // Pagination state for each history table
   const [purchasePage, setPurchasePage] = useState(1)
-  const [purchaseLimit, setPurchaseLimit] = useState(10)
+  const [purchaseLimit, setPurchaseLimit] = usePersistedPageSize('ms-load-purchaseLimit', 10)
   const [purchaseSearch, setPurchaseSearch] = useState('')
   const [transactionPage, setTransactionPage] = useState(1)
-  const [transactionLimit, setTransactionLimit] = useState(10)
+  const [transactionLimit, setTransactionLimit] = usePersistedPageSize('ms-load-transactionLimit', 10)
   const [salesSearch, setSalesSearch] = useState('')
   const [withdrawalPage, setWithdrawalPage] = useState(1)
-  const [withdrawalLimit, setWithdrawalLimit] = useState(10)
+  const [withdrawalLimit, setWithdrawalLimit] = usePersistedPageSize('ms-load-withdrawalLimit', 10)
   const [withdrawalSearch, setWithdrawalSearch] = useState('')
 
   const [createLoadPurchase, { isLoading: isSavingPurchase }] = useCreateLoadPurchaseMutation()

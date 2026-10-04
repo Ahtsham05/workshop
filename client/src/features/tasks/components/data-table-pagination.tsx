@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE_OPTIONS, formatPageSize } from '@/lib/page-size'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -43,9 +44,9 @@ export function DataTablePagination<TData>({
               <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side='top'>
-              {[10, 20, 30, 40, 50].map((pageSize) => (
+              {DEFAULT_PAGE_SIZE_OPTIONS.map((pageSize) => (
                 <SelectItem key={pageSize} value={`${pageSize}`}>
-                  {pageSize}
+                  {formatPageSize(pageSize)}
                 </SelectItem>
               ))}
             </SelectContent>

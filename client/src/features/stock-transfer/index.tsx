@@ -31,8 +31,8 @@ import { CreateTransferDialog, type TransferPrefill } from './components/create-
 import { BulkTransferPanel } from './components/bulk-transfer-panel'
 import { SuggestedTransfersPanel } from './components/suggested-transfers-panel'
 import { TransferDetailsDialog } from './components/transfer-details-dialog'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
-const LIMIT = 15
 
 function branchName(ref: GroupedTransferRow['fromBranchId']): string {
   if (typeof ref === 'string') return ref
@@ -43,6 +43,7 @@ function branchId(ref: GroupedTransferRow['fromBranchId']): string {
 }
 
 export default function StockTransfer() {
+  const [limit, setLimit] = usePersistedPageSize('stock-transfer', 15)
   const { t, language } = useLanguage()
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
   const user = useSelector((s: RootState) => s.auth.data?.user)
@@ -62,7 +63,7 @@ export default function StockTransfer() {
 
   const { data, isFetching } = useGetTransfersQuery({
     page,
-    limit: LIMIT,
+    limit: limit,
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
     ...(directionFilter !== 'all' ? { direction: directionFilter } : {}),
   })
@@ -301,7 +302,8 @@ export default function StockTransfer() {
             currentPage={page}
             totalPages={data?.totalPages || 1}
             totalResults={data?.totalResults}
-            limit={LIMIT}
+            limit={limit}
+            onLimitChange={setLimit}
             onPageChange={setPage}
             className='mt-3'
           />

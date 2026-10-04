@@ -37,6 +37,7 @@ import { StatCard } from '@/features/dashboard/components/stat-card'
 import { toneColor } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
 import type { Supplier } from './data/schema'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const SEARCH_DEBOUNCE_MS = 400
 const ALL_STATUS = 'all'
@@ -57,7 +58,7 @@ export default function Suppliers() {
   const [suppliers, setSuppliers] = useState([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
-  const [limit, setLimit] = useState(50)
+  const [limit, setLimit] = usePersistedPageSize('suppliers', 50)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [searchInput, setSearchInput] = useState('')

@@ -49,6 +49,7 @@ import { BuyNewPhoneDialog } from './components/buy-new-phone-dialog'
 import { usePermissions } from '@/context/permission-context'
 import type { RootState } from '@/stores/store'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 interface PhoneProductOption {
   id?: string
@@ -159,7 +160,7 @@ export default function NewPhonesPage() {
   const debouncedSearch = useDebouncedValue(search, 400)
   const [statusTab, setStatusTab] = useState<'all' | 'in_stock' | 'sold'>('all')
   const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('new-phones', 10)
 
   const { data: inventoryData, isLoading: isInventoryLoading } = useGetImeisQuery(
     {

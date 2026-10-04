@@ -5,7 +5,11 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
   return (
     <div
       data-slot='table-container'
-      className='relative w-full overflow-x-auto'
+      // Scrolls both ways inside a viewport-relative max height so the sticky header cells
+      // below stay pinned while a long list scrolls (sticky can't work against the page when an
+      // ancestor is overflow-x:auto). Short tables never reach the max height, so they look
+      // unchanged. Dialogs/sheets get a smaller cap in index.css.
+      className='relative max-h-[calc(100vh-11rem)] w-full overflow-auto'
     >
       <table
         data-slot='table'
@@ -68,7 +72,7 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ComponentProps<'t
       ref={ref}
       data-slot='table-head'
       className={cn(
-        'text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap overflow-hidden text-ellipsis [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
+        'text-foreground sticky top-0 z-10 bg-[color-mix(in_oklab,var(--muted)_70%,var(--background))] h-10 px-2 text-left align-middle font-medium whitespace-nowrap overflow-hidden text-ellipsis [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
         className
       )}
       {...props}

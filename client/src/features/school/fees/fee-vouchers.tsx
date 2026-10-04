@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE_OPTIONS } from '@/lib/page-size'
 import { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1543,8 +1544,8 @@ export default function FeeVouchers() {
                 <SelectValue placeholder="Rows" />
               </SelectTrigger>
               <SelectContent>
-                {[10, 25, 50, 100].map((n) => (
-                  <SelectItem key={n} value={String(n)}>{n} rows</SelectItem>
+                {DEFAULT_PAGE_SIZE_OPTIONS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n >= 100000 ? 'All rows' : `${n} rows`}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

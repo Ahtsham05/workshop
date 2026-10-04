@@ -56,6 +56,7 @@ import {
   CHECKLIST_FIELDS, fmtAmt as fmtAmtBase, getImeiSummary, daysSince,
 } from './constants'
 import { useCurrencyMeta } from '@/lib/format-money'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 interface CustomerOption {
   id?: string
@@ -110,7 +111,7 @@ export default function OldPhonesPage() {
   const debouncedSearch = useDebouncedValue(search, 400)
   const [statusTab, setStatusTab] = useState<'all' | 'in_stock' | 'sold'>('all')
   const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('old-phones', 10)
 
   // Date range narrows the "Sold" / "Realized Profit" stat cards (and the list below) to
   // a period — "in stock" / "capital in stock" stay a live snapshot regardless, since

@@ -45,8 +45,10 @@ import { SyncBranchesDialog } from './components/sync-branches-dialog'
 import { useSyncTargetBranches } from './hooks/use-branch-sync'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { BarChart3, LayoutList } from 'lucide-react'
+import { BarChart3, LayoutList, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { PerformanceView } from './analytics/performance-view'
+import { isAllRows } from '@/lib/page-size'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const SEARCH_DEBOUNCE_MS = 400
 const ALL_STATUS = 'all'
@@ -89,19 +91,27 @@ function buildSortByParam(sorting: SortingState): string {
   return parts.length > 0 ? parts.join(',') : PRODUCTS_SORT_BY
 }
 
+const ALL_CHUNK_SIZE = 1000
+const ALL_CHUNK_CONCURRENCY = 3
+
 export default function Products() {
   // Parse product list
   const [products, setProducts] = useState<any[]>([])
   const [allProducts, setAllProducts] = useState<any[]>([]) // Store all products for low stock alert
   const [totalPage, setTotalPage] = useState(1)
   const [totalResults, setTotalResults] = useState(0)
+  // While "Show All" is still streaming in chunks: rows loaded so far (null = idle).
+  const [loadedCount, setLoadedCount] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('products', 10)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingAllProducts, setLoadingAllProducts] = useState(true)
   const [productStats, setProductStats] = useState<{ totalProducts: number; totalStockQuantity: number; totalStockValue: number; addedTodayCount?: number } | null>(null)
   const [loadingStats, setLoadingStats] = useState(true)
+  // True once the table's first request has settled — the heavy 1000-product request below
+  // waits for it so the rows the person is looking at get the connection first.
+  const [tableSettled, setTableSettled] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
   const [selectedProducts, setSelectedProducts] = useState<any[]>([])
@@ -218,6 +228,7 @@ export default function Products() {
   const allProductsLoadedRef = useRef(false)
   useEffect(() => {
     let cancelled = false
+    if (!tableSettled) return
     const load = () => {
       if (!allProductsLoadedRef.current) setLoadingAllProducts(true)
       dispatch(fetchProducts({ page: 1, limit: 1000, sortBy: PRODUCTS_SORT_BY }))
@@ -245,7 +256,7 @@ export default function Products() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [fetch, dispatch])
+  }, [fetch, dispatch, tableSettled])
 
   // Header badge totals (total product count, total stock quantity, total stock
   // value) — computed by the database over the WHOLE catalog (or just the selected
@@ -286,7 +297,10 @@ export default function Products() {
   // Fetch paginated products for table display — skipped in breakdown mode, which
   // shows the per-category rollup instead of the flat table.
   useEffect(() => {
-    if (isBreakdownMode) return
+    if (isBreakdownMode) {
+      setTableSettled(true)
+      return
+    }
     setLoading(true)
     const q = debouncedSearch.trim()
     const hasQuantityFilter = quantityFilter.op !== NO_QUANTITY_OP && quantityFilter.value.trim() !== ''
@@ -314,27 +328,75 @@ export default function Products() {
       ...(addedTodayOnly ? { addedToday: true } : {}),
     };
 
-    dispatch(fetchProducts(params))
-        .then((data) => {
-        if (data.payload?.results) {
-          setProducts(data.payload.results)
-          setTotalPage(data.payload.totalPages || 1)
-          setTotalResults(data.payload.totalResults || 0)
-        } else {
+    let cancelled = false
+    setLoadedCount(null)
+    const showAll = isAllRows(limit)
+    // "Show All" is loaded in chunks: the first chunk paints right away (and tells us the
+    // total), the rest stream in behind it a few requests at a time. One request for
+    // thousands of rows would be slow to build, huge to transfer and give no feedback.
+    const firstParams = showAll ? { ...params, page: 1, limit: ALL_CHUNK_SIZE } : params
+
+    const fail = (error: unknown) => {
+      if (cancelled) return
+      console.error('Error fetching products:', error)
+      setProducts([])
+      setTotalPage(1)
+      setTotalResults(0)
+      setLoadedCount(null)
+      setLoading(false)
+      setTableSettled(true)
+      toast.error('Failed to fetch products')
+    }
+
+    dispatch(fetchProducts(firstParams))
+      .then(async (data) => {
+        if (cancelled) return
+        if (!data.payload?.results) {
           setProducts([])
           setTotalPage(1)
           setTotalResults(0)
+          setLoadedCount(null)
+          setLoading(false)
+          setTableSettled(true)
+          return
         }
+        const total = data.payload.totalResults || 0
+        setProducts(data.payload.results)
+        setTotalResults(total)
+        setTotalPage(showAll ? 1 : data.payload.totalPages || 1)
         setLoading(false)
+        setTableSettled(true)
+
+        const chunkCount = showAll ? Math.ceil(total / ALL_CHUNK_SIZE) : 1
+        if (chunkCount <= 1) {
+          setLoadedCount(null)
+          return
+        }
+        const chunks: any[][] = [data.payload.results]
+        setLoadedCount(data.payload.results.length)
+        let next = 2
+        const worker = async () => {
+          while (!cancelled && next <= chunkCount) {
+            const pageNo = next++
+            const res = await dispatch(fetchProducts({ ...params, page: pageNo, limit: ALL_CHUNK_SIZE }))
+            if (cancelled) return
+            if (!res.payload?.results) throw new Error('chunk failed')
+            chunks[pageNo - 1] = res.payload.results
+            // Publish the contiguous prefix only, so rows never appear out of order.
+            let ready = 0
+            while (chunks[ready]) ready++
+            const merged = chunks.slice(0, ready).flat()
+            setProducts(merged)
+            setLoadedCount(merged.length)
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(ALL_CHUNK_CONCURRENCY, chunkCount - 1) }, worker))
+        if (!cancelled) setLoadedCount(null)
       })
-      .catch((error) => {
-        console.error('Error fetching products:', error)
-        setProducts([])
-        setTotalPage(1)
-        setTotalResults(0)
-        setLoading(false)
-        toast.error('Failed to fetch products')
-      })
+      .catch(fail)
+    return () => {
+      cancelled = true
+    }
   }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, addedTodayOnly, dispatch, isBreakdownMode, isSingleCategorySelected])
 
   // Category-wise rollup for the "All Categories" breakdown view — fetched only while
@@ -560,6 +622,25 @@ export default function Products() {
   // each product's own threshold override when set (see getStockStatus), falling back to
   // the store-wide default otherwise. Computed here since the alert banner no longer
   // exposes these counts itself.
+  const [stockAlertsCollapsed, setStockAlertsCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('products-stock-alerts-collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const toggleStockAlerts = () => {
+    setStockAlertsCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem('products-stock-alerts-collapsed', String(next))
+      } catch {
+        // Storage blocked — the choice just won't persist.
+      }
+      return next
+    })
+  }
+
   const stockCounts = useMemo(() => {
     let outOfStock = 0
     let lowStock = 0
@@ -743,7 +824,38 @@ export default function Products() {
             <PerformanceView />
           ) : (
           <>
-          <div className='mb-4'>
+          {/* Stock alerts (stat cards + out-of-stock banner) — collapsible, remembered across visits. */}
+          <div className='mb-4 space-y-4'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <button
+                type='button'
+                onClick={toggleStockAlerts}
+                aria-expanded={!stockAlertsCollapsed}
+                className='flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-sm font-medium hover:bg-accent'
+              >
+                {stockAlertsCollapsed ? <ChevronRight className='h-4 w-4' /> : <ChevronDown className='h-4 w-4' />}
+                {t('Stock alerts')}
+                <span className='text-xs font-normal text-muted-foreground'>
+                  {stockAlertsCollapsed ? t('Show') : t('Hide')}
+                </span>
+              </button>
+              {stockAlertsCollapsed && (
+                <div className='flex flex-wrap items-center gap-1.5 text-xs'>
+                  <Badge variant='outline' className='border-rose-300 text-rose-700 dark:text-rose-400'>
+                    {loadingAllProducts ? '…' : stockCounts.outOfStock} {t('out_of_stock')}
+                  </Badge>
+                  <Badge variant='outline' className='border-orange-300 text-orange-700 dark:text-orange-400'>
+                    {loadingAllProducts ? '…' : stockCounts.lowStock} {t('low_stock')}
+                  </Badge>
+                  <Badge variant='outline' className='border-amber-300 text-amber-700 dark:text-amber-400'>
+                    {loadingAllProducts ? '…' : stockCounts.criticalStock} {t('critical_stock')}
+                  </Badge>
+                </div>
+              )}
+            </div>
+            {!stockAlertsCollapsed && (
+              <>
+            <div>
             <ProductStatCards
               outOfStock={stockCounts.outOfStock}
               lowStock={stockCounts.lowStock}
@@ -754,7 +866,7 @@ export default function Products() {
           </div>
 
 {/* Out of stock / low stock banner */}
-          <div className='mb-4'>
+          <div>
             <div onClick={() => !loadingAllProducts && setShowLowStockDetails(true)} className={loadingAllProducts ? '' : 'cursor-pointer'}>
               <LowStockAlert
                 products={allProducts}
@@ -764,6 +876,10 @@ export default function Products() {
                 loading={loadingAllProducts}
               />
             </div>
+          </div>
+
+              </>
+            )}
           </div>
 
           <div className='mb-4 flex flex-wrap items-center gap-2'>
@@ -851,6 +967,17 @@ export default function Products() {
             </div>
           )}
           <div className='-mx-4 flex-1 overflow-auto px-4 py-1 lg:flex-row lg:space-y-0 lg:space-x-12'>
+            {loadedCount !== null && totalResults > 0 && (
+              <div className='mb-2 flex items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm' role='status' aria-live='polite'>
+                <Loader2 className='h-4 w-4 shrink-0 animate-spin text-muted-foreground' />
+                <span className='shrink-0 tabular-nums'>
+                  {t('Loading all products')}… {loadedCount.toLocaleString()} / {totalResults.toLocaleString()}
+                </span>
+                <div className='h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-muted'>
+                  <div className='h-full rounded-full bg-primary transition-all' style={{ width: `${Math.min(100, (loadedCount / totalResults) * 100)}%` }} />
+                </div>
+              </div>
+            )}
             <ProductTable
               data={products}
               columns={columns}

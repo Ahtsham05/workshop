@@ -23,10 +23,11 @@ import { apiError, COUNT_TYPE_META } from '../lib/labels'
 import { useStockCountAccess } from '../lib/use-stock-count-access'
 import { ClassBadge, CountStatusBadge } from './count-badges'
 import { NewCountDialog } from './new-count-dialog'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
-const LIMIT = 15
 
 export function CountsTab() {
+  const [limit, setLimit] = usePersistedPageSize('stock-counts', 15)
   const { t } = useLanguage()
   const navigate = useNavigate()
   const { canCount, canApprove } = useStockCountAccess()
@@ -35,7 +36,7 @@ export function CountsTab() {
   const [dialogType, setDialogType] = useState<StockCountType | null>(null)
 
   const { data: plan, isLoading: planLoading, isError: planError } = useGetCyclePlanQuery()
-  const { data, isFetching } = useGetStockCountsQuery({ page, limit: LIMIT, ...(status !== 'all' ? { status } : {}) })
+  const { data, isFetching } = useGetStockCountsQuery({ page, limit: limit, ...(status !== 'all' ? { status } : {}) })
   const [createCount, { isLoading: creating }] = useCreateStockCountMutation()
 
   const startCycle = async () => {
@@ -204,7 +205,8 @@ export function CountsTab() {
             currentPage={page}
             totalPages={data?.totalPages || 1}
             totalResults={data?.totalResults}
-            limit={LIMIT}
+            limit={limit}
+            onLimitChange={setLimit}
             onPageChange={setPage}
             className='mt-3'
           />

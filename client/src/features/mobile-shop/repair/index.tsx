@@ -75,6 +75,7 @@ import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { formatMoneyWithMeta, useCurrencyMeta } from '@/lib/format-money'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,7 +164,7 @@ export default function RepairPage() {
   const [activeTab, setActiveTab] = useState('all')
   const [repairSearch, setRepairSearch] = useState('')
   const [repairPage, setRepairPage] = useState(1)
-  const [repairLimit, setRepairLimit] = useState(10)
+  const [repairLimit, setRepairLimit] = usePersistedPageSize('ms-repair-repairLimit', 10)
   const [printRepair, setPrintRepair] = useState<RepairJobRecord | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<RepairJobRecord | null>(null)
   const [completeDialog, setCompleteDialog] = useState<CompleteDialogState>({

@@ -38,6 +38,7 @@ import { StatCard } from '@/features/dashboard/components/stat-card'
 import { toneColor } from '@/lib/stat-card-tones'
 import type { Customer } from './data/schema'
 import { useFormatMoney } from '@/lib/format-money'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const SEARCH_DEBOUNCE_MS = 400
 const ALL_STATUS = 'all'
@@ -52,7 +53,7 @@ export default function Customers() {
   const [customers, setCustomers] = useState([])
   const [totalPage, setTotalPage] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
-  const [limit, setLimit] = useState(50)
+  const [limit, setLimit] = usePersistedPageSize('customers', 50)
   const [fetch, setFetch] = useState(false)
   const [loading, setLoading] = useState(false)
   const [searchInput, setSearchInput] = useState('')

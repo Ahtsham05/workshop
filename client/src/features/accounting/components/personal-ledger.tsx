@@ -1,3 +1,5 @@
+import { DEFAULT_PAGE_SIZE_OPTIONS, formatPageSize } from '@/lib/page-size'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -474,7 +476,7 @@ export function PersonalLedger() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = usePersistedPageSize('personal-ledger', 10);
   const [search, setSearch] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -1186,8 +1188,8 @@ export function PersonalLedger() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[10, 25, 50, 100].map(n => (
-                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                {DEFAULT_PAGE_SIZE_OPTIONS.map(n => (
+                  <SelectItem key={n} value={String(n)}>{formatPageSize(n)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

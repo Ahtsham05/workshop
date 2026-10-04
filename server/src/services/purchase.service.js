@@ -1357,7 +1357,7 @@ const toObjectId = (id) => (mongoose.Types.ObjectId.isValid(id) ? new mongoose.T
 const priceComparisonKey = (productId, variantId) => (variantId ? String(variantId) : String(productId));
 
 /**
- * Bulk "last purchase price" lookup for many product/variant keys at once — the data
+ * Bulk "last purchase price" lookup for many product/variant keys at once (full-history aggregation — the exact, always-correct path; see getBulkPriceComparison for the indexed fast path that fronts it) — the data
  * source behind Purchase Invoice's price-change indicator. Always exactly ONE Purchase
  * aggregation regardless of how many items are requested (no per-product query — see
  * supplierScoring.service.js's computeSupplierPricesForProduct for the single-product
@@ -1376,7 +1376,7 @@ const priceComparisonKey = (productId, variantId) => (variantId ? String(variant
  * @param {string} [params.supplierId]
  * @returns {Promise<Object>} map of key -> comparison entry, one per requested item
  */
-const getBulkPriceComparison = async ({ organizationId, branchId, items, supplierId }) => {
+const getBulkPriceComparisonByAggregation = async ({ organizationId, branchId, items, supplierId, supplierOnly = false }) => {
   const productIds = [...new Set(items.map((item) => String(item.productId)))].map(toObjectId);
   if (productIds.length === 0) return {};
 
@@ -1386,6 +1386,10 @@ const getBulkPriceComparison = async ({ organizationId, branchId, items, supplie
   const matchStage = { 'items.product': { $in: productIds } };
   if (organizationId) matchStage.organizationId = toObjectId(organizationId);
   if (branchId) matchStage.branchId = toObjectId(branchId);
+  // supplierOnly: the caller already has the overall prices and wants just this supplier's —
+  // restrict to that supplier's purchases up front (served by the {org, branch, supplier,
+  // purchaseDate} index) instead of scanning every purchase of the products.
+  if (supplierOnly && supplierObjectId) matchStage.supplier = supplierObjectId;
 
   const facetStages = {
     overall: [
@@ -1460,6 +1464,158 @@ const getBulkPriceComparison = async ({ organizationId, branchId, items, supplie
   return result;
 };
 
+
+
+// Newest purchases read per product by the fast path. History deeper than this (or an
+// exact-timestamp tie that straddles the cut) is settled by the aggregation instead.
+const PRICE_COMPARISON_TOP_N = 8;
+// Below this many distinct products one aggregation is already as fast as the per-product
+// index reads (measured), so small batches — the usual first add to a new purchase — use it.
+const PRICE_COMPARISON_FAST_PATH_MIN_PRODUCTS = 12;
+
+const compareNewestFirst = (a, b) => {
+  const ad = a.purchaseDate ? +new Date(a.purchaseDate) : -Infinity;
+  const bd = b.purchaseDate ? +new Date(b.purchaseDate) : -Infinity;
+  if (ad !== bd) return bd - ad;
+  const ac = a.createdAt ? +new Date(a.createdAt) : -Infinity;
+  const bc = b.createdAt ? +new Date(b.createdAt) : -Infinity;
+  return bc - ac;
+};
+
+/**
+ * Bulk "last purchase price" lookup — what the New Purchase form's price-change indicator
+ * calls (one request per debounced batch of newly-added products).
+ *
+ * Fast path (branch-scoped, the normal case): per requested product, read only its newest
+ * few purchases straight off the {org, branch, items.product, purchaseDate} index
+ * (limit pushed into the index scan — cost doesn't grow with how many purchases the product
+ * has ever had), and pick each key's latest line from those. A result is accepted only when
+ * it is PROVABLY the latest: either the product's whole history fit in the page, or the
+ * oldest purchase read is strictly older than the one chosen (so no unseen purchase can tie
+ * or beat it). Anything not provable — deep history, a tie at the cut — is handed to
+ * getBulkPriceComparisonByAggregation, which scans full history for just those products.
+ * The "same supplier" price is always taken from that aggregation, scoped to the one
+ * supplier's purchases. Organisation-wide reads (no branch) skip straight to the aggregation.
+ */
+const getBulkPriceComparison = async ({ organizationId, branchId, items, supplierId }) => {
+  if (!organizationId || !branchId) {
+    return getBulkPriceComparisonByAggregation({ organizationId, branchId, items, supplierId });
+  }
+  const orgId = toObjectId(organizationId);
+  const brId = toObjectId(branchId);
+  const supplierObjectId =
+    supplierId && mongoose.Types.ObjectId.isValid(supplierId) ? toObjectId(supplierId) : null;
+  const productIds = [...new Set(items.map((item) => String(item.productId)))];
+  if (productIds.length === 0) return {};
+  if (productIds.length < PRICE_COMPARISON_FAST_PATH_MIN_PRODUCTS) {
+    return getBulkPriceComparisonByAggregation({ organizationId, branchId, items, supplierId });
+  }
+
+  const pages = new Map(
+    await Promise.all(
+      productIds.map(async (pid) => {
+        const docs = await Purchase.find({ organizationId: orgId, branchId: brId, 'items.product': toObjectId(pid) })
+          .sort({ purchaseDate: -1 })
+          .limit(PRICE_COMPARISON_TOP_N)
+          .select('purchaseDate createdAt supplier items.product items.variantId items.priceAtPurchase')
+          .lean();
+        docs.sort(compareNewestFirst);
+        return [pid, docs];
+      })
+    )
+  );
+
+  const resolved = new Map(); // key -> overall row
+  const unresolvedProducts = new Set();
+  for (const { productId, variantId } of items) {
+    const pid = String(productId);
+    const key = priceComparisonKey(productId, variantId);
+    if (resolved.has(key)) continue;
+    const docs = pages.get(pid);
+    const exhaustive = docs.length < PRICE_COMPARISON_TOP_N;
+    let hit = null;
+    for (const doc of docs) {
+      const line = (doc.items || []).find(
+        (it) =>
+          String(it.product) === pid &&
+          (variantId ? String(it.variantId) === String(variantId) : !it.variantId)
+      );
+      if (line) {
+        hit = { doc, line };
+        break;
+      }
+    }
+    if (hit) {
+      const oldest = docs[docs.length - 1];
+      const provable = exhaustive || +new Date(oldest.purchaseDate) < +new Date(hit.doc.purchaseDate);
+      if (provable) {
+        resolved.set(key, {
+          lastPurchasePrice: hit.line.priceAtPurchase,
+          lastPurchaseDate: hit.doc.purchaseDate,
+          lastPurchaseSupplierId: hit.doc.supplier || null,
+        });
+        continue;
+      }
+    } else if (exhaustive) {
+      resolved.set(key, null); // never purchased
+      continue;
+    }
+    unresolvedProducts.add(pid);
+  }
+
+  // Aggregation for (a) products the fast path could not prove and (b) the same-supplier
+  // price. Skipped entirely when neither applies.
+  let aggResult = {};
+  if (unresolvedProducts.size > 0) {
+    aggResult = await getBulkPriceComparisonByAggregation({
+      organizationId,
+      branchId,
+      items: items.filter((it) => unresolvedProducts.has(String(it.productId))),
+      supplierId,
+    });
+  }
+  let supplierResult = {};
+  if (supplierObjectId) {
+    supplierResult = await getBulkPriceComparisonByAggregation({
+      organizationId,
+      branchId,
+      items,
+      supplierId,
+      supplierOnly: true,
+    });
+  }
+
+  const supplierIds = [
+    ...new Set([...resolved.values()].map((r) => r && r.lastPurchaseSupplierId).filter(Boolean).map(String)),
+  ];
+  const suppliers = supplierIds.length ? await Supplier.find({ _id: { $in: supplierIds } }).select('name').lean() : [];
+  const supplierNameById = new Map(suppliers.map((sp) => [String(sp._id), sp.name]));
+
+  const result = {};
+  for (const { productId, variantId } of items) {
+    const key = priceComparisonKey(productId, variantId);
+    if (result[key]) continue;
+    const fast = resolved.has(key) ? resolved.get(key) : undefined;
+    let entry;
+    if (fast !== undefined) {
+      entry = {
+        hasHistory: !!fast,
+        lastPurchasePrice: fast ? fast.lastPurchasePrice : null,
+        lastPurchaseDate: fast ? fast.lastPurchaseDate : null,
+        lastPurchaseSupplierId: fast?.lastPurchaseSupplierId ? String(fast.lastPurchaseSupplierId) : null,
+        lastPurchaseSupplierName: fast?.lastPurchaseSupplierId
+          ? supplierNameById.get(String(fast.lastPurchaseSupplierId)) || null
+          : null,
+        supplierPrice: null,
+      };
+    } else {
+      entry = { ...aggResult[key] };
+    }
+    entry.supplierPrice = supplierObjectId ? supplierResult[key]?.supplierPrice ?? null : null;
+    result[key] = entry;
+  }
+  return result;
+};
 
 /* ------------------------------------------------------------------------------------
  * Purchase list: filtering, sorting and totals

@@ -12,12 +12,13 @@ import { Can } from '@/context/permission-context'
 import { Trash2 } from 'lucide-react'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useGetBrandsQuery, type Brand } from '@/stores/brand.api'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const SEARCH_DEBOUNCE_MS = 400
 
 export default function BrandsIndex() {
   const [currentPage, setCurrentPage] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = usePersistedPageSize('brands', 10)
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS)
   const [selectedBrands, setSelectedBrands] = useState<Brand[]>([])

@@ -1,3 +1,5 @@
+import { DEFAULT_PAGE_SIZE_OPTIONS, formatPageSize } from '@/lib/page-size'
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -72,7 +74,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = usePersistedPageSize('expenses', 10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -237,13 +239,12 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
               <Label>{t('Records per page')}</Label>
               <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
                 <SelectTrigger className='w-full'>
-                  <SelectValue />
+                  <SelectValue>{formatPageSize(pageSize)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
+                  {DEFAULT_PAGE_SIZE_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>{formatPageSize(n)}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
