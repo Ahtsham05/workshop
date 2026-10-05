@@ -742,7 +742,7 @@ export function InvoicePanel({
   // re-renders on nearly every keystroke anywhere in the form (qty, discount, etc.),
   // and re-scanning a 1000+ row customer list each time was real, felt input lag.
   const filteredCustomers = useMemo(
-    () => filterAndRankBySearch(customers, customerSearchQuery, (customer) => [customer.name, customer.nameUrdu, customer.phone]),
+    () => filterAndRankBySearch([...customers].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true })), customerSearchQuery, (customer) => [customer.name, customer.nameUrdu, customer.phone]),
     [customers, customerSearchQuery],
   )
   // What actually renders — capped so opening the dropdown never mounts 1000+ rows.

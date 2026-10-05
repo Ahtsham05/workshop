@@ -402,6 +402,12 @@ interface PurchasePanelProps {
   stickyActionsContainer?: HTMLElement | null
 }
 
+const isoDay = (v?: string | Date | null) => {
+  if (!v) return '';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+};
+
 export default function PurchasePanel({
   purchase,
   setPurchase,
@@ -661,7 +667,7 @@ export default function PurchasePanel({
   )
 
   // Filter suppliers by name, Urdu name, or phone
-  const filteredSuppliers = filterAndRankBySearch(suppliers, supplierSearchQuery, (supplier) => [supplier.name, supplier.nameUrdu, supplier.phone])
+  const filteredSuppliers = filterAndRankBySearch([...suppliers].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true })), supplierSearchQuery, (supplier) => [supplier.name, supplier.nameUrdu, supplier.phone])
 
   // Flat purchase catalog: one row per non-variant product, and one row per real
   // variant for hasVariants products — each with its own real price/cost/stock, so the
@@ -2341,13 +2347,18 @@ export default function PurchasePanel({
                 ref={purchaseDateRef}
                 id="purchase-date"
                 type="date"
-                value={purchase.date ? new Date(purchase.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
-                onChange={(e) =>
+                value={(() => {
+                  const d = purchase.date ? new Date(purchase.date) : new Date();
+                  return (Number.isNaN(d.getTime()) ? new Date() : d).toISOString().split('T')[0];
+                })()}
+                onChange={(e) => {
+                  const next = new Date(e.target.value);
+                  if (Number.isNaN(next.getTime())) return; // cleared/partial date input
                   setPurchase((prev) => ({
                     ...prev,
-                    date: new Date(e.target.value).toISOString(),
-                  }))
-                }
+                    date: next.toISOString(),
+                  }));
+                }}
                 onKeyDown={(e) => onEnterAdvance(e, focusVendorBillNumber)}
                 className="w-full"
               />
@@ -2362,12 +2373,12 @@ export default function PurchasePanel({
                 <Input
                   id="purchase-due-date"
                   type="date"
-                  value={purchase.dueDate ? new Date(purchase.dueDate).toISOString().split('T')[0] : ''}
-                  min={purchase.date ? new Date(purchase.date).toISOString().split('T')[0] : undefined}
+                  value={isoDay(purchase.dueDate)}
+                  min={isoDay(purchase.date) || undefined}
                   onChange={(e) =>
                     setPurchase((prev) => ({
                       ...prev,
-                      dueDate: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                      dueDate: e.target.value && !Number.isNaN(new Date(e.target.value).getTime()) ? new Date(e.target.value).toISOString() : undefined,
                     }))
                   }
                   className="w-full"
