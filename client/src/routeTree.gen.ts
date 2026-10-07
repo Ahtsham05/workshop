@@ -47,6 +47,7 @@ import { Route as authOtpImport } from './routes/(auth)/otp'
 import { Route as authOnboardingImport } from './routes/(auth)/onboarding'
 import { Route as authForgotPasswordImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings/route'
+import { Route as AuthenticatedManufacturingRouteImport } from './routes/_authenticated/manufacturing/route'
 import { Route as AuthenticatedWhatsappIndexImport } from './routes/_authenticated/whatsapp/index'
 import { Route as AuthenticatedUsersIndexImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedUsersManagementIndexImport } from './routes/_authenticated/users-management/index'
@@ -69,6 +70,7 @@ import { Route as AuthenticatedPurchaseInvoiceIndexImport } from './routes/_auth
 import { Route as AuthenticatedProductsIndexImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedPartnersIndexImport } from './routes/_authenticated/partners/index'
 import { Route as AuthenticatedNotesIndexImport } from './routes/_authenticated/notes/index'
+import { Route as AuthenticatedManufacturingIndexImport } from './routes/_authenticated/manufacturing/index'
 import { Route as AuthenticatedLeadsIndexImport } from './routes/_authenticated/leads/index'
 import { Route as AuthenticatedInvoiceIndexImport } from './routes/_authenticated/invoice/index'
 import { Route as AuthenticatedHrIndexImport } from './routes/_authenticated/hr/index'
@@ -133,6 +135,15 @@ import { Route as AuthenticatedMobileShopImeiTrackingImport } from './routes/_au
 import { Route as AuthenticatedMobileShopCashManagementImport } from './routes/_authenticated/mobile-shop/cash-management'
 import { Route as AuthenticatedMobileShopCashBookImport } from './routes/_authenticated/mobile-shop/cash-book'
 import { Route as AuthenticatedMobileShopBillPaymentsImport } from './routes/_authenticated/mobile-shop/bill-payments'
+import { Route as AuthenticatedManufacturingWipImport } from './routes/_authenticated/manufacturing/wip'
+import { Route as AuthenticatedManufacturingSettingsImport } from './routes/_authenticated/manufacturing/settings'
+import { Route as AuthenticatedManufacturingScrapImport } from './routes/_authenticated/manufacturing/scrap'
+import { Route as AuthenticatedManufacturingRequirementsImport } from './routes/_authenticated/manufacturing/requirements'
+import { Route as AuthenticatedManufacturingProductsImport } from './routes/_authenticated/manufacturing/products'
+import { Route as AuthenticatedManufacturingMaterialIssuesImport } from './routes/_authenticated/manufacturing/material-issues'
+import { Route as AuthenticatedManufacturingFinishedGoodsImport } from './routes/_authenticated/manufacturing/finished-goods'
+import { Route as AuthenticatedManufacturingBomsImport } from './routes/_authenticated/manufacturing/boms'
+import { Route as AuthenticatedManufacturingAssembliesImport } from './routes/_authenticated/manufacturing/assemblies'
 import { Route as AuthenticatedSchoolWhatsappIndexImport } from './routes/_authenticated/school/whatsapp/index'
 import { Route as AuthenticatedSchoolVisitorsIndexImport } from './routes/_authenticated/school/visitors/index'
 import { Route as AuthenticatedSchoolTimetableIndexImport } from './routes/_authenticated/school/timetable/index'
@@ -159,6 +170,7 @@ import { Route as AuthenticatedSchoolAttendanceScannerIndexImport } from './rout
 import { Route as AuthenticatedSchoolAccountsIndexImport } from './routes/_authenticated/school/accounts/index'
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
 import { Route as AuthenticatedMobileShopUsedPhonesIndexImport } from './routes/_authenticated/mobile-shop/used-phones/index'
+import { Route as AuthenticatedManufacturingProductionOrdersIndexImport } from './routes/_authenticated/manufacturing/production-orders/index'
 import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authenticated/hr/settings/index'
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
 import { Route as AuthenticatedHrLeavesIndexImport } from './routes/_authenticated/hr/leaves/index'
@@ -176,6 +188,7 @@ import { Route as AuthenticatedSchoolPortalsStudentImport } from './routes/_auth
 import { Route as AuthenticatedSchoolPortalsParentImport } from './routes/_authenticated/school/portals/parent'
 import { Route as AuthenticatedMobileShopUsedPhonesOldPhonesImport } from './routes/_authenticated/mobile-shop/used-phones/old-phones'
 import { Route as AuthenticatedMobileShopUsedPhonesNewPhonesImport } from './routes/_authenticated/mobile-shop/used-phones/new-phones'
+import { Route as AuthenticatedManufacturingProductionOrdersOrderIdImport } from './routes/_authenticated/manufacturing/production-orders/$orderId'
 import { Route as AuthenticatedHrEmployeesCreateImport } from './routes/_authenticated/hr/employees/create'
 import { Route as AuthenticatedHrEmployeesIdImport } from './routes/_authenticated/hr/employees/$id'
 import { Route as AuthenticatedSchoolStudentsIdIndexImport } from './routes/_authenticated/school/students/$id.index'
@@ -419,6 +432,13 @@ const AuthenticatedSettingsRouteRoute = AuthenticatedSettingsRouteImport.update(
   } as any,
 )
 
+const AuthenticatedManufacturingRouteRoute =
+  AuthenticatedManufacturingRouteImport.update({
+    id: '/manufacturing',
+    path: '/manufacturing',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+
 const AuthenticatedWhatsappIndexRoute = AuthenticatedWhatsappIndexImport.update(
   {
     id: '/whatsapp/',
@@ -571,6 +591,13 @@ const AuthenticatedNotesIndexRoute = AuthenticatedNotesIndexImport.update({
   path: '/notes/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+
+const AuthenticatedManufacturingIndexRoute =
+  AuthenticatedManufacturingIndexImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
 
 const AuthenticatedLeadsIndexRoute = AuthenticatedLeadsIndexImport.update({
   id: '/leads/',
@@ -1013,6 +1040,69 @@ const AuthenticatedMobileShopBillPaymentsRoute =
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
+const AuthenticatedManufacturingWipRoute =
+  AuthenticatedManufacturingWipImport.update({
+    id: '/wip',
+    path: '/wip',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingSettingsRoute =
+  AuthenticatedManufacturingSettingsImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingScrapRoute =
+  AuthenticatedManufacturingScrapImport.update({
+    id: '/scrap',
+    path: '/scrap',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingRequirementsRoute =
+  AuthenticatedManufacturingRequirementsImport.update({
+    id: '/requirements',
+    path: '/requirements',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingProductsRoute =
+  AuthenticatedManufacturingProductsImport.update({
+    id: '/products',
+    path: '/products',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingMaterialIssuesRoute =
+  AuthenticatedManufacturingMaterialIssuesImport.update({
+    id: '/material-issues',
+    path: '/material-issues',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingFinishedGoodsRoute =
+  AuthenticatedManufacturingFinishedGoodsImport.update({
+    id: '/finished-goods',
+    path: '/finished-goods',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingBomsRoute =
+  AuthenticatedManufacturingBomsImport.update({
+    id: '/boms',
+    path: '/boms',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingAssembliesRoute =
+  AuthenticatedManufacturingAssembliesImport.update({
+    id: '/assemblies',
+    path: '/assemblies',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
 const AuthenticatedSchoolWhatsappIndexRoute =
   AuthenticatedSchoolWhatsappIndexImport.update({
     id: '/whatsapp/',
@@ -1195,6 +1285,13 @@ const AuthenticatedMobileShopUsedPhonesIndexRoute =
     getParentRoute: () => AuthenticatedMobileShopUsedPhonesRoute,
   } as any)
 
+const AuthenticatedManufacturingProductionOrdersIndexRoute =
+  AuthenticatedManufacturingProductionOrdersIndexImport.update({
+    id: '/production-orders/',
+    path: '/production-orders/',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
 const AuthenticatedHrSettingsIndexRoute =
   AuthenticatedHrSettingsIndexImport.update({
     id: '/hr/settings/',
@@ -1315,6 +1412,13 @@ const AuthenticatedMobileShopUsedPhonesNewPhonesRoute =
     getParentRoute: () => AuthenticatedMobileShopUsedPhonesRoute,
   } as any)
 
+const AuthenticatedManufacturingProductionOrdersOrderIdRoute =
+  AuthenticatedManufacturingProductionOrdersOrderIdImport.update({
+    id: '/production-orders/$orderId',
+    path: '/production-orders/$orderId',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
 const AuthenticatedHrEmployeesCreateRoute =
   AuthenticatedHrEmployeesCreateImport.update({
     id: '/hr/employees/create',
@@ -1417,6 +1521,13 @@ declare module '@tanstack/react-router' {
       fullPath: ''
       preLoaderRoute: typeof AuthenticatedImport
       parentRoute: typeof rootRoute
+    }
+    '/_authenticated/manufacturing': {
+      id: '/_authenticated/manufacturing'
+      path: '/manufacturing'
+      fullPath: '/manufacturing'
+      preLoaderRoute: typeof AuthenticatedManufacturingRouteImport
+      parentRoute: typeof AuthenticatedImport
     }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
@@ -1662,6 +1773,69 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexImport
       parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/manufacturing/assemblies': {
+      id: '/_authenticated/manufacturing/assemblies'
+      path: '/assemblies'
+      fullPath: '/manufacturing/assemblies'
+      preLoaderRoute: typeof AuthenticatedManufacturingAssembliesImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/boms': {
+      id: '/_authenticated/manufacturing/boms'
+      path: '/boms'
+      fullPath: '/manufacturing/boms'
+      preLoaderRoute: typeof AuthenticatedManufacturingBomsImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/finished-goods': {
+      id: '/_authenticated/manufacturing/finished-goods'
+      path: '/finished-goods'
+      fullPath: '/manufacturing/finished-goods'
+      preLoaderRoute: typeof AuthenticatedManufacturingFinishedGoodsImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/material-issues': {
+      id: '/_authenticated/manufacturing/material-issues'
+      path: '/material-issues'
+      fullPath: '/manufacturing/material-issues'
+      preLoaderRoute: typeof AuthenticatedManufacturingMaterialIssuesImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/products': {
+      id: '/_authenticated/manufacturing/products'
+      path: '/products'
+      fullPath: '/manufacturing/products'
+      preLoaderRoute: typeof AuthenticatedManufacturingProductsImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/requirements': {
+      id: '/_authenticated/manufacturing/requirements'
+      path: '/requirements'
+      fullPath: '/manufacturing/requirements'
+      preLoaderRoute: typeof AuthenticatedManufacturingRequirementsImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/scrap': {
+      id: '/_authenticated/manufacturing/scrap'
+      path: '/scrap'
+      fullPath: '/manufacturing/scrap'
+      preLoaderRoute: typeof AuthenticatedManufacturingScrapImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/settings': {
+      id: '/_authenticated/manufacturing/settings'
+      path: '/settings'
+      fullPath: '/manufacturing/settings'
+      preLoaderRoute: typeof AuthenticatedManufacturingSettingsImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/wip': {
+      id: '/_authenticated/manufacturing/wip'
+      path: '/wip'
+      fullPath: '/manufacturing/wip'
+      preLoaderRoute: typeof AuthenticatedManufacturingWipImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
     '/_authenticated/mobile-shop/bill-payments': {
       id: '/_authenticated/mobile-shop/bill-payments'
@@ -2111,6 +2285,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLeadsIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/manufacturing/': {
+      id: '/_authenticated/manufacturing/'
+      path: '/'
+      fullPath: '/manufacturing/'
+      preLoaderRoute: typeof AuthenticatedManufacturingIndexImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
     '/_authenticated/notes/': {
       id: '/_authenticated/notes/'
       path: '/notes'
@@ -2279,6 +2460,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrEmployeesCreateImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/manufacturing/production-orders/$orderId': {
+      id: '/_authenticated/manufacturing/production-orders/$orderId'
+      path: '/production-orders/$orderId'
+      fullPath: '/manufacturing/production-orders/$orderId'
+      preLoaderRoute: typeof AuthenticatedManufacturingProductionOrdersOrderIdImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
     '/_authenticated/mobile-shop/used-phones/new-phones': {
       id: '/_authenticated/mobile-shop/used-phones/new-phones'
       path: '/new-phones'
@@ -2397,6 +2585,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/hr/settings'
       preLoaderRoute: typeof AuthenticatedHrSettingsIndexImport
       parentRoute: typeof AuthenticatedImport
+    }
+    '/_authenticated/manufacturing/production-orders/': {
+      id: '/_authenticated/manufacturing/production-orders/'
+      path: '/production-orders'
+      fullPath: '/manufacturing/production-orders'
+      preLoaderRoute: typeof AuthenticatedManufacturingProductionOrdersIndexImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
     '/_authenticated/mobile-shop/used-phones/': {
       id: '/_authenticated/mobile-shop/used-phones/'
@@ -2662,6 +2857,50 @@ declare module '@tanstack/react-router' {
 
 // Create and export the route tree
 
+interface AuthenticatedManufacturingRouteRouteChildren {
+  AuthenticatedManufacturingAssembliesRoute: typeof AuthenticatedManufacturingAssembliesRoute
+  AuthenticatedManufacturingBomsRoute: typeof AuthenticatedManufacturingBomsRoute
+  AuthenticatedManufacturingFinishedGoodsRoute: typeof AuthenticatedManufacturingFinishedGoodsRoute
+  AuthenticatedManufacturingMaterialIssuesRoute: typeof AuthenticatedManufacturingMaterialIssuesRoute
+  AuthenticatedManufacturingProductsRoute: typeof AuthenticatedManufacturingProductsRoute
+  AuthenticatedManufacturingRequirementsRoute: typeof AuthenticatedManufacturingRequirementsRoute
+  AuthenticatedManufacturingScrapRoute: typeof AuthenticatedManufacturingScrapRoute
+  AuthenticatedManufacturingSettingsRoute: typeof AuthenticatedManufacturingSettingsRoute
+  AuthenticatedManufacturingWipRoute: typeof AuthenticatedManufacturingWipRoute
+  AuthenticatedManufacturingIndexRoute: typeof AuthenticatedManufacturingIndexRoute
+  AuthenticatedManufacturingProductionOrdersOrderIdRoute: typeof AuthenticatedManufacturingProductionOrdersOrderIdRoute
+  AuthenticatedManufacturingProductionOrdersIndexRoute: typeof AuthenticatedManufacturingProductionOrdersIndexRoute
+}
+
+const AuthenticatedManufacturingRouteRouteChildren: AuthenticatedManufacturingRouteRouteChildren =
+  {
+    AuthenticatedManufacturingAssembliesRoute:
+      AuthenticatedManufacturingAssembliesRoute,
+    AuthenticatedManufacturingBomsRoute: AuthenticatedManufacturingBomsRoute,
+    AuthenticatedManufacturingFinishedGoodsRoute:
+      AuthenticatedManufacturingFinishedGoodsRoute,
+    AuthenticatedManufacturingMaterialIssuesRoute:
+      AuthenticatedManufacturingMaterialIssuesRoute,
+    AuthenticatedManufacturingProductsRoute:
+      AuthenticatedManufacturingProductsRoute,
+    AuthenticatedManufacturingRequirementsRoute:
+      AuthenticatedManufacturingRequirementsRoute,
+    AuthenticatedManufacturingScrapRoute: AuthenticatedManufacturingScrapRoute,
+    AuthenticatedManufacturingSettingsRoute:
+      AuthenticatedManufacturingSettingsRoute,
+    AuthenticatedManufacturingWipRoute: AuthenticatedManufacturingWipRoute,
+    AuthenticatedManufacturingIndexRoute: AuthenticatedManufacturingIndexRoute,
+    AuthenticatedManufacturingProductionOrdersOrderIdRoute:
+      AuthenticatedManufacturingProductionOrdersOrderIdRoute,
+    AuthenticatedManufacturingProductionOrdersIndexRoute:
+      AuthenticatedManufacturingProductionOrdersIndexRoute,
+  }
+
+const AuthenticatedManufacturingRouteRouteWithChildren =
+  AuthenticatedManufacturingRouteRoute._addFileChildren(
+    AuthenticatedManufacturingRouteRouteChildren,
+  )
+
 interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
@@ -2906,6 +3145,7 @@ const AuthenticatedHrEmployeesIdRouteWithChildren =
   )
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedManufacturingRouteRoute: typeof AuthenticatedManufacturingRouteRouteWithChildren
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedActivitiesRoute: typeof AuthenticatedActivitiesRoute
   AuthenticatedAiAssistantRoute: typeof AuthenticatedAiAssistantRoute
@@ -3001,6 +3241,8 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedManufacturingRouteRoute:
+    AuthenticatedManufacturingRouteRouteWithChildren,
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedActivitiesRoute: AuthenticatedActivitiesRoute,
   AuthenticatedAiAssistantRoute: AuthenticatedAiAssistantRoute,
@@ -3112,6 +3354,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 
 export interface FileRoutesByFullPath {
   '': typeof AuthenticatedRouteWithChildren
+  '/manufacturing': typeof AuthenticatedManufacturingRouteRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/onboarding': typeof authOnboardingRoute
@@ -3147,6 +3390,15 @@ export interface FileRoutesByFullPath {
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/order/$qrToken': typeof OrderQrTokenRoute
   '/': typeof AuthenticatedIndexRoute
+  '/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
+  '/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
+  '/manufacturing/finished-goods': typeof AuthenticatedManufacturingFinishedGoodsRoute
+  '/manufacturing/material-issues': typeof AuthenticatedManufacturingMaterialIssuesRoute
+  '/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
+  '/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
+  '/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
+  '/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
+  '/manufacturing/wip': typeof AuthenticatedManufacturingWipRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/mobile-shop/cash-management': typeof AuthenticatedMobileShopCashManagementRoute
@@ -3211,6 +3463,7 @@ export interface FileRoutesByFullPath {
   '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/leads': typeof AuthenticatedLeadsIndexRoute
+  '/manufacturing/': typeof AuthenticatedManufacturingIndexRoute
   '/notes': typeof AuthenticatedNotesIndexRoute
   '/partners': typeof AuthenticatedPartnersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
@@ -3235,6 +3488,7 @@ export interface FileRoutesByFullPath {
   '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/manufacturing/production-orders/$orderId': typeof AuthenticatedManufacturingProductionOrdersOrderIdRoute
   '/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
   '/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -3252,6 +3506,7 @@ export interface FileRoutesByFullPath {
   '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
   '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
+  '/manufacturing/production-orders': typeof AuthenticatedManufacturingProductionOrdersIndexRoute
   '/mobile-shop/used-phones/': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
   '/school/accounts': typeof AuthenticatedSchoolAccountsIndexRoute
@@ -3325,6 +3580,15 @@ export interface FileRoutesByTo {
   '/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/order/$qrToken': typeof OrderQrTokenRoute
   '/': typeof AuthenticatedIndexRoute
+  '/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
+  '/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
+  '/manufacturing/finished-goods': typeof AuthenticatedManufacturingFinishedGoodsRoute
+  '/manufacturing/material-issues': typeof AuthenticatedManufacturingMaterialIssuesRoute
+  '/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
+  '/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
+  '/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
+  '/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
+  '/manufacturing/wip': typeof AuthenticatedManufacturingWipRoute
   '/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/mobile-shop/cash-management': typeof AuthenticatedMobileShopCashManagementRoute
@@ -3388,6 +3652,7 @@ export interface FileRoutesByTo {
   '/hr': typeof AuthenticatedHrIndexRoute
   '/invoice': typeof AuthenticatedInvoiceIndexRoute
   '/leads': typeof AuthenticatedLeadsIndexRoute
+  '/manufacturing': typeof AuthenticatedManufacturingIndexRoute
   '/notes': typeof AuthenticatedNotesIndexRoute
   '/partners': typeof AuthenticatedPartnersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
@@ -3412,6 +3677,7 @@ export interface FileRoutesByTo {
   '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/manufacturing/production-orders/$orderId': typeof AuthenticatedManufacturingProductionOrdersOrderIdRoute
   '/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
   '/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -3428,6 +3694,7 @@ export interface FileRoutesByTo {
   '/hr/leaves': typeof AuthenticatedHrLeavesIndexRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
   '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
+  '/manufacturing/production-orders': typeof AuthenticatedManufacturingProductionOrdersIndexRoute
   '/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
   '/school/accounts': typeof AuthenticatedSchoolAccountsIndexRoute
@@ -3470,6 +3737,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/_authenticated/manufacturing': typeof AuthenticatedManufacturingRouteRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
   '/(auth)/onboarding': typeof authOnboardingRoute
@@ -3505,6 +3773,15 @@ export interface FileRoutesById {
   '/_authenticated/voice-demo': typeof AuthenticatedVoiceDemoRoute
   '/order/$qrToken': typeof OrderQrTokenRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
+  '/_authenticated/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
+  '/_authenticated/manufacturing/finished-goods': typeof AuthenticatedManufacturingFinishedGoodsRoute
+  '/_authenticated/manufacturing/material-issues': typeof AuthenticatedManufacturingMaterialIssuesRoute
+  '/_authenticated/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
+  '/_authenticated/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
+  '/_authenticated/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
+  '/_authenticated/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
+  '/_authenticated/manufacturing/wip': typeof AuthenticatedManufacturingWipRoute
   '/_authenticated/mobile-shop/bill-payments': typeof AuthenticatedMobileShopBillPaymentsRoute
   '/_authenticated/mobile-shop/cash-book': typeof AuthenticatedMobileShopCashBookRoute
   '/_authenticated/mobile-shop/cash-management': typeof AuthenticatedMobileShopCashManagementRoute
@@ -3569,6 +3846,7 @@ export interface FileRoutesById {
   '/_authenticated/hr/': typeof AuthenticatedHrIndexRoute
   '/_authenticated/invoice/': typeof AuthenticatedInvoiceIndexRoute
   '/_authenticated/leads/': typeof AuthenticatedLeadsIndexRoute
+  '/_authenticated/manufacturing/': typeof AuthenticatedManufacturingIndexRoute
   '/_authenticated/notes/': typeof AuthenticatedNotesIndexRoute
   '/_authenticated/partners/': typeof AuthenticatedPartnersIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
@@ -3593,6 +3871,7 @@ export interface FileRoutesById {
   '/_authenticated/whatsapp/': typeof AuthenticatedWhatsappIndexRoute
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/_authenticated/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
+  '/_authenticated/manufacturing/production-orders/$orderId': typeof AuthenticatedManufacturingProductionOrdersOrderIdRoute
   '/_authenticated/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
   '/_authenticated/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/_authenticated/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -3610,6 +3889,7 @@ export interface FileRoutesById {
   '/_authenticated/hr/leaves/': typeof AuthenticatedHrLeavesIndexRoute
   '/_authenticated/hr/payroll/': typeof AuthenticatedHrPayrollIndexRoute
   '/_authenticated/hr/settings/': typeof AuthenticatedHrSettingsIndexRoute
+  '/_authenticated/manufacturing/production-orders/': typeof AuthenticatedManufacturingProductionOrdersIndexRoute
   '/_authenticated/mobile-shop/used-phones/': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/_authenticated/products/bulk-edit/': typeof AuthenticatedProductsBulkEditIndexRoute
   '/_authenticated/school/accounts/': typeof AuthenticatedSchoolAccountsIndexRoute
@@ -3653,6 +3933,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | ''
+    | '/manufacturing'
     | '/settings'
     | '/forgot-password'
     | '/onboarding'
@@ -3688,6 +3969,15 @@ export interface FileRouteTypes {
     | '/voice-demo'
     | '/order/$qrToken'
     | '/'
+    | '/manufacturing/assemblies'
+    | '/manufacturing/boms'
+    | '/manufacturing/finished-goods'
+    | '/manufacturing/material-issues'
+    | '/manufacturing/products'
+    | '/manufacturing/requirements'
+    | '/manufacturing/scrap'
+    | '/manufacturing/settings'
+    | '/manufacturing/wip'
     | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
     | '/mobile-shop/cash-management'
@@ -3752,6 +4042,7 @@ export interface FileRouteTypes {
     | '/hr'
     | '/invoice'
     | '/leads'
+    | '/manufacturing/'
     | '/notes'
     | '/partners'
     | '/products'
@@ -3776,6 +4067,7 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/hr/employees/$id'
     | '/hr/employees/create'
+    | '/manufacturing/production-orders/$orderId'
     | '/mobile-shop/used-phones/new-phones'
     | '/mobile-shop/used-phones/old-phones'
     | '/school/portals/parent'
@@ -3793,6 +4085,7 @@ export interface FileRouteTypes {
     | '/hr/leaves'
     | '/hr/payroll'
     | '/hr/settings'
+    | '/manufacturing/production-orders'
     | '/mobile-shop/used-phones/'
     | '/products/bulk-edit'
     | '/school/accounts'
@@ -3865,6 +4158,15 @@ export interface FileRouteTypes {
     | '/voice-demo'
     | '/order/$qrToken'
     | '/'
+    | '/manufacturing/assemblies'
+    | '/manufacturing/boms'
+    | '/manufacturing/finished-goods'
+    | '/manufacturing/material-issues'
+    | '/manufacturing/products'
+    | '/manufacturing/requirements'
+    | '/manufacturing/scrap'
+    | '/manufacturing/settings'
+    | '/manufacturing/wip'
     | '/mobile-shop/bill-payments'
     | '/mobile-shop/cash-book'
     | '/mobile-shop/cash-management'
@@ -3928,6 +4230,7 @@ export interface FileRouteTypes {
     | '/hr'
     | '/invoice'
     | '/leads'
+    | '/manufacturing'
     | '/notes'
     | '/partners'
     | '/products'
@@ -3952,6 +4255,7 @@ export interface FileRouteTypes {
     | '/whatsapp'
     | '/hr/employees/$id'
     | '/hr/employees/create'
+    | '/manufacturing/production-orders/$orderId'
     | '/mobile-shop/used-phones/new-phones'
     | '/mobile-shop/used-phones/old-phones'
     | '/school/portals/parent'
@@ -3968,6 +4272,7 @@ export interface FileRouteTypes {
     | '/hr/leaves'
     | '/hr/payroll'
     | '/hr/settings'
+    | '/manufacturing/production-orders'
     | '/mobile-shop/used-phones'
     | '/products/bulk-edit'
     | '/school/accounts'
@@ -4008,6 +4313,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
+    | '/_authenticated/manufacturing'
     | '/_authenticated/settings'
     | '/(auth)/forgot-password'
     | '/(auth)/onboarding'
@@ -4043,6 +4349,15 @@ export interface FileRouteTypes {
     | '/_authenticated/voice-demo'
     | '/order/$qrToken'
     | '/_authenticated/'
+    | '/_authenticated/manufacturing/assemblies'
+    | '/_authenticated/manufacturing/boms'
+    | '/_authenticated/manufacturing/finished-goods'
+    | '/_authenticated/manufacturing/material-issues'
+    | '/_authenticated/manufacturing/products'
+    | '/_authenticated/manufacturing/requirements'
+    | '/_authenticated/manufacturing/scrap'
+    | '/_authenticated/manufacturing/settings'
+    | '/_authenticated/manufacturing/wip'
     | '/_authenticated/mobile-shop/bill-payments'
     | '/_authenticated/mobile-shop/cash-book'
     | '/_authenticated/mobile-shop/cash-management'
@@ -4107,6 +4422,7 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/'
     | '/_authenticated/invoice/'
     | '/_authenticated/leads/'
+    | '/_authenticated/manufacturing/'
     | '/_authenticated/notes/'
     | '/_authenticated/partners/'
     | '/_authenticated/products/'
@@ -4131,6 +4447,7 @@ export interface FileRouteTypes {
     | '/_authenticated/whatsapp/'
     | '/_authenticated/hr/employees/$id'
     | '/_authenticated/hr/employees/create'
+    | '/_authenticated/manufacturing/production-orders/$orderId'
     | '/_authenticated/mobile-shop/used-phones/new-phones'
     | '/_authenticated/mobile-shop/used-phones/old-phones'
     | '/_authenticated/school/portals/parent'
@@ -4148,6 +4465,7 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/leaves/'
     | '/_authenticated/hr/payroll/'
     | '/_authenticated/hr/settings/'
+    | '/_authenticated/manufacturing/production-orders/'
     | '/_authenticated/mobile-shop/used-phones/'
     | '/_authenticated/products/bulk-edit/'
     | '/_authenticated/school/accounts/'
@@ -4248,6 +4566,7 @@ export const routeTree = rootRoute
     "/_authenticated": {
       "filePath": "_authenticated.tsx",
       "children": [
+        "/_authenticated/manufacturing",
         "/_authenticated/settings",
         "/_authenticated/activities",
         "/_authenticated/ai-assistant",
@@ -4340,6 +4659,24 @@ export const routeTree = rootRoute
         "/_authenticated/hr/payroll/",
         "/_authenticated/hr/settings/",
         "/_authenticated/products/bulk-edit/"
+      ]
+    },
+    "/_authenticated/manufacturing": {
+      "filePath": "_authenticated/manufacturing/route.tsx",
+      "parent": "/_authenticated",
+      "children": [
+        "/_authenticated/manufacturing/assemblies",
+        "/_authenticated/manufacturing/boms",
+        "/_authenticated/manufacturing/finished-goods",
+        "/_authenticated/manufacturing/material-issues",
+        "/_authenticated/manufacturing/products",
+        "/_authenticated/manufacturing/requirements",
+        "/_authenticated/manufacturing/scrap",
+        "/_authenticated/manufacturing/settings",
+        "/_authenticated/manufacturing/wip",
+        "/_authenticated/manufacturing/",
+        "/_authenticated/manufacturing/production-orders/$orderId",
+        "/_authenticated/manufacturing/production-orders/"
       ]
     },
     "/_authenticated/settings": {
@@ -4541,6 +4878,42 @@ export const routeTree = rootRoute
     "/_authenticated/": {
       "filePath": "_authenticated/index.tsx",
       "parent": "/_authenticated"
+    },
+    "/_authenticated/manufacturing/assemblies": {
+      "filePath": "_authenticated/manufacturing/assemblies.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/boms": {
+      "filePath": "_authenticated/manufacturing/boms.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/finished-goods": {
+      "filePath": "_authenticated/manufacturing/finished-goods.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/material-issues": {
+      "filePath": "_authenticated/manufacturing/material-issues.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/products": {
+      "filePath": "_authenticated/manufacturing/products.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/requirements": {
+      "filePath": "_authenticated/manufacturing/requirements.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/scrap": {
+      "filePath": "_authenticated/manufacturing/scrap.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/settings": {
+      "filePath": "_authenticated/manufacturing/settings.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/wip": {
+      "filePath": "_authenticated/manufacturing/wip.tsx",
+      "parent": "/_authenticated/manufacturing"
     },
     "/_authenticated/mobile-shop/bill-payments": {
       "filePath": "_authenticated/mobile-shop/bill-payments.tsx",
@@ -4803,6 +5176,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/leads/index.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/manufacturing/": {
+      "filePath": "_authenticated/manufacturing/index.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
     "/_authenticated/notes/": {
       "filePath": "_authenticated/notes/index.tsx",
       "parent": "/_authenticated"
@@ -4902,6 +5279,10 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/hr/employees/create.tsx",
       "parent": "/_authenticated"
     },
+    "/_authenticated/manufacturing/production-orders/$orderId": {
+      "filePath": "_authenticated/manufacturing/production-orders/$orderId.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
     "/_authenticated/mobile-shop/used-phones/new-phones": {
       "filePath": "_authenticated/mobile-shop/used-phones/new-phones.tsx",
       "parent": "/_authenticated/mobile-shop/used-phones"
@@ -4972,6 +5353,10 @@ export const routeTree = rootRoute
     "/_authenticated/hr/settings/": {
       "filePath": "_authenticated/hr/settings/index.tsx",
       "parent": "/_authenticated"
+    },
+    "/_authenticated/manufacturing/production-orders/": {
+      "filePath": "_authenticated/manufacturing/production-orders/index.tsx",
+      "parent": "/_authenticated/manufacturing"
     },
     "/_authenticated/mobile-shop/used-phones/": {
       "filePath": "_authenticated/mobile-shop/used-phones/index.tsx",

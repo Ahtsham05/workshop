@@ -34,7 +34,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, ClipboardCheck, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, ClipboardCheck, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote, Factory, FileStack, ListChecks, Workflow, PackageCheck } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -111,6 +111,22 @@ export const sidebarData: SidebarData = {
             { title: 'IMEI / Serial Tracking', url: '/mobile-shop/imei-tracking', icon: ShieldCheck, permission: 'viewImeiTracking' },
             { title: 'Price Checker', url: '/price-checker', icon: DollarSign, permission: 'viewPriceChecker' },
             { title: 'Price Updates', url: '/price-updates', icon: TrendingUp, anyPermission: ['viewPriceUpdates', 'managePriceUpdates'] },
+          ],
+        },
+        {
+          // Manufacturing module — every section lives under /manufacturing with its own
+          // in-page section rail (features/manufacturing/components/manufacturing-shell.tsx).
+          title: 'Manufacturing',
+          icon: Factory,
+          permission: 'viewManufacturing',
+          excludeBusinessTypes: ['school', 'restaurant'],
+          items: [
+            { title: 'Dashboard', url: '/manufacturing', icon: IconLayoutDashboard, permission: 'viewManufacturing' },
+            { title: 'Bills of Materials', url: '/manufacturing/boms', icon: FileStack, permission: 'viewManufacturing' },
+            { title: 'Production Orders', url: '/manufacturing/production-orders', icon: ClipboardList, permission: 'viewManufacturing' },
+            { title: 'Material Requirements', url: '/manufacturing/requirements', icon: ListChecks, permission: 'viewManufacturing' },
+            { title: 'Work in Progress', url: '/manufacturing/wip', icon: Workflow, permission: 'viewManufacturing' },
+            { title: 'Finished Goods', url: '/manufacturing/finished-goods', icon: PackageCheck, permission: 'viewManufacturing' },
           ],
         },
         {

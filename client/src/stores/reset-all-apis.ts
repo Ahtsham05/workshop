@@ -39,6 +39,7 @@ import { brandApi } from './brand.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { inventoryTransferApi } from './inventoryTransfer.api'
 import { stockAdjustmentApi } from './stockAdjustment.api'
+import { manufacturingApi } from './manufacturing.api'
 import { stockCountApi } from './stockCount.api'
 import { auditLogApi } from './auditLog.api'
 import { aiAssistantApi } from './aiAssistant.api'
@@ -63,7 +64,7 @@ const ALL_APIS = [
   productApi, inventoryApi, batchApi, brandApi, purchaseCatalogApi,
   inventoryTransferApi, stockAdjustmentApi, stockCountApi, auditLogApi, aiAssistantApi,
   recurringExpenseApi, expenseApi, communicationLogApi, reminderApi, noteApi, leadApi,
-  productAnalyticsApi,
+  productAnalyticsApi, manufacturingApi,
 ]
 
 /**

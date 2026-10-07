@@ -71,7 +71,8 @@ export type PermissionKey =
   | 'viewAiAssistant'
   | 'viewInsights'
   | 'viewPurchaseSuggestions'
-  | 'viewBarcodeGenerator';
+  | 'viewBarcodeGenerator'
+  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'executeProduction' | 'manageManufacturingSettings';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -167,6 +168,11 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'insights', label: 'Insights', permissions: ['viewInsights'] },
   { id: 'purchase_suggestions', label: 'Purchase Suggestions', permissions: ['viewPurchaseSuggestions'] },
   { id: 'barcode', label: 'Barcode Generator', permissions: ['viewBarcodeGenerator'] },
+  {
+    id: 'manufacturing',
+    label: 'Manufacturing',
+    permissions: ['viewManufacturing', 'manageBoms', 'manageProductionOrders', 'executeProduction', 'manageManufacturingSettings'],
+  },
 ];
 
 export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))] as PermissionKey[];
@@ -176,6 +182,7 @@ export const PERMISSION_TAB_GROUPS = {
     'products', 'stock_counts', 'imei_tracking', 'price_checker', 'price_updates', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
     'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system', 'leads',
     'communication_log', 'reminders', 'whatsapp', 'sms', 'website_connections', 'ai_assistant', 'insights', 'purchase_suggestions', 'barcode',
+    'manufacturing',
   ],
   mobile_shop: [
     'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones',

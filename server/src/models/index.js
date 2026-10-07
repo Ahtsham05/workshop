@@ -186,3 +186,11 @@ module.exports.ManualPayment = require('./manualPayment.model');
 module.exports.WebhookEvent = require('./webhookEvent.model');
 module.exports.BillingAudit = require('./billingAudit.model');
 module.exports.WebsiteConnection = require('./websiteConnection.model');
+
+// Manufacturing
+module.exports.ManufacturingSettings = require('./manufacturingSettings.model');
+module.exports.Bom = require('./bom.model');
+module.exports.ProductionOrder = require('./productionOrder.model');
+module.exports.MaterialIssue = require('./materialIssue.model');
+module.exports.ProductionReceipt = require('./productionReceipt.model');
+module.exports.ScrapRecord = require('./scrapRecord.model');

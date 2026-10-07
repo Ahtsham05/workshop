@@ -258,6 +258,7 @@ const createDefaultRoles = async () => {
         viewInsights: true,
         viewPurchaseSuggestions: true,
         viewBarcodeGenerator: true,
+        viewManufacturing: true, manageBoms: true, manageProductionOrders: true, executeProduction: true,
         viewDashboard: true,
         // Manager already views business Reports; extend that same view-only reach to the
         // new Tax & Currency Settings group (view-only — Manager doesn't manage settings).
@@ -296,6 +297,7 @@ const createDefaultRoles = async () => {
         viewRepairs: true, viewServices: true, viewBillPayments: true, viewInstallments: true,
         viewImeiTracking: true,
         viewPriceChecker: true,
+        viewManufacturing: true,
         viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
         viewExpenseReports: true, viewSimSaleReports: true, viewProfitLossReports: true,
         viewLoadReports: true, viewRepairReports: true, viewServiceReports: true,

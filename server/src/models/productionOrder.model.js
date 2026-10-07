@@ -1,0 +1,113 @@
+const mongoose = require('mongoose');
+const { paginate, toJSON } = require('./plugins');
+const { DEFAULT_UNIT, UNITS } = require('../config/units');
+const { PRODUCTION_STATUSES, PRODUCTION_PRIORITIES } = require('../config/manufacturing');
+
+/**
+ * A material the order needs, snapshotted from the (exploded) BOM when the order is
+ * created or its BOM/quantity changes while still editable. Execution only ever moves
+ * `issuedQuantity`/`issuedCost`/`scrappedQuantity`; the requirement itself is frozen
+ * from release onwards.
+ */
+const ProductionMaterialSchema = new mongoose.Schema(
+  {
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+    variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: null },
+    productName: { type: String, trim: true },
+    sku: { type: String, trim: true },
+    unit: { type: String, enum: Object.values(UNITS), default: DEFAULT_UNIT },
+    // Net quantity per the BOM, and the quantity including the component's scrap allowance.
+    baseQuantity: { type: Number, required: true, min: 0 },
+    requiredQuantity: { type: Number, required: true, min: 0 },
+    issuedQuantity: { type: Number, default: 0 },
+    issuedCost: { type: Number, default: 0 },
+    scrappedQuantity: { type: Number, default: 0 },
+    isOptional: { type: Boolean, default: false },
+    // 1 = direct component of the order's BOM, 2+ = came from an exploded sub-assembly.
+    level: { type: Number, default: 1 },
+    // Which BOM (version) this line was exploded from, for traceability.
+    sourceBomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bom', default: null },
+    alternatives: {
+      type: [
+        new mongoose.Schema(
+          {
+            productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+            variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: null },
+            productName: { type: String, trim: true },
+            ratio: { type: Number, default: 1 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+  },
+  { _id: true }
+);
+
+const StatusHistorySchema = new mongoose.Schema(
+  {
+    from: { type: String },
+    to: { type: String, required: true },
+    note: { type: String, trim: true, default: '' },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    at: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+/**
+ * A production (manufacturing) order. Stock in Logix Plus is held per branch, so the
+ * order's branch IS its warehouse: materials are issued from and finished goods received
+ * into that branch's stock. The location fields are labels for areas/bins inside it
+ * (raw-material store, production floor, FG store) — informational in Phase 1.
+ */
+const ProductionOrderSchema = new mongoose.Schema(
+  {
+    organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
+    branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true, index: true },
+    orderNumber: { type: String, required: true, trim: true },
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true, index: true },
+    variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: null },
+    productName: { type: String, trim: true },
+    sku: { type: String, trim: true },
+    unit: { type: String, enum: Object.values(UNITS), default: DEFAULT_UNIT },
+    bomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bom', default: null },
+    bomNumber: { type: String, trim: true },
+    bomVersion: { type: Number },
+    plannedQuantity: { type: Number, required: true, min: 0.000001 },
+    completedQuantity: { type: Number, default: 0 },
+    scrappedQuantity: { type: Number, default: 0 },
+    plannedStartDate: { type: Date, default: null },
+    plannedCompletionDate: { type: Date, default: null },
+    actualStartDate: { type: Date, default: null },
+    actualCompletionDate: { type: Date, default: null },
+    sourceLocation: { type: String, trim: true, default: '' },
+    wipLocation: { type: String, trim: true, default: '' },
+    finishedGoodsLocation: { type: String, trim: true, default: '' },
+    status: { type: String, enum: PRODUCTION_STATUSES, default: 'draft', index: true },
+    priority: { type: String, enum: PRODUCTION_PRIORITIES, default: 'normal' },
+    notes: { type: String, trim: true, default: '' },
+    materials: { type: [ProductionMaterialSchema], default: [] },
+    // Running totals kept in step with issues/receipts so lists and the dashboard never
+    // need to aggregate the transaction collections.
+    materialCost: { type: Number, default: 0 },
+    finishedGoodsValue: { type: Number, default: 0 },
+    statusHistory: { type: [StatusHistorySchema], default: [] },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  },
+  { timestamps: true, keepTimestampsInJSON: true }
+);
+
+ProductionOrderSchema.plugin(toJSON);
+ProductionOrderSchema.plugin(paginate);
+
+ProductionOrderSchema.index({ organizationId: 1, orderNumber: 1 }, { unique: true });
+ProductionOrderSchema.index({ organizationId: 1, branchId: 1, status: 1, plannedCompletionDate: 1 });
+ProductionOrderSchema.index({ organizationId: 1, branchId: 1, createdAt: -1 });
+ProductionOrderSchema.index({ organizationId: 1, bomId: 1 });
+
+const ProductionOrder = mongoose.model('ProductionOrder', ProductionOrderSchema);
+
+module.exports = ProductionOrder;

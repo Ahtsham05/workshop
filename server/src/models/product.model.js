@@ -3,6 +3,7 @@ const { paginate, toJSON } = require('./plugins');
 const syncVersionPlugin = require('./plugins/syncVersion.plugin');
 const { DEFAULT_UNIT, UNITS } = require('../config/units');
 const { BUSINESS_TYPES } = require('../config/businessTypes');
+const { PRODUCT_TYPES, PROCUREMENT_TYPES } = require('../config/manufacturing');
 
 const ProductSchema = new mongoose.Schema({
     organizationId: {
@@ -183,6 +184,16 @@ const ProductSchema = new mongoose.Schema({
         }, { _id: false }),
         default: null,
     },
+    // ── Manufacturing (see config/manufacturing.js) ─────────────────────────────────
+    // All optional and null by default, so every existing product keeps working exactly
+    // as before — only the Manufacturing module reads these. productType null = "not
+    // classified for manufacturing", which is distinct from any of the enum values.
+    productType: { type: String, enum: [...PRODUCT_TYPES, null], default: null, index: true },
+    procurementType: { type: String, enum: [...PROCUREMENT_TYPES, null], default: null },
+    // The BOM version used by default when a production order for this product doesn't
+    // name one, and when this product appears as a sub-assembly inside another BOM.
+    defaultBomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bom', default: null },
+    manufacturingLeadTimeDays: { type: Number, min: 0, default: null },
 },{
     timestamps: true,
     keepTimestampsInJSON: true,

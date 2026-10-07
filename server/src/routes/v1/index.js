@@ -83,6 +83,7 @@ const repairStockItemRoute = require('./repairStockItem.route');
 const installmentRoute = require('./installment.route');
 const auditLogRoute = require('./auditLog.route');
 const aiAssistantRoute = require('./aiAssistant.route');
+const manufacturingRoute = require('./manufacturing.route');
 const { readOnlyGate } = require('../../middlewares/entitlement');
 
 // Localization / Currency / Tax engine Routes
@@ -706,6 +707,10 @@ const defaultRoutes = [
     route: aiAssistantRoute,
   },
   {
+    path: '/manufacturing',
+    route: manufacturingRoute,
+  },
+  {
     path: '/sms-gateway',
     route: smsGatewayRoute,
   },
@@ -850,6 +855,7 @@ const protectedPaths = [
   '/restaurant',
   '/audit-logs',
   '/ai-assistant',
+  '/manufacturing',
   '/tax-categories',
   '/tax-rates',
   '/tax-jurisdictions',
