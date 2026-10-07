@@ -9,5 +9,6 @@ const execution = require('./execution.service');
 const products = require('./products.service');
 const dashboard = require('./dashboard.service');
 const traceability = require('./traceability.service');
+const demoData = require('./demoData.service');
 
-module.exports = { settings, bom, productionOrder, execution, products, dashboard, traceability };
+module.exports = { settings, bom, productionOrder, execution, products, dashboard, traceability, demoData };

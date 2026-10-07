@@ -32,6 +32,8 @@ const ScrapRecordSchema = new mongoose.Schema(
     scrapDate: { type: Date, default: Date.now },
     notes: { type: String, trim: true, default: '' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    // Created by the manufacturing demo-data seeder (services/manufacturing/demoData.service.js).
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true, keepTimestampsInJSON: true }
 );

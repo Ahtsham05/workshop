@@ -72,6 +72,29 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
       ),
       default: counterDefaults,
     },
+    // Progress of the background demo-data load (services/manufacturing/demoData.service.js).
+    // Kept in the DB, not in memory, so any server instance can report it and a load cut
+    // short by a restart is recognisable (heartbeat goes stale).
+    demoJob: {
+      type: new mongoose.Schema(
+        {
+          state: { type: String, enum: ['running', 'done', 'failed'] },
+          action: { type: String, enum: ['load', 'reload'] },
+          branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
+          step: { type: Number, default: 0 },
+          total: { type: Number, default: 0 },
+          message: { type: String, default: '' },
+          error: { type: String, default: '' },
+          result: { type: mongoose.Schema.Types.Mixed, default: null },
+          startedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+          startedAt: { type: Date },
+          heartbeatAt: { type: Date },
+          finishedAt: { type: Date },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true, keepTimestampsInJSON: true }

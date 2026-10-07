@@ -742,6 +742,7 @@ const TAGS = [
   'MfgSettings',
   'MfgOutput',
   'MfgMovement',
+  'MfgDemo',
 ] as const
 
 /** Everything a stock movement can change. */
@@ -756,6 +757,41 @@ const EXECUTION_TAGS = [
   'MfgProduct',
   'MfgOutput',
   'MfgMovement',
+] as const
+
+export interface DemoDataJob {
+  /** `interrupted`: still marked running but its heartbeat went stale (server restarted). */
+  state: 'running' | 'done' | 'failed' | 'interrupted'
+  action: 'load' | 'reload'
+  step: number
+  total: number
+  percent: number
+  message: string
+  error: string
+  result: Record<string, number> | null
+  startedAt?: string
+  finishedAt?: string
+}
+
+export interface DemoDataStatus {
+  hasDemoData: boolean
+  products: number
+  boms: number
+  orders: number
+  issues: number
+  returns: number
+  outputs: number
+  receipts: number
+  scrap: number
+  job: DemoDataJob | null
+}
+
+/** Loading or removing demo data touches every manufacturing list and the catalog. */
+const ALL_DATA_TAGS = [
+  ...EXECUTION_TAGS,
+  'MfgBom',
+  'MfgSettings',
+  'MfgDemo',
 ] as const
 
 export const manufacturingApi = createApi({
@@ -783,6 +819,26 @@ export const manufacturingApi = createApi({
         body,
       }),
       invalidatesTags: ['MfgSettings'],
+    }),
+
+    // Demo data (current branch)
+    getDemoDataStatus: builder.query<DemoDataStatus, void>({
+      query: () => '/manufacturing/demo-data',
+      providesTags: ['MfgDemo'],
+    }),
+    // Starts a background load (202) — progress arrives through getDemoDataStatus.
+    loadDemoData: builder.mutation<DemoDataJob, { reload?: boolean } | void>({
+      query: (body) => ({
+        url: '/manufacturing/demo-data',
+        method: 'POST',
+        body: body ?? {},
+      }),
+      invalidatesTags: ['MfgDemo'],
+    }),
+    removeDemoData: builder.mutation<Record<string, number>, void>({
+      query: () => ({ url: '/manufacturing/demo-data', method: 'DELETE' }),
+      invalidatesTags: [...ALL_DATA_TAGS],
+      onQueryStarted: invalidateStockCaches,
     }),
 
     // Products
@@ -1304,10 +1360,23 @@ export const manufacturingApi = createApi({
   }),
 })
 
+/** Refresh every manufacturing view and the product catalog once a demo load finishes. */
+export const refreshAfterDemoData =
+  () =>
+  (dispatch: (action: unknown) => unknown): void => {
+    dispatch(manufacturingApi.util.invalidateTags([...ALL_DATA_TAGS]))
+    dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
+    dispatch(productApi.util.invalidateTags(['Product']))
+    dispatch(inventoryApi.util.invalidateTags(['Inventory'] as never))
+  }
+
 export const {
   useGetManufacturingDashboardQuery,
   useGetManufacturingSettingsQuery,
   useUpdateManufacturingSettingsMutation,
+  useGetDemoDataStatusQuery,
+  useLoadDemoDataMutation,
+  useRemoveDemoDataMutation,
   useGetManufacturingProductsQuery,
   useGetProductTypeSummaryQuery,
   useUpdateManufacturingProductMutation,

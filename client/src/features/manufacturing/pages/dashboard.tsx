@@ -36,6 +36,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { PriorityText, ProgressBar, StatusBadge } from '../components/badges'
+import { DemoDataBanner } from '../components/demo-data'
 import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
 import {
   PRODUCT_TYPE_META,
@@ -86,6 +87,12 @@ export default function ManufacturingDashboard() {
           </Button>
         }
       />
+
+      {data && (
+        <DemoDataBanner
+          hasOrders={Object.values(data.byStatus).some((n) => n > 0)}
+        />
+      )}
 
       <div className='grid grid-cols-2 gap-4 max-sm:gap-3 md:grid-cols-3 xl:grid-cols-6'>
         <StatCard

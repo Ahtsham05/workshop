@@ -145,6 +145,8 @@ const createOrder = async ({ organizationId, branchId, createdBy }, body) => {
     notes: body.notes || '',
     materials,
     statusHistory: [{ from: null, to: status, by: createdBy, at: new Date(), note: 'Created' }],
+    // Only the demo-data seeder sets this (the API validation doesn't accept it).
+    isDemo: body.isDemo === true,
     createdBy,
     updatedBy: createdBy,
   });
@@ -504,6 +506,8 @@ const createSubAssemblyOrders = async (
       priority: order.priority,
       operatorId,
       notes: `Sub-assembly for ${order.orderNumber}`,
+      // Children of demo orders are demo data too, so the demo cleanup removes them.
+      isDemo: order.isDemo === true,
     });
     created.push({ order: child, depth });
     if (recursive) {

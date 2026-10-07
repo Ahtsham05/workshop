@@ -326,6 +326,15 @@ const seedDemoData = async (ctx) => {
 const resetDemoData = async (ctx) => {
   const { organizationId } = ctx;
 
+  // Manufacturing demo products are isDemo too — clear them (and the BOMs/orders that use
+  // them) first, so the Product.deleteMany below never orphans manufacturing documents.
+  try {
+    // eslint-disable-next-line global-require
+    await require('./manufacturing/demoData.service').clearDemoData({ organizationId });
+  } catch (err) {
+    logger.warn(`Demo data reset: failed to clear manufacturing demo data — ${err.message}`);
+  }
+
   const [demoInvoices, demoPurchases, demoExpenses] = await Promise.all([
     Invoice.find({ organizationId, isDemo: true }).select('_id'),
     Purchase.find({ organizationId, isDemo: true }).select('_id'),

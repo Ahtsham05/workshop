@@ -37,6 +37,11 @@ router
   .route('/settings')
   .get(auth(VIEW), c.getSettings)
   .patch(auth('manageManufacturingSettings'), validate(v.updateSettings), c.updateSettings);
+router
+  .route('/demo-data')
+  .get(auth(VIEW), c.getDemoDataStatus)
+  .post(auth('manageManufacturingSettings'), c.loadDemoData)
+  .delete(auth('manageManufacturingSettings'), c.removeDemoData);
 
 // Manufacturing view of the existing product catalog (no separate product system)
 router.get('/products', auth(VIEW), validate(v.getProducts), c.getProducts);

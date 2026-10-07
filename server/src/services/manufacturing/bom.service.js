@@ -245,6 +245,8 @@ const createBom = async ({ organizationId, branchId, createdBy }, body) => {
     isDefault: false,
     effectiveFrom: body.effectiveFrom || null,
     effectiveTo: body.effectiveTo || null,
+    // Only the demo-data seeder sets this (the API validation doesn't accept it).
+    isDemo: body.isDemo === true,
     createdBy,
     updatedBy: createdBy,
   });
@@ -343,6 +345,7 @@ const createNewVersion = async ({ organizationId, branchId, createdBy }, bomId, 
     isLocked: false,
     effectiveFrom: body.effectiveFrom ?? null,
     effectiveTo: body.effectiveTo ?? null,
+    isDemo: !!source.isDemo,
     createdBy,
     updatedBy: createdBy,
   });

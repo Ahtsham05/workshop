@@ -323,6 +323,7 @@ const issueMaterials = async ({ organizationId, branchId, createdBy }, orderId, 
           lines,
           totalCost,
           notes: body.notes || '',
+          isDemo: !!order.isDemo,
           createdBy,
         },
       ],
@@ -475,6 +476,7 @@ const returnMaterialsInTx = async (
         lines: docLines,
         totalCost: roundMoney(docLines.reduce((s, l) => s + l.totalCost, 0)),
         notes: notes || '',
+        isDemo: !!order.isDemo,
         createdBy,
       },
     ],
@@ -649,6 +651,7 @@ const receiveGood = async (
         imeiIds: imeiIds.length ? imeiIds : undefined,
         serialNumbers: serialNumbers.length ? serialNumbers : undefined,
         notes: notes || '',
+        isDemo: !!order.isDemo,
         createdBy,
       },
     ],
@@ -828,6 +831,7 @@ const postInspection = async (order, output, result, ctx) => {
           totalCost: roundMoney(rejectedQuantity * unitCost),
           affectsStock: false,
           notes: rejectReason || '',
+          isDemo: !!order.isDemo,
           createdBy,
         },
         session
@@ -919,6 +923,7 @@ const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, bo
       status: 'pending_qc',
       reportedBy: createdBy,
       notes: body.notes || '',
+      isDemo: !!order.isDemo,
     });
 
     if (inspectNow) {
@@ -1081,6 +1086,7 @@ const resolveRework = async ({ organizationId, branchId, createdBy }, orderId, b
           totalCost: roundMoney(scrapQuantity * unitCost),
           affectsStock: false,
           notes: body.notes || '',
+          isDemo: !!order.isDemo,
           createdBy,
         },
         session
@@ -1359,6 +1365,7 @@ const recordScrap = async ({ organizationId, branchId, createdBy }, body) => {
         quantity,
         scrapDate: body.scrapDate || new Date(),
         notes: body.notes || '',
+        isDemo: !!(order && order.isDemo),
         createdBy,
       },
       session
@@ -1476,6 +1483,7 @@ const completeOrder = async ({ organizationId, branchId, createdBy }, orderId, {
             totalCost: cost,
             affectsStock: false,
             notes: 'Unused WIP scrapped on completion',
+            isDemo: !!order.isDemo,
             createdBy,
           },
           session
