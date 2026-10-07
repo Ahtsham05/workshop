@@ -221,7 +221,7 @@ function DateRangeField({
           })
         }
       >
-        <SelectTrigger aria-label={label}>
+        <SelectTrigger aria-label={label} className='w-full'>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
