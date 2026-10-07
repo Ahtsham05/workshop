@@ -57,6 +57,8 @@ const ProductionOutputSchema = new mongoose.Schema(
     inspectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     inspectionNotes: { type: String, trim: true, default: '' },
     notes: { type: String, trim: true, default: '' },
+    // Created by the manufacturing demo-data seeder (services/manufacturing/demoData.service.js).
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true, keepTimestampsInJSON: true }
 );

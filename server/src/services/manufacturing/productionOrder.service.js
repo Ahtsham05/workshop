@@ -116,6 +116,8 @@ const createOrder = async ({ organizationId, branchId, createdBy }, body) => {
     notes: body.notes || '',
     materials,
     statusHistory: [{ from: null, to: status, by: createdBy, at: new Date(), note: 'Created' }],
+    // Only the demo-data seeder sets this (the API validation doesn't accept it).
+    isDemo: body.isDemo === true,
     createdBy,
     updatedBy: createdBy,
   });

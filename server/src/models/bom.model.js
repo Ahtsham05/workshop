@@ -73,6 +73,8 @@ const BomSchema = new mongoose.Schema(
     effectiveTo: { type: Date, default: null },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    // Created by the manufacturing demo-data seeder (services/manufacturing/demoData.service.js).
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true, keepTimestampsInJSON: true }
 );

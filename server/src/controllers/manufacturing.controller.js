@@ -13,6 +13,7 @@ const {
   execution: executionService,
   products: productsService,
   dashboard: dashboardService,
+  demoData: demoDataService,
 } = manufacturingService;
 
 /** Read context: org always, branch when the client picked one (superAdmins may read org-wide). */
@@ -58,6 +59,35 @@ const updateSettings = catchAsync(async (req, res) => {
     metadata: { fields: Object.keys(req.body) },
   });
   res.send(settings);
+});
+
+// ── Demo data ────────────────────────────────────────────────────────────────────
+const getDemoDataStatus = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  res.send(await demoDataService.getDemoStatus(ctx));
+});
+
+const loadDemoData = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const reload = !!(req.body && req.body.reload === true);
+  const job = await demoDataService.startDemoLoad(ctx, { reload });
+  await audit(req, {
+    module: 'ManufacturingSettings',
+    entityName: reload ? 'Manufacturing demo data reloaded' : 'Manufacturing demo data loaded',
+  });
+  res.status(httpStatus.ACCEPTED).send(job);
+});
+
+const removeDemoData = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const result = await demoDataService.removeDemoData(ctx);
+  await audit(req, {
+    action: 'delete',
+    module: 'ManufacturingSettings',
+    entityName: 'Manufacturing demo data removed',
+    metadata: result,
+  });
+  res.send(result);
 });
 
 // ── Products ─────────────────────────────────────────────────────────────────────
@@ -410,6 +440,9 @@ module.exports = {
   getDashboard,
   getSettings,
   updateSettings,
+  getDemoDataStatus,
+  loadDemoData,
+  removeDemoData,
   getProducts,
   getProductTypeSummary,
   updateProductAttributes,

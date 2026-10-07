@@ -94,6 +94,18 @@ Every request is scoped by `organizationId` and (for writes, always) `branchId`;
 manufacturing router additionally rejects an `x-branch-id` that doesn't belong to the
 caller's organization (including for super-admins).
 
+## Demo data
+
+Manufacturing → Settings → **Demo data** (or the prompt on an empty dashboard) loads a sample
+fan factory into the current branch: 24 products, 8 BOMs (3 levels deep, a batch BOM, a locked
+v1 with a default v2, an inactive trial version), 15 production orders in every status with
+issues, partial receipts, scrap at all three stages, overdue orders and shortages, dated over
+the last five weeks. It runs through the real services (`services/manufacturing/demoData.service.js`),
+so stock and costs are consistent. Products are tagged `isDemo` + `manufacturing-demo`, and
+manufacturing documents carry `isDemo`. **Remove demo data** deletes exactly that set, keeps any
+demo product that the user's own BOMs or orders use, and restarts numbering for any document type
+that has no records left. Requires `manageManufacturingSettings`.
+
 ## Not in Phase 1
 
 MRP netting (incoming purchases, safety stock), scheduling/capacity, routings and work

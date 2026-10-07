@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { DemoDataCard } from '../components/demo-data'
 import { SectionHeader } from '../components/manufacturing-shell'
 import { PRIORITIES, PRIORITY_META } from '../lib/constants'
 
@@ -305,6 +306,8 @@ export default function ManufacturingSettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <DemoDataCard />
       </div>
     </div>
   )
