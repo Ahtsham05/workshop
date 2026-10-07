@@ -394,8 +394,10 @@ export interface ProductionReceipt {
   receiptDate: string
   balanceAfter?: number
   source?: 'output' | 'rework' | 'direct'
+  batchId?: string | null
   batchNumber?: string
   expiryDate?: string | null
+  imeiIds?: string[]
   serialNumbers?: string[]
   notes?: string
   createdBy?: Ref
@@ -503,6 +505,13 @@ export interface FinishedGoodsInput {
   location?: string
 }
 
+export interface OrderStatusCounts {
+  byStatus: Partial<Record<ProductionStatus, number>>
+  total: number
+  open: number
+  overdue: number
+}
+
 export interface OrderTreeNode {
   id: string
   orderNumber: string
@@ -592,6 +601,7 @@ export interface TraceLookupHit {
 export interface WipRow {
   id: string
   orderNumber: string
+  orderType?: OrderType
   productName: string
   sku?: string
   unit: string
@@ -660,6 +670,7 @@ export interface Assembly
 export interface DashboardOrder {
   id: string
   orderNumber: string
+  orderType?: OrderType
   productName: string
   plannedQuantity: number
   completedQuantity: number
@@ -702,6 +713,7 @@ export interface ManufacturingSettings {
   prefixes: {
     bom: string
     productionOrder: string
+    assemblyOrder: string
     materialIssue: string
     materialReturn: string
     productionOutput: string
@@ -1049,6 +1061,16 @@ export const manufacturingApi = createApi({
       }),
       invalidatesTags: ['MfgOrder', 'MfgDashboard', 'MfgRequirements'],
     }),
+    getOrderStatusCounts: builder.query<
+      OrderStatusCounts,
+      { orderType?: OrderType; search?: string }
+    >({
+      query: (params) => ({
+        url: '/manufacturing/production-orders/status-counts',
+        params,
+      }),
+      providesTags: ['MfgOrder'],
+    }),
     getOrderTree: builder.query<
       { ancestors: OrderTreeNode[]; order: OrderTreeNode },
       string
@@ -1384,6 +1406,7 @@ export const {
   useGetWhereUsedQuery,
   useGetAssembliesQuery,
   useGetBomsQuery,
+  useGetOrderStatusCountsQuery,
   useGetBomQuery,
   useGetBomVersionsQuery,
   useExplodeBomQuery,

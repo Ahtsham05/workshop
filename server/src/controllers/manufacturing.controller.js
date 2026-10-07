@@ -239,6 +239,10 @@ const createProductionOrder = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(order);
 });
 
+const getOrderStatusCounts = catchAsync(async (req, res) => {
+  res.send(await productionOrderService.countOrdersByStatus(readCtx(req), pick(req.query, ['orderType', 'search'])));
+});
+
 const getProductionOrders = catchAsync(async (req, res) => {
   const filter = pick(req.query, [
     'status',
@@ -524,6 +528,7 @@ const getWip = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getOrderStatusCounts,
   getDashboard,
   getSettings,
   updateSettings,

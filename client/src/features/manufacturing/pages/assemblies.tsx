@@ -6,14 +6,14 @@ import {
 } from '@/stores/manufacturing.api'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ProductTypeBadge } from '../components/badges'
 import { BomDetailSheet } from '../components/bom-detail-sheet'
 import { BomEditorDialog } from '../components/bom-editor-dialog'
-import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
+import { SearchField, Toolbar } from '../components/list-controls'
+import { EmptyState, PageHeader } from '../components/page'
 import { fmtQty } from '../lib/constants'
 
 /** Sub-assemblies: their own BOM and every parent BOM that consumes them. */
@@ -23,29 +23,60 @@ export default function AssembliesPage() {
   const { data, isLoading } = useGetAssembliesQuery()
   const [openBomId, setOpenBomId] = useState<string | null>(null)
   const [creatingFor, setCreatingFor] = useState<Assembly | null>(null)
+  const [search, setSearch] = useState('')
+  const needle = search.trim().toLowerCase()
+  const items = (data || []).filter(
+    (i) =>
+      !needle ||
+      i.name.toLowerCase().includes(needle) ||
+      (i.sku || '').toLowerCase().includes(needle)
+  )
 
   return (
-    <div className='space-y-4'>
-      <SectionHeader
-        title={t('Assemblies')}
+    <div className='space-y-5'>
+      <PageHeader
+        title={t('Structures')}
         description={t(
-          'Sub-assemblies are built from their own BOM and consumed inside other BOMs — e.g. Finished Product → Motor Assembly → Motor → Bearing.'
+          'Sub-assemblies are built from their own BOM and consumed inside other BOMs, for example Finished product → Motor assembly → Motor → Bearing.'
         )}
       />
-      {isLoading && <Skeleton className='h-40 w-full rounded-xl' />}
-      {!isLoading && !data?.length && (
+      {!!data?.length && (
+        <Toolbar>
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder={t('Search sub-assembly or SKU')}
+          />
+        </Toolbar>
+      )}
+      {isLoading && (
+        <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-3'>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className='h-48 w-full rounded-xl' />
+          ))}
+        </div>
+      )}
+      {!isLoading && !items.length && (
         <EmptyState
           icon={Layers}
-          title={t('No sub-assemblies yet')}
-          description={t(
-            'Classify products as Sub-Assembly under Products, give them a BOM, and use them as components in other BOMs.'
-          )}
+          title={
+            data?.length
+              ? t('No sub-assemblies match')
+              : t('No sub-assemblies yet')
+          }
+          description={
+            data?.length
+              ? t('Try another search.')
+              : t(
+                  'Classify products as Sub-Assembly under Products, give them a BOM, and use them as components in other BOMs.'
+                )
+          }
         />
       )}
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-3'>
-        {data?.map((item) => (
-          <Card key={item.id}>
-            <CardContent className='space-y-3 p-4'>
+        {items.map((item) => (
+          <Card key={item.id} className='gap-0 py-0 shadow-none'>
+            <CardContent className='space-y-4 p-4'>
               <div className='flex items-start justify-between gap-2'>
                 <div className='min-w-0'>
                   <div className='truncate font-semibold'>{item.name}</div>
@@ -57,7 +88,7 @@ export default function AssembliesPage() {
                 <ProductTypeBadge type={item.productType} />
               </div>
 
-              <div className='bg-muted/40 rounded-lg p-3'>
+              <div className='rounded-lg border p-3'>
                 <div className='text-muted-foreground text-[11px] font-medium tracking-wide uppercase'>
                   {t('Built from')}
                 </div>
@@ -102,14 +133,14 @@ export default function AssembliesPage() {
                 ) : (
                   <div className='mt-1 flex flex-wrap gap-1.5'>
                     {item.usedIn.map((parent) => (
-                      <Badge
+                      <button
                         key={parent.id}
-                        variant='outline'
-                        className='hover:bg-muted cursor-pointer font-normal'
+                        type='button'
                         onClick={() => setOpenBomId(parent.id)}
+                        className='hover:bg-muted focus-visible:ring-ring inline-flex h-7 items-center rounded-md border px-2 text-xs outline-none focus-visible:ring-2'
                       >
                         {parent.productName} · v{parent.version}
-                      </Badge>
+                      </button>
                     ))}
                   </div>
                 )}

@@ -11,18 +11,10 @@ import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { CellStack, DataTable, type Column } from '../components/data-table'
 import { InspectOutputDialog } from '../components/execution-dialogs'
-import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
+import { FilterChips } from '../components/list-controls'
+import { EmptyState, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
 import { fmtDate, fmtQty, refName } from '../lib/constants'
 
@@ -35,145 +27,212 @@ export default function QualityPage() {
   const [view, setView] = useState<'pending_qc' | 'inspected'>('pending_qc')
   const [page, setPage] = useState(1)
   const [inspecting, setInspecting] = useState<ProductionOutput | null>(null)
-  const { data, isLoading } = useGetOutputsQuery({
+  const { data, isLoading, isFetching } = useGetOutputsQuery({
     status: view,
     page,
     limit: 20,
   })
-  const rows = data?.results || []
+  // Pending count stays visible on the chip while browsing history.
+  const { data: pending } = useGetOutputsQuery({
+    status: 'pending_qc',
+    page: 1,
+    limit: 1,
+  })
+  const pendingView = view === 'pending_qc'
+
+  const columns: Column<ProductionOutput>[] = [
+    {
+      id: 'output',
+      header: t('Output'),
+      className: 'w-44',
+      cell: (o) => (
+        <CellStack
+          mono
+          primary={o.outputNumber}
+          secondary={`${fmtDate(o.reportedAt)} · ${refName(o.reportedBy) || '—'}`}
+        />
+      ),
+    },
+    {
+      id: 'product',
+      header: t('Product'),
+      cell: (o) => (
+        <div className='min-w-0'>
+          <div className='truncate font-medium'>{o.productName}</div>
+          <Link
+            to={
+              `/manufacturing/production-orders/${o.productionOrderId}` as never
+            }
+            className='text-muted-foreground font-mono text-xs hover:underline'
+          >
+            {o.orderNumber}
+          </Link>
+        </div>
+      ),
+    },
+    {
+      id: 'produced',
+      header: t('Produced'),
+      align: 'right',
+      cell: (o) => (
+        <span className='tabular-nums'>
+          {fmtQty(o.producedQuantity)}{' '}
+          <span className='text-muted-foreground text-xs'>{o.unit}</span>
+        </span>
+      ),
+    },
+    ...(!pendingView
+      ? ([
+          {
+            id: 'good',
+            header: t('Good'),
+            align: 'right',
+            cell: (o) => (
+              <span className='text-emerald-600 tabular-nums dark:text-emerald-400'>
+                {fmtQty(o.goodQuantity)}
+              </span>
+            ),
+          },
+          {
+            id: 'rejected',
+            header: t('Rejected'),
+            align: 'right',
+            hideBelow: 'md',
+            cell: (o) => (
+              <span
+                className={cn(
+                  'tabular-nums',
+                  o.rejectedQuantity > 0 && 'text-rose-600 dark:text-rose-400'
+                )}
+              >
+                {fmtQty(o.rejectedQuantity)}
+                {o.rejectedQuantity > 0 && o.rejectDisposition && (
+                  <span className='text-muted-foreground ml-1 text-xs'>
+                    → {t(o.rejectDisposition)}
+                  </span>
+                )}
+              </span>
+            ),
+          },
+        ] satisfies Column<ProductionOutput>[])
+      : []),
+    {
+      id: 'value',
+      header: t('Value'),
+      align: 'right',
+      hideBelow: 'lg',
+      cell: (o) => (
+        <span className='tabular-nums'>{formatMoney(o.materialCost)}</span>
+      ),
+    },
+    ...(pendingView && canInspect
+      ? ([
+          {
+            id: 'action',
+            header: <span className='sr-only'>{t('Actions')}</span>,
+            align: 'right',
+            className: 'w-28',
+            cell: (o) => (
+              <Button
+                size='sm'
+                className='h-8'
+                onClick={() => setInspecting(o)}
+              >
+                {t('Inspect')}
+              </Button>
+            ),
+          },
+        ] satisfies Column<ProductionOutput>[])
+      : []),
+  ]
 
   return (
-    <div className='space-y-4'>
-      <SectionHeader
+    <div className='space-y-5'>
+      <PageHeader
         title={t('Quality check')}
         description={t(
           'Output reported from the floor waits here. Passing units go to finished stock; rejected units go to scrap or rework.'
         )}
       />
-      <div className='inline-flex rounded-lg border p-0.5'>
-        {(
-          [
-            ['pending_qc', t('Waiting for inspection')],
-            ['inspected', t('Inspected')],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type='button'
-            onClick={() => {
-              setView(key)
-              setPage(1)
-            }}
-            className={cn(
-              'rounded-md px-3 py-1 text-xs',
-              view === key
-                ? 'bg-foreground text-background'
-                : 'text-muted-foreground hover:text-foreground'
+      <FilterChips
+        label={t('Inspection status')}
+        value={view}
+        onChange={(v) => {
+          setView(v as typeof view)
+          setPage(1)
+        }}
+        options={[
+          {
+            value: 'pending_qc',
+            label: t('Waiting for inspection'),
+            count: pending?.totalResults,
+            tone: 'warning',
+          },
+          { value: 'inspected', label: t('Inspected') },
+        ]}
+      />
+      <DataTable
+        caption={t('Quality check')}
+        columns={columns}
+        rows={data?.results}
+        rowKey={(o) => o.id}
+        loading={isLoading}
+        fetching={isFetching}
+        empty={
+          <EmptyState
+            bordered={false}
+            icon={ClipboardCheck}
+            title={
+              pendingView
+                ? t('Nothing waiting for inspection')
+                : t('No inspections yet')
+            }
+            description={
+              pendingView
+                ? t(
+                    'Output reported on an order appears here when quality check is required.'
+                  )
+                : undefined
+            }
+          />
+        }
+        mobileCard={(o) => (
+          <div className='space-y-2'>
+            <div className='flex items-start justify-between gap-3'>
+              <div className='min-w-0'>
+                <div className='truncate font-medium'>{o.productName}</div>
+                <div className='text-muted-foreground font-mono text-xs'>
+                  {o.outputNumber} · {o.orderNumber}
+                </div>
+              </div>
+              <span className='shrink-0 text-sm tabular-nums'>
+                {fmtQty(o.producedQuantity)} {o.unit}
+              </span>
+            </div>
+            {pendingView && canInspect ? (
+              <Button
+                size='sm'
+                className='h-9 w-full'
+                onClick={() => setInspecting(o)}
+              >
+                {t('Inspect')}
+              </Button>
+            ) : (
+              !pendingView && (
+                <div className='text-muted-foreground text-xs tabular-nums'>
+                  {t('Good')} {fmtQty(o.goodQuantity)} · {t('Rejected')}{' '}
+                  {fmtQty(o.rejectedQuantity)}
+                </div>
+              )
             )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <Card>
-        <CardContent className='space-y-3 p-0'>
-          <div className='overflow-x-auto'>
-            <Table>
-              <TableHeader>
-                <TableRow className='bg-muted/40'>
-                  <TableHead>{t('Output')}</TableHead>
-                  <TableHead>{t('Product')}</TableHead>
-                  <TableHead>{t('Order')}</TableHead>
-                  <TableHead className='text-right'>{t('Produced')}</TableHead>
-                  <TableHead className='text-right'>{t('Good')}</TableHead>
-                  <TableHead className='text-right'>{t('Rejected')}</TableHead>
-                  <TableHead className='text-right'>{t('Value')}</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading && (
-                  <TableRow>
-                    <TableCell colSpan={8}>
-                      <Skeleton className='h-16 w-full' />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!isLoading && rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8}>
-                      <EmptyState
-                        icon={ClipboardCheck}
-                        title={
-                          view === 'pending_qc'
-                            ? t('Nothing waiting for inspection')
-                            : t('No inspections yet')
-                        }
-                      />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {rows.map((o) => (
-                  <TableRow key={o.id}>
-                    <TableCell>
-                      <div className='font-mono text-xs font-medium'>
-                        {o.outputNumber}
-                      </div>
-                      <div className='text-muted-foreground text-xs'>
-                        {fmtDate(o.reportedAt)} · {refName(o.reportedBy) || '—'}
-                      </div>
-                    </TableCell>
-                    <TableCell className='font-medium'>
-                      {o.productName}
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        to={
-                          `/manufacturing/production-orders/${o.productionOrderId}` as never
-                        }
-                        className='text-primary font-mono text-xs hover:underline'
-                      >
-                        {o.orderNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {fmtQty(o.producedQuantity)}{' '}
-                      <span className='text-muted-foreground text-xs'>
-                        {o.unit}
-                      </span>
-                    </TableCell>
-                    <TableCell className='text-right text-emerald-600 tabular-nums dark:text-emerald-400'>
-                      {o.status === 'inspected' ? fmtQty(o.goodQuantity) : '—'}
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {o.status === 'inspected'
-                        ? `${fmtQty(o.rejectedQuantity)}${o.rejectDisposition ? ` → ${t(o.rejectDisposition)}` : ''}`
-                        : '—'}
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {formatMoney(o.materialCost)}
-                    </TableCell>
-                    <TableCell className='text-right'>
-                      {o.status === 'pending_qc' && canInspect && (
-                        <Button
-                          size='sm'
-                          className='h-7'
-                          onClick={() => setInspecting(o)}
-                        >
-                          {t('Inspect')}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
           </div>
-          <div className='px-3 pb-3'>
+        )}
+        footer={
+          data && data.totalPages > 1 ? (
             <Pager data={data} page={page} onPageChange={setPage} />
-          </div>
-        </CardContent>
-      </Card>
+          ) : undefined
+        }
+      />
       {inspecting && (
         <InspectFromQueue
           output={inspecting}

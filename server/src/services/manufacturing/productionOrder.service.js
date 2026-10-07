@@ -7,7 +7,7 @@ const bomService = require('./bom.service');
 const stockService = require('./stock.service');
 const executionService = require('./execution.service');
 const wip = require('./wip');
-const { roundQty, requireBranch, scopeFilter, escapeRegex, parseDateRange } = require('./common');
+const { roundQty, requireBranch, scopeFilter, aggregateScope, escapeRegex, parseDateRange } = require('./common');
 
 const findOrderOrThrow = async ({ organizationId, branchId }, orderId) => {
   const order = await ProductionOrder.findOne({ _id: orderId, ...scopeFilter({ organizationId, branchId }) });
@@ -174,6 +174,36 @@ const queryOrders = async ({ organizationId, branchId }, filter, options) => {
     query.$or = [{ orderNumber: re }, { productName: re }, { sku: re }, { bomNumber: re }];
   }
   return ProductionOrder.paginate(query, { sortBy: 'createdAt:desc', ...options });
+};
+
+/**
+ * Order counts per status for the list's filter chips, under the same order type and
+ * search as the list itself (status and overdue are what the chips choose, so they are
+ * not applied here). `overdue` counts open orders past their planned completion.
+ */
+const countOrdersByStatus = async (ctx, filter = {}) => {
+  const extra = {};
+  if (filter.orderType) extra.orderType = filter.orderType === 'production' ? { $ne: 'assembly' } : filter.orderType;
+  if (filter.search) {
+    const re = new RegExp(escapeRegex(filter.search), 'i');
+    extra.$or = [{ orderNumber: re }, { productName: re }, { sku: re }, { bomNumber: re }];
+  }
+  const [rows, overdue] = await Promise.all([
+    ProductionOrder.aggregate([
+      { $match: { ...aggregateScope(ctx), ...extra } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]),
+    ProductionOrder.countDocuments({
+      ...scopeFilter(ctx),
+      ...extra,
+      status: { $in: OPEN_PRODUCTION_STATUSES },
+      plannedCompletionDate: { $lt: new Date() },
+    }),
+  ]);
+  const byStatus = Object.fromEntries(rows.map((r) => [r._id, r.count]));
+  const total = rows.reduce((sum, r) => sum + r.count, 0);
+  const open = OPEN_PRODUCTION_STATUSES.reduce((sum, st) => sum + (byStatus[st] || 0), 0);
+  return { byStatus, total, open, overdue };
 };
 
 const getOrder = async (ctx, orderId) => findOrderOrThrow(ctx, orderId);
@@ -560,6 +590,7 @@ const getOrderTree = async (ctx, orderId) => {
 };
 
 module.exports = {
+  countOrdersByStatus,
   createSubAssemblyOrders,
   getOrderTree,
   createOrder,

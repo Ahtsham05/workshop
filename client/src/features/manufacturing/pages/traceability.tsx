@@ -20,16 +20,9 @@ import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Badge } from '@/components/ui/badge'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
+import { EmptyState, PageHeader, Panel } from '../components/page'
 import { TraceTree, WhereUsedTree } from '../components/trace-views'
 
 const KIND_ICON = { serial: ScanLine, batch: Layers, order: Factory } as const
@@ -65,80 +58,85 @@ export default function TraceabilityPage() {
   })
 
   return (
-    <div className='space-y-4'>
-      <SectionHeader
+    <div className='space-y-5'>
+      <PageHeader
         title={t('Traceability')}
         description={t(
           'Follow any finished unit back to its production and assembly orders, components, raw-material batches and suppliers — or any raw-material batch forward to the finished products that contain it.'
         )}
       />
-      <Card>
-        <CardContent className='space-y-3 p-4'>
-          <div className='relative'>
-            <Search className='text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={t('Serial / IMEI, batch number or order number…')}
-              className='h-11 pl-9 text-base'
-              autoFocus
-            />
-          </div>
-          {debounced.length >= 2 && (
-            <div className='flex flex-wrap gap-2'>
-              {isFetching && (
-                <span className='text-muted-foreground text-xs'>
-                  {t('Searching…')}
-                </span>
-              )}
-              {!isFetching && hits?.length === 0 && (
-                <span className='text-muted-foreground text-xs'>
-                  {t('No matches')}
-                </span>
-              )}
-              {hits?.map((hit) => {
-                const Icon = KIND_ICON[hit.kind]
-                const active = selected?.id === hit.id
-                return (
-                  <button
-                    key={`${hit.kind}:${hit.id}`}
-                    type='button'
-                    onClick={() => setSelected(hit)}
+      <div className='space-y-3'>
+        <div className='relative max-w-2xl'>
+          <Search
+            className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2'
+            aria-hidden
+          />
+          <Input
+            type='search'
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('Serial / IMEI, batch number or order number')}
+            aria-label={t('Serial / IMEI, batch number or order number')}
+            className='h-11 pl-9 text-base'
+            showVoiceInput={false}
+            autoFocus
+          />
+        </div>
+        {debounced.length >= 2 && (
+          <div className='flex flex-wrap gap-2'>
+            {isFetching && (
+              <span className='text-muted-foreground text-xs'>
+                {t('Searching…')}
+              </span>
+            )}
+            {!isFetching && hits?.length === 0 && (
+              <span className='text-muted-foreground text-xs'>
+                {t('No matches')}
+              </span>
+            )}
+            {hits?.map((hit) => {
+              const Icon = KIND_ICON[hit.kind]
+              const active = selected?.id === hit.id
+              return (
+                <button
+                  key={`${hit.kind}:${hit.id}`}
+                  type='button'
+                  onClick={() => setSelected(hit)}
+                  aria-pressed={active}
+                  className={cn(
+                    'focus-visible:ring-ring flex min-h-9 items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-sm transition-colors outline-none focus-visible:ring-2',
+                    active
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'hover:bg-muted'
+                  )}
+                >
+                  <Icon className='h-3.5 w-3.5' />
+                  <span className='font-mono'>{hit.label}</span>
+                  <span
                     className={cn(
-                      'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-sm transition-colors',
-                      active
-                        ? 'border-foreground bg-foreground text-background'
-                        : 'hover:bg-muted'
+                      'text-xs',
+                      active ? 'opacity-80' : 'text-muted-foreground'
                     )}
                   >
-                    <Icon className='h-3.5 w-3.5' />
-                    <span className='font-mono'>{hit.label}</span>
-                    <span
+                    {hit.productName}
+                  </span>
+                  {hit.kind !== 'order' && (
+                    <Badge
+                      variant='outline'
                       className={cn(
-                        'text-xs',
-                        active ? 'opacity-80' : 'text-muted-foreground'
+                        'h-5 px-1.5 text-[10px]',
+                        active && 'border-background/40 text-background'
                       )}
                     >
-                      {hit.productName}
-                    </span>
-                    {hit.kind !== 'order' && (
-                      <Badge
-                        variant='outline'
-                        className={cn(
-                          'h-5 px-1.5 text-[10px]',
-                          active && 'border-background/40 text-background'
-                        )}
-                      >
-                        {hit.madeHere ? t('made here') : t('purchased')}
-                      </Badge>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      {hit.madeHere ? t('made here') : t('purchased')}
+                    </Badge>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {!selected ? (
         <EmptyState
@@ -189,53 +187,47 @@ function TraceResult({
 
   return (
     <div className='grid gap-4 xl:grid-cols-2'>
-      <Card>
-        <CardHeader className='pb-3'>
-          <CardTitle className='flex items-center gap-2 text-base'>
-            <ArrowDownToLine className='h-4 w-4' />
+      <Panel
+        title={
+          <span className='flex items-center gap-2'>
+            <ArrowDownToLine className='h-4 w-4' aria-hidden />
             {t('Made from')}
-          </CardTitle>
-          <CardDescription>
-            {t(
-              'Finished product → production order → assembly orders → components → batches → suppliers'
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {forwardLoading && <Skeleton className='h-40 w-full' />}
-          {!forwardLoading && forwardTrace && <TraceTree node={forwardTrace} />}
-          {!forwardLoading && !forwardTrace && (
-            <p className='text-muted-foreground py-6 text-center text-sm'>
-              {forwardFinished.data?.message ||
-                t('This item was purchased, not produced here.')}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className='pb-3'>
-          <CardTitle className='flex items-center gap-2 text-base'>
-            <ArrowUpFromLine className='h-4 w-4' />
+          </span>
+        }
+        description={t(
+          'Finished product → production order → assembly orders → components → batches → suppliers'
+        )}
+      >
+        {forwardLoading && <Skeleton className='h-40 w-full' />}
+        {!forwardLoading && forwardTrace && <TraceTree node={forwardTrace} />}
+        {!forwardLoading && !forwardTrace && (
+          <p className='text-muted-foreground py-6 text-center text-sm'>
+            {forwardFinished.data?.message ||
+              t('This item was purchased, not produced here.')}
+          </p>
+        )}
+      </Panel>
+      <Panel
+        title={
+          <span className='flex items-center gap-2'>
+            <ArrowUpFromLine className='h-4 w-4' aria-hidden />
             {t('Used in')}
-          </CardTitle>
-          <CardDescription>
-            {t('Batch → assembly → production → finished products')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {subject.kind === 'order' ? (
-            <p className='text-muted-foreground py-6 text-center text-sm'>
-              {t(
-                'Search a batch or serial number of what this order produced to see where it went.'
-              )}
-            </p>
-          ) : reverse.isLoading ? (
-            <Skeleton className='h-40 w-full' />
-          ) : (
-            <WhereUsedTree nodes={reverse.data || []} />
-          )}
-        </CardContent>
-      </Card>
+          </span>
+        }
+        description={t('Batch → assembly → production → finished products')}
+      >
+        {subject.kind === 'order' ? (
+          <p className='text-muted-foreground py-6 text-center text-sm'>
+            {t(
+              'Search a batch or serial number of what this order produced to see where it went.'
+            )}
+          </p>
+        ) : reverse.isLoading ? (
+          <Skeleton className='h-40 w-full' />
+        ) : (
+          <WhereUsedTree nodes={reverse.data || []} />
+        )}
+      </Panel>
     </div>
   )
 }

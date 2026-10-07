@@ -813,3 +813,32 @@ describeTx('Assembly orders, nesting and traceability', () => {
     await manufacturing.settings.updateSettings(ORG, { requireQualityCheck: false }, USER);
   }
 });
+
+describe('List support for the UI', () => {
+  test('settings saved straight back from GET pass validation (every numbering prefix is accepted)', async () => {
+    const validation = require('../../src/validations/manufacturing.validation'); // eslint-disable-line global-require
+    const settings = await manufacturing.settings.getSettings(ORG);
+    const { error } = validation.updateSettings.body.validate({
+      prefixes: settings.toJSON().prefixes,
+      numberPadding: settings.numberPadding,
+    });
+    expect(error).toBeUndefined();
+    const saved = await manufacturing.settings.updateSettings(ORG, { prefixes: { assemblyOrder: 'asy' } }, USER);
+    expect(saved.prefixes.assemblyOrder).toBe('ASY');
+  });
+
+  test('status counts per order type drive the filter chips', async () => {
+    const { fan } = await buildMotorTree();
+    const po = manufacturing.productionOrder;
+    const a = await po.createOrder(ctx, { productId: fan._id, plannedQuantity: 1 });
+    await po.createOrder(ctx, { productId: fan._id, plannedQuantity: 2, plannedCompletionDate: '2020-01-01' });
+    await po.changeStatus(ctx, a._id, { status: 'cancelled' });
+
+    const counts = await po.countOrdersByStatus(ctx, { orderType: 'production' });
+    expect(counts).toMatchObject({ total: 2, open: 1, overdue: 1, byStatus: { draft: 1, cancelled: 1 } });
+    expect(await po.countOrdersByStatus(ctx, { orderType: 'assembly' })).toMatchObject({ total: 0, open: 0 });
+    expect((await po.countOrdersByStatus(ctx, { orderType: 'production', search: 'nothing-like-this' })).total).toBe(0);
+    // Another organization sees none of it.
+    expect((await po.countOrdersByStatus({ organizationId: id(), branchId: String(BRANCH) }, {})).total).toBe(0);
+  });
+});

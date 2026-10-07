@@ -14,21 +14,11 @@ import {
 } from '@/stores/manufacturing.api'
 import { useFormatMoney } from '@/lib/format-money'
 import { getErrorMessage } from '@/lib/get-error-message'
-import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -38,17 +28,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { ProductTypeBadge } from '../components/badges'
-import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
+import { CellStack, DataTable, type Column } from '../components/data-table'
+import {
+  FilterChips,
+  SearchField,
+  Toolbar,
+  type ChipOption,
+} from '../components/list-controls'
+import { EmptyState, Field, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
 import {
   PROCUREMENT_LABELS,
@@ -93,6 +89,7 @@ export default function ManufacturingProducts() {
   const rows = data?.results || []
   const allOnPage =
     rows.length > 0 && rows.every((r) => selected.includes(r.id))
+  const someOnPage = rows.some((r) => selected.includes(r.id))
   const total = summary ? Object.values(summary).reduce((s, n) => s + n, 0) : 0
 
   const applyBulk = async () => {
@@ -115,240 +112,264 @@ export default function ManufacturingProducts() {
     }
   }
 
-  const chips: { key: string; label: string; count?: number }[] = [
-    { key: 'all', label: t('All'), count: total },
-    ...PRODUCT_TYPES.map((type) => ({
-      key: type,
-      label: t(PRODUCT_TYPE_META[type].label),
-      count: summary?.[type],
-    })),
+  const toggle = (id: string, on: boolean) =>
+    setSelected(on ? [...selected, id] : selected.filter((x) => x !== id))
+
+  const chips: ChipOption[] = [
+    { value: 'all', label: t('All'), count: total },
+    ...PRODUCT_TYPES.filter((type) => (summary?.[type] ?? 1) > 0).map(
+      (type) => ({
+        value: type,
+        label: t(PRODUCT_TYPE_META[type].label),
+        count: summary?.[type],
+      })
+    ),
     {
-      key: 'unclassified',
+      value: 'unclassified',
       label: t('Unclassified'),
       count: summary?.unclassified,
+      tone: 'warning',
     },
   ]
 
+  const columns: Column<ManufacturingProduct>[] = [
+    ...(canEdit
+      ? [
+          {
+            id: 'select',
+            className: 'w-10',
+            header: (
+              <Checkbox
+                checked={
+                  allOnPage ? true : someOnPage ? 'indeterminate' : false
+                }
+                onCheckedChange={(v) =>
+                  setSelected(
+                    v
+                      ? [...new Set([...selected, ...rows.map((r) => r.id)])]
+                      : selected.filter((id) => !rows.some((r) => r.id === id))
+                  )
+                }
+                aria-label={t('Select all on this page')}
+              />
+            ),
+            cell: (p: ManufacturingProduct) => (
+              <Checkbox
+                checked={selected.includes(p.id)}
+                onCheckedChange={(v) => toggle(p.id, !!v)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={t('Select {{name}}').replace('{{name}}', p.name)}
+              />
+            ),
+          } satisfies Column<ManufacturingProduct>,
+        ]
+      : []),
+    {
+      id: 'product',
+      header: t('Product'),
+      cell: (p) => <CellStack primary={p.name} secondary={p.sku || '—'} />,
+    },
+    {
+      id: 'type',
+      header: t('Type'),
+      cell: (p) => <ProductTypeBadge type={p.productType} />,
+    },
+    {
+      id: 'procurement',
+      header: t('Procurement'),
+      hideBelow: 'lg',
+      cell: (p) => (
+        <span className='text-muted-foreground'>
+          {p.procurementType ? t(PROCUREMENT_LABELS[p.procurementType]) : '—'}
+        </span>
+      ),
+    },
+    {
+      id: 'onhand',
+      header: t('On hand'),
+      align: 'right',
+      cell: (p) => (
+        <span className='tabular-nums'>
+          {fmtQty(p.stockQuantity)}{' '}
+          <span className='text-muted-foreground text-xs'>{p.unit}</span>
+        </span>
+      ),
+    },
+    {
+      id: 'cost',
+      header: t('Cost'),
+      align: 'right',
+      hideBelow: 'md',
+      cell: (p) => <span className='tabular-nums'>{formatMoney(p.cost)}</span>,
+    },
+    {
+      id: 'bom',
+      header: t('BOM'),
+      hideBelow: 'lg',
+      cell: (p) =>
+        p.bomCount > 0 ? (
+          <Link
+            to={'/manufacturing/boms' as never}
+            search={{ productId: p.id } as never}
+            onClick={(e) => e.stopPropagation()}
+            className='inline-flex items-center gap-1 text-sm hover:underline'
+          >
+            <FileStack className='text-muted-foreground h-3.5 w-3.5' />
+            {t('{{count}} version(s)').replace('{{count}}', String(p.bomCount))}
+          </Link>
+        ) : (
+          <span className='text-muted-foreground'>—</span>
+        ),
+    },
+    ...(canEdit
+      ? [
+          {
+            id: 'edit',
+            header: <span className='sr-only'>{t('Actions')}</span>,
+            className: 'w-12',
+            align: 'right',
+            cell: (p: ManufacturingProduct) => (
+              <Button
+                variant='ghost'
+                size='icon'
+                className='h-8 w-8'
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditing(p)
+                }}
+                aria-label={t(
+                  'Edit manufacturing attributes of {{name}}'
+                ).replace('{{name}}', p.name)}
+              >
+                <Pencil className='h-3.5 w-3.5' />
+              </Button>
+            ),
+          } satisfies Column<ManufacturingProduct>,
+        ]
+      : []),
+  ]
+
   return (
-    <div className='space-y-4'>
-      <SectionHeader
-        title={t('Manufacturing products')}
+    <div className='space-y-5'>
+      <PageHeader
+        title={t('Products')}
         description={t(
-          'Your existing product catalog, classified for production. No separate product list — changes here apply to the same products used in sales and purchasing.'
+          'Your existing catalog, classified for production. Changes here apply to the same products used in sales and purchasing.'
         )}
       />
 
-      <div className='-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]'>
-        {chips.map((chip) => (
-          <button
-            key={chip.key}
-            type='button'
-            onClick={() => {
-              setTypeFilter(chip.key)
-              setPage(1)
-              setSelected([])
-            }}
-            className={cn(
-              'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors',
-              typeFilter === chip.key
-                ? 'border-foreground bg-foreground text-background'
-                : 'hover:bg-muted'
-            )}
+      <div className='space-y-3'>
+        {canEdit && selected.length > 0 ? (
+          <div
+            className='bg-muted/50 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2'
+            role='region'
+            aria-label={t('Bulk actions')}
           >
-            {chip.label}
-            {chip.count !== undefined && (
-              <span className='tabular-nums opacity-70'>{chip.count}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      <Card>
-        <CardContent className='space-y-3 p-4 max-sm:p-3'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <Input
-              placeholder={t('Search name, SKU or barcode…')}
+            <span className='text-sm font-medium'>
+              {t('{{count}} selected').replace(
+                '{{count}}',
+                String(selected.length)
+              )}
+            </span>
+            <div className='ml-auto flex flex-wrap items-center gap-2 max-sm:ml-0 max-sm:w-full'>
+              <Select value={bulkType} onValueChange={setBulkType}>
+                <SelectTrigger
+                  className='h-9 w-48 max-sm:flex-1'
+                  aria-label={t('Set type')}
+                >
+                  <SelectValue placeholder={t('Set type…')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRODUCT_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {t(PRODUCT_TYPE_META[type].label)}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NONE}>
+                    {t('Clear classification')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                size='sm'
+                className='h-9'
+                onClick={applyBulk}
+                disabled={!bulkType || bulkBusy}
+              >
+                <Tags className='mr-1.5 h-3.5 w-3.5' />
+                {t('Apply')}
+              </Button>
+              <Button
+                size='sm'
+                variant='ghost'
+                className='h-9'
+                onClick={() => setSelected([])}
+              >
+                {t('Clear')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Toolbar>
+            <SearchField
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
+              onChange={(v) => {
+                setSearch(v)
                 setPage(1)
               }}
-              className='h-9 w-72 max-sm:w-full'
+              placeholder={t('Search name, SKU or barcode')}
             />
-            {canEdit && selected.length > 0 && (
-              <div className='bg-muted/40 ml-auto flex flex-wrap items-center gap-2 rounded-lg border px-2 py-1 max-sm:ml-0 max-sm:w-full'>
-                <span className='text-muted-foreground text-xs'>
-                  {t('{{count}} selected').replace(
-                    '{{count}}',
-                    String(selected.length)
-                  )}
-                </span>
-                <Select value={bulkType} onValueChange={setBulkType}>
-                  <SelectTrigger className='h-8 w-44'>
-                    <SelectValue placeholder={t('Set type…')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRODUCT_TYPES.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {t(PRODUCT_TYPE_META[type].label)}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value={NONE}>
-                      {t('Clear classification')}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  size='sm'
-                  onClick={applyBulk}
-                  disabled={!bulkType || bulkBusy}
-                >
-                  <Tags className='mr-1.5 h-3.5 w-3.5' />
-                  {t('Apply')}
-                </Button>
-              </div>
-            )}
-          </div>
+          </Toolbar>
+        )}
+        <FilterChips
+          label={t('Filter by product type')}
+          options={chips}
+          value={typeFilter}
+          onChange={(v) => {
+            setTypeFilter(v)
+            setPage(1)
+            setSelected([])
+          }}
+        />
+      </div>
 
-          <div className='overflow-x-auto rounded-lg border'>
-            <Table>
-              <TableHeader>
-                <TableRow className='bg-muted/40'>
-                  {canEdit && (
-                    <TableHead className='w-10'>
-                      <Checkbox
-                        checked={allOnPage}
-                        onCheckedChange={(v) =>
-                          setSelected(
-                            v
-                              ? [
-                                  ...new Set([
-                                    ...selected,
-                                    ...rows.map((r) => r.id),
-                                  ]),
-                                ]
-                              : selected.filter(
-                                  (id) => !rows.some((r) => r.id === id)
-                                )
-                          )
-                        }
-                        aria-label={t('Select page')}
-                      />
-                    </TableHead>
-                  )}
-                  <TableHead>{t('Product')}</TableHead>
-                  <TableHead>{t('Type')}</TableHead>
-                  <TableHead>{t('Procurement')}</TableHead>
-                  <TableHead className='text-right'>{t('On hand')}</TableHead>
-                  <TableHead className='text-right'>{t('Cost')}</TableHead>
-                  <TableHead>{t('BOM')}</TableHead>
-                  <TableHead className='w-10' />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading &&
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={8}>
-                        <Skeleton className='h-6 w-full' />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                {!isLoading && rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8}>
-                      <EmptyState
-                        icon={Boxes}
-                        title={t('No products match')}
-                        description={t('Try another type or search term.')}
-                      />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {rows.map((product) => (
-                  <TableRow
-                    key={product.id}
-                    className={cn(isFetching && 'opacity-70')}
-                  >
-                    {canEdit && (
-                      <TableCell>
-                        <Checkbox
-                          checked={selected.includes(product.id)}
-                          onCheckedChange={(v) =>
-                            setSelected(
-                              v
-                                ? [...selected, product.id]
-                                : selected.filter((id) => id !== product.id)
-                            )
-                          }
-                          aria-label={product.name}
-                        />
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <div className='font-medium'>{product.name}</div>
-                      <div className='text-muted-foreground text-xs'>
-                        {product.sku || '—'}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <ProductTypeBadge type={product.productType} />
-                    </TableCell>
-                    <TableCell className='text-muted-foreground text-sm'>
-                      {product.procurementType
-                        ? t(PROCUREMENT_LABELS[product.procurementType])
-                        : '—'}
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {fmtQty(product.stockQuantity)}{' '}
-                      <span className='text-muted-foreground text-xs'>
-                        {product.unit}
-                      </span>
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {formatMoney(product.cost)}
-                    </TableCell>
-                    <TableCell>
-                      {product.bomCount > 0 ? (
-                        <Link
-                          to={'/manufacturing/boms' as never}
-                          search={{ productId: product.id } as never}
-                          className='text-primary inline-flex items-center gap-1 text-sm hover:underline'
-                        >
-                          <FileStack className='h-3.5 w-3.5' />
-                          {t('{{count}} version(s)').replace(
-                            '{{count}}',
-                            String(product.bomCount)
-                          )}
-                        </Link>
-                      ) : (
-                        <span className='text-muted-foreground text-xs'>—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {canEdit && (
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          className='h-8 w-8'
-                          onClick={() => setEditing(product)}
-                          aria-label={t('Edit manufacturing attributes')}
-                        >
-                          <Pencil className='h-3.5 w-3.5' />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+      <DataTable
+        caption={t('Products')}
+        columns={columns}
+        rows={rows}
+        rowKey={(p) => p.id}
+        loading={isLoading}
+        fetching={isFetching}
+        onRowClick={canEdit ? (p) => setEditing(p) : undefined}
+        rowClassName={(p) => selected.includes(p.id) && 'bg-muted/40'}
+        empty={
+          <EmptyState
+            bordered={false}
+            icon={Boxes}
+            title={t('No products match')}
+            description={t('Try another type or search term.')}
+          />
+        }
+        mobileCard={(p) => (
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0 space-y-1'>
+              <div className='truncate font-medium'>{p.name}</div>
+              <div className='text-muted-foreground text-xs'>
+                {p.sku || '—'} · {fmtQty(p.stockQuantity)} {p.unit}
+              </div>
+            </div>
+            <ProductTypeBadge type={p.productType} />
           </div>
-          <Pager data={data} page={page} onPageChange={setPage} />
-        </CardContent>
-      </Card>
+        )}
+        footer={
+          data && data.totalPages > 1 ? (
+            <Pager data={data} page={page} onPageChange={setPage} />
+          ) : undefined
+        }
+      />
 
       {editing && (
-        <ProductAttributesDialog
+        <ProductAttributesSheet
           product={editing}
           onClose={() => setEditing(null)}
         />
@@ -357,7 +378,7 @@ export default function ManufacturingProducts() {
   )
 }
 
-function ProductAttributesDialog({
+function ProductAttributesSheet({
   product,
   onClose,
 }: {
@@ -404,17 +425,24 @@ function ProductAttributesDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className='sm:max-w-md'>
-        <DialogHeader>
-          <DialogTitle>{product.name}</DialogTitle>
-          <DialogDescription>
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className='flex w-full flex-col gap-0 sm:max-w-md'>
+        <SheetHeader className='border-b px-5 py-4'>
+          <SheetTitle>{product.name}</SheetTitle>
+          <SheetDescription>
             {t(
-              'Manufacturing attributes — everything else about this product stays as it is.'
+              'Manufacturing attributes. Everything else about this product stays as it is.'
             )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className='grid gap-4'>
+          </SheetDescription>
+        </SheetHeader>
+        <div className='grid flex-1 content-start gap-5 overflow-y-auto px-5 py-5'>
+          <dl className='bg-muted/40 grid grid-cols-3 gap-3 rounded-lg border px-3 py-2.5'>
+            <Field label={t('SKU')}>{product.sku || '—'}</Field>
+            <Field label={t('On hand')}>
+              {fmtQty(product.stockQuantity)} {product.unit}
+            </Field>
+            <Field label={t('BOMs')}>{product.bomCount}</Field>
+          </dl>
           <div className='grid gap-1.5'>
             <Label>{t('Product type')}</Label>
             <Select value={productType} onValueChange={setProductType}>
@@ -482,15 +510,15 @@ function ProductAttributesDialog({
             </Select>
           </div>
         </div>
-        <DialogFooter>
+        <SheetFooter className='flex-row justify-end border-t px-5 py-3'>
           <Button variant='outline' onClick={onClose}>
             {t('Cancel')}
           </Button>
           <Button onClick={save} disabled={isLoading}>
-            {t('Save')}
+            {t('Save changes')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

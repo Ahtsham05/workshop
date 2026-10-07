@@ -36,6 +36,7 @@ const updateSettings = {
       prefixes: Joi.object().keys({
         bom: prefix(),
         productionOrder: prefix(),
+        assemblyOrder: prefix(),
         materialIssue: prefix(),
         materialReturn: prefix(),
         productionOutput: prefix(),
@@ -203,6 +204,13 @@ const createProductionOrder = {
     parentMaterialLineId: id().allow(null),
     plannedQuantity: orderBody.plannedQuantity.required(),
     status: Joi.string().valid('draft', 'planned'),
+  }),
+};
+
+const getOrderStatusCounts = {
+  query: Joi.object().keys({
+    orderType: Joi.string().valid(...ORDER_TYPES),
+    search: Joi.string().allow(''),
   }),
 };
 
@@ -434,6 +442,7 @@ const listTransactions = {
 const issueIdParam = { params: Joi.object().keys({ issueId: id().required() }) };
 
 module.exports = {
+  getOrderStatusCounts,
   updateSettings,
   getProducts,
   updateProductAttributes,

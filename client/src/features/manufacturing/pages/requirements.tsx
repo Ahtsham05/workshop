@@ -1,206 +1,240 @@
-import { Fragment, useState } from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { ChevronDown, ChevronRight, ListChecks } from 'lucide-react'
-import { useGetRequirementsQuery } from '@/stores/manufacturing.api'
-import { cn } from '@/lib/utils'
-import { useLanguage } from '@/context/language-context'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ChevronRight, ListChecks } from 'lucide-react'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+  useGetRequirementsQuery,
+  type RequirementLine,
+} from '@/stores/manufacturing.api'
+import { useLanguage } from '@/context/language-context'
+import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '../components/badges'
-import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
+import { CellStack, DataTable, type Column } from '../components/data-table'
+import { DetailSheet, SheetSection } from '../components/detail-sheet'
+import { FilterChips, SearchField, Toolbar } from '../components/list-controls'
+import {
+  EmptyState,
+  Field,
+  PageHeader,
+  Stat,
+  StatGrid,
+} from '../components/page'
 import { fmtQty } from '../lib/constants'
+
+const lineKey = (l: RequirementLine) =>
+  `${l.branchId}:${l.productId}:${l.variantId || ''}`
+
+function Shortage({ line }: { line: RequirementLine }) {
+  const { t } = useLanguage()
+  return line.shortageQuantity > 0 ? (
+    <span className='font-medium text-rose-600 tabular-nums dark:text-rose-400'>
+      −{fmtQty(line.shortageQuantity)}
+    </span>
+  ) : (
+    <span className='text-emerald-600 dark:text-emerald-400'>
+      {t('Covered')}
+    </span>
+  )
+}
 
 /** Outstanding material needs of all open orders vs on-hand stock (no MRP netting yet). */
 export default function RequirementsPage() {
   const { t } = useLanguage()
-  const [shortOnly, setShortOnly] = useState(false)
+  const [view, setView] = useState<'all' | 'short'>('all')
   const [search, setSearch] = useState('')
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [open, setOpen] = useState<RequirementLine | null>(null)
   const { data, isLoading } = useGetRequirementsQuery()
 
+  const needle = search.trim().toLowerCase()
   const lines = (data?.lines || []).filter(
     (l) =>
-      (!shortOnly || l.shortageQuantity > 0) &&
-      (!search || l.productName.toLowerCase().includes(search.toLowerCase()))
+      (view === 'all' || l.shortageQuantity > 0) &&
+      (!needle ||
+        l.productName.toLowerCase().includes(needle) ||
+        (l.sku || '').toLowerCase().includes(needle))
   )
 
+  const columns: Column<RequirementLine>[] = [
+    {
+      id: 'material',
+      header: t('Material'),
+      cell: (l) => <CellStack primary={l.productName} secondary={l.sku} />,
+    },
+    {
+      id: 'need',
+      header: t('Outstanding need'),
+      align: 'right',
+      cell: (l) => (
+        <span className='tabular-nums'>
+          {fmtQty(l.requiredQuantity)}{' '}
+          <span className='text-muted-foreground text-xs'>{l.unit}</span>
+        </span>
+      ),
+    },
+    {
+      id: 'onhand',
+      header: t('On hand'),
+      align: 'right',
+      hideBelow: 'md',
+      cell: (l) => (
+        <span className='text-muted-foreground tabular-nums'>
+          {fmtQty(l.availableQuantity)}
+        </span>
+      ),
+    },
+    {
+      id: 'short',
+      header: t('Shortage'),
+      align: 'right',
+      cell: (l) => <Shortage line={l} />,
+    },
+    {
+      id: 'orders',
+      header: t('Orders'),
+      align: 'right',
+      hideBelow: 'lg',
+      cell: (l) => (
+        <span className='text-muted-foreground inline-flex items-center gap-1 tabular-nums'>
+          {l.orders?.length ?? 0}
+          <ChevronRight className='h-3.5 w-3.5' aria-hidden />
+        </span>
+      ),
+    },
+  ]
+
   return (
-    <div className='space-y-4'>
-      <SectionHeader
+    <div className='space-y-5'>
+      <PageHeader
         title={t('Material requirements')}
         description={t(
           'What every planned, released and running order still needs, against what is on the shelf right now.'
         )}
       />
-      <div className='grid grid-cols-3 gap-3'>
-        {[
-          [t('Open orders'), data?.orderCount ?? 0],
-          [t('Materials needed'), data?.materialCount ?? 0],
-          [t('Short materials'), data?.shortageCount ?? 0],
-        ].map(([label, value], i) => (
-          <Card key={String(label)}>
-            <CardContent className='p-4'>
-              <div className='text-muted-foreground text-xs'>{label}</div>
-              <div
-                className={cn(
-                  'text-2xl font-semibold tabular-nums',
-                  i === 2 &&
-                    Number(value) > 0 &&
-                    'text-rose-600 dark:text-rose-400'
-                )}
-              >
-                {value}
+
+      {isLoading ? (
+        <Skeleton className='h-[88px] w-full rounded-xl' />
+      ) : (
+        <StatGrid className='grid-cols-3'>
+          <Stat label={t('Open orders')} value={data?.orderCount ?? 0} />
+          <Stat
+            label={t('Materials needed')}
+            value={data?.materialCount ?? 0}
+          />
+          <Stat
+            label={t('Short')}
+            value={data?.shortageCount ?? 0}
+            tone='danger'
+            active={(data?.shortageCount ?? 0) > 0}
+          />
+        </StatGrid>
+      )}
+
+      <Toolbar>
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          placeholder={t('Filter by material or SKU')}
+        />
+        <FilterChips
+          label={t('Filter requirements')}
+          value={view}
+          onChange={(v) => setView(v as typeof view)}
+          options={[
+            {
+              value: 'all',
+              label: t('All materials'),
+              count: data?.materialCount,
+            },
+            {
+              value: 'short',
+              label: t('Shortages'),
+              count: data?.shortageCount,
+              tone: 'danger',
+            },
+          ]}
+        />
+      </Toolbar>
+
+      <DataTable
+        caption={t('Material requirements')}
+        columns={columns}
+        rows={lines}
+        rowKey={lineKey}
+        loading={isLoading}
+        onRowClick={setOpen}
+        empty={
+          <EmptyState
+            bordered={false}
+            icon={ListChecks}
+            title={
+              needle || view === 'short'
+                ? t('Nothing matches')
+                : t('Nothing outstanding')
+            }
+            description={
+              needle || view === 'short'
+                ? t('No material matches these filters.')
+                : t('Open orders have everything they need issued or in stock.')
+            }
+          />
+        }
+        mobileCard={(l) => (
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0'>
+              <div className='truncate font-medium'>{l.productName}</div>
+              <div className='text-muted-foreground text-xs tabular-nums'>
+                {t('Need')} {fmtQty(l.requiredQuantity)} · {t('Have')}{' '}
+                {fmtQty(l.availableQuantity)} {l.unit}
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      <Card>
-        <CardContent className='space-y-3 p-4 max-sm:p-3'>
-          <div className='flex flex-wrap items-center gap-3'>
-            <Input
-              placeholder={t('Filter materials…')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className='h-9 w-64 max-sm:w-full'
-            />
-            <label className='flex items-center gap-2 text-sm'>
-              <input
-                type='checkbox'
-                checked={shortOnly}
-                onChange={(e) => setShortOnly(e.target.checked)}
-                className='accent-primary'
-              />
-              {t('Shortages only')}
-            </label>
+            </div>
+            <Shortage line={l} />
           </div>
-          <div className='overflow-x-auto rounded-lg border'>
-            <Table>
-              <TableHeader>
-                <TableRow className='bg-muted/40'>
-                  <TableHead>{t('Material')}</TableHead>
-                  <TableHead className='text-right'>
-                    {t('Outstanding need')}
-                  </TableHead>
-                  <TableHead className='text-right'>{t('On hand')}</TableHead>
-                  <TableHead className='text-right'>{t('Shortage')}</TableHead>
-                  <TableHead className='text-right'>{t('Orders')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading && (
-                  <TableRow>
-                    <TableCell colSpan={5}>
-                      <Skeleton className='h-20 w-full' />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!isLoading && lines.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5}>
-                      <EmptyState
-                        icon={ListChecks}
-                        title={t('Nothing outstanding')}
-                        description={t(
-                          'Open orders have everything they need issued or in stock.'
-                        )}
-                      />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {lines.map((line) => {
-                  const key = `${line.branchId}:${line.productId}:${line.variantId || ''}`
-                  const open = expanded === key
-                  return (
-                    <Fragment key={key}>
-                      <TableRow
-                        className='cursor-pointer'
-                        onClick={() => setExpanded(open ? null : key)}
-                      >
-                        <TableCell>
-                          <div className='flex items-center gap-1.5 font-medium'>
-                            {open ? (
-                              <ChevronDown className='h-3.5 w-3.5' />
-                            ) : (
-                              <ChevronRight className='h-3.5 w-3.5' />
-                            )}
-                            {line.productName}
-                          </div>
-                          {line.sku && (
-                            <div className='text-muted-foreground pl-5 text-xs'>
-                              {line.sku}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className='text-right tabular-nums'>
-                          {fmtQty(line.requiredQuantity)}{' '}
-                          <span className='text-muted-foreground text-xs'>
-                            {line.unit}
-                          </span>
-                        </TableCell>
-                        <TableCell className='text-muted-foreground text-right tabular-nums'>
-                          {fmtQty(line.availableQuantity)}
-                        </TableCell>
-                        <TableCell className='text-right tabular-nums'>
-                          {line.shortageQuantity > 0 ? (
-                            <span className='rounded-md bg-rose-500/10 px-2 py-0.5 font-medium text-rose-700 dark:text-rose-300'>
-                              −{fmtQty(line.shortageQuantity)}
-                            </span>
-                          ) : (
-                            <span className='text-emerald-600 dark:text-emerald-400'>
-                              {t('Covered')}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className='text-right tabular-nums'>
-                          {line.orders?.length ?? 0}
-                        </TableCell>
-                      </TableRow>
-                      {open && (
-                        <TableRow className='bg-muted/30 hover:bg-muted/30'>
-                          <TableCell colSpan={5} className='py-2'>
-                            <div className='flex flex-wrap gap-2 pl-5'>
-                              {line.orders?.map((o) => (
-                                <Link
-                                  key={o.orderId}
-                                  to={
-                                    `/manufacturing/production-orders/${o.orderId}` as never
-                                  }
-                                  className='bg-background hover:border-foreground/30 inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs'
-                                >
-                                  <span className='font-mono'>
-                                    {o.orderNumber}
-                                  </span>
-                                  <StatusBadge
-                                    status={o.status}
-                                    className='h-5 px-1.5 text-[10px]'
-                                  />
-                                  <span className='text-muted-foreground tabular-nums'>
-                                    {fmtQty(o.quantity)} {line.unit}
-                                  </span>
-                                </Link>
-                              ))}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </Fragment>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+        )}
+      />
+
+      {open && (
+        <DetailSheet
+          open
+          onOpenChange={(o) => !o && setOpen(null)}
+          title={open.productName}
+          description={open.sku || undefined}
+        >
+          <dl className='grid grid-cols-3 gap-4'>
+            <Field label={t('Outstanding need')}>
+              {fmtQty(open.requiredQuantity)} {open.unit}
+            </Field>
+            <Field label={t('On hand')}>
+              {fmtQty(open.availableQuantity)} {open.unit}
+            </Field>
+            <Field label={t('Shortage')}>
+              <Shortage line={open} />
+            </Field>
+          </dl>
+          <SheetSection title={t('Needed by')}>
+            <ul className='divide-y rounded-lg border'>
+              {(open.orders || []).map((o) => (
+                <li key={o.orderId}>
+                  <Link
+                    to={
+                      `/manufacturing/production-orders/${o.orderId}` as never
+                    }
+                    className='hover:bg-muted/40 flex min-h-12 items-center gap-3 px-3 py-2 text-sm'
+                  >
+                    <span className='font-mono text-xs'>{o.orderNumber}</span>
+                    <StatusBadge
+                      status={o.status}
+                      className='h-5 px-1.5 text-[10px]'
+                    />
+                    <span className='ml-auto tabular-nums'>
+                      {fmtQty(o.quantity)} {open.unit}
+                    </span>
+                    <ChevronRight className='text-muted-foreground h-4 w-4' />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </SheetSection>
+        </DetailSheet>
+      )}
     </div>
   )
 }

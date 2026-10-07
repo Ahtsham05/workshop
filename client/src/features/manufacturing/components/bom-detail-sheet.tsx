@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useConfirm } from '../lib/confirm'
 import { fmtDate, fmtQty } from '../lib/constants'
 import { BomEditorDialog, type BomEditorMode } from './bom-editor-dialog'
 
@@ -82,6 +83,7 @@ export function BomDetailSheet({
   onSelect: (id: string) => void
 }) {
   const { t } = useLanguage()
+  const confirm = useConfirm()
   const { hasPermission } = usePermissions()
   const canManage = hasPermission('manageBoms')
   const { data: bom, isLoading } = useGetBomQuery(bomId)
@@ -188,13 +190,18 @@ export function BomDetailSheet({
                       size='sm'
                       variant='ghost'
                       className='text-destructive hover:text-destructive'
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            t('Delete this BOM version? This cannot be undone.')
-                          )
-                        )
-                          return
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: t('Delete {{n}} v{{v}}?')
+                            .replace('{{n}}', bom.bomNumber)
+                            .replace('{{v}}', String(bom.version)),
+                          description: t(
+                            'This BOM version is removed permanently. This cannot be undone.'
+                          ),
+                          confirmText: t('Delete'),
+                          destructive: true,
+                        })
+                        if (!ok) return
                         run(async () => {
                           await deleteBom(bom.id).unwrap()
                           onClose()

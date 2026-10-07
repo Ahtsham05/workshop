@@ -2,13 +2,14 @@ import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
   ArrowRight,
-  CalendarClock,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardCheck,
   ClipboardList,
-  Factory,
   FileStack,
-  PackageCheck,
-  Recycle,
-  Workflow,
+  PackageMinus,
+  PauseCircle,
+  Wrench,
 } from 'lucide-react'
 import {
   Bar,
@@ -21,29 +22,31 @@ import {
 } from 'recharts'
 import {
   useGetManufacturingDashboardQuery,
+  type DashboardOrder,
   type ProductionStatus,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney, useCurrencySymbolPrefix } from '@/lib/format-money'
+import { useFormatMoney } from '@/lib/format-money'
+import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { StatCard } from '@/features/dashboard/components/stat-card'
 import { PriorityText, ProgressBar, StatusBadge } from '../components/badges'
+import { DataTable, type Column } from '../components/data-table'
 import { DemoDataBanner } from '../components/demo-data'
-import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
+import {
+  EmptyState,
+  PageHeader,
+  Panel,
+  Stat,
+  StatGrid,
+} from '../components/page'
 import {
   PRODUCT_TYPE_META,
   PRODUCT_TYPES,
   STATUS_META,
   fmtDate,
   fmtQty,
+  orderPath,
 } from '../lib/constants'
 
 const PIPELINE: ProductionStatus[] = [
@@ -52,40 +55,129 @@ const PIPELINE: ProductionStatus[] = [
   'released',
   'in_production',
   'paused',
+  'qc_pending',
   'completed',
 ]
+
+const pct = (o: DashboardOrder) =>
+  o.plannedQuantity > 0 ? (o.completedQuantity / o.plannedQuantity) * 100 : 0
 
 export default function ManufacturingDashboard() {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const currencyPrefix = useCurrencySymbolPrefix()
   const { data, isLoading } = useGetManufacturingDashboardQuery()
 
   const pipelineTotal = data
-    ? PIPELINE.reduce((s, k) => s + data.byStatus[k], 0)
+    ? PIPELINE.reduce((s, k) => s + (data.byStatus[k] || 0), 0)
     : 0
   const typeTotal = data
     ? PRODUCT_TYPES.reduce((s, k) => s + (data.productTypes[k] || 0), 0)
     : 0
 
+  // What a supervisor should look at first — only non-zero items are listed.
+  const attention = data
+    ? [
+        {
+          key: 'overdue',
+          count: data.overdue,
+          label: t('Orders past their planned completion'),
+          icon: AlertTriangle,
+          tone: 'danger' as const,
+          to: '/manufacturing/production-orders',
+          search: { status: 'overdue' },
+        },
+        {
+          key: 'shortages',
+          count: data.shortageCount,
+          label: t('Materials short for open orders'),
+          icon: PackageMinus,
+          tone: 'danger' as const,
+          to: '/manufacturing/requirements',
+        },
+        {
+          key: 'qc',
+          count: data.qcPendingQuantity,
+          label: t('Units waiting for quality check'),
+          icon: ClipboardCheck,
+          tone: 'warning' as const,
+          to: '/manufacturing/quality',
+        },
+        {
+          key: 'rework',
+          count: data.reworkPendingQuantity,
+          label: t('Units in rework'),
+          icon: Wrench,
+          tone: 'warning' as const,
+          to: '/manufacturing/quality',
+        },
+        {
+          key: 'paused',
+          count: data.byStatus.paused || 0,
+          label: t('Paused orders'),
+          icon: PauseCircle,
+          tone: 'warning' as const,
+          to: '/manufacturing/production-orders',
+          search: { status: 'paused' },
+        },
+      ].filter((a) => a.count > 0)
+    : []
+
+  const recentColumns: Column<DashboardOrder>[] = [
+    {
+      id: 'order',
+      header: t('Order'),
+      className: 'w-32',
+      cell: (o) => (
+        <Link
+          to={orderPath(o) as never}
+          className='font-mono text-xs font-medium hover:underline'
+        >
+          {o.orderNumber}
+        </Link>
+      ),
+    },
+    {
+      id: 'product',
+      header: t('Product'),
+      cell: (o) => <span className='font-medium'>{o.productName}</span>,
+    },
+    {
+      id: 'qty',
+      header: t('Completed'),
+      align: 'right',
+      hideBelow: 'sm',
+      cell: (o) => (
+        <span className='text-muted-foreground tabular-nums'>
+          <span className='text-foreground'>{fmtQty(o.completedQuantity)}</span>{' '}
+          / {fmtQty(o.plannedQuantity)} {o.unit}
+        </span>
+      ),
+    },
+    {
+      id: 'due',
+      header: t('Due'),
+      hideBelow: 'md',
+      cell: (o) => (
+        <span className='text-muted-foreground tabular-nums'>
+          {fmtDate(o.plannedCompletionDate)}
+        </span>
+      ),
+    },
+    {
+      id: 'status',
+      header: t('Status'),
+      className: 'w-36',
+      cell: (o) => <StatusBadge status={o.status} orderType={o.orderType} />,
+    },
+  ]
+
   return (
-    <div className='space-y-5'>
-      <SectionHeader
-        title={t('Production overview')}
+    <div className='space-y-6'>
+      <PageHeader
+        title={t('Overview')}
         description={t(
-          'Live position of orders, work in progress and output for this branch'
+          'Orders, work in progress and output for this branch, updated live.'
         )}
-        actions={
-          <Button asChild className='max-sm:w-full'>
-            <Link
-              to={'/manufacturing/production-orders' as never}
-              search={{ new: true } as never}
-            >
-              <ClipboardList className='mr-2 h-4 w-4' />
-              {t('New Production Order')}
-            </Link>
-          </Button>
-        }
       />
 
       {data && (
@@ -94,425 +186,435 @@ export default function ManufacturingDashboard() {
         />
       )}
 
-      <div className='grid grid-cols-2 gap-4 max-sm:gap-3 md:grid-cols-3 xl:grid-cols-6'>
-        <StatCard
-          inlineHeaderOnMobile
-          isLoading={isLoading}
-          title={t('Open Orders')}
-          value={data?.openOrders ?? 0}
-          icon={<ClipboardList />}
-          tone='sky'
-          description={t('Draft → Paused')}
-          link={{ to: '/manufacturing/production-orders' }}
-        />
-        <StatCard
-          inlineHeaderOnMobile
-          isLoading={isLoading}
-          title={t('In Progress')}
-          value={data?.inProgress ?? 0}
-          icon={<Factory />}
-          tone='amber'
-          description={
-            data && data.qcPendingQuantity > 0
-              ? t('{{q}} unit(s) awaiting QC').replace(
-                  '{{q}}',
-                  fmtQty(data.qcPendingQuantity)
-                )
-              : t('Released, running or paused')
-          }
-          link={{ to: '/manufacturing/wip' }}
-        />
-        <StatCard
-          inlineHeaderOnMobile
-          isLoading={isLoading}
-          title={t('Overdue')}
-          value={data?.overdue ?? 0}
-          icon={<AlertTriangle />}
-          tone='rose'
-          description={t('Past planned completion')}
-        />
-        <StatCard
-          inlineHeaderOnMobile
-          isLoading={isLoading}
-          title={t('WIP Value')}
-          value={data?.wipValue ?? 0}
-          valuePrefix={currencyPrefix}
-          icon={<Workflow />}
-          tone='violet'
-          description={t('Material lots on the floor')}
-        />
-        <StatCard
-          inlineHeaderOnMobile
-          isLoading={isLoading}
-          title={t('Produced (month)')}
-          value={fmtQty(data?.month.producedQuantity)}
-          icon={<PackageCheck />}
-          tone='emerald'
-          description={`${formatMoney(data?.month.producedValue ?? 0)} ${t('at material cost')}`}
-          link={{ to: '/manufacturing/finished-goods' }}
-        />
-        <StatCard
-          inlineHeaderOnMobile
-          isLoading={isLoading}
-          title={t('Scrap (month)')}
-          value={data?.month.scrapValue ?? 0}
-          valuePrefix={currencyPrefix}
-          icon={<Recycle />}
-          tone='orange'
-          description={t('{{count}} record(s)').replace(
-            '{{count}}',
-            String(data?.month.scrapCount ?? 0)
-          )}
-          link={{ to: '/manufacturing/scrap' }}
-        />
-      </div>
+      {isLoading ? (
+        <Skeleton className='h-[104px] w-full rounded-xl' />
+      ) : (
+        <StatGrid className='xl:grid-cols-6'>
+          <Stat
+            label={t('Open orders')}
+            value={data?.openOrders ?? 0}
+            hint={t('Draft to QC pending')}
+            href='/manufacturing/production-orders'
+          />
+          <Stat
+            label={t('In progress')}
+            value={data?.inProgress ?? 0}
+            hint={t('Released, running or paused')}
+            href='/manufacturing/wip'
+          />
+          <Stat
+            label={t('Overdue')}
+            value={data?.overdue ?? 0}
+            hint={t('Past planned completion')}
+            tone='danger'
+            active={(data?.overdue ?? 0) > 0}
+            href='/manufacturing/production-orders'
+            search={{ status: 'overdue' }}
+          />
+          <Stat
+            label={t('WIP value')}
+            value={formatMoney(data?.wipValue ?? 0)}
+            hint={t('Material on the floor')}
+            href='/manufacturing/wip'
+          />
+          <Stat
+            label={t('Produced this month')}
+            value={fmtQty(data?.month.producedQuantity)}
+            hint={`${formatMoney(data?.month.producedValue ?? 0)} ${t('at cost')}`}
+            href='/manufacturing/finished-goods'
+          />
+          <Stat
+            label={t('Scrap this month')}
+            value={formatMoney(data?.month.scrapValue ?? 0)}
+            hint={t('{{count}} record(s)').replace(
+              '{{count}}',
+              String(data?.month.scrapCount ?? 0)
+            )}
+            tone='warning'
+            active={(data?.month.scrapValue ?? 0) > 0}
+            href='/manufacturing/scrap'
+          />
+        </StatGrid>
+      )}
 
       <div className='grid gap-4 lg:grid-cols-3'>
-        <Card className='lg:col-span-2'>
-          <CardHeader className='pb-2'>
-            <CardTitle className='text-base'>{t('Daily output')}</CardTitle>
-            <CardDescription>
-              {t('Units received into stock from production, last 14 days')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='h-64 pl-0'>
-            {isLoading ? (
-              <Skeleton className='ml-6 h-full w-[calc(100%-1.5rem)]' />
-            ) : (
-              <ResponsiveContainer width='100%' height='100%'>
-                <BarChart
-                  data={data?.outputTrend ?? []}
-                  margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid
-                    vertical={false}
-                    strokeDasharray='0'
-                    className='stroke-border'
-                  />
-                  <XAxis
-                    dataKey='date'
-                    stroke='#888888'
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(d: string) =>
-                      new Date(`${d}T00:00`).toLocaleDateString(undefined, {
-                        day: 'numeric',
-                        month: 'short',
-                      })
-                    }
-                    minTickGap={16}
-                  />
-                  <YAxis
-                    stroke='#888888'
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                    width={44}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    cursor={{ className: 'fill-muted' }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null
-                      const row = payload[0].payload as {
-                        date: string
-                        quantity: number
-                        value: number
-                      }
-                      return (
-                        <div className='bg-popover rounded-lg border px-3 py-2 text-xs shadow-md'>
-                          <div className='font-medium'>
-                            {new Date(`${row.date}T00:00`).toLocaleDateString(
-                              undefined,
-                              {
-                                weekday: 'short',
-                                day: 'numeric',
-                                month: 'short',
-                              }
-                            )}
-                          </div>
-                          <div className='text-muted-foreground mt-1'>
-                            {t('Units')}:{' '}
-                            <span className='text-foreground font-medium'>
-                              {fmtQty(row.quantity)}
-                            </span>
-                          </div>
-                          <div className='text-muted-foreground'>
-                            {t('Value')}:{' '}
-                            <span className='text-foreground font-medium'>
-                              {formatMoney(row.value)}
-                            </span>
-                          </div>
-                        </div>
-                      )
-                    }}
-                  />
-                  <Bar
-                    dataKey='quantity'
-                    fill='currentColor'
-                    className='fill-primary'
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={28}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='pb-3'>
-            <CardTitle className='text-base'>{t('Order pipeline')}</CardTitle>
-            <CardDescription>
-              {t('Where every order currently sits')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='space-y-3'>
-            {PIPELINE.map((status) => {
-              const count = data?.byStatus[status] ?? 0
-              const pct = pipelineTotal ? (count / pipelineTotal) * 100 : 0
-              return (
-                <Link
-                  key={status}
-                  to={'/manufacturing/production-orders' as never}
-                  search={{ status } as never}
-                  className='group block space-y-1'
-                >
-                  <div className='flex items-center justify-between text-sm'>
-                    <span className='flex items-center gap-2'>
-                      <span
-                        className={`h-2 w-2 rounded-full ${STATUS_META[status].dot}`}
-                      />
-                      <span className='group-hover:underline'>
-                        {t(STATUS_META[status].label)}
-                      </span>
-                    </span>
-                    <span className='text-muted-foreground tabular-nums'>
-                      {count}
-                    </span>
-                  </div>
-                  <div className='bg-muted h-1 overflow-hidden rounded-full'>
-                    <div
-                      className={`h-full rounded-full ${STATUS_META[status].dot}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </Link>
-              )
-            })}
-            {(data?.byStatus.cancelled ?? 0) > 0 && (
-              <p className='text-muted-foreground pt-1 text-xs'>
-                {t('{{count}} cancelled').replace(
-                  '{{count}}',
-                  String(data?.byStatus.cancelled)
-                )}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className='grid gap-4 lg:grid-cols-3'>
-        <Card>
-          <CardHeader className='flex flex-row items-start justify-between space-y-0 pb-3'>
-            <div>
-              <CardTitle className='text-base'>{t('Due this week')}</CardTitle>
-              <CardDescription>
-                {t('Open orders by planned completion')}
-              </CardDescription>
+        <Panel
+          title={t('Needs attention')}
+          description={t('Exceptions across orders, stock and quality')}
+          flush
+        >
+          {isLoading ? (
+            <div className='space-y-3 p-5'>
+              <Skeleton className='h-5 w-full' />
+              <Skeleton className='h-5 w-4/5' />
+              <Skeleton className='h-5 w-3/5' />
             </div>
-            <CalendarClock className='text-muted-foreground h-4 w-4' />
-          </CardHeader>
-          <CardContent className='space-y-3'>
-            {isLoading && <Skeleton className='h-24 w-full' />}
-            {!isLoading && !data?.dueSoon.length && (
-              <p className='text-muted-foreground py-6 text-center text-sm'>
-                {t('Nothing due in the next 7 days')}
-              </p>
-            )}
-            {data?.dueSoon.map((order) => (
-              <Link
-                key={order.id}
-                to={`/manufacturing/production-orders/${order.id}` as never}
-                className='hover:bg-muted/60 -mx-2 block space-y-1.5 rounded-lg p-2'
-              >
-                <div className='flex items-center justify-between gap-2 text-sm'>
-                  <span className='truncate font-medium'>
-                    {order.productName}
-                  </span>
-                  <span className='text-muted-foreground shrink-0 text-xs'>
-                    {fmtDate(order.plannedCompletionDate)}
-                  </span>
-                </div>
-                <div className='text-muted-foreground flex items-center gap-2 text-xs'>
-                  <span className='font-mono'>{order.orderNumber}</span>
-                  <PriorityText priority={order.priority} />
-                  <span className='ml-auto tabular-nums'>
-                    {fmtQty(order.completedQuantity)} /{' '}
-                    {fmtQty(order.plannedQuantity)} {order.unit}
-                  </span>
-                </div>
-                <ProgressBar
-                  value={
-                    (order.completedQuantity / order.plannedQuantity) * 100
-                  }
-                  tone='emerald'
-                />
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='flex flex-row items-start justify-between space-y-0 pb-3'>
-            <div>
-              <CardTitle className='text-base'>
-                {t('Material shortages')}
-              </CardTitle>
-              <CardDescription>
-                {t('Outstanding needs above on-hand stock')}
-              </CardDescription>
-            </div>
-            <Button variant='ghost' size='sm' asChild>
-              <Link to={'/manufacturing/requirements' as never}>
-                {t('All')} <ArrowRight className='ml-1 h-3.5 w-3.5' />
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {isLoading && <Skeleton className='h-24 w-full' />}
-            {!isLoading && !data?.shortages.length && (
-              <p className='text-muted-foreground py-6 text-center text-sm'>
-                {t('All open orders are covered by stock')}
-              </p>
-            )}
-            <ul className='divide-y'>
-              {data?.shortages.map((line) => (
-                <li
-                  key={`${line.productId}:${line.variantId || ''}`}
-                  className='flex items-center justify-between gap-3 py-2 text-sm'
-                >
-                  <span className='min-w-0'>
-                    <span className='block truncate font-medium'>
-                      {line.productName}
-                    </span>
-                    <span className='text-muted-foreground text-xs'>
-                      {t('Need')} {fmtQty(line.requiredQuantity)} · {t('Have')}{' '}
-                      {fmtQty(line.availableQuantity)}
-                    </span>
-                  </span>
-                  <span className='shrink-0 rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-700 tabular-nums dark:text-rose-300'>
-                    −{fmtQty(line.shortageQuantity)} {line.unit}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='flex flex-row items-start justify-between space-y-0 pb-3'>
-            <div>
-              <CardTitle className='text-base'>
-                {t('Catalog coverage')}
-              </CardTitle>
-              <CardDescription>
-                {t('{{count}} active BOM version(s)').replace(
-                  '{{count}}',
-                  String(data?.activeBoms ?? 0)
-                )}
-              </CardDescription>
-            </div>
-            <FileStack className='text-muted-foreground h-4 w-4' />
-          </CardHeader>
-          <CardContent className='space-y-2'>
-            {PRODUCT_TYPES.filter(
-              (type) => (data?.productTypes[type] || 0) > 0
-            ).map((type) => (
-              <Link
-                key={type}
-                to={'/manufacturing/products' as never}
-                search={{ type } as never}
-                className='hover:bg-muted/60 -mx-2 flex items-center justify-between rounded-md px-2 py-1 text-sm'
-              >
-                <span>{t(PRODUCT_TYPE_META[type].label)}</span>
-                <span className='text-muted-foreground tabular-nums'>
-                  {data?.productTypes[type]}
-                </span>
-              </Link>
-            ))}
-            {!isLoading && typeTotal === 0 && (
-              <EmptyState
-                icon={FileStack}
-                title={t('No products classified yet')}
-                description={t(
-                  'Tag existing products as raw materials, components or finished goods to start building BOMs.'
-                )}
-                action={
-                  <Button size='sm' variant='outline' asChild>
-                    <Link to={'/manufacturing/products' as never}>
-                      {t('Classify products')}
-                    </Link>
-                  </Button>
-                }
-              />
-            )}
-            {(data?.productTypes.unclassified ?? 0) > 0 && typeTotal > 0 && (
-              <p className='text-muted-foreground pt-1 text-xs'>
-                {t('{{count}} product(s) not classified').replace(
-                  '{{count}}',
-                  String(data?.productTypes.unclassified)
-                )}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className='pb-2'>
-          <CardTitle className='text-base'>
-            {t('Recent production orders')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className='px-0'>
-          {!isLoading && !data?.recentOrders.length ? (
-            <div className='px-6'>
-              <EmptyState
-                icon={ClipboardList}
-                title={t('No production orders yet')}
-                description={t(
-                  'Create a BOM for a product, then plan your first production order.'
-                )}
-              />
+          ) : attention.length === 0 ? (
+            <div className='flex items-center gap-3 px-5 py-6 text-sm'>
+              <CheckCircle2 className='h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400' />
+              <span className='text-muted-foreground'>
+                {t('Nothing needs attention right now.')}
+              </span>
             </div>
           ) : (
             <ul className='divide-y'>
-              {data?.recentOrders.map((order) => (
-                <li key={order.id}>
+              {attention.map((a) => (
+                <li key={a.key}>
                   <Link
-                    to={`/manufacturing/production-orders/${order.id}` as never}
-                    className='hover:bg-muted/50 flex flex-wrap items-center gap-x-4 gap-y-1 px-6 py-3'
+                    to={a.to as never}
+                    search={a.search as never}
+                    className='hover:bg-muted/40 focus-visible:ring-ring flex min-h-12 items-center gap-3 px-5 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset'
                   >
-                    <span className='text-muted-foreground w-24 font-mono text-xs'>
-                      {order.orderNumber}
+                    <a.icon
+                      className={cn(
+                        'h-4 w-4 shrink-0',
+                        a.tone === 'danger'
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : 'text-amber-600 dark:text-amber-400'
+                      )}
+                      aria-hidden
+                    />
+                    <span className='min-w-0 flex-1'>{a.label}</span>
+                    <span className='font-semibold tabular-nums'>
+                      {fmtQty(a.count)}
                     </span>
-                    <span className='min-w-0 flex-1 truncate font-medium max-sm:order-first max-sm:basis-full'>
-                      {order.productName}
-                    </span>
-                    <span className='text-muted-foreground text-sm tabular-nums'>
-                      {fmtQty(order.completedQuantity)} /{' '}
-                      {fmtQty(order.plannedQuantity)} {order.unit}
-                    </span>
-                    <StatusBadge status={order.status} />
+                    <ChevronRight className='text-muted-foreground h-4 w-4' />
                   </Link>
                 </li>
               ))}
             </ul>
           )}
-        </CardContent>
-      </Card>
+        </Panel>
+
+        <Panel
+          className='lg:col-span-2'
+          title={t('Daily output')}
+          description={t(
+            'Units received into stock from production, last 14 days'
+          )}
+          contentClassName='h-60 pl-0 pr-4'
+        >
+          {isLoading ? (
+            <Skeleton className='ml-5 h-full w-[calc(100%-1.25rem)]' />
+          ) : (
+            <ResponsiveContainer width='100%' height='100%'>
+              <BarChart
+                data={data?.outputTrend ?? []}
+                margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
+                accessibilityLayer
+              >
+                <CartesianGrid vertical={false} className='stroke-border' />
+                <XAxis
+                  dataKey='date'
+                  stroke='var(--muted-foreground)'
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(d: string) =>
+                    new Date(`${d}T00:00`).toLocaleDateString(undefined, {
+                      day: 'numeric',
+                      month: 'short',
+                    })
+                  }
+                  minTickGap={16}
+                />
+                <YAxis
+                  stroke='var(--muted-foreground)'
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  width={44}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  cursor={{ className: 'fill-muted' }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null
+                    const row = payload[0].payload as {
+                      date: string
+                      quantity: number
+                      value: number
+                    }
+                    return (
+                      <div className='bg-popover rounded-md border px-3 py-2 text-xs shadow-sm'>
+                        <div className='font-medium'>
+                          {new Date(`${row.date}T00:00`).toLocaleDateString(
+                            undefined,
+                            { weekday: 'short', day: 'numeric', month: 'short' }
+                          )}
+                        </div>
+                        <div className='text-muted-foreground mt-1'>
+                          {t('Units')}:{' '}
+                          <span className='text-foreground font-medium'>
+                            {fmtQty(row.quantity)}
+                          </span>
+                        </div>
+                        <div className='text-muted-foreground'>
+                          {t('Value')}:{' '}
+                          <span className='text-foreground font-medium'>
+                            {formatMoney(row.value)}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+                <Bar
+                  dataKey='quantity'
+                  name={t('Units')}
+                  className='fill-primary'
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={24}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Panel>
+      </div>
+
+      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
+        <Panel
+          title={t('Order pipeline')}
+          description={t('Where every order currently sits')}
+        >
+          {isLoading ? (
+            <Skeleton className='h-40 w-full' />
+          ) : (
+            <div className='space-y-4'>
+              <div
+                className='bg-muted flex h-2 w-full overflow-hidden rounded-full'
+                role='img'
+                aria-label={t('Order pipeline')}
+              >
+                {PIPELINE.map((s) => {
+                  const count = data?.byStatus[s] || 0
+                  if (!count || !pipelineTotal) return null
+                  return (
+                    <div
+                      key={s}
+                      className={cn('h-full', STATUS_META[s].dot)}
+                      style={{ width: `${(count / pipelineTotal) * 100}%` }}
+                    />
+                  )
+                })}
+              </div>
+              <ul className='space-y-0.5'>
+                {PIPELINE.map((s) => (
+                  <li key={s}>
+                    <Link
+                      to={'/manufacturing/production-orders' as never}
+                      search={{ status: s } as never}
+                      className='hover:bg-muted/60 -mx-2 flex min-h-9 items-center justify-between rounded-md px-2 text-sm'
+                    >
+                      <span className='flex items-center gap-2'>
+                        <span
+                          className={cn(
+                            'h-2 w-2 rounded-full',
+                            STATUS_META[s].dot
+                          )}
+                          aria-hidden
+                        />
+                        {t(STATUS_META[s].label)}
+                      </span>
+                      <span className='text-muted-foreground tabular-nums'>
+                        {data?.byStatus[s] || 0}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {(data?.byStatus.cancelled ?? 0) > 0 && (
+                <p className='text-muted-foreground text-xs'>
+                  {t('{{count}} cancelled').replace(
+                    '{{count}}',
+                    String(data?.byStatus.cancelled)
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+        </Panel>
+
+        <Panel
+          title={t('Due this week')}
+          description={t('Open orders by planned completion')}
+          flush
+        >
+          {isLoading ? (
+            <div className='space-y-3 p-5'>
+              <Skeleton className='h-10 w-full' />
+              <Skeleton className='h-10 w-full' />
+            </div>
+          ) : !data?.dueSoon.length ? (
+            <p className='text-muted-foreground px-5 py-8 text-center text-sm'>
+              {t('Nothing due in the next 7 days')}
+            </p>
+          ) : (
+            <ul className='divide-y'>
+              {data.dueSoon.map((o) => (
+                <li key={o.id}>
+                  <Link
+                    to={orderPath(o) as never}
+                    className='hover:bg-muted/40 focus-visible:ring-ring block space-y-1.5 px-5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset'
+                  >
+                    <div className='flex items-center justify-between gap-2 text-sm'>
+                      <span className='truncate font-medium'>
+                        {o.productName}
+                      </span>
+                      <span className='text-muted-foreground shrink-0 text-xs tabular-nums'>
+                        {fmtDate(o.plannedCompletionDate)}
+                      </span>
+                    </div>
+                    <div className='text-muted-foreground flex items-center gap-2 text-xs'>
+                      <span className='font-mono'>{o.orderNumber}</span>
+                      <PriorityText priority={o.priority} />
+                      <span className='ml-auto tabular-nums'>
+                        {fmtQty(o.completedQuantity)} /{' '}
+                        {fmtQty(o.plannedQuantity)} {o.unit}
+                      </span>
+                    </div>
+                    <ProgressBar value={pct(o)} tone='emerald' />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel
+          title={t('Material shortages')}
+          description={t('Open-order needs above on-hand stock')}
+          action={
+            <Button variant='ghost' size='sm' asChild className='-mr-2 h-8'>
+              <Link to={'/manufacturing/requirements' as never}>
+                {t('View all')} <ArrowRight className='ml-1 h-3.5 w-3.5' />
+              </Link>
+            </Button>
+          }
+          flush
+        >
+          {isLoading ? (
+            <div className='space-y-3 p-5'>
+              <Skeleton className='h-8 w-full' />
+              <Skeleton className='h-8 w-full' />
+            </div>
+          ) : !data?.shortages.length ? (
+            <p className='text-muted-foreground px-5 py-8 text-center text-sm'>
+              {t('All open orders are covered by stock')}
+            </p>
+          ) : (
+            <ul className='divide-y'>
+              {data.shortages.map((line) => (
+                <li
+                  key={`${line.productId}:${line.variantId || ''}`}
+                  className='flex items-center justify-between gap-3 px-5 py-2.5 text-sm'
+                >
+                  <span className='min-w-0'>
+                    <span className='block truncate font-medium'>
+                      {line.productName}
+                    </span>
+                    <span className='text-muted-foreground text-xs tabular-nums'>
+                      {t('Need')} {fmtQty(line.requiredQuantity)} · {t('Have')}{' '}
+                      {fmtQty(line.availableQuantity)}
+                    </span>
+                  </span>
+                  <span className='shrink-0 text-sm font-medium text-rose-600 tabular-nums dark:text-rose-400'>
+                    −{fmtQty(line.shortageQuantity)} {line.unit}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
+
+      <div className='grid gap-4 lg:grid-cols-3'>
+        <div className='space-y-3 lg:col-span-2'>
+          <div className='flex items-center justify-between'>
+            <h3 className='text-sm font-semibold'>{t('Recent orders')}</h3>
+            <Button variant='ghost' size='sm' asChild className='-mr-2 h-8'>
+              <Link
+                to={'/manufacturing/production-orders' as never}
+                search={{ status: 'all' } as never}
+              >
+                {t('View all')} <ArrowRight className='ml-1 h-3.5 w-3.5' />
+              </Link>
+            </Button>
+          </div>
+          <DataTable
+            caption={t('Recent orders')}
+            columns={recentColumns}
+            rows={data?.recentOrders}
+            rowKey={(o) => o.id}
+            loading={isLoading}
+            skeletonRows={4}
+            empty={
+              <EmptyState
+                bordered={false}
+                icon={ClipboardList}
+                title={t('No orders yet')}
+                description={t(
+                  'Create a BOM for a product, then plan your first production order.'
+                )}
+              />
+            }
+          />
+        </div>
+
+        <Panel
+          title={t('Catalog coverage')}
+          description={t('{{count}} active BOM version(s)').replace(
+            '{{count}}',
+            String(data?.activeBoms ?? 0)
+          )}
+          flush
+        >
+          {!isLoading && typeTotal === 0 ? (
+            <EmptyState
+              bordered={false}
+              icon={FileStack}
+              title={t('No products classified yet')}
+              description={t(
+                'Tag products as raw materials, components or finished goods to start building BOMs.'
+              )}
+              action={
+                <Button size='sm' variant='outline' asChild>
+                  <Link to={'/manufacturing/products' as never}>
+                    {t('Classify products')}
+                  </Link>
+                </Button>
+              }
+            />
+          ) : (
+            <ul className='py-1.5'>
+              {PRODUCT_TYPES.filter(
+                (type) => (data?.productTypes[type] || 0) > 0
+              ).map((type) => (
+                <li key={type}>
+                  <Link
+                    to={'/manufacturing/products' as never}
+                    search={{ type } as never}
+                    className='hover:bg-muted/40 flex min-h-9 items-center justify-between px-5 text-sm'
+                  >
+                    <span>{t(PRODUCT_TYPE_META[type].label)}</span>
+                    <span className='text-muted-foreground tabular-nums'>
+                      {data?.productTypes[type]}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+              {(data?.productTypes.unclassified ?? 0) > 0 && (
+                <li className='text-muted-foreground border-t px-5 pt-2.5 pb-1 text-xs'>
+                  {t('{{count}} product(s) not classified').replace(
+                    '{{count}}',
+                    String(data?.productTypes.unclassified)
+                  )}
+                </li>
+              )}
+            </ul>
+          )}
+        </Panel>
+      </div>
     </div>
   )
 }

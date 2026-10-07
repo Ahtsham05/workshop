@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { AlertTriangle, ClipboardList, Plus } from 'lucide-react'
+import { AlertTriangle, ClipboardList, Component, Plus } from 'lucide-react'
 import {
+  useGetOrderStatusCountsQuery,
   useGetProductionOrdersQuery,
   type OrderType,
+  type ProductionOrder,
   type ProductionStatus,
 } from '@/stores/manufacturing.api'
 import { cn } from '@/lib/utils'
@@ -11,27 +13,18 @@ import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { PriorityText, ProgressBar, StatusBadge } from '../components/badges'
-import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
+import { DataTable, type Column } from '../components/data-table'
+import { FilterChips, SearchField, Toolbar } from '../components/list-controls'
+import { EmptyState, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
 import { ProductionOrderDialog } from '../components/production-order-dialog'
 import {
   PRODUCTION_STATUSES,
   fmtDate,
   fmtQty,
-  statusLabel,
   orderPath,
+  statusLabel,
 } from '../lib/constants'
 
 const OPEN: ProductionStatus[] = [
@@ -42,6 +35,16 @@ const OPEN: ProductionStatus[] = [
   'paused',
   'qc_pending',
 ]
+
+const pct = (o: ProductionOrder) =>
+  o.plannedQuantity > 0
+    ? Math.round((o.completedQuantity / o.plannedQuantity) * 100)
+    : 0
+
+const isLate = (o: ProductionOrder, now: number) =>
+  !!o.plannedCompletionDate &&
+  OPEN.includes(o.status) &&
+  new Date(o.plannedCompletionDate).getTime() < now
 
 /** Production orders, or — with orderType 'assembly' — assembly orders (same engine). */
 export default function ProductionOrdersPage({
@@ -59,7 +62,6 @@ export default function ProductionOrdersPage({
   }
 
   const [status, setStatus] = useState<string>(routeSearch.status || 'open')
-  const [overdue, setOverdue] = useState(false)
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search, 300)
   const [page, setPage] = useState(1)
@@ -68,246 +70,280 @@ export default function ProductionOrdersPage({
   useEffect(() => {
     if (routeSearch.status) setStatus(routeSearch.status)
   }, [routeSearch.status])
+  useEffect(() => {
+    if (routeSearch.new) setCreating(true)
+  }, [routeSearch.new])
 
+  const overdue = status === 'overdue'
   const { data, isLoading, isFetching } = useGetProductionOrdersQuery({
     page,
     limit: 20,
     search: debounced || undefined,
     orderType,
     status:
-      status === 'all'
+      status === 'all' || overdue
         ? undefined
         : status === 'open'
           ? OPEN.join(',')
           : status,
     ...(overdue ? { overdue: true } : {}),
   })
-  const rows = data?.results || []
+  const { data: counts } = useGetOrderStatusCountsQuery({
+    orderType,
+    search: debounced || undefined,
+  })
   const now = Date.now()
 
-  const tabs: { key: string; label: string }[] = [
-    { key: 'open', label: t('Open') },
+  const chips = [
+    { value: 'open', label: t('Open'), count: counts?.open },
+    {
+      value: 'overdue',
+      label: t('Overdue'),
+      count: counts?.overdue,
+      tone: 'danger' as const,
+    },
     ...PRODUCTION_STATUSES.filter((s) =>
       isAssembly ? s !== 'planned' : s !== 'qc_pending'
     ).map((s) => ({
-      key: s,
+      value: s,
       label: t(statusLabel(s, orderType)),
+      count: counts ? counts.byStatus[s] || 0 : undefined,
+      tone: s === 'qc_pending' ? ('warning' as const) : undefined,
     })),
-    { key: 'all', label: t('All') },
+    { value: 'all', label: t('All'), count: counts?.total },
   ]
 
+  const columns: Column<ProductionOrder>[] = [
+    {
+      id: 'order',
+      header: t('Order'),
+      className: 'w-36',
+      cell: (o) => (
+        <div>
+          <Link
+            to={orderPath(o) as never}
+            onClick={(e) => e.stopPropagation()}
+            className='font-mono text-xs font-medium hover:underline'
+          >
+            {o.orderNumber}
+          </Link>
+          {o.bomNumber && (
+            <div className='text-muted-foreground text-[11px]'>
+              {o.bomNumber} v{o.bomVersion}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'product',
+      header: t('Product'),
+      cell: (o) => (
+        <div className='min-w-0'>
+          <div className='truncate font-medium'>{o.productName}</div>
+          {(o.operatorName || o.parentOrderId) && (
+            <div className='text-muted-foreground truncate text-xs'>
+              {[o.operatorName, o.parentOrderId ? t('Sub-assembly') : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'progress',
+      header: t('Progress'),
+      className: 'w-48',
+      hideBelow: 'md',
+      cell: (o) => (
+        <div className='space-y-1.5'>
+          <div className='text-muted-foreground flex justify-between text-xs tabular-nums'>
+            <span>
+              <span className='text-foreground'>
+                {fmtQty(o.completedQuantity)}
+              </span>{' '}
+              / {fmtQty(o.plannedQuantity)} {o.unit}
+            </span>
+            <span>{pct(o)}%</span>
+          </div>
+          <ProgressBar value={pct(o)} tone='emerald' />
+        </div>
+      ),
+    },
+    {
+      id: 'due',
+      header: t('Due'),
+      hideBelow: 'lg',
+      cell: (o) => (
+        <div className='text-sm tabular-nums'>
+          <div
+            className={cn(
+              isLate(o, now) && 'font-medium text-rose-600 dark:text-rose-400'
+            )}
+          >
+            {fmtDate(o.plannedCompletionDate)}
+            {isLate(o, now) && (
+              <AlertTriangle
+                className='ml-1 inline h-3 w-3'
+                aria-label={t('Overdue')}
+              />
+            )}
+          </div>
+          <div className='text-muted-foreground text-xs'>
+            {t('Start')} {fmtDate(o.plannedStartDate)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'priority',
+      header: t('Priority'),
+      hideBelow: 'xl',
+      cell: (o) => <PriorityText priority={o.priority} />,
+    },
+    {
+      id: 'status',
+      header: t('Status'),
+      className: 'w-36',
+      cell: (o) => <StatusBadge status={o.status} orderType={o.orderType} />,
+    },
+  ]
+
+  const title = isAssembly ? t('Assembly orders') : t('Production orders')
+  const canCreate = hasPermission('manageProductionOrders')
+
   return (
-    <div className='space-y-4'>
-      <SectionHeader
-        title={isAssembly ? t('Assembly orders') : t('Production orders')}
+    <div className='space-y-5'>
+      <PageHeader
+        title={title}
         description={
           isAssembly
             ? t(
-                'Build sub-assemblies and final assemblies: start moves components into WIP, completion sends the assembly through QC into stock.'
+                'Build sub-assemblies and final assemblies. Starting moves components into WIP; completing sends the assembly through QC into stock.'
               )
             : t(
                 'Plan, release and track every manufacturing run from draft to completion.'
               )
         }
         actions={
-          hasPermission('manageProductionOrders') && (
-            <Button onClick={() => setCreating(true)} className='max-sm:w-full'>
-              <Plus className='mr-2 h-4 w-4' />
-              {isAssembly ? t('New assembly') : t('New order')}
+          canCreate && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus className='mr-1.5 h-4 w-4' />
+              {isAssembly ? t('New assembly order') : t('New production order')}
             </Button>
           )
         }
       />
 
-      <Card>
-        <CardContent className='space-y-3 p-4 max-sm:p-3'>
-          <div className='-mx-1 flex gap-1 overflow-x-auto px-1 pb-1'>
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                type='button'
-                onClick={() => {
-                  setStatus(tab.key)
-                  setPage(1)
-                }}
+      <div className='space-y-3'>
+        <Toolbar>
+          <SearchField
+            value={search}
+            onChange={(v) => {
+              setSearch(v)
+              setPage(1)
+            }}
+            placeholder={t('Search order, product or BOM')}
+          />
+        </Toolbar>
+        <FilterChips
+          label={t('Filter by status')}
+          options={chips}
+          value={status}
+          onChange={(v) => {
+            setStatus(v)
+            setPage(1)
+          }}
+        />
+      </div>
+
+      <DataTable
+        caption={title}
+        columns={columns}
+        rows={data?.results}
+        rowKey={(o) => o.id}
+        loading={isLoading}
+        fetching={isFetching}
+        onRowClick={(o) => navigate({ to: orderPath(o) as never })}
+        empty={
+          <EmptyState
+            bordered={false}
+            icon={isAssembly ? Component : ClipboardList}
+            title={
+              debounced || status !== 'all'
+                ? t('No orders match these filters')
+                : isAssembly
+                  ? t('No assembly orders yet')
+                  : t('No production orders yet')
+            }
+            description={
+              debounced || status !== 'all'
+                ? t('Try another status or clear the search.')
+                : t('Create one from a product that has a bill of materials.')
+            }
+            action={
+              canCreate &&
+              !debounced && (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setCreating(true)}
+                >
+                  <Plus className='mr-1.5 h-3.5 w-3.5' />
+                  {isAssembly
+                    ? t('New assembly order')
+                    : t('New production order')}
+                </Button>
+              )
+            }
+          />
+        }
+        mobileCard={(o) => (
+          <div className='space-y-2'>
+            <div className='flex items-start justify-between gap-3'>
+              <div className='min-w-0'>
+                <div className='truncate font-medium'>{o.productName}</div>
+                <div className='text-muted-foreground font-mono text-xs'>
+                  {o.orderNumber}
+                </div>
+              </div>
+              <StatusBadge status={o.status} orderType={o.orderType} />
+            </div>
+            <ProgressBar value={pct(o)} tone='emerald' />
+            <div className='text-muted-foreground flex justify-between text-xs tabular-nums'>
+              <span>
+                {fmtQty(o.completedQuantity)} / {fmtQty(o.plannedQuantity)}{' '}
+                {o.unit}
+              </span>
+              <span
                 className={cn(
-                  'shrink-0 rounded-md px-3 py-1 text-xs transition-colors',
-                  status === tab.key
-                    ? 'bg-foreground text-background'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  isLate(o, now) &&
+                    'font-medium text-rose-600 dark:text-rose-400'
                 )}
               >
-                {tab.label}
-              </button>
-            ))}
+                {t('Due')} {fmtDate(o.plannedCompletionDate)}
+              </span>
+            </div>
           </div>
-          <div className='flex flex-wrap items-center gap-2'>
-            <Input
-              placeholder={t('Search order, product or BOM…')}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setPage(1)
-              }}
-              className='h-9 w-72 max-sm:w-full'
-            />
-            <Button
-              variant={overdue ? 'default' : 'outline'}
-              size='sm'
-              onClick={() => {
-                setOverdue(!overdue)
-                setPage(1)
-              }}
-            >
-              <AlertTriangle className='mr-1.5 h-3.5 w-3.5' />
-              {t('Overdue only')}
-            </Button>
-          </div>
-
-          <div className='overflow-x-auto rounded-lg border'>
-            <Table>
-              <TableHeader>
-                <TableRow className='bg-muted/40'>
-                  <TableHead>{t('Order')}</TableHead>
-                  <TableHead>{t('Product')}</TableHead>
-                  <TableHead className='w-44'>{t('Progress')}</TableHead>
-                  <TableHead>{t('Schedule')}</TableHead>
-                  <TableHead>{t('Priority')}</TableHead>
-                  <TableHead>{t('Status')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading &&
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={6}>
-                        <Skeleton className='h-6 w-full' />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                {!isLoading && rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <EmptyState
-                        icon={ClipboardList}
-                        title={t('No production orders')}
-                        description={t('Nothing matches these filters.')}
-                      />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {rows.map((order) => {
-                  const isLate =
-                    !!order.plannedCompletionDate &&
-                    OPEN.includes(order.status) &&
-                    new Date(order.plannedCompletionDate).getTime() < now
-                  return (
-                    <TableRow
-                      key={order.id}
-                      className={cn(
-                        'cursor-pointer',
-                        isFetching && 'opacity-70'
-                      )}
-                      onClick={() =>
-                        navigate({
-                          to: orderPath(order) as never,
-                        })
-                      }
-                    >
-                      <TableCell>
-                        <Link
-                          to={orderPath(order) as never}
-                          className='font-mono text-xs font-medium hover:underline'
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {order.orderNumber}
-                        </Link>
-                        {order.bomNumber && (
-                          <div className='text-muted-foreground text-[11px]'>
-                            {order.bomNumber} v{order.bomVersion}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className='font-medium'>{order.productName}</div>
-                        {(order.operatorName || order.parentOrderId) && (
-                          <div className='text-muted-foreground text-xs'>
-                            {[
-                              order.operatorName,
-                              order.parentOrderId ? t('sub-assembly') : null,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className='text-muted-foreground mb-1 flex justify-between text-xs tabular-nums'>
-                          <span>
-                            {fmtQty(order.completedQuantity)} /{' '}
-                            {fmtQty(order.plannedQuantity)} {order.unit}
-                          </span>
-                          <span>
-                            {Math.round(
-                              (order.completedQuantity /
-                                order.plannedQuantity) *
-                                100
-                            )}
-                            %
-                          </span>
-                        </div>
-                        <ProgressBar
-                          value={
-                            (order.completedQuantity / order.plannedQuantity) *
-                            100
-                          }
-                          tone='emerald'
-                        />
-                      </TableCell>
-                      <TableCell className='text-sm'>
-                        <div className='text-muted-foreground'>
-                          {fmtDate(order.plannedStartDate)}
-                        </div>
-                        <div
-                          className={cn(
-                            isLate &&
-                              'font-medium text-rose-600 dark:text-rose-400'
-                          )}
-                        >
-                          → {fmtDate(order.plannedCompletionDate)}
-                          {isLate && (
-                            <AlertTriangle className='ml-1 inline h-3 w-3' />
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <PriorityText priority={order.priority} />
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          status={order.status}
-                          orderType={order.orderType}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          <Pager data={data} page={page} onPageChange={setPage} />
-        </CardContent>
-      </Card>
+        )}
+        footer={
+          data && data.totalPages > 1 ? (
+            <Pager data={data} page={page} onPageChange={setPage} />
+          ) : undefined
+        }
+      />
 
       {creating && (
         <ProductionOrderDialog
           orderType={orderType}
-          onClose={() => setCreating(false)}
-          onSaved={(order) =>
-            navigate({
-              to: orderPath(order) as never,
-            })
-          }
+          onClose={() => {
+            setCreating(false)
+            if (routeSearch.new) {
+              navigate({ to: '.' as never, search: {} as never, replace: true })
+            }
+          }}
+          onSaved={(order) => navigate({ to: orderPath(order) as never })}
         />
       )}
     </div>

@@ -83,6 +83,7 @@ router.get('/boms/:bomId/explode', auth(VIEW), validate(v.explodeBom), c.explode
 router.get('/requirements', auth(VIEW), validate(v.getRequirements), c.getRequirements);
 
 // Production orders
+router.get('/production-orders/status-counts', auth(VIEW), validate(v.getOrderStatusCounts), c.getOrderStatusCounts);
 router
   .route('/production-orders')
   .get(auth(VIEW), validate(v.getProductionOrders), c.getProductionOrders)

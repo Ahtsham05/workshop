@@ -74,10 +74,14 @@ export function PriorityText({ priority }: { priority: ProductionPriority }) {
 export function ProgressBar({
   value,
   tone = 'primary',
+  label,
 }: {
   value: number
   tone?: 'primary' | 'amber' | 'emerald'
+  /** Accessible name; defaults to "Progress". */
+  label?: string
 }) {
+  const { t } = useLanguage()
   const pct = Math.max(0, Math.min(100, value))
   const color =
     tone === 'amber'
@@ -89,7 +93,8 @@ export function ProgressBar({
     <div
       className='bg-muted h-1.5 w-full overflow-hidden rounded-full'
       role='progressbar'
-      aria-valuenow={pct}
+      aria-label={label || t('Progress')}
+      aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
       aria-valuemax={100}
     >

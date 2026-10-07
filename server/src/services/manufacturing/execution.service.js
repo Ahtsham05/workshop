@@ -1610,7 +1610,7 @@ const getWip = async (ctx) => {
     status: { $in: ['released', 'in_production', 'paused'] },
   })
     .select(
-      'orderNumber productName sku unit status priority plannedQuantity producedQuantity completedQuantity rejectedQuantity qcPendingQuantity reworkPendingQuantity scrappedQuantity materialCost finishedGoodsValue plannedStartDate plannedCompletionDate actualStartDate wipLocation materials wipLots'
+      'orderNumber orderType productName sku unit status priority plannedQuantity producedQuantity completedQuantity rejectedQuantity qcPendingQuantity reworkPendingQuantity scrappedQuantity materialCost finishedGoodsValue plannedStartDate plannedCompletionDate actualStartDate wipLocation materials wipLots'
     )
     .sort({ plannedCompletionDate: 1, createdAt: 1 })
     .lean();
@@ -1628,6 +1628,7 @@ const getWip = async (ctx) => {
     return {
       id: String(order._id),
       orderNumber: order.orderNumber,
+      orderType: order.orderType || 'production',
       productName: order.productName,
       sku: order.sku,
       unit: order.unit,

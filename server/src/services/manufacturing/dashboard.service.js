@@ -45,7 +45,9 @@ const getDashboard = async (ctx) => {
       status: { $in: OPEN_PRODUCTION_STATUSES },
       plannedCompletionDate: { $gte: now, $lte: weekAhead },
     })
-      .select('orderNumber productName plannedQuantity completedQuantity unit status priority plannedCompletionDate')
+      .select(
+        'orderNumber orderType productName plannedQuantity completedQuantity unit status priority plannedCompletionDate'
+      )
       .sort({ plannedCompletionDate: 1 })
       .limit(6)
       .lean(),
@@ -82,7 +84,7 @@ const getDashboard = async (ctx) => {
     Bom.countDocuments({ ...scopeFilter(ctx), isActive: true }),
     ProductionOrder.find({ ...scopeFilter(ctx) })
       .select(
-        'orderNumber productName plannedQuantity completedQuantity unit status priority plannedCompletionDate createdAt'
+        'orderNumber orderType productName plannedQuantity completedQuantity unit status priority plannedCompletionDate createdAt'
       )
       .sort({ createdAt: -1 })
       .limit(6)

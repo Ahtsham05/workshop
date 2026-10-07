@@ -74,7 +74,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PriorityText, StatusBadge } from '../components/badges'
+import { PriorityText, ProgressBar, StatusBadge } from '../components/badges'
 import {
   CompleteOrderDialog,
   InspectOutputDialog,
@@ -90,8 +90,10 @@ import {
   ProgressLegend,
 } from '../components/material-progress'
 import { MovementsTable } from '../components/movements-table'
+import { Stat, StatGrid } from '../components/page'
 import { ProductionOrderDialog } from '../components/production-order-dialog'
 import { TraceTree } from '../components/trace-views'
+import { useConfirm } from '../lib/confirm'
 import {
   SCRAP_REASON_LABELS,
   SCRAP_STAGE_LABELS,
@@ -159,6 +161,7 @@ export default function ProductionOrderDetail({
   const [startAssemblyMutation, { isLoading: starting }] =
     useStartAssemblyMutation()
   const [deleteOrder] = useDeleteProductionOrderMutation()
+  const confirm = useConfirm()
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const [inspecting, setInspecting] = useState<ProductionOutput | null>(null)
 
@@ -212,7 +215,17 @@ export default function ProductionOrderDetail({
   const move = async (status: ProductionStatus) => {
     if (
       status === 'cancelled' &&
-      !window.confirm(t('Cancel this production order?'))
+      !(await confirm({
+        title: isAssembly
+          ? t('Cancel this assembly order?')
+          : t('Cancel this production order?'),
+        description: t(
+          'The order stops here and can no longer be executed. Stock already moved stays in the ledger.'
+        ),
+        confirmText: t('Cancel order'),
+        cancelText: t('Keep order'),
+        destructive: true,
+      }))
     )
       return
     try {
@@ -245,40 +258,45 @@ export default function ProductionOrderDetail({
 
   return (
     <div className='space-y-4'>
-      <Button variant='ghost' size='sm' asChild className='-ml-2'>
+      <nav
+        aria-label={t('Breadcrumb')}
+        className='text-muted-foreground flex items-center gap-1.5 text-sm'
+      >
         <Link
           to={
             (isAssembly
               ? '/manufacturing/assembly-orders'
               : '/manufacturing/production-orders') as never
           }
+          className='hover:text-foreground inline-flex items-center gap-1'
         >
-          <ArrowLeft className='mr-1.5 h-4 w-4' />
+          <ArrowLeft className='h-3.5 w-3.5' aria-hidden />
           {isAssembly ? t('Assembly orders') : t('Production orders')}
         </Link>
-      </Button>
+        <span aria-hidden>/</span>
+        <span className='text-foreground font-mono text-xs' aria-current='page'>
+          {order.orderNumber}
+        </span>
+      </nav>
 
       {/* Header */}
-      <Card className='overflow-hidden'>
+      <Card className='gap-0 overflow-hidden py-0'>
         <div className='flex flex-wrap items-start gap-4 p-5 max-sm:p-4'>
           <div className='min-w-0 flex-1'>
             <div className='flex flex-wrap items-center gap-2'>
-              <span className='bg-muted rounded-md px-2 py-0.5 font-mono text-xs'>
+              <span className='text-muted-foreground font-mono text-xs'>
                 {order.orderNumber}
               </span>
               <StatusBadge status={order.status} orderType={order.orderType} />
               {isAssembly && (
-                <Badge
-                  variant='outline'
-                  className='gap-1 border-violet-500/30 text-violet-700 dark:text-violet-300'
-                >
+                <Badge variant='outline' className='gap-1 font-normal'>
                   <Layers className='h-3 w-3' />
                   {t('Assembly')}
                 </Badge>
               )}
               <PriorityText priority={order.priority} />
             </div>
-            <h2 className='mt-2 text-2xl font-semibold tracking-tight'>
+            <h2 className='mt-1.5 text-xl font-semibold tracking-tight'>
               {order.productName}
             </h2>
             <p className='text-muted-foreground text-sm'>
@@ -311,7 +329,7 @@ export default function ProductionOrderDetail({
               )}
             </p>
           </div>
-          <div className='flex flex-wrap items-center gap-2 max-sm:w-full'>
+          <div className='flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>button:not([aria-label])]:flex-1'>
             {canExecute && canStartAssembly && (
               <Button onClick={startAssembly} disabled={starting}>
                 <Play className='mr-2 h-4 w-4' />
@@ -344,7 +362,7 @@ export default function ProductionOrderDetail({
               transitions.map((s) => (
                 <Button
                   key={s}
-                  variant={s === 'released' ? 'default' : 'secondary'}
+                  variant={s === 'released' ? 'default' : 'outline'}
                   disabled={changing}
                   onClick={() => move(s)}
                 >
@@ -354,7 +372,7 @@ export default function ProductionOrderDetail({
                 </Button>
               ))}
             {canManage && canComplete && (
-              <Button variant='secondary' onClick={() => setDialog('complete')}>
+              <Button variant='outline' onClick={() => setDialog('complete')}>
                 <CheckCircle2 className='mr-2 h-4 w-4' />
                 {t('Complete')}
               </Button>
@@ -432,17 +450,25 @@ export default function ProductionOrderDetail({
                       <DropdownMenuItem
                         className='text-destructive'
                         onClick={async () => {
-                          if (
-                            !window.confirm(
-                              t('Delete this production order permanently?')
-                            )
-                          )
-                            return
+                          const ok = await confirm({
+                            title: t('Delete {{n}}?').replace(
+                              '{{n}}',
+                              order.orderNumber
+                            ),
+                            description: t(
+                              'The order is removed permanently. This cannot be undone.'
+                            ),
+                            confirmText: t('Delete'),
+                            destructive: true,
+                          })
+                          if (!ok) return
                           try {
                             await deleteOrder(order.id).unwrap()
                             toast.success(t('Production order deleted'))
                             navigate({
-                              to: '/manufacturing/production-orders' as never,
+                              to: (isAssembly
+                                ? '/manufacturing/assembly-orders'
+                                : '/manufacturing/production-orders') as never,
                             })
                           } catch (err) {
                             toast.error(
@@ -462,7 +488,10 @@ export default function ProductionOrderDetail({
         </div>
 
         {order.status !== 'cancelled' && (
-          <div className='bg-muted/30 flex items-center gap-1 overflow-x-auto border-t px-5 py-3 max-sm:px-4'>
+          <div
+            className='bg-muted/30 flex items-center gap-1 overflow-x-auto border-t px-5 py-3 [scrollbar-width:none] max-sm:px-4'
+            aria-label={t('Order lifecycle')}
+          >
             {lifecycle.map((step, i) => {
               const done = i < lifecycleIndex || order.status === 'completed'
               const current =
@@ -509,45 +538,54 @@ export default function ProductionOrderDetail({
       </Card>
 
       {/* Quantities: planned / produced / good / rejected / remaining */}
-      <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5'>
-        <Kpi
+      <StatGrid className='lg:grid-cols-5'>
+        <Stat
           label={t('Planned')}
-          value={fmtQty(order.plannedQuantity)}
-          unit={order.unit}
+          value={<Qty value={order.plannedQuantity} unit={order.unit} />}
         />
-        <Kpi
+        <Stat
           label={t('Produced')}
-          value={fmtQty(order.producedQuantity)}
-          unit={order.unit}
-          bar={(order.producedQuantity / order.plannedQuantity) * 100}
+          value={<Qty value={order.producedQuantity} unit={order.unit} />}
+          hint={
+            <ProgressBar
+              value={
+                order.plannedQuantity
+                  ? (order.producedQuantity / order.plannedQuantity) * 100
+                  : 0
+              }
+            />
+          }
         />
-        <Kpi
+        <Stat
           label={t('Good')}
-          value={fmtQty(order.completedQuantity)}
-          unit={order.unit}
-          tone='emerald'
+          value={<Qty value={order.completedQuantity} unit={order.unit} />}
+          tone='success'
+          active={order.completedQuantity > 0}
           hint={
             order.reworkedGoodQuantity
               ? `${fmtQty(order.reworkedGoodQuantity)} ${t('after rework')}`
               : undefined
           }
         />
-        <Kpi
+        <Stat
           label={t('Rejected')}
-          value={fmtQty(order.rejectedQuantity)}
-          unit={order.unit}
-          tone={order.rejectedQuantity ? 'rose' : undefined}
+          value={<Qty value={order.rejectedQuantity} unit={order.unit} />}
+          tone='danger'
+          active={order.rejectedQuantity > 0}
         />
-        <Kpi
+        <Stat
           label={t('Remaining')}
-          value={fmtQty(remaining)}
-          unit={order.unit}
-          tone={remaining > 0 ? 'amber' : undefined}
+          value={<Qty value={remaining} unit={order.unit} />}
+          tone='warning'
+          active={
+            remaining > 0 &&
+            !['draft', 'planned', 'cancelled'].includes(order.status)
+          }
         />
-      </div>
+      </StatGrid>
 
       {/* Flow: stock → WIP → produced → QC → finished goods */}
-      <Card>
+      <Card className='py-0'>
         <CardContent className='[&>*]:bg-card bg-border grid grid-cols-2 gap-px overflow-hidden rounded-xl p-0 sm:grid-cols-4'>
           <FlowStage
             icon={Warehouse}
@@ -653,7 +691,7 @@ export default function ProductionOrderDetail({
 
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]'>
         <Tabs defaultValue='materials' className='min-w-0'>
-          <TabsList className='max-w-full overflow-x-auto'>
+          <TabsList className='w-full justify-start overflow-x-auto [scrollbar-width:none] sm:w-fit sm:max-w-full'>
             <TabsTrigger value='materials'>
               {t('Materials')}
               {requirements && requirements.shortageCount > 0 && (
@@ -696,19 +734,19 @@ export default function ProductionOrderDetail({
                         <TableHeader>
                           <TableRow className='bg-muted/40'>
                             <TableHead>{t('Material')}</TableHead>
-                            <TableHead className='w-56'>
+                            <TableHead className='w-56 max-sm:hidden'>
                               {t('Issued / required')}
                             </TableHead>
-                            <TableHead className='text-right'>
+                            <TableHead className='text-right max-lg:hidden'>
                               {t('In WIP')}
                             </TableHead>
-                            <TableHead className='text-right'>
+                            <TableHead className='text-right max-lg:hidden'>
                               {t('Consumed')}
                             </TableHead>
-                            <TableHead className='text-right'>
+                            <TableHead className='text-right max-md:hidden'>
                               {t('Remaining')}
                             </TableHead>
-                            <TableHead className='text-right'>
+                            <TableHead className='text-right max-sm:hidden'>
                               {t('On hand')}
                             </TableHead>
                           </TableRow>
@@ -747,19 +785,22 @@ export default function ProductionOrderDetail({
                                       .filter(Boolean)
                                       .join(' · ') || m.unit}
                                   </div>
+                                  <div className='mt-2 sm:hidden'>
+                                    <MaterialProgress material={m} />
+                                  </div>
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className='max-sm:hidden'>
                                   <MaterialProgress material={m} />
                                 </TableCell>
-                                <TableCell className='text-right tabular-nums'>
+                                <TableCell className='text-right tabular-nums max-lg:hidden'>
                                   {fmtQty(lineWip(m))}
                                 </TableCell>
-                                <TableCell className='text-muted-foreground text-right tabular-nums'>
+                                <TableCell className='text-muted-foreground text-right tabular-nums max-lg:hidden'>
                                   {fmtQty(m.consumedQuantity)}
                                 </TableCell>
                                 <TableCell
                                   className={cn(
-                                    'text-right font-medium tabular-nums',
+                                    'text-right font-medium tabular-nums max-md:hidden',
                                     rem > EPS
                                       ? 'text-amber-600 dark:text-amber-400'
                                       : 'text-emerald-600 dark:text-emerald-400'
@@ -769,7 +810,7 @@ export default function ProductionOrderDetail({
                                 </TableCell>
                                 <TableCell
                                   className={cn(
-                                    'text-right tabular-nums',
+                                    'text-right tabular-nums max-sm:hidden',
                                     short
                                       ? 'font-medium text-rose-600 dark:text-rose-400'
                                       : 'text-muted-foreground'
@@ -815,11 +856,7 @@ export default function ProductionOrderDetail({
             <OrderScrap orderId={order.id} />
           </TabsContent>
           <TabsContent value='movements' className='mt-3'>
-            <Card>
-              <CardContent className='p-0'>
-                <MovementsTable productionOrderId={order.id} />
-              </CardContent>
-            </Card>
+            <MovementsTable productionOrderId={order.id} />
           </TabsContent>
           <TabsContent value='trace' className='mt-3'>
             <OrderTraceTab orderId={order.id} />
@@ -941,59 +978,16 @@ export default function ProductionOrderDetail({
   )
 }
 
-function Kpi({
-  label,
-  value,
-  unit,
-  hint,
-  tone,
-  bar,
-}: {
-  label: string
-  value: string
-  unit?: string
-  hint?: string
-  tone?: 'emerald' | 'rose' | 'amber'
-  bar?: number
-}) {
-  const color =
-    tone === 'emerald'
-      ? 'text-emerald-600 dark:text-emerald-400'
-      : tone === 'rose'
-        ? 'text-rose-600 dark:text-rose-400'
-        : tone === 'amber'
-          ? 'text-amber-600 dark:text-amber-400'
-          : ''
+function Qty({ value, unit }: { value: number; unit?: string }) {
   return (
-    <Card>
-      <CardContent className='space-y-1.5 p-4'>
-        <div className='text-muted-foreground text-xs'>{label}</div>
-        <div className='flex items-baseline gap-1'>
-          <span
-            className={cn(
-              'text-2xl font-semibold tracking-tight tabular-nums',
-              color
-            )}
-          >
-            {value}
-          </span>
-          {unit && (
-            <span className='text-muted-foreground text-xs'>{unit}</span>
-          )}
-        </div>
-        {bar !== undefined && (
-          <div className='bg-muted h-1 overflow-hidden rounded-full'>
-            <div
-              className='bg-primary h-full rounded-full'
-              style={{ width: `${Math.min(100, bar)}%` }}
-            />
-          </div>
-        )}
-        {hint && (
-          <div className='text-muted-foreground text-[11px]'>{hint}</div>
-        )}
-      </CardContent>
-    </Card>
+    <span className='inline-flex items-baseline gap-1'>
+      {fmtQty(value)}
+      {unit && (
+        <span className='text-muted-foreground text-xs font-normal'>
+          {unit}
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -1010,14 +1004,11 @@ function FlowStage({
   sub: string
   tone?: 'amber' | 'sky' | 'emerald'
 }) {
-  const accent =
-    tone === 'amber'
-      ? 'bg-amber-500/10 text-amber-600'
-      : tone === 'sky'
-        ? 'bg-sky-500/10 text-sky-600'
-        : tone === 'emerald'
-          ? 'bg-emerald-500/10 text-emerald-600'
-          : 'bg-muted text-muted-foreground'
+  // Icons stay neutral; the stage order (left → right) carries the meaning.
+  const accent = cn(
+    'bg-muted text-muted-foreground',
+    tone && 'text-foreground/70'
+  )
   return (
     <div className='flex items-start gap-3 p-4'>
       <div
@@ -1050,10 +1041,14 @@ function WipLotsTab({ order }: { order: ProductionOrder }) {
           <TableHeader>
             <TableRow className='bg-muted/40'>
               <TableHead>{t('Item')}</TableHead>
-              <TableHead>{t('Batch / serials')}</TableHead>
+              <TableHead className='max-md:hidden'>
+                {t('Batch / serials')}
+              </TableHead>
               <TableHead className='text-right'>{t('Quantity')}</TableHead>
-              <TableHead className='text-right'>{t('Value')}</TableHead>
-              <TableHead>{t('Issued')}</TableHead>
+              <TableHead className='text-right max-sm:hidden'>
+                {t('Value')}
+              </TableHead>
+              <TableHead className='max-lg:hidden'>{t('Issued')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1067,7 +1062,7 @@ function WipLotsTab({ order }: { order: ProductionOrder }) {
                     </div>
                   )}
                 </TableCell>
-                <TableCell className='text-xs'>
+                <TableCell className='text-xs max-md:hidden'>
                   {l.batchNumber && (
                     <Badge variant='outline' className='font-mono text-[10px]'>
                       {l.batchNumber}
@@ -1093,10 +1088,10 @@ function WipLotsTab({ order }: { order: ProductionOrder }) {
                     {l.unit}
                   </span>
                 </TableCell>
-                <TableCell className='text-right tabular-nums'>
+                <TableCell className='text-right tabular-nums max-sm:hidden'>
                   {formatMoney(l.quantity * (l.unitCost || 0))}
                 </TableCell>
-                <TableCell className='text-muted-foreground text-xs'>
+                <TableCell className='text-muted-foreground text-xs max-lg:hidden'>
                   {fmtDate(l.issuedAt)}
                 </TableCell>
               </TableRow>
@@ -1132,7 +1127,9 @@ function OutputsTab({
               <TableHead className='text-right'>{t('Produced')}</TableHead>
               <TableHead className='text-right'>{t('Good')}</TableHead>
               <TableHead className='text-right'>{t('Rejected')}</TableHead>
-              <TableHead className='text-right'>{t('Unit cost')}</TableHead>
+              <TableHead className='text-right max-md:hidden'>
+                {t('Unit cost')}
+              </TableHead>
               <TableHead>{t('QC')}</TableHead>
             </TableRow>
           </TableHeader>
@@ -1175,7 +1172,7 @@ function OutputsTab({
                     '—'
                   )}
                 </TableCell>
-                <TableCell className='text-right tabular-nums'>
+                <TableCell className='text-right tabular-nums max-md:hidden'>
                   {formatMoney(o.unitCost)}
                 </TableCell>
                 <TableCell>

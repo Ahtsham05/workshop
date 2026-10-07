@@ -1,26 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { FileStack, Plus, X } from 'lucide-react'
-import { useGetBomsQuery } from '@/stores/manufacturing.api'
-import { cn } from '@/lib/utils'
+import { useGetBomsQuery, type Bom } from '@/stores/manufacturing.api'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { BomDetailSheet, BomStateBadges } from '../components/bom-detail-sheet'
 import { BomEditorDialog } from '../components/bom-editor-dialog'
-import { EmptyState, SectionHeader } from '../components/manufacturing-shell'
+import { DataTable, type Column } from '../components/data-table'
+import { FilterChips, SearchField, Toolbar } from '../components/list-controls'
+import { EmptyState, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
 import { fmtDate, fmtQty } from '../lib/constants'
 
@@ -48,6 +38,9 @@ export default function BomsPage() {
   useEffect(() => {
     if (routeSearch.bomId) setOpenBomId(routeSearch.bomId)
   }, [routeSearch.bomId])
+  useEffect(() => {
+    if (routeSearch.new) setCreating(true)
+  }, [routeSearch.new])
 
   const { data, isLoading, isFetching } = useGetBomsQuery({
     page,
@@ -58,169 +51,205 @@ export default function BomsPage() {
     ...(view === 'inactive' ? { isActive: false } : {}),
   })
   const rows = data?.results || []
+  const canManage = hasPermission('manageBoms')
+  const filtered = !!debounced || view !== 'all' || !!routeSearch.productId
+
+  const columns: Column<Bom>[] = [
+    {
+      id: 'bom',
+      header: t('BOM'),
+      className: 'w-44',
+      cell: (bom) => (
+        <div className='min-w-0'>
+          <div className='flex items-center gap-1.5'>
+            <button
+              type='button'
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpenBomId(bom.id)
+              }}
+              className='font-mono text-xs font-medium hover:underline'
+            >
+              {bom.bomNumber}
+            </button>
+            <span className='text-muted-foreground rounded border px-1 text-[10px] leading-4'>
+              v{bom.version}
+            </span>
+          </div>
+          {bom.name && bom.name !== bom.productName && (
+            <div className='text-muted-foreground truncate text-xs'>
+              {bom.name}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'product',
+      header: t('Product'),
+      cell: (bom) => <span className='font-medium'>{bom.productName}</span>,
+    },
+    {
+      id: 'output',
+      header: t('Output'),
+      align: 'right',
+      hideBelow: 'md',
+      cell: (bom) => (
+        <span className='tabular-nums'>
+          {fmtQty(bom.quantity)}{' '}
+          <span className='text-muted-foreground text-xs'>{bom.unit}</span>
+        </span>
+      ),
+    },
+    {
+      id: 'components',
+      header: t('Components'),
+      align: 'right',
+      hideBelow: 'md',
+      cell: (bom) => (
+        <span className='tabular-nums'>{bom.components.length}</span>
+      ),
+    },
+    {
+      id: 'state',
+      header: t('State'),
+      cell: (bom) => <BomStateBadges bom={bom} />,
+    },
+    {
+      id: 'updated',
+      header: t('Updated'),
+      hideBelow: 'lg',
+      cell: (bom) => (
+        <span className='text-muted-foreground tabular-nums'>
+          {fmtDate(bom.updatedAt)}
+        </span>
+      ),
+    },
+  ]
 
   return (
-    <div className='space-y-4'>
-      <SectionHeader
+    <div className='space-y-5'>
+      <PageHeader
         title={t('Bills of Materials')}
         description={t(
-          'Recipes for everything you make. Each BOM keeps a full version history; nested sub-assemblies expand into multi-level structures.'
+          'Recipes for everything you make. Each BOM keeps a full version history, and nested sub-assemblies expand into multi-level structures.'
         )}
         actions={
-          hasPermission('manageBoms') && (
-            <Button onClick={() => setCreating(true)} className='max-sm:w-full'>
-              <Plus className='mr-2 h-4 w-4' />
+          canManage && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus className='mr-1.5 h-4 w-4' />
               {t('New BOM')}
             </Button>
           )
         }
       />
 
-      <Card>
-        <CardContent className='space-y-3 p-4 max-sm:p-3'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <div className='inline-flex rounded-lg border p-0.5'>
-              {(
-                [
-                  ['all', t('All versions')],
-                  ['default', t('Default only')],
-                  ['inactive', t('Inactive')],
-                ] as [View, string][]
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type='button'
-                  onClick={() => {
-                    setView(key)
-                    setPage(1)
-                  }}
-                  className={cn(
-                    'rounded-md px-3 py-1 text-xs transition-colors',
-                    view === key
-                      ? 'bg-foreground text-background'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <Input
-              placeholder={t('Search BOM number, name or product…')}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setPage(1)
-              }}
-              className='h-9 w-72 max-sm:w-full'
+      <Toolbar>
+        <SearchField
+          value={search}
+          onChange={(v) => {
+            setSearch(v)
+            setPage(1)
+          }}
+          placeholder={t('Search BOM number, name or product')}
+        />
+        <FilterChips
+          label={t('Filter BOM versions')}
+          value={view}
+          onChange={(v) => {
+            setView(v as View)
+            setPage(1)
+          }}
+          options={[
+            { value: 'all', label: t('All versions') },
+            { value: 'default', label: t('Default only') },
+            { value: 'inactive', label: t('Inactive') },
+          ]}
+        />
+        {routeSearch.productId && (
+          <Button
+            variant='secondary'
+            size='sm'
+            className='h-8 rounded-full'
+            onClick={() =>
+              navigate({
+                to: '/manufacturing/boms' as never,
+                search: {} as never,
+              })
+            }
+          >
+            {rows[0]?.productName || t('One product')}
+            <X
+              className='ml-1.5 h-3.5 w-3.5'
+              aria-label={t('Clear product filter')}
             />
-            {routeSearch.productId && (
-              <Button
-                variant='ghost'
-                size='sm'
-                onClick={() =>
-                  navigate({
-                    to: '/manufacturing/boms' as never,
-                    search: {} as never,
-                  })
-                }
-              >
-                <X className='mr-1 h-3.5 w-3.5' />
-                {t('Clear product filter')}
-              </Button>
-            )}
-          </div>
+          </Button>
+        )}
+      </Toolbar>
 
-          <div className='overflow-x-auto rounded-lg border'>
-            <Table>
-              <TableHeader>
-                <TableRow className='bg-muted/40'>
-                  <TableHead>{t('BOM')}</TableHead>
-                  <TableHead>{t('Product')}</TableHead>
-                  <TableHead className='text-right'>{t('Output')}</TableHead>
-                  <TableHead className='text-right'>
-                    {t('Components')}
-                  </TableHead>
-                  <TableHead>{t('State')}</TableHead>
-                  <TableHead>{t('Updated')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading &&
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={6}>
-                        <Skeleton className='h-6 w-full' />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                {!isLoading && rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <EmptyState
-                        icon={FileStack}
-                        title={t('No BOMs here yet')}
-                        description={t(
-                          'A BOM lists the components, quantities and scrap allowance needed to build a product.'
-                        )}
-                        action={
-                          hasPermission('manageBoms') && (
-                            <Button size='sm' onClick={() => setCreating(true)}>
-                              {t('Create a BOM')}
-                            </Button>
-                          )
-                        }
-                      />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {rows.map((bom) => (
-                  <TableRow
-                    key={bom.id}
-                    className={cn('cursor-pointer', isFetching && 'opacity-70')}
-                    onClick={() => setOpenBomId(bom.id)}
-                  >
-                    <TableCell>
-                      <div className='flex items-center gap-2'>
-                        <span className='font-mono text-xs'>
-                          {bom.bomNumber}
-                        </span>
-                        <span className='text-muted-foreground rounded border px-1.5 text-[11px]'>
-                          v{bom.version}
-                        </span>
-                      </div>
-                      {bom.name && bom.name !== bom.productName && (
-                        <div className='text-muted-foreground text-xs'>
-                          {bom.name}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className='font-medium'>
-                      {bom.productName}
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {fmtQty(bom.quantity)}{' '}
-                      <span className='text-muted-foreground text-xs'>
-                        {bom.unit}
-                      </span>
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {bom.components.length}
-                    </TableCell>
-                    <TableCell>
-                      <BomStateBadges bom={bom} />
-                    </TableCell>
-                    <TableCell className='text-muted-foreground text-sm'>
-                      {fmtDate(bom.updatedAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+      <DataTable
+        caption={t('Bills of Materials')}
+        columns={columns}
+        rows={rows}
+        rowKey={(bom) => bom.id}
+        loading={isLoading}
+        fetching={isFetching}
+        onRowClick={(bom) => setOpenBomId(bom.id)}
+        empty={
+          <EmptyState
+            bordered={false}
+            icon={FileStack}
+            title={
+              filtered ? t('No BOMs match these filters') : t('No BOMs yet')
+            }
+            description={
+              filtered
+                ? t('Try another filter or clear the search.')
+                : t(
+                    'A BOM lists the components, quantities and scrap allowance needed to build a product.'
+                  )
+            }
+            action={
+              canManage &&
+              !filtered && (
+                <Button
+                  size='sm'
+                  variant='outline'
+                  onClick={() => setCreating(true)}
+                >
+                  <Plus className='mr-1.5 h-3.5 w-3.5' />
+                  {t('Create a BOM')}
+                </Button>
+              )
+            }
+          />
+        }
+        mobileCard={(bom) => (
+          <div className='space-y-1.5'>
+            <div className='flex items-start justify-between gap-3'>
+              <div className='min-w-0'>
+                <div className='truncate font-medium'>{bom.productName}</div>
+                <div className='text-muted-foreground font-mono text-xs'>
+                  {bom.bomNumber} v{bom.version}
+                </div>
+              </div>
+              <BomStateBadges bom={bom} />
+            </div>
+            <div className='text-muted-foreground text-xs'>
+              {t('{{n}} components').replace(
+                '{{n}}',
+                String(bom.components.length)
+              )}{' '}
+              · {t('makes')} {fmtQty(bom.quantity)} {bom.unit}
+            </div>
           </div>
-          <Pager data={data} page={page} onPageChange={setPage} />
-        </CardContent>
-      </Card>
+        )}
+        footer={
+          data && data.totalPages > 1 ? (
+            <Pager data={data} page={page} onPageChange={setPage} />
+          ) : undefined
+        }
+      />
 
       {openBomId && (
         <BomDetailSheet
@@ -232,7 +261,16 @@ export default function BomsPage() {
       {creating && (
         <BomEditorDialog
           mode='create'
-          onClose={() => setCreating(false)}
+          onClose={() => {
+            setCreating(false)
+            if (routeSearch.new) {
+              navigate({
+                to: '/manufacturing/boms' as never,
+                search: {} as never,
+                replace: true,
+              })
+            }
+          }}
           onSaved={(bom) => setOpenBomId(bom.id)}
         />
       )}
