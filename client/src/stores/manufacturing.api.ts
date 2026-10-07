@@ -510,6 +510,116 @@ export interface OrderStatusCounts {
   total: number
   open: number
   overdue: number
+  delayed: number
+  inProduction: number
+  paused: number
+  planned: number
+  completed: number
+  cancelled: number
+  plannedQuantity: number
+  materialCost: number
+}
+
+/** Query params the Production Orders toolbar sends (lists are comma-separated). */
+export interface OrderListParams {
+  search?: string
+  orderNumber?: string
+  product?: string
+  status?: string
+  priority?: string
+  orderType?: OrderType
+  parentOrderId?: string
+  productId?: string
+  operatorId?: string
+  createdBy?: string
+  bomId?: string
+  branchId?: string
+  warehouse?: string
+  workCenter?: string
+  productType?: string
+  productionFrom?: string
+  productionTo?: string
+  dueFrom?: string
+  dueTo?: string
+  completedFrom?: string
+  completedTo?: string
+  quantityMin?: number
+  quantityMax?: number
+  completionMin?: number
+  completionMax?: number
+  delayed?: boolean
+  overdue?: boolean
+  hasShortage?: boolean
+  hasQcIssue?: boolean
+  hasScrap?: boolean
+  hasRework?: boolean
+  sort?: OrderSort
+  dir?: 'asc' | 'desc'
+}
+
+export type OrderSort =
+  | 'newest'
+  | 'oldest'
+  | 'due'
+  | 'quantity'
+  | 'priority'
+  | 'status'
+  | 'completion'
+  | 'cost'
+
+/** A list row: the order plus the flags the server derives for badges. */
+export interface ProductionOrderRow extends ProductionOrder {
+  completionPercent: number
+  isOverdue: boolean
+  isDelayed: boolean
+  daysLate: number
+  hasShortage: boolean
+  hasQcIssue: boolean
+  hasRework: boolean
+}
+
+export interface OrderFilterOptions {
+  workCenters: string[]
+  warehouses: string[]
+  operators: { id: string; name: string }[]
+  createdBy: { id: string; name: string; email?: string }[]
+  boms: { id: string; label: string; productName: string }[]
+  branches: { id: string; name: string }[]
+}
+
+export interface OrderExportRow {
+  id: string
+  orderNumber: string
+  orderType: OrderType
+  productName: string
+  sku: string
+  bom: string
+  status: ProductionStatus
+  priority: ProductionPriority
+  plannedQuantity: number
+  completedQuantity: number
+  rejectedQuantity: number
+  unit: string
+  completionPercent: number
+  plannedStartDate?: string | null
+  plannedCompletionDate?: string | null
+  actualCompletionDate?: string | null
+  workCenter: string
+  warehouse: string
+  branch: string
+  operator: string
+  createdBy: string
+  materialCost: number
+  isDelayed: boolean
+  isOverdue: boolean
+  hasShortage: boolean
+  createdAt: string
+}
+
+export interface OrderExport {
+  totalResults: number
+  truncated: boolean
+  results: OrderExportRow[]
 }
 
 export interface OrderTreeNode {
@@ -1089,15 +1199,8 @@ export const manufacturingApi = createApi({
 
     // Production orders
     getProductionOrders: builder.query<
-      Paginated<ProductionOrder>,
-      ListParams & {
-        status?: string
-        priority?: ProductionPriority
-        orderType?: OrderType
-        parentOrderId?: string
-        productId?: string
-        overdue?: boolean
-      }
+      Paginated<ProductionOrderRow>,
+      ListParams & OrderListParams
     >({
       query: (params) => ({ url: '/manufacturing/production-orders', params }),
       providesTags: ['MfgOrder'],
@@ -1153,15 +1256,45 @@ export const manufacturingApi = createApi({
       }),
       invalidatesTags: ['MfgOrder', 'MfgDashboard', 'MfgRequirements'],
     }),
-    getOrderStatusCounts: builder.query<
-      OrderStatusCounts,
-      { orderType?: OrderType; search?: string }
-    >({
+    getOrderStatusCounts: builder.query<OrderStatusCounts, OrderListParams>({
       query: (params) => ({
         url: '/manufacturing/production-orders/status-counts',
         params,
       }),
       providesTags: ['MfgOrder'],
+    }),
+    getOrderFilterOptions: builder.query<OrderFilterOptions, void>({
+      query: () => '/manufacturing/production-orders/filter-options',
+      providesTags: ['MfgOrder'],
+    }),
+    exportProductionOrders: builder.query<OrderExport, OrderListParams>({
+      query: (params) => ({
+        url: '/manufacturing/production-orders/export',
+        params,
+      }),
+      keepUnusedDataFor: 0,
+    }),
+    bulkUpdateProductionOrders: builder.mutation<
+      {
+        updated: { id: string; orderNumber: string; status: ProductionStatus }[]
+        failed: { id: string; orderNumber: string; message: string }[]
+      },
+      {
+        orderIds: string[]
+        priority?: ProductionPriority
+        operatorId?: string | null
+        plannedStartDate?: string | null
+        plannedCompletionDate?: string | null
+        status?: 'planned' | 'released' | 'paused' | 'cancelled'
+        note?: string
+      }
+    >({
+      query: (body) => ({
+        url: '/manufacturing/production-orders/bulk',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgOrder', 'MfgDashboard', 'MfgRequirements'],
     }),
     getOrderTree: builder.query<
       { ancestors: OrderTreeNode[]; order: OrderTreeNode },
@@ -1500,6 +1633,9 @@ export const {
   useGetAssembliesQuery,
   useGetBomsQuery,
   useGetOrderStatusCountsQuery,
+  useGetOrderFilterOptionsQuery,
+  useLazyExportProductionOrdersQuery,
+  useBulkUpdateProductionOrdersMutation,
   useGetBomQuery,
   useGetBomVersionsQuery,
   useExplodeBomQuery,

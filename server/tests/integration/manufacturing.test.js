@@ -14,6 +14,8 @@ const {
   ProductionOutput,
   ScrapRecord,
   ManufacturingSettings,
+  Branch,
+  User,
 } = require('../../src/models');
 const manufacturing = require('../../src/services/manufacturing');
 
@@ -834,12 +836,19 @@ describe('List support for the UI', () => {
     await po.createOrder(ctx, { productId: fan._id, plannedQuantity: 2, plannedCompletionDate: '2020-01-01' });
     await po.changeStatus(ctx, a._id, { status: 'cancelled' });
 
-    const counts = await po.countOrdersByStatus(ctx, { orderType: 'production' });
+    const counts = await manufacturing.orderList.summarizeOrders(ctx, { orderType: 'production' });
     expect(counts).toMatchObject({ total: 2, open: 1, overdue: 1, byStatus: { draft: 1, cancelled: 1 } });
-    expect(await po.countOrdersByStatus(ctx, { orderType: 'assembly' })).toMatchObject({ total: 0, open: 0 });
-    expect((await po.countOrdersByStatus(ctx, { orderType: 'production', search: 'nothing-like-this' })).total).toBe(0);
+    expect(await manufacturing.orderList.summarizeOrders(ctx, { orderType: 'assembly' })).toMatchObject({
+      total: 0,
+      open: 0,
+    });
+    expect(
+      (await manufacturing.orderList.summarizeOrders(ctx, { orderType: 'production', search: 'nothing-like-this' })).total
+    ).toBe(0);
     // Another organization sees none of it.
-    expect((await po.countOrdersByStatus({ organizationId: id(), branchId: String(BRANCH) }, {})).total).toBe(0);
+    expect(
+      (await manufacturing.orderList.summarizeOrders({ organizationId: id(), branchId: String(BRANCH) }, {})).total
+    ).toBe(0);
   });
 });
 
@@ -1027,5 +1036,222 @@ describe('Dashboard analytics', () => {
     const other = await analytics.getAnalytics({ organizationId: id(), branchId: String(BRANCH) }, { range: '7d' }, NOW);
     expect(other.kpis.unitsProduced.quantity).toBe(0);
     expect(other.alerts).toEqual([]);
+  });
+});
+
+describe('Production orders workspace (filters, sorting, summary, export, bulk)', () => {
+  const ol = () => manufacturing.orderList;
+  const NOW = new Date('2026-10-07T08:00:00Z'); // 13:00 PKT
+  const at = (isoDay, hourUtc = 7) => new Date(`${isoDay}T${String(hourUtc).padStart(2, '0')}:00:00Z`);
+
+  const seed = async () => {
+    const otherBranch = id();
+    const foreignBranch = id();
+    const opA = id();
+    const maker = id();
+    const bomA = id();
+    const fg = await insertProduct('Fan', { productType: 'finished_good' });
+    const sub = await insertProduct('Motor', { productType: 'sub_assembly' });
+    await Branch.collection.insertMany([
+      { _id: BRANCH, organizationId: ORG, name: 'Main' },
+      { _id: otherBranch, organizationId: ORG, name: 'Plant 2' },
+      { _id: foreignBranch, organizationId: id(), name: 'Someone else' },
+    ]);
+    await User.collection.insertMany([{ _id: maker, name: 'Sana', email: 'sana@x.io', organizationId: ORG }]);
+    const base = { organizationId: ORG, branchId: BRANCH, unit: 'pcs', materials: [], createdBy: maker };
+    const order = (n, extra) => ({
+      ...base,
+      orderNumber: `MO-${n}`,
+      productId: fg._id,
+      productName: 'Fan',
+      priority: 'normal',
+      plannedQuantity: 10,
+      completedQuantity: 0,
+      rejectedQuantity: 0,
+      qcPendingQuantity: 0,
+      reworkPendingQuantity: 0,
+      reworkedGoodQuantity: 0,
+      scrappedQuantity: 0,
+      materialCost: 0,
+      wipLocation: 'Line 1',
+      sourceLocation: 'Raw Store',
+      finishedGoodsLocation: 'FG Store',
+      createdAt: at('2026-10-01'),
+      ...extra,
+    });
+    await ProductionOrder.collection.insertMany([
+      // overdue + in production, high, 50% done, BOM A, operator A
+      order('001', {
+        status: 'in_production',
+        priority: 'high',
+        plannedQuantity: 20,
+        completedQuantity: 10,
+        plannedStartDate: at('2026-09-28'),
+        plannedCompletionDate: at('2026-10-05'),
+        bomId: bomA,
+        bomNumber: 'BOM-1',
+        bomVersion: 1,
+        operatorId: opA,
+        operatorName: 'Ali',
+        materialCost: 900,
+        rejectedQuantity: 2,
+        createdAt: at('2026-09-27'),
+      }),
+      // late start: planned, should have started yesterday; urgent; on Line 2
+      order('002', {
+        status: 'planned',
+        priority: 'urgent',
+        plannedStartDate: at('2026-10-06'),
+        plannedCompletionDate: at('2026-10-20'),
+        wipLocation: 'Line 2',
+        createdAt: at('2026-10-03'),
+      }),
+      // completed, with rework history, sub-assembly product, cost 300
+      order('003', {
+        status: 'completed',
+        productId: sub._id,
+        productName: 'Motor',
+        priority: 'low',
+        completedQuantity: 10,
+        reworkedGoodQuantity: 1,
+        plannedCompletionDate: at('2026-10-02'),
+        actualCompletionDate: at('2026-10-02'),
+        materialCost: 300,
+        createdAt: at('2026-09-20'),
+      }),
+      // cancelled, big quantity, other branch of the same org
+      order('004', { status: 'cancelled', plannedQuantity: 500, branchId: otherBranch, createdAt: at('2026-10-05') }),
+      // another organization's order — never visible
+      { ...order('999', { status: 'draft' }), organizationId: id(), branchId: foreignBranch },
+    ]);
+    await ScrapRecord.collection.insertOne({
+      organizationId: ORG,
+      branchId: BRANCH,
+      scrapNumber: 'SCR-9',
+      productionOrderId: (await ProductionOrder.findOne({ orderNumber: 'MO-002' }))._id,
+      scrapDate: at('2026-10-06'),
+      quantity: 1,
+      totalCost: 5,
+    });
+    return { otherBranch, foreignBranch, opA, maker, bomA };
+  };
+
+  const orgCtx = { organizationId: ORG, createdBy: USER }; // org-wide viewer (no pinned branch)
+  const numbers = (res) => res.results.map((o) => o.orderNumber);
+  const find = (filter, options = {}) => ol().listOrders(orgCtx, filter, options, NOW);
+
+  test('every filter narrows the same org-scoped set', async () => {
+    const { otherBranch, foreignBranch, opA, maker, bomA } = await seed();
+
+    expect(numbers(await find({}))).toEqual(['MO-004', 'MO-002', 'MO-001', 'MO-003']); // newest first
+    expect(numbers(await find({ orderNumber: '00' }))).toHaveLength(4);
+    expect(numbers(await find({ product: 'mot' }))).toEqual(['MO-003']);
+    expect(numbers(await find({ status: 'planned,in_production' })).sort()).toEqual(['MO-001', 'MO-002']);
+    expect(numbers(await find({ priority: 'urgent,high' })).sort()).toEqual(['MO-001', 'MO-002']);
+    expect(numbers(await find({ productionFrom: '2026-10-06', productionTo: '2026-10-06' }))).toEqual(['MO-002']);
+    expect(numbers(await find({ dueFrom: '2026-10-01', dueTo: '2026-10-05' })).sort()).toEqual(['MO-001', 'MO-003']);
+    expect(numbers(await find({ completedFrom: '2026-10-01', completedTo: '2026-10-31' }))).toEqual(['MO-003']);
+    expect(numbers(await find({ warehouse: 'Raw Store' }))).toHaveLength(4);
+    expect(numbers(await find({ warehouse: 'Nowhere' }))).toEqual([]);
+    expect(numbers(await find({ branchId: String(otherBranch) }))).toEqual(['MO-004']);
+    // Another organization's branch id can't widen the scope — it simply matches nothing.
+    expect(numbers(await find({ branchId: String(foreignBranch) }))).toEqual([]);
+    expect(numbers(await find({ bomId: String(bomA) }))).toEqual(['MO-001']);
+    expect(numbers(await find({ productType: 'sub_assembly' }))).toEqual(['MO-003']);
+    expect(numbers(await find({ workCenter: 'Line 2' }))).toEqual(['MO-002']);
+    expect(numbers(await find({ operatorId: String(opA) }))).toEqual(['MO-001']);
+    expect(numbers(await find({ createdBy: String(maker) }))).toHaveLength(4);
+    expect(numbers(await find({ quantityMin: 15, quantityMax: 100 }))).toEqual(['MO-001']);
+    expect(numbers(await find({ completionMin: 40, completionMax: 60 }))).toEqual(['MO-001']);
+    expect(numbers(await find({ overdue: 'true' }))).toEqual(['MO-001']);
+    expect(numbers(await find({ delayed: 'true' })).sort()).toEqual(['MO-001', 'MO-002']);
+    expect(numbers(await find({ hasQcIssue: 'true' }))).toEqual(['MO-001']);
+    expect(numbers(await find({ hasScrap: 'true' }))).toEqual(['MO-002']);
+    expect(numbers(await find({ hasRework: 'true' }))).toEqual(['MO-003']);
+    expect(numbers(await find({ hasShortage: 'true' }))).toEqual([]); // no material lines in this set
+
+    // A user pinned to the main branch never sees the other branch, even when asking for it.
+    const pinned = await ol().listOrders(ctx, { branchId: String(otherBranch) }, {}, NOW);
+    expect(pinned.totalResults).toBe(0);
+
+    const row = (await find({ orderNumber: 'MO-001' })).results[0];
+    expect(row).toMatchObject({ completionPercent: 50, isOverdue: true, isDelayed: true, daysLate: 2, hasQcIssue: true });
+  });
+
+  test('sorting, summary cards and export follow the same filters', async () => {
+    await seed();
+    const by = async (sort, dir) => numbers(await find({}, { sort, dir }));
+    expect(await by('oldest')).toEqual(['MO-003', 'MO-001', 'MO-002', 'MO-004']);
+    expect(await by('due')).toEqual(['MO-003', 'MO-001', 'MO-002', 'MO-004']); // undated last
+    expect(await by('quantity')).toEqual(['MO-004', 'MO-001', 'MO-002', 'MO-003']);
+    expect(await by('priority')).toEqual(['MO-002', 'MO-001', 'MO-004', 'MO-003']);
+    expect(await by('status')).toEqual(['MO-002', 'MO-001', 'MO-003', 'MO-004']);
+    expect(await by('completion')).toEqual(['MO-003', 'MO-001', 'MO-004', 'MO-002']);
+    expect(await by('cost')).toEqual(['MO-001', 'MO-003', 'MO-004', 'MO-002']);
+    expect(await by('cost', 'asc')).toEqual(['MO-004', 'MO-002', 'MO-003', 'MO-001']);
+    await expect(find({}, { sort: 'colour' })).rejects.toThrow(/Unknown sort/);
+
+    const page = await find({}, { limit: 2, page: 2 });
+    expect(page).toMatchObject({ page: 2, limit: 2, totalPages: 2, totalResults: 4 });
+
+    const summary = await ol().summarizeOrders(orgCtx, { status: 'completed' }, NOW); // status is ignored here
+    expect(summary).toMatchObject({
+      total: 4,
+      inProduction: 1,
+      planned: 1,
+      completed: 1,
+      cancelled: 1,
+      delayed: 2,
+      overdue: 1,
+      plannedQuantity: 540,
+      materialCost: 1200,
+    });
+    expect((await ol().summarizeOrders(orgCtx, { priority: 'urgent' }, NOW)).total).toBe(1);
+
+    const exported = await ol().exportOrders(orgCtx, { status: 'in_production,planned' }, { sort: 'priority' }, NOW);
+    expect(exported.results.map((r) => [r.orderNumber, r.branch, r.createdBy, r.workCenter])).toEqual([
+      ['MO-002', 'Main', 'Sana', 'Line 2'],
+      ['MO-001', 'Main', 'Sana', 'Line 1'],
+    ]);
+    expect(exported.truncated).toBe(false);
+
+    const options = await ol().filterOptions(orgCtx);
+    expect(options.workCenters).toEqual(['Line 1', 'Line 2']);
+    expect(options.warehouses).toEqual(['FG Store', 'Raw Store']);
+    expect(options.operators).toEqual([{ id: expect.any(String), name: 'Ali' }]);
+    expect(options.createdBy.map((u) => u.name)).toEqual(['Sana']);
+    expect(options.branches.map((b) => b.name)).toEqual(['Main', 'Plant 2']); // never another org's
+  });
+
+  test('bulk update applies per order through the normal rules and reports failures', async () => {
+    const { fan } = await buildMotorTree();
+    const po = manufacturing.productionOrder;
+    const a = await po.createOrder(ctx, { productId: fan._id, plannedQuantity: 1 });
+    const b = await po.createOrder(ctx, { productId: fan._id, plannedQuantity: 2 });
+    await po.changeStatus(ctx, b._id, { status: 'cancelled' });
+
+    const res = await ol().bulkUpdate(ctx, { orderIds: [String(a._id), String(b._id)], priority: 'urgent' });
+    expect(res.updated.map((o) => o.orderNumber)).toEqual([a.orderNumber]);
+    expect(res.failed).toEqual([
+      { id: String(b._id), orderNumber: b.orderNumber, message: expect.stringMatching(/cancelled/) },
+    ]);
+    expect((await ProductionOrder.findById(a._id)).priority).toBe('urgent');
+
+    const moved = await ol().bulkUpdate(ctx, { orderIds: [String(a._id)], status: 'planned' });
+    expect(moved.updated[0].status).toBe('planned');
+    await expect(ol().bulkUpdate(ctx, { orderIds: [String(a._id)], status: 'completed' })).rejects.toThrow(/Bulk status/);
+    await expect(ol().bulkUpdate(ctx, { orderIds: [String(a._id)] })).rejects.toThrow(/Nothing to change/);
+
+    // Orders of another organization fail individually; nothing leaks or changes.
+    const foreign = await ol().bulkUpdate(
+      { organizationId: id(), branchId: String(BRANCH) },
+      {
+        orderIds: [String(a._id)],
+        priority: 'low',
+      }
+    );
+    expect(foreign.updated).toEqual([]);
+    expect(foreign.failed).toHaveLength(1);
+    expect((await ProductionOrder.findById(a._id)).priority).toBe('urgent');
   });
 });

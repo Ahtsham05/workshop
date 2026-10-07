@@ -85,6 +85,14 @@ router.get('/requirements', auth(VIEW), validate(v.getRequirements), c.getRequir
 
 // Production orders
 router.get('/production-orders/status-counts', auth(VIEW), validate(v.getOrderStatusCounts), c.getOrderStatusCounts);
+router.get('/production-orders/filter-options', auth(VIEW), c.getProductionOrderFilterOptions);
+router.get('/production-orders/export', auth(VIEW), validate(v.exportProductionOrders), c.exportProductionOrders);
+router.post(
+  '/production-orders/bulk',
+  auth('manageProductionOrders'),
+  validate(v.bulkUpdateProductionOrders),
+  c.bulkUpdateProductionOrders
+);
 router
   .route('/production-orders')
   .get(auth(VIEW), validate(v.getProductionOrders), c.getProductionOrders)

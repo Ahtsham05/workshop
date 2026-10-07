@@ -17,6 +17,7 @@ const {
   analytics: analyticsService,
   traceability: traceabilityService,
   demoData: demoDataService,
+  orderList: orderListService,
 } = manufacturingService;
 
 /** Read context: org always, branch when the client picked one (superAdmins may read org-wide). */
@@ -244,25 +245,98 @@ const createProductionOrder = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(order);
 });
 
+const ORDER_FILTER_KEYS = [
+  'search',
+  'orderNumber',
+  'product',
+  'status',
+  'priority',
+  'orderType',
+  'parentOrderId',
+  'productId',
+  'operatorId',
+  'createdBy',
+  'bomId',
+  'branchId',
+  'warehouse',
+  'workCenter',
+  'productType',
+  'productionFrom',
+  'productionTo',
+  'dueFrom',
+  'dueTo',
+  'completedFrom',
+  'completedTo',
+  'createdFrom',
+  'createdTo',
+  'dateFrom',
+  'dateTo',
+  'quantityMin',
+  'quantityMax',
+  'completionMin',
+  'completionMax',
+  'delayed',
+  'overdue',
+  'hasShortage',
+  'hasQcIssue',
+  'hasScrap',
+  'hasRework',
+];
+
 const getOrderStatusCounts = catchAsync(async (req, res) => {
-  res.send(await productionOrderService.countOrdersByStatus(readCtx(req), pick(req.query, ['orderType', 'search'])));
+  res.send(await orderListService.summarizeOrders(readCtx(req), pick(req.query, ORDER_FILTER_KEYS)));
 });
 
 const getProductionOrders = catchAsync(async (req, res) => {
-  const filter = pick(req.query, [
-    'status',
-    'priority',
-    'orderType',
-    'parentOrderId',
-    'operatorId',
-    'productId',
-    'bomId',
-    'overdue',
-    'search',
-    'dateFrom',
-    'dateTo',
-  ]);
-  res.send(await productionOrderService.queryOrders(readCtx(req), filter, listOptions(req)));
+  res.send(
+    await orderListService.listOrders(
+      readCtx(req),
+      pick(req.query, ORDER_FILTER_KEYS),
+      pick(req.query, ['sort', 'dir', 'page', 'limit'])
+    )
+  );
+});
+
+const getProductionOrderFilterOptions = catchAsync(async (req, res) => {
+  res.send(await orderListService.filterOptions(readCtx(req)));
+});
+
+const exportProductionOrders = catchAsync(async (req, res) => {
+  const result = await orderListService.exportOrders(
+    readCtx(req),
+    pick(req.query, ORDER_FILTER_KEYS),
+    pick(req.query, ['sort', 'dir'])
+  );
+  await audit(req, {
+    action: 'export',
+    module: 'ProductionOrder',
+    entityName: 'Production orders',
+    metadata: { rows: result.results.length, filters: pick(req.query, ORDER_FILTER_KEYS) },
+  });
+  res.send(result);
+});
+
+const bulkUpdateProductionOrders = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const result = await orderListService.bulkUpdate(ctx, req.body);
+  await Promise.all(
+    result.updated.map((order) =>
+      audit(req, {
+        action: req.body.status ? 'status_change' : 'update',
+        module: 'ProductionOrder',
+        entity: order,
+        entityName: orderLabel(order),
+        metadata: {
+          bulk: true,
+          changes: pick(req.body, ['priority', 'operatorId', 'plannedStartDate', 'plannedCompletionDate', 'status']),
+        },
+      })
+    )
+  );
+  res.send({
+    updated: result.updated.map((o) => ({ id: String(o._id || o.id), orderNumber: o.orderNumber, status: o.status })),
+    failed: result.failed,
+  });
 });
 
 const getProductionOrder = catchAsync(async (req, res) => {
@@ -533,6 +607,9 @@ const getWip = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getProductionOrderFilterOptions,
+  exportProductionOrders,
+  bulkUpdateProductionOrders,
   getAnalytics,
   getOrderStatusCounts,
   getDashboard,

@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/language-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -47,6 +48,8 @@ export function DataTable<T>({
   footer,
   caption,
   skeletonRows = 6,
+  dense,
+  rowLabel,
   className,
 }: {
   columns: Column<T>[]
@@ -61,8 +64,13 @@ export function DataTable<T>({
   footer?: React.ReactNode
   caption?: string
   skeletonRows?: number
+  /** Tighter rows for scanning long lists. */
+  dense?: boolean
+  /** Accessible name for a phone card's "open" control, e.g. "Open MO-00012". */
+  rowLabel?: (row: T) => string
   className?: string
 }) {
+  const { t } = useLanguage()
   const list = rows || []
   const showEmpty = !loading && list.length === 0
   const colClass = (c: Column<T>) =>
@@ -130,7 +138,13 @@ export function DataTable<T>({
                   )}
                 >
                   {columns.map((c) => (
-                    <TableCell key={c.id} className={cn('py-3', colClass(c))}>
+                    <TableCell
+                      key={c.id}
+                      className={cn(
+                        dense ? 'py-1.5 text-[13px]' : 'py-3',
+                        colClass(c)
+                      )}
+                    >
                       {c.cell(row)}
                     </TableCell>
                   ))}
@@ -157,18 +171,27 @@ export function DataTable<T>({
           {showEmpty && <li>{empty}</li>}
           {!loading &&
             list.map((row) => (
-              <li key={rowKey(row)}>
-                {onRowClick ? (
+              <li key={rowKey(row)} className='relative'>
+                {/* The whole card opens the row, via a button laid *behind* the content
+                    rather than wrapping it — so a checkbox or link inside the card stays
+                    its own control (buttons can't nest). */}
+                {onRowClick && (
                   <button
                     type='button'
                     onClick={() => onRowClick(row)}
-                    className='hover:bg-muted/40 focus-visible:ring-ring block min-h-14 w-full px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset'
-                  >
-                    {mobileCard(row)}
-                  </button>
-                ) : (
-                  <div className='px-4 py-3'>{mobileCard(row)}</div>
+                    aria-label={rowLabel ? rowLabel(row) : t('Open details')}
+                    className='hover:bg-muted/40 focus-visible:ring-ring absolute inset-0 h-full w-full outline-none focus-visible:ring-2 focus-visible:ring-inset'
+                  />
                 )}
+                <div
+                  className={cn(
+                    'relative min-h-14 px-4 py-3',
+                    onRowClick &&
+                      'pointer-events-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto [&_input]:pointer-events-auto [&_label]:pointer-events-auto'
+                  )}
+                >
+                  {mobileCard(row)}
+                </div>
               </li>
             ))}
         </ul>

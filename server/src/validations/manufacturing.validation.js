@@ -213,27 +213,74 @@ const getAnalytics = {
   }),
 };
 
+const csv = () => Joi.string().allow('');
+const calendarDay = () => Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/);
+/** Everything the Production Orders toolbar can send; shared by list, summary and export. */
+const orderListFilters = {
+  search: Joi.string().allow(''),
+  orderNumber: Joi.string().allow(''),
+  product: Joi.string().allow(''),
+  status: csv(),
+  priority: csv(),
+  orderType: Joi.string().valid(...ORDER_TYPES),
+  parentOrderId: csv(),
+  productId: csv(),
+  operatorId: csv(),
+  createdBy: csv(),
+  bomId: csv(),
+  branchId: csv(),
+  warehouse: csv(),
+  workCenter: csv(),
+  productType: csv(),
+  productionFrom: calendarDay(),
+  productionTo: calendarDay(),
+  dueFrom: calendarDay(),
+  dueTo: calendarDay(),
+  completedFrom: calendarDay(),
+  completedTo: calendarDay(),
+  createdFrom: calendarDay(),
+  createdTo: calendarDay(),
+  quantityMin: Joi.number().min(0),
+  quantityMax: Joi.number().min(0),
+  completionMin: Joi.number().min(0).max(100),
+  completionMax: Joi.number().min(0).max(100),
+  delayed: Joi.boolean(),
+  overdue: Joi.boolean(),
+  hasShortage: Joi.boolean(),
+  hasQcIssue: Joi.boolean(),
+  hasScrap: Joi.boolean(),
+  hasRework: Joi.boolean(),
+  ...dateRange,
+};
+const orderListSort = {
+  sort: Joi.string().valid('newest', 'oldest', 'due', 'quantity', 'priority', 'status', 'completion', 'cost'),
+  dir: Joi.string().valid('asc', 'desc'),
+};
+
 const getOrderStatusCounts = {
-  query: Joi.object().keys({
-    orderType: Joi.string().valid(...ORDER_TYPES),
-    search: Joi.string().allow(''),
-  }),
+  query: Joi.object().keys({ ...orderListFilters }),
 };
 
 const getProductionOrders = {
-  query: Joi.object().keys({
-    status: Joi.string(),
-    priority: Joi.string().valid(...PRODUCTION_PRIORITIES),
-    orderType: Joi.string().valid(...ORDER_TYPES),
-    parentOrderId: id(),
-    operatorId: id(),
-    productId: id(),
-    bomId: id(),
-    overdue: Joi.boolean(),
-    search: Joi.string().allow(''),
-    ...dateRange,
-    ...pagination,
-  }),
+  query: Joi.object().keys({ ...orderListFilters, ...orderListSort, ...pagination }),
+};
+
+const exportProductionOrders = {
+  query: Joi.object().keys({ ...orderListFilters, ...orderListSort }),
+};
+
+const bulkUpdateProductionOrders = {
+  body: Joi.object()
+    .keys({
+      orderIds: Joi.array().items(id().required()).min(1).max(200).required(),
+      priority: Joi.string().valid(...PRODUCTION_PRIORITIES),
+      operatorId: id().allow(null),
+      plannedStartDate: Joi.date().allow(null),
+      plannedCompletionDate: Joi.date().allow(null),
+      status: Joi.string().valid('planned', 'released', 'paused', 'cancelled'),
+      note: Joi.string().allow('').max(500),
+    })
+    .or('priority', 'operatorId', 'plannedStartDate', 'plannedCompletionDate', 'status'),
 };
 
 const orderIdParam = { params: Joi.object().keys({ orderId: id().required() }) };
@@ -448,6 +495,8 @@ const listTransactions = {
 const issueIdParam = { params: Joi.object().keys({ issueId: id().required() }) };
 
 module.exports = {
+  exportProductionOrders,
+  bulkUpdateProductionOrders,
   getAnalytics,
   getOrderStatusCounts,
   updateSettings,

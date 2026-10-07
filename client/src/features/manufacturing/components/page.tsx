@@ -169,6 +169,8 @@ export function Stat({
   active = true,
   href,
   search,
+  onClick,
+  pressed,
   delta,
   className,
 }: {
@@ -182,6 +184,10 @@ export function Stat({
   active?: boolean
   href?: string
   search?: Record<string, unknown>
+  /** Act in place (e.g. apply a filter) instead of navigating. */
+  onClick?: () => void
+  /** With onClick: the filter this tile applies is currently on. */
+  pressed?: boolean
   className?: string
 }) {
   const appliedTone = active ? tone : 'default'
@@ -231,6 +237,22 @@ export function Stat({
     </>
   )
   const base = cn('bg-card @container min-w-0 px-5 py-4 max-sm:px-4', className)
+  if (onClick) {
+    return (
+      <button
+        type='button'
+        onClick={onClick}
+        aria-pressed={pressed}
+        className={cn(
+          base,
+          'hover:bg-muted/40 focus-visible:ring-ring text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset',
+          pressed && 'bg-muted/60 shadow-[inset_0_-2px_0_0_var(--foreground)]'
+        )}
+      >
+        {body}
+      </button>
+    )
+  }
   if (!href) return <div className={base}>{body}</div>
   return (
     <Link
