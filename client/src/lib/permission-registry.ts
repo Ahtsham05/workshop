@@ -72,7 +72,7 @@ export type PermissionKey =
   | 'viewInsights'
   | 'viewPurchaseSuggestions'
   | 'viewBarcodeGenerator'
-  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'executeProduction' | 'manageManufacturingSettings';
+  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'executeProduction' | 'overIssueMaterials' | 'inspectProduction' | 'manageManufacturingSettings';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -171,7 +171,15 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   {
     id: 'manufacturing',
     label: 'Manufacturing',
-    permissions: ['viewManufacturing', 'manageBoms', 'manageProductionOrders', 'executeProduction', 'manageManufacturingSettings'],
+    permissions: [
+      'viewManufacturing',
+      'manageBoms',
+      'manageProductionOrders',
+      'executeProduction',
+      'overIssueMaterials',
+      'inspectProduction',
+      'manageManufacturingSettings',
+    ],
   },
 ];
 

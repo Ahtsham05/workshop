@@ -19,6 +19,8 @@ const UPDATABLE_FIELDS = [
   'requireBomForProduction',
   'explodeSubAssemblies',
   'defaultPriority',
+  'requireQualityCheck',
+  'defaultRejectDisposition',
 ];
 
 const updateSettings = async (organizationId, body, updatedBy) => {

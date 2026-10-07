@@ -41,7 +41,7 @@ export default function FinishedGoodsPage() {
       <SectionHeader
         title={t('Finished goods')}
         description={t(
-          'Output received into stock from production orders, valued at material cost.'
+          'Inspected good output received into stock — with its batch or serial numbers — valued at the material it consumed.'
         )}
       />
       <Card>
@@ -87,7 +87,7 @@ export default function FinishedGoodsPage() {
                   <TableHead className='text-right'>{t('Quantity')}</TableHead>
                   <TableHead className='text-right'>{t('Unit cost')}</TableHead>
                   <TableHead className='text-right'>{t('Value')}</TableHead>
-                  <TableHead>{t('Location')}</TableHead>
+                  <TableHead>{t('Location / tracking')}</TableHead>
                   <TableHead>{t('By')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -148,7 +148,25 @@ export default function FinishedGoodsPage() {
                       {formatMoney(r.totalCost)}
                     </TableCell>
                     <TableCell className='text-muted-foreground text-sm'>
-                      {r.location || '—'}
+                      <div>{r.location || '—'}</div>
+                      {r.batchNumber && (
+                        <div className='font-mono text-[11px]'>
+                          {t('Batch')} {r.batchNumber}
+                        </div>
+                      )}
+                      {r.serialNumbers?.length ? (
+                        <div
+                          className='max-w-44 truncate font-mono text-[11px]'
+                          title={r.serialNumbers.join(', ')}
+                        >
+                          {r.serialNumbers.join(', ')}
+                        </div>
+                      ) : null}
+                      {r.source === 'rework' && (
+                        <div className='text-[11px] text-violet-600'>
+                          {t('from rework')}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className='text-muted-foreground text-sm'>
                       {refName(r.createdBy) || '—'}

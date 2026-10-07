@@ -8,6 +8,8 @@ const {
   PRODUCTION_PRIORITIES,
   SCRAP_STAGES,
   SCRAP_REASONS,
+  REJECT_DISPOSITIONS,
+  OUTPUT_STATUSES,
 } = require('../config/manufacturing');
 
 const id = () => Joi.string().custom(objectId);
@@ -34,6 +36,8 @@ const updateSettings = {
         bom: prefix(),
         productionOrder: prefix(),
         materialIssue: prefix(),
+        materialReturn: prefix(),
+        productionOutput: prefix(),
         productionReceipt: prefix(),
         scrap: prefix(),
       }),
@@ -43,6 +47,8 @@ const updateSettings = {
       defaultFinishedGoodsLocation: Joi.string().allow('').trim().max(100),
       allowNegativeStockIssue: Joi.boolean(),
       allowOverProduction: Joi.boolean(),
+      requireQualityCheck: Joi.boolean(),
+      defaultRejectDisposition: Joi.string().valid(...REJECT_DISPOSITIONS),
       requireBomForProduction: Joi.boolean(),
       explodeSubAssemblies: Joi.boolean(),
       defaultPriority: Joi.string().valid(...PRODUCTION_PRIORITIES),
@@ -224,6 +230,8 @@ const changeProductionStatus = {
       .valid(...PRODUCTION_STATUSES)
       .required(),
     note: Joi.string().allow('').max(500),
+    // Required when completing an order that still has material in WIP.
+    wipDisposition: Joi.string().valid('return', 'scrap'),
   }),
 };
 
@@ -232,6 +240,16 @@ const getRequirements = {
 };
 
 // ── Execution ─────────────────────────────────────────────────────────────────────
+const serialList = () => Joi.array().items(Joi.string().trim()).max(5000);
+
+const finishedGoods = Joi.object().keys({
+  batchNumber: Joi.string().trim().max(60).allow(''),
+  manufactureDate: Joi.date().allow(null),
+  expiryDate: Joi.date().allow(null),
+  serialNumbers: serialList(),
+  location: Joi.string().allow('').trim().max(100),
+});
+
 const issueMaterials = {
   ...orderIdParam,
   body: Joi.object().keys({
@@ -239,24 +257,78 @@ const issueMaterials = {
       .items(
         Joi.object().keys({
           materialLineId: id().required(),
-          quantity: Joi.number().min(0).required(),
+          // Serial-tracked lines may give only imeiIds/serialNumbers (quantity = count).
+          quantity: Joi.number().min(0),
           alternativeProductId: id().allow(null),
+          batches: Joi.array()
+            .items(Joi.object().keys({ batchId: id().required(), quantity: Joi.number().positive().required() }))
+            .max(100),
+          imeiIds: Joi.array().items(id()).max(5000),
+          serialNumbers: serialList(),
         })
       )
       .min(1)
       .max(500)
       .required(),
+    // Explicit confirmation for issuing beyond the remaining requirement (also needs the
+    // overIssueMaterials permission).
+    allowOverIssue: Joi.boolean(),
     issueDate: Joi.date(),
     notes: Joi.string().allow('').max(1000),
   }),
 };
 
-const receiveFinishedGoods = {
+const returnMaterials = {
   ...orderIdParam,
   body: Joi.object().keys({
-    quantity: Joi.number().positive().required(),
-    location: Joi.string().allow('').trim().max(100),
-    receiptDate: Joi.date(),
+    lines: Joi.array()
+      .items(
+        Joi.object().keys({
+          wipLotId: id().required(),
+          quantity: Joi.number().min(0),
+          imeiIds: Joi.array().items(id()).max(5000),
+        })
+      )
+      .min(1)
+      .max(500)
+      .required(),
+    notes: Joi.string().allow('').max(1000),
+  }),
+};
+
+const rejectFields = {
+  rejectedQuantity: Joi.number().min(0),
+  rejectDisposition: Joi.string().valid(...REJECT_DISPOSITIONS),
+  rejectReason: Joi.string().allow('').max(500),
+  finishedGoods,
+};
+
+const reportOutput = {
+  ...orderIdParam,
+  body: Joi.object().keys({
+    producedQuantity: Joi.number().positive().required(),
+    // Only used when quality checks are turned off (inspection happens immediately).
+    goodQuantity: Joi.number().min(0),
+    ...rejectFields,
+    notes: Joi.string().allow('').max(1000),
+  }),
+};
+
+const inspectOutput = {
+  params: Joi.object().keys({ outputId: id().required() }),
+  body: Joi.object().keys({
+    goodQuantity: Joi.number().min(0).required(),
+    ...rejectFields,
+    inspectionNotes: Joi.string().allow('').max(1000),
+  }),
+};
+
+const resolveRework = {
+  ...orderIdParam,
+  body: Joi.object().keys({
+    goodQuantity: Joi.number().min(0),
+    scrapQuantity: Joi.number().min(0),
+    finishedGoods,
     notes: Joi.string().allow('').max(1000),
   }),
 };
@@ -264,16 +336,44 @@ const receiveFinishedGoods = {
 const recordScrap = {
   body: Joi.object().keys({
     productionOrderId: id().allow(null),
-    stage: Joi.string()
-      .valid(...SCRAP_STAGES)
-      .required(),
+    // 'wip', 'qc_reject' and 'rework' records are created by the production flow itself.
+    stage: Joi.string().valid('material', 'finished_good').required(),
     materialLineId: id().when('stage', { is: 'material', then: Joi.required() }),
     productId: id(),
     variantId: id().allow(null),
-    quantity: Joi.number().positive().required(),
+    batchId: id(),
+    imeiIds: Joi.array().items(id()).max(5000),
+    serialNumbers: serialList(),
+    quantity: Joi.number().positive(),
     reason: Joi.string().valid(...SCRAP_REASONS),
     scrapDate: Joi.date(),
     notes: Joi.string().allow('').max(1000),
+  }),
+};
+
+const stockDetail = {
+  query: Joi.object().keys({ productId: id().required(), variantId: id().allow(null, '') }),
+};
+
+const listMovements = {
+  query: Joi.object().keys({
+    productionOrderId: id(),
+    productId: id(),
+    bucket: Joi.string().valid('available', 'wip', 'qc', 'rework'),
+    type: Joi.string(),
+    ...dateRange,
+    ...pagination,
+  }),
+};
+
+const listOutputs = {
+  query: Joi.object().keys({
+    productionOrderId: id(),
+    productId: id(),
+    status: Joi.string().valid(...OUTPUT_STATUSES),
+    search: Joi.string().allow(''),
+    ...dateRange,
+    ...pagination,
   }),
 };
 
@@ -283,6 +383,7 @@ const listTransactions = {
     productId: id(),
     stage: Joi.string().valid(...SCRAP_STAGES),
     reason: Joi.string().valid(...SCRAP_REASONS),
+    kind: Joi.string().valid('issue', 'return'),
     search: Joi.string().allow(''),
     ...dateRange,
     ...pagination,
@@ -311,8 +412,14 @@ module.exports = {
   changeProductionStatus,
   getRequirements,
   issueMaterials,
-  receiveFinishedGoods,
+  returnMaterials,
+  reportOutput,
+  inspectOutput,
+  resolveRework,
   recordScrap,
+  stockDetail,
+  listMovements,
+  listOutputs,
   listTransactions,
   issueIdParam,
 };

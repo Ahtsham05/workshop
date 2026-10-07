@@ -4,6 +4,8 @@ const pick = require('../utils/pick');
 const { manufacturingService, auditLogService } = require('../services');
 const { getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 
+const stockService = require('../services/manufacturing/stock.service');
+
 const {
   settings: settingsService,
   bom: bomService,
@@ -263,30 +265,88 @@ const getRequirements = catchAsync(async (req, res) => {
 });
 
 // ── Execution ────────────────────────────────────────────────────────────────────
+/**
+ * Whether the signed-in user holds a role permission — same rules as middlewares/permission
+ * (super/system admins hold everything). Used where a permission changes what a request
+ * may do rather than whether it may run at all.
+ */
+const userHasPermission = async (req, key) => {
+  const { user } = req;
+  if (!user) return false;
+  if (user.systemRole === 'superAdmin' || user.systemRole === 'system_admin') return true;
+  if (!user.role || typeof user.role === 'string' || !user.role.permissions) await user.populate('role');
+  return !!(user.role && user.role.permissions && user.role.permissions[key] === true);
+};
+
 const issueMaterials = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
-  const issue = await executionService.issueMaterials(ctx, req.params.orderId, req.body);
+  const canOverIssue = req.body.allowOverIssue ? await userHasPermission(req, 'overIssueMaterials') : false;
+  const issue = await executionService.issueMaterials(ctx, req.params.orderId, req.body, { canOverIssue });
   await audit(req, {
     action: 'stock_adjust',
     module: 'MaterialIssue',
     entity: issue,
     entityName: `${issue.issueNumber} (${issue.orderNumber})`,
-    metadata: { totalCost: issue.totalCost, lines: issue.lines.length },
+    metadata: { totalCost: issue.totalCost, lines: issue.lines.length, overIssue: issue.isOverIssue },
   });
   res.status(httpStatus.CREATED).send(issue);
 });
 
-const receiveFinishedGoods = catchAsync(async (req, res) => {
+const returnMaterials = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
-  const receipt = await executionService.receiveFinishedGoods(ctx, req.params.orderId, req.body);
+  const doc = await executionService.returnMaterials(ctx, req.params.orderId, req.body);
   await audit(req, {
     action: 'stock_adjust',
-    module: 'ProductionReceipt',
-    entity: receipt,
-    entityName: `${receipt.receiptNumber} (${receipt.orderNumber})`,
-    metadata: { quantity: receipt.quantity, productName: receipt.productName },
+    module: 'MaterialReturn',
+    entity: doc,
+    entityName: `${doc.issueNumber} (${doc.orderNumber})`,
+    metadata: { totalCost: doc.totalCost, lines: doc.lines.length },
   });
-  res.status(httpStatus.CREATED).send(receipt);
+  res.status(httpStatus.CREATED).send(doc);
+});
+
+const reportOutput = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const output = await executionService.reportOutput(ctx, req.params.orderId, req.body);
+  await audit(req, {
+    action: 'stock_adjust',
+    module: 'ProductionOutput',
+    entity: output,
+    entityName: `${output.outputNumber} (${output.orderNumber})`,
+    metadata: {
+      produced: output.producedQuantity,
+      good: output.goodQuantity,
+      rejected: output.rejectedQuantity,
+      status: output.status,
+    },
+  });
+  res.status(httpStatus.CREATED).send(output);
+});
+
+const inspectOutput = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const output = await executionService.inspectOutput(ctx, req.params.outputId, req.body);
+  await audit(req, {
+    action: 'status_change',
+    module: 'ProductionOutput',
+    entity: output,
+    entityName: `${output.outputNumber} (${output.orderNumber})`,
+    metadata: { good: output.goodQuantity, rejected: output.rejectedQuantity, disposition: output.rejectDisposition },
+  });
+  res.send(output);
+});
+
+const resolveRework = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const result = await executionService.resolveRework(ctx, req.params.orderId, req.body);
+  await audit(req, {
+    action: 'stock_adjust',
+    module: 'ProductionOrder',
+    entity: { _id: req.params.orderId },
+    entityName: 'Rework result',
+    metadata: { good: req.body.goodQuantity || 0, scrapped: req.body.scrapQuantity || 0 },
+  });
+  res.send(result);
 });
 
 const recordScrap = catchAsync(async (req, res) => {
@@ -303,7 +363,7 @@ const recordScrap = catchAsync(async (req, res) => {
 });
 
 const txFilter = (req) =>
-  pick(req.query, ['productionOrderId', 'productId', 'stage', 'reason', 'search', 'dateFrom', 'dateTo']);
+  pick(req.query, ['productionOrderId', 'productId', 'stage', 'reason', 'kind', 'status', 'search', 'dateFrom', 'dateTo']);
 
 const getMaterialIssues = catchAsync(async (req, res) => {
   res.send(await executionService.queryIssues(readCtx(req), txFilter(req), listOptions(req)));
@@ -317,8 +377,29 @@ const getProductionReceipts = catchAsync(async (req, res) => {
   res.send(await executionService.queryReceipts(readCtx(req), txFilter(req), listOptions(req)));
 });
 
+const getProductionOutputs = catchAsync(async (req, res) => {
+  res.send(await executionService.queryOutputs(readCtx(req), txFilter(req), listOptions(req)));
+});
+
 const getScrapRecords = catchAsync(async (req, res) => {
   res.send(await executionService.queryScrap(readCtx(req), txFilter(req), listOptions(req)));
+});
+
+const getMovements = catchAsync(async (req, res) => {
+  const filter = pick(req.query, ['productionOrderId', 'productId', 'bucket', 'type', 'dateFrom', 'dateTo']);
+  res.send(await executionService.queryMovements(readCtx(req), filter, listOptions(req)));
+});
+
+const getStockDetail = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  res.send(
+    await stockService.getStockDetail({
+      organizationId: ctx.organizationId,
+      branchId: ctx.branchId,
+      productId: req.query.productId,
+      variantId: req.query.variantId || null,
+    })
+  );
 });
 
 const getWip = catchAsync(async (req, res) => {
@@ -355,8 +436,14 @@ module.exports = {
   getOrderRequirements,
   getRequirements,
   issueMaterials,
-  receiveFinishedGoods,
+  returnMaterials,
+  reportOutput,
+  inspectOutput,
+  resolveRework,
   recordScrap,
+  getProductionOutputs,
+  getMovements,
+  getStockDetail,
   getMaterialIssues,
   getMaterialIssue,
   getProductionReceipts,

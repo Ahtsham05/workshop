@@ -1,29 +1,33 @@
 const httpStatus = require('http-status');
-const { Product, ProductVariant, Inventory, InventoryTransaction } = require('../../models');
+const { Product, ProductVariant, Inventory, InventoryTransaction, Batch, Imei } = require('../../models');
 const inventorySyncService = require('../inventorySync.service');
 const ApiError = require('../../utils/ApiError');
-const { roundQty } = require('./common');
+const { roundQty, roundMoney } = require('./common');
 
 /**
- * Stock movements for manufacturing, following the same split as
- * stockAdjustment.service.js: a simple product (or its untracked hidden default variant)
- * keeps Product.stockQuantity authoritative and mirrors into the ledger through
- * inventorySync.recordStockChange; a real variant moves its Inventory row and writes the
- * InventoryTransaction directly.
+ * Every manufacturing stock movement goes through this file, on top of the existing
+ * inventory model — never beside it:
  *
- * Phase 1 deliberately refuses IMEI/serial- and batch/expiry-tracked items: issuing or
- * receiving those needs per-unit / per-batch selection, which comes in a later phase.
+ *  - "available" stock stays exactly where the rest of Logix Plus keeps it:
+ *      simple product                      → Product.stockQuantity
+ *      real variant, or batch/expiry-tracked default variant
+ *                                          → Inventory.quantity (+ Batch.quantity per lot,
+ *                                            mirrored to Product.stockQuantity for defaults)
+ *    — the same split stockAdjustment / inventoryTransfer use.
+ *  - IMEI/serial units move through the existing Imei records (status + history).
+ *  - Every move, in every bucket (available / wip / qc / rework), is one immutable
+ *    InventoryTransaction row with full traceability (reference, product, warehouse,
+ *    location, unit, batch, serials, production order, user, time).
+ *
+ * All functions take the caller's session; callers run them inside one transaction.
  */
-const resolveStockTarget = async ({ organizationId, branchId, productId, variantId, session }) => {
+
+const isSerialized = (product, variant) => !!(product.trackImei || product.trackSerial || (variant && variant.trackSerial));
+
+/** Loads a product (+ variant) of this branch and works out how its stock is held. */
+const resolveItem = async ({ organizationId, branchId, productId, variantId, session }) => {
   const product = await Product.findOne({ _id: productId, organizationId, branchId }).session(session || null);
   if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found in this branch');
-
-  if (product.trackImei || product.trackSerial) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      `"${product.name}" is IMEI/serial-tracked — manufacturing stock moves for serialized items aren't supported yet.`
-    );
-  }
 
   let variant = null;
   if (variantId) {
@@ -33,172 +37,367 @@ const resolveStockTarget = async ({ organizationId, branchId, productId, variant
     if (!variant) throw new ApiError(httpStatus.NOT_FOUND, `Variant not found for "${product.name}"`);
   } else if (product.hasVariants) {
     throw new ApiError(httpStatus.BAD_REQUEST, `"${product.name}" has variants — pick the variant to move.`);
+  } else {
+    variant = await ProductVariant.findOne({ productId: product._id, isDefault: true }).session(session || null);
   }
 
-  if (variant && (variant.trackBatch || variant.trackExpiry)) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      `"${product.name}" is batch/expiry-tracked — manufacturing stock moves for batch items aren't supported yet.`
-    );
-  }
-
-  // An untracked default variant is just a simple product's stand-in: stock lives on
-  // Product.stockQuantity (see inventory.service.js#adjustInventory).
-  if (!variant || variant.isDefault) {
-    return { kind: 'product', product, variant: null, available: product.stockQuantity || 0, unitCost: product.cost || 0 };
-  }
-
-  const inventory = await Inventory.findOne({ variantId: variant._id }).session(session || null);
+  const batchTracked = !!(variant && (variant.trackBatch || variant.trackExpiry));
+  const serial = isSerialized(product, variant);
+  // A simple product's untracked default variant is only a stand-in: Product.stockQuantity
+  // stays authoritative (see inventory.service.js#adjustInventory).
+  const inventoryBacked = !!(variant && (!variant.isDefault || batchTracked));
+  const inventory = variant ? await Inventory.findOne({ variantId: variant._id }).session(session || null) : null;
+  const available = inventoryBacked ? (inventory ? inventory.quantity : 0) : product.stockQuantity || 0;
   const averageCost = inventory && inventory.averageCost > 0 ? inventory.averageCost : null;
+
   return {
-    kind: 'variant',
     product,
     variant,
     inventory,
-    available: inventory ? inventory.quantity : 0,
-    unitCost: averageCost ?? variant.cost ?? product.cost ?? 0,
+    serial,
+    batchTracked,
+    inventoryBacked,
+    available,
+    unit: (variant && variant.unit) || product.unit,
+    unitCost: averageCost ?? (variant && !variant.isDefault ? variant.cost : null) ?? product.cost ?? 0,
+    name: variant && !variant.isDefault ? `${product.name}${variant.sku ? ` — ${variant.sku}` : ''}` : product.name,
   };
 };
 
-const displayName = (target) =>
-  target.variant ? `${target.product.name}${target.variant.sku ? ` — ${target.variant.sku}` : ''}` : target.product.name;
-
 /**
- * Applies a signed stock change. When `allowNegative` is false a decrease is applied with
- * a conditional $inc (balance >= amount), so two concurrent issues can never both pass a
- * stale availability check. Returns the balance after the move.
+ * InventoryTransaction rows reference an Inventory row and a variant. A simple product
+ * that predates the variant migration gets its default variant + Inventory row created
+ * here (same documents the migration/dual-write would create), the Inventory row seeded
+ * from the product's current stock so it starts as a faithful mirror.
  */
-const applyStockDelta = async (target, delta, { allowNegative = false, session } = {}) => {
-  const amount = roundQty(delta);
-  const guard = !allowNegative && amount < 0;
-
-  if (target.kind === 'product') {
-    const updated = await Product.findOneAndUpdate(
-      { _id: target.product._id, ...(guard ? { stockQuantity: { $gte: -amount } } : {}) },
-      { $inc: { stockQuantity: amount } },
-      { new: true, session }
-    );
-    if (!updated) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `Insufficient stock for "${displayName(target)}": ${roundQty(
-          target.product.stockQuantity
-        )} available, ${-amount} needed`
-      );
-    }
-    return updated.stockQuantity;
+const ensureLedgerAnchor = async (item, session) => {
+  /* eslint-disable no-param-reassign */
+  if (!item.variant) {
+    [item.variant] = await ProductVariant.create([inventorySyncService.buildDefaultVariantDoc(item.product)], { session });
   }
-
-  let { inventory } = target;
-  if (!inventory) {
-    [inventory] = await Inventory.create(
+  if (!item.inventory) {
+    [item.inventory] = await Inventory.create(
       [
         {
-          organizationId: target.variant.organizationId,
-          branchId: target.variant.branchId,
-          productId: target.product._id,
-          variantId: target.variant._id,
-          quantity: 0,
-          averageCost: target.variant.cost,
+          organizationId: item.variant.organizationId,
+          branchId: item.variant.branchId,
+          productId: item.product._id,
+          variantId: item.variant._id,
+          quantity: item.inventoryBacked ? 0 : item.product.stockQuantity || 0,
+          averageCost: item.variant.cost,
         },
       ],
       { session }
     );
   }
+  /* eslint-enable no-param-reassign */
+  return item;
+};
+
+const insufficient = (item, have, need) =>
+  new ApiError(
+    httpStatus.BAD_REQUEST,
+    `Insufficient stock for "${item.name}": ${roundQty(have)} available, ${roundQty(need)} needed`
+  );
+
+/**
+ * Moves available stock by `delta` (signed) and returns the balance after. A decrease is
+ * a conditional $inc (balance >= amount), so concurrent issues can never both pass a stale
+ * check. `batchId` also moves that batch's quantity (inventory-backed items only).
+ */
+const applyAvailableDelta = async (item, delta, { batchId = null, allowNegative = false, session } = {}) => {
+  const amount = roundQty(delta);
+  const guard = !allowNegative && amount < 0;
+
+  if (!item.inventoryBacked) {
+    const updated = await Product.findOneAndUpdate(
+      { _id: item.product._id, ...(guard ? { stockQuantity: { $gte: -amount } } : {}) },
+      { $inc: { stockQuantity: amount } },
+      { new: true, session }
+    );
+    if (!updated) throw insufficient(item, item.product.stockQuantity, -amount);
+    // Keep the default variant's Inventory mirror in step, under the same per-org flag
+    // as every other legacy stock write (inventorySync.service.js).
+    if (item.inventory && inventorySyncService.isDualWriteEnabledForOrg(item.product.organizationId)) {
+      await Inventory.updateOne({ _id: item.inventory._id }, { $inc: { quantity: amount } }, { session });
+    }
+    // eslint-disable-next-line no-param-reassign
+    item.product.stockQuantity = updated.stockQuantity;
+    return updated.stockQuantity;
+  }
+
+  await ensureLedgerAnchor(item, session);
   const updated = await Inventory.findOneAndUpdate(
-    { _id: inventory._id, ...(guard ? { quantity: { $gte: -amount } } : {}) },
+    { _id: item.inventory._id, ...(guard ? { quantity: { $gte: -amount } } : {}) },
     { $inc: { quantity: amount } },
     { new: true, session }
   );
-  if (!updated) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      `Insufficient stock for "${displayName(target)}": ${roundQty(inventory.quantity)} available, ${-amount} needed`
-    );
-  }
+  if (!updated) throw insufficient(item, item.inventory.quantity, -amount);
   // eslint-disable-next-line no-param-reassign
-  target.inventory = updated;
+  item.inventory = updated;
+
+  if (batchId) {
+    const batch = await Batch.findOneAndUpdate(
+      { _id: batchId, inventoryId: updated._id, ...(amount < 0 ? { quantity: { $gte: -amount } } : {}) },
+      { $inc: { quantity: amount } },
+      { new: true, session }
+    );
+    if (!batch) throw new ApiError(httpStatus.BAD_REQUEST, `Batch does not have ${-amount} ${item.unit} of "${item.name}"`);
+    const status = batch.quantity <= 0 ? 'depleted' : 'active';
+    if (batch.status !== status && ['active', 'depleted'].includes(batch.status)) {
+      await Batch.updateOne({ _id: batch._id }, { $set: { status } }, { session });
+    }
+  }
+  if (item.variant.isDefault) {
+    await Product.updateOne({ _id: item.product._id }, { $inc: { stockQuantity: amount } }, { session });
+  }
   return updated.quantity;
 };
 
 /**
- * Ledger entry for a move just applied by applyStockDelta. Variant moves are written in
- * the caller's transaction; simple-product moves are returned as a deferred callback to
- * run after commit, because inventorySync.recordStockChange is best-effort and
- * session-less by design (it must never fail the stock write it mirrors).
+ * Batches to draw `quantity` from: the caller's explicit allocations (validated), or
+ * FEFO (earliest expiry, then oldest) across the item's active batches.
  */
-const writeLedger = async (
-  target,
-  { organizationId, delta, type, refType, refId, unitCost, balanceAfter, createdBy, session }
-) => {
-  if (target.kind === 'product') {
-    return () =>
-      inventorySyncService.recordStockChange({
-        organizationId,
-        productId: target.product._id,
-        quantityDelta: delta,
-        type,
-        refType,
-        refId,
-        unitCost,
-        createdBy,
+const allocateBatches = async (item, quantity, requested, session) => {
+  await ensureLedgerAnchor(item, session);
+  if (requested && requested.length) {
+    const ids = requested.map((r) => r.batchId);
+    const batches = await Batch.find({ _id: { $in: ids }, inventoryId: item.inventory._id }).session(session || null);
+    const byId = new Map(batches.map((b) => [String(b._id), b]));
+    const allocations = requested
+      .filter((r) => r.quantity > 0)
+      .map((r) => {
+        const batch = byId.get(String(r.batchId));
+        if (!batch) throw new ApiError(httpStatus.BAD_REQUEST, `Batch not found for "${item.name}"`);
+        if (batch.quantity < r.quantity) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Batch ${batch.batchNumber} of "${item.name}" has only ${roundQty(batch.quantity)}`
+          );
+        }
+        return { batch, quantity: roundQty(r.quantity) };
       });
+    const total = roundQty(allocations.reduce((s, a) => s + a.quantity, 0));
+    if (Math.abs(total - quantity) > 1e-6) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `Batch quantities for "${item.name}" add up to ${total}, not ${quantity}`);
+    }
+    return allocations;
   }
+  const batches = await Batch.find({ inventoryId: item.inventory._id, status: 'active', quantity: { $gt: 0 } })
+    .sort({ expiryDate: 1, createdAt: 1 })
+    .session(session || null);
+  const allocations = [];
+  let left = quantity;
+  // eslint-disable-next-line no-restricted-syntax
+  for (const batch of batches) {
+    if (left <= 1e-9) break;
+    const take = roundQty(Math.min(left, batch.quantity));
+    allocations.push({ batch, quantity: take });
+    left = roundQty(left - take);
+  }
+  if (left > 1e-9) {
+    const have = roundQty(quantity - left);
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Only ${have} ${item.unit} of "${item.name}" is available across its batches`
+    );
+  }
+  return allocations;
+};
+
+/** In-stock serial units of this item, by id or number; must match `expectedCount` when given. */
+const pickSerials = async (
+  item,
+  { organizationId, branchId, imeiIds, serialNumbers, status = 'in_stock', productionOrderId, session }
+) => {
+  const or = [];
+  if (imeiIds && imeiIds.length) or.push({ _id: { $in: imeiIds } });
+  if (serialNumbers && serialNumbers.length) or.push({ imei: { $in: serialNumbers } }, { imei2: { $in: serialNumbers } });
+  if (!or.length) throw new ApiError(httpStatus.BAD_REQUEST, `Select the serial/IMEI numbers of "${item.name}"`);
+  const wanted = new Set([...(imeiIds || []).map(String), ...(serialNumbers || [])]);
+  const records = await Imei.find({
+    organizationId,
+    branchId,
+    productId: item.product._id,
+    status,
+    ...(productionOrderId ? { productionOrderId } : {}),
+    $or: or,
+  }).session(session || null);
+  if (records.length !== wanted.size) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Some of the selected serial numbers of "${item.name}" are not ${
+        status === 'in_stock' ? 'in stock' : 'in this order’s WIP'
+      }`
+    );
+  }
+  return records;
+};
+
+const setSerialStatus = async (records, { status, productionOrderId = null, note, userId, session }) => {
+  if (!records.length) return;
+  await Imei.updateMany(
+    { _id: { $in: records.map((r) => r._id || r) } },
+    {
+      $set: { status, productionOrderId },
+      $push: { history: { status, note: note || '', at: new Date(), byUserId: userId || null } },
+    },
+    { session }
+  );
+};
+
+/**
+ * One immutable ledger row. `bucket` 'available' rows carry the real stock balance after
+ * the move; holding-bucket rows (wip/qc/rework) carry that bucket's balance for the
+ * production order, which is where those balances live.
+ */
+const writeMovement = async (
+  item,
+  {
+    organizationId,
+    branchId,
+    type,
+    bucket = 'available',
+    delta,
+    balanceAfter,
+    unitCost,
+    refType,
+    refId,
+    productionOrderId,
+    location,
+    batchId,
+    imeiIds,
+    serialNumbers,
+    createdBy,
+    session,
+  }
+) => {
+  await ensureLedgerAnchor(item, session);
   await InventoryTransaction.create(
     [
       {
         organizationId,
-        branchId: target.variant.branchId,
-        inventoryId: target.inventory._id,
-        variantId: target.variant._id,
+        branchId,
+        warehouseId: branchId,
+        inventoryId: item.inventory._id,
+        variantId: item.variant._id,
+        productId: item.product._id,
+        unit: item.unit,
         type,
-        quantityDelta: delta,
-        balanceAfter,
-        unitCost,
+        stockBucket: bucket,
+        quantityDelta: roundQty(delta),
+        balanceAfter: roundQty(balanceAfter),
+        unitCost: roundMoney(unitCost || 0),
         refType,
         refId,
+        productionOrderId,
+        location: location || undefined,
+        batchId: batchId || undefined,
+        imeiIds: imeiIds && imeiIds.length ? imeiIds : undefined,
+        serialNumbers: serialNumbers && serialNumbers.length ? serialNumbers : undefined,
         createdBy,
       },
     ],
     { session }
   );
-  return null;
 };
 
 /** Current on-hand quantity for many (productId, variantId) pairs in one branch, keyed "productId:variantId". */
 const getAvailability = async ({ organizationId, branchId, items }) => {
   const productIds = [...new Set(items.map((item) => String(item.productId)))];
   const variantIds = [...new Set(items.filter((item) => item.variantId).map((item) => String(item.variantId)))];
-  const [products, inventories, variants] = await Promise.all([
+  const [products, inventories, variants, defaults] = await Promise.all([
     Product.find({ _id: { $in: productIds }, organizationId, ...(branchId ? { branchId } : {}) })
       .select('stockQuantity cost name')
       .lean(),
-    variantIds.length
-      ? Inventory.find({ variantId: { $in: variantIds }, organizationId })
-          .select('variantId quantity')
-          .lean()
-      : [],
+    Inventory.find({ productId: { $in: productIds }, organizationId })
+      .select('variantId quantity')
+      .lean(),
     variantIds.length
       ? ProductVariant.find({ _id: { $in: variantIds }, organizationId })
-          .select('isDefault')
+          .select('isDefault trackBatch trackExpiry')
           .lean()
       : [],
+    ProductVariant.find({ productId: { $in: productIds }, isDefault: true })
+      .select('productId trackBatch trackExpiry')
+      .lean(),
   ]);
   const productById = new Map(products.map((p) => [String(p._id), p]));
   const inventoryByVariant = new Map(inventories.map((inv) => [String(inv.variantId), inv.quantity]));
-  const defaultVariantIds = new Set(variants.filter((v) => v.isDefault).map((v) => String(v._id)));
+  const variantById = new Map(variants.map((v) => [String(v._id), v]));
+  const trackedDefaultByProduct = new Map(
+    defaults.filter((v) => v.trackBatch || v.trackExpiry).map((v) => [String(v.productId), String(v._id)])
+  );
 
   const result = new Map();
   items.forEach((item) => {
     const key = `${item.productId}:${item.variantId || ''}`;
-    const product = productById.get(String(item.productId));
-    if (item.variantId && !defaultVariantIds.has(String(item.variantId))) {
+    const variant = item.variantId ? variantById.get(String(item.variantId)) : null;
+    if (variant && !variant.isDefault) {
       result.set(key, inventoryByVariant.get(String(item.variantId)) || 0);
-    } else {
-      result.set(key, product ? product.stockQuantity || 0 : 0);
+      return;
     }
+    const trackedDefault = trackedDefaultByProduct.get(String(item.productId));
+    if (trackedDefault) {
+      result.set(key, inventoryByVariant.get(trackedDefault) || 0);
+      return;
+    }
+    const product = productById.get(String(item.productId));
+    result.set(key, product ? product.stockQuantity || 0 : 0);
   });
   return result;
 };
 
-module.exports = { resolveStockTarget, applyStockDelta, writeLedger, getAvailability, displayName };
+/** What the issue/scrap pickers need: tracking mode, on-hand, batches (FEFO order), serials. */
+const getStockDetail = async ({ organizationId, branchId, productId, variantId }) => {
+  const item = await resolveItem({ organizationId, branchId, productId, variantId });
+  const [batches, serials] = await Promise.all([
+    item.batchTracked && item.inventory
+      ? Batch.find({ inventoryId: item.inventory._id, status: 'active', quantity: { $gt: 0 } })
+          .sort({ expiryDate: 1, createdAt: 1 })
+          .select('batchNumber quantity expiryDate costPerUnit')
+          .lean()
+      : [],
+    item.serial
+      ? Imei.find({ organizationId, branchId, productId: item.product._id, status: 'in_stock' })
+          .select('imei imei2 batchId purchasePrice')
+          .sort({ createdAt: 1 })
+          .limit(1000)
+          .lean()
+      : [],
+  ]);
+  return {
+    productId: String(item.product._id),
+    variantId: item.variant && !item.variant.isDefault ? String(item.variant._id) : null,
+    name: item.name,
+    unit: item.unit,
+    available: roundQty(item.available),
+    unitCost: roundMoney(item.unitCost),
+    tracking: { batch: item.batchTracked && !item.serial, serial: item.serial },
+    batches: batches.map((b) => ({
+      id: String(b._id),
+      batchNumber: b.batchNumber,
+      quantity: b.quantity,
+      expiryDate: b.expiryDate,
+      costPerUnit: b.costPerUnit,
+    })),
+    serials: serials.map((s) => ({
+      id: String(s._id),
+      number: s.imei,
+      number2: s.imei2 || '',
+      batchId: s.batchId ? String(s.batchId) : null,
+    })),
+  };
+};
+
+module.exports = {
+  resolveItem,
+  ensureLedgerAnchor,
+  applyAvailableDelta,
+  allocateBatches,
+  pickSerials,
+  setSerialStatus,
+  writeMovement,
+  getAvailability,
+  getStockDetail,
+};

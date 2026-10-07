@@ -9,6 +9,8 @@ const {
 const settingsService = require('./settings.service');
 const bomService = require('./bom.service');
 const stockService = require('./stock.service');
+const executionService = require('./execution.service');
+const wip = require('./wip');
 const { roundQty, requireBranch, scopeFilter, escapeRegex, parseDateRange } = require('./common');
 
 const findOrderOrThrow = async ({ organizationId, branchId }, orderId) => {
@@ -43,7 +45,15 @@ const snapshotMaterials = async ({ organizationId, branchId, bom, quantity, sett
   const { lines } = await bomService.explodeBom({ organizationId, branchId }, bom._id, quantity, {
     explode: !!settings.explodeSubAssemblies,
   });
-  return lines.map((line) => ({ ...line, issuedQuantity: 0, issuedCost: 0, scrappedQuantity: 0 }));
+  return lines.map((line) => ({
+    ...line,
+    issuedQuantity: 0,
+    issuedCost: 0,
+    returnedQuantity: 0,
+    consumedQuantity: 0,
+    consumedCost: 0,
+    scrappedQuantity: 0,
+  }));
 };
 
 const loadProduct = async ({ organizationId, branchId, productId, variantId }) => {
@@ -210,20 +220,28 @@ const refreshMaterials = async ({ organizationId, branchId, createdBy }, orderId
   return order;
 };
 
-const hasExecution = (order) => (order.materials || []).some((m) => m.issuedQuantity > 0) || order.completedQuantity > 0;
+const hasExecution = (order) =>
+  (order.materials || []).some((m) => m.issuedQuantity > 0) ||
+  order.completedQuantity > 0 ||
+  order.producedQuantity > 0 ||
+  (order.wipLots || []).length > 0;
 
 /**
  * Moves an order through its lifecycle (see PRODUCTION_STATUS_TRANSITIONS). The write is
  * conditional on the status read here, so two people clicking different actions at once
  * can't both win.
  */
-const changeStatus = async ({ organizationId, branchId, createdBy }, orderId, { status: to, note }) => {
+const changeStatus = async ({ organizationId, branchId, createdBy }, orderId, { status: to, note, wipDisposition }) => {
   requireBranch(branchId);
   const order = await findOrderOrThrow({ organizationId, branchId }, orderId);
   const from = order.status;
   if (from === to) return order;
   if (!(PRODUCTION_STATUS_TRANSITIONS[from] || []).includes(to)) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Cannot move a production order from ${from} to ${to}`);
+  }
+  // Completion settles WIP / QC / rework, so it runs as one stock transaction.
+  if (to === 'completed') {
+    return executionService.completeOrder({ organizationId, branchId, createdBy }, orderId, { wipDisposition, note });
   }
 
   if ((to === 'cancelled' || (from === 'released' && to === 'planned')) && hasExecution(order)) {
@@ -241,7 +259,6 @@ const changeStatus = async ({ organizationId, branchId, createdBy }, orderId, { 
 
   const $set = { status: to, updatedBy: createdBy };
   if (to === 'in_production' && !order.actualStartDate) $set.actualStartDate = new Date();
-  if (to === 'completed') $set.actualCompletionDate = new Date();
 
   const updated = await ProductionOrder.findOneAndUpdate(
     { _id: order._id, organizationId, status: from },
@@ -280,7 +297,7 @@ const getOrderRequirements = async ({ organizationId, branchId }, orderId) => {
   });
   const lines = order.materials.map((m) => {
     const available = availability.get(`${m.productId}:${m.variantId || ''}`) || 0;
-    const outstanding = Math.max(0, roundQty(m.requiredQuantity - m.issuedQuantity));
+    const outstanding = wip.lineRemaining(m);
     return {
       materialLineId: String(m._id),
       productId: String(m.productId),
@@ -292,6 +309,10 @@ const getOrderRequirements = async ({ organizationId, branchId }, orderId) => {
       isOptional: m.isOptional,
       requiredQuantity: m.requiredQuantity,
       issuedQuantity: m.issuedQuantity,
+      returnedQuantity: m.returnedQuantity,
+      consumedQuantity: m.consumedQuantity,
+      scrappedQuantity: m.scrappedQuantity,
+      wipQuantity: wip.lineWip(order, m),
       outstandingQuantity: outstanding,
       availableQuantity: roundQty(available),
       shortageQuantity: m.isOptional ? 0 : Math.max(0, roundQty(outstanding - Math.max(0, available))),
@@ -322,7 +343,7 @@ const getAggregatedRequirements = async ({ organizationId, branchId }, { statuse
   orders.forEach((order) => {
     order.materials.forEach((m) => {
       if (m.isOptional) return;
-      const outstanding = Math.max(0, roundQty(m.requiredQuantity - m.issuedQuantity));
+      const outstanding = wip.lineRemaining(m);
       if (outstanding <= 0) return;
       const key = `${order.branchId}|${m.productId}:${m.variantId || ''}`;
       const entry = byKey.get(key) || {

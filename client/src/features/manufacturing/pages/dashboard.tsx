@@ -105,7 +105,14 @@ export default function ManufacturingDashboard() {
           value={data?.inProgress ?? 0}
           icon={<Factory />}
           tone='amber'
-          description={t('Released, running or paused')}
+          description={
+            data && data.qcPendingQuantity > 0
+              ? t('{{q}} unit(s) awaiting QC').replace(
+                  '{{q}}',
+                  fmtQty(data.qcPendingQuantity)
+                )
+              : t('Released, running or paused')
+          }
           link={{ to: '/manufacturing/wip' }}
         />
         <StatCard
@@ -125,7 +132,7 @@ export default function ManufacturingDashboard() {
           valuePrefix={currencyPrefix}
           icon={<Workflow />}
           tone='violet'
-          description={t('Material on the floor')}
+          description={t('Material lots on the floor')}
         />
         <StatCard
           inlineHeaderOnMobile

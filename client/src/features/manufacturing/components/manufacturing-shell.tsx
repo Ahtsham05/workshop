@@ -12,6 +12,8 @@ import {
   Recycle,
   Workflow,
   ListChecks,
+  ClipboardCheck,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
@@ -38,6 +40,11 @@ const MANUFACTURING_SECTIONS = [
     icon: PackageMinus,
   },
   { to: '/manufacturing/wip', label: 'WIP', icon: Workflow },
+  {
+    to: '/manufacturing/quality',
+    label: 'Quality Check',
+    icon: ClipboardCheck,
+  },
   { to: '/manufacturing/assemblies', label: 'Assemblies', icon: Layers },
   {
     to: '/manufacturing/finished-goods',
@@ -45,6 +52,11 @@ const MANUFACTURING_SECTIONS = [
     icon: PackageCheck,
   },
   { to: '/manufacturing/scrap', label: 'Scrap', icon: Recycle },
+  {
+    to: '/manufacturing/movements',
+    label: 'Stock Movements',
+    icon: ArrowLeftRight,
+  },
   {
     to: '/manufacturing/settings',
     label: 'Settings',

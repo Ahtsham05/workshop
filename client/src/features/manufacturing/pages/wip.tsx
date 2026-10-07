@@ -21,14 +21,17 @@ export default function WipPage() {
       <SectionHeader
         title={t('Work in progress')}
         description={t(
-          'Orders on the floor and the value of material tied up in them (issued material minus output already received).'
+          'Orders on the floor, the material lots sitting in their WIP (valued at issue cost), and output waiting for QC or rework.'
         )}
       />
       <div className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
         {[
           [t('Orders on floor'), String(data?.totals.orderCount ?? 0)],
           [t('WIP value'), formatMoney(data?.totals.wipValue ?? 0)],
-          [t('Material issued'), formatMoney(data?.totals.materialCost ?? 0)],
+          [
+            t('Awaiting QC / rework'),
+            `${fmtQty(data?.totals.qcPendingQuantity ?? 0)} / ${fmtQty(data?.totals.reworkPendingQuantity ?? 0)}`,
+          ],
           [t('Overdue'), String(data?.totals.overdueCount ?? 0)],
         ].map(([label, value], i) => (
           <Card key={label}>
@@ -94,14 +97,67 @@ export default function WipPage() {
                 </div>
                 <div className='space-y-1'>
                   <div className='text-muted-foreground flex justify-between text-xs'>
-                    <span>{t('Output')}</span>
+                    <span>{t('Produced')}</span>
                     <span className='tabular-nums'>
-                      {fmtQty(row.completedQuantity)} /{' '}
+                      {fmtQty(row.producedQuantity)} /{' '}
                       {fmtQty(row.plannedQuantity)} {row.unit}
                     </span>
                   </div>
                   <ProgressBar value={row.outputPercent} tone='emerald' />
+                  <div className='text-muted-foreground flex flex-wrap gap-x-3 text-[11px] tabular-nums'>
+                    <span>
+                      {t('Good')}{' '}
+                      <b className='text-foreground'>
+                        {fmtQty(row.completedQuantity)}
+                      </b>
+                    </span>
+                    <span>
+                      {t('Rejected')}{' '}
+                      <b className='text-foreground'>
+                        {fmtQty(row.rejectedQuantity)}
+                      </b>
+                    </span>
+                    {row.qcPendingQuantity > 0 && (
+                      <span className='text-sky-600'>
+                        {t('QC')} {fmtQty(row.qcPendingQuantity)}
+                      </span>
+                    )}
+                    {row.reworkPendingQuantity > 0 && (
+                      <span className='text-violet-600'>
+                        {t('Rework')} {fmtQty(row.reworkPendingQuantity)}
+                      </span>
+                    )}
+                    <span className='ml-auto'>
+                      {t('Remaining')}{' '}
+                      <b className='text-foreground'>
+                        {fmtQty(row.remainingQuantity)}
+                      </b>
+                    </span>
+                  </div>
                 </div>
+                {row.wipItems.length > 0 && (
+                  <ul className='bg-muted/40 space-y-0.5 rounded-md p-2 text-[11px]'>
+                    {row.wipItems.slice(0, 4).map((item) => (
+                      <li key={item.id} className='flex justify-between gap-2'>
+                        <span className='truncate'>
+                          {item.productName}
+                          {item.batchNumber ? ` · ${item.batchNumber}` : ''}
+                          {item.serialCount
+                            ? ` · ${item.serialCount} ${t('serials')}`
+                            : ''}
+                        </span>
+                        <span className='shrink-0 tabular-nums'>
+                          {fmtQty(item.quantity)} {item.unit}
+                        </span>
+                      </li>
+                    ))}
+                    {row.wipItems.length > 4 && (
+                      <li className='text-muted-foreground'>
+                        +{row.wipItems.length - 4} {t('more')}
+                      </li>
+                    )}
+                  </ul>
+                )}
                 <div className='flex items-center justify-between border-t pt-3 text-xs'>
                   <span
                     className={cn(

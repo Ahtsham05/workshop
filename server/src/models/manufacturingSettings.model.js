@@ -1,7 +1,15 @@
 const mongoose = require('mongoose');
 const { toJSON } = require('./plugins');
 
-const counterDefaults = () => ({ bom: 0, productionOrder: 0, materialIssue: 0, productionReceipt: 0, scrap: 0 });
+const counterDefaults = () => ({
+  bom: 0,
+  productionOrder: 0,
+  materialIssue: 0,
+  materialReturn: 0,
+  productionOutput: 0,
+  productionReceipt: 0,
+  scrap: 0,
+});
 
 /**
  * One document per organization: manufacturing preferences plus the atomic document
@@ -21,6 +29,8 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
       bom: { type: String, trim: true, default: 'BOM' },
       productionOrder: { type: String, trim: true, default: 'MO' },
       materialIssue: { type: String, trim: true, default: 'MI' },
+      materialReturn: { type: String, trim: true, default: 'MR' },
+      productionOutput: { type: String, trim: true, default: 'PO' },
       productionReceipt: { type: String, trim: true, default: 'FG' },
       scrap: { type: String, trim: true, default: 'SCR' },
     },
@@ -39,6 +49,10 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
     // Explode sub-assemblies' own BOMs when computing material requirements; when off,
     // a sub-assembly is treated as a stocked item to be issued as-is.
     explodeSubAssemblies: { type: Boolean, default: false },
+    // Reported output waits in a QC hold until inspected; when off, good/rejected
+    // quantities are entered with the output and posted straight away.
+    requireQualityCheck: { type: Boolean, default: true },
+    defaultRejectDisposition: { type: String, enum: ['scrap', 'rework'], default: 'scrap' },
     defaultPriority: { type: String, enum: ['low', 'normal', 'high', 'urgent'], default: 'normal' },
     counters: {
       type: new mongoose.Schema(
@@ -46,6 +60,8 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
           bom: { type: Number, default: 0 },
           productionOrder: { type: Number, default: 0 },
           materialIssue: { type: Number, default: 0 },
+          materialReturn: { type: Number, default: 0 },
+          productionOutput: { type: Number, default: 0 },
           productionReceipt: { type: Number, default: 0 },
           scrap: { type: Number, default: 0 },
         },

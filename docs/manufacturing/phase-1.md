@@ -1,5 +1,8 @@
 # Manufacturing — Phase 1 (Foundation)
 
+> Execution (issues, WIP, output, QC, finished goods, batch/serial tracking) was reworked
+> in Phase 2 — see [phase-2.md](phase-2.md). The sections below on execution describe Phase 1.
+
 The Manufacturing module is an integrated part of Logix Plus, not a separate system. It
 reuses the existing Product catalog, branch-scoped stock (Product.stockQuantity /
 Inventory), the InventoryTransaction ledger, auth/permissions, branch scoping and audit log.

@@ -3,8 +3,10 @@ import { Link } from '@tanstack/react-router'
 import { PackageMinus } from 'lucide-react'
 import { useGetMaterialIssuesQuery } from '@/stores/manufacturing.api'
 import { useFormatMoney } from '@/lib/format-money'
+import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -41,7 +43,7 @@ export default function MaterialIssuesPage() {
       <SectionHeader
         title={t('Material issues')}
         description={t(
-          'Every component taken out of stock for production. Issue from an order’s page; each issue is permanent and appears in the stock ledger.'
+          'Every component moved from stock into WIP (issues) and back (returns). Each one is permanent and appears in the stock ledger.'
         )}
       />
       <Card>
@@ -112,8 +114,29 @@ export default function MaterialIssuesPage() {
                 {data?.results.map((issue) => (
                   <TableRow key={issue.id}>
                     <TableCell>
-                      <div className='font-mono text-xs font-medium'>
-                        {issue.issueNumber}
+                      <div className='flex items-center gap-1.5'>
+                        <span className='font-mono text-xs font-medium'>
+                          {issue.issueNumber}
+                        </span>
+                        <Badge
+                          variant='outline'
+                          className={cn(
+                            'h-5 px-1.5 text-[10px]',
+                            issue.kind === 'return'
+                              ? 'border-sky-500/30 text-sky-700'
+                              : 'border-amber-500/30 text-amber-700'
+                          )}
+                        >
+                          {issue.kind === 'return' ? t('Return') : t('Issue')}
+                        </Badge>
+                        {issue.isOverIssue && (
+                          <Badge
+                            variant='outline'
+                            className='h-5 px-1.5 text-[10px] text-violet-700'
+                          >
+                            {t('Over-issue')}
+                          </Badge>
+                        )}
                       </div>
                       <div className='text-muted-foreground text-xs'>
                         {fmtDate(issue.issueDate)}

@@ -5,6 +5,7 @@ import {
   useUpdateManufacturingSettingsMutation,
   type ManufacturingSettings,
   type ProductionPriority,
+  type RejectDisposition,
 } from '@/stores/manufacturing.api'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { useLanguage } from '@/context/language-context'
@@ -36,6 +37,8 @@ const PREFIX_FIELDS: { key: PrefixKey; label: string }[] = [
   { key: 'bom', label: 'Bill of materials' },
   { key: 'productionOrder', label: 'Production order' },
   { key: 'materialIssue', label: 'Material issue' },
+  { key: 'materialReturn', label: 'Material return' },
+  { key: 'productionOutput', label: 'Production output' },
   { key: 'productionReceipt', label: 'Finished goods receipt' },
   { key: 'scrap', label: 'Scrap record' },
 ]
@@ -46,9 +49,15 @@ const TOGGLES: {
     | 'explodeSubAssemblies'
     | 'allowNegativeStockIssue'
     | 'allowOverProduction'
+    | 'requireQualityCheck'
   label: string
   help: string
 }[] = [
+  {
+    key: 'requireQualityCheck',
+    label: 'Quality check before finished goods',
+    help: 'Reported output waits in a QC hold until inspected. When off, good and rejected quantities are posted with the output.',
+  },
   {
     key: 'requireBomForProduction',
     label: 'Require a BOM on every production order',
@@ -66,8 +75,8 @@ const TOGGLES: {
   },
   {
     key: 'allowOverProduction',
-    label: 'Allow receiving more output than planned',
-    help: 'When off, receipts stop at the planned quantity.',
+    label: 'Allow producing more than planned',
+    help: 'When off, output reports stop at the planned quantity.',
   },
 ]
 
@@ -105,6 +114,8 @@ export default function ManufacturingSettingsPage() {
         requireBomForProduction: form.requireBomForProduction,
         explodeSubAssemblies: form.explodeSubAssemblies,
         defaultPriority: form.defaultPriority,
+        requireQualityCheck: form.requireQualityCheck,
+        defaultRejectDisposition: form.defaultRejectDisposition,
       }).unwrap()
       toast.success(t('Manufacturing settings saved'))
     } catch (err) {
@@ -265,6 +276,33 @@ export default function ManufacturingSettingsPage() {
                 />
               </div>
             ))}
+            <div className='flex items-start justify-between gap-4 py-3 last:pb-0'>
+              <div>
+                <Label className='font-medium'>
+                  {t('Rejected output goes to')}
+                </Label>
+                <p className='text-muted-foreground text-sm'>
+                  {t(
+                    'Default choice at inspection — can be changed for each inspection.'
+                  )}
+                </p>
+              </div>
+              <Select
+                value={form.defaultRejectDisposition}
+                disabled={!canEdit}
+                onValueChange={(v) =>
+                  set('defaultRejectDisposition', v as RejectDisposition)
+                }
+              >
+                <SelectTrigger className='w-36'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='scrap'>{t('Scrap')}</SelectItem>
+                  <SelectItem value='rework'>{t('Rework')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardContent>
         </Card>
       </div>

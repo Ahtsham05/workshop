@@ -93,7 +93,9 @@ const imeiSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['in_stock', 'sold', 'returned', 'scrapped', 'lost', 'stolen', 'in_transit'],
+      // 'in_production': issued to a production order and sitting in WIP (productionOrderId
+      // set); 'consumed': built into a manufactured product. See services/manufacturing.
+      enum: ['in_stock', 'sold', 'returned', 'scrapped', 'lost', 'stolen', 'in_transit', 'in_production', 'consumed'],
       default: 'in_stock',
       index: true,
     },
@@ -104,6 +106,14 @@ const imeiSchema = new mongoose.Schema(
     transferId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'InventoryTransfer',
+      default: null,
+      index: true,
+    },
+    // Production order currently holding this unit in WIP (status 'in_production'), or the
+    // order that consumed/produced it. Same role transferId plays for transfers.
+    productionOrderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ProductionOrder',
       default: null,
       index: true,
     },

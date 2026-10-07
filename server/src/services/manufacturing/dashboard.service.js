@@ -49,12 +49,35 @@ const getDashboard = async (ctx) => {
       .sort({ plannedCompletionDate: 1 })
       .limit(6)
       .lean(),
+    // WIP = cost of material lots still on the floor; plus output waiting in QC / rework.
     ProductionOrder.aggregate([
       { $match: { ...match, status: { $in: ['released', 'in_production', 'paused'] } } },
-      { $group: { _id: null, materialCost: { $sum: '$materialCost' }, fgValue: { $sum: '$finishedGoodsValue' } } },
+      {
+        $project: {
+          lotValue: {
+            $sum: {
+              $map: {
+                input: { $ifNull: ['$wipLots', []] },
+                as: 'l',
+                in: { $multiply: ['$$l.quantity', { $ifNull: ['$$l.unitCost', 0] }] },
+              },
+            },
+          },
+          qcPendingQuantity: { $ifNull: ['$qcPendingQuantity', 0] },
+          reworkPendingQuantity: { $ifNull: ['$reworkPendingQuantity', 0] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          wipValue: { $sum: '$lotValue' },
+          qcPending: { $sum: '$qcPendingQuantity' },
+          reworkPending: { $sum: '$reworkPendingQuantity' },
+        },
+      },
     ]),
     sumSince(ProductionReceipt, match, 'receiptDate', monthStart, ['quantity', 'totalCost']),
-    sumSince(MaterialIssue, match, 'issueDate', monthStart, ['totalCost']),
+    sumSince(MaterialIssue, { ...match, kind: { $ne: 'return' } }, 'issueDate', monthStart, ['totalCost']),
     sumSince(ScrapRecord, match, 'scrapDate', monthStart, ['quantity', 'totalCost']),
     Bom.countDocuments({ ...scopeFilter(ctx), isActive: true }),
     ProductionOrder.find({ ...scopeFilter(ctx) })
@@ -94,7 +117,7 @@ const getDashboard = async (ctx) => {
     return { date: key, quantity: row ? roundQty(row.quantity) : 0, value: row ? roundMoney(row.value) : 0 };
   });
 
-  const wip = wipRows[0] || { materialCost: 0, fgValue: 0 };
+  const wip = wipRows[0] || { wipValue: 0, qcPending: 0, reworkPending: 0 };
   const mapOrder = ({ _id, ...o }) => ({ ...o, id: String(_id) });
 
   return {
@@ -102,7 +125,9 @@ const getDashboard = async (ctx) => {
     openOrders: OPEN_PRODUCTION_STATUSES.reduce((s, k) => s + byStatus[k], 0),
     inProgress: byStatus.in_production + byStatus.paused + byStatus.released,
     overdue,
-    wipValue: Math.max(0, roundMoney(wip.materialCost - wip.fgValue)),
+    wipValue: roundMoney(wip.wipValue),
+    qcPendingQuantity: roundQty(wip.qcPending),
+    reworkPendingQuantity: roundQty(wip.reworkPending),
     month: {
       producedQuantity: roundQty(produced.quantity),
       producedValue: roundMoney(produced.totalCost),

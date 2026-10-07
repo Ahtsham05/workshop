@@ -1,6 +1,20 @@
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
-const { Product, Bom, ProductionOrder, MaterialIssue, ProductionReceipt, ScrapRecord } = require('../../src/models');
+const {
+  Product,
+  ProductVariant,
+  Inventory,
+  InventoryTransaction,
+  Batch,
+  Imei,
+  Bom,
+  ProductionOrder,
+  MaterialIssue,
+  ProductionReceipt,
+  ProductionOutput,
+  ScrapRecord,
+  ManufacturingSettings,
+} = require('../../src/models');
 const manufacturing = require('../../src/services/manufacturing');
 
 /**
@@ -25,7 +39,11 @@ beforeAll(async () => {
     await mongoose.connect(mongod.getUri());
   }
   // Unique indexes (BOM/order numbers) are part of what's under test.
-  await Promise.all([Bom, ProductionOrder, MaterialIssue, ProductionReceipt, ScrapRecord].map((m) => m.syncIndexes()));
+  await Promise.all(
+    [Bom, ProductionOrder, MaterialIssue, ProductionReceipt, ProductionOutput, ScrapRecord, Batch].map((m) =>
+      m.syncIndexes()
+    )
+  );
 });
 beforeEach(async () => {
   await Promise.all(Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({})));
@@ -223,143 +241,354 @@ describe('Production orders', () => {
   });
 });
 
-describeTx('Production execution (stock moves)', () => {
-  const releasedOrder = async (tree, plannedQuantity = 2) => {
-    const order = await manufacturing.productionOrder.createOrder(ctx, { productId: tree.assembly._id, plannedQuantity });
+describeTx('Production flow (stock moves, transactional)', () => {
+  const svc = manufacturing.execution;
+  const release = async (productId, plannedQuantity) => {
+    const order = await manufacturing.productionOrder.createOrder(ctx, { productId, plannedQuantity });
     return manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'released' });
   };
+  const lineFor = (order, product) => order.materials.find((m) => String(m.productId) === String(product._id));
+  const ledgerFor = (orderId) =>
+    InventoryTransaction.find({ productionOrderId: orderId }).sort({ createdAt: 1, _id: 1 }).lean();
+  const setSettings = (patch) => manufacturing.settings.updateSettings(ORG, patch, USER);
 
-  test('issuing materials takes stock, starts the order and costs the issue', async () => {
-    const tree = await buildMotorTree();
-    const order = await releasedOrder(tree, 2); // Motor ×2, Housing ×2.2
-    const housingLine = order.materials.find((m) => String(m.productId) === String(tree.housing._id));
-    const motorLine = order.materials.find((m) => String(m.productId) === String(tree.motor._id));
-
-    const issue = await manufacturing.execution.issueMaterials(ctx, order._id, {
-      lines: [
-        { materialLineId: motorLine._id, quantity: 2 },
-        { materialLineId: housingLine._id, quantity: 2.2 },
+  /** MO example from the spec: Motor 100, Bearing 200, Steel Body 100 per 100 units. */
+  const buildFanLine = async () => {
+    const motor = await insertProduct('Motor', { productType: 'component', cost: 20, stockQuantity: 150 });
+    const bearing = await insertProduct('Bearing', { productType: 'component', cost: 2, stockQuantity: 500 });
+    const body = await insertProduct('Steel Body', { productType: 'component', cost: 10, stockQuantity: 120 });
+    const fan = await insertProduct('Pedestal Fan', { productType: 'finished_good', cost: 60, stockQuantity: 0 });
+    await manufacturing.bom.createBom(ctx, {
+      productId: fan._id,
+      components: [
+        { productId: motor._id, quantity: 1 },
+        { productId: bearing._id, quantity: 2 },
+        { productId: body._id, quantity: 1 },
       ],
     });
-    expect(issue.issueNumber).toBe('MI-00001');
-    expect(issue.totalCost).toBe(51); // 2×20 + 2.2×5
-    expect(await stockOf(tree.motor._id)).toBe(8);
-    expect(await stockOf(tree.housing._id)).toBeCloseTo(97.8);
+    return { motor, bearing, body, fan };
+  };
 
+  test('material issue moves stock into WIP with a fully traceable ledger pair per item', async () => {
+    const { motor, bearing, body, fan } = await buildFanLine();
+    const order = await release(fan._id, 100);
+    const issue = await svc.issueMaterials(ctx, order._id, {
+      lines: [motor, bearing, body].map((p) => ({
+        materialLineId: lineFor(order, p)._id,
+        quantity: lineFor(order, p).requiredQuantity,
+      })),
+    });
+
+    expect(await stockOf(motor._id)).toBe(50);
+    expect(await stockOf(bearing._id)).toBe(300);
+    expect(await stockOf(body._id)).toBe(20);
+
+    const rows = await ledgerFor(order._id);
+    expect(rows).toHaveLength(6);
+    const motorRows = rows.filter((r) => String(r.productId) === String(motor._id));
+    expect(motorRows.map((r) => [r.type, r.stockBucket, r.quantityDelta, r.balanceAfter])).toEqual([
+      ['production_issue', 'available', -100, 50],
+      ['wip_in', 'wip', 100, 100],
+    ]);
+    motorRows.forEach((r) => {
+      expect(r).toMatchObject({ refType: 'MaterialIssue', unit: 'pcs', location: expect.any(String) });
+      expect(String(r.refId)).toBe(String(issue._id));
+      expect(String(r.organizationId)).toBe(String(ORG));
+      expect(String(r.branchId)).toBe(String(BRANCH));
+      expect(String(r.warehouseId)).toBe(String(BRANCH));
+      expect(String(r.createdBy)).toBe(String(USER));
+      expect(r.createdAt).toBeInstanceOf(Date);
+      expect(r.inventoryId).toBeTruthy();
+    });
     const after = await ProductionOrder.findById(order._id);
     expect(after.status).toBe('in_production');
-    expect(after.actualStartDate).toBeTruthy();
-    expect(after.materialCost).toBe(51);
-    expect(after.materials.id(motorLine._id).issuedQuantity).toBe(2);
+    expect(after.wipLots).toHaveLength(3);
   });
 
-  test('an issue with a short line changes nothing at all', async () => {
-    const tree = await buildMotorTree();
-    const order = await releasedOrder(tree, 20); // needs 20 Motors, only 10 on hand
-    const [motorLine, housingLine] = [tree.motor, tree.housing].map((p) =>
-      order.materials.find((m) => String(m.productId) === String(p._id))
-    );
-    await expect(
-      manufacturing.execution.issueMaterials(ctx, order._id, {
-        lines: [
-          { materialLineId: housingLine._id, quantity: 5 },
-          { materialLineId: motorLine._id, quantity: 20 },
-        ],
-      })
-    ).rejects.toThrow(/Insufficient stock/);
-    expect(await stockOf(tree.housing._id)).toBe(100);
-    expect(await stockOf(tree.motor._id)).toBe(10);
-    expect((await ProductionOrder.findById(order._id)).status).toBe('released');
-    expect(await MaterialIssue.countDocuments()).toBe(0);
-  });
-
-  test('receiving output adds stock at material cost and blocks over-production', async () => {
-    const tree = await buildMotorTree();
-    const order = await releasedOrder(tree, 2);
-    const motorLine = order.materials.find((m) => String(m.productId) === String(tree.motor._id));
-    await manufacturing.execution.issueMaterials(ctx, order._id, {
-      lines: [{ materialLineId: motorLine._id, quantity: 2 }],
+  test('partial issues track remaining; over-issue needs confirmation and permission', async () => {
+    const { motor, fan } = await buildFanLine();
+    const order = await release(fan._id, 100);
+    const line = lineFor(order, motor);
+    await svc.issueMaterials(ctx, order._id, { lines: [{ materialLineId: line._id, quantity: 60 }] });
+    let reqs = await manufacturing.productionOrder.getOrderRequirements(ctx, order._id);
+    expect(reqs.lines.find((l) => l.productId === String(motor._id))).toMatchObject({
+      requiredQuantity: 100,
+      issuedQuantity: 60,
+      wipQuantity: 60,
+      outstandingQuantity: 40,
     });
 
-    const receipt = await manufacturing.execution.receiveFinishedGoods(ctx, order._id, { quantity: 2 });
-    expect(receipt.receiptNumber).toBe('FG-00001');
-    expect(receipt.unitCost).toBe(20); // 40 material ÷ 2 planned
-    expect(await stockOf(tree.assembly._id)).toBe(12);
-    await expect(manufacturing.execution.receiveFinishedGoods(ctx, order._id, { quantity: 1 })).rejects.toThrow(
-      /exceed the planned/
+    const over = { lines: [{ materialLineId: line._id, quantity: 50 }] };
+    await expect(svc.issueMaterials(ctx, order._id, over)).rejects.toThrow(/more than the 40 still required/);
+    await expect(svc.issueMaterials(ctx, order._id, { ...over, allowOverIssue: true })).rejects.toThrow(/permission/);
+    expect(await stockOf(motor._id)).toBe(90);
+    const issue = await svc.issueMaterials(ctx, order._id, { ...over, allowOverIssue: true }, { canOverIssue: true });
+    expect(issue.isOverIssue).toBe(true);
+    reqs = await manufacturing.productionOrder.getOrderRequirements(ctx, order._id);
+    expect(reqs.lines.find((l) => l.productId === String(motor._id)).outstandingQuantity).toBe(0);
+    expect(await stockOf(motor._id)).toBe(40);
+  });
+
+  test('output 95 → QC 92 good / 3 rejected: WIP consumed, FG received, scrap recorded, 5 remaining', async () => {
+    const { motor, bearing, body, fan } = await buildFanLine();
+    const order = await release(fan._id, 100);
+    await svc.issueMaterials(ctx, order._id, {
+      lines: [motor, bearing, body].map((p) => ({
+        materialLineId: lineFor(order, p)._id,
+        quantity: lineFor(order, p).requiredQuantity,
+      })),
+    });
+
+    const output = await svc.reportOutput(ctx, order._id, { producedQuantity: 95 });
+    expect(output.status).toBe('pending_qc');
+    expect(output.materialCost).toBe(95 * (20 + 2 * 2 + 10));
+    let o = await ProductionOrder.findById(order._id);
+    expect(lineFor(o, motor).consumedQuantity).toBe(95);
+    expect(lineFor(o, bearing).consumedQuantity).toBe(190);
+    expect(o.qcPendingQuantity).toBe(95);
+    expect(await stockOf(fan._id)).toBe(0); // nothing in finished stock before inspection
+
+    await expect(svc.inspectOutput(ctx, output._id, { goodQuantity: 92, rejectedQuantity: 2 })).rejects.toThrow(
+      /must equal/
+    );
+    await svc.inspectOutput(ctx, output._id, { goodQuantity: 92, rejectedQuantity: 3, rejectDisposition: 'scrap' });
+    o = await ProductionOrder.findById(order._id);
+    expect(o).toMatchObject({ producedQuantity: 95, completedQuantity: 92, rejectedQuantity: 3, qcPendingQuantity: 0 });
+    expect(o.plannedQuantity - o.producedQuantity).toBe(5);
+    expect(await stockOf(fan._id)).toBe(92);
+    expect(await ScrapRecord.countDocuments({ stage: 'qc_reject', quantity: 3 })).toBe(1);
+
+    const types = (await ledgerFor(order._id))
+      .filter((r) => String(r.productId) === String(fan._id))
+      .map((r) => `${r.type}:${r.quantityDelta}`);
+    expect(types).toEqual(['qc_in:95', 'qc_out:-95', 'production_receipt:92']);
+    const wipMotor = (await ledgerFor(order._id)).filter(
+      (r) => r.type === 'wip_consume' && String(r.productId) === String(motor._id)
+    );
+    expect(wipMotor[0]).toMatchObject({ stockBucket: 'wip', quantityDelta: -95, balanceAfter: 5 });
+  });
+
+  test('rejected units can go to rework and later pass into stock or fail to scrap', async () => {
+    const { motor, bearing, body, fan } = await buildFanLine();
+    await setSettings({ requireQualityCheck: false });
+    const order = await release(fan._id, 10);
+    await svc.issueMaterials(ctx, order._id, {
+      lines: [motor, bearing, body].map((p) => ({
+        materialLineId: lineFor(order, p)._id,
+        quantity: lineFor(order, p).requiredQuantity,
+      })),
+    });
+    const output = await svc.reportOutput(ctx, order._id, {
+      producedQuantity: 10,
+      rejectedQuantity: 4,
+      rejectDisposition: 'rework',
+    });
+    expect(output.status).toBe('inspected');
+    expect(await stockOf(fan._id)).toBe(6);
+    await expect(manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'completed' })).rejects.toThrow(
+      /in rework/
     );
 
-    // Started orders can't be cancelled any more — only completed.
-    await expect(manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'cancelled' })).rejects.toThrow(
-      /Cannot move/
-    );
+    await svc.resolveRework(ctx, order._id, { goodQuantity: 3, scrapQuantity: 1 });
+    const o = await ProductionOrder.findById(order._id);
+    expect(o).toMatchObject({
+      completedQuantity: 9,
+      reworkPendingQuantity: 0,
+      reworkedGoodQuantity: 3,
+      scrappedQuantity: 1,
+    });
+    expect(await stockOf(fan._id)).toBe(9);
     const done = await manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'completed' });
-    expect(done.actualCompletionDate).toBeTruthy();
-    await expect(manufacturing.execution.receiveFinishedGoods(ctx, order._id, { quantity: 1 })).rejects.toThrow(
-      /release it/
+    expect(done.status).toBe('completed');
+  });
+
+  test('backflush refuses output the issued material cannot cover', async () => {
+    const { motor, bearing, body, fan } = await buildFanLine();
+    const order = await release(fan._id, 100);
+    await svc.issueMaterials(ctx, order._id, {
+      lines: [
+        { materialLineId: lineFor(order, motor)._id, quantity: 50 },
+        { materialLineId: lineFor(order, bearing)._id, quantity: 200 },
+        { materialLineId: lineFor(order, body)._id, quantity: 100 },
+      ],
+    });
+    await expect(svc.reportOutput(ctx, order._id, { producedQuantity: 60 })).rejects.toThrow(/Not enough "Motor" in WIP/);
+    const o = await ProductionOrder.findById(order._id);
+    expect(o.producedQuantity).toBe(0);
+    expect(lineFor(o, bearing).consumedQuantity).toBe(0); // nothing half-applied
+    expect(await ProductionOutput.countDocuments()).toBe(0);
+  });
+
+  test('completion requires leftover WIP to be returned or scrapped', async () => {
+    const { motor, bearing, body, fan } = await buildFanLine();
+    await setSettings({ requireQualityCheck: false });
+    const order = await release(fan._id, 10);
+    await svc.issueMaterials(ctx, order._id, {
+      lines: [
+        { materialLineId: lineFor(order, motor)._id, quantity: 10 },
+        { materialLineId: lineFor(order, bearing)._id, quantity: 20 },
+        { materialLineId: lineFor(order, body)._id, quantity: 10 },
+      ],
+    });
+    await svc.reportOutput(ctx, order._id, { producedQuantity: 8 });
+    await expect(manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'completed' })).rejects.toThrow(
+      /still in WIP/
     );
+    await manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'completed', wipDisposition: 'return' });
+    expect(await stockOf(motor._id)).toBe(150 - 8);
+    expect(await stockOf(bearing._id)).toBe(500 - 16);
+    const o = await ProductionOrder.findById(order._id);
+    expect(o.wipLots).toHaveLength(0);
+    expect(lineFor(o, motor).returnedQuantity).toBe(2);
+    expect(await MaterialIssue.countDocuments({ kind: 'return' })).toBe(1);
   });
 
-  test('scrap: material scrap is bounded by what was issued; finished-good scrap writes stock off', async () => {
-    const tree = await buildMotorTree();
-    const order = await releasedOrder(tree, 2);
-    const housingLine = order.materials.find((m) => String(m.productId) === String(tree.housing._id));
-    await manufacturing.execution.issueMaterials(ctx, order._id, {
-      lines: [{ materialLineId: housingLine._id, quantity: 2 }],
+  describe('batch- and serial-tracked items', () => {
+    const insertBatchProduct = async (name, batches) => {
+      const total = batches.reduce((s, b) => s + b.quantity, 0);
+      const product = await insertProduct(name, { productType: 'raw_material', cost: 5, stockQuantity: total });
+      const [variant] = await ProductVariant.create([
+        {
+          organizationId: ORG,
+          branchId: BRANCH,
+          productId: product._id,
+          isDefault: true,
+          price: 10,
+          cost: 5,
+          trackBatch: true,
+        },
+      ]);
+      const [inventory] = await Inventory.create([
+        { organizationId: ORG, branchId: BRANCH, productId: product._id, variantId: variant._id, quantity: total },
+      ]);
+      const created = await Batch.create(
+        batches.map((b) => ({ organizationId: ORG, inventoryId: inventory._id, costPerUnit: 5, ...b }))
+      );
+      return { product, inventory, batches: created };
+    };
+    const insertSerialProduct = async (name, numbers) => {
+      const product = await insertProduct(name, {
+        productType: 'component',
+        cost: 30,
+        stockQuantity: numbers.length,
+        trackSerial: true,
+      });
+      const units = await Imei.create(
+        numbers.map((imei) => ({
+          organizationId: ORG,
+          branchId: BRANCH,
+          imei,
+          type: 'serial',
+          productId: product._id,
+          purchasePrice: 30,
+        }))
+      );
+      return { product, units };
+    };
+
+    test('batch items issue FEFO, keep batch quantities in step and return to the same batch', async () => {
+      const resin = await insertBatchProduct('Resin', [
+        { batchNumber: 'LATE', quantity: 50, expiryDate: new Date('2027-06-01') },
+        { batchNumber: 'EARLY', quantity: 30, expiryDate: new Date('2027-01-01') },
+      ]);
+      const panel = await insertProduct('Panel', { productType: 'finished_good' });
+      await manufacturing.bom.createBom(ctx, {
+        productId: panel._id,
+        components: [{ productId: resin.product._id, quantity: 4 }],
+      });
+      const order = await release(panel._id, 10);
+      const issue = await svc.issueMaterials(ctx, order._id, {
+        lines: [{ materialLineId: order.materials[0]._id, quantity: 40 }],
+      });
+      expect(issue.lines.map((l) => [l.batchNumber, l.quantity])).toEqual([
+        ['EARLY', 30],
+        ['LATE', 10],
+      ]);
+      const [early, late] = await Promise.all(['EARLY', 'LATE'].map((n) => Batch.findOne({ batchNumber: n }).lean()));
+      expect([early.quantity, early.status, late.quantity]).toEqual([0, 'depleted', 40]);
+      expect((await Inventory.findById(resin.inventory._id)).quantity).toBe(40);
+      expect(await stockOf(resin.product._id)).toBe(40);
+      const batchRows = await InventoryTransaction.find({ productionOrderId: order._id, type: 'production_issue' }).lean();
+      expect(batchRows.map((r) => String(r.batchId)).sort()).toEqual([String(early._id), String(late._id)].sort());
+
+      const o = await ProductionOrder.findById(order._id);
+      const earlyLot = o.wipLots.find((l) => l.batchNumber === 'EARLY');
+      await svc.returnMaterials(ctx, order._id, { lines: [{ wipLotId: earlyLot._id, quantity: 5 }] });
+      expect((await Batch.findById(early._id)).toObject()).toMatchObject({ quantity: 5, status: 'active' });
+      expect(await stockOf(resin.product._id)).toBe(45);
     });
 
-    await expect(
-      manufacturing.execution.recordScrap(ctx, {
+    test('serial units move to in_production, are consumed by output, and finished serials are created', async () => {
+      const board = await insertSerialProduct('Control Board', ['CB-1', 'CB-2', 'CB-3']);
+      const robot = await insertProduct('Robot', { productType: 'finished_good', trackSerial: true });
+      await manufacturing.bom.createBom(ctx, {
+        productId: robot._id,
+        components: [{ productId: board.product._id, quantity: 1 }],
+      });
+      await setSettings({ requireQualityCheck: false });
+      const order = await release(robot._id, 2);
+      await svc.issueMaterials(ctx, order._id, {
+        lines: [{ materialLineId: order.materials[0]._id, serialNumbers: ['CB-1', 'CB-3'] }],
+      });
+      expect((await Imei.findOne({ imei: 'CB-1' })).toObject()).toMatchObject({
+        status: 'in_production',
         productionOrderId: order._id,
-        stage: 'material',
-        materialLineId: housingLine._id,
-        quantity: 3,
-      })
-    ).rejects.toThrow(/has been issued/);
-    const materialScrap = await manufacturing.execution.recordScrap(ctx, {
-      productionOrderId: order._id,
-      stage: 'material',
-      materialLineId: housingLine._id,
-      quantity: 1,
-      reason: 'defect',
-    });
-    // The rejected attempt above already reserved SCR-00001 — numbers are reserved before
-    // the transaction (see settings.service.js#nextDocumentNumber), so failures leave gaps.
-    expect(materialScrap.toObject()).toMatchObject({
-      scrapNumber: 'SCR-00002',
-      affectsStock: false,
-      unitCost: 5,
-      totalCost: 5,
-    });
-    expect(await stockOf(tree.housing._id)).toBe(98);
+      });
+      expect((await Imei.findOne({ imei: 'CB-2' })).status).toBe('in_stock');
+      expect(await stockOf(board.product._id)).toBe(1);
 
-    const fgScrap = await manufacturing.execution.recordScrap(ctx, {
-      stage: 'finished_good',
-      productId: tree.motor._id,
-      quantity: 3,
+      // Finished serials are mandatory for a serial-tracked product — and a failure leaves nothing half-done.
+      await expect(svc.reportOutput(ctx, order._id, { producedQuantity: 2 })).rejects.toThrow(/serial/);
+      expect((await Imei.findOne({ imei: 'CB-1' })).status).toBe('in_production');
+      expect((await ProductionOrder.findById(order._id)).producedQuantity).toBe(0);
+
+      await svc.reportOutput(ctx, order._id, {
+        producedQuantity: 2,
+        finishedGoods: { serialNumbers: ['RB-100', 'RB-101'] },
+      });
+      expect((await Imei.findOne({ imei: 'CB-3' })).status).toBe('consumed');
+      const made = await Imei.find({ productId: robot._id }).lean();
+      expect(made.map((u) => [u.imei, u.status])).toEqual([
+        ['RB-100', 'in_stock'],
+        ['RB-101', 'in_stock'],
+      ]);
+      expect(await stockOf(robot._id)).toBe(2);
+      const receiptRow = await InventoryTransaction.findOne({
+        productionOrderId: order._id,
+        type: 'production_receipt',
+      }).lean();
+      expect(receiptRow.serialNumbers).toEqual(['RB-100', 'RB-101']);
     });
-    expect(fgScrap.affectsStock).toBe(true);
-    expect(await stockOf(tree.motor._id)).toBe(7);
-  });
 
-  test('WIP and dashboard roll up open work', async () => {
-    const tree = await buildMotorTree();
-    const order = await releasedOrder(tree, 2);
-    const motorLine = order.materials.find((m) => String(m.productId) === String(tree.motor._id));
-    await manufacturing.execution.issueMaterials(ctx, order._id, {
-      lines: [{ materialLineId: motorLine._id, quantity: 2 }],
+    test('batch-tracked finished goods land in a new batch', async () => {
+      const flour = await insertProduct('Flour', { productType: 'raw_material', cost: 1, stockQuantity: 100 });
+      const bread = await insertProduct('Bread', { productType: 'finished_good', cost: 3 });
+      await ProductVariant.create([
+        {
+          organizationId: ORG,
+          branchId: BRANCH,
+          productId: bread._id,
+          isDefault: true,
+          price: 5,
+          cost: 3,
+          trackBatch: true,
+          trackExpiry: true,
+        },
+      ]);
+      await manufacturing.bom.createBom(ctx, {
+        productId: bread._id,
+        components: [{ productId: flour._id, quantity: 0.5 }],
+      });
+      await setSettings({ requireQualityCheck: false });
+      const order = await release(bread._id, 20);
+      await svc.issueMaterials(ctx, order._id, { lines: [{ materialLineId: order.materials[0]._id, quantity: 10 }] });
+      await svc.reportOutput(ctx, order._id, {
+        producedQuantity: 20,
+        finishedGoods: { batchNumber: 'BR-0701', expiryDate: '2026-10-14' },
+      });
+      const batch = await Batch.findOne({ batchNumber: 'BR-0701' }).lean();
+      expect(batch).toMatchObject({ quantity: 20, costPerUnit: 0.5, status: 'active' });
+      expect(await stockOf(bread._id)).toBe(20);
     });
-    await manufacturing.execution.receiveFinishedGoods(ctx, order._id, { quantity: 1 });
-
-    const wip = await manufacturing.execution.getWip(ctx);
-    expect(wip.orders).toHaveLength(1);
-    expect(wip.totals.wipValue).toBe(20); // 40 issued − 20 received
-
-    const dashboard = await manufacturing.dashboard.getDashboard(ctx);
-    expect(dashboard.byStatus.in_production).toBe(1);
-    expect(dashboard.wipValue).toBe(20);
-    expect(dashboard.month.producedQuantity).toBe(1);
-    expect(dashboard.activeBoms).toBe(3);
-    expect(dashboard.productTypes.sub_assembly).toBe(2);
   });
 });

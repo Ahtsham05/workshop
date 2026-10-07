@@ -259,6 +259,7 @@ const createDefaultRoles = async () => {
         viewPurchaseSuggestions: true,
         viewBarcodeGenerator: true,
         viewManufacturing: true, manageBoms: true, manageProductionOrders: true, executeProduction: true,
+        overIssueMaterials: true, inspectProduction: true,
         viewDashboard: true,
         // Manager already views business Reports; extend that same view-only reach to the
         // new Tax & Currency Settings group (view-only — Manager doesn't manage settings).

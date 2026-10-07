@@ -47,7 +47,14 @@ export type ProductionStatus =
   | 'completed'
   | 'cancelled'
 export type ProductionPriority = 'low' | 'normal' | 'high' | 'urgent'
-export type ScrapStage = 'material' | 'wip' | 'finished_good'
+export type ScrapStage =
+  | 'material'
+  | 'wip'
+  | 'qc_reject'
+  | 'rework'
+  | 'finished_good'
+export type RejectDisposition = 'scrap' | 'rework'
+export type StockBucket = 'available' | 'wip' | 'qc' | 'rework'
 export type ScrapReason =
   | 'defect'
   | 'damage'
@@ -202,12 +209,34 @@ export interface ProductionMaterial {
   unit: string
   baseQuantity: number
   requiredQuantity: number
+  /** All in the line's own units; in WIP = issued − returned − consumed − scrapped. */
   issuedQuantity: number
   issuedCost: number
+  returnedQuantity: number
+  consumedQuantity: number
+  consumedCost: number
   scrappedQuantity: number
   isOptional: boolean
   level: number
   alternatives: BomAlternative[]
+}
+
+export interface WipLot {
+  _id: string
+  materialLineId: string
+  productId: string
+  variantId?: string | null
+  productName: string
+  unit: string
+  batchId?: string | null
+  batchNumber?: string
+  imeiIds?: string[]
+  serialNumbers?: string[]
+  quantity: number
+  ratio: number
+  isAlternative: boolean
+  unitCost: number
+  issuedAt: string
 }
 
 export interface ProductionOrder {
@@ -222,7 +251,13 @@ export interface ProductionOrder {
   bomNumber?: string
   bomVersion?: number
   plannedQuantity: number
+  /** Reported off the line; good units land in completedQuantity after inspection. */
+  producedQuantity: number
   completedQuantity: number
+  rejectedQuantity: number
+  qcPendingQuantity: number
+  reworkPendingQuantity: number
+  reworkedGoodQuantity: number
   scrappedQuantity: number
   plannedStartDate?: string | null
   plannedCompletionDate?: string | null
@@ -235,6 +270,7 @@ export interface ProductionOrder {
   priority: ProductionPriority
   notes?: string
   materials: ProductionMaterial[]
+  wipLots: WipLot[]
   materialCost: number
   finishedGoodsValue: number
   statusHistory: {
@@ -306,6 +342,8 @@ export interface AggregatedRequirements {
 export interface MaterialIssue {
   id: string
   issueNumber: string
+  kind: 'issue' | 'return'
+  isOverIssue?: boolean
   productionOrderId: string
   orderNumber: string
   issueDate: string
@@ -320,6 +358,8 @@ export interface MaterialIssue {
     unitCost: number
     totalCost: number
     balanceAfter?: number
+    batchNumber?: string
+    serialNumbers?: string[]
   }[]
   totalCost: number
   notes?: string
@@ -341,6 +381,10 @@ export interface ProductionReceipt {
   location?: string
   receiptDate: string
   balanceAfter?: number
+  source?: 'output' | 'rework' | 'direct'
+  batchNumber?: string
+  expiryDate?: string | null
+  serialNumbers?: string[]
   notes?: string
   createdBy?: Ref
   createdAt: string
@@ -366,6 +410,87 @@ export interface ScrapRecord {
   createdAt: string
 }
 
+export interface ProductionOutput {
+  id: string
+  outputNumber: string
+  productionOrderId: string
+  orderNumber: string
+  productId: string
+  productName: string
+  unit: string
+  producedQuantity: number
+  goodQuantity: number
+  rejectedQuantity: number
+  rejectDisposition?: RejectDisposition | null
+  rejectReason?: string
+  status: 'pending_qc' | 'inspected'
+  consumption: {
+    productName: string
+    unit: string
+    quantity: number
+    cost: number
+  }[]
+  materialCost: number
+  unitCost: number
+  reportedAt: string
+  reportedBy?: Ref
+  inspectedAt?: string | null
+  inspectedBy?: Ref
+  inspectionNotes?: string
+  notes?: string
+  createdAt: string
+}
+
+export interface StockMovement {
+  id: string
+  type: string
+  stockBucket: StockBucket
+  productId?: { id?: string; _id?: string; name: string; sku?: string } | string
+  unit?: string
+  quantityDelta: number
+  balanceAfter: number
+  unitCost?: number
+  refType?: string
+  refId?: string
+  productionOrderId?: string
+  warehouseId?: string
+  location?: string
+  batchId?: { id?: string; batchNumber: string } | string | null
+  serialNumbers?: string[]
+  createdBy?: Ref
+  createdAt: string
+}
+
+export interface StockDetail {
+  productId: string
+  variantId: string | null
+  name: string
+  unit: string
+  available: number
+  unitCost: number
+  tracking: { batch: boolean; serial: boolean }
+  batches: {
+    id: string
+    batchNumber: string
+    quantity: number
+    expiryDate?: string | null
+    costPerUnit: number
+  }[]
+  serials: {
+    id: string
+    number: string
+    number2: string
+    batchId: string | null
+  }[]
+}
+
+export interface FinishedGoodsInput {
+  batchNumber?: string
+  expiryDate?: string | null
+  serialNumbers?: string[]
+  location?: string
+}
+
 export interface WipRow {
   id: string
   orderNumber: string
@@ -375,7 +500,11 @@ export interface WipRow {
   status: ProductionStatus
   priority: ProductionPriority
   plannedQuantity: number
+  producedQuantity: number
   completedQuantity: number
+  rejectedQuantity: number
+  qcPendingQuantity: number
+  reworkPendingQuantity: number
   scrappedQuantity: number
   remainingQuantity: number
   materialIssuedPercent: number
@@ -383,6 +512,14 @@ export interface WipRow {
   materialCost: number
   finishedGoodsValue: number
   wipValue: number
+  wipItems: {
+    id: string
+    productName: string
+    unit: string
+    quantity: number
+    batchNumber?: string
+    serialCount: number
+  }[]
   wipLocation?: string
   plannedStartDate?: string | null
   plannedCompletionDate?: string | null
@@ -396,6 +533,8 @@ export interface WipSummary {
     orderCount: number
     wipValue: number
     materialCost: number
+    qcPendingQuantity: number
+    reworkPendingQuantity: number
     overdueCount: number
   }
 }
@@ -439,6 +578,8 @@ export interface ManufacturingDashboard {
   inProgress: number
   overdue: number
   wipValue: number
+  qcPendingQuantity: number
+  reworkPendingQuantity: number
   month: {
     producedQuantity: number
     producedValue: number
@@ -464,6 +605,8 @@ export interface ManufacturingSettings {
     bom: string
     productionOrder: string
     materialIssue: string
+    materialReturn: string
+    productionOutput: string
     productionReceipt: string
     scrap: string
   }
@@ -475,6 +618,8 @@ export interface ManufacturingSettings {
   allowOverProduction: boolean
   requireBomForProduction: boolean
   explodeSubAssemblies: boolean
+  requireQualityCheck: boolean
+  defaultRejectDisposition: RejectDisposition
   defaultPriority: ProductionPriority
   counters: Record<string, number>
 }
@@ -497,6 +642,8 @@ const TAGS = [
   'MfgScrap',
   'MfgWip',
   'MfgSettings',
+  'MfgOutput',
+  'MfgMovement',
 ] as const
 
 /** Everything a stock movement can change. */
@@ -509,6 +656,8 @@ const EXECUTION_TAGS = [
   'MfgScrap',
   'MfgWip',
   'MfgProduct',
+  'MfgOutput',
+  'MfgMovement',
 ] as const
 
 export const manufacturingApi = createApi({
@@ -773,9 +922,12 @@ export const manufacturingApi = createApi({
         orderId: string
         lines: {
           materialLineId: string
-          quantity: number
+          quantity?: number
           alternativeProductId?: string | null
+          batches?: { batchId: string; quantity: number }[]
+          imeiIds?: string[]
         }[]
+        allowOverIssue?: boolean
         notes?: string
         issueDate?: string
       }
@@ -788,18 +940,75 @@ export const manufacturingApi = createApi({
       invalidatesTags: [...EXECUTION_TAGS],
       onQueryStarted: invalidateStockCaches,
     }),
-    receiveFinishedGoods: builder.mutation<
-      ProductionReceipt,
+    returnMaterials: builder.mutation<
+      MaterialIssue,
       {
         orderId: string
-        quantity: number
-        location?: string
+        lines: { wipLotId: string; quantity?: number; imeiIds?: string[] }[]
         notes?: string
-        receiptDate?: string
       }
     >({
       query: ({ orderId, ...body }) => ({
-        url: `/manufacturing/production-orders/${orderId}/receive`,
+        url: `/manufacturing/production-orders/${orderId}/return`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    reportOutput: builder.mutation<
+      ProductionOutput,
+      {
+        orderId: string
+        producedQuantity: number
+        goodQuantity?: number
+        rejectedQuantity?: number
+        rejectDisposition?: RejectDisposition
+        rejectReason?: string
+        finishedGoods?: FinishedGoodsInput
+        notes?: string
+      }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/manufacturing/production-orders/${orderId}/outputs`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    inspectOutput: builder.mutation<
+      ProductionOutput,
+      {
+        outputId: string
+        goodQuantity: number
+        rejectedQuantity?: number
+        rejectDisposition?: RejectDisposition
+        rejectReason?: string
+        finishedGoods?: FinishedGoodsInput
+        inspectionNotes?: string
+      }
+    >({
+      query: ({ outputId, ...body }) => ({
+        url: `/manufacturing/outputs/${outputId}/inspect`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    resolveRework: builder.mutation<
+      { reworkPendingQuantity: number },
+      {
+        orderId: string
+        goodQuantity?: number
+        scrapQuantity?: number
+        finishedGoods?: FinishedGoodsInput
+        notes?: string
+      }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/manufacturing/production-orders/${orderId}/rework`,
         method: 'POST',
         body,
       }),
@@ -810,10 +1019,12 @@ export const manufacturingApi = createApi({
       ScrapRecord,
       {
         productionOrderId?: string | null
-        stage: ScrapStage
+        stage: 'material' | 'finished_good'
         materialLineId?: string
         productId?: string
-        quantity: number
+        batchId?: string
+        imeiIds?: string[]
+        quantity?: number
         reason?: ScrapReason
         notes?: string
       }
@@ -822,10 +1033,45 @@ export const manufacturingApi = createApi({
       invalidatesTags: [...EXECUTION_TAGS],
       onQueryStarted: invalidateStockCaches,
     }),
+    getOutputs: builder.query<
+      Paginated<ProductionOutput>,
+      ListParams & {
+        productionOrderId?: string
+        status?: 'pending_qc' | 'inspected'
+      }
+    >({
+      query: (params) => ({ url: '/manufacturing/outputs', params }),
+      providesTags: ['MfgOutput'],
+    }),
+    getMovements: builder.query<
+      Paginated<StockMovement>,
+      ListParams & {
+        productionOrderId?: string
+        productId?: string
+        bucket?: StockBucket
+        type?: string
+        dateFrom?: string
+        dateTo?: string
+      }
+    >({
+      query: (params) => ({ url: '/manufacturing/movements', params }),
+      providesTags: ['MfgMovement'],
+    }),
+    getStockDetail: builder.query<
+      StockDetail,
+      { productId: string; variantId?: string | null }
+    >({
+      query: ({ productId, variantId }) => ({
+        url: '/manufacturing/stock-detail',
+        params: { productId, ...(variantId ? { variantId } : {}) },
+      }),
+      providesTags: ['MfgOrder'],
+    }),
     getMaterialIssues: builder.query<
       Paginated<MaterialIssue>,
       ListParams & {
         productionOrderId?: string
+        kind?: 'issue' | 'return'
         dateFrom?: string
         dateTo?: string
       }
@@ -894,7 +1140,13 @@ export const {
   useGetOrderRequirementsQuery,
   useGetRequirementsQuery,
   useIssueMaterialsMutation,
-  useReceiveFinishedGoodsMutation,
+  useReturnMaterialsMutation,
+  useReportOutputMutation,
+  useInspectOutputMutation,
+  useResolveReworkMutation,
+  useGetOutputsQuery,
+  useGetMovementsQuery,
+  useGetStockDetailQuery,
   useRecordScrapMutation,
   useGetMaterialIssuesQuery,
   useGetProductionReceiptsQuery,

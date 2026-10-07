@@ -101,12 +101,17 @@ router.post(
 );
 router.get('/production-orders/:orderId/requirements', auth(VIEW), validate(v.orderIdParam), c.getOrderRequirements);
 router.post('/production-orders/:orderId/issue', auth('executeProduction'), validate(v.issueMaterials), c.issueMaterials);
-router.post(
-  '/production-orders/:orderId/receive',
-  auth('executeProduction'),
-  validate(v.receiveFinishedGoods),
-  c.receiveFinishedGoods
-);
+router.post('/production-orders/:orderId/return', auth('executeProduction'), validate(v.returnMaterials), c.returnMaterials);
+// Output → (quality check) → finished goods. Reporting needs executeProduction; the QC
+// decision and rework results need inspectProduction.
+router.post('/production-orders/:orderId/outputs', auth('executeProduction'), validate(v.reportOutput), c.reportOutput);
+router.post('/production-orders/:orderId/rework', auth('inspectProduction'), validate(v.resolveRework), c.resolveRework);
+router.get('/outputs', auth(VIEW), validate(v.listOutputs), c.getProductionOutputs);
+router.post('/outputs/:outputId/inspect', auth('inspectProduction'), validate(v.inspectOutput), c.inspectOutput);
+// The inventory ledger rows written by manufacturing, with full traceability.
+router.get('/movements', auth(VIEW), validate(v.listMovements), c.getMovements);
+// Batches / serial units / on-hand of one product, for the issue & scrap pickers.
+router.get('/stock-detail', auth(VIEW), validate(v.stockDetail), c.getStockDetail);
 
 // Execution records
 router.get('/material-issues', auth(VIEW), validate(v.listTransactions), c.getMaterialIssues);

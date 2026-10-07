@@ -12,6 +12,10 @@ const MaterialIssueSchema = new mongoose.Schema(
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true, index: true },
     issueNumber: { type: String, required: true, trim: true },
+    // 'issue' = stock → WIP; 'return' = unused WIP → stock (numbered with the MR prefix).
+    kind: { type: String, enum: ['issue', 'return'], default: 'issue', index: true },
+    // Set when the user deliberately issued more than the remaining requirement.
+    isOverIssue: { type: Boolean, default: false },
     productionOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductionOrder', required: true, index: true },
     orderNumber: { type: String, trim: true },
     issueDate: { type: Date, default: Date.now },
@@ -33,6 +37,11 @@ const MaterialIssueSchema = new mongoose.Schema(
             unitCost: { type: Number, default: 0 },
             totalCost: { type: Number, default: 0 },
             balanceAfter: { type: Number },
+            batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
+            batchNumber: { type: String, trim: true },
+            imeiIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Imei' }], default: undefined },
+            serialNumbers: { type: [String], default: undefined },
+            wipLotId: { type: mongoose.Schema.Types.ObjectId },
           },
           { _id: false }
         ),

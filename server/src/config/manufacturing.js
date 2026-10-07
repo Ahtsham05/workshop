@@ -55,13 +55,25 @@ const OPEN_PRODUCTION_STATUSES = ['draft', 'planned', 'released', 'in_production
 
 const PRODUCTION_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
-/** Where in the process a scrap was recorded. */
-const SCRAP_STAGES = ['material', 'wip', 'finished_good'];
+/**
+ * Where in the process a scrap was recorded:
+ *  material      — issued material lost on the floor (moves out of WIP)
+ *  wip           — partly-made output lost in process (Phase 1 records; record only)
+ *  qc_reject     — output rejected at quality inspection with disposition "scrap"
+ *  rework        — units that failed rework
+ *  finished_good — finished stock written off (moves out of available stock)
+ */
+const SCRAP_STAGES = ['material', 'wip', 'qc_reject', 'rework', 'finished_good'];
+
+/** What happens to output rejected at quality inspection. */
+const REJECT_DISPOSITIONS = ['scrap', 'rework'];
+
+const OUTPUT_STATUSES = ['pending_qc', 'inspected'];
 
 const SCRAP_REASONS = ['defect', 'damage', 'process_loss', 'expired', 'setup', 'rework', 'other'];
 
 /** Keys of the per-organization document counters in ManufacturingSettings. */
-const COUNTER_KEYS = ['bom', 'productionOrder', 'materialIssue', 'productionReceipt', 'scrap'];
+const COUNTER_KEYS = ['bom', 'productionOrder', 'materialIssue', 'materialReturn', 'productionOutput', 'productionReceipt', 'scrap'];
 
 /** Max depth when exploding a multi-level BOM — guards against pathological trees. */
 const MAX_BOM_DEPTH = 10;
@@ -78,6 +90,8 @@ module.exports = {
   PRODUCTION_PRIORITIES,
   SCRAP_STAGES,
   SCRAP_REASONS,
+  REJECT_DISPOSITIONS,
+  OUTPUT_STATUSES,
   COUNTER_KEYS,
   MAX_BOM_DEPTH,
 };

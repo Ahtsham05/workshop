@@ -19,8 +19,13 @@ const ProductionMaterialSchema = new mongoose.Schema(
     // Net quantity per the BOM, and the quantity including the component's scrap allowance.
     baseQuantity: { type: Number, required: true, min: 0 },
     requiredQuantity: { type: Number, required: true, min: 0 },
+    // All in the line's own (primary component) units — an alternative issued at ratio r is
+    // credited as qty ÷ r. In WIP right now = issued − returned − consumed − scrapped.
     issuedQuantity: { type: Number, default: 0 },
     issuedCost: { type: Number, default: 0 },
+    returnedQuantity: { type: Number, default: 0 },
+    consumedQuantity: { type: Number, default: 0 },
+    consumedCost: { type: Number, default: 0 },
     scrappedQuantity: { type: Number, default: 0 },
     isOptional: { type: Boolean, default: false },
     // 1 = direct component of the order's BOM, 2+ = came from an exploded sub-assembly.
@@ -41,6 +46,36 @@ const ProductionMaterialSchema = new mongoose.Schema(
       ],
       default: [],
     },
+  },
+  { _id: true }
+);
+
+/**
+ * A quantity of one physical item currently sitting in this order's WIP: what was issued
+ * (product/variant, the batch it came from, the serial units), at what cost, and against
+ * which material line. Consumed / returned / scrapped FIFO. The authoritative record of
+ * every move is the InventoryTransaction ledger (stockBucket 'wip'); lots are the order's
+ * running balance of it so execution never has to re-aggregate the ledger.
+ */
+const WipLotSchema = new mongoose.Schema(
+  {
+    materialLineId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+    variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: null },
+    productName: { type: String, trim: true },
+    unit: { type: String },
+    batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
+    batchNumber: { type: String, trim: true },
+    imeiIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Imei' }], default: undefined },
+    serialNumbers: { type: [String], default: undefined },
+    // Physical units of this item still in WIP, and how many of them equal one unit of the
+    // material line (1 for the primary component, the BOM ratio for an alternative).
+    quantity: { type: Number, required: true, min: 0 },
+    ratio: { type: Number, default: 1 },
+    isAlternative: { type: Boolean, default: false },
+    unitCost: { type: Number, default: 0 },
+    issueId: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialIssue' },
+    issuedAt: { type: Date, default: Date.now },
   },
   { _id: true }
 );
@@ -76,7 +111,15 @@ const ProductionOrderSchema = new mongoose.Schema(
     bomNumber: { type: String, trim: true },
     bomVersion: { type: Number },
     plannedQuantity: { type: Number, required: true, min: 0.000001 },
+    // Output flow: produced = reported by the floor; it then sits in QC (qcPending) until
+    // inspected into good (→ finished stock, counted in completedQuantity) and rejected
+    // (→ scrap or rework). Rework that passes later also lands in completedQuantity.
+    producedQuantity: { type: Number, default: 0 },
     completedQuantity: { type: Number, default: 0 },
+    rejectedQuantity: { type: Number, default: 0 },
+    qcPendingQuantity: { type: Number, default: 0 },
+    reworkPendingQuantity: { type: Number, default: 0 },
+    reworkedGoodQuantity: { type: Number, default: 0 },
     scrappedQuantity: { type: Number, default: 0 },
     plannedStartDate: { type: Date, default: null },
     plannedCompletionDate: { type: Date, default: null },
@@ -89,6 +132,10 @@ const ProductionOrderSchema = new mongoose.Schema(
     priority: { type: String, enum: PRODUCTION_PRIORITIES, default: 'normal' },
     notes: { type: String, trim: true, default: '' },
     materials: { type: [ProductionMaterialSchema], default: [] },
+    wipLots: { type: [WipLotSchema], default: [] },
+    // Unit cost of output sitting in QC / rework, so it is valued when it finally lands.
+    qcPendingCost: { type: Number, default: 0 },
+    reworkPendingCost: { type: Number, default: 0 },
     // Running totals kept in step with issues/receipts so lists and the dashboard never
     // need to aggregate the transaction collections.
     materialCost: { type: Number, default: 0 },

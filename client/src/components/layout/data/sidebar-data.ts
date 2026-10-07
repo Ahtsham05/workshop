@@ -126,6 +126,7 @@ export const sidebarData: SidebarData = {
             { title: 'Production Orders', url: '/manufacturing/production-orders', icon: ClipboardList, permission: 'viewManufacturing' },
             { title: 'Material Requirements', url: '/manufacturing/requirements', icon: ListChecks, permission: 'viewManufacturing' },
             { title: 'Work in Progress', url: '/manufacturing/wip', icon: Workflow, permission: 'viewManufacturing' },
+            { title: 'Quality Check', url: '/manufacturing/quality', icon: ClipboardCheck, permission: 'viewManufacturing' },
             { title: 'Finished Goods', url: '/manufacturing/finished-goods', icon: PackageCheck, permission: 'viewManufacturing' },
           ],
         },

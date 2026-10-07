@@ -193,4 +193,5 @@ module.exports.Bom = require('./bom.model');
 module.exports.ProductionOrder = require('./productionOrder.model');
 module.exports.MaterialIssue = require('./materialIssue.model');
 module.exports.ProductionReceipt = require('./productionReceipt.model');
+module.exports.ProductionOutput = require('./productionOutput.model');
 module.exports.ScrapRecord = require('./scrapRecord.model');

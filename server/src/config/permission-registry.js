@@ -367,6 +367,10 @@ const PERMISSION_GROUPS = [
       'manageBoms',
       'manageProductionOrders',
       'executeProduction',
+      // Issue more material than an order still requires (otherwise blocked).
+      'overIssueMaterials',
+      // Quality inspection of reported output, and rework results.
+      'inspectProduction',
       'manageManufacturingSettings',
     ],
   },
