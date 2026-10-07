@@ -452,9 +452,22 @@ const runScenario = async (ctx, P, step) => {
   const id = (key) => P[key]._id;
   const counts = { boms: 0, orders: 0, issues: 0, returns: 0, outputs: 0, receipts: 0, scrap: 0 };
 
-  // Moves everything stamped with the real clock during this run onto the scenario date.
-  const backdate = (Model, docId, date) =>
-    Model.collection.updateOne({ _id: docId }, { $set: { createdAt: date, updatedAt: date } });
+  // Moves everything stamped with the real clock during this run onto the scenario date —
+  // the audit timestamps and the document's own business date, which reports and the
+  // dashboard read (receipt / scrap dates; output report and inspection times are passed in).
+  const BUSINESS_DATE = { [ProductionReceipt.modelName]: 'receiptDate', [ScrapRecord.modelName]: 'scrapDate' };
+  const backdate = (Model, docId, date, extra = {}) =>
+    Model.collection.updateOne(
+      { _id: docId },
+      {
+        $set: {
+          createdAt: date,
+          updatedAt: date,
+          ...(BUSINESS_DATE[Model.modelName] ? { [BUSINESS_DATE[Model.modelName]]: date } : {}),
+          ...extra,
+        },
+      }
+    );
 
   // One round trip: any history entry / start / completion date written by the real clock
   // since the run began (i.e. by the call just made) moves to `date`.
@@ -659,7 +672,7 @@ const runScenario = async (ctx, P, step) => {
     const goodQuantity = good ?? roundQty(quantity - rejected);
     const output = await executionService.reportOutput(ctx, order._id, { producedQuantity: quantity, notes });
     const reportDate = at(day, hour, 0);
-    await backdate(ProductionOutput, output._id, reportDate);
+    await backdate(ProductionOutput, output._id, reportDate, { reportedAt: reportDate });
     const inspected = await executionService.inspectOutput(ctx, output._id, {
       goodQuantity,
       rejectedQuantity: rejected,
@@ -669,7 +682,7 @@ const runScenario = async (ctx, P, step) => {
     });
     const inspectDate = at(day, hour, 40);
     await Promise.all([
-      backdate(ProductionOutput, inspected._id, inspectDate),
+      backdate(ProductionOutput, inspected._id, inspectDate, { inspectedAt: inspectDate }),
       inspected.receiptId ? backdate(ProductionReceipt, inspected.receiptId, inspectDate) : null,
       inspected.scrapId ? backdate(ScrapRecord, inspected.scrapId, inspectDate) : null,
       stampOrder(order._id, inspectDate),

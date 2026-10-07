@@ -169,11 +169,14 @@ export function Stat({
   active = true,
   href,
   search,
+  delta,
   className,
 }: {
   label: React.ReactNode
   value: React.ReactNode
   hint?: React.ReactNode
+  /** Change vs a named period. `good` says whether this direction is good news. */
+  delta?: { text: string; direction: 'up' | 'down' | 'flat'; good: boolean }
   tone?: Tone
   /** Whether the tone applies (e.g. overdue count > 0). */
   active?: boolean
@@ -193,14 +196,35 @@ export function Stat({
       </div>
       <div
         className={cn(
-          'mt-2 truncate text-xl font-semibold tracking-tight tabular-nums @[13rem]:text-2xl',
+          'mt-2 truncate text-xl font-semibold tracking-tight @[13rem]:text-2xl',
           TONE_TEXT[appliedTone]
         )}
       >
         {value}
       </div>
+      {delta && (
+        <div
+          className={cn(
+            'mt-1 flex items-start gap-1 text-xs font-medium sm:truncate',
+            delta.direction === 'flat'
+              ? 'text-muted-foreground'
+              : delta.good
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : 'text-rose-700 dark:text-rose-400'
+          )}
+        >
+          <span aria-hidden>
+            {delta.direction === 'up'
+              ? '↑'
+              : delta.direction === 'down'
+                ? '↓'
+                : '→'}
+          </span>
+          {delta.text}
+        </div>
+      )}
       {hint && (
-        <div className='text-muted-foreground mt-1 truncate text-xs'>
+        <div className='text-muted-foreground mt-1 text-xs sm:truncate'>
           {hint}
         </div>
       )}

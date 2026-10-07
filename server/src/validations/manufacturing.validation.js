@@ -207,6 +207,12 @@ const createProductionOrder = {
   }),
 };
 
+const getAnalytics = {
+  query: Joi.object().keys({
+    range: Joi.string().valid('7d', '30d', '90d', 'mtd'),
+  }),
+};
+
 const getOrderStatusCounts = {
   query: Joi.object().keys({
     orderType: Joi.string().valid(...ORDER_TYPES),
@@ -442,6 +448,7 @@ const listTransactions = {
 const issueIdParam = { params: Joi.object().keys({ issueId: id().required() }) };
 
 module.exports = {
+  getAnalytics,
   getOrderStatusCounts,
   updateSettings,
   getProducts,

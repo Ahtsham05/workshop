@@ -708,6 +708,88 @@ export interface ManufacturingDashboard {
   shortageCount: number
 }
 
+export type AnalyticsRange = '7d' | '30d' | '90d' | 'mtd'
+
+export interface AnalyticsBucket {
+  /** Business calendar day (YYYY-MM-DD); the first day of the week for weekly buckets. */
+  key: string
+  produced: number
+  previous: number
+  target: number
+  goodCost: number
+  scrapCost: number
+  scrapRate: number
+}
+
+export type AlertSeverity = 'critical' | 'warning' | 'success' | 'info'
+
+export interface ProductionAlert {
+  id: string
+  kind: 'shortage' | 'delayed' | 'scrap' | 'qc' | 'completed'
+  severity: AlertSeverity
+  title: string
+  message: string
+  at?: string
+  link: { order?: string; orderType?: OrderType; to?: string }
+}
+
+export interface ManufacturingAnalytics {
+  range: AnalyticsRange
+  granularity: 'day' | 'week'
+  period: { start: string; end: string; days: number; today: string }
+  kpis: {
+    productionOrders: { total: number; inProduction: number; completed: number }
+    inProduction: { count: number; paused: number; released: number }
+    completedToday: { orders: number; units: number }
+    unitsProduced: {
+      quantity: number
+      value: number
+      previous: number
+      change: number | null
+    }
+    wipValue: { value: number; orders: number }
+    materialShortages: { count: number; orders: number }
+    qcIssues: {
+      rejected: number
+      inspected: number
+      rejectRate: number
+      awaiting: number
+    }
+    scrapRate: { rate: number; previous: number; change: number; value: number }
+  }
+  series: AnalyticsBucket[]
+  materialConsumption: {
+    rows: {
+      productId: string
+      productName: string
+      unit: string
+      quantity: number
+      cost: number
+    }[]
+    other: { count: number; cost: number } | null
+  }
+  productionByProduct: {
+    rows: {
+      productId: string
+      productName: string
+      unit: string
+      quantity: number
+      value: number
+    }[]
+    other: { count: number; value: number } | null
+  }
+  productionByWorkCenter: {
+    workCenter: string | null
+    quantity: number
+    value: number
+    scrapCost: number
+    scrapRate: number
+  }[]
+  orderStatus: Record<ProductionStatus, number>
+  alerts: ProductionAlert[]
+  alertCounts: Partial<Record<AlertSeverity, number>>
+}
+
 export interface ManufacturingSettings {
   id: string
   prefixes: {
@@ -813,6 +895,16 @@ export const manufacturingApi = createApi({
   endpoints: (builder) => ({
     getManufacturingDashboard: builder.query<ManufacturingDashboard, void>({
       query: () => '/manufacturing/dashboard',
+      providesTags: ['MfgDashboard'],
+    }),
+    getManufacturingAnalytics: builder.query<
+      ManufacturingAnalytics,
+      { range: AnalyticsRange }
+    >({
+      query: (params) => ({
+        url: '/manufacturing/dashboard/analytics',
+        params,
+      }),
       providesTags: ['MfgDashboard'],
     }),
 
@@ -1394,6 +1486,7 @@ export const refreshAfterDemoData =
 
 export const {
   useGetManufacturingDashboardQuery,
+  useGetManufacturingAnalyticsQuery,
   useGetManufacturingSettingsQuery,
   useUpdateManufacturingSettingsMutation,
   useGetDemoDataStatusQuery,

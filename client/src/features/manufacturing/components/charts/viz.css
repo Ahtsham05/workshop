@@ -1,0 +1,16 @@
+/*
+ * Series colours for Manufacturing charts. Two categorical slots plus a de-emphasis
+ * gray, validated (lightness band, chroma, CVD separation, contrast) against the app's
+ * card surfaces: #ffffff (light) and #020919 (dark). Each entity keeps its hue in both
+ * modes — only the step changes — so "production" is always blue, "scrap" always orange.
+ */
+.mfg-viz {
+  --viz-1: #2a78d6; /* production / units / good output */
+  --viz-2: #eb6834; /* scrap */
+  --viz-muted: #898781; /* target, previous period */
+}
+.dark .mfg-viz {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-muted: #898781;
+}

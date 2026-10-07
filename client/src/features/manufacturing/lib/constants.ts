@@ -184,7 +184,7 @@ export const PRIORITY_META: Record<
 > = {
   low: { label: 'Low', className: 'text-muted-foreground' },
   normal: { label: 'Normal', className: 'text-foreground' },
-  high: { label: 'High', className: 'text-orange-600 dark:text-orange-400' },
+  high: { label: 'High', className: 'text-orange-700 dark:text-orange-400' },
   urgent: {
     label: 'Urgent',
     className: 'text-rose-600 dark:text-rose-400 font-semibold',

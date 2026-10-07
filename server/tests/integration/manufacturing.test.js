@@ -842,3 +842,190 @@ describe('List support for the UI', () => {
     expect((await po.countOrdersByStatus({ organizationId: id(), branchId: String(BRANCH) }, {})).total).toBe(0);
   });
 });
+
+describe('Dashboard analytics', () => {
+  const { analytics } = manufacturing;
+  // 13:00 in Karachi on 7 Oct 2026; business days run midnight-to-midnight PKT.
+  const NOW = new Date('2026-10-07T08:00:00Z');
+  const at = (isoDay, hourUtc = 7) => new Date(`${isoDay}T${String(hourUtc).padStart(2, '0')}:00:00Z`);
+
+  test('periods: daily buckets ending today, weekly for 90 days, month to date; bad ranges rejected', () => {
+    const week = analytics.resolvePeriod('7d', NOW);
+    expect(week.buckets.map((b) => b.key)).toEqual([
+      '2026-10-01',
+      '2026-10-02',
+      '2026-10-03',
+      '2026-10-04',
+      '2026-10-05',
+      '2026-10-06',
+      '2026-10-07',
+    ]);
+    expect(week.granularity).toBe('day');
+    expect(week.start.toISOString()).toBe('2026-09-30T19:00:00.000Z'); // 1 Oct 00:00 PKT
+    expect(week.prevStart.toISOString()).toBe('2026-09-23T19:00:00.000Z');
+
+    const quarter = analytics.resolvePeriod('90d', NOW);
+    expect(quarter.granularity).toBe('week');
+    expect(quarter.buckets).toHaveLength(13);
+    expect(quarter.buckets[0].days).toHaveLength(7);
+    expect(quarter.buckets.flatMap((b) => b.days)).toHaveLength(90);
+
+    const mtd = analytics.resolvePeriod('mtd', NOW);
+    expect(mtd.buckets.map((b) => b.key)).toEqual([
+      '2026-10-01',
+      '2026-10-02',
+      '2026-10-03',
+      '2026-10-04',
+      '2026-10-05',
+      '2026-10-06',
+      '2026-10-07',
+    ]);
+    expect(() => analytics.resolvePeriod('1y', NOW)).toThrow(/Unknown range/);
+  });
+
+  test('KPIs, series, breakdowns and production alerts from real records', async () => {
+    const lineA = id();
+    const lineB = id();
+    const fan = id();
+    const exhaust = id();
+    const steel = id();
+    const base = { organizationId: ORG, branchId: BRANCH };
+    await ProductionOrder.collection.insertMany([
+      {
+        ...base,
+        _id: lineA,
+        orderNumber: 'MO-00120',
+        productName: 'Ceiling Fan',
+        unit: 'pcs',
+        status: 'completed',
+        wipLocation: 'Assembly Line 2',
+        plannedQuantity: 10,
+        completedQuantity: 10,
+        plannedCompletionDate: at('2026-10-06'),
+        actualCompletionDate: at('2026-10-07', 6),
+        createdAt: at('2026-10-02'),
+      },
+      {
+        ...base,
+        _id: lineB,
+        orderNumber: 'MO-00131',
+        productName: 'Exhaust Fan',
+        unit: 'pcs',
+        status: 'in_production',
+        wipLocation: 'Line 1',
+        plannedQuantity: 20,
+        completedQuantity: 5,
+        materials: [],
+        plannedCompletionDate: at('2026-10-05'),
+        createdAt: at('2026-09-20'),
+        wipLots: [{ quantity: 3, unitCost: 50 }],
+      },
+      {
+        ...base,
+        orderNumber: 'MO-00140',
+        productName: 'Old Fan',
+        unit: 'pcs',
+        status: 'cancelled',
+        plannedQuantity: 99,
+        plannedCompletionDate: at('2026-10-04'),
+        createdAt: at('2026-10-01'),
+      },
+    ]);
+    let seq = 0;
+    const receipt = (orderId, productName, day, quantity, totalCost) => ({
+      ...base,
+      receiptNumber: `FG-${(seq += 1)}`,
+      productionOrderId: orderId,
+      productId: productName === 'Exhaust Fan' ? exhaust : fan,
+      productName,
+      unit: 'pcs',
+      receiptDate: at(day),
+      quantity,
+      totalCost,
+    });
+    await ProductionReceipt.collection.insertMany([
+      receipt(lineA, 'Ceiling Fan', '2026-10-07', 10, 1000), // today
+      receipt(lineB, 'Exhaust Fan', '2026-10-04', 5, 500),
+      receipt(lineA, 'Ceiling Fan', '2026-09-27', 10, 1000), // previous 7 days
+      receipt(lineB, 'Exhaust Fan', '2026-08-01', 50, 5000), // outside both periods
+    ]);
+    await ScrapRecord.collection.insertMany([
+      { ...base, scrapNumber: 'SCR-1', productionOrderId: lineA, scrapDate: at('2026-10-07'), quantity: 1, totalCost: 100 },
+      { ...base, scrapNumber: 'SCR-2', productionOrderId: lineA, scrapDate: at('2026-09-27'), quantity: 1, totalCost: 20 },
+    ]);
+    await ProductionOutput.collection.insertMany([
+      {
+        ...base,
+        outputNumber: 'PO-1',
+        productionOrderId: lineA,
+        orderNumber: 'MO-00120',
+        status: 'inspected',
+        producedQuantity: 11,
+        rejectedQuantity: 1,
+        reportedAt: at('2026-10-07', 5),
+        inspectedAt: at('2026-10-07', 6),
+        consumption: [{ productId: steel, productName: 'Steel Tube', unit: 'pcs', quantity: 11, cost: 1100 }],
+      },
+      {
+        ...base,
+        outputNumber: 'PO-2',
+        productionOrderId: lineB,
+        orderNumber: 'MO-00131',
+        status: 'pending_qc',
+        producedQuantity: 4,
+        unit: 'pcs',
+        reportedAt: at('2026-10-04'),
+        consumption: [],
+      },
+    ]);
+
+    const a = await analytics.getAnalytics(ctx, { range: '7d' }, NOW);
+
+    expect(a.kpis.productionOrders).toEqual({ total: 2, inProduction: 1, completed: 1 });
+    expect(a.kpis.inProduction).toEqual({ count: 1, paused: 0, released: 0 });
+    expect(a.kpis.completedToday).toEqual({ orders: 1, units: 10 });
+    expect(a.kpis.unitsProduced).toEqual({ quantity: 15, value: 1500, previous: 10, change: 50 });
+    expect(a.kpis.wipValue).toEqual({ value: 150, orders: 1 });
+    expect(a.kpis.qcIssues).toMatchObject({ rejected: 1, inspected: 11, rejectRate: 9.1 });
+    // 100 / (1500 + 100) this week vs 20 / (1000 + 20) last week
+    expect(a.kpis.scrapRate).toEqual({ rate: 6.3, previous: 2, change: 4.3, value: 100 });
+
+    const byDay = Object.fromEntries(a.series.map((s) => [s.key, s]));
+    expect(byDay['2026-10-07']).toMatchObject({ produced: 10, target: 0, goodCost: 1000, scrapCost: 100, scrapRate: 9.1 });
+    expect(byDay['2026-10-05']).toMatchObject({ produced: 0, target: 20 });
+    expect(byDay['2026-10-06']).toMatchObject({ target: 10 });
+    expect(byDay['2026-10-04']).toMatchObject({ produced: 5, target: 0 }); // the cancelled order sets no target
+    expect(byDay['2026-09-30']).toBeUndefined();
+    expect(a.series.find((s) => s.key === '2026-10-04').previous).toBe(10); // 27 Sep sits 7 days earlier
+
+    expect(a.materialConsumption.rows).toEqual([
+      { productId: String(steel), productName: 'Steel Tube', unit: 'pcs', quantity: 11, cost: 1100 },
+    ]);
+    expect(a.productionByProduct.rows.map((r) => [r.productName, r.quantity])).toEqual([
+      ['Ceiling Fan', 10],
+      ['Exhaust Fan', 5],
+    ]);
+    expect(a.productionByWorkCenter).toEqual([
+      { workCenter: 'Assembly Line 2', quantity: 10, value: 1000, scrapCost: 100, scrapRate: 9.1 },
+      { workCenter: 'Line 1', quantity: 5, value: 500, scrapCost: 0, scrapRate: 0 },
+    ]);
+    expect(a.orderStatus).toMatchObject({ completed: 1, in_production: 1, cancelled: 1 });
+
+    const messages = a.alerts.map((x) => `${x.severity}|${x.message}`);
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        'warning|MO-00131 is 2 days behind schedule (Exhaust Fan)',
+        'warning|Assembly Line 2 scrap rate increased by 355% (9.1% vs 2%)',
+        'warning|PO-2 (4 pcs, MO-00131) has waited 3 days for QC',
+        'success|MO-00120 completed successfully: 10 pcs Ceiling Fan',
+      ])
+    );
+    expect(a.alerts[a.alerts.length - 1].severity).toBe('success'); // problems first
+    expect(a.alertCounts).toEqual({ warning: 3, success: 1 });
+
+    // Nothing leaks across organizations.
+    const other = await analytics.getAnalytics({ organizationId: id(), branchId: String(BRANCH) }, { range: '7d' }, NOW);
+    expect(other.kpis.unitsProduced.quantity).toBe(0);
+    expect(other.alerts).toEqual([]);
+  });
+});

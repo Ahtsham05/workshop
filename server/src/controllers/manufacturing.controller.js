@@ -14,6 +14,7 @@ const {
   execution: executionService,
   products: productsService,
   dashboard: dashboardService,
+  analytics: analyticsService,
   traceability: traceabilityService,
   demoData: demoDataService,
 } = manufacturingService;
@@ -43,6 +44,10 @@ const audit = (req, { action = 'create', module, entity, entityName, metadata })
 const listOptions = (req) => pick(req.query, ['sortBy', 'limit', 'page']);
 
 // ── Dashboard & settings ─────────────────────────────────────────────────────────
+const getAnalytics = catchAsync(async (req, res) => {
+  res.send(await analyticsService.getAnalytics(readCtx(req), pick(req.query, ['range'])));
+});
+
 const getDashboard = catchAsync(async (req, res) => {
   res.send(await dashboardService.getDashboard(readCtx(req)));
 });
@@ -528,6 +533,7 @@ const getWip = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getAnalytics,
   getOrderStatusCounts,
   getDashboard,
   getSettings,

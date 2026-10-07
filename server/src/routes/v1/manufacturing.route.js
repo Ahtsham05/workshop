@@ -33,6 +33,7 @@ const VIEW = 'viewManufacturing';
 
 // Dashboard & settings
 router.get('/dashboard', auth(VIEW), c.getDashboard);
+router.get('/dashboard/analytics', auth(VIEW), validate(v.getAnalytics), c.getAnalytics);
 router
   .route('/settings')
   .get(auth(VIEW), c.getSettings)
