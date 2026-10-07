@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { AlertTriangle, ClipboardList, Plus } from 'lucide-react'
 import {
   useGetProductionOrdersQuery,
+  type OrderType,
   type ProductionStatus,
 } from '@/stores/manufacturing.api'
 import { cn } from '@/lib/utils'
@@ -27,9 +28,10 @@ import { Pager } from '../components/pager'
 import { ProductionOrderDialog } from '../components/production-order-dialog'
 import {
   PRODUCTION_STATUSES,
-  STATUS_META,
   fmtDate,
   fmtQty,
+  statusLabel,
+  orderPath,
 } from '../lib/constants'
 
 const OPEN: ProductionStatus[] = [
@@ -38,9 +40,16 @@ const OPEN: ProductionStatus[] = [
   'released',
   'in_production',
   'paused',
+  'qc_pending',
 ]
 
-export default function ProductionOrdersPage() {
+/** Production orders, or — with orderType 'assembly' — assembly orders (same engine). */
+export default function ProductionOrdersPage({
+  orderType = 'production',
+}: {
+  orderType?: OrderType
+}) {
+  const isAssembly = orderType === 'assembly'
   const { t } = useLanguage()
   const navigate = useNavigate()
   const { hasPermission } = usePermissions()
@@ -64,6 +73,7 @@ export default function ProductionOrdersPage() {
     page,
     limit: 20,
     search: debounced || undefined,
+    orderType,
     status:
       status === 'all'
         ? undefined
@@ -77,9 +87,11 @@ export default function ProductionOrdersPage() {
 
   const tabs: { key: string; label: string }[] = [
     { key: 'open', label: t('Open') },
-    ...PRODUCTION_STATUSES.map((s) => ({
+    ...PRODUCTION_STATUSES.filter((s) =>
+      isAssembly ? s !== 'planned' : s !== 'qc_pending'
+    ).map((s) => ({
       key: s,
-      label: t(STATUS_META[s].label),
+      label: t(statusLabel(s, orderType)),
     })),
     { key: 'all', label: t('All') },
   ]
@@ -87,15 +99,21 @@ export default function ProductionOrdersPage() {
   return (
     <div className='space-y-4'>
       <SectionHeader
-        title={t('Production orders')}
-        description={t(
-          'Plan, release and track every manufacturing run from draft to completion.'
-        )}
+        title={isAssembly ? t('Assembly orders') : t('Production orders')}
+        description={
+          isAssembly
+            ? t(
+                'Build sub-assemblies and final assemblies: start moves components into WIP, completion sends the assembly through QC into stock.'
+              )
+            : t(
+                'Plan, release and track every manufacturing run from draft to completion.'
+              )
+        }
         actions={
           hasPermission('manageProductionOrders') && (
             <Button onClick={() => setCreating(true)} className='max-sm:w-full'>
               <Plus className='mr-2 h-4 w-4' />
-              {t('New order')}
+              {isAssembly ? t('New assembly') : t('New order')}
             </Button>
           )
         }
@@ -192,15 +210,13 @@ export default function ProductionOrdersPage() {
                       )}
                       onClick={() =>
                         navigate({
-                          to: `/manufacturing/production-orders/${order.id}` as never,
+                          to: orderPath(order) as never,
                         })
                       }
                     >
                       <TableCell>
                         <Link
-                          to={
-                            `/manufacturing/production-orders/${order.id}` as never
-                          }
+                          to={orderPath(order) as never}
                           className='font-mono text-xs font-medium hover:underline'
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -212,8 +228,18 @@ export default function ProductionOrdersPage() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className='font-medium'>
-                        {order.productName}
+                      <TableCell>
+                        <div className='font-medium'>{order.productName}</div>
+                        {(order.operatorName || order.parentOrderId) && (
+                          <div className='text-muted-foreground text-xs'>
+                            {[
+                              order.operatorName,
+                              order.parentOrderId ? t('sub-assembly') : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className='text-muted-foreground mb-1 flex justify-between text-xs tabular-nums'>
@@ -258,7 +284,10 @@ export default function ProductionOrdersPage() {
                         <PriorityText priority={order.priority} />
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={order.status} />
+                        <StatusBadge
+                          status={order.status}
+                          orderType={order.orderType}
+                        />
                       </TableCell>
                     </TableRow>
                   )
@@ -272,10 +301,11 @@ export default function ProductionOrdersPage() {
 
       {creating && (
         <ProductionOrderDialog
+          orderType={orderType}
           onClose={() => setCreating(false)}
           onSaved={(order) =>
             navigate({
-              to: `/manufacturing/production-orders/${order.id}` as never,
+              to: orderPath(order) as never,
             })
           }
         />

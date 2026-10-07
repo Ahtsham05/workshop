@@ -6,6 +6,7 @@ import type {
   ScrapReason,
   ScrapStage,
   StockBucket,
+  OrderType,
 } from '@/stores/manufacturing.api'
 
 /** Mirrors server/src/config/manufacturing.js — keep the two in sync. */
@@ -108,6 +109,11 @@ export const STATUS_META: Record<
     className:
       'bg-orange-500/10 text-orange-700 border-orange-500/25 dark:text-orange-300',
   },
+  qc_pending: {
+    label: 'QC Pending',
+    dot: 'bg-sky-500',
+    className: 'bg-sky-500/10 text-sky-700 border-sky-500/25 dark:text-sky-300',
+  },
   completed: {
     label: 'Completed',
     dot: 'bg-emerald-500',
@@ -133,9 +139,34 @@ export const STATUS_TRANSITIONS: Record<ProductionStatus, ProductionStatus[]> =
     released: ['planned', 'in_production', 'cancelled'],
     in_production: ['paused', 'completed'],
     paused: ['in_production', 'completed'],
+    qc_pending: [],
     completed: [],
     cancelled: [],
   }
+
+/** Mirrors ASSEMBLY_STATUS_TRANSITIONS on the server. */
+export const ASSEMBLY_STATUS_TRANSITIONS: Record<
+  ProductionStatus,
+  ProductionStatus[]
+> = {
+  draft: ['released', 'cancelled'],
+  planned: ['released', 'draft', 'cancelled'],
+  released: ['draft', 'in_production', 'cancelled'],
+  in_production: ['paused', 'qc_pending', 'completed'],
+  paused: ['in_production', 'completed'],
+  qc_pending: ['in_production', 'completed'],
+  completed: [],
+  cancelled: [],
+}
+
+export const transitionsFor = (orderType?: OrderType) =>
+  orderType === 'assembly' ? ASSEMBLY_STATUS_TRANSITIONS : STATUS_TRANSITIONS
+
+/** Status label, with "In Assembly" for assembly orders. */
+export const statusLabel = (status: ProductionStatus, orderType?: OrderType) =>
+  orderType === 'assembly' && status === 'in_production'
+    ? 'In Assembly'
+    : STATUS_META[status].label
 
 export const TRANSITION_LABELS: Partial<Record<ProductionStatus, string>> = {
   draft: 'Back to Draft',
@@ -236,3 +267,10 @@ export const refName = (ref: unknown): string => {
   if (!ref || typeof ref !== 'object') return ''
   return (ref as { name?: string }).name || ''
 }
+
+/** Detail URL for an order — assembly orders live under their own section. */
+export const orderPath = (order: {
+  id: string
+  orderType?: OrderType | null
+}) =>
+  `/manufacturing/${order.orderType === 'assembly' ? 'assembly-orders' : 'production-orders'}/${order.id}`

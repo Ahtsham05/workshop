@@ -44,8 +44,10 @@ export type ProductionStatus =
   | 'released'
   | 'in_production'
   | 'paused'
+  | 'qc_pending'
   | 'completed'
   | 'cancelled'
+export type OrderType = 'production' | 'assembly'
 export type ProductionPriority = 'low' | 'normal' | 'high' | 'urgent'
 export type ScrapStage =
   | 'material'
@@ -242,6 +244,12 @@ export interface WipLot {
 export interface ProductionOrder {
   id: string
   orderNumber: string
+  /** 'assembly' orders build (sub-)assemblies with the same engine and their own lifecycle. */
+  orderType: OrderType
+  parentOrderId?: string | null
+  parentMaterialLineId?: string | null
+  operatorId?: string | null
+  operatorName?: string
   productId: string
   variantId?: string | null
   productName: string
@@ -298,6 +306,10 @@ export interface ProductionOrderInput {
   priority?: ProductionPriority
   notes?: string
   status?: 'draft' | 'planned'
+  orderType?: OrderType
+  operatorId?: string | null
+  parentOrderId?: string | null
+  parentMaterialLineId?: string | null
 }
 
 export interface RequirementLine {
@@ -489,6 +501,92 @@ export interface FinishedGoodsInput {
   expiryDate?: string | null
   serialNumbers?: string[]
   location?: string
+}
+
+export interface OrderTreeNode {
+  id: string
+  orderNumber: string
+  orderType: OrderType
+  productId: string
+  productName: string
+  unit: string
+  plannedQuantity: number
+  producedQuantity: number
+  completedQuantity: number
+  status: ProductionStatus
+  operatorName: string
+  parentMaterialLineId: string | null
+  children?: OrderTreeNode[]
+}
+
+export interface TraceOrderSummary {
+  id: string
+  orderNumber: string
+  orderType: OrderType
+  productId: string
+  productName: string
+  unit: string
+  plannedQuantity: number
+  completedQuantity: number
+  status: ProductionStatus
+  operatorName: string
+  actualCompletionDate?: string | null
+}
+
+export interface TraceProduced {
+  receiptId: string
+  receiptNumber: string
+  quantity: number
+  unit: string
+  date: string
+  source?: string
+  batch: { id: string; batchNumber: string; expiryDate?: string | null } | null
+  serials: { id: string | null; number: string }[]
+}
+
+export interface TraceSource {
+  kind: 'purchase' | 'production' | 'untracked'
+  linked?: boolean
+  serials?: { id: string; number: string }[]
+  supplier?: { id: string | null; name: string } | null
+  purchase?: { id: string; number: string; date?: string } | null
+  order?: TraceNode
+}
+
+export interface TraceComponent {
+  productId: string
+  productName: string
+  unit: string
+  quantity: number
+  batch: { id: string; batchNumber: string; expiryDate?: string | null } | null
+  sources: TraceSource[]
+}
+
+export interface TraceNode {
+  order: TraceOrderSummary
+  produced: TraceProduced[]
+  components: TraceComponent[]
+  truncated?: boolean
+}
+
+export interface WhereUsedNode {
+  order: TraceOrderSummary
+  quantityUsed: number
+  unit: string
+  produced: TraceProduced[]
+  usedIn: WhereUsedNode[]
+  truncated?: boolean
+}
+
+export interface TraceLookupHit {
+  kind: 'serial' | 'batch' | 'order'
+  id: string
+  label: string
+  productName: string
+  madeHere?: boolean
+  status?: string
+  quantity?: number
+  orderType?: OrderType
 }
 
 export interface WipRow {
@@ -835,11 +933,107 @@ export const manufacturingApi = createApi({
       ListParams & {
         status?: string
         priority?: ProductionPriority
+        orderType?: OrderType
+        parentOrderId?: string
         productId?: string
         overdue?: boolean
       }
     >({
       query: (params) => ({ url: '/manufacturing/production-orders', params }),
+      providesTags: ['MfgOrder'],
+    }),
+    startAssembly: builder.mutation<
+      ProductionOrder,
+      { orderId: string; note?: string }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/manufacturing/assembly-orders/${orderId}/start`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    completeAssembly: builder.mutation<
+      ProductionOrder,
+      {
+        orderId: string
+        quantity?: number
+        goodQuantity?: number
+        rejectedQuantity?: number
+        rejectDisposition?: RejectDisposition
+        rejectReason?: string
+        finishedGoods?: FinishedGoodsInput
+        wipDisposition?: 'return' | 'scrap'
+        notes?: string
+      }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/manufacturing/assembly-orders/${orderId}/complete`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    createSubAssemblies: builder.mutation<
+      { order: ProductionOrder; depth: number }[],
+      {
+        orderId: string
+        recursive?: boolean
+        basis?: 'shortage' | 'full'
+        materialLineIds?: string[]
+        operatorId?: string | null
+      }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/manufacturing/production-orders/${orderId}/sub-assemblies`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgOrder', 'MfgDashboard', 'MfgRequirements'],
+    }),
+    getOrderTree: builder.query<
+      { ancestors: OrderTreeNode[]; order: OrderTreeNode },
+      string
+    >({
+      query: (orderId) => `/manufacturing/production-orders/${orderId}/tree`,
+      providesTags: ['MfgOrder'],
+    }),
+    getOperators: builder.query<
+      { id: string; name: string; email?: string }[],
+      void
+    >({
+      query: () => '/manufacturing/operators',
+    }),
+    traceLookup: builder.query<TraceLookupHit[], string>({
+      query: (q) => ({ url: '/manufacturing/trace/lookup', params: { q } }),
+    }),
+    traceOrder: builder.query<TraceNode, string>({
+      query: (orderId) => `/manufacturing/trace/orders/${orderId}`,
+      providesTags: ['MfgOrder'],
+    }),
+    traceFinished: builder.query<
+      {
+        subject: {
+          kind: string
+          id: string
+          label: string
+          productName?: string
+        }
+        trace: TraceNode | null
+        message?: string
+      },
+      { imeiId?: string; batchId?: string; receiptId?: string }
+    >({
+      query: (params) => ({ url: '/manufacturing/trace/finished', params }),
+      providesTags: ['MfgOrder'],
+    }),
+    traceWhereUsed: builder.query<
+      WhereUsedNode[],
+      { imeiId?: string; batchId?: string; productId?: string }
+    >({
+      query: (params) => ({ url: '/manufacturing/trace/where-used', params }),
       providesTags: ['MfgOrder'],
     }),
     getProductionOrder: builder.query<ProductionOrder, string>({
@@ -1152,4 +1346,13 @@ export const {
   useGetProductionReceiptsQuery,
   useGetScrapRecordsQuery,
   useGetWipQuery,
+  useStartAssemblyMutation,
+  useCompleteAssemblyMutation,
+  useCreateSubAssembliesMutation,
+  useGetOrderTreeQuery,
+  useGetOperatorsQuery,
+  useTraceLookupQuery,
+  useTraceOrderQuery,
+  useTraceFinishedQuery,
+  useTraceWhereUsedQuery,
 } = manufacturingApi

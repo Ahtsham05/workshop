@@ -117,6 +117,14 @@ const imeiSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // The production/assembly order that built this unit (set once, never moved) — unlike
+    // productionOrderId above, which follows the unit into whichever order consumes it.
+    producedByOrderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ProductionOrder',
+      default: null,
+      index: true,
+    },
     purchasePrice: {
       type: Number,
       default: 0,

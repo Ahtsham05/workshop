@@ -592,3 +592,224 @@ describeTx('Production flow (stock moves, transactional)', () => {
     });
   });
 });
+
+describeTx('Assembly orders, nesting and traceability', () => {
+  const po = () => manufacturing.productionOrder;
+  const ex = () => manufacturing.execution;
+  const tr = () => manufacturing.traceability;
+  const { Supplier, User } = require('../../src/models'); // eslint-disable-line global-require
+
+  const batchTracked = async (product, batches = []) => {
+    const [variant] = await ProductVariant.create([
+      {
+        organizationId: ORG,
+        branchId: BRANCH,
+        productId: product._id,
+        isDefault: true,
+        price: 1,
+        cost: product.cost,
+        trackBatch: true,
+      },
+    ]);
+    const total = batches.reduce((s, b) => s + b.quantity, 0);
+    const [inventory] = await Inventory.create([
+      { organizationId: ORG, branchId: BRANCH, productId: product._id, variantId: variant._id, quantity: total },
+    ]);
+    const created = batches.length
+      ? await Batch.create(
+          batches.map((b) => ({ organizationId: ORG, inventoryId: inventory._id, costPerUnit: product.cost, ...b }))
+        )
+      : [];
+    return { variant, inventory, batches: created };
+  };
+
+  /** Laptop: Motherboard (batch, bought) + RAM ×2 (serial, bought) + SSD → Motherboard Assembly; + Battery + Case → Laptop. */
+  const buildLaptop = async () => {
+    const [acme, chipCo] = await Supplier.create([
+      { organizationId: ORG, branchId: BRANCH, name: 'Acme Boards' },
+      { organizationId: ORG, branchId: BRANCH, name: 'ChipCo Memory' },
+    ]);
+    const mobo = await insertProduct('Motherboard', { productType: 'raw_material', cost: 80, stockQuantity: 5 });
+    const moboStock = await batchTracked(mobo, [{ batchNumber: 'MB-LOT-7', quantity: 5, supplierId: acme._id }]);
+    const ram = await insertProduct('RAM 8GB', {
+      productType: 'raw_material',
+      cost: 20,
+      stockQuantity: 6,
+      trackSerial: true,
+    });
+    await Imei.create(
+      ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'].map((imei) => ({
+        organizationId: ORG,
+        branchId: BRANCH,
+        imei,
+        type: 'serial',
+        productId: ram._id,
+        purchasePrice: 20,
+        supplierId: chipCo._id,
+        supplierName: 'ChipCo Memory',
+      }))
+    );
+    const ssd = await insertProduct('SSD 512', {
+      productType: 'raw_material',
+      cost: 40,
+      stockQuantity: 10,
+      supplier: acme._id,
+    });
+    const battery = await insertProduct('Battery', { productType: 'raw_material', cost: 30, stockQuantity: 10 });
+    const laptopCase = await insertProduct('Case', { productType: 'raw_material', cost: 25, stockQuantity: 10 });
+    const moboAsm = await insertProduct('Motherboard Assembly', { productType: 'sub_assembly', cost: 0 });
+    await batchTracked(moboAsm);
+    const laptop = await insertProduct('Laptop', { productType: 'finished_good', cost: 0, trackSerial: true });
+
+    await manufacturing.bom.createBom(ctx, {
+      productId: moboAsm._id,
+      components: [
+        { productId: mobo._id, quantity: 1 },
+        { productId: ram._id, quantity: 2 },
+        { productId: ssd._id, quantity: 1 },
+      ],
+    });
+    await manufacturing.bom.createBom(ctx, {
+      productId: laptop._id,
+      components: [
+        { productId: moboAsm._id, quantity: 1 },
+        { productId: battery._id, quantity: 1 },
+        { productId: laptopCase._id, quantity: 1 },
+      ],
+    });
+    return { acme, chipCo, mobo, moboStock, ram, ssd, battery, laptopCase, moboAsm, laptop };
+  };
+
+  test('assembly order lifecycle: start moves components into WIP, complete → QC pending → completed', async () => {
+    const t = await buildLaptop();
+    const operator = await User.collection.insertOne({ name: 'Ayesha (Line 2)', email: 'op@x.io', organizationId: ORG });
+    const asm = await po().createOrder(ctx, {
+      orderType: 'assembly',
+      productId: t.moboAsm._id,
+      plannedQuantity: 2,
+      operatorId: operator.insertedId,
+    });
+    expect(asm.orderNumber).toBe('ASM-00001');
+    expect(asm).toMatchObject({ orderType: 'assembly', status: 'draft', operatorName: 'Ayesha (Line 2)' });
+
+    await expect(po().changeStatus(ctx, asm._id, { status: 'in_production' })).rejects.toThrow(/Cannot move/);
+    await po().changeStatus(ctx, asm._id, { status: 'released' });
+    const started = await po().changeStatus(ctx, asm._id, { status: 'in_production' });
+    expect(started.status).toBe('in_production');
+    expect(started.wipLots.map((l) => [l.productName, l.quantity, l.batchNumber || null]).sort()).toEqual(
+      [
+        ['Motherboard', 2, 'MB-LOT-7'],
+        ['RAM 8GB', 4, null],
+        ['SSD 512', 2, null],
+      ].sort()
+    );
+    expect(await Imei.countDocuments({ productId: t.ram._id, status: 'in_production' })).toBe(4);
+    expect(await stockOf(t.ssd._id)).toBe(8);
+
+    await expect(po().changeStatus(ctx, asm._id, { status: 'qc_pending' })).rejects.toThrow(/Complete assembly/);
+    const pending = await ex().completeAssembly(ctx, asm._id, { finishedGoods: {} });
+    expect(pending.status).toBe('qc_pending');
+    expect(await Imei.countDocuments({ productId: t.ram._id, status: 'consumed' })).toBe(4);
+
+    const [output] = (
+      await ex().queryOutputs({ organizationId: ORG, branchId: String(BRANCH) }, { productionOrderId: asm._id }, {})
+    ).results;
+    await ex().inspectOutput(ctx, output._id, { goodQuantity: 2, finishedGoods: { batchNumber: 'MBA-0001' } });
+    const done = await ProductionOrder.findById(asm._id);
+    expect(done.status).toBe('completed');
+    expect(done.statusHistory.map((h) => h.to)).toEqual(['draft', 'released', 'in_production', 'qc_pending', 'completed']);
+    const made = await Batch.findOne({ batchNumber: 'MBA-0001' }).lean();
+    expect(made).toMatchObject({ quantity: 2, costPerUnit: 160 }); // 80 + 2×20 + 40
+    expect(String(made.productionOrderId)).toBe(String(asm._id));
+  });
+
+  test('raw → sub-assembly → final assembly with forward and reverse traceability', async () => {
+    const t = await buildLaptop();
+    await setSettingsQcOff();
+    const laptopOrder = await po().createOrder(ctx, { productId: t.laptop._id, plannedQuantity: 2 });
+    const created = await po().createSubAssemblyOrders(ctx, laptopOrder._id, {});
+    expect(created).toHaveLength(1);
+    const asm = created[0].order;
+    expect(asm).toMatchObject({ orderType: 'assembly', plannedQuantity: 2 });
+    expect(String(asm.parentOrderId)).toBe(String(laptopOrder._id));
+    // Already covered by an open child — asking again creates nothing.
+    expect(await po().createSubAssemblyOrders(ctx, laptopOrder._id, {})).toHaveLength(0);
+
+    await po().changeStatus(ctx, asm._id, { status: 'released' });
+    await po().changeStatus(ctx, asm._id, { status: 'in_production' });
+    const asmDone = await ex().completeAssembly(ctx, asm._id, { finishedGoods: { batchNumber: 'MBA-0002' } });
+    expect(asmDone.status).toBe('completed');
+
+    await po().changeStatus(ctx, laptopOrder._id, { status: 'released' });
+    const lo = await ProductionOrder.findById(laptopOrder._id);
+    await ex().issueMaterials(ctx, laptopOrder._id, {
+      lines: lo.materials.map((m) => ({ materialLineId: m._id, quantity: m.requiredQuantity })),
+    });
+    await ex().reportOutput(ctx, laptopOrder._id, {
+      producedQuantity: 2,
+      finishedGoods: { serialNumbers: ['LP-1001', 'LP-1002'] },
+    });
+
+    // Forward: finished laptop serial → laptop order → motherboard assembly batch → assembly
+    // order → motherboard batch / RAM serials → suppliers.
+    const lp = await Imei.findOne({ imei: 'LP-1001' });
+    const fwd = await tr().traceFinished(ctx, { imeiId: lp._id });
+    expect(fwd.trace.order.orderNumber).toBe(laptopOrder.orderNumber);
+    const asmComponent = fwd.trace.components.find((c) => c.productName === 'Motherboard Assembly');
+    expect(asmComponent.batch.batchNumber).toBe('MBA-0002');
+    const asmTrace = asmComponent.sources[0].order;
+    expect(asmComponent.sources[0].kind).toBe('production');
+    expect(asmTrace.order.orderNumber).toBe(asm.orderNumber);
+    const moboComp = asmTrace.components.find((c) => c.productName === 'Motherboard');
+    expect(moboComp.batch.batchNumber).toBe('MB-LOT-7');
+    expect(moboComp.sources[0]).toMatchObject({ kind: 'purchase', supplier: { name: 'Acme Boards' } });
+    const ramComp = asmTrace.components.find((c) => c.productName === 'RAM 8GB');
+    expect(ramComp.sources[0].supplier.name).toBe('ChipCo Memory');
+    expect(ramComp.sources[0].serials).toHaveLength(4);
+    const ssdComp = asmTrace.components.find((c) => c.productName === 'SSD 512');
+    expect(ssdComp.sources[0]).toMatchObject({ kind: 'untracked', supplier: { name: 'Acme Boards' } });
+
+    // Reverse: raw motherboard batch → assembly → laptop production → finished serials.
+    const [usage] = await tr().traceWhereUsed(ctx, { batchId: t.moboStock.batches[0]._id });
+    expect(usage.order.orderNumber).toBe(asm.orderNumber);
+    expect(usage.quantityUsed).toBe(2);
+    expect(usage.usedIn[0].order.orderNumber).toBe(laptopOrder.orderNumber);
+    expect(usage.usedIn[0].produced[0].serials.map((s) => s.number)).toEqual(['LP-1001', 'LP-1002']);
+
+    // Reverse from a RAM serial goes the same way.
+    const r1 = await Imei.findOne({ imei: 'R1' });
+    const [ramUse] = await tr().traceWhereUsed(ctx, { imeiId: r1._id });
+    expect(ramUse.order.orderNumber).toBe(asm.orderNumber);
+    expect(ramUse.usedIn[0].order.orderNumber).toBe(laptopOrder.orderNumber);
+
+    const hits = await tr().lookup(ctx, 'LP-10');
+    expect(hits.filter((h) => h.kind === 'serial').map((h) => h.label)).toEqual(['LP-1001', 'LP-1002']);
+  });
+
+  test('nested assemblies: A → B → C created recursively and linked both ways', async () => {
+    const raw = await insertProduct('Steel', { productType: 'raw_material', cost: 1, stockQuantity: 100 });
+    const c = await insertProduct('Assembly C', { productType: 'sub_assembly' });
+    const b = await insertProduct('Assembly B', { productType: 'sub_assembly' });
+    const a = await insertProduct('Product A', { productType: 'finished_good' });
+    await manufacturing.bom.createBom(ctx, { productId: c._id, components: [{ productId: raw._id, quantity: 3 }] });
+    await manufacturing.bom.createBom(ctx, { productId: b._id, components: [{ productId: c._id, quantity: 2 }] });
+    await manufacturing.bom.createBom(ctx, { productId: a._id, components: [{ productId: b._id, quantity: 1 }] });
+
+    const orderA = await po().createOrder(ctx, { productId: a._id, plannedQuantity: 5 });
+    const created = await po().createSubAssemblyOrders(ctx, orderA._id, { recursive: true });
+    expect(created.map(({ order, depth }) => [order.productName, order.plannedQuantity, depth])).toEqual([
+      ['Assembly B', 5, 1],
+      ['Assembly C', 10, 2],
+    ]);
+    const orderC = created[1].order;
+    const tree = await po().getOrderTree(ctx, orderC._id);
+    expect(tree.ancestors.map((n) => n.productName)).toEqual(['Product A', 'Assembly B']);
+    const top = await po().getOrderTree(ctx, orderA._id);
+    expect(top.order.children[0].productName).toBe('Assembly B');
+    expect(top.order.children[0].children[0].productName).toBe('Assembly C');
+  });
+
+  async function setSettingsQcOff() {
+    await manufacturing.settings.updateSettings(ORG, { requireQualityCheck: false }, USER);
+  }
+});

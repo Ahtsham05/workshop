@@ -4,6 +4,7 @@ const { toJSON } = require('./plugins');
 const counterDefaults = () => ({
   bom: 0,
   productionOrder: 0,
+  assemblyOrder: 0,
   materialIssue: 0,
   materialReturn: 0,
   productionOutput: 0,
@@ -28,6 +29,7 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
     prefixes: {
       bom: { type: String, trim: true, default: 'BOM' },
       productionOrder: { type: String, trim: true, default: 'MO' },
+      assemblyOrder: { type: String, trim: true, default: 'ASM' },
       materialIssue: { type: String, trim: true, default: 'MI' },
       materialReturn: { type: String, trim: true, default: 'MR' },
       productionOutput: { type: String, trim: true, default: 'PO' },
@@ -59,6 +61,7 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
         {
           bom: { type: Number, default: 0 },
           productionOrder: { type: Number, default: 0 },
+          assemblyOrder: { type: Number, default: 0 },
           materialIssue: { type: Number, default: 0 },
           materialReturn: { type: Number, default: 0 },
           productionOutput: { type: Number, default: 0 },

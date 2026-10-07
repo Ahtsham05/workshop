@@ -84,6 +84,10 @@ InventoryTransactionSchema.index({ inventoryId: 1, createdAt: -1 });
 InventoryTransactionSchema.index({ refType: 1, refId: 1 });
 InventoryTransactionSchema.index({ productionOrderId: 1, createdAt: 1 }, { partialFilterExpression: { productionOrderId: { $exists: true } } });
 InventoryTransactionSchema.index({ organizationId: 1, branchId: 1, productId: 1, createdAt: -1 });
+// Traceability (services/manufacturing/traceability.service.js): which orders drew a given
+// batch or serial unit.
+InventoryTransactionSchema.index({ batchId: 1, type: 1 }, { partialFilterExpression: { batchId: { $exists: true } } });
+InventoryTransactionSchema.index({ imeiIds: 1, type: 1 }, { partialFilterExpression: { imeiIds: { $exists: true } } });
 
 const InventoryTransaction = mongoose.model('InventoryTransaction', InventoryTransactionSchema);
 

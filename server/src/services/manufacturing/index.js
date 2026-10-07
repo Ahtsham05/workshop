@@ -8,5 +8,6 @@ const productionOrder = require('./productionOrder.service');
 const execution = require('./execution.service');
 const products = require('./products.service');
 const dashboard = require('./dashboard.service');
+const traceability = require('./traceability.service');
 
-module.exports = { settings, bom, productionOrder, execution, products, dashboard };
+module.exports = { settings, bom, productionOrder, execution, products, dashboard, traceability };

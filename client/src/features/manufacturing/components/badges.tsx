@@ -2,21 +2,29 @@ import type {
   ProductType,
   ProductionPriority,
   ProductionStatus,
+  OrderType,
 } from '@/stores/manufacturing.api'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
-import { PRIORITY_META, PRODUCT_TYPE_META, STATUS_META } from '../lib/constants'
+import {
+  PRIORITY_META,
+  PRODUCT_TYPE_META,
+  STATUS_META,
+  statusLabel,
+} from '../lib/constants'
 
 export function StatusBadge({
   status,
+  orderType,
   className,
 }: {
   status: ProductionStatus
+  orderType?: OrderType
   className?: string
 }) {
   const { t } = useLanguage()
-  const meta = STATUS_META[status]
+  const meta = { ...STATUS_META[status], label: statusLabel(status, orderType) }
   return (
     <Badge
       variant='outline'

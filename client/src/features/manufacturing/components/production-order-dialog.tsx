@@ -4,7 +4,9 @@ import {
   useCreateProductionOrderMutation,
   useGetBomsQuery,
   useGetManufacturingSettingsQuery,
+  useGetOperatorsQuery,
   useUpdateProductionOrderMutation,
+  type OrderType,
   type ProductionOrder,
   type ProductionPriority,
 } from '@/stores/manufacturing.api'
@@ -40,14 +42,24 @@ const NONE = '__none__'
 /** Create a production order, or edit one (recipe fields lock once it's released). */
 export function ProductionOrderDialog({
   order,
+  orderType: orderTypeProp = 'production',
   onClose,
   onSaved,
 }: {
   order?: ProductionOrder | null
+  orderType?: OrderType
   onClose: () => void
   onSaved?: (order: ProductionOrder) => void
 }) {
   const { t } = useLanguage()
+  const orderType = order?.orderType || orderTypeProp
+  const isAssembly = orderType === 'assembly'
+  const { data: operators } = useGetOperatorsQuery(undefined, {
+    skip: !isAssembly,
+  })
+  const [operatorId, setOperatorId] = useState<string>(
+    order?.operatorId || NONE
+  )
   const branchName = useBranchName()
   const { data: settings } = useGetManufacturingSettingsQuery()
   const recipeEditable =
@@ -117,6 +129,9 @@ export function ProductionOrderDialog({
       wipLocation,
       finishedGoodsLocation: fgLocation,
       notes,
+      ...(isAssembly
+        ? { operatorId: operatorId === NONE ? null : operatorId }
+        : {}),
     }
     try {
       const saved = order
@@ -126,14 +141,12 @@ export function ProductionOrderDialog({
             productId: product.id,
             plannedQuantity: Number(quantity),
             status,
+            orderType,
           }).unwrap()
       toast.success(
         order
-          ? t('Production order updated')
-          : t('Production order {{n}} created').replace(
-              '{{n}}',
-              saved.orderNumber
-            )
+          ? t('Order updated')
+          : t('{{n}} created').replace('{{n}}', saved.orderNumber)
       )
       onSaved?.(saved)
       onClose()
@@ -149,7 +162,9 @@ export function ProductionOrderDialog({
           <DialogTitle>
             {order
               ? `${t('Edit')} ${order.orderNumber}`
-              : t('New production order')}
+              : isAssembly
+                ? t('New assembly order')
+                : t('New production order')}
           </DialogTitle>
           <DialogDescription>
             {t(
@@ -238,6 +253,24 @@ export function ProductionOrderDialog({
               </SelectContent>
             </Select>
           </div>
+          {isAssembly && (
+            <div className='grid gap-1.5 md:col-span-6'>
+              <Label>{t('Operator')}</Label>
+              <Select value={operatorId} onValueChange={setOperatorId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t('Assign an operator')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>{t('Unassigned')}</SelectItem>
+                  {operators?.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className='grid gap-1.5 md:col-span-3'>
             <Label>{t('Planned start')}</Label>
             <Input
@@ -256,21 +289,29 @@ export function ProductionOrderDialog({
             />
           </div>
           <div className='grid gap-1.5 md:col-span-2'>
-            <Label>{t('Source location')}</Label>
+            <Label>
+              {isAssembly
+                ? t('Source warehouse / location')
+                : t('Source location')}
+            </Label>
             <Input
               value={sourceLocation}
               onChange={(e) => setSourceLocation(e.target.value)}
             />
           </div>
           <div className='grid gap-1.5 md:col-span-2'>
-            <Label>{t('WIP location')}</Label>
+            <Label>
+              {isAssembly ? t('Assembly / WIP location') : t('WIP location')}
+            </Label>
             <Input
               value={wipLocation}
               onChange={(e) => setWipLocation(e.target.value)}
             />
           </div>
           <div className='grid gap-1.5 md:col-span-2'>
-            <Label>{t('Finished goods location')}</Label>
+            <Label>
+              {isAssembly ? t('Output location') : t('Finished goods location')}
+            </Label>
             <Input
               value={fgLocation}
               onChange={(e) => setFgLocation(e.target.value)}
@@ -301,11 +342,13 @@ export function ProductionOrderDialog({
                 onClick={() => save('draft')}
                 disabled={creating}
               >
-                {t('Save as draft')}
+                {isAssembly ? t('Create assembly order') : t('Save as draft')}
               </Button>
-              <Button onClick={() => save('planned')} disabled={creating}>
-                {t('Create & plan')}
-              </Button>
+              {!isAssembly && (
+                <Button onClick={() => save('planned')} disabled={creating}>
+                  {t('Create & plan')}
+                </Button>
+              )}
             </>
           )}
         </DialogFooter>

@@ -5,6 +5,7 @@ const { manufacturingService, auditLogService } = require('../services');
 const { getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 
 const stockService = require('../services/manufacturing/stock.service');
+const { User } = require('../models');
 
 const {
   settings: settingsService,
@@ -13,6 +14,7 @@ const {
   execution: executionService,
   products: productsService,
   dashboard: dashboardService,
+  traceability: traceabilityService,
 } = manufacturingService;
 
 /** Read context: org always, branch when the client picked one (superAdmins may read org-wide). */
@@ -208,7 +210,19 @@ const createProductionOrder = catchAsync(async (req, res) => {
 });
 
 const getProductionOrders = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['status', 'priority', 'productId', 'bomId', 'overdue', 'search', 'dateFrom', 'dateTo']);
+  const filter = pick(req.query, [
+    'status',
+    'priority',
+    'orderType',
+    'parentOrderId',
+    'operatorId',
+    'productId',
+    'bomId',
+    'overdue',
+    'search',
+    'dateFrom',
+    'dateTo',
+  ]);
   res.send(await productionOrderService.queryOrders(readCtx(req), filter, listOptions(req)));
 });
 
@@ -402,6 +416,79 @@ const getStockDetail = catchAsync(async (req, res) => {
   );
 });
 
+// ── Assembly orders & nesting ────────────────────────────────────────────────────────
+const startAssembly = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const order = await executionService.startAssembly(ctx, req.params.orderId, req.body || {});
+  await audit(req, {
+    action: 'status_change',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { status: order.status, event: 'assembly_started' },
+  });
+  res.send(order);
+});
+
+const completeAssembly = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const order = await executionService.completeAssembly(ctx, req.params.orderId, req.body);
+  await audit(req, {
+    action: 'status_change',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { status: order.status, event: 'assembly_completed', produced: order.producedQuantity },
+  });
+  res.send(order);
+});
+
+const createSubAssemblies = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const created = await productionOrderService.createSubAssemblyOrders(ctx, req.params.orderId, req.body);
+  await Promise.all(
+    created.map(({ order }) =>
+      audit(req, {
+        module: 'ProductionOrder',
+        entity: order,
+        entityName: orderLabel(order),
+        metadata: { parentOrderId: req.params.orderId },
+      })
+    )
+  );
+  res.status(httpStatus.CREATED).send(created.map(({ order, depth }) => ({ order, depth })));
+});
+
+const getOrderTree = catchAsync(async (req, res) => {
+  res.send(await productionOrderService.getOrderTree(readCtx(req), req.params.orderId));
+});
+
+const getOperators = catchAsync(async (req, res) => {
+  const users = await User.find({ organizationId: req.organizationId, isActive: { $ne: false } })
+    .select('name email')
+    .sort({ name: 1 })
+    .limit(500)
+    .lean();
+  res.send(users.map((u) => ({ id: String(u._id), name: u.name, email: u.email })));
+});
+
+// ── Traceability ──────────────────────────────────────────────────────────────────
+const traceOrder = catchAsync(async (req, res) => {
+  res.send(await traceabilityService.traceOrder(readCtx(req), req.params.orderId));
+});
+
+const traceFinished = catchAsync(async (req, res) => {
+  res.send(await traceabilityService.traceFinished(readCtx(req), pick(req.query, ['imeiId', 'batchId', 'receiptId'])));
+});
+
+const traceWhereUsed = catchAsync(async (req, res) => {
+  res.send(await traceabilityService.traceWhereUsed(readCtx(req), pick(req.query, ['imeiId', 'batchId', 'productId'])));
+});
+
+const traceLookup = catchAsync(async (req, res) => {
+  res.send(await traceabilityService.lookup(readCtx(req), req.query.q));
+});
+
 const getWip = catchAsync(async (req, res) => {
   res.send(await executionService.getWip(readCtx(req)));
 });
@@ -449,4 +536,13 @@ module.exports = {
   getProductionReceipts,
   getScrapRecords,
   getWip,
+  startAssembly,
+  completeAssembly,
+  createSubAssemblies,
+  getOrderTree,
+  getOperators,
+  traceOrder,
+  traceFinished,
+  traceWhereUsed,
+  traceLookup,
 };

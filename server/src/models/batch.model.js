@@ -26,6 +26,9 @@ const BatchSchema = new mongoose.Schema({
     expiryDate: { type: Date, index: true }, // FEFO queries, expiry alert jobs
     supplierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
     purchaseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase' },
+    // Set when the batch was produced in-house — the production/assembly order that made it
+    // (manufacturing traceability; purchased batches carry purchaseId/supplierId instead).
+    productionOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductionOrder', default: null },
     // Investor/partner who funded this specific lot, if any — set at purchase time when
     // tagging a batch with an investor (see purchase.service.js's createPurchase). This is
     // informational/denormalized; the actual earning mechanism is a batch-scoped
@@ -45,6 +48,7 @@ BatchSchema.plugin(paginate);
 
 BatchSchema.index({ organizationId: 1, inventoryId: 1, batchNumber: 1 }, { unique: true });
 BatchSchema.index({ organizationId: 1, expiryDate: 1 });
+BatchSchema.index({ productionOrderId: 1 }, { partialFilterExpression: { productionOrderId: { $type: 'objectId' } } });
 
 const Batch = mongoose.model('Batch', BatchSchema);
 

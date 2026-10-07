@@ -10,6 +10,7 @@ const {
   SCRAP_REASONS,
   REJECT_DISPOSITIONS,
   OUTPUT_STATUSES,
+  ORDER_TYPES,
 } = require('../config/manufacturing');
 
 const id = () => Joi.string().custom(objectId);
@@ -190,12 +191,16 @@ const orderBody = {
   finishedGoodsLocation: Joi.string().allow('').trim().max(100),
   priority: Joi.string().valid(...PRODUCTION_PRIORITIES),
   notes: Joi.string().allow('').max(2000),
+  operatorId: id().allow(null, ''),
 };
 
 const createProductionOrder = {
   body: Joi.object().keys({
     productId: id().required(),
     ...orderBody,
+    orderType: Joi.string().valid(...ORDER_TYPES),
+    parentOrderId: id().allow(null),
+    parentMaterialLineId: id().allow(null),
     plannedQuantity: orderBody.plannedQuantity.required(),
     status: Joi.string().valid('draft', 'planned'),
   }),
@@ -205,6 +210,9 @@ const getProductionOrders = {
   query: Joi.object().keys({
     status: Joi.string(),
     priority: Joi.string().valid(...PRODUCTION_PRIORITIES),
+    orderType: Joi.string().valid(...ORDER_TYPES),
+    parentOrderId: id(),
+    operatorId: id(),
     productId: id(),
     bomId: id(),
     overdue: Joi.boolean(),
@@ -260,6 +268,8 @@ const issueMaterials = {
           // Serial-tracked lines may give only imeiIds/serialNumbers (quantity = count).
           quantity: Joi.number().min(0),
           alternativeProductId: id().allow(null),
+          // Serial items: take the oldest in-stock units for `quantity` instead of naming them.
+          autoPickSerials: Joi.boolean(),
           batches: Joi.array()
             .items(Joi.object().keys({ batchId: id().required(), quantity: Joi.number().positive().required() }))
             .max(100),
@@ -351,6 +361,37 @@ const recordScrap = {
   }),
 };
 
+const completeAssembly = {
+  ...orderIdParam,
+  body: Joi.object().keys({
+    quantity: Joi.number().min(0),
+    goodQuantity: Joi.number().min(0),
+    ...rejectFields,
+    wipDisposition: Joi.string().valid('return', 'scrap'),
+    notes: Joi.string().allow('').max(1000),
+  }),
+};
+
+const createSubAssemblies = {
+  ...orderIdParam,
+  body: Joi.object().keys({
+    recursive: Joi.boolean(),
+    basis: Joi.string().valid('shortage', 'full'),
+    materialLineIds: Joi.array().items(id()).max(500),
+    operatorId: id().allow(null, ''),
+  }),
+};
+
+const traceFinished = {
+  query: Joi.object().keys({ imeiId: id(), batchId: id(), receiptId: id() }).or('imeiId', 'batchId', 'receiptId'),
+};
+
+const traceWhereUsed = {
+  query: Joi.object().keys({ imeiId: id(), batchId: id(), productId: id() }).or('imeiId', 'batchId', 'productId'),
+};
+
+const traceLookup = { query: Joi.object().keys({ q: Joi.string().trim().min(2).max(80).required() }) };
+
 const stockDetail = {
   query: Joi.object().keys({ productId: id().required(), variantId: id().allow(null, '') }),
 };
@@ -418,6 +459,11 @@ module.exports = {
   resolveRework,
   recordScrap,
   stockDetail,
+  completeAssembly,
+  createSubAssemblies,
+  traceFinished,
+  traceWhereUsed,
+  traceLookup,
   listMovements,
   listOutputs,
   listTransactions,

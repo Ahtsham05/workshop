@@ -14,6 +14,8 @@ import {
   ListChecks,
   ClipboardCheck,
   ArrowLeftRight,
+  Component,
+  Network,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
@@ -28,6 +30,11 @@ const MANUFACTURING_SECTIONS = [
     to: '/manufacturing/production-orders',
     label: 'Production Orders',
     icon: ClipboardList,
+  },
+  {
+    to: '/manufacturing/assembly-orders',
+    label: 'Assembly Orders',
+    icon: Component,
   },
   {
     to: '/manufacturing/requirements',
@@ -52,6 +59,7 @@ const MANUFACTURING_SECTIONS = [
     icon: PackageCheck,
   },
   { to: '/manufacturing/scrap', label: 'Scrap', icon: Recycle },
+  { to: '/manufacturing/traceability', label: 'Traceability', icon: Network },
   {
     to: '/manufacturing/movements',
     label: 'Stock Movements',

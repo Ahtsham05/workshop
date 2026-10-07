@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
 const { DEFAULT_UNIT, UNITS } = require('../config/units');
-const { PRODUCTION_STATUSES, PRODUCTION_PRIORITIES } = require('../config/manufacturing');
+const { PRODUCTION_STATUSES, PRODUCTION_PRIORITIES, ORDER_TYPES } = require('../config/manufacturing');
 
 /**
  * A material the order needs, snapshotted from the (exploded) BOM when the order is
@@ -102,6 +102,15 @@ const ProductionOrderSchema = new mongoose.Schema(
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true, index: true },
     orderNumber: { type: String, required: true, trim: true },
+    // 'assembly' orders build (sub-)assemblies — same engine, own numbering and lifecycle.
+    orderType: { type: String, enum: ORDER_TYPES, default: 'production', index: true },
+    // Nesting: the order (and its material line) this one was created to supply. The
+    // sub-assembly it builds goes into stock and is issued to the parent like any component.
+    parentOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductionOrder', default: null, index: true },
+    parentMaterialLineId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    // The person doing the assembly work.
+    operatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    operatorName: { type: String, trim: true, default: '' },
     productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true, index: true },
     variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: null },
     productName: { type: String, trim: true },

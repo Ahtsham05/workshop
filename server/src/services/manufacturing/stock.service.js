@@ -208,12 +208,25 @@ const allocateBatches = async (item, quantity, requested, session) => {
 /** In-stock serial units of this item, by id or number; must match `expectedCount` when given. */
 const pickSerials = async (
   item,
-  { organizationId, branchId, imeiIds, serialNumbers, status = 'in_stock', productionOrderId, session }
+  { organizationId, branchId, imeiIds, serialNumbers, status = 'in_stock', productionOrderId, autoCount = 0, session }
 ) => {
   const or = [];
   if (imeiIds && imeiIds.length) or.push({ _id: { $in: imeiIds } });
   if (serialNumbers && serialNumbers.length) or.push({ imei: { $in: serialNumbers } }, { imei2: { $in: serialNumbers } });
-  if (!or.length) throw new ApiError(httpStatus.BAD_REQUEST, `Select the serial/IMEI numbers of "${item.name}"`);
+  if (!or.length) {
+    // Quantity only (e.g. "start assembly"): take the oldest in-stock units, FIFO.
+    if (autoCount > 0) {
+      const units = await Imei.find({ organizationId, branchId, productId: item.product._id, status })
+        .sort({ createdAt: 1, _id: 1 })
+        .limit(autoCount)
+        .session(session || null);
+      if (units.length < autoCount) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Only ${units.length} serial unit(s) of "${item.name}" are in stock`);
+      }
+      return units;
+    }
+    throw new ApiError(httpStatus.BAD_REQUEST, `Select the serial/IMEI numbers of "${item.name}"`);
+  }
   const wanted = new Set([...(imeiIds || []).map(String), ...(serialNumbers || [])]);
   const records = await Imei.find({
     organizationId,

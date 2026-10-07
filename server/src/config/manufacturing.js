@@ -27,7 +27,25 @@ const PROCUREMENT_TYPES = ['buy', 'make', 'buy_or_make'];
 /** Product types that can be produced by a production order (i.e. can own a BOM). */
 const PRODUCIBLE_TYPES = ['sub_assembly', 'wip', 'finished_good', 'by_product'];
 
-const PRODUCTION_STATUSES = ['draft', 'planned', 'released', 'in_production', 'paused', 'completed', 'cancelled'];
+// 'qc_pending' is used by assembly orders: assembled output is waiting for inspection.
+// For assembly orders 'in_production' is shown as "In Assembly".
+const PRODUCTION_STATUSES = [
+  'draft',
+  'planned',
+  'released',
+  'in_production',
+  'paused',
+  'qc_pending',
+  'completed',
+  'cancelled',
+];
+
+/**
+ * Both kinds share one document model and one execution engine (issue → WIP → output →
+ * QC → finished goods); they differ in numbering, lifecycle and screens. An assembly
+ * order builds a (sub-)assembly from components and can be nested under a parent order.
+ */
+const ORDER_TYPES = ['production', 'assembly'];
 
 /**
  * Allowed production-order status moves. Material issue auto-advances `released` to
@@ -40,9 +58,30 @@ const PRODUCTION_STATUS_TRANSITIONS = {
   released: ['planned', 'in_production', 'cancelled'],
   in_production: ['paused', 'completed'],
   paused: ['in_production', 'completed'],
+  qc_pending: [],
   completed: [],
   cancelled: [],
 };
+
+/**
+ * Assembly lifecycle: Draft → Released → In Assembly ⇄ Paused → QC Pending → Completed.
+ * "Start assembly" (released → in_production) moves components into WIP; "Complete
+ * assembly" reports the output and moves to qc_pending (or straight to completed when
+ * quality checks are off); the inspection then completes it.
+ */
+const ASSEMBLY_STATUS_TRANSITIONS = {
+  draft: ['released', 'cancelled'],
+  planned: ['released', 'draft', 'cancelled'],
+  released: ['draft', 'in_production', 'cancelled'],
+  in_production: ['paused', 'qc_pending', 'completed'],
+  paused: ['in_production', 'completed'],
+  qc_pending: ['in_production', 'completed'],
+  completed: [],
+  cancelled: [],
+};
+
+const transitionsFor = (orderType) =>
+  orderType === 'assembly' ? ASSEMBLY_STATUS_TRANSITIONS : PRODUCTION_STATUS_TRANSITIONS;
 
 /** Statuses in which a production order's header/BOM can still be edited. */
 const EDITABLE_PRODUCTION_STATUSES = ['draft', 'planned'];
@@ -51,7 +90,7 @@ const EDITABLE_PRODUCTION_STATUSES = ['draft', 'planned'];
 const EXECUTABLE_PRODUCTION_STATUSES = ['released', 'in_production', 'paused'];
 
 /** Statuses considered "open" (counted on the dashboard, in requirements, etc). */
-const OPEN_PRODUCTION_STATUSES = ['draft', 'planned', 'released', 'in_production', 'paused'];
+const OPEN_PRODUCTION_STATUSES = ['draft', 'planned', 'released', 'in_production', 'paused', 'qc_pending'];
 
 const PRODUCTION_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
@@ -73,7 +112,16 @@ const OUTPUT_STATUSES = ['pending_qc', 'inspected'];
 const SCRAP_REASONS = ['defect', 'damage', 'process_loss', 'expired', 'setup', 'rework', 'other'];
 
 /** Keys of the per-organization document counters in ManufacturingSettings. */
-const COUNTER_KEYS = ['bom', 'productionOrder', 'materialIssue', 'materialReturn', 'productionOutput', 'productionReceipt', 'scrap'];
+const COUNTER_KEYS = [
+  'bom',
+  'productionOrder',
+  'assemblyOrder',
+  'materialIssue',
+  'materialReturn',
+  'productionOutput',
+  'productionReceipt',
+  'scrap',
+];
 
 /** Max depth when exploding a multi-level BOM — guards against pathological trees. */
 const MAX_BOM_DEPTH = 10;
@@ -84,6 +132,9 @@ module.exports = {
   PRODUCIBLE_TYPES,
   PRODUCTION_STATUSES,
   PRODUCTION_STATUS_TRANSITIONS,
+  ASSEMBLY_STATUS_TRANSITIONS,
+  ORDER_TYPES,
+  transitionsFor,
   EDITABLE_PRODUCTION_STATUSES,
   EXECUTABLE_PRODUCTION_STATUSES,
   OPEN_PRODUCTION_STATUSES,

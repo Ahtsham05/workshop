@@ -1,35 +1,44 @@
-import { useState } from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
   Factory,
+  GitBranch,
+  Layers,
   MapPin,
   MoreHorizontal,
   PackageCheck,
   PackageMinus,
   PackagePlus,
   Pencil,
+  Play,
   Recycle,
   RefreshCw,
   Trash2,
   Undo2,
+  UserRound,
   Warehouse,
   Wrench,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   useChangeProductionStatusMutation,
+  useCreateSubAssembliesMutation,
   useDeleteProductionOrderMutation,
   useGetMaterialIssuesQuery,
+  useGetOrderTreeQuery,
   useGetOrderRequirementsQuery,
   useGetOutputsQuery,
   useGetProductionOrderQuery,
   useGetProductionReceiptsQuery,
   useGetScrapRecordsQuery,
   useRefreshProductionMaterialsMutation,
+  useStartAssemblyMutation,
+  useTraceOrderQuery,
+  type OrderTreeNode,
   type ProductionOrder,
   type ProductionOutput,
   type ProductionStatus,
@@ -82,15 +91,18 @@ import {
 } from '../components/material-progress'
 import { MovementsTable } from '../components/movements-table'
 import { ProductionOrderDialog } from '../components/production-order-dialog'
+import { TraceTree } from '../components/trace-views'
 import {
   SCRAP_REASON_LABELS,
   SCRAP_STAGE_LABELS,
   STATUS_META,
-  STATUS_TRANSITIONS,
   TRANSITION_LABELS,
   fmtDate,
   fmtQty,
   refName,
+  statusLabel,
+  transitionsFor,
+  orderPath,
 } from '../lib/constants'
 import { lineRemaining, lineWip } from '../lib/material-math'
 
@@ -99,6 +111,13 @@ const LIFECYCLE: ProductionStatus[] = [
   'planned',
   'released',
   'in_production',
+  'completed',
+]
+const ASSEMBLY_LIFECYCLE: ProductionStatus[] = [
+  'draft',
+  'released',
+  'in_production',
+  'qc_pending',
   'completed',
 ]
 const EXECUTABLE: ProductionStatus[] = ['released', 'in_production', 'paused']
@@ -112,6 +131,7 @@ type DialogKind =
   | 'rework'
   | 'complete'
   | 'scrap'
+  | 'assemble'
 
 export default function ProductionOrderDetail({
   orderId,
@@ -136,9 +156,21 @@ export default function ProductionOrderDetail({
   const [changeStatus, { isLoading: changing }] =
     useChangeProductionStatusMutation()
   const [refreshMaterials] = useRefreshProductionMaterialsMutation()
+  const [startAssemblyMutation, { isLoading: starting }] =
+    useStartAssemblyMutation()
   const [deleteOrder] = useDeleteProductionOrderMutation()
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const [inspecting, setInspecting] = useState<ProductionOutput | null>(null)
+
+  const pathname = useLocation({ select: (l) => l.pathname })
+  // Links that only know an order id land on /production-orders/…; keep assembly
+  // orders on their own section so the rail and back link stay correct.
+  const canonical = order ? orderPath(order) : null
+  useEffect(() => {
+    if (canonical && pathname !== canonical) {
+      navigate({ to: canonical as never, replace: true })
+    }
+  }, [canonical, pathname, navigate])
 
   if (isLoading) return <Skeleton className='h-96 w-full rounded-xl' />
   if (!order) {
@@ -150,10 +182,23 @@ export default function ProductionOrderDetail({
   }
 
   const executable = EXECUTABLE.includes(order.status)
-  const transitions = STATUS_TRANSITIONS[order.status].filter(
-    (s) => s !== 'cancelled' && s !== 'draft' && s !== 'completed'
+  const isAssembly = order.orderType === 'assembly'
+  const allowed = transitionsFor(order.orderType)[order.status]
+  // Assembly orders start and complete through their own actions (which move stock).
+  const transitions = allowed.filter(
+    (s) =>
+      s !== 'cancelled' &&
+      s !== 'draft' &&
+      s !== 'completed' &&
+      s !== 'qc_pending' &&
+      !(isAssembly && s === 'in_production' && order.status === 'released')
   )
-  const canComplete = STATUS_TRANSITIONS[order.status].includes('completed')
+  const canComplete = allowed.includes('completed')
+  const canStartAssembly = isAssembly && order.status === 'released'
+  const canCompleteAssembly =
+    isAssembly &&
+    ['in_production', 'paused'].includes(order.status) &&
+    order.producedQuantity < order.plannedQuantity
   const wipLots = order.wipLots.filter((l) => l.quantity > EPS)
   const wipValue = wipLots.reduce(
     (s, l) => s + l.quantity * (l.unitCost || 0),
@@ -173,24 +218,43 @@ export default function ProductionOrderDetail({
     try {
       await changeStatus({ orderId: order.id, status }).unwrap()
       toast.success(
-        t('Order moved to {{s}}').replace('{{s}}', t(STATUS_META[status].label))
+        t('Order moved to {{s}}').replace(
+          '{{s}}',
+          t(statusLabel(status, order.orderType))
+        )
       )
     } catch (err) {
       toast.error(getErrorMessage(err, t('Could not change status')))
     }
   }
 
+  const startAssembly = async () => {
+    try {
+      await startAssemblyMutation({ orderId: order.id }).unwrap()
+      toast.success(t('Assembly started — components moved into WIP'))
+    } catch (err) {
+      toast.error(getErrorMessage(err, t('Could not start assembly')))
+    }
+  }
+
+  const lifecycle = isAssembly ? ASSEMBLY_LIFECYCLE : LIFECYCLE
   const lifecycleIndex =
     order.status === 'paused'
-      ? LIFECYCLE.indexOf('in_production')
-      : LIFECYCLE.indexOf(order.status)
+      ? lifecycle.indexOf('in_production')
+      : lifecycle.indexOf(order.status)
 
   return (
     <div className='space-y-4'>
       <Button variant='ghost' size='sm' asChild className='-ml-2'>
-        <Link to={'/manufacturing/production-orders' as never}>
+        <Link
+          to={
+            (isAssembly
+              ? '/manufacturing/assembly-orders'
+              : '/manufacturing/production-orders') as never
+          }
+        >
           <ArrowLeft className='mr-1.5 h-4 w-4' />
-          {t('Production orders')}
+          {isAssembly ? t('Assembly orders') : t('Production orders')}
         </Link>
       </Button>
 
@@ -202,7 +266,16 @@ export default function ProductionOrderDetail({
               <span className='bg-muted rounded-md px-2 py-0.5 font-mono text-xs'>
                 {order.orderNumber}
               </span>
-              <StatusBadge status={order.status} />
+              <StatusBadge status={order.status} orderType={order.orderType} />
+              {isAssembly && (
+                <Badge
+                  variant='outline'
+                  className='gap-1 border-violet-500/30 text-violet-700 dark:text-violet-300'
+                >
+                  <Layers className='h-3 w-3' />
+                  {t('Assembly')}
+                </Badge>
+              )}
               <PriorityText priority={order.priority} />
             </div>
             <h2 className='mt-2 text-2xl font-semibold tracking-tight'>
@@ -229,10 +302,29 @@ export default function ProductionOrderDetail({
                   {fmtDate(order.plannedCompletionDate)}
                 </>
               )}
+              {order.operatorName && (
+                <>
+                  {' · '}
+                  <UserRound className='mb-0.5 inline h-3.5 w-3.5' />{' '}
+                  {order.operatorName}
+                </>
+              )}
             </p>
           </div>
           <div className='flex flex-wrap items-center gap-2 max-sm:w-full'>
-            {canExecute && executable && (
+            {canExecute && canStartAssembly && (
+              <Button onClick={startAssembly} disabled={starting}>
+                <Play className='mr-2 h-4 w-4' />
+                {t('Start assembly')}
+              </Button>
+            )}
+            {canExecute && canCompleteAssembly && (
+              <Button onClick={() => setDialog('assemble')}>
+                <PackageCheck className='mr-2 h-4 w-4' />
+                {t('Complete assembly')}
+              </Button>
+            )}
+            {canExecute && executable && !isAssembly && (
               <>
                 <Button
                   variant='outline'
@@ -256,7 +348,9 @@ export default function ProductionOrderDetail({
                   disabled={changing}
                   onClick={() => move(s)}
                 >
-                  {t(TRANSITION_LABELS[s] || STATUS_META[s].label)}
+                  {isAssembly && s === 'in_production'
+                    ? t('Resume assembly')
+                    : t(TRANSITION_LABELS[s] || STATUS_META[s].label)}
                 </Button>
               ))}
             {canManage && canComplete && (
@@ -315,24 +409,22 @@ export default function ProductionOrderDetail({
                         {t('Refresh materials from BOM')}
                       </DropdownMenuItem>
                     )}
-                  {canManage &&
-                    STATUS_TRANSITIONS[order.status].includes('draft') && (
-                      <DropdownMenuItem onClick={() => move('draft')}>
-                        {t('Back to Draft')}
+                  {canManage && allowed.includes('draft') && (
+                    <DropdownMenuItem onClick={() => move('draft')}>
+                      {t('Back to Draft')}
+                    </DropdownMenuItem>
+                  )}
+                  {canManage && allowed.includes('cancelled') && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className='text-destructive'
+                        onClick={() => move('cancelled')}
+                      >
+                        {t('Cancel order')}
                       </DropdownMenuItem>
-                    )}
-                  {canManage &&
-                    STATUS_TRANSITIONS[order.status].includes('cancelled') && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className='text-destructive'
-                          onClick={() => move('cancelled')}
-                        >
-                          {t('Cancel order')}
-                        </DropdownMenuItem>
-                      </>
-                    )}
+                    </>
+                  )}
                   {canManage &&
                     ['draft', 'planned', 'cancelled'].includes(
                       order.status
@@ -371,7 +463,7 @@ export default function ProductionOrderDetail({
 
         {order.status !== 'cancelled' && (
           <div className='bg-muted/30 flex items-center gap-1 overflow-x-auto border-t px-5 py-3 max-sm:px-4'>
-            {LIFECYCLE.map((step, i) => {
+            {lifecycle.map((step, i) => {
               const done = i < lifecycleIndex || order.status === 'completed'
               const current =
                 i === lifecycleIndex && order.status !== 'completed'
@@ -407,7 +499,7 @@ export default function ProductionOrderDetail({
                     />
                     {current && order.status === 'paused'
                       ? t('Paused')
-                      : t(STATUS_META[step].label)}
+                      : t(statusLabel(step, order.orderType))}
                   </span>
                 </div>
               )
@@ -583,6 +675,7 @@ export default function ProductionOrderDetail({
             <TabsTrigger value='receipts'>{t('Receipts')}</TabsTrigger>
             <TabsTrigger value='scrap'>{t('Scrap')}</TabsTrigger>
             <TabsTrigger value='movements'>{t('Stock ledger')}</TabsTrigger>
+            <TabsTrigger value='trace'>{t('Traceability')}</TabsTrigger>
             <TabsTrigger value='history'>{t('History')}</TabsTrigger>
           </TabsList>
 
@@ -728,6 +821,9 @@ export default function ProductionOrderDetail({
               </CardContent>
             </Card>
           </TabsContent>
+          <TabsContent value='trace' className='mt-3'>
+            <OrderTraceTab orderId={order.id} />
+          </TabsContent>
           <TabsContent value='history' className='mt-3'>
             <Card>
               <CardContent className='p-5'>
@@ -741,7 +837,10 @@ export default function ProductionOrderDetail({
                         )}
                       />
                       <div className='flex flex-wrap items-center gap-2 text-sm'>
-                        <StatusBadge status={h.to} />
+                        <StatusBadge
+                          status={h.to}
+                          orderType={order.orderType}
+                        />
                         <span className='text-muted-foreground text-xs'>
                           {new Date(h.at).toLocaleString()}
                         </span>
@@ -759,45 +858,48 @@ export default function ProductionOrderDetail({
           </TabsContent>
         </Tabs>
 
-        <Card className='h-fit'>
-          <CardHeader className='pb-2'>
-            <CardTitle className='text-sm'>{t('Locations')}</CardTitle>
-            <CardDescription className='text-xs'>
-              {t('Within this branch (the warehouse)')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='space-y-3 text-sm'>
-            {[
-              [t('Raw material source'), order.sourceLocation],
-              [t('Work in progress'), order.wipLocation],
-              [t('Finished goods'), order.finishedGoodsLocation],
-            ].map(([label, value], i) => (
-              <div key={label} className='flex items-start gap-2'>
-                <MapPin className='text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0' />
-                <div>
-                  <div className='text-muted-foreground text-xs'>{label}</div>
-                  <div>{value || '—'}</div>
+        <div className='space-y-4'>
+          <HierarchyCard order={order} canManage={canManage} />
+          <Card className='h-fit'>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-sm'>{t('Locations')}</CardTitle>
+              <CardDescription className='text-xs'>
+                {t('Within this branch (the warehouse)')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='space-y-3 text-sm'>
+              {[
+                [t('Raw material source'), order.sourceLocation],
+                [t('Work in progress'), order.wipLocation],
+                [t('Finished goods'), order.finishedGoodsLocation],
+              ].map(([label, value], i) => (
+                <div key={label} className='flex items-start gap-2'>
+                  <MapPin className='text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0' />
+                  <div>
+                    <div className='text-muted-foreground text-xs'>{label}</div>
+                    <div>{value || '—'}</div>
+                  </div>
+                  {i < 2 && (
+                    <ArrowRight className='text-muted-foreground/50 ml-auto h-3.5 w-3.5' />
+                  )}
                 </div>
-                {i < 2 && (
-                  <ArrowRight className='text-muted-foreground/50 ml-auto h-3.5 w-3.5' />
-                )}
-              </div>
-            ))}
-            {order.notes && (
-              <div className='border-t pt-3'>
-                <div className='text-muted-foreground text-xs'>
-                  {t('Notes')}
+              ))}
+              {order.notes && (
+                <div className='border-t pt-3'>
+                  <div className='text-muted-foreground text-xs'>
+                    {t('Notes')}
+                  </div>
+                  <p className='whitespace-pre-wrap'>{order.notes}</p>
                 </div>
-                <p className='whitespace-pre-wrap'>{order.notes}</p>
+              )}
+              <div className='text-muted-foreground border-t pt-3 text-xs'>
+                {t('Started')}: {fmtDate(order.actualStartDate)}
+                <br />
+                {t('Completed')}: {fmtDate(order.actualCompletionDate)}
               </div>
-            )}
-            <div className='text-muted-foreground border-t pt-3 text-xs'>
-              {t('Started')}: {fmtDate(order.actualStartDate)}
-              <br />
-              {t('Completed')}: {fmtDate(order.actualCompletionDate)}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {dialog === 'edit' && (
@@ -811,6 +913,13 @@ export default function ProductionOrderDetail({
       )}
       {dialog === 'output' && (
         <ReportOutputDialog order={order} onClose={() => setDialog(null)} />
+      )}
+      {dialog === 'assemble' && (
+        <ReportOutputDialog
+          order={order}
+          assembly
+          onClose={() => setDialog(null)}
+        />
       )}
       {dialog === 'rework' && (
         <ReworkDialog order={order} onClose={() => setDialog(null)} />
@@ -1258,6 +1367,202 @@ function OrderScrap({ orderId }: { orderId: string }) {
             </span>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function OrderTraceTab({ orderId }: { orderId: string }) {
+  const { t } = useLanguage()
+  const { data, isLoading, error } = useTraceOrderQuery(orderId)
+  return (
+    <Card>
+      <CardHeader className='pb-2'>
+        <CardTitle className='text-sm'>{t('Genealogy')}</CardTitle>
+        <CardDescription className='text-xs'>
+          {t(
+            'What this order produced, the components it consumed, their batches and serials, and the supplier or sub-assembly order each came from.'
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className='h-40 w-full' />
+        ) : data ? (
+          <TraceTree node={data} />
+        ) : (
+          <EmptyLine text={getErrorMessage(error, t('No trace available'))} />
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function TreeRow({
+  node,
+  current,
+  depth,
+}: {
+  node: OrderTreeNode
+  current: string
+  depth: number
+}) {
+  const isCurrent = node.id === current
+  return (
+    <>
+      <div
+        className={cn(
+          'flex items-center gap-2 rounded-md px-1.5 py-1 text-xs',
+          isCurrent && 'bg-primary/5 ring-primary/20 ring-1'
+        )}
+        style={{ paddingLeft: `${depth * 14 + 6}px` }}
+      >
+        {node.orderType === 'assembly' ? (
+          <Layers className='h-3.5 w-3.5 shrink-0 text-violet-600' />
+        ) : (
+          <Factory className='text-primary h-3.5 w-3.5 shrink-0' />
+        )}
+        <div className='min-w-0 flex-1'>
+          {isCurrent ? (
+            <span className='font-mono font-semibold'>{node.orderNumber}</span>
+          ) : (
+            <Link
+              to={orderPath(node) as never}
+              className='font-mono font-medium hover:underline'
+            >
+              {node.orderNumber}
+            </Link>
+          )}
+          <div className='text-muted-foreground truncate'>
+            {node.productName} · {fmtQty(node.plannedQuantity)} {node.unit}
+          </div>
+        </div>
+        <StatusBadge
+          status={node.status}
+          orderType={node.orderType}
+          className='h-5 px-1.5 text-[10px]'
+        />
+      </div>
+      {node.children?.map((c) => (
+        <TreeRow key={c.id} node={c} current={current} depth={depth + 1} />
+      ))}
+    </>
+  )
+}
+
+/** Parent chain and nested sub-assembly orders, with one-click creation of missing ones. */
+function HierarchyCard({
+  order,
+  canManage,
+}: {
+  order: ProductionOrder
+  canManage: boolean
+}) {
+  const { t } = useLanguage()
+  const { data: tree } = useGetOrderTreeQuery(order.id)
+  const [createSubs, { isLoading }] = useCreateSubAssembliesMutation()
+  const open = !['completed', 'cancelled'].includes(order.status)
+
+  const create = async (recursive: boolean) => {
+    try {
+      const created = await createSubs({
+        orderId: order.id,
+        recursive,
+      }).unwrap()
+      if (!created.length) {
+        toast.info(
+          t(
+            'Nothing to create — sub-assemblies are in stock or already on order'
+          )
+        )
+      } else {
+        toast.success(
+          t('{{n}} sub-assembly order(s) created').replace(
+            '{{n}}',
+            String(created.length)
+          )
+        )
+      }
+    } catch (err) {
+      toast.error(
+        getErrorMessage(err, t('Could not create sub-assembly orders'))
+      )
+    }
+  }
+
+  if (!tree) return null
+  const hasTree =
+    tree.ancestors.length > 0 || (tree.order.children?.length || 0) > 0
+  if (!hasTree && !(canManage && open)) return null
+
+  // Ancestors arrive root-first: root → … → this order → its children.
+  const chain = tree.ancestors
+  return (
+    <Card className='h-fit'>
+      <CardHeader className='pb-2'>
+        <CardTitle className='flex items-center gap-1.5 text-sm'>
+          <GitBranch className='h-4 w-4' />
+          {t('Assembly structure')}
+        </CardTitle>
+        <CardDescription className='text-xs'>
+          {t('Parent orders and the sub-assembly orders that feed this one')}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-3'>
+        {hasTree ? (
+          <div className='space-y-0.5'>
+            {chain.map((a, i) => (
+              <TreeRow
+                key={a.id}
+                node={{ ...a, children: [] }}
+                current={order.id}
+                depth={i}
+              />
+            ))}
+            <TreeRow
+              node={tree.order}
+              current={order.id}
+              depth={chain.length}
+            />
+          </div>
+        ) : (
+          <p className='text-muted-foreground text-xs'>
+            {t('No linked parent or sub-assembly orders.')}
+          </p>
+        )}
+        {canManage && open && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant='outline'
+                size='sm'
+                className='w-full'
+                disabled={isLoading}
+              >
+                <Layers className='mr-2 h-3.5 w-3.5' />
+                {t('Create sub-assembly orders')}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='w-64'>
+              <DropdownMenuItem onClick={() => create(false)}>
+                <div>
+                  <div>{t('Direct sub-assemblies')}</div>
+                  <div className='text-muted-foreground text-xs'>
+                    {t('One level, for components short in stock')}
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => create(true)}>
+                <div>
+                  <div>{t('Full nested chain')}</div>
+                  <div className='text-muted-foreground text-xs'>
+                    {t('Every level down to raw materials')}
+                  </div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </CardContent>
     </Card>
   )

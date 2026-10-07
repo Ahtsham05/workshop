@@ -123,4 +123,27 @@ router
   .post(auth('executeProduction'), validate(v.recordScrap), c.recordScrap);
 router.get('/wip', auth(VIEW), c.getWip);
 
+// Assembly orders (ProductionOrder with orderType 'assembly') and nesting
+router.post('/assembly-orders/:orderId/start', auth('executeProduction'), validate(v.orderIdParam), c.startAssembly);
+router.post(
+  '/assembly-orders/:orderId/complete',
+  auth('executeProduction'),
+  validate(v.completeAssembly),
+  c.completeAssembly
+);
+router.post(
+  '/production-orders/:orderId/sub-assemblies',
+  auth('manageProductionOrders'),
+  validate(v.createSubAssemblies),
+  c.createSubAssemblies
+);
+router.get('/production-orders/:orderId/tree', auth(VIEW), validate(v.orderIdParam), c.getOrderTree);
+router.get('/operators', auth(VIEW), c.getOperators);
+
+// Traceability — forward (finished → components → batches → suppliers) and reverse
+router.get('/trace/lookup', auth(VIEW), validate(v.traceLookup), c.traceLookup);
+router.get('/trace/finished', auth(VIEW), validate(v.traceFinished), c.traceFinished);
+router.get('/trace/where-used', auth(VIEW), validate(v.traceWhereUsed), c.traceWhereUsed);
+router.get('/trace/orders/:orderId', auth(VIEW), validate(v.orderIdParam), c.traceOrder);
+
 module.exports = router;

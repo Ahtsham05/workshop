@@ -3,6 +3,7 @@ import { AlertTriangle, Layers, ScanLine } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   useChangeProductionStatusMutation,
+  useCompleteAssemblyMutation,
   useGetManufacturingSettingsQuery,
   useGetStockDetailQuery,
   useInspectOutputMutation,
@@ -908,9 +909,12 @@ function ConsumptionPreview({
 /** Report production. With QC on, units wait for inspection; with it off, good/rejected post now. */
 export function ReportOutputDialog({
   order,
+  assembly = false,
   onClose,
 }: {
   order: ProductionOrder
+  /** "Complete assembly": reports the output and moves the assembly order on (QC Pending / Completed). */
+  assembly?: boolean
   onClose: () => void
 }) {
   const { t } = useLanguage()
@@ -922,7 +926,10 @@ export function ReportOutputDialog({
   const [reason, setReason] = useState('')
   const [fg, setFg] = useState<FinishedGoodsInput>({})
   const [notes, setNotes] = useState('')
-  const [report, { isLoading }] = useReportOutputMutation()
+  const [reportOutput, { isLoading: reporting }] = useReportOutputMutation()
+  const [completeAssembly, { isLoading: completing }] =
+    useCompleteAssemblyMutation()
+  const isLoading = reporting || completing
   const qcRequired = settings?.requireQualityCheck ?? true
   const producedNum = Number(produced) || 0
   const goodValue = good ?? produced
@@ -934,7 +941,13 @@ export function ReportOutputDialog({
       return toast.error(t('Produced quantity must be greater than zero'))
     const ok = await notify(
       () =>
-        report({
+        (assembly
+          ? ({
+              producedQuantity,
+              ...rest
+            }: Parameters<typeof reportOutput>[0]) =>
+              completeAssembly({ ...rest, quantity: producedQuantity })
+          : reportOutput)({
           orderId: order.id,
           producedQuantity: producedNum,
           ...(qcRequired
@@ -948,7 +961,9 @@ export function ReportOutputDialog({
           notes,
         }).unwrap(),
       qcRequired
-        ? t('Output reported — waiting for quality check')
+        ? assembly
+          ? t('Assembly completed — waiting for quality check')
+          : t('Output reported — waiting for quality check')
         : t('Output posted to finished goods'),
       t('Failed to report output')
     )
@@ -959,7 +974,9 @@ export function ReportOutputDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className='flex max-h-[92vh] flex-col sm:max-w-lg'>
         <DialogHeader>
-          <DialogTitle>{t('Report production output')}</DialogTitle>
+          <DialogTitle>
+            {assembly ? t('Complete assembly') : t('Report production output')}
+          </DialogTitle>
           <DialogDescription>
             {order.productName} · {t('Planned')} {fmtQty(order.plannedQuantity)}{' '}
             · {t('produced so far')} {fmtQty(order.producedQuantity)} ·{' '}
@@ -1018,7 +1035,11 @@ export function ReportOutputDialog({
             {t('Cancel')}
           </Button>
           <Button onClick={submit} disabled={isLoading}>
-            {qcRequired ? t('Send to QC') : t('Post output')}
+            {assembly
+              ? t('Complete assembly')
+              : qcRequired
+                ? t('Send to QC')
+                : t('Post output')}
           </Button>
         </DialogFooter>
       </DialogContent>

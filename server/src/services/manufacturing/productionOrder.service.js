@@ -1,11 +1,7 @@
 const httpStatus = require('http-status');
-const { ProductionOrder, Product, ProductVariant, Bom } = require('../../models');
+const { ProductionOrder, Product, ProductVariant, Bom, User } = require('../../models');
 const ApiError = require('../../utils/ApiError');
-const {
-  PRODUCTION_STATUS_TRANSITIONS,
-  EDITABLE_PRODUCTION_STATUSES,
-  OPEN_PRODUCTION_STATUSES,
-} = require('../../config/manufacturing');
+const { transitionsFor, EDITABLE_PRODUCTION_STATUSES, OPEN_PRODUCTION_STATUSES } = require('../../config/manufacturing');
 const settingsService = require('./settings.service');
 const bomService = require('./bom.service');
 const stockService = require('./stock.service');
@@ -17,6 +13,29 @@ const findOrderOrThrow = async ({ organizationId, branchId }, orderId) => {
   const order = await ProductionOrder.findOne({ _id: orderId, ...scopeFilter({ organizationId, branchId }) });
   if (!order) throw new ApiError(httpStatus.NOT_FOUND, 'Production order not found');
   return order;
+};
+
+const kindLabel = (order) => (order.orderType === 'assembly' ? 'assembly order' : 'production order');
+
+/** The operator must be a user of the same organization. */
+const resolveOperator = async (organizationId, operatorId) => {
+  if (!operatorId) return { operatorId: null, operatorName: '' };
+  const user = await User.findOne({ _id: operatorId, organizationId }).select('name').lean();
+  if (!user) throw new ApiError(httpStatus.BAD_REQUEST, 'Operator not found in this organization');
+  return { operatorId: user._id, operatorName: user.name || '' };
+};
+
+/** A parent (for nested assemblies) must be an order of the same org + branch. */
+const resolveParent = async ({ organizationId, branchId }, parentOrderId, parentMaterialLineId) => {
+  if (!parentOrderId) return { parentOrderId: null, parentMaterialLineId: null };
+  const parent = await ProductionOrder.findOne({ _id: parentOrderId, organizationId, branchId })
+    .select('materials._id')
+    .lean();
+  if (!parent) throw new ApiError(httpStatus.BAD_REQUEST, 'Parent order not found in this branch');
+  if (parentMaterialLineId && !parent.materials.some((m) => String(m._id) === String(parentMaterialLineId))) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Parent material line not found');
+  }
+  return { parentOrderId: parent._id, parentMaterialLineId: parentMaterialLineId || null };
 };
 
 /** Resolves which BOM version an order uses and checks it actually builds the product. */
@@ -90,13 +109,23 @@ const createOrder = async ({ organizationId, branchId, createdBy }, body) => {
   const plannedQuantity = roundQty(body.plannedQuantity);
   const materials = await snapshotMaterials({ organizationId, branchId, bom, quantity: plannedQuantity, settings });
 
-  const status = body.status === 'planned' ? 'planned' : 'draft';
-  const orderNumber = await settingsService.nextDocumentNumber(organizationId, 'productionOrder');
+  const orderType = body.orderType === 'assembly' ? 'assembly' : 'production';
+  // Assembly orders have no "planned" stage — they go draft → released.
+  const status = body.status === 'planned' && orderType === 'production' ? 'planned' : 'draft';
+  const operator = await resolveOperator(organizationId, body.operatorId);
+  const parent = await resolveParent({ organizationId, branchId }, body.parentOrderId, body.parentMaterialLineId);
+  const orderNumber = await settingsService.nextDocumentNumber(
+    organizationId,
+    orderType === 'assembly' ? 'assemblyOrder' : 'productionOrder'
+  );
 
   return ProductionOrder.create({
     organizationId,
     branchId,
     orderNumber,
+    orderType,
+    ...operator,
+    ...parent,
     productId: product._id,
     variantId: variant ? variant._id : null,
     productName: product.name,
@@ -128,6 +157,9 @@ const queryOrders = async ({ organizationId, branchId }, filter, options) => {
     query.status = statuses.length > 1 ? { $in: statuses } : statuses[0];
   }
   if (filter.priority) query.priority = filter.priority;
+  if (filter.orderType) query.orderType = filter.orderType === 'production' ? { $ne: 'assembly' } : filter.orderType;
+  if (filter.parentOrderId) query.parentOrderId = filter.parentOrderId;
+  if (filter.operatorId) query.operatorId = filter.operatorId;
   if (filter.productId) query.productId = filter.productId;
   if (filter.bomId) query.bomId = filter.bomId;
   if (filter.overdue === true || filter.overdue === 'true') {
@@ -161,8 +193,9 @@ const updateOrder = async ({ organizationId, branchId, createdBy }, orderId, bod
   // Dates, priority, locations and notes stay editable until the order is closed; the
   // recipe (product/BOM/quantity) only while it's still draft/planned.
   if (['completed', 'cancelled'].includes(order.status)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `A ${order.status} production order can no longer be edited`);
+    throw new ApiError(httpStatus.BAD_REQUEST, `A ${order.status} ${kindLabel(order)} can no longer be edited`);
   }
+  if (body.operatorId !== undefined) Object.assign(order, await resolveOperator(organizationId, body.operatorId));
   const recipeChanged =
     (body.productId && String(body.productId) !== String(order.productId)) ||
     (body.variantId !== undefined && String(body.variantId || '') !== String(order.variantId || '')) ||
@@ -236,12 +269,21 @@ const changeStatus = async ({ organizationId, branchId, createdBy }, orderId, { 
   const order = await findOrderOrThrow({ organizationId, branchId }, orderId);
   const from = order.status;
   if (from === to) return order;
-  if (!(PRODUCTION_STATUS_TRANSITIONS[from] || []).includes(to)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `Cannot move a production order from ${from} to ${to}`);
+  if (!(transitionsFor(order.orderType)[from] || []).includes(to)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Cannot move a ${kindLabel(order)} from ${from} to ${to}`);
   }
   // Completion settles WIP / QC / rework, so it runs as one stock transaction.
   if (to === 'completed') {
     return executionService.completeOrder({ organizationId, branchId, createdBy }, orderId, { wipDisposition, note });
+  }
+  if (order.orderType === 'assembly') {
+    // Starting an assembly moves its components into WIP (one transaction).
+    if (from === 'released' && to === 'in_production') {
+      return executionService.startAssembly({ organizationId, branchId, createdBy }, orderId, { note });
+    }
+    if (to === 'qc_pending') {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Use “Complete assembly” — it reports the output and sends it to QC');
+    }
   }
 
   if ((to === 'cancelled' || (from === 'released' && to === 'planned')) && hasExecution(order)) {
@@ -389,7 +431,133 @@ const getAggregatedRequirements = async ({ organizationId, branchId }, { statuse
   };
 };
 
+// ── Nested assemblies ───────────────────────────────────────────────────────────────
+
+const OPEN_CHILD_STATUSES = ['draft', 'planned', 'released', 'in_production', 'paused', 'qc_pending'];
+const MAX_NESTING = 10;
+
+/**
+ * Creates linked assembly orders for an order's sub-assembly components — any material
+ * line whose product has an active default BOM. Quantity = what the parent still needs,
+ * less stock on hand and less what open child orders already cover ('shortage'), or the
+ * full remaining requirement ('full'). With `recursive`, each new assembly order gets its
+ * own sub-assembly orders the same way (Product A → Assembly B → Assembly C).
+ */
+const createSubAssemblyOrders = async (
+  ctx,
+  orderId,
+  { recursive = false, materialLineIds, basis = 'shortage', operatorId } = {},
+  depth = 1
+) => {
+  requireBranch(ctx.branchId);
+  if (depth > MAX_NESTING) throw new ApiError(httpStatus.BAD_REQUEST, `Assemblies nest deeper than ${MAX_NESTING} levels`);
+  const order = await findOrderOrThrow(ctx, orderId);
+  if (['completed', 'cancelled'].includes(order.status)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `The ${kindLabel(order)} is ${order.status}`);
+  }
+  const lines = order.materials.filter((m) => !materialLineIds || materialLineIds.map(String).includes(String(m._id)));
+  if (!lines.length) return [];
+
+  const products = await Product.find({ _id: { $in: lines.map((m) => m.productId) }, organizationId: ctx.organizationId })
+    .select('name defaultBomId')
+    .lean();
+  const bomIds = products.map((p) => p.defaultBomId).filter(Boolean);
+  const activeBoms = new Set(
+    (
+      await Bom.find({ _id: { $in: bomIds }, isActive: true })
+        .select('_id')
+        .lean()
+    ).map((b) => String(b._id))
+  );
+  const productById = new Map(products.map((p) => [String(p._id), p]));
+  const availability = await stockService.getAvailability({
+    organizationId: ctx.organizationId,
+    branchId: order.branchId,
+    items: lines.map((m) => ({ productId: m.productId, variantId: m.variantId })),
+  });
+  const openChildren = await ProductionOrder.find({ parentOrderId: order._id, status: { $in: OPEN_CHILD_STATUSES } })
+    .select('parentMaterialLineId plannedQuantity completedQuantity')
+    .lean();
+
+  const created = [];
+  // eslint-disable-next-line no-restricted-syntax
+  for (const m of lines) {
+    const product = productById.get(String(m.productId));
+    if (!product || !product.defaultBomId || !activeBoms.has(String(product.defaultBomId))) continue; // eslint-disable-line no-continue
+    const need = wip.lineRemaining(m);
+    const covered = openChildren
+      .filter((c) => String(c.parentMaterialLineId) === String(m._id))
+      .reduce((sum, c) => sum + Math.max(0, c.plannedQuantity - c.completedQuantity), 0);
+    const onHand = Math.max(0, availability.get(`${m.productId}:${m.variantId || ''}`) || 0);
+    const quantity = roundQty(basis === 'full' ? need - covered : need - onHand - covered);
+    if (quantity <= 0) continue; // eslint-disable-line no-continue
+    // eslint-disable-next-line no-await-in-loop
+    const child = await createOrder(ctx, {
+      orderType: 'assembly',
+      productId: m.productId,
+      variantId: m.variantId,
+      bomId: product.defaultBomId,
+      plannedQuantity: quantity,
+      parentOrderId: order._id,
+      parentMaterialLineId: m._id,
+      plannedCompletionDate: order.plannedStartDate || null,
+      priority: order.priority,
+      operatorId,
+      notes: `Sub-assembly for ${order.orderNumber}`,
+    });
+    created.push({ order: child, depth });
+    if (recursive) {
+      // eslint-disable-next-line no-await-in-loop
+      const nested = await createSubAssemblyOrders(ctx, child._id, { recursive, basis, operatorId }, depth + 1);
+      created.push(...nested);
+    }
+  }
+  return created;
+};
+
+const treeNode = (o) => ({
+  id: String(o._id),
+  orderNumber: o.orderNumber,
+  orderType: o.orderType || 'production',
+  productId: String(o.productId),
+  productName: o.productName,
+  unit: o.unit,
+  plannedQuantity: o.plannedQuantity,
+  producedQuantity: o.producedQuantity || 0,
+  completedQuantity: o.completedQuantity || 0,
+  status: o.status,
+  operatorName: o.operatorName || '',
+  parentMaterialLineId: o.parentMaterialLineId ? String(o.parentMaterialLineId) : null,
+});
+
+/** The order's place in its assembly hierarchy: ancestors up to the top, and every descendant. */
+const getOrderTree = async (ctx, orderId) => {
+  const order = await findOrderOrThrow(ctx, orderId);
+  const fields =
+    'orderNumber orderType productId productName unit plannedQuantity producedQuantity completedQuantity status operatorName parentOrderId parentMaterialLineId';
+  const ancestors = [];
+  let cursor = order.parentOrderId;
+  while (cursor && ancestors.length < MAX_NESTING) {
+    // eslint-disable-next-line no-await-in-loop
+    const parent = await ProductionOrder.findOne({ _id: cursor, organizationId: ctx.organizationId }).select(fields).lean();
+    if (!parent) break;
+    ancestors.unshift(treeNode(parent));
+    cursor = parent.parentOrderId;
+  }
+  const children = async (id, depth) => {
+    if (depth > MAX_NESTING) return [];
+    const rows = await ProductionOrder.find({ parentOrderId: id, organizationId: ctx.organizationId })
+      .select(fields)
+      .sort({ createdAt: 1 })
+      .lean();
+    return Promise.all(rows.map(async (r) => ({ ...treeNode(r), children: await children(r._id, depth + 1) })));
+  };
+  return { ancestors, order: { ...treeNode(order), children: await children(order._id, 1) } };
+};
+
 module.exports = {
+  createSubAssemblyOrders,
+  getOrderTree,
   createOrder,
   queryOrders,
   getOrder,

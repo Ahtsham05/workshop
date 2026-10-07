@@ -104,6 +104,7 @@ const resolveIssuePieces = async (item, input, { organizationId, branchId, sessi
       branchId,
       imeiIds: input.imeiIds,
       serialNumbers: input.serialNumbers,
+      autoCount: input.autoPickSerials ? Math.round(input.quantity || 0) : 0,
       session,
     });
     if (input.quantity && Math.round(input.quantity) !== units.length) {
@@ -558,6 +559,7 @@ const receiveGood = async (
         productId: item.product._id,
         productName: item.product.name,
         productionOrderId: order._id,
+        producedByOrderId: order._id,
         purchasePrice: unitCost,
         purchaseDate: new Date(),
         status: 'in_stock',
@@ -582,6 +584,7 @@ const receiveGood = async (
         $setOnInsert: {
           quantity: 0,
           costPerUnit: unitCost,
+          productionOrderId: order._id,
           manufactureDate: fg.manufactureDate || new Date(),
           expiryDate: fg.expiryDate || null,
         },
@@ -995,6 +998,7 @@ const inspectOutput = async ({ organizationId, branchId, createdBy }, outputId, 
       { organizationId, branchId, createdBy, session, ...numbers }
     );
     output.inspectionNotes = body.inspectionNotes || '';
+    settleAssemblyAfterQc(order, createdBy);
     order.updatedBy = createdBy;
     await order.save({ session });
     await output.save({ session });
@@ -1086,6 +1090,99 @@ const resolveRework = async ({ organizationId, branchId, createdBy }, orderId, b
     await order.save({ session });
     return { receipt, scrap, reworkPendingQuantity: order.reworkPendingQuantity };
   });
+};
+
+// ── Assembly orders ─────────────────────────────────────────────────────────────────
+
+/**
+ * Once an assembly waiting in QC has nothing left in QC: completed if nothing remains to
+ * settle, otherwise back to In Assembly (rework or leftover WIP still to deal with).
+ */
+const settleAssemblyAfterQc = (order, createdBy) => {
+  /* eslint-disable no-param-reassign */
+  if (order.orderType !== 'assembly' || order.status !== 'qc_pending' || order.qcPendingQuantity > EPS) return;
+  const hasWip = order.wipLots.some((l) => l.quantity > EPS);
+  const outputDone = order.producedQuantity + EPS >= order.plannedQuantity;
+  const to = !hasWip && order.reworkPendingQuantity <= EPS && outputDone ? 'completed' : 'in_production';
+  order.statusHistory.push({
+    from: 'qc_pending',
+    to,
+    note: to === 'completed' ? 'Quality check passed' : 'Quality check done — rework, WIP or output still open',
+    by: createdBy,
+    at: new Date(),
+  });
+  order.status = to;
+  if (to === 'completed') order.actualCompletionDate = new Date();
+  /* eslint-enable no-param-reassign */
+};
+
+/**
+ * Start assembly: moves every component still required into WIP in one issue (batches
+ * FEFO, serial units oldest-first unless `lines` name them) and sets In Assembly.
+ */
+const startAssembly = async ({ organizationId, branchId, createdBy }, orderId, { lines, note } = {}) => {
+  requireBranch(branchId);
+  const order = await ProductionOrder.findOne({ _id: orderId, organizationId, branchId }).lean();
+  if (!order) throw new ApiError(httpStatus.NOT_FOUND, 'Assembly order not found');
+  if (order.orderType !== 'assembly') throw new ApiError(httpStatus.BAD_REQUEST, 'Not an assembly order');
+  if (order.status !== 'released') {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Only a released assembly can be started (this one is ${order.status})`);
+  }
+  const toIssue =
+    lines ||
+    order.materials
+      .filter((m) => !m.isOptional && wip.lineRemaining(m) > EPS)
+      .map((m) => ({ materialLineId: m._id, quantity: wip.lineRemaining(m), autoPickSerials: true }));
+  if (toIssue.length) {
+    await issueMaterials({ organizationId, branchId, createdBy }, orderId, {
+      lines: toIssue,
+      notes: note || 'Components issued on assembly start',
+    });
+  } else {
+    await ProductionOrder.updateOne(
+      { _id: orderId, status: 'released' },
+      {
+        $set: { status: 'in_production', actualStartDate: new Date(), updatedBy: createdBy },
+        $push: { statusHistory: { from: 'released', to: 'in_production', note: note || '', by: createdBy, at: new Date() } },
+      }
+    );
+  }
+  return ProductionOrder.findById(orderId);
+};
+
+/**
+ * Complete assembly: reports the remaining quantity as assembled (backflushing WIP).
+ * With quality checks on the order moves to QC Pending and the inspection completes it;
+ * with them off the good/rejected split posts now and the order completes (any leftover
+ * WIP is returned to stock).
+ */
+const completeAssembly = async ({ organizationId, branchId, createdBy }, orderId, body = {}) => {
+  const ctx = { organizationId, branchId, createdBy };
+  requireBranch(branchId);
+  const pre = await ProductionOrder.findOne({ _id: orderId, organizationId, branchId }).lean();
+  if (!pre) throw new ApiError(httpStatus.NOT_FOUND, 'Assembly order not found');
+  if (pre.orderType !== 'assembly') throw new ApiError(httpStatus.BAD_REQUEST, 'Not an assembly order');
+  const remaining = roundQty(pre.plannedQuantity - pre.producedQuantity);
+  const quantity = roundQty(body.quantity ?? remaining);
+  if (quantity > EPS) {
+    await reportOutput(ctx, orderId, { ...body, producedQuantity: quantity });
+  }
+  const settings = await settingsService.getSettings(organizationId);
+  const order = await ProductionOrder.findById(orderId);
+  if (settings.requireQualityCheck && order.qcPendingQuantity > EPS) {
+    return ProductionOrder.findOneAndUpdate(
+      { _id: orderId, status: { $in: ['in_production', 'paused'] } },
+      {
+        $set: { status: 'qc_pending', updatedBy: createdBy },
+        $push: {
+          statusHistory: { from: order.status, to: 'qc_pending', note: body.notes || '', by: createdBy, at: new Date() },
+        },
+      },
+      { new: true }
+    );
+  }
+  if (order.reworkPendingQuantity > EPS || order.producedQuantity + EPS < order.plannedQuantity) return order;
+  return completeOrder(ctx, orderId, { wipDisposition: body.wipDisposition || 'return', note: body.notes });
 };
 
 // ── Scrap ───────────────────────────────────────────────────────────────────────────
@@ -1577,6 +1674,8 @@ module.exports = {
   resolveRework,
   recordScrap,
   completeOrder,
+  startAssembly,
+  completeAssembly,
   queryIssues,
   queryReceipts,
   queryOutputs,
