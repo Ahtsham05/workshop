@@ -15,6 +15,7 @@ import { AdjustmentTypeBadge } from '@/features/stock-adjustments/components/adj
 import { ADJUSTMENT_TYPE_ORDER, ADJUSTMENT_TYPE_META } from '@/features/stock-adjustments/lib/adjustment-types'
 import { expiryBadge } from '../utils/expiry-badge'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface StockAdjustmentReportProps {
   startDate: string
@@ -211,7 +212,7 @@ export const StockAdjustmentReport = forwardRef<{ exportToExcel: () => void }, S
                   {data!.lineItems.map((row) => (
                     <TableRow key={row.id}>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                        {format(new Date(row.date), 'MMM dd, yyyy')}
+                        {formatAppDate(new Date(row.date))}
                       </TableCell>
                       <TableCell className='font-medium max-w-[200px] truncate' title={row.productName}>
                         {row.productName}

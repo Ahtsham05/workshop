@@ -74,6 +74,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { buildCustomerBalanceMessage, getCustomerBalanceTemplate } from '@/utils/sms-messages'
+import { formatAppDate } from '@/lib/date-format'
 
 interface ConvertedItem {
   id: string
@@ -944,7 +945,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="font-medium">{invoice.invoiceNumber}</div>
                                   <div className="text-sm text-muted-foreground">
-                                    {format(new Date(invoice.createdAt), 'MMM dd, yyyy')}
+                                    {formatAppDate(new Date(invoice.createdAt))}
                                   </div>
                                 </div>
                                 
@@ -1023,7 +1024,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="text-sm">
-                                {format(new Date(billGroup.convertedAt), 'MMM dd, yyyy')}
+                                {formatAppDate(new Date(billGroup.convertedAt))}
                               </span>
                               <span className="text-xs text-muted-foreground">
                                 {format(new Date(billGroup.convertedAt), 'hh:mm a')}

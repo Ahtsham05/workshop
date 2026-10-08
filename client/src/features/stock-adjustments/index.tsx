@@ -48,6 +48,7 @@ import { CreateAdjustmentDialog, type AdjustmentPrefill } from './components/cre
 import { ADJUSTMENT_TYPE_ORDER, ADJUSTMENT_TYPE_META } from './lib/adjustment-types'
 import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { formatAppDate } from '@/lib/date-format'
 
 
 export default function StockAdjustments() {
@@ -256,7 +257,7 @@ export default function StockAdjustments() {
                 {adjustments.map((adj) => (
                   <TableRow key={adj.id}>
                     <TableCell className='text-sm text-muted-foreground whitespace-nowrap'>
-                      {new Date(adj.createdAt).toLocaleDateString()}
+                      {formatAppDate(new Date(adj.createdAt))}
                     </TableCell>
                     <TableCell className='font-medium max-w-[200px] truncate' title={adj.productName}>
                       {adj.productName}

@@ -20,7 +20,6 @@ import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
 import { formatMoneyWithMeta, FALLBACK_CURRENCY, useCurrencyMeta, useFormatMoney } from '@/lib/format-money';
 import type { CurrencyOption } from '@/stores/localization.api';
-import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   AlertDialog,
@@ -32,6 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { formatAppDate } from '@/lib/date-format'
 
 function partnerLabel(ref: PartnerProfitShareRule['partnerId']): string {
   return typeof ref === 'string' ? ref : ref.name;
@@ -106,7 +106,7 @@ export function ProfitShareRulesTab() {
     () =>
       (previewBatchesData || []).map((b) => {
         const id = (b._id || b.id) as string;
-        const expiry = b.expiryDate ? ` · exp ${new Date(b.expiryDate).toLocaleDateString()}` : '';
+        const expiry = b.expiryDate ? ` · exp ${formatAppDate(new Date(b.expiryDate))}` : '';
         return { value: id, label: `${b.batchNumber} · ${b.quantity} left${expiry}` };
       }),
     [previewBatchesData]
@@ -333,8 +333,8 @@ export function ProfitShareRulesTab() {
                         </div>
                       </TableCell>
                       <TableCell>{rateLabel(rule, currencyMeta)}</TableCell>
-                      <TableCell>{format(new Date(rule.effectiveFrom), 'MMM dd, yyyy')}</TableCell>
-                      <TableCell>{rule.effectiveTo ? format(new Date(rule.effectiveTo), 'MMM dd, yyyy') : '—'}</TableCell>
+                      <TableCell>{formatAppDate(new Date(rule.effectiveFrom))}</TableCell>
+                      <TableCell>{rule.effectiveTo ? formatAppDate(new Date(rule.effectiveTo)) : '—'}</TableCell>
                       <TableCell>
                         {rule.isActive ? (
                           <Badge variant="default">{t('active') || 'Active'}</Badge>

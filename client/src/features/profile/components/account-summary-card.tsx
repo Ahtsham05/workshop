@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MyProfile } from '@/stores/user-preferences.api'
+import { formatAppDate } from '@/lib/date-format'
 
 const ACCESS_LABELS: Record<string, string> = {
   system_admin: 'Platform administrator',
@@ -60,11 +61,7 @@ export function AccountSummaryCard({
   const roleName =
     typeof profile?.role === 'object' && profile?.role ? profile.role.name : undefined
   const memberSince = profile?.createdAt
-    ? new Date(profile.createdAt).toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
+    ? formatAppDate(new Date(profile.createdAt))
     : undefined
 
   return (

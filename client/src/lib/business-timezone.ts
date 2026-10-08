@@ -1,3 +1,5 @@
+import { formatCalendarParts } from '@/lib/date-format'
+
 /** Pakistan business timezone — used for filters and display across the app. */
 export const BUSINESS_TIMEZONE = 'Asia/Karachi'
 
@@ -70,32 +72,41 @@ export function parseBusinessDateTimeLocal(value: string): string {
   return new Date(raw).toISOString()
 }
 
-/** Calendar date label in Pakistan (e.g. queue lists). */
+const businessPartsFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone: BUSINESS_TIMEZONE,
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+})
+
+/** Pakistan wall-clock pieces of an instant: date in the app's date format + 12h time. */
+function businessParts(date: Date) {
+  const p = Object.fromEntries(businessPartsFormat.formatToParts(date).map((part) => [part.type, part.value]))
+  const period = (p.dayPeriod ?? '').toUpperCase()
+  return {
+    date: formatCalendarParts(Number(p.year), Number(p.month), Number(p.day)),
+    time: `${p.hour}:${p.minute} ${period}`.trim(),
+    timeWithSeconds: `${p.hour}:${p.minute}:${p.second} ${period}`.trim(),
+  }
+}
+
+/** Calendar date label in Pakistan, in the app's date format (Settings → Localization). */
 export function formatBusinessDate(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleDateString('en-PK', {
-    timeZone: BUSINESS_TIMEZONE,
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
+  return businessParts(date).date
 }
 
-/** Display a stored UTC timestamp in Pakistan local time. */
+/** Display a stored UTC timestamp in Pakistan local time (app date format + time). */
 export function formatBusinessDateTime(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString('en-PK', {
-    timeZone: BUSINESS_TIMEZONE,
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-  })
+  const parts = businessParts(date)
+  return `${parts.date}, ${parts.timeWithSeconds}`
 }
 
 const clockFormat = new Intl.DateTimeFormat('en-PK', {
@@ -116,7 +127,7 @@ export function getBusinessClockParts(date: Date = new Date()) {
   const p = Object.fromEntries(clockFormat.formatToParts(date).map((part) => [part.type, part.value]))
   return {
     weekday: p.weekday,
-    date: `${p.day} ${p.month} ${p.year}`,
+    date: businessParts(date).date,
     time: `${p.hour}:${p.minute}:${p.second} ${(p.dayPeriod ?? '').toUpperCase()}`.trim(),
   }
 }
@@ -138,22 +149,11 @@ export function formatBusinessFileStamp(date: Date = new Date()): string {
   return `${p.year}-${p.month}-${p.day}_${p.hour}-${p.minute}-${p.second}`
 }
 
-/** Compact "15-Sep-2026, 11:45 AM" date+time in Pakistan local time — no seconds,
+/** Compact "15/09/2026, 11:45 AM" date+time in Pakistan local time — no seconds,
  * for tight spaces like a printed voucher/receipt field. */
 export function formatBusinessDateTimeShort(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  const datePart = date.toLocaleDateString('en-PK', {
-    timeZone: BUSINESS_TIMEZONE,
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
-  const timePart = date.toLocaleTimeString('en-PK', {
-    timeZone: BUSINESS_TIMEZONE,
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
-  return `${datePart}, ${timePart}`
+  const parts = businessParts(date)
+  return `${parts.date}, ${parts.time}`
 }

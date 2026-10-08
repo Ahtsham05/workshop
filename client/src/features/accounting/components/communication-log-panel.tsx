@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { format, formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 import {
   Phone,
   MessageCircle,
@@ -65,6 +65,7 @@ import {
   type CommunicationOutcome,
   type RelatedRecordType,
 } from '@/stores/communicationLog.api'
+import { formatAppDate } from '@/lib/date-format'
 
 const TYPE_CONFIG: Record<CommunicationType, { label: string; icon: typeof Phone; iconBg: string; iconText: string; ring: string }> = {
   call: { label: 'Call', icon: Phone, iconBg: 'bg-blue-500/10', iconText: 'text-blue-600 dark:text-blue-400', ring: 'ring-blue-500' },
@@ -447,7 +448,7 @@ function LogInteractionDialog({
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="flex-1 justify-start font-normal">
                       <CalendarClock className="mr-2 h-4 w-4" />
-                      {followUpDate ? format(followUpDate, 'PPP') : t('Pick a date')}
+                      {followUpDate ? formatAppDate(followUpDate) : t('Pick a date')}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">

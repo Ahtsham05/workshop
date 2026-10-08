@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface InstallmentReportProps {
   startDate: string
@@ -266,7 +267,7 @@ export const InstallmentReport = forwardRef<{ exportToExcel: () => void }, Insta
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {row.nextDueDate ? format(new Date(row.nextDueDate), 'dd MMM yyyy') : '—'}
+                          {row.nextDueDate ? formatAppDate(new Date(row.nextDueDate)) : '—'}
                         </TableCell>
                       </TableRow>
                     ))}

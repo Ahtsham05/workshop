@@ -35,6 +35,7 @@ import {
 } from '@/stores/school.api';
 import StudentAvatar from '../components/student-avatar';
 import { useFormatMoney } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 const REQ_STATUS: Record<string, { label: string; color: string; icon: any }> = {
   pending: { label: 'Awaiting approval', color: 'bg-amber-100 text-amber-700', icon: Hourglass },
@@ -466,7 +467,7 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
                               <p className="text-xs text-muted-foreground">
                                 {f.typeLabel || 'Fee'}
                                 {f.voucherNumber ? ` · #${f.voucherNumber}` : ''}
-                                {f.dueDate ? ` · Due ${new Date(f.dueDate).toLocaleDateString()}` : ''}
+                                {f.dueDate ? ` · Due ${formatAppDate(new Date(f.dueDate))}` : ''}
                               </p>
                             </div>
                           </div>
@@ -542,7 +543,7 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
                           {(r.voucherSummary || []).map((v: any) => v.period).filter(Boolean).join(', ') || '—'}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Submitted {new Date(r.createdAt).toLocaleDateString()}
+                          Submitted {formatAppDate(new Date(r.createdAt))}
                           {r.transactionRef ? ` · Ref ${r.transactionRef}` : ''}
                         </p>
                         {r.status === 'rejected' && r.reviewNote && (
@@ -730,7 +731,7 @@ function AcademicsTable({ exam, marks }: { exam: any; marks: any[] }) {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <p className="text-sm text-muted-foreground">
             {exam.name}{exam.type ? ` · ${String(exam.type).replace('_', ' ')}` : ''}
-            {exam.startDate ? ` · ${new Date(exam.startDate).toLocaleDateString()}` : ''}
+            {exam.startDate ? ` · ${formatAppDate(new Date(exam.startDate))}` : ''}
           </p>
           <span className={`px-3 py-1 rounded font-bold text-sm ${GRADE_COLOR[calcGradeSimple(pct)] || 'bg-gray-100'}`}>
             {pct}% · Grade {calcGradeSimple(pct)}

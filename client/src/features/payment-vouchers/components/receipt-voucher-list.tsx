@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
-import { format, isValid } from 'date-fns'
+import { isValid } from 'date-fns'
 import {
   Eye,
   Pencil,
@@ -80,11 +80,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { formatAppDate } from '@/lib/date-format'
 
 const formatDate = (value?: string) => {
   if (!value) return '-'
   const parsed = new Date(value)
-  return isValid(parsed) ? format(parsed, 'MMM dd, yyyy') : '-'
+  return isValid(parsed) ? formatAppDate(parsed) : '-'
 }
 
 const voucherTypeLabel = (voucher: ReceiptVoucherRecord) => {

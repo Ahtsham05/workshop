@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { format } from 'date-fns'
 import { useForm } from 'react-hook-form'
 import { CalendarIcon, CaretSortIcon, CheckIcon } from '@radix-ui/react-icons'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -30,6 +29,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { formatAppDate } from '@/lib/date-format'
 
 const languages = [
   { label: 'English', value: 'en' },
@@ -114,7 +114,7 @@ export function AccountForm() {
                       )}
                     >
                       {field.value ? (
-                        format(field.value, 'MMM d, yyyy')
+                        formatAppDate(field.value)
                       ) : (
                         <span>Pick a date</span>
                       )}

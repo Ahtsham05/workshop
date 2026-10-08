@@ -14,6 +14,7 @@ import { getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-time
 import { useGetStockCountReportsQuery, type AccuracyBucket } from '@/stores/stockCount.api'
 import { COUNT_TYPE_META, REASON_LABELS, signed } from '../lib/labels'
 import { ClassBadge } from './count-badges'
+import { formatAppDate } from '@/lib/date-format'
 
 const PERIODS = [
   { days: 30, label: 'Last 30 days' },
@@ -219,7 +220,7 @@ export function ReportsTab() {
                 >
                   <span>
                     <b>{count.number}</b> · {t(COUNT_TYPE_META[count.type].label)}
-                    <span className='ml-2 text-xs text-muted-foreground'>{new Date(count.postedAt).toLocaleDateString()}</span>
+                    <span className='ml-2 text-xs text-muted-foreground'>{formatAppDate(new Date(count.postedAt))}</span>
                   </span>
                   <span className='text-xs text-muted-foreground'>
                     {count.totals.matchedCount}/{count.totals.countedCount} {t('matched')}

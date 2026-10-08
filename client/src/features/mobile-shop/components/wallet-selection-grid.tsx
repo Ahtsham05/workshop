@@ -5,7 +5,7 @@ import {
   ArrowUpRight,
   Wallet,
 } from 'lucide-react'
-import { format, isValid } from 'date-fns'
+import { isValid } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,12 +16,13 @@ import {
 } from '@/features/mobile-shop/utils/cash-transaction-labels'
 import { resolveWalletId, type WalletLike } from '@/features/mobile-shop/utils/wallet-utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 const formatWalletDate = (dateValue?: string) => {
   if (!dateValue) return '-'
   const parsedDate = new Date(dateValue)
   if (!isValid(parsedDate)) return '-'
-  return format(parsedDate, 'MMM dd, yyyy')
+  return formatAppDate(parsedDate)
 }
 
 export type WalletSelectionAction =

@@ -36,6 +36,7 @@ import { useLanguage } from '@/context/language-context'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface ActivitySummaryReportProps {
   startDate: string
@@ -195,7 +196,7 @@ function ActivityTable({ entries, fmt, showModuleColumn = false, embedded = fals
           {entries.map((entry) => (
             <TableRow key={`${entry.module}-${entry.id}`}>
               <TableCell className='whitespace-nowrap text-sm'>
-                {format(new Date(entry.date), 'dd MMM yyyy')}
+                {formatAppDate(new Date(entry.date))}
                 <div className='text-xs text-muted-foreground'>
                   {format(new Date(entry.date), 'hh:mm a')}
                 </div>

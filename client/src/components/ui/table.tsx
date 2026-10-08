@@ -1,7 +1,15 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+function Table({
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<'table'> & {
+  /** Overrides for the scroll wrapper — e.g. `max-h-none overflow-visible` when an outer
+   *  element already scrolls the table, so the two don't nest into a double scrollbar. */
+  containerClassName?: string
+}) {
   return (
     <div
       data-slot='table-container'
@@ -9,7 +17,7 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
       // below stay pinned while a long list scrolls (sticky can't work against the page when an
       // ancestor is overflow-x:auto). Short tables never reach the max height, so they look
       // unchanged. Dialogs/sheets get a smaller cap in index.css.
-      className='relative max-h-[calc(100vh-11rem)] w-full overflow-auto'
+      className={cn('relative max-h-[calc(100vh-11rem)] w-full overflow-auto', containerClassName)}
     >
       <table
         data-slot='table'

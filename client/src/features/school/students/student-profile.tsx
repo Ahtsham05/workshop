@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import AdmissionFormPrint from './admission-form-print';
 import StudentStrikeOffDialog from './student-strike-off-dialog';
 import { useFormatMoney } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 const LEAVING_REASON_LABELS: Record<string, string> = {
   fee_default: 'Fee Default (non-payment)',
@@ -422,10 +423,10 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <div><span className="text-sm text-muted-foreground">Gender</span><p className="font-medium capitalize">{student.gender}</p></div>
-              <div><span className="text-sm text-muted-foreground">Date of Birth</span><p className="font-medium">{new Date(student.dateOfBirth).toLocaleDateString()}</p></div>
+              <div><span className="text-sm text-muted-foreground">Date of Birth</span><p className="font-medium">{formatAppDate(new Date(student.dateOfBirth))}</p></div>
               <div><span className="text-sm text-muted-foreground">Class</span><p className="font-medium">{student.classId?.name || '-'}</p></div>
               <div><span className="text-sm text-muted-foreground">Section</span><p className="font-medium">{student.sectionId?.name || '-'}</p></div>
-              <div><span className="text-sm text-muted-foreground">Admission Date</span><p className="font-medium">{student.admissionDate ? new Date(student.admissionDate).toLocaleDateString() : '-'}</p></div>
+              <div><span className="text-sm text-muted-foreground">Admission Date</span><p className="font-medium">{student.admissionDate ? formatAppDate(new Date(student.admissionDate)) : '-'}</p></div>
               <div><span className="text-sm text-muted-foreground">Blood Group</span><p className="font-medium">{student.bloodGroup || '-'}</p></div>
               <div><span className="text-sm text-muted-foreground">Nationality</span><p className="font-medium">{student.nationality || '-'}</p></div>
               <div><span className="text-sm text-muted-foreground">Religion</span><p className="font-medium">{student.religion || '-'}</p></div>
@@ -445,7 +446,7 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div><span className="text-sm text-muted-foreground">Leaving Date</span><p className="font-medium">{student.leftInfo.leftDate ? new Date(student.leftInfo.leftDate).toLocaleDateString() : '-'}</p></div>
+              <div><span className="text-sm text-muted-foreground">Leaving Date</span><p className="font-medium">{student.leftInfo.leftDate ? formatAppDate(new Date(student.leftInfo.leftDate)) : '-'}</p></div>
               <div><span className="text-sm text-muted-foreground">Reason</span><p className="font-medium">{LEAVING_REASON_LABELS[student.leftInfo.reason] || student.leftInfo.reason || '-'}</p></div>
               <div><span className="text-sm text-muted-foreground">TC Number</span><p className="font-medium">{student.leftInfo.tcNumber || '-'}</p></div>
               <div>
@@ -498,7 +499,7 @@ export default function StudentProfile({ id, defaultEdit = false }: Props) {
                 <div key={fee._id || fee.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                   <div>
                     <p className="font-medium capitalize">{fee.feeType} - {fee.month}/{fee.year}</p>
-                    <p className="text-sm text-muted-foreground">Due: {new Date(fee.dueDate).toLocaleDateString()}</p>
+                    <p className="text-sm text-muted-foreground">Due: {formatAppDate(new Date(fee.dueDate))}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-bold">{formatMoney(fee.netAmount)}</p>

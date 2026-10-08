@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { cn, formatDateSafe } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { TransferStatusBadge } from '@/features/stock-transfer/components/transfer-status-badge'
+import { formatAppDate } from '@/lib/date-format'
 
 interface StockTransferReportProps {
   startDate: string
@@ -182,7 +183,7 @@ export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, Sto
                   {data!.lineItems.map((row) => (
                     <TableRow key={row.id}>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                        {formatDateSafe(row.date, 'MMM dd, yyyy')}
+                        {formatAppDate(row.date)}
                       </TableCell>
                       <TableCell className='font-medium max-w-[200px]' title={row.productName}>
                         <div className='truncate'>{row.productName}</div>
@@ -205,7 +206,7 @@ export const StockTransferReport = forwardRef<{ exportToExcel: () => void }, Sto
                         {row.reason || '—'}
                       </TableCell>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                        {formatDateSafe(row.completedAt, 'MMM dd, yyyy')}
+                        {formatAppDate(row.completedAt)}
                       </TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{row.decidedByName || '—'}</TableCell>
                     </TableRow>

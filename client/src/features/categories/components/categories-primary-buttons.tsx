@@ -14,6 +14,7 @@ import { Can, usePermissions } from '@/context/permission-context'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import * as XLSX from 'xlsx'
+import { formatAppDate } from '@/lib/date-format'
 
 export default function CategoriesPrimaryButtons() {
   const { dispatch } = useCategories()
@@ -45,7 +46,7 @@ export default function CategoriesPrimaryButtons() {
       const rows = categories.map((category: any) => ({
         name: category.name || '',
         nameUrdu: category.nameUrdu || '',
-        createdAt: category.createdAt ? new Date(category.createdAt).toLocaleDateString() : '',
+        createdAt: category.createdAt ? formatAppDate(new Date(category.createdAt)) : '',
       }))
 
       const ws = XLSX.utils.json_to_sheet(rows)

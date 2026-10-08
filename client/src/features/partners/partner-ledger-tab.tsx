@@ -17,7 +17,6 @@ import { PartnerPaymentDialog } from './partner-payment-dialog';
 import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
 import { useFormatMoney } from '@/lib/format-money';
-import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   AlertDialog,
@@ -29,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { formatAppDate } from '@/lib/date-format'
 
 function partnerLabel(ref: PartnerProfitShareLedgerEntry['partnerId']): string {
   return typeof ref === 'string' ? ref : ref.name;
@@ -167,7 +167,7 @@ export function PartnerLedgerTab() {
                   {entries.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="whitespace-nowrap">
-                        {format(new Date(entry.transactionDate), 'MMM dd, yyyy')}
+                        {formatAppDate(new Date(entry.transactionDate))}
                       </TableCell>
                       {!selectedPartnerId && <TableCell>{partnerLabel(entry.partnerId)}</TableCell>}
                       <TableCell>

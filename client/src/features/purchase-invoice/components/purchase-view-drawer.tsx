@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { differenceInCalendarDays, format } from 'date-fns'
+import { differenceInCalendarDays } from 'date-fns'
 import { toast } from 'sonner'
 import { useGetPurchaseByIdQuery, useAddPurchaseCommentMutation, useDeletePurchaseCommentMutation } from '@/stores/purchase.api'
 import { useGetPurchasePaymentsQuery, useVoidSupplierPaymentMutation } from '@/stores/supplierPayment.api'
@@ -47,6 +47,7 @@ import {
   resolvePaymentTypeLabel,
   resolvePurchaseSettlement,
 } from '../utils/purchase-settlement'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 interface PurchaseViewDrawerProps {
   purchaseId: string | null
@@ -369,12 +370,12 @@ export function PurchaseViewDrawer({
                     {purchase.vendorBillNumber || <NotSet label={t('Not set')} />}
                   </Field>
                   <Field label={t('Purchase Date')}>
-                    {format(new Date(purchase.purchaseDate || purchase.createdAt), 'dd MMM yyyy')}
+                    {formatAppDate(new Date(purchase.purchaseDate || purchase.createdAt))}
                   </Field>
                   <Field label={t('Due Date')}>
                     {purchase.dueDate ? (
                       <span className='flex flex-wrap items-center gap-1.5'>
-                        {format(new Date(purchase.dueDate), 'dd MMM yyyy')}
+                        {formatAppDate(new Date(purchase.dueDate))}
                         {dueContext && <span className='text-xs font-normal text-muted-foreground'>({dueContext})</span>}
                       </span>
                     ) : (
@@ -392,7 +393,7 @@ export function PurchaseViewDrawer({
                   </Field>
                   <Field label={t('Last Updated')}>
                     {purchase.updatedAt ? (
-                      format(new Date(purchase.updatedAt), 'dd MMM yyyy HH:mm')
+                      formatAppDateTime(new Date(purchase.updatedAt))
                     ) : (
                       <NotSet label={t('Never edited')} />
                     )}
@@ -590,7 +591,7 @@ export function PurchaseViewDrawer({
                           )}
                         </div>
                         <p className='text-xs text-muted-foreground'>
-                          {format(new Date(payment.paymentDate), 'dd MMM yyyy')} ·{' '}
+                          {formatAppDate(new Date(payment.paymentDate))} ·{' '}
                           {/* A return settles the invoice with goods, not money — saying
                               "Cash" here would read as a payment that never happened. */}
                           {payment.direction === 'return_credit'
@@ -693,7 +694,7 @@ export function PurchaseViewDrawer({
                             <p className='text-xs font-medium'>
                               {entry.authorName || t('Unknown')}
                               <span className='ml-2 font-normal text-muted-foreground'>
-                                {entry.createdAt ? format(new Date(entry.createdAt), 'dd MMM yyyy HH:mm') : ''}
+                                {entry.createdAt ? formatAppDateTime(new Date(entry.createdAt)) : ''}
                               </span>
                             </p>
                             <p className='mt-1 whitespace-pre-wrap text-sm'>{entry.message}</p>
@@ -729,7 +730,7 @@ export function PurchaseViewDrawer({
                         <p className='text-sm font-medium capitalize'>
                           {log.action.replace('_', ' ')}
                           <span className='ml-2 text-xs font-normal text-muted-foreground'>
-                            {format(new Date(log.createdAt), 'dd MMM yyyy HH:mm')}
+                            {formatAppDateTime(new Date(log.createdAt))}
                           </span>
                         </p>
                         <p className='flex items-center gap-1 text-xs text-muted-foreground'>

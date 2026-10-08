@@ -1,4 +1,3 @@
-import { format } from 'date-fns'
 import { useGetInvoiceByIdQuery } from '@/stores/invoice.api'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -6,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { expiryBadge } from '@/features/reports/utils/expiry-badge'
 import { useLanguage } from '@/context/language-context'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-100 text-green-800',
@@ -27,7 +27,7 @@ const formatDate = (date: unknown) => {
     if (!date) return '—'
     const dateObj = new Date(date as string)
     if (isNaN(dateObj.getTime())) return '—'
-    return format(dateObj, 'MMM dd, yyyy')
+    return formatAppDate(dateObj)
   } catch {
     return '—'
   }

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { format } from 'date-fns'
 import {
   CheckCircle2,
   XCircle,
@@ -79,6 +78,7 @@ import {
   useAdminChangeUserPasswordMutation,
   type Payment,
 } from '@/stores/subscription.api'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 const PLAN_LABELS: Record<string, string> = {
   trial: 'Free Trial',
@@ -123,7 +123,7 @@ function safeFormatWithTime(date: string | undefined | null): string {
   try {
     const d = new Date(date)
     if (isNaN(d.getTime())) return '—'
-    return format(d, 'MMM dd, yyyy • hh:mm a')
+    return formatAppDateTime(d)
   } catch {
     return '—'
   }
@@ -321,11 +321,11 @@ function OrgDetailPanel({ orgId, onBack }: { orgId: string; onBack: () => void }
               </div>
               <div>
                 <p className='text-xs text-muted-foreground'>Start Date</p>
-                <p className='font-medium text-sm'>{sub?.startDate ? format(new Date(sub.startDate), 'MMM dd, yyyy') : '—'}</p>
+                <p className='font-medium text-sm'>{sub?.startDate ? formatAppDate(new Date(sub.startDate)) : '—'}</p>
               </div>
               <div>
                 <p className='text-xs text-muted-foreground'>End Date</p>
-                <p className='font-medium text-sm'>{sub?.endDate ? format(new Date(sub.endDate), 'MMM dd, yyyy') : '—'}</p>
+                <p className='font-medium text-sm'>{sub?.endDate ? formatAppDate(new Date(sub.endDate)) : '—'}</p>
               </div>
               <div>
                 <p className='text-xs text-muted-foreground'>Trial</p>

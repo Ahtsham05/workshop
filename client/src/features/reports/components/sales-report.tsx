@@ -36,6 +36,7 @@ import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 interface SalesReportProps {
   startDate: string
@@ -324,7 +325,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         note?: string
       }>>()
       mergedInvoices.forEach((inv) => {
-        const dateStr = format(new Date(inv.invoiceDate), 'dd MMM yyyy')
+        const dateStr = formatAppDate(new Date(inv.invoiceDate))
         if (!dateMap.has(dateStr)) dateMap.set(dateStr, [])
         // Share of this invoice actually realized as cash — driven off `balance` (the same
         // "amount still owed" figure the Invoice View's own Balance column already shows),
@@ -836,7 +837,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                               </TableCell>
                             )}
                             <TableCell className='text-sm text-muted-foreground'>
-                              {format(new Date(inv.invoiceDate), 'dd MMM yyyy')}
+                              {formatAppDate(new Date(inv.invoiceDate))}
                             </TableCell>
                             <TableCell
                               className={cn(
@@ -1026,7 +1027,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 <div className='grid grid-cols-2 gap-4 text-sm'>
                   <div className='space-y-1'>
                     <p className='text-muted-foreground'>Date</p>
-                    <p className='font-medium'>{format(new Date(viewInvoice.invoiceDate), 'dd MMM yyyy, hh:mm a')}</p>
+                    <p className='font-medium'>{formatAppDateTime(new Date(viewInvoice.invoiceDate))}</p>
                   </div>
                   <div className='space-y-1'>
                     <p className='text-muted-foreground'>Customer</p>

@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useStateDraft } from '@/hooks/use-form-draft';
 import { FormDraftNotice } from '@/components/form-draft-notice';
+import { formatAppDate } from '@/lib/date-format'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   upcoming: { label: 'Upcoming', color: 'bg-blue-100 text-blue-700' },
@@ -677,8 +678,8 @@ export default function ExamManagement() {
                           {e.startDate
                             ? new Date(e.startDate).toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })
                             : 'No start date'}
-                          {e.endDate && e.startDate && e.endDate !== e.startDate && ` — ${new Date(e.endDate).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: 'numeric' })}`}
-                          {e.endDate && !e.startDate && `Ends ${new Date(e.endDate).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                          {e.endDate && e.startDate && e.endDate !== e.startDate && ` — ${formatAppDate(new Date(e.endDate))}`}
+                          {e.endDate && !e.startDate && `Ends ${formatAppDate(new Date(e.endDate))}`}
                         </span>
                       </div>
                       {e.subjects?.length > 0 ? (

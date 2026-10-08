@@ -14,8 +14,15 @@ const TONE_CLASSES: Record<string, string> = {
 
 /**
  * Compact "↑ Rs11.17 (+7.51%)" line rendered under a purchase row's Purchase Price field.
+ * Nothing is shown when the price is unchanged — only an actual change is worth the space.
  *
- * Always renders its own fixed-height, fixed-margin slot (`mt-1 h-3.5`) — even before the
+ * `floating` (desktop table rows): the line hangs below the input, absolutely positioned
+ * inside the row's bottom padding (the caller's wrapper must be `relative`), so it never adds
+ * height — the Purchase Price input stays vertically aligned with Qty/Sale Price/Discount in
+ * the same row whether or not a change line is showing, and nothing shifts when the
+ * comparison arrives.
+ *
+ * Otherwise (stacked card rows) it always renders its own fixed-height, fixed-margin slot (`mt-1 h-3.5`) — even before the
  * comparison has loaded, and even when there's nothing to show — instead of rendering
  * `null` until data arrives. The comparison is fetched asynchronously (debounced bulk
  * request, see usePurchasePriceComparison), so if this returned `null` while waiting, the
@@ -28,10 +35,12 @@ export function PriceChangeIndicator({
   comparison,
   currentPrice,
   supplierName,
+  floating = false,
 }: {
   comparison: PriceComparisonEntry | undefined
   currentPrice: number
   supplierName?: string
+  floating?: boolean
 }) {
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
@@ -44,7 +53,7 @@ export function PriceChangeIndicator({
     body = <span className='truncate'>No previous purchase</span>
   } else if (basis) {
     const change = calculatePriceChange(basis.previousPrice, currentPrice)
-    if (change) {
+    if (change && change.direction !== 'none') {
       const formatted = formatPriceChange(change, currencyMeta)
       const Icon =
         formatted.icon === 'up'
@@ -67,10 +76,15 @@ export function PriceChangeIndicator({
     }
   }
 
+  if (floating && !body) return null
+
   return (
     <div
       className={cn(
-        'mt-1 flex h-3.5 w-full min-w-0 items-center justify-center gap-1 text-[10px] leading-none',
+        'flex h-3.5 min-w-0 items-center justify-center gap-1 text-[10px] leading-none',
+        // Floating: centred under the input but allowed a little wider than it, so
+        // "-Rs180.00 (-15.65%)" isn't cut off by the input's width.
+        floating ? 'absolute left-1/2 top-full mt-0.5 w-max max-w-[150px] -translate-x-1/2' : 'mt-1 w-full',
         TONE_CLASSES[tone],
       )}
       title={tooltip}

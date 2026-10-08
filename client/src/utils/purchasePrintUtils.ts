@@ -7,6 +7,7 @@ import { PAPER_FORMATS, withPrintOrientation, type PaperSize, type PrintOrientat
 import { INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import type { CurrencyOption } from '@/stores/localization.api'
 import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
+import { formatAppDate } from '@/lib/date-format'
 
 export type { PaperSize }
 export type { InvoiceTemplate }
@@ -130,7 +131,7 @@ export function generatePurchaseInvoiceHTML(
   const itemsHTML = items.map((item: any, index: number) => `
     <tr>
       <td>${index + 1}</td>
-      <td>${getPurchaseItemDisplayName(item)}${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${new Date(item.expiryDate).toLocaleDateString()}` : ''}</small>` : ''}</td>
+      <td>${getPurchaseItemDisplayName(item)}${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${formatAppDate(new Date(item.expiryDate))}` : ''}</small>` : ''}</td>
       <td>${resolveUnitPrice(item).toFixed(2)}</td>
       <td>${item.quantity}</td>
       <td>${resolveLineTotal(item).toFixed(2)}</td>
@@ -206,7 +207,7 @@ export function generatePurchaseInvoiceHTML(
   <div class="invoice-info">
     <div class="info-row"><span class="info-label">${labels.invoice_number}:</span><span class="highlight">${purchase.invoiceNumber || ''}</span></div>
     ${purchase.vendorBillNumber ? `<div class="info-row"><span class="info-label">${labels.vendor_bill_number}:</span><span>${purchase.vendorBillNumber}</span></div>` : ''}
-    <div class="info-row"><span class="info-label">${labels.date}:</span><span>${purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)} ${new Date().toLocaleTimeString(locale)}</span></div>
+    <div class="info-row"><span class="info-label">${labels.date}:</span><span>${purchase.purchaseDate ? formatAppDate(new Date(purchase.purchaseDate)) : formatAppDate(new Date())} ${new Date().toLocaleTimeString(locale)}</span></div>
     <div class="info-row"><span class="info-label">${labels.supplier}:</span><span>${supplierName}</span></div>
     <div class="info-row"><span class="info-label">${labels.payment_type}:</span><span>${paymentType}</span></div>
   </div>
@@ -316,7 +317,7 @@ export function generatePurchaseInvoiceA4HTML(
   const itemsHTML = items.map((item: any, index: number) => `
     <tr>
       <td class="text-center"><strong>${index + 1}</strong></td>
-      <td class="text-left"><strong>${getPurchaseItemDisplayName(item)}</strong>${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${new Date(item.expiryDate).toLocaleDateString()}` : ''}</small>` : ''}</td>
+      <td class="text-left"><strong>${getPurchaseItemDisplayName(item)}</strong>${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${formatAppDate(new Date(item.expiryDate))}` : ''}</small>` : ''}</td>
       <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
       <td class="text-right"><strong>${fmt(resolveUnitPrice(item))}</strong></td>
       <td class="text-right"><strong>${fmt(resolveLineTotal(item))}</strong></td>
@@ -401,7 +402,7 @@ export function generatePurchaseInvoiceA4HTML(
       <div class="invoice-meta">
         <div><strong>#${purchase.invoiceNumber || ''}</strong></div>
         ${purchase.vendorBillNumber ? `<div>${labels.vendor_bill_number}: ${purchase.vendorBillNumber}</div>` : ''}
-        <div>${labels.date}: ${purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)}</div>
+        <div>${labels.date}: ${purchase.purchaseDate ? formatAppDate(new Date(purchase.purchaseDate)) : formatAppDate(new Date())}</div>
         <div>${labels.time}: ${new Date().toLocaleTimeString(locale)}</div>
       </div>
     </div>
@@ -417,7 +418,7 @@ export function generatePurchaseInvoiceA4HTML(
     </div>
     <div class="info-section">
       <div class="info-title">${labels.invoice_number}:</div>
-      <div class="info-row"><span>${purchase.purchaseDate ? new Date(purchase.purchaseDate).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)}</span></div>
+      <div class="info-row"><span>${purchase.purchaseDate ? formatAppDate(new Date(purchase.purchaseDate)) : formatAppDate(new Date())}</span></div>
     </div>
   </div>
 

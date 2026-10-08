@@ -18,10 +18,10 @@ import { useUrduDisplay } from '@/context/urdu-display-context'
 import { useProductDisplay } from '@/context/product-display-context'
 import { getTextClasses, getUrduSecondaryNameClasses } from '@/utils/urdu-text-utils'
 import { getUnitLabel, DEFAULT_UNIT } from '@/lib/units'
-import { formatDateSafe } from '@/lib/utils'
 import { getDisplayStockValue, getStockStatus } from '@/lib/product-stock-display'
 import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 export const useProductColumns = (
   lowStockThreshold = 10,
@@ -439,7 +439,7 @@ export const useProductColumns = (
     id: 'createdAt',
     size: 140,
     header: ({ column }) => <DataTableColumnHeader column={column} title='date_added' />,
-    cell: ({ row }) => <div>{formatDateSafe(row.original.createdAt, 'MMM dd, yyyy')}</div>,
+    cell: ({ row }) => <div>{formatAppDate(row.original.createdAt)}</div>,
     enableHiding: true,
   },
 {

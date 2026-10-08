@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
@@ -37,6 +38,7 @@ import { AlertTriangle, ArrowRight, Banknote, Coins, HandCoins, Loader2, Wallet 
 import { normalizeSuppliersList } from '../utils/catalog-helpers'
 import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { formatAppDate } from '@/lib/date-format'
 
 /** Allocation strategies the dialog offers, in the order an ERP user expects them. */
 const ALLOCATION_MODES: { value: AllocationMode; label: string; hint: string }[] = [
@@ -364,7 +366,7 @@ export function SupplierPaymentDialog({ open, onOpenChange, defaultSupplierId, o
               <div className='grid grid-cols-2 gap-3'>
                 <div className='space-y-1.5'>
                   <Label>{t('Date')}</Label>
-                  <Input type='date' value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
+                  <DatePicker value={paymentDate} onChange={setPaymentDate} />
                 </div>
                 <div className='space-y-1.5'>
                   <Label>{t('Reference')}</Label>
@@ -534,7 +536,7 @@ export function SupplierPaymentDialog({ open, onOpenChange, defaultSupplierId, o
                                     <p className='truncate font-medium'>{invoice.invoiceNumber}</p>
                                     <p className='flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground'>
                                       <span>
-                                        {invoice.purchaseDate ? format(new Date(invoice.purchaseDate), 'dd MMM yyyy') : '—'}
+                                        {invoice.purchaseDate ? formatAppDate(new Date(invoice.purchaseDate)) : '—'}
                                       </span>
                                       {invoice.dueDate && (
                                         <span>

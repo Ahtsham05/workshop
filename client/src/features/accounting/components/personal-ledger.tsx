@@ -64,6 +64,7 @@ import {
 } from '../hooks/use-wallet-ledger-category-catalog';
 import { mergeWalletCategoriesForPicker } from '../utils/merge-wallet-categories';
 import { useFormatMoney } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 interface LedgerEntry {
   _id?: string;
@@ -853,7 +854,7 @@ export function PersonalLedger() {
   const exportToExcel = () => {
     try {
       const detailData = reportEntries.map(entry => ({
-        Date: format(new Date(entry.transactionDate), 'MMM dd, yyyy'),
+        Date: formatAppDate(new Date(entry.transactionDate)),
         Type: getTypeLabel(entry.transactionType),
         Description: entry.description,
         Category: entry.category || '-',
@@ -1272,7 +1273,7 @@ export function PersonalLedger() {
                   {entries.map((entry) => (
                     <TableRow key={entry.id || entry._id}>
                       <TableCell className="text-sm whitespace-nowrap">
-                        {format(new Date(entry.transactionDate), 'MMM dd, yyyy')}
+                        {formatAppDate(new Date(entry.transactionDate))}
                       </TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getTypeBadge(entry.transactionType)}`}>
@@ -1428,7 +1429,7 @@ export function PersonalLedger() {
                             : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
                         </TableCell>
                         <TableCell className="py-2 text-sm whitespace-nowrap">
-                          {format(new Date(entry.transactionDate), 'dd MMM yyyy')}
+                          {formatAppDate(new Date(entry.transactionDate))}
                         </TableCell>
                         <TableCell className="py-2 text-sm font-medium">{entry.description}</TableCell>
                         <TableCell className="py-2">
@@ -1494,7 +1495,7 @@ export function PersonalLedger() {
             <div className="border-t px-6 py-4 flex-shrink-0">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">
-                  {format(new Date(startDate), 'dd MMM yyyy')} — {format(new Date(endDate), 'dd MMM yyyy')}
+                  {formatAppDate(new Date(startDate))} — {formatAppDate(new Date(endDate))}
                 </span>
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground">{t('Total Expense')}</p>

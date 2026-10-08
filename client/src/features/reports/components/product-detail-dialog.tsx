@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGetProductDetailReportQuery, useGetStockAdjustmentReportQuery, useGetStockTransferReportQuery } from '@/stores/reports.api'
 import { useLanguage } from '@/context/language-context'
-import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { Boxes, ArrowDownToLine, ArrowUpFromLine, Wallet, Receipt } from 'lucide-react'
 import { getUnitLabel } from '@/lib/units'
@@ -17,6 +16,7 @@ import { TransferStatusBadge } from '@/features/stock-transfer/components/transf
 import { MovementTile } from './movement-tile'
 import { formatImeiEntries } from '@/stores/imei.api'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface ProductDetailDialogProps {
   productId: string | null
@@ -210,7 +210,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                         {data?.sales && data.sales.length > 0 ? (
                           data.sales.map((sale: any) => (
                             <TableRow key={sale._id}>
-                              <TableCell className='whitespace-nowrap'>{format(new Date(sale.date), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell className='whitespace-nowrap'>{formatAppDate(new Date(sale.date))}</TableCell>
                               <TableCell>
                                 <Badge variant='outline'>{sale.invoiceNumber}</Badge>
                               </TableCell>
@@ -282,7 +282,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                         {data?.purchases && data.purchases.length > 0 ? (
                           data.purchases.map((purchase: any) => (
                             <TableRow key={purchase._id}>
-                              <TableCell className='whitespace-nowrap'>{format(new Date(purchase.date), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell className='whitespace-nowrap'>{formatAppDate(new Date(purchase.date))}</TableCell>
                               <TableCell>
                                 <Badge variant='outline'>{purchase.purchaseNumber}</Badge>
                               </TableCell>
@@ -346,7 +346,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                         {adjustmentsData?.lineItems && adjustmentsData.lineItems.length > 0 ? (
                           adjustmentsData.lineItems.map((adj) => (
                             <TableRow key={adj.id}>
-                              <TableCell className='whitespace-nowrap'>{format(new Date(adj.date), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell className='whitespace-nowrap'>{formatAppDate(new Date(adj.date))}</TableCell>
                               <TableCell>
                                 <AdjustmentTypeBadge type={adj.type} />
                               </TableCell>
@@ -410,7 +410,7 @@ export function ProductDetailDialog({ productId, startDate, endDate, onClose }: 
                         {transfersData?.lineItems && transfersData.lineItems.length > 0 ? (
                           transfersData.lineItems.map((tr) => (
                             <TableRow key={tr.id}>
-                              <TableCell className='whitespace-nowrap'>{format(new Date(tr.date), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell className='whitespace-nowrap'>{formatAppDate(new Date(tr.date))}</TableCell>
                               <TableCell className='text-sm text-muted-foreground'>{tr.fromBranchName || '—'}</TableCell>
                               <TableCell className='text-sm text-muted-foreground'>{tr.toBranchName || '—'}</TableCell>
                               <TableCell className='text-right font-medium'>{tr.quantity}</TableCell>

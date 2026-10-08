@@ -45,6 +45,7 @@ import {
   POS_HOLD_MAX_AGE_MS,
   type PurchaseHeldRecord,
 } from '@/lib/pos-hold-storage';
+import { formatAppDateTime } from '@/lib/date-format'
 
 // Purchase Item Interface - simpler than invoice, no profit tracking
 export interface PurchaseItem {
@@ -1166,7 +1167,7 @@ const PurchaseInvoicePage = () => {
                           >
                             <p className="text-sm font-medium leading-snug">{h.label}</p>
                             <p className="text-xs text-muted-foreground">
-                              {new Date(h.savedAt).toLocaleString()}
+                              {formatAppDateTime(new Date(h.savedAt))}
                             </p>
                             <div className="flex flex-wrap gap-2">
                               <Button size="sm" type="button" onClick={() => resumePurchaseHeld(h.id)}>
@@ -1231,7 +1232,7 @@ const PurchaseInvoicePage = () => {
           {/* Left Column - Purchase Panel — full width when catalog hidden: PurchasePanel
               itself splits into a details+totals / items two-column layout ("fast
               purchasing" mode) so hiding the catalog actually reclaims the freed-up width. */}
-          <div className="min-w-0 space-y-4 pb-6">
+          <div className={cn('min-w-0 space-y-4', showProductCatalog && 'pb-6')}>
             <PurchasePanel
               purchase={purchase}
               setPurchase={setPurchase}

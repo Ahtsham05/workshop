@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
+import { getBusinessToday } from '@/lib/business-timezone'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -23,7 +25,8 @@ import { isUsedPhonesBucketProduct } from '@/features/mobile-shop/old-phones/con
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '@/context/language-context'
-import { useIsPhone } from '@/hooks/use-mobile'
+import { useIsBelowXl, useIsPhone } from '@/hooks/use-mobile'
+import { useFitListToViewport } from '@/lib/use-fit-list-to-viewport'
 import { useIsNarrower } from '@/hooks/use-element-width'
 import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
@@ -154,6 +157,7 @@ import { ProductHistoryDialog } from './product-history-dialog'
 import { ColorDot } from '@/components/color-swatch-picker'
 import { FlagBadge, FlagPickerPopover } from '@/components/flag-badge'
 import { useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
+import { formatAppDate } from '@/lib/date-format'
 
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
@@ -324,7 +328,7 @@ export function InvoicePanel({
   const invoiceTypeTriggerRef = useRef<HTMLButtonElement>(null)
   const invoiceDateRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
-  // The items table's fixed-width columns (colgroup below) need ~760px+ before table-fixed
+  // The items table's fixed-width columns (colgroup below) need ~790px+ before table-fixed
   // stops proportionally squeezing every column below its intended width (that's what makes
   // headers/values visually run together — the table is forced to 100% of a too-narrow
   // container instead of overflowing). Below that, fall back to the same stacked-card row
@@ -332,7 +336,15 @@ export function InvoicePanel({
   // actual rendered width, so a docked devtools panel or a collapsed sidebar can trigger it
   // too, not just a narrow viewport. Mirrors Purchase's identical guard (see purchase-panel.tsx).
   const itemsAreaRef = useRef<HTMLDivElement>(null)
-  const isItemsAreaNarrow = useIsNarrower(itemsAreaRef, 760)
+  const isItemsAreaNarrow = useIsNarrower(itemsAreaRef, 790)
+  // Three-column desktop layout: size the items list to the space left in the viewport, so a
+  // long invoice scrolls only inside the list instead of the list *and* the page. Phones, the
+  // stacked tablet layout and catalog mode keep the fixed cap. Same as purchase-panel.tsx.
+  const panelRootRef = useRef<HTMLDivElement>(null)
+  const isBelowXl = useIsBelowXl()
+  const itemsListMaxHeight = useFitListToViewport(itemsScrollRef, panelRootRef, {
+    enabled: !showProductCatalog && !isPhone && !isBelowXl,
+  })
   const autoOpenedInvoiceItemIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -2078,7 +2090,7 @@ export function InvoicePanel({
           return (
             <span
               className={pillClass}
-              title={selectedBatch.expiryDate ? `Expires ${new Date(selectedBatch.expiryDate).toLocaleDateString()}` : undefined}
+              title={selectedBatch.expiryDate ? `Expires ${formatAppDate(new Date(selectedBatch.expiryDate))}` : undefined}
             >
               <Layers className='h-2.5 w-2.5 shrink-0' />
               <span className='max-w-[100px] truncate'>{selectedBatch.batchNumber}</span>
@@ -2114,7 +2126,7 @@ export function InvoicePanel({
                       <span className='truncate font-medium'>{b.batchNumber}</span>
                       <span className='flex shrink-0 items-center gap-1.5'>
                         {b.expiryDate && (
-                          <span className='text-muted-foreground'>exp {new Date(b.expiryDate).toLocaleDateString()}</span>
+                          <span className='text-muted-foreground'>exp {formatAppDate(new Date(b.expiryDate))}</span>
                         )}
                         <span className='font-semibold'>{batchLeft} left</span>
                         {isSelected && <Check className='h-3 w-3' />}
@@ -2300,10 +2312,10 @@ export function InvoicePanel({
                                                 {catalogItem.trackBatch && catalogItem.batches && catalogItem.batches.length > 0 && (
                                                   <span
                                                     className="text-blue-600"
-                                                    title={catalogItem.batches.map(b => `${b.batchNumber}: ${b.quantity} left${b.expiryDate ? ` (exp ${new Date(b.expiryDate).toLocaleDateString()})` : ''}`).join(', ')}
+                                                    title={catalogItem.batches.map(b => `${b.batchNumber}: ${b.quantity} left${b.expiryDate ? ` (exp ${formatAppDate(new Date(b.expiryDate))})` : ''}`).join(', ')}
                                                   >
                                                     {catalogItem.batches.length} batch{catalogItem.batches.length === 1 ? '' : 'es'}
-                                                    {catalogItem.batches[0]?.expiryDate && ` · exp ${new Date(catalogItem.batches[0].expiryDate).toLocaleDateString()}`}
+                                                    {catalogItem.batches[0]?.expiryDate && ` · exp ${formatAppDate(new Date(catalogItem.batches[0].expiryDate))}`}
                                                   </span>
                                                 )}
                                               </div>
@@ -2891,6 +2903,7 @@ export function InvoicePanel({
 
   return (
     <div
+      ref={panelRootRef}
       className={cn(
         !showProductCatalog
           ? // Three columns — details / items / summary+payment+actions — each column is
@@ -3307,11 +3320,11 @@ export function InvoicePanel({
           </div>
           <div>
             <Label htmlFor="invoiceDate">{t('invoice_date') || 'Invoice Date'}</Label>
-            <Input
+            <DatePicker
               ref={invoiceDateRef}
-              type="date"
-              value={invoice.invoiceDate || new Date().toISOString().split('T')[0]}
-              onChange={(e) => setInvoice(prev => ({ ...prev, invoiceDate: e.target.value }))}
+              id="invoiceDate"
+              value={invoice.invoiceDate || getBusinessToday()}
+              onChange={(day) => setInvoice(prev => ({ ...prev, invoiceDate: day }))}
               onKeyDown={(e) => onEnterAdvance(e, openProductSelectorForEntry)}
             />
           </div>
@@ -3660,9 +3673,11 @@ export function InvoicePanel({
           <div
             ref={itemsScrollRef}
             className={cn(
-              'overflow-y-auto max-h-[460px]',
+              'overflow-y-auto',
+              itemsListMaxHeight === undefined && 'max-h-[460px]',
               (showProductCatalog || isPhone || isItemsAreaNarrow) ? 'space-y-2 p-3' : 'overflow-x-auto',
             )}
+            style={itemsListMaxHeight !== undefined ? { maxHeight: itemsListMaxHeight } : undefined}
           >
             {invoice.items.length === 0 ? (
               <div className='text-center text-muted-foreground py-8'>
@@ -3684,9 +3699,11 @@ export function InvoicePanel({
               // like the product picker popover.
               invoice.items.map((item) => renderItemCard(item))
             ) : (
-              <Table className='table-fixed'>
+              // This div already scrolls the list — the Table's own scroll wrapper would nest a
+              // second scrollbar inside it (and steal the sticky header from this one).
+              <Table className='table-fixed' containerClassName='max-h-none overflow-visible'>
                   <colgroup>
-                    <col className='w-10' />
+                    <col className='w-12' />
                     <col />
                     {/* Qty/Price/Discount/Total run narrower from sm up to (not including) xl —
                         tablet's Items column is full-width (not squeezed into a fixed 3-col
@@ -3700,17 +3717,17 @@ export function InvoicePanel({
                         Rs/% toggle) — its column no longer needs 150px, so the extra space
                         reverts to Product (the unlabeled `<col />` above, which soaks up
                         whatever's left in this table-fixed layout). */}
-                    <col className='w-[85px] xl:w-[100px]' />
+                    <col className='w-[116px]' />
                     <col className='w-[85px] xl:w-[110px]' />
                     <col className='w-16' />
                   </colgroup>
                   <TableHeader className='sticky top-0 z-10 bg-muted'>
                     <TableRow className='hover:bg-transparent'>
-                      <TableHead className='w-10 pl-4'>#</TableHead>
+                      <TableHead className='w-12 pl-4 pr-1'>#</TableHead>
                       <TableHead className='min-w-[160px]'>{t('product') || 'Product'}</TableHead>
                       <TableHead className='min-w-[140px] xl:min-w-[150px]'>{t('Qty')}</TableHead>
                       <TableHead className='min-w-[100px] xl:min-w-[130px]'>{t('unit_price') || 'Unit Price'}</TableHead>
-                      <TableHead className='min-w-[85px] xl:min-w-[100px]'>{t('discount') || 'Discount'}</TableHead>
+                      <TableHead className='min-w-[116px]'>{t('discount') || 'Discount'}</TableHead>
                       <TableHead className='min-w-[85px] xl:min-w-[100px] text-right'>{t('total') || 'Total'}</TableHead>
                       <TableHead className='w-16 pr-3' />
                     </TableRow>
@@ -3737,7 +3754,7 @@ export function InvoicePanel({
                       const { hasProduct, productCell, qtyControl, priceControl, discountControl, totalDisplay, deleteButton, historyButton } = renderInvoiceItemParts(item)
                       return (
                         <TableRow key={item.id} className={cn(!hasProduct && 'bg-muted/10')}>
-                          <TableCell className='py-3 pl-4 align-top text-xs text-muted-foreground'>{itemIndex + 1}</TableCell>
+                          <TableCell className='overflow-visible py-3 pl-4 pr-1 align-top text-xs tabular-nums text-muted-foreground'>{itemIndex + 1}</TableCell>
                           <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
                           <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
                           <TableCell className='align-middle py-3'>{priceControl}</TableCell>

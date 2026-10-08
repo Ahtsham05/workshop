@@ -27,6 +27,7 @@ import { useGetPartnerProfitShareReportQuery } from '@/stores/reports.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useCurrencyMeta, useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface PartnerProfitShareReportProps {
   startDate: string
@@ -325,7 +326,7 @@ export const PartnerProfitShareReport = forwardRef<{ exportToExcel: () => void }
                                     {row.entries.map((e, idx) => (
                                       <TableRow key={`${e.referenceId || idx}-${e.transactionType}`}>
                                         <TableCell className='font-mono text-sm'>{e.reference || '—'}</TableCell>
-                                        <TableCell className='text-sm'>{format(new Date(e.date), 'dd MMM yyyy')}</TableCell>
+                                        <TableCell className='text-sm'>{formatAppDate(new Date(e.date))}</TableCell>
                                         <TableCell>
                                           <Badge
                                             className={

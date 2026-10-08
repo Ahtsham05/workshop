@@ -1,10 +1,10 @@
-import { format } from 'date-fns'
 import { ArrowRight, FileText, MessageSquare, AlarmClock, GitCommitHorizontal } from 'lucide-react'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import type { LeadTimelineEvent } from '@/stores/lead.api'
 import { STAGE_LABELS } from '../utils/stage-config'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const KIND_ICON: Record<LeadTimelineEvent['kind'], typeof ArrowRight> = {
   stage_change: GitCommitHorizontal,
@@ -83,7 +83,7 @@ export function LeadActivityTimeline({ events, isLoading }: LeadActivityTimeline
             <div className="min-w-0 flex-1 pb-4">
               <p className="text-sm font-medium">{eventTitle(event, t)}</p>
               {subtitle && <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>}
-              <p className="mt-1 text-[11px] text-muted-foreground">{format(new Date(event.timestamp), 'PPP p')}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{formatAppDateTime(new Date(event.timestamp))}</p>
             </div>
           </div>
         )

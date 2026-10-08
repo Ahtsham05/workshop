@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import { ExpenseReport } from '@/features/reports/components/expense-report'
+import { formatAppDate } from '@/lib/date-format'
 
 function getLast30DaysRange() {
   const now = new Date()
@@ -67,7 +68,7 @@ export function ExpenseCategorySection({
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {range.startDate ? format(range.startDate, 'PPP') : t('pick_date')}
+                    {range.startDate ? formatAppDate(range.startDate) : t('pick_date')}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -100,7 +101,7 @@ export function ExpenseCategorySection({
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {range.endDate ? format(range.endDate, 'PPP') : t('pick_date')}
+                    {range.endDate ? formatAppDate(range.endDate) : t('pick_date')}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">

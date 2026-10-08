@@ -1,6 +1,7 @@
 import { formatCurrency } from '@/features/invoice/utils/print-utils'
 import { escapeHtml } from '@/lib/escape-html'
 import { PAPER_FORMATS, type SheetSize } from '@/features/invoice/utils/paper-format'
+import { formatAppDate } from '@/lib/date-format'
 
 export type LedgerStatementLanguage = 'en' | 'ur'
 
@@ -149,8 +150,8 @@ const statementLabels = {
 
 type StatementLabels = { [K in keyof typeof statementLabels.en]: string }
 
-const fmtDate = (d: string | Date, locale: string) =>
-  new Date(d).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
+const fmtDate = (d: string | Date, _locale: string) =>
+  formatAppDate(new Date(d))
 
 const balanceLabel = (balance: number, labels: StatementLabels): string => {
   const amount = formatCurrency(Math.abs(balance))
@@ -360,7 +361,7 @@ export function generateCustomerLedgerStatementHTML(
     </div>
     <div class="statement-title-block">
       <div class="statement-title">${labels.statement_title}</div>
-      <div class="statement-meta">${labels.generated}: ${now.toLocaleDateString(locale)} ${now.toLocaleTimeString(locale)}</div>
+      <div class="statement-meta">${labels.generated}: ${formatAppDate(now)} ${now.toLocaleTimeString(locale)}</div>
     </div>
   </div>
 

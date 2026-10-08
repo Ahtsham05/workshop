@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { format, isPast, isToday, startOfDay, subDays } from 'date-fns'
+import { isPast, isToday, startOfDay, subDays } from 'date-fns'
 import {
   Plus,
   AlarmClock,
@@ -65,6 +65,7 @@ import {
 } from '@/stores/reminder.api'
 import { ReminderMutateDialog } from './components/reminder-mutate-dialog'
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const PRIORITY_STYLES: Record<ReminderPriority, string> = {
   low: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
@@ -431,8 +432,8 @@ function ReminderRow({
         <p className={cn('mt-1 flex items-center gap-1 text-xs', overdue ? 'font-medium text-red-600' : 'text-muted-foreground')}>
           <Clock className="h-3 w-3 max-sm:shrink-0" />
           {/* Phones get a compact one-line date instead of "September 22nd, 2026 8:00 AM". */}
-          <span className="max-sm:hidden">{format(dueDate, 'PPP p')}</span>
-          <span className="hidden max-sm:inline">{format(dueDate, 'MMM d, yyyy · p')}</span>
+          <span className="max-sm:hidden">{formatAppDateTime(dueDate)}</span>
+          <span className="hidden max-sm:inline">{formatAppDateTime(dueDate)}</span>
         </p>
       </div>
 

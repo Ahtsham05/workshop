@@ -45,7 +45,7 @@ import {
   Landmark,
   ScrollText,
 } from 'lucide-react'
-import { format, isValid } from 'date-fns'
+import { isValid } from 'date-fns'
 import {
   CASH_RECEIVED_COMMISSION_LABEL,
   CASH_SEND_COMMISSION_LABEL,
@@ -57,12 +57,13 @@ import {
   MOBILE_FORM_KEYBOARD_HINT,
   useCtrlEnterSubmit,
 } from '@/lib/mobile-form-keyboard'
+import { formatAppDate } from '@/lib/date-format'
 
 const formatWalletDate = (dateValue?: string) => {
   if (!dateValue) return '-'
   const parsedDate = new Date(dateValue)
   if (!isValid(parsedDate)) return '-'
-  return format(parsedDate, 'MMM dd, yyyy')
+  return formatAppDate(parsedDate)
 }
 
 type WalletRecord = {

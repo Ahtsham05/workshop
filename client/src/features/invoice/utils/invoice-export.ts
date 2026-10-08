@@ -1,6 +1,7 @@
 import { format } from 'date-fns'
 import type { InvoiceExportRow } from '@/stores/invoice.api'
 import { SETTLEMENT_STATUS_META, DUE_STATUS_META, type DueStatus, type SettlementStatus } from './invoice-settlement'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 const EXPORT_COLUMNS: { header: string; value: (row: InvoiceExportRow) => string | number }[] = [
   { header: 'Invoice #', value: (row) => row.invoiceNumber || '' },
@@ -71,8 +72,8 @@ export function exportInvoicesToPdf(
         <td>${escapeHtml(row.invoiceNumber)}</td>
         <td>${escapeHtml(row.billNumber || '—')}</td>
         <td>${escapeHtml(row.customerDisplayName || '—')}</td>
-        <td>${escapeHtml(row.invoiceDate ? format(new Date(row.invoiceDate), 'dd MMM yyyy') : '—')}</td>
-        <td>${escapeHtml(row.dueDate ? format(new Date(row.dueDate), 'dd MMM yyyy') : '—')}</td>
+        <td>${escapeHtml(row.invoiceDate ? formatAppDate(new Date(row.invoiceDate)) : '—')}</td>
+        <td>${escapeHtml(row.dueDate ? formatAppDate(new Date(row.dueDate)) : '—')}</td>
         <td class="num">${escapeHtml(meta.formatMoney(Number(row.total || 0)))}</td>
         <td class="num">${escapeHtml(meta.formatMoney(Number(row.settledAmount || 0)))}</td>
         <td class="num">${escapeHtml(meta.formatMoney(Number(row.remainingAmount || 0)))}</td>
@@ -97,7 +98,7 @@ export function exportInvoicesToPdf(
 </style></head>
 <body>
   <h1>${escapeHtml(meta.title || 'Invoice Report')}</h1>
-  <div class="subtitle">${escapeHtml(meta.subtitle || '')} · ${rows.length} record(s) · generated ${format(new Date(), 'dd MMM yyyy HH:mm')}</div>
+  <div class="subtitle">${escapeHtml(meta.subtitle || '')} · ${rows.length} record(s) · generated ${formatAppDateTime(new Date())}</div>
   <table>
     <thead><tr>
       <th>Invoice</th><th>Bill #</th><th>Customer</th><th>Date</th><th>Due</th>

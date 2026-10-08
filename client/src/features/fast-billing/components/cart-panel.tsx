@@ -13,6 +13,7 @@ import { computeDiscountAmount, type DiscountType } from '@/lib/discount'
 import { ProductHistoryDialog } from '@/features/invoice/components/product-history-dialog'
 import { BatchAllocationEditor, SerialSummaryTrigger } from '@/components/serial-batch-line-controls'
 import type { PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { formatAppDate } from '@/lib/date-format'
 
 type Props = {
   cart: CartLine[]
@@ -133,7 +134,7 @@ export function CartPanel({
                                 key={b.id}
                                 type='button'
                                 onClick={() => onUpdateBatch(line.key, b.id, b.batchNumber, b.quantity, b.costPerUnit, b.sellingPrice, catalogEntry?.price)}
-                                title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+                                title={b.expiryDate ? `Expires ${formatAppDate(new Date(b.expiryDate))}` : undefined}
                                 className={cn(
                                   'shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] transition-colors',
                                   isSelected

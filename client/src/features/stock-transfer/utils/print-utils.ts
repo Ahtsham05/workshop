@@ -1,5 +1,6 @@
 import { escapeHtml, invoiceNoteToSafeHtml } from '@/lib/escape-html'
 import type { InventoryTransfer, TransferStatus } from '@/stores/inventoryTransfer.api'
+import { formatAppDate } from '@/lib/date-format'
 
 export type TransferPrintLanguage = 'en' | 'ur'
 
@@ -188,7 +189,7 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
   const fmtDate = (value?: string) => {
     if (!value) return '—'
     const d = new Date(value)
-    return `${d.toLocaleDateString(locale)} ${d.toLocaleTimeString(locale)}`
+    return `${formatAppDate(d)} ${d.toLocaleTimeString(locale)}`
   }
 
   const infoRow = (label: string, value: string) =>

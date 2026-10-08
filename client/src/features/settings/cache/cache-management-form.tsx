@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { format, formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 import {
   Loader2,
   RefreshCw,
@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { getElectronAPI } from '@/lib/sync/electron'
 import type { CacheEntry, CacheSettings, CacheStats, OfflineBootstrapProgress } from '@/types/electron'
+import { formatAppDateTime } from '@/lib/date-format'
 
 function formatBytes(bytes: number) {
   if (!bytes) return '0 B'
@@ -401,7 +402,7 @@ export function CacheManagementForm() {
                       </td>
                       <td className="py-2 pr-4">{formatBytes(entry.sizeBytes)}</td>
                       <td className="py-2 pr-4">
-                        {format(new Date(entry.updatedAt), 'PP p')}
+                        {formatAppDateTime(new Date(entry.updatedAt))}
                       </td>
                       <td className="py-2">
                         <Button

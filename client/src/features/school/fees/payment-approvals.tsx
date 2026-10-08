@@ -19,6 +19,7 @@ import {
   useRejectFeePaymentRequestMutation,
 } from '@/stores/school.api';
 import { useFormatMoney } from '@/lib/format-money';
+import { formatAppDateTime } from '@/lib/date-format'
 
 const STATUS_TABS = [
   { key: 'pending', label: 'Pending', icon: Hourglass },
@@ -36,7 +37,7 @@ const STATUS_BADGE: Record<string, string> = {
 function formatDate(value: unknown): string {
   if (!value) return '—';
   const d = new Date(value as string);
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('en-PK', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(d.getTime()) ? '—' : formatAppDateTime(d);
 }
 
 function voucherLabel(r: any): string {

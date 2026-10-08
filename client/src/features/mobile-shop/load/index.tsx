@@ -93,7 +93,6 @@ import type { RootState } from '@/stores/store'
 import { fetchAllSuppliers } from '@/stores/supplier.slice'
 import { ArrowLeft, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { usePermissions } from '@/context/permission-context'
-import { format } from 'date-fns'
 import { getBusinessToday, parseBusinessDateTimeLocal, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
@@ -130,6 +129,7 @@ import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { filterAndRankBySearch, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { formatAppDate } from '@/lib/date-format'
 
 type PurchaseFormState = {
   walletId: string
@@ -1948,7 +1948,7 @@ function LoadManagementPage({
                     <TableBody>
                       {filteredPurchases.map((p) => (
                         <TableRow key={p.id}>
-                          <TableCell className='text-sm'>{format(new Date(p.date), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className='text-sm'>{formatAppDate(new Date(p.date))}</TableCell>
                           <TableCell>{p.walletType}</TableCell>
                           <TableCell className='font-medium'>{p.supplierName || '-'}</TableCell>
                           <TableCell>{formatMoney(Number(p.amount))}</TableCell>
@@ -2226,7 +2226,7 @@ function LoadManagementPage({
                     <TableBody>
                       {filteredTransactions.map((t) => (
                         <TableRow key={t.id}>
-                          <TableCell className='text-sm'>{format(new Date(t.date), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className='text-sm'>{formatAppDate(new Date(t.date))}</TableCell>
                           <TableCell className='font-medium'>{t.walletType}</TableCell>
                           <TableCell className='font-medium'>
                             {t.customerName?.trim() || (t as any).customerId?.name || 'Walk-in Customer'}
@@ -2914,7 +2914,7 @@ function LoadManagementPage({
                           return (
                             <TableRow key={`transfer-${t.id}`}>
                               <TableCell />
-                              <TableCell className='text-sm'>{format(new Date(t.date), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell className='text-sm'>{formatAppDate(new Date(t.date))}</TableCell>
                               <TableCell>
                                 <span className={`text-xs font-medium px-2 py-1 rounded-full ${isReceive ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>
                                   {isReceive ? `💸 ${cashTxLabel('withdrawal')}` : `📲 ${cashTxLabel('deposit')}`}
@@ -2949,7 +2949,7 @@ function LoadManagementPage({
                               onCheckedChange={() => toggleWithdrawalSelection(w.id)}
                             />
                           </TableCell>
-                          <TableCell className='text-sm'>{format(new Date(w.date), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className='text-sm'>{formatAppDate(new Date(w.date))}</TableCell>
                           <TableCell>
                             <span className={`text-xs font-medium px-2 py-1 rounded-full ${w.transactionType === 'withdrawal' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>
                               {w.transactionType === 'withdrawal' ? `💸 ${cashTxLabel('withdrawal')}` : `📲 ${cashTxLabel('deposit')}`}

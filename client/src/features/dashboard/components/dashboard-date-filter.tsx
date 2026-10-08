@@ -1,4 +1,3 @@
-import { format } from 'date-fns'
 import { CalendarDays, RefreshCcw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -12,6 +11,7 @@ import {
   type DashboardDateRange,
 } from '@/lib/dashboard-date-range'
 import { cn } from '@/lib/utils'
+import { formatAppDate } from '@/lib/date-format'
 
 /** "YYYY-MM-DD" business calendar key -> local Date, with no timezone shifting. */
 const parseDateKey = (key: string) => {
@@ -95,8 +95,8 @@ export function DashboardDateFilter({
             <PopoverTrigger asChild>
               <Button variant='outline' size='sm' className='h-9 min-w-0 justify-center gap-2 px-2 font-normal sm:justify-start sm:px-3'>
                 <CalendarDays className='hidden h-4 w-4 shrink-0 text-muted-foreground sm:block' aria-hidden />
-                <span className='sm:hidden'>{format(parseDateKey(value.startDate), 'PP')}</span>
-                <span className='hidden sm:inline'>{format(parseDateKey(value.startDate), 'PPP')}</span>
+                <span className='sm:hidden'>{formatAppDate(parseDateKey(value.startDate))}</span>
+                <span className='hidden sm:inline'>{formatAppDate(parseDateKey(value.startDate))}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className='w-auto p-0' align='start'>
@@ -118,8 +118,8 @@ export function DashboardDateFilter({
             <PopoverTrigger asChild>
               <Button variant='outline' size='sm' className='h-9 min-w-0 justify-center gap-2 px-2 font-normal sm:justify-start sm:px-3'>
                 <CalendarDays className='hidden h-4 w-4 shrink-0 text-muted-foreground sm:block' aria-hidden />
-                <span className='sm:hidden'>{format(parseDateKey(value.endDate), 'PP')}</span>
-                <span className='hidden sm:inline'>{format(parseDateKey(value.endDate), 'PPP')}</span>
+                <span className='sm:hidden'>{formatAppDate(parseDateKey(value.endDate))}</span>
+                <span className='hidden sm:inline'>{formatAppDate(parseDateKey(value.endDate))}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className='w-auto p-0' align='start'>

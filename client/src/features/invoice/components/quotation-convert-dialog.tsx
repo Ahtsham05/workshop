@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Select,
   SelectContent,
@@ -193,11 +194,11 @@ export function QuotationConvertDialog({
           {targetType === 'credit' && (
             <div className='space-y-2'>
               <Label htmlFor='quotation-due-date'>{t('due_date') || 'Due Date'}</Label>
-              <Input
+              <DatePicker
                 id='quotation-due-date'
-                type='date'
                 value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
+                clearable
+                onChange={setDueDate}
               />
             </div>
           )}

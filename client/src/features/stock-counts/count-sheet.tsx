@@ -50,6 +50,7 @@ import { useLineSaver } from './lib/use-line-saver'
 import { useCountQueue } from './lib/use-count-queue'
 import { useStockCountAccess } from './lib/use-stock-count-access'
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { formatAppDateTime } from '@/lib/date-format'
 
 type Filter = 'all' | 'todo' | 'counted' | 'diff' | 'recount'
 const PAGE = 150
@@ -464,7 +465,7 @@ export default function CountSheetPage({ countId }: { countId: string }) {
               <CheckCircle2 className='size-3.5' />
               {t('Posted {{date}} — differences were applied as Stock Count adjustments.').replace(
                 '{{date}}',
-                count.postedAt ? new Date(count.postedAt).toLocaleString() : ''
+                count.postedAt ? formatAppDateTime(new Date(count.postedAt)) : ''
               )}{' '}
               <Link to='/stock-adjustments' className='underline'>
                 {t('View adjustments')}

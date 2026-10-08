@@ -42,6 +42,7 @@ import { useGetAgentBillReportQuery, useGetUtilityCompaniesQuery, type AgentBill
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ interface AgentBillReportProps {
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#84cc16']
 
 const fmtDate = (d?: string) =>
-  d ? new Date(d).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+  d ? formatAppDate(new Date(d)) : '—'
 
 /** What the agent owes/paid for this bill: current + previous + previous-overdue are
  *  always payable; current-cycle overdue is only added once the due date passes. */
@@ -405,7 +406,7 @@ export const AgentBillReport = forwardRef<{ exportToExcel: () => void }, AgentBi
                       : '0'
                     return (
                       <TableRow key={row._id}>
-                        <TableCell className='font-medium'>{format(new Date(row._id), 'dd MMM yyyy')}</TableCell>
+                        <TableCell className='font-medium'>{formatAppDate(new Date(row._id))}</TableCell>
                         <TableCell className='text-right'>{row.billCount}</TableCell>
                         <TableCell className='text-right font-semibold'>{fmt(row.totalCollection)}</TableCell>
                         <TableCell className='text-right text-green-600 font-medium'>{fmt(row.totalProfit)}</TableCell>

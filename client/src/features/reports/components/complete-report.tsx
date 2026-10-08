@@ -39,13 +39,14 @@ import { useFeatureAccess } from '@/hooks/use-feature-access'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
+import { formatAppDate } from '@/lib/date-format'
 
 interface CompleteReportProps {
   startDate: string
   endDate: string
 }
 
-const fmtDate = (v: string | undefined) => (v ? format(new Date(v), 'dd MMM yyyy') : '—')
+const fmtDate = (v: string | undefined) => (v ? formatAppDate(new Date(v)) : '—')
 
 function LockedNote({ label }: { label: string }) {
   return (

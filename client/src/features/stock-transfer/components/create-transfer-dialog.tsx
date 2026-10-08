@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select'
 import { SerialPickDialog } from '@/components/serial-pick-dialog'
+import { formatAppDate } from '@/lib/date-format'
 
 export interface TransferPrefill {
   fromProductId: string
@@ -332,10 +333,10 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
                                 {item.trackBatch && item.batches && item.batches.length > 0 && (
                                   <span
                                     className='text-blue-600'
-                                    title={item.batches.map((b) => `${b.batchNumber}: ${b.quantity} left${b.expiryDate ? ` (exp ${new Date(b.expiryDate).toLocaleDateString()})` : ''}`).join(', ')}
+                                    title={item.batches.map((b) => `${b.batchNumber}: ${b.quantity} left${b.expiryDate ? ` (exp ${formatAppDate(new Date(b.expiryDate))})` : ''}`).join(', ')}
                                   >
                                     {item.batches.length} {item.batches.length === 1 ? t('batch') : t('batches')}
-                                    {item.batches[0]?.expiryDate && ` · exp ${new Date(item.batches[0].expiryDate).toLocaleDateString()}`}
+                                    {item.batches[0]?.expiryDate && ` · exp ${formatAppDate(new Date(item.batches[0].expiryDate))}`}
                                   </span>
                                 )}
                               </div>
@@ -364,7 +365,7 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
                       key={b.id}
                       type='button'
                       onClick={() => setSelectedBatchId(b.id)}
-                      title={b.expiryDate ? `${t('Expires')} ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+                      title={b.expiryDate ? `${t('Expires')} ${formatAppDate(new Date(b.expiryDate))}` : undefined}
                       className={cn(
                         'rounded-full border px-1.5 py-0.5 text-[11px] transition-colors',
                         isSelected

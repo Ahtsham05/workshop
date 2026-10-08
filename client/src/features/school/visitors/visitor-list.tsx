@@ -16,6 +16,7 @@ import { useNavigate } from '@tanstack/react-router';
 import VisitorForm, { SOURCE_OPTIONS, STATUS_OPTIONS, statusBadge } from './visitor-form';
 import FollowUpDialog from './follow-up-dialog';
 import toast from 'react-hot-toast';
+import { formatAppDate } from '@/lib/date-format'
 
 // ─── Stats bar ────────────────────────────────────────────────────────────────
 
@@ -241,7 +242,7 @@ export default function VisitorList() {
                       <tr key={id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3">
                           <div className="font-medium">{v.studentName}</div>
-                          <div className="text-xs text-muted-foreground capitalize">{v.gender} · {v.inquiryDate ? new Date(v.inquiryDate).toLocaleDateString() : '—'}</div>
+                          <div className="text-xs text-muted-foreground capitalize">{v.gender} · {v.inquiryDate ? formatAppDate(new Date(v.inquiryDate)) : '—'}</div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="font-medium">{v.parentName}</div>
@@ -255,7 +256,7 @@ export default function VisitorList() {
                         <td className="px-4 py-3">
                           {followUpDate ? (
                             <span className={`text-xs font-medium ${isOverdue ? 'text-red-600' : 'text-muted-foreground'}`}>
-                              {followUpDate.toLocaleDateString()}
+                              {formatAppDate(followUpDate)}
                               {isOverdue && ' ⚠'}
                             </span>
                           ) : (

@@ -14,6 +14,7 @@ import { Can, usePermissions } from '@/context/permission-context'
 import { AppDispatch } from '@/stores/store'
 import { brandApi } from '@/stores/brand.api'
 import * as XLSX from 'xlsx'
+import { formatAppDate } from '@/lib/date-format'
 
 export default function BrandsPrimaryButtons() {
   const { dispatch } = useBrands()
@@ -56,7 +57,7 @@ export default function BrandsPrimaryButtons() {
         phone: brand.phone || '',
         description: brand.description || '',
         status: brand.status || 'active',
-        createdAt: brand.createdAt ? new Date(brand.createdAt).toLocaleDateString() : '',
+        createdAt: brand.createdAt ? formatAppDate(new Date(brand.createdAt)) : '',
       }))
 
       const ws = XLSX.utils.json_to_sheet(rows)

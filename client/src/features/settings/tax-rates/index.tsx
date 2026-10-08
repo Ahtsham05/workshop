@@ -47,6 +47,7 @@ import {
 } from '@/stores/taxRate.api'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { formatAppDate } from '@/lib/date-format'
 
 const formSchema = z.object({
   taxCategoryId: z.string().min(1, 'Tax category is required'),
@@ -373,8 +374,8 @@ export default function TaxRatesSettings() {
                     {rate.taxJurisdictionId ? jurisdictionNameById.get(rate.taxJurisdictionId) || '—' : 'Everywhere'}
                   </TableCell>
                   <TableCell className='text-muted-foreground'>
-                    {new Date(rate.effectiveFrom).toLocaleDateString()} —{' '}
-                    {rate.effectiveTo ? new Date(rate.effectiveTo).toLocaleDateString() : 'Ongoing'}
+                    {formatAppDate(new Date(rate.effectiveFrom))} —{' '}
+                    {rate.effectiveTo ? formatAppDate(new Date(rate.effectiveTo)) : 'Ongoing'}
                   </TableCell>
                   <TableCell>
                     <Badge variant={rate.status === 'inactive' ? 'outline' : 'default'}>

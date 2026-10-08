@@ -1,12 +1,10 @@
 import type { SubscriptionStatus } from '@/stores/billing.api'
+import { formatBusinessDate } from '@/lib/business-timezone'
 
-const PKT = 'Asia/Karachi'
 
 export function formatDate(value?: string | null): string {
   if (!value) return '—'
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: PKT }).format(
-    new Date(value)
-  )
+  return formatBusinessDate(value)
 }
 
 export const formatUsd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -527,18 +528,20 @@ export function PurchaseFiltersToolbar({
               <div className='space-y-1.5'>
                 <Label className='text-xs font-medium text-muted-foreground'>{t('Date Range')}</Label>
                 <div className='flex items-center gap-2'>
-                  <Input
-                    type='date'
+                  <DatePicker
                     value={draft.startDate}
                     max={draft.endDate || undefined}
-                    onChange={(event) => onPatchDraft({ startDate: event.target.value })}
+                    clearable
+                    className='min-w-0 flex-1'
+                    onChange={(day) => onPatchDraft({ startDate: day })}
                   />
                   <span className='text-muted-foreground'>–</span>
-                  <Input
-                    type='date'
+                  <DatePicker
                     value={draft.endDate}
                     min={draft.startDate || undefined}
-                    onChange={(event) => onPatchDraft({ endDate: event.target.value })}
+                    clearable
+                    className='min-w-0 flex-1'
+                    onChange={(day) => onPatchDraft({ endDate: day })}
                   />
                 </div>
               </div>

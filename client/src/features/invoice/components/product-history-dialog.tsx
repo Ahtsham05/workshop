@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { format } from 'date-fns'
 import { History, TrendingUp, TrendingDown, Minus, Calendar, DollarSign, Package, FileText } from 'lucide-react'
 import {
   Dialog,
@@ -16,6 +15,7 @@ import { useGetCustomerProductHistoryQuery } from '@/stores/invoice.api'
 import { Loader2 } from 'lucide-react'
 import { getTextClasses } from '@/utils/urdu-text-utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface ProductHistoryDialogProps {
   open: boolean
@@ -188,7 +188,7 @@ export function ProductHistoryDialog({
                             <span className="text-xs">{t('date')}</span>
                           </div>
                           <p className="font-medium">
-                            {format(new Date(item.date), 'MMM dd, yyyy')}
+                            {formatAppDate(new Date(item.date))}
                           </p>
                         </div>
 

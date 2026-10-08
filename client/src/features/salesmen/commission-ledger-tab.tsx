@@ -37,6 +37,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { formatAppDate } from '@/lib/date-format'
 
 function salesmanName(ref: CommissionLedgerEntry['salesmanId']): string {
   return typeof ref === 'string' ? ref : ref.name;
@@ -318,7 +319,7 @@ export function CommissionLedgerTab() {
                   {filteredEntries.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="whitespace-nowrap">
-                        {format(new Date(entry.transactionDate), 'MMM dd, yyyy')}
+                        {formatAppDate(new Date(entry.transactionDate))}
                       </TableCell>
                       {!selectedSalesmanId && <TableCell>{salesmanName(entry.salesmanId)}</TableCell>}
                       <TableCell>

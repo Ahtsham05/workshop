@@ -22,6 +22,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import StudentAvatar from '../components/student-avatar';
+import { NativeDateInput } from '@/components/ui/date-picker'
 
 const STATUS_CONFIG = [
   { key: 'present', label: 'Present', short: 'P', icon: CheckCircle2, activeClass: 'bg-green-500 text-white', rowBg: 'bg-green-50/40', dotClass: 'bg-green-500' },
@@ -189,11 +190,10 @@ export default function AttendanceManagement() {
                 ))}
               </SelectContent>
             </Select>
-            <input
-              type="date"
+            <NativeDateInput
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="border rounded-md px-3 py-2 text-sm h-10 bg-background"
+              className="h-10 w-40"
             />
             {total > 0 && (
               <div className="flex gap-2 ml-auto flex-wrap">

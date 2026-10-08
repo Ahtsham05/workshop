@@ -13,6 +13,7 @@ import { useSelector } from 'react-redux'
 import type { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 export default function RestaurantReportsPage() {
   const formatMoney = useFormatMoney()
@@ -184,7 +185,7 @@ export default function RestaurantReportsPage() {
       <div className='hidden'>
         <div ref={printRef}>
           <EndOfDaySummary
-            date={new Date().toLocaleDateString()}
+            date={formatAppDate(new Date())}
             totalOrders={stats?.todayOrders ?? orders.length}
             revenue={stats?.todayRevenue ?? revenue}
             venueName={org?.name || 'Restaurant'}

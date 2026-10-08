@@ -40,6 +40,7 @@ import { useFormatMoney } from '@/lib/format-money';
 import ReceiptRegister from './receipt-register';
 import FeeCollectionReports from './fee-collection-reports';
 import { useOrgAndUser, printReport, openReportPrintWindow } from './report-print';
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const PIE_COLORS = ['#10b981', '#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -65,7 +66,7 @@ export function exportToPDF(title: string, headers: string[], rows: string[][], 
       doc.setFontSize(14);
       doc.text(title, 14, 15);
       doc.setFontSize(8);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 21);
+      doc.text(`Generated: ${formatAppDate(new Date())}`, 14, 21);
       (doc as any).autoTable({
         head: [headers],
         body: rows,
@@ -1328,7 +1329,7 @@ function FinancialExpenseDetailReport({ year, month }: { year: number; month: st
   const paidPct = summary.totalTransactions > 0 ? Math.round((summary.paidCount / summary.totalTransactions) * 100) : 0;
 
   const excelRows = transactions.map((t: any) => ({
-    Date: new Date(t.date).toLocaleDateString('en-GB'),
+    Date: formatAppDate(new Date(t.date)),
     'Expense #': t.expenseNumber || '-',
     'Voucher #': t.voucherNumber || '-',
     Category: t.categoryName,
@@ -1342,7 +1343,7 @@ function FinancialExpenseDetailReport({ year, month }: { year: number; month: st
   }));
 
   const pdfRows = transactions.map((t: any) => [
-    new Date(t.date).toLocaleDateString('en-GB'),
+    formatAppDate(new Date(t.date)),
     t.expenseNumber || '-',
     t.categoryName,
     t.description || '-',
@@ -1475,7 +1476,7 @@ function FinancialExpenseDetailReport({ year, month }: { year: number; month: st
                 ) : transactions.map((t: any, idx: number) => (
                   <tr key={t.id} className="border-b hover:bg-muted/20">
                     <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{new Date(t.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatAppDate(new Date(t.date))}</td>
                     <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{t.expenseNumber || '-'}</td>
                     <td className="px-3 py-2">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: `${t.categoryColor}1a`, color: t.categoryColor }}>{t.categoryName}</span>
@@ -1636,7 +1637,7 @@ function StudentLeftReport({ classId }: { classId?: string }) {
   const pdfHeaders = ['Name', 'Adm#', 'Class', 'Left Date', 'Reason', 'TC#', 'Dues at Leaving', 'Pending Now'];
   const pdfRows = students.map((s: any) => [
     s.name, s.admissionNumber, s.className,
-    s.leftDate ? new Date(s.leftDate).toLocaleDateString() : '-',
+    s.leftDate ? formatAppDate(new Date(s.leftDate)) : '-',
     s.reasonLabel, s.tcNumber || '-',
     s.outstandingDuesAtLeaving.toLocaleString(), s.currentPendingAmount.toLocaleString(),
   ]);
@@ -1722,7 +1723,7 @@ function StudentLeftReport({ classId }: { classId?: string }) {
                         <div className="text-muted-foreground text-[10px]">#{s.admissionNumber}</div>
                       </td>
                       <td className="px-3 py-1.5 text-muted-foreground">{s.className || '-'}</td>
-                      <td className="px-3 py-1.5 text-muted-foreground">{s.leftDate ? new Date(s.leftDate).toLocaleDateString() : '-'}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">{s.leftDate ? formatAppDate(new Date(s.leftDate)) : '-'}</td>
                       <td className="px-3 py-1.5">{s.reasonLabel}</td>
                       <td className="px-3 py-1.5 text-right font-semibold">
                         {s.currentPendingAmount > 0
@@ -2716,7 +2717,7 @@ function printFeeReport(reportData: any[], schoolName: string, year: number) {
     // of once at the end of that class's table.
     const totalRow = `<tr class="frow"><td colspan="5" class="ftlabel">Total</td>${footerCells}<td class="ftot paid">${cls.classTotalPaid.toLocaleString()}</td><td class="ftot unpaid">${cls.classTotalPending.toLocaleString()}</td></tr>`;
 
-    return `<div class="page"><div class="header"><h1>${schoolName}</h1><h2>Fee Collection Report - ${year}</h2><h3>Class: ${cls.className} | Students: ${cls.totalStudents}</h3></div><table><thead><tr><th class="sno">#</th><th class="name">Student</th><th>Roll#</th><th>Father</th><th>Phone</th>${monthHeaders}<th class="toth">Paid</th><th class="toth">Pending</th></tr></thead><tbody>${rows}${totalRow}</tbody></table><div class="footer"><span>Printed: ${new Date().toLocaleDateString()}</span><span>${schoolName}</span></div></div>`;
+    return `<div class="page"><div class="header"><h1>${schoolName}</h1><h2>Fee Collection Report - ${year}</h2><h3>Class: ${cls.className} | Students: ${cls.totalStudents}</h3></div><table><thead><tr><th class="sno">#</th><th class="name">Student</th><th>Roll#</th><th>Father</th><th>Phone</th>${monthHeaders}<th class="toth">Paid</th><th class="toth">Pending</th></tr></thead><tbody>${rows}${totalRow}</tbody></table><div class="footer"><span>Printed: ${formatAppDate(new Date())}</span><span>${schoolName}</span></div></div>`;
   }).join('');
 
   openReportPrintWindow(`<!DOCTYPE html><html><head><title>Fee Report</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:8px;color:#000;background:#fff}.page{padding:8mm 6mm;page-break-after:always}.page:last-child{page-break-after:auto}.header{text-align:center;margin-bottom:6px}.header h1{font-size:16px;font-weight:900;text-transform:uppercase}.header h2{font-size:11px;font-weight:700}.header h3{font-size:10px;color:#444}table{width:100%;border-collapse:collapse;margin-top:4px}th,td{border:1px solid #999;padding:3px 4px}thead tr{background:#e8e8e8}th{font-size:7.5px;font-weight:700;text-transform:uppercase}th.sno{width:20px;text-align:center}th.name{min-width:100px}th.mh{text-align:center;width:48px}th.toth{text-align:right;width:52px}td.sno{text-align:center;color:#555;font-size:7px}td.name{font-weight:600;white-space:nowrap}td.mc{text-align:center;font-size:7.5px}td.mc.paid{color:#047857;font-weight:700}td.mc.partial{color:#2563eb;font-weight:600}td.mc.unpaid{color:#dc2626;font-weight:700}td.tot{text-align:right;font-weight:700;font-size:8px}td.tot.paid{color:#047857}td.tot.unpaid{color:#dc2626}td.ftlabel{font-weight:800;font-size:8px}td.ftot{text-align:center;font-weight:800;font-size:8px}td.ftot.paid{color:#047857;text-align:right}td.ftot.unpaid{color:#dc2626;text-align:right}tbody tr:nth-child(even){background:#fafafa}tbody tr.frow{background:#f3f3f3;break-inside:avoid}.footer{display:flex;justify-content:space-between;margin-top:6px;font-size:7px;color:#888;border-top:1px solid #ccc;padding-top:3px}@media print{@page{size:A4 landscape;margin:5mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${classPages}</body></html>`);
@@ -2741,7 +2742,7 @@ function printExpenseReport(reportData: any, schoolName: string, year: number, m
 
   const txnRows = transactions.map((t: any, idx: number) => `<tr>
     <td class="c">${idx + 1}</td>
-    <td>${new Date(t.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+    <td>${formatAppDate(new Date(t.date))}</td>
     <td>${t.expenseNumber || '-'}</td>
     <td>${t.categoryName}</td>
     <td>${t.description || '-'}</td>
@@ -2800,6 +2801,6 @@ tfoot td{font-weight:800;background:#f0f0f0}
 <tbody>${txnRows}</tbody>
 <tfoot><tr><td colspan="9">Total (${transactions.length} transactions)</td><td class="r">${fmt(summary.totalExpense)}</td></tr></tfoot>
 </table>
-<div class="footer"><span>Printed: ${new Date().toLocaleString()}</span><span>${schoolName} — Expense Report</span></div>
+<div class="footer"><span>Printed: ${formatAppDateTime(new Date())}</span><span>${schoolName} — Expense Report</span></div>
 </body></html>`);
 }

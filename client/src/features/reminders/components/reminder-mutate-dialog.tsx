@@ -38,6 +38,7 @@ import {
 } from '@/stores/reminder.api'
 import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { formatAppDate } from '@/lib/date-format'
 
 const PRIORITIES: ReminderPriority[] = ['low', 'medium', 'high', 'urgent']
 const REPEATS: ReminderRepeat[] = ['none', 'daily', 'weekly', 'monthly']
@@ -257,7 +258,7 @@ export function ReminderMutateDialog({ open, onOpenChange, reminder }: ReminderM
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start font-normal">
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dueDate ? format(dueDate, 'PPP') : t('Pick a date')}
+                    {dueDate ? formatAppDate(dueDate) : t('Pick a date')}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { format, formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 import {
   Archive,
   FolderOpen,
@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { getElectronAPI } from '@/lib/sync/electron'
 import type { BackupManifest, BackupPreview, BackupRecord, BackupSettings } from '@/types/electron'
+import { formatAppDateTime } from '@/lib/date-format'
 
 function formatBytes(bytes: number) {
   if (!bytes) return '0 B'
@@ -302,7 +303,7 @@ export function BackupRestoreForm() {
                 <div>
                   <div className="font-medium">{backup.fileName}</div>
                   <div className="text-sm text-muted-foreground">
-                    {format(new Date(backup.createdAt), 'PPpp')} · {formatBytes(backup.size)}
+                    {formatAppDateTime(new Date(backup.createdAt))} · {formatBytes(backup.size)}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -356,7 +357,7 @@ export function BackupRestoreForm() {
                 {manifest.includesMongo ? <Badge>MongoDB included</Badge> : null}
               </div>
               <div className="grid gap-2 text-sm md:grid-cols-2">
-                <div>Created: {format(new Date(manifest.createdAt), 'PPpp')}</div>
+                <div>Created: {formatAppDateTime(new Date(manifest.createdAt))}</div>
                 <div>App version: {manifest.appVersion}</div>
                 <div>Pending queue: {manifest.stats?.queueSize ?? 0}</div>
                 <div>Cached records: {manifest.stats?.cacheCount ?? 0}</div>

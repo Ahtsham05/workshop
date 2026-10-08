@@ -19,6 +19,7 @@ import { Can, usePermissions } from '@/context/permission-context'
 import Axios from '@/utils/Axios'
 import summery from '@/utils/summery'
 import * as XLSX from 'xlsx'
+import { formatAppDate } from '@/lib/date-format'
 
 interface SubCategoriesPrimaryButtonsProps {
   hasCategories: boolean
@@ -57,7 +58,7 @@ export default function SubCategoriesPrimaryButtons({ hasCategories, defaultCate
         name: subCategory.name || '',
         nameUrdu: subCategory.nameUrdu || '',
         category: typeof subCategory.category === 'object' ? subCategory.category?.name || '' : '',
-        createdAt: subCategory.createdAt ? new Date(subCategory.createdAt).toLocaleDateString() : '',
+        createdAt: subCategory.createdAt ? formatAppDate(new Date(subCategory.createdAt)) : '',
       }))
 
       const ws = XLSX.utils.json_to_sheet(rows)

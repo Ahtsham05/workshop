@@ -1,9 +1,9 @@
-import { format } from 'date-fns'
 import { escapeHtml } from '@/lib/escape-html'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import { openPrintWindowForFormat, type PrintWindowContact } from '@/features/invoice/utils/print-utils'
 import { PAPER_FORMATS, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import type { CurrencyOption } from '@/stores/localization.api'
+import { formatAppDate } from '@/lib/date-format'
 
 const FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
 
@@ -41,7 +41,7 @@ interface PrintCompany {
 
 const formatDate = (dateString: string) => {
   try {
-    return format(new Date(dateString), 'PPP')
+    return formatAppDate(new Date(dateString))
   } catch {
     return dateString
   }

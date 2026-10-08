@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { format } from 'date-fns'
 import { Search, Send, CheckCheck, Check, Clock, AlertCircle, RotateCw, Trash2, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -25,6 +24,7 @@ import {
   type SmsMessage,
   type SmsMessageStatusFilter,
 } from '@/stores/smsGateway.api'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const SOURCE_LABELS: Record<string, string> = {
   manual: 'Manual',
@@ -437,7 +437,7 @@ export function SmsLogPage() {
                           <StatusBadge status={message.status} error={message.error} />
                         </TableCell>
                         <TableCell className='text-sm text-muted-foreground'>
-                          {format(new Date(message.createdAt), 'd MMM yyyy, h:mm a')}
+                          {formatAppDateTime(new Date(message.createdAt))}
                         </TableCell>
                         <TableCell className='text-right'>
                           {isResendable && (

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
+import { NativeDateInput } from '@/components/ui/date-picker'
 import {
   formatPhoneInput,
   formatCNICInput,
@@ -101,6 +102,22 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       },
       [value, onChange, fieldType],
     )
+
+    // Native date fields display in the OS/browser format, not the business's — every
+    // `<Input type="date">` renders the app date field instead (typed in the Settings →
+    // Localization format, same `YYYY-MM-DD` value/event contract). See date-picker.tsx.
+    if (type === 'date') {
+      return (
+        <NativeDateInput
+          ref={ref}
+          value={value as string | undefined}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          className={className}
+          {...props}
+        />
+      )
+    }
 
     const shouldShowVoice = showVoiceInput !== false && !NO_VOICE_TYPES.has(type || 'text')
 

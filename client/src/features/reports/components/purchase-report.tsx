@@ -34,6 +34,7 @@ import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 import { PurchaseAttachmentsButton } from '@/features/purchase-invoice/components/purchase-attachments-button'
+import { formatAppDate } from '@/lib/date-format'
 
 interface PurchaseReportProps {
   startDate: string
@@ -109,7 +110,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
         }>
       >()
       detailData.purchases.forEach((p) => {
-        const dateStr = format(new Date(p.purchaseDate), 'dd MMM yyyy')
+        const dateStr = formatAppDate(new Date(p.purchaseDate))
         if (!dateMap.has(dateStr)) dateMap.set(dateStr, [])
         p.items.forEach((item) => {
           dateMap.get(dateStr)!.push({
@@ -532,7 +533,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                               )}
                             </TableCell>
                             <TableCell className='text-sm text-muted-foreground'>
-                              {format(new Date(p.purchaseDate), 'dd MMM yyyy')}
+                              {formatAppDate(new Date(p.purchaseDate))}
                             </TableCell>
                             <TableCell
                               className={cn(
@@ -681,7 +682,7 @@ export const PurchaseReport = forwardRef<{ exportToExcel: () => void }, Purchase
                   <div className='space-y-1'>
                     <p className='text-muted-foreground'>Date</p>
                     <p className='font-medium'>
-                      {format(new Date(viewInvoice.purchaseDate), 'dd MMM yyyy')}
+                      {formatAppDate(new Date(viewInvoice.purchaseDate))}
                     </p>
                   </div>
                   <div className='space-y-1'>

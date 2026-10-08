@@ -44,6 +44,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { getEntityId } from '@/lib/entity-id';
 import { resolveDayStatus } from '@/lib/hr-attendance-utils';
+import { formatAppDate } from '@/lib/date-format'
 
 // Selectable attendance actions — what an admin can actually record for a day.
 const STATUS_OPTIONS = [
@@ -375,7 +376,7 @@ export default function AttendanceTracking() {
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              {t('Daily Attendance')} — {format(new Date(selectedDate), 'MMM dd, yyyy')}
+              {t('Daily Attendance')} — {formatAppDate(new Date(selectedDate))}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               {filteredEmployees.length} {t('employees')}

@@ -12,6 +12,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import type { RootState } from '@/stores/store';
 import editorCss from './report-print-editor.css?raw';
 import editorJs from './report-print-editor.js?raw';
+import { formatAppDateTime } from '@/lib/date-format'
 
 export type PrintSection =
   | { type: 'summary'; heading?: string; items: { label: string; value: string }[] }
@@ -75,7 +76,7 @@ ${sectionsHtml}
   <div class="sig-box"><div class="sig-line"></div>Prepared By</div>
   <div class="sig-box"><div class="sig-line"></div>Authorized Signature</div>
 </div>
-<div class="footer"><span>Generated: ${new Date().toLocaleString()} by ${opts.generatedByName || 'Staff'}</span><span>${org?.name || 'School'} — ${opts.title}</span></div>
+<div class="footer"><span>Generated: ${formatAppDateTime(new Date())} by ${opts.generatedByName || 'Staff'}</span><span>${org?.name || 'School'} — ${opts.title}</span></div>
 </body></html>`;
 }
 

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { format } from 'date-fns'
 import { CloudDownload, CheckCircle2, Loader2, AlertCircle, WifiOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -8,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { getElectronAPI } from '@/lib/sync/electron'
 import type { OfflineBootstrapInfo, OfflineBootstrapProgress } from '@/types/electron'
+import { formatAppDateTime } from '@/lib/date-format'
 
 function statusBadge(info: OfflineBootstrapInfo | null) {
   switch (info?.status) {
@@ -114,7 +114,7 @@ export function OfflineModeForm() {
         {statusBadge(bootstrapInfo)}
         {bootstrapInfo?.completedAt && (
           <span className="text-sm text-muted-foreground">
-            Last download: {format(new Date(bootstrapInfo.completedAt), 'PPpp')}
+            Last download: {formatAppDateTime(new Date(bootstrapInfo.completedAt))}
           </span>
         )}
         {bootstrapInfo?.version && (

@@ -79,6 +79,7 @@ import { BulkExpensesDialog } from './bulk-expenses-dialog';
 import { printExpenseVoucher } from './print-expense-voucher';
 import { useStateDraft } from '@/hooks/use-form-draft';
 import { FormDraftNotice } from '@/components/form-draft-notice';
+import { formatAppDate } from '@/lib/date-format'
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -634,7 +635,7 @@ function ExpensesTab() {
                       return (
                         <TableRow key={exp.id || exp._id} className="hover:bg-muted/30 text-sm">
                           <TableCell className="pl-4 text-muted-foreground whitespace-nowrap">
-                            {new Date(exp.date).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: '2-digit' })}
+                            {formatAppDate(new Date(exp.date))}
                           </TableCell>
                           <TableCell className="max-w-[240px]">
                             <div className="flex items-center gap-1.5">

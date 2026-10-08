@@ -24,6 +24,7 @@ import {
   type WebsiteConnection,
   type WebsiteConnectionInput,
 } from '@/stores/websiteConnection.api'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const API_BASE = (import.meta.env.VITE_BACKEND_URL || `${window.location.origin}/v1`).replace(/\/+$/, '')
 
@@ -358,7 +359,7 @@ function ConnectionCard({
       </div>
       <p className='text-muted-foreground text-xs'>
         {t('Key')} <code className='font-mono'>{connection.keyPrefix}…</code> ·{' '}
-        {connection.lastUsedAt ? t('Last used {{when}}', { when: new Date(connection.lastUsedAt).toLocaleString() }) : t('Not used yet')}
+        {connection.lastUsedAt ? t('Last used {{when}}', { when: formatAppDateTime(new Date(connection.lastUsedAt)) }) : t('Not used yet')}
       </p>
       <div className='flex flex-wrap gap-2'>
         <Button size='sm' variant='outline' className='gap-1.5' onClick={onPreview}><Eye className='size-3.5' />{t('Preview')}</Button>

@@ -27,6 +27,7 @@ import { useGetSalesmanCommissionReportQuery } from '@/stores/reports.api'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface SalesmanCommissionReportProps {
   startDate: string
@@ -306,7 +307,7 @@ export const SalesmanCommissionReport = forwardRef<{ exportToExcel: () => void }
                                     {row.invoices.map((inv, idx) => (
                                       <TableRow key={`${inv.referenceId || idx}-${inv.transactionType}`}>
                                         <TableCell className='font-mono text-sm'>{inv.reference || '—'}</TableCell>
-                                        <TableCell className='text-sm'>{format(new Date(inv.date), 'dd MMM yyyy')}</TableCell>
+                                        <TableCell className='text-sm'>{formatAppDate(new Date(inv.date))}</TableCell>
                                         <TableCell>
                                           <Badge
                                             className={

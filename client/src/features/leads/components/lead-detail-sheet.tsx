@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { format } from 'date-fns'
 import {
   Building2,
   ChevronRight,
@@ -52,6 +51,7 @@ import { LeadActivityTimeline } from './lead-activity-timeline'
 import { LeadMutateDialog } from './lead-mutate-dialog'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { LeadQuotationDialog } from './lead-quotation-dialog'
+import { formatAppDate } from '@/lib/date-format'
 
 function repName(assignedTo: Lead['assignedTo']): string {
   if (!assignedTo) return '—'
@@ -212,7 +212,7 @@ export function LeadDetailSheet({ lead, onOpenChange }: LeadDetailSheetProps) {
               </div>
               <div className="rounded-lg border bg-muted/30 p-2.5">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t('Created')}</p>
-                <p className="mt-0.5 font-medium">{format(new Date(lead.createdAt), 'PP')}</p>
+                <p className="mt-0.5 font-medium">{formatAppDate(new Date(lead.createdAt))}</p>
               </div>
             </div>
 

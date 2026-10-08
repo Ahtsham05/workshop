@@ -26,3 +26,8 @@ export function useIsMobile() {
 export function useIsPhone() {
   return useMaxWidthQuery(PHONE_BREAKPOINT)
 }
+
+/** Below Tailwind's `xl` (1280px) — where the invoice/purchase forms stop being three columns. */
+export function useIsBelowXl() {
+  return useMaxWidthQuery(1280)
+}

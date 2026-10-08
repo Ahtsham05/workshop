@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { format, formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 import {
   RefreshCw,
   RotateCcw,
@@ -38,6 +38,7 @@ import type {
   SyncFailedItems,
   SyncLogEntry,
 } from '@/types/electron'
+import { formatAppDateTime } from '@/lib/date-format'
 
 function formatRelativeTime(value: string | null | undefined) {
   if (!value) return 'Never'
@@ -283,7 +284,7 @@ export function SyncDashboardForm() {
           value={formatRelativeTime(dashboard?.lastSuccessAt || dashboard?.lastPushAt)}
           hint={
             dashboard?.lastSuccessAt
-              ? format(new Date(dashboard.lastSuccessAt), 'PPpp')
+              ? formatAppDateTime(new Date(dashboard.lastSuccessAt))
               : undefined
           }
         />
@@ -537,7 +538,7 @@ export function SyncDashboardForm() {
                     {log.status}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    {format(new Date(log.createdAt), 'PP p')}
+                    {formatAppDateTime(new Date(log.createdAt))}
                   </span>
                 </div>
                 <div className="mt-1">{log.message}</div>

@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Bell, Send, Trash2, Users, GraduationCap, Megaphone } from 'lucide-react'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const AUDIENCES = [
   { id: 'teacher', label: 'Teachers', icon: GraduationCap },
@@ -167,7 +168,7 @@ export default function NotificationsManagement() {
                           <Badge key={a} variant="outline" className="text-[10px] capitalize">{a}s</Badge>
                         ))}
                         <span className="text-[10px] text-muted-foreground/70">
-                          {n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
+                          {n.createdAt ? formatAppDateTime(new Date(n.createdAt)) : ''}
                         </span>
                       </div>
                     </div>

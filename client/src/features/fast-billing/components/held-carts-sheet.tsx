@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PackageOpen, Trash2 } from 'lucide-react'
 import type { FastBillHeldRecord } from '@/lib/pos-hold-storage'
+import { formatAppDateTime } from '@/lib/date-format'
 
 type Props = {
   open: boolean
@@ -40,7 +41,7 @@ export function HeldCartsSheet({ open, onOpenChange, held, onResume, onDelete }:
                       <Badge variant='secondary'>{items.length} items</Badge>
                     </div>
                     <p className='mt-0.5 text-xs text-muted-foreground'>
-                      {new Date(record.savedAt).toLocaleString()} · {formatMoney(total)}
+                      {formatAppDateTime(new Date(record.savedAt))} · {formatMoney(total)}
                     </p>
                     <div className='mt-2 flex gap-2'>
                       <Button type='button' size='sm' className='h-7 flex-1 text-xs' onClick={() => onResume(record)}>

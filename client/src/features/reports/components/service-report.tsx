@@ -50,6 +50,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface ServiceReportProps {
   startDate: string
@@ -456,7 +457,7 @@ export const ServiceReport = forwardRef<{ exportToExcel: () => void }, ServiceRe
                                     {inv.invoiceNumber}
                                   </TableCell>
                                   <TableCell className='text-xs text-muted-foreground py-2.5'>
-                                    {format(new Date(inv.date), 'dd MMM yyyy')}
+                                    {formatAppDate(new Date(inv.date))}
                                   </TableCell>
                                   <TableCell className='text-xs font-medium py-2.5'>
                                     {inv.customerName || 'Walk-in'}

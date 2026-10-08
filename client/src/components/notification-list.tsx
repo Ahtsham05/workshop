@@ -5,6 +5,7 @@ import { useGetMyNotificationsQuery, useMarkAllNotificationsReadMutation } from 
 import { Bell, AlertTriangle, CalendarDays, GraduationCap, Wallet, Megaphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { formatAppDate } from '@/lib/date-format'
 
 export function timeAgo(date?: string): string {
   if (!date) return ''
@@ -17,7 +18,7 @@ export function timeAgo(date?: string): string {
   if (hrs < 24) return `${hrs}h ago`
   const days = Math.floor(hrs / 24)
   if (days < 7) return `${days}d ago`
-  return new Date(date).toLocaleDateString()
+  return formatAppDate(new Date(date))
 }
 
 export const TYPE_META: Record<string, { icon: typeof Bell; color: string }> = {

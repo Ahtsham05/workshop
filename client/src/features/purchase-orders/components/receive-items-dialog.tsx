@@ -50,6 +50,7 @@ import {
   toWalletOptionValue,
 } from '@/lib/wallet-payment-options'
 import { SplitPaymentFields, type SplitPaymentValue } from '@/components/split-payment-fields'
+import { formatAppDate } from '@/lib/date-format'
 
 type Row = {
   productId: string
@@ -231,7 +232,7 @@ function ReceiveRowBatchFields({ row, onChange }: { row: Row; onChange: (patch: 
             <button
               type='button'
               onClick={() => onChange({ batchNumber: b.batchNumber, priceAtPurchase: b.costPerUnit })}
-              title={b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : undefined}
+              title={b.expiryDate ? `Expires ${formatAppDate(new Date(b.expiryDate))}` : undefined}
               className={cn('py-1', isSelected ? 'pl-2.5' : 'px-2.5')}
             >
               {b.batchNumber} · {b.quantity} left
@@ -247,7 +248,7 @@ function ReceiveRowBatchFields({ row, onChange }: { row: Row; onChange: (patch: 
       {isNewBatch && (
         <span
           className={pillClass(true)}
-          title={isExpirable ? (row.expiryDate ? `Expires ${new Date(row.expiryDate).toLocaleDateString()}` : 'No expiry set') : undefined}
+          title={isExpirable ? (row.expiryDate ? `Expires ${formatAppDate(new Date(row.expiryDate))}` : 'No expiry set') : undefined}
         >
           <button type='button' onClick={openEditDialog} className='py-1 pl-2.5'>
             <Sparkles className='mr-1 inline h-3 w-3' />

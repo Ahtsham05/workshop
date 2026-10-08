@@ -55,6 +55,7 @@ import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { formatImeiEntries } from '@/stores/imei.api'
 import { PurchaseAttachmentsButton } from '@/features/purchase-invoice/components/purchase-attachments-button'
+import { formatAppDate } from '@/lib/date-format'
 
 interface LedgerReportProps {
   startDate: string
@@ -299,7 +300,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
         runningBalance: number
       }>>()
       filteredRows.forEach((row) => {
-        const dateStr = format(new Date(row.date), 'dd MMM yyyy')
+        const dateStr = formatAppDate(new Date(row.date))
         if (!dateMap.has(dateStr)) dateMap.set(dateStr, [])
         row.items.forEach((item) => {
           dateMap.get(dateStr)!.push({
@@ -697,7 +698,7 @@ export const LedgerReport = forwardRef<{ exportToExcel: () => void }, LedgerRepo
                               </Button>
                             </TableCell>
                             <TableCell className='whitespace-nowrap text-sm'>
-                              {format(new Date(row.date), 'dd MMM yyyy')}
+                              {formatAppDate(new Date(row.date))}
                               <div className='text-xs text-muted-foreground'>{format(new Date(row.date), 'hh:mm a')}</div>
                             </TableCell>
                             <TableCell>

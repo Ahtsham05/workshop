@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { useSelector } from 'react-redux'
-import { format } from 'date-fns'
 import { FileText, Loader2, MessageCircle } from 'lucide-react'
 import {
   Dialog,
@@ -44,6 +43,7 @@ import {
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { sendInvoiceReceiptWhatsApp } from '@/features/invoice/utils/send-invoice-whatsapp'
 import { useCurrencyMeta, formatMoneyWithMeta } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 const STATUS_BADGE: Record<string, string> = {
   draft: 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
@@ -191,7 +191,7 @@ export function LeadQuotationDialog({ invoiceId, onOpenChange, leadName, leadPho
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{t('Date')}</p>
-                <p className="text-sm font-medium">{invoice.createdAt ? format(new Date(invoice.createdAt), 'MMM dd, yyyy') : '-'}</p>
+                <p className="text-sm font-medium">{invoice.createdAt ? formatAppDate(new Date(invoice.createdAt)) : '-'}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{t('Customer')}</p>

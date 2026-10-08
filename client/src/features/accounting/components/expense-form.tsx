@@ -12,7 +12,6 @@ import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command'
 import { CalendarIcon, Loader2, Save, X, Plus, Check, ChevronsUpDown, Pencil, Trash2 } from 'lucide-react'
-import { format } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { toast } from 'sonner'
@@ -52,6 +51,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { formatAppDate } from '@/lib/date-format'
 
 interface ExpenseFormProps {
   expense?: any
@@ -458,7 +458,7 @@ export function ExpenseForm({
                     className={cn('w-full justify-start text-left font-normal', !formData.date && 'text-muted-foreground')}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formData.date ? format(formData.date, 'PPP') : <span>{t('Pick a date')}</span>}
+                    {formData.date ? formatAppDate(formData.date) : <span>{t('Pick a date')}</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">

@@ -44,6 +44,8 @@ import StudentAvatar from '../components/student-avatar';
 import type { RootState, AppDispatch } from '@/stores/store';
 import { setActiveBranch } from '@/stores/auth.slice';
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
+import { NativeDateInput } from '@/components/ui/date-picker'
+import { formatAppDate } from '@/lib/date-format'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -717,7 +719,7 @@ export default function TeacherPortalPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap gap-3 lg:items-end">
                 <div className="col-span-1">
                   <p className="text-xs text-muted-foreground mb-1 font-medium">Date</p>
-                  <input type="date" className="text-sm border rounded px-2 py-1.5 bg-background w-full" value={attDate} onChange={e => setAttDate(e.target.value)} />
+                  <NativeDateInput className="w-full" value={attDate} onChange={e => setAttDate(e.target.value)} />
                 </div>
                 <div className="col-span-1">
                   <p className="text-xs text-muted-foreground mb-1 font-medium">Class</p>
@@ -904,7 +906,7 @@ export default function TeacherPortalPage() {
                   )}
                   <div>
                     <p className="text-xs text-muted-foreground mb-1 font-medium">Date</p>
-                    <input type="date" className="text-sm border rounded px-2 py-1.5 bg-background" value={diaryDate} onChange={e => setDiaryDate(e.target.value)} />
+                    <NativeDateInput className="w-40" value={diaryDate} onChange={e => setDiaryDate(e.target.value)} />
                   </div>
                 </div>
 
@@ -980,7 +982,7 @@ export default function TeacherPortalPage() {
                         <div className="min-w-0">
                           <p className="font-semibold text-sm truncate">{d.title || 'Daily Diary'}</p>
                           <p className="text-xs text-muted-foreground">
-                            {d.classId?.name || ''}{d.sectionId?.name ? ` · ${d.sectionId.name}` : ''} · {new Date(d.date).toLocaleDateString()}
+                            {d.classId?.name || ''}{d.sectionId?.name ? ` · ${d.sectionId.name}` : ''} · {formatAppDate(new Date(d.date))}
                           </p>
                         </div>
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive flex-shrink-0" onClick={() => handleDeleteDiary(d._id || d.id)}>
@@ -1352,8 +1354,8 @@ export default function TeacherPortalPage() {
                           <p className="font-semibold text-sm">{e.name}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {e.classId?.name} &nbsp;·&nbsp; {e.type?.replace('_', ' ')}
-                            {e.startDate && ` · ${new Date(e.startDate).toLocaleDateString()}`}
-                            {e.endDate && ` – ${new Date(e.endDate).toLocaleDateString()}`}
+                            {e.startDate && ` · ${formatAppDate(new Date(e.startDate))}`}
+                            {e.endDate && ` – ${formatAppDate(new Date(e.endDate))}`}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">

@@ -1,6 +1,7 @@
 import type { AgentBillRecord } from '@/stores/mobile-shop.api'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import type { CurrencyOption } from '@/stores/localization.api'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 interface AgentBillReceiptOptions {
   orgName?: string
@@ -23,15 +24,9 @@ export function generateAgentBillReceiptHTML(
   const companyName = options.branchDetails?.name || options.orgName || 'Bill Collection'
   const fmt = (n: number) => formatMoneyWithMeta(n, options.currencyMeta ?? FALLBACK_CURRENCY)
   const fmtDate = (d?: string) =>
-    d ? new Date(d).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+    d ? formatAppDate(new Date(d)) : '—'
 
-  const printedAt = new Date().toLocaleDateString('en-PK', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const printedAt = formatAppDateTime(new Date())
 
   // Current/previous overdue amounts are folded into their bill's line so the
   // customer just sees "Current Bill" / "Previous Bill" — the overdue split is

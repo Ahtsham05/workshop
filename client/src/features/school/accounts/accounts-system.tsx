@@ -52,6 +52,7 @@ import {
 } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { useCurrencyMeta, useFormatMoney } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ─── Constants ────────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ const TAB_KEYS = TABS.map((t) => t.key);
 
 function fmtDate(d: string | undefined) {
   if (!d) return '-';
-  return new Date(d).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatAppDate(new Date(d));
 }
 
 function resolveId(item: { id?: string; _id?: string } | null | undefined) {
@@ -111,7 +112,7 @@ function exportToPDF(title: string, headers: string[], rows: string[][], fileNam
       doc.setFontSize(14);
       doc.text(title, 14, 15);
       doc.setFontSize(8);
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 21);
+      doc.text(`Generated: ${formatAppDate(new Date())}`, 14, 21);
       (doc as any).autoTable({
         head: [headers],
         body: rows,

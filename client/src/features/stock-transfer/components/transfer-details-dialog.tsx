@@ -14,10 +14,10 @@ import {
 } from '@/stores/inventoryTransfer.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useLanguage } from '@/context/language-context'
-import { formatDateSafe } from '@/lib/utils'
 import type { RootState } from '@/stores/store'
 import { TransferStatusBadge } from './transfer-status-badge'
 import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow } from '../utils/print-utils'
+import { formatAppDateTime } from '@/lib/date-format'
 
 interface TransferDetailsDialogProps {
   groupId: string | null
@@ -56,7 +56,7 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
 
   if (!groupId) return null
 
-  const formatDate = (value?: string | null) => formatDateSafe(value, 'MMM dd, yyyy hh:mm a')
+  const formatDate = (value?: string | null) => formatAppDateTime(value)
 
   const first = items?.[0]
   const isSource = first ? branchIdOf(first.fromBranchId) === activeBranchId : false

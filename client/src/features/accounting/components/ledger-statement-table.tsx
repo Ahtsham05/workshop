@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
-import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
@@ -10,6 +9,7 @@ import {
   isSettledCashRow,
   type LedgerParty,
 } from '@/features/accounting/utils/ledger-display';
+import { formatAppDate } from '@/lib/date-format'
 
 export interface LedgerStatementEntry {
   id?: string;
@@ -108,7 +108,7 @@ export function LedgerStatementTable({
                   {rowNumber}
                 </TableCell>
                 <TableCell className='whitespace-nowrap text-sm tabular-nums'>
-                  {format(new Date(entry.transactionDate), 'MMM dd, yyyy')}
+                  {formatAppDate(new Date(entry.transactionDate))}
                 </TableCell>
                 <TableCell>
                   <Badge variant={getTypeBadgeVariant(entry.transactionType)} className='whitespace-nowrap'>

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Link } from '@tanstack/react-router'
 import { CheckCircle2, History, Upload, AlertTriangle, Wallet as WalletIcon } from 'lucide-react'
@@ -38,11 +37,13 @@ import {
 import { getBusinessToday } from '@/lib/business-timezone'
 import { StatementUploadDialog } from './components/statement-upload-dialog'
 import { useFormatMoney } from '@/lib/format-money'
+import { NativeDateInput } from '@/components/ui/date-picker'
+import { formatAppDate } from '@/lib/date-format'
 
 const formatDate = (value?: string) => {
   if (!value) return '-'
   try {
-    return format(new Date(value), 'dd MMM yyyy')
+    return formatAppDate(new Date(value))
   } catch {
     return value
   }
@@ -247,20 +248,18 @@ export default function BankReconciliationPage({ initialWalletType }: BankReconc
             <CardContent className='grid gap-4 md:grid-cols-4'>
               <div className='space-y-2'>
                 <Label>Statement Start Date</Label>
-                <input
-                  type='date'
+                <NativeDateInput
                   value={statementStartDate}
                   onChange={(e) => setStatementStartDate(e.target.value)}
-                  className='h-9 w-full rounded-md border bg-background px-3 text-sm'
+                  className='h-9 w-full'
                 />
               </div>
               <div className='space-y-2'>
                 <Label>Statement End Date</Label>
-                <input
-                  type='date'
+                <NativeDateInput
                   value={statementEndDate}
                   onChange={(e) => setStatementEndDate(e.target.value)}
-                  className='h-9 w-full rounded-md border bg-background px-3 text-sm'
+                  className='h-9 w-full'
                 />
               </div>
               <div className='space-y-2'>

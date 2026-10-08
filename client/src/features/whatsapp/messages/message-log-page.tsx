@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { format } from 'date-fns'
 import {
   Search,
   Send,
@@ -45,6 +44,7 @@ import {
   type WhatsAppLogMessage,
   type WhatsAppMessageSource,
 } from '@/stores/whatsappCloud.api'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const SOURCE_LABELS: Record<WhatsAppMessageSource, string> = {
   inbox: 'Inbox',
@@ -536,7 +536,7 @@ export function MessageLogPage() {
                           <StatusBadge status={message.status} errorMessage={message.errorMessage} />
                         </TableCell>
                         <TableCell className='text-sm text-muted-foreground'>
-                          {format(new Date(message.createdAt), 'd MMM yyyy, h:mm a')}
+                          {formatAppDateTime(new Date(message.createdAt))}
                         </TableCell>
                         <TableCell className='text-right'>
                           {isResendable && canManageWhatsapp && (

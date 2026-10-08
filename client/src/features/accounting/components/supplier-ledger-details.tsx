@@ -78,6 +78,7 @@ import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button';
 import { useBranchName } from '@/hooks/use-branch-name'
 import { buildSupplierBalanceMessage, buildPaymentMadeMessage } from '@/utils/sms-messages'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 interface LedgerEntry {
   _id?: string;
@@ -153,7 +154,7 @@ function PurchaseDialogContent({ purchaseId, supplierName }: { purchaseId?: stri
       if (!date) return '-';
       const dateObj = new Date(date);
       if (isNaN(dateObj.getTime())) return '-';
-      return format(dateObj, 'MMM dd, yyyy');
+      return formatAppDate(dateObj);
     } catch {
       return '-';
     }
@@ -270,7 +271,7 @@ function InvoiceDialogContent({ invoiceId, supplierName }: { invoiceId?: string;
       if (!date) return '-';
       const dateObj = new Date(date);
       if (isNaN(dateObj.getTime())) return '-';
-      return format(dateObj, 'MMM dd, yyyy');
+      return formatAppDate(dateObj);
     } catch {
       return '-';
     }
@@ -397,7 +398,7 @@ function PurchaseReturnDialogContent({
       if (!date) return '-';
       const dateObj = new Date(date as string);
       if (isNaN(dateObj.getTime())) return '-';
-      return format(dateObj, 'MMM dd, yyyy');
+      return formatAppDate(dateObj);
     } catch {
       return '-';
     }
@@ -553,7 +554,7 @@ function LoadPurchaseDetailDialogContent({
     try {
       if (!d) return '—';
       const dt = new Date(d as string);
-      return isNaN(dt.getTime()) ? '—' : format(dt, 'MMM dd, yyyy HH:mm');
+      return isNaN(dt.getTime()) ? '—' : formatAppDateTime(dt);
     } catch {
       return '—';
     }
@@ -722,7 +723,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   const exportToExcel = () => {
     try {
       const data = entries.map(entry => ({
-        'Date': format(new Date(entry.transactionDate), 'MMM dd, yyyy'),
+        'Date': formatAppDate(new Date(entry.transactionDate)),
         'Type': getTransactionTypeLabel(entry),
         'Description': entry.description,
         'Reference': entry.reference || '-',
@@ -925,7 +926,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
           {
             title: 'Purchase return',
             reference: pr.returnNumber,
-            issuedAt: pr.date ? new Date(pr.date).toLocaleString() : new Date(pr.createdAt).toLocaleString(),
+            issuedAt: pr.date ? formatAppDateTime(new Date(pr.date)) : formatAppDateTime(new Date(pr.createdAt)),
             lines: [
               { label: 'Supplier', value: sup },
               ...(purchaseRef ? [{ label: 'Purchase', value: purchaseRef }] : []),
@@ -948,7 +949,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
           {
             title: 'Load purchase',
             reference: String(lp.id).slice(-10).toUpperCase(),
-            issuedAt: new Date(lp.date).toLocaleString(),
+            issuedAt: formatAppDateTime(new Date(lp.date)),
             lines: [
               { label: 'Wallet', value: lp.walletType },
               { label: 'Amount', value: formatMoney(lp.amount) },
@@ -1561,7 +1562,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                         className={cn('w-full justify-start text-left font-normal')}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {format(new Date(dateRange.startDate), 'PPP')}
+                        {formatAppDate(new Date(dateRange.startDate))}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -1590,7 +1591,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
                         className={cn('w-full justify-start text-left font-normal')}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {format(new Date(dateRange.endDate), 'PPP')}
+                        {formatAppDate(new Date(dateRange.endDate))}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -1663,7 +1664,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-muted-foreground">
-                  {format(new Date(dateRange.startDate), 'dd MMM yyyy')} — {format(new Date(dateRange.endDate), 'dd MMM yyyy')}
+                  {formatAppDate(new Date(dateRange.startDate))} — {formatAppDate(new Date(dateRange.endDate))}
                   {' · '}
                   {totalResults} {t('entries')}
                 </span>

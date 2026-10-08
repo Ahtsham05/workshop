@@ -16,6 +16,7 @@ import type { PurchaseCatalogBatch } from '@/stores/purchaseCatalog.api'
 import type { BatchAllocation } from '@/lib/batch-allocation'
 import { focusField } from '@/lib/invoice-form-keyboard'
 import { cn } from '@/lib/utils'
+import { formatAppDate } from '@/lib/date-format'
 
 export const entryImei = (e: ImeiEntryInput) => (typeof e === 'string' ? e : e.imei)
 
@@ -306,7 +307,7 @@ export function BatchAllocationEditor({
         return (
           <div
             key={alloc.batchId}
-            title={batchInfo?.expiryDate ? `Expires ${new Date(batchInfo.expiryDate).toLocaleDateString()}` : undefined}
+            title={batchInfo?.expiryDate ? `Expires ${formatAppDate(new Date(batchInfo.expiryDate))}` : undefined}
             className={cn(
               'inline-flex items-center gap-1 rounded-full border py-0.5 pl-2 pr-1 text-[11px] transition-colors',
               overCap

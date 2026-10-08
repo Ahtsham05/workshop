@@ -82,6 +82,7 @@ import {
 } from '@/lib/wallet-payment-options';
 import { usePermissions } from '@/context/permission-context';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 const STATUS_COLORS: Record<string, string> = {
   Pending: '#f59e0b',
@@ -1007,7 +1008,7 @@ export default function PayrollManagement() {
                           salaryLedgerEntries.map((entry: any) => {
                             return (
                               <TableRow key={entry.id}>
-                                <TableCell>{new Date(entry.transactionDate).toLocaleDateString('en-GB')}</TableCell>
+                                <TableCell>{formatAppDate(new Date(entry.transactionDate))}</TableCell>
                                 <TableCell>{entry.reference || entry.notes || '-'}</TableCell>
                                 <TableCell>{formatCurrency(entry.debit || 0)}</TableCell>
                                 <TableCell>{formatCurrency(entry.credit || 0)}</TableCell>
@@ -1105,7 +1106,7 @@ export default function PayrollManagement() {
                             const isStorePurchase = entry.referenceModel === 'Invoice';
                             return (
                             <TableRow key={entry.id}>
-                              <TableCell>{new Date(entry.transactionDate).toLocaleDateString('en-GB')}</TableCell>
+                              <TableCell>{formatAppDate(new Date(entry.transactionDate))}</TableCell>
                               <TableCell>
                                 {isStorePurchase ? (
                                   <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-blue-700">

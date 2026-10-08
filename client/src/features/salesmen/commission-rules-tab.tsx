@@ -18,7 +18,6 @@ import { CommissionRuleDialog } from './commission-rule-dialog';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useLanguage } from '@/context/language-context';
 import { Can } from '@/context/permission-context';
-import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   AlertDialog,
@@ -30,6 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { formatAppDate } from '@/lib/date-format'
 
 function moduleLabel(module: CommissionRule['module']): string {
   if (!module) return 'All Modules';
@@ -218,8 +218,8 @@ export function CommissionRulesTab() {
                         <Badge variant={rule.module ? 'outline' : 'secondary'}>{moduleLabel(rule.module)}</Badge>
                       </TableCell>
                       <TableCell>{rule.rate}%</TableCell>
-                      <TableCell>{format(new Date(rule.effectiveFrom), 'MMM dd, yyyy')}</TableCell>
-                      <TableCell>{rule.effectiveTo ? format(new Date(rule.effectiveTo), 'MMM dd, yyyy') : '—'}</TableCell>
+                      <TableCell>{formatAppDate(new Date(rule.effectiveFrom))}</TableCell>
+                      <TableCell>{rule.effectiveTo ? formatAppDate(new Date(rule.effectiveTo)) : '—'}</TableCell>
                       <TableCell>
                         {rule.isActive ? (
                           <Badge variant="default">{t('active') || 'Active'}</Badge>

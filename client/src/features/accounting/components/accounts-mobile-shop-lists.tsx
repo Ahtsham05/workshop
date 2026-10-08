@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { format, isValid } from 'date-fns'
+import { isValid } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -14,11 +14,12 @@ import { useGetCashWithdrawalsQuery, useGetLoadTransactionsQuery } from '@/store
 import { useLanguage } from '@/context/language-context'
 import { ArrowRight } from 'lucide-react'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 const fmtRowDate = (d?: string) => {
   if (!d) return '—'
   const parsed = new Date(d)
-  return isValid(parsed) ? format(parsed, 'MMM dd, yyyy') : '—'
+  return isValid(parsed) ? formatAppDate(parsed) : '—'
 }
 
 export function AccountsMobileShopLists() {

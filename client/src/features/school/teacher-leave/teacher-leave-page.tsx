@@ -22,6 +22,7 @@ import {
   useCancelTeacherLeaveMutation,
 } from '@/stores/school.api';
 import { toast } from 'sonner';
+import { formatAppDate } from '@/lib/date-format'
 
 const LEAVE_TYPES = ['sick', 'casual', 'annual', 'emergency', 'unpaid', 'maternity', 'paternity'];
 
@@ -32,7 +33,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Cancelled', color: 'bg-gray-100 text-gray-500' },
 };
 
-const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const fmtDate = (d: string) => d ? formatAppDate(new Date(d)) : '—';
 
 function calcDays(from: string, to: string) {
   if (!from || !to) return 0;

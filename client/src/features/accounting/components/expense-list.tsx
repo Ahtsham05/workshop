@@ -32,7 +32,6 @@ import {
   CheckCircle2,
   Clock
 } from 'lucide-react';
-import { format } from 'date-fns';
 import { useLanguage } from '@/context/language-context';
 import { usePermissions } from '@/context/permission-context';
 import { toast } from 'sonner';
@@ -51,6 +50,7 @@ import {
 import { useGetExpenseCategoriesQuery } from '@/stores/expenseCategory.api';
 import { CreatedByCell, useCanViewCreatedBy } from '@/components/created-by-cell';
 import { useFormatMoney } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 interface ExpenseListProps {
   onEdit: (expense: any) => void;
@@ -122,7 +122,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
     try {
       const data = expenses.map(expense => ({
         'Expense No': expense.expenseNumber || '-',
-        'Date': format(new Date(expense.date), 'MMM dd, yyyy'),
+        'Date': formatAppDate(new Date(expense.date)),
         'Category': expense.category,
         'Description': expense.description,
         'Vendor': expense.vendor || '-',
@@ -310,7 +310,7 @@ export function ExpenseList({ onEdit, onDelete, refreshTrigger }: ExpenseListPro
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
-                          {format(new Date(expense.date), 'MMM dd, yyyy')}
+                          {formatAppDate(new Date(expense.date))}
                         </div>
                       </TableCell>
                       <TableCell>

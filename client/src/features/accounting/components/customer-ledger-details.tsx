@@ -93,6 +93,7 @@ import {
   generateCustomerLedgerStatementHTML,
   type LedgerStatementRow,
 } from '@/features/accounting/utils/ledger-print-utils';
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 interface LedgerEntry {
   _id?: string;
@@ -164,7 +165,7 @@ function InvoiceDialogContent({ invoiceId, customerName }: { invoiceId?: string;
       if (!date) return '-';
       const dateObj = new Date(date);
       if (isNaN(dateObj.getTime())) return '-';
-      return format(dateObj, 'MMM dd, yyyy');
+      return formatAppDate(dateObj);
     } catch {
       return '-';
     }
@@ -291,7 +292,7 @@ function SalesReturnDialogContent({
       if (!date) return '-';
       const dateObj = new Date(date as string);
       if (isNaN(dateObj.getTime())) return '-';
-      return format(dateObj, 'MMM dd, yyyy');
+      return formatAppDate(dateObj);
     } catch {
       return '-';
     }
@@ -427,7 +428,7 @@ function SimSaleDetailDialogContent({
     try {
       if (!d) return '—';
       const dt = new Date(d as string);
-      return isNaN(dt.getTime()) ? '—' : format(dt, 'MMM dd, yyyy HH:mm');
+      return isNaN(dt.getTime()) ? '—' : formatAppDateTime(dt);
     } catch {
       return '—';
     }
@@ -553,7 +554,7 @@ function LoadSaleDetailDialogContent({
     try {
       if (!d) return '—';
       const dt = new Date(d as string);
-      return isNaN(dt.getTime()) ? '—' : format(dt, 'MMM dd, yyyy HH:mm');
+      return isNaN(dt.getTime()) ? '—' : formatAppDateTime(dt);
     } catch {
       return '—';
     }
@@ -668,7 +669,7 @@ function CashWithdrawalDetailDialogContent({
     try {
       if (!d) return '—';
       const dt = new Date(d as string);
-      return isNaN(dt.getTime()) ? '—' : format(dt, 'MMM dd, yyyy HH:mm');
+      return isNaN(dt.getTime()) ? '—' : formatAppDateTime(dt);
     } catch {
       return '—';
     }
@@ -861,7 +862,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const exportToExcel = () => {
     try {
       const data = entries.map(entry => ({
-        'Date': format(new Date(entry.transactionDate), 'MMM dd, yyyy'),
+        'Date': formatAppDate(new Date(entry.transactionDate)),
         'Type': getTransactionTypeLabel(entry),
         'Description': entry.description,
         'Reference': entry.reference || '-',
@@ -1164,7 +1165,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           {
             title: 'Sales return',
             reference: sr.returnNumber,
-            issuedAt: sr.date ? new Date(sr.date).toLocaleString() : new Date(sr.createdAt).toLocaleString(),
+            issuedAt: sr.date ? formatAppDateTime(new Date(sr.date)) : formatAppDateTime(new Date(sr.createdAt)),
             lines: [
               { label: 'Customer', value: cust },
               ...(invRef ? [{ label: 'Invoice', value: invRef }] : []),
@@ -1186,7 +1187,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           {
             title: 'SIM sale',
             reference: `Job #${sale.jobNumber}`,
-            issuedAt: new Date(sale.date).toLocaleString(),
+            issuedAt: formatAppDateTime(new Date(sale.date)),
             lines: [
               { label: 'Item', value: sale.productName || '—' },
               { label: 'Load A/C', value: sale.walletType || '—' },
@@ -1220,7 +1221,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           {
             title: 'Load sale',
             reference: String(tx.id).slice(-10).toUpperCase(),
-            issuedAt: new Date(tx.date).toLocaleString(),
+            issuedAt: formatAppDateTime(new Date(tx.date)),
             lines: [
               { label: 'Network', value: tx.network || '—' },
               { label: 'Wallet', value: tx.walletType },
@@ -1844,7 +1845,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                         className={cn('w-full justify-start text-left font-normal')}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {format(new Date(dateRange.startDate), 'PPP')}
+                        {formatAppDate(new Date(dateRange.startDate))}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -1873,7 +1874,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                         className={cn('w-full justify-start text-left font-normal')}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {format(new Date(dateRange.endDate), 'PPP')}
+                        {formatAppDate(new Date(dateRange.endDate))}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -1957,7 +1958,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-muted-foreground">
-                  {format(new Date(dateRange.startDate), 'dd MMM yyyy')} — {format(new Date(dateRange.endDate), 'dd MMM yyyy')}
+                  {formatAppDate(new Date(dateRange.startDate))} — {formatAppDate(new Date(dateRange.endDate))}
                   {' · '}
                   {totalResults} {t('entries')}
                 </span>

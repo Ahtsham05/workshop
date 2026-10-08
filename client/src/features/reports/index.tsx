@@ -54,6 +54,7 @@ import { DailySalesSummaryReport } from './components/daily-sales-summary-report
 import { SalesmanCommissionReport } from './components/salesman-commission-report'
 import { PartnerProfitShareReport } from './components/partner-profit-share-report'
 import { BankPositionReport } from './components/bank-position-report'
+import { formatAppDate } from '@/lib/date-format'
 
 // Maps a report tab to the granular RBAC permission that unlocks it. Tabs not
 // listed here (broad summaries that mix several report domains, e.g. Activities,
@@ -211,7 +212,7 @@ export default function ReportsPage() {
                     )}
                   >
                     <CalendarIcon className='mr-2 h-4 w-4' />
-                    {startDate ? format(startDate, 'PPP') : <span>{t('pick_date')}</span>}
+                    {startDate ? formatAppDate(startDate) : <span>{t('pick_date')}</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className='w-auto p-0' align='start'>
@@ -240,7 +241,7 @@ export default function ReportsPage() {
                     )}
                   >
                     <CalendarIcon className='mr-2 h-4 w-4' />
-                    {endDate ? format(endDate, 'PPP') : <span>{t('pick_date')}</span>}
+                    {endDate ? formatAppDate(endDate) : <span>{t('pick_date')}</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className='w-auto p-0' align='start'>

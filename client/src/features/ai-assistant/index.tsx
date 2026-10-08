@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { toast } from 'sonner'
-import { format, isToday, isYesterday, isSameDay, isValid } from 'date-fns'
+import { isToday, isYesterday, isSameDay, isValid } from 'date-fns'
 import { Bot, RefreshCw, PanelLeft, SquarePen, ArrowDown } from 'lucide-react'
 import { Fragment } from 'react/jsx-runtime'
 import { cn } from '@/lib/utils'
@@ -35,6 +35,7 @@ import { VOICE_ERROR_MESSAGES } from './lib/voice-errors'
 import { detectVoiceLanguage } from './lib/detect-language'
 import { VOICE_LANGUAGES } from './lib/voice-languages'
 import { streamAssistantMessage } from './lib/stream-message'
+import { formatAppDate } from '@/lib/date-format'
 
 /** One in-progress assistant reply — see streamAndTrack. */
 interface StreamState {
@@ -48,7 +49,7 @@ interface StreamState {
 function dateSeparatorLabel(date: Date) {
   if (isToday(date)) return 'Today'
   if (isYesterday(date)) return 'Yesterday'
-  return format(date, 'MMMM d, yyyy')
+  return formatAppDate(date)
 }
 
 function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {

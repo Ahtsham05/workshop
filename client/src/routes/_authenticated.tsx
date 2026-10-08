@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { createFileRoute, redirect, Outlet, useLocation } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { AppSidebar } from '@/components/layout/app-sidebar'
@@ -18,6 +18,7 @@ import { restoreSessionFromCache } from '@/lib/auth-cache'
 import { looksLikeJwt } from '@/lib/auth-token'
 import { LocalDatabaseSetupBanner } from '@/features/settings/local-database/local-database-setup-banner'
 import { setActiveOrganizationBusinessType } from '@/lib/organization-context'
+import { setAppDateFormat } from '@/lib/date-format'
 import { PushNotificationPrompt } from '@/components/push-notification-prompt'
 import { useReminderWatchdog } from '@/hooks/use-reminder-watchdog'
 import { ReminderAlarmSplash } from '@/components/reminder-alarm-splash'
@@ -52,6 +53,11 @@ function AuthenticatedLayout() {
       setActiveOrganizationBusinessType(orgData.businessType)
     }
   }, [orgData?.businessType])
+
+  // Settings → Localization date format drives every date label/field (see lib/date-format).
+  useLayoutEffect(() => {
+    if (orgData) setAppDateFormat(orgData.dateFormat)
+  }, [orgData])
 
   const storedUser = (() => {
     try {

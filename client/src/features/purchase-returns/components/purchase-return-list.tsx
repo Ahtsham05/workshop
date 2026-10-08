@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Plus, Search, Eye, Trash2, CheckCircle, XCircle, ArrowRightLeft, Receipt, Wallet, PackageCheck } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -50,6 +49,7 @@ import {
 import { usePermissions } from '@/context/permission-context'
 import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
+import { formatAppDate } from '@/lib/date-format'
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -322,7 +322,7 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {ret.date ? format(new Date(ret.date), 'dd MMM yyyy') : '—'}
+                      {ret.date ? formatAppDate(new Date(ret.date)) : '—'}
                     </TableCell>
                     <TableCell>
                       <div className='flex items-center gap-1'>
@@ -472,7 +472,7 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
                           {sr.reason || '—'}
                         </TableCell>
                         <TableCell>
-                          {sr.date ? format(new Date(sr.date), 'dd MMM yyyy') : '—'}
+                          {sr.date ? formatAppDate(new Date(sr.date)) : '—'}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -526,7 +526,7 @@ export default function PurchaseReturnList({ onCreateNew, onConvertSalesReturn }
                   <p className='text-muted-foreground'>Date</p>
                   <p className='font-medium'>
                     {selectedReturn.date
-                      ? format(new Date(selectedReturn.date), 'dd MMM yyyy')
+                      ? formatAppDate(new Date(selectedReturn.date))
                       : '—'}
                   </p>
                 </div>

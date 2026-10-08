@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
@@ -287,7 +288,7 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
         </Button>
         <div className="flex-1">
           <h1 className="text-3xl font-bold tracking-tight">New Student Admission</h1>
-          <p className="text-muted-foreground">Admission Date: {new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+          <p className="text-muted-foreground">Admission Date: {formatAppDate(new Date())}</p>
         </div>
         {students.length > 1 && (
           <Badge variant="secondary" className="text-sm">{students.length} Students</Badge>
@@ -809,7 +810,7 @@ export default function StudentForm({ visitorPrefill }: { visitorPrefill?: any }
                     </div>
                     <div>
                       <p className="text-muted-foreground">Due Date</p>
-                      <p className="font-medium">{v?.dueDate ? new Date(v.dueDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                      <p className="font-medium">{v?.dueDate ? formatAppDate(new Date(v.dueDate)) : '-'}</p>
                     </div>
                   </div>
 

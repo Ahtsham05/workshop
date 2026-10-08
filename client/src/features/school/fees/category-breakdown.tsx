@@ -11,6 +11,7 @@ import { Receipt, Plus, X, Pencil, Trash2, Printer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFormatMoney } from '@/lib/format-money';
 import { useGetTransactionCategoryReportQuery, useLazyGetSchoolTransactionsQuery } from '@/stores/school.api';
+import { formatAppDate } from '@/lib/date-format'
 
 const DEFAULT_CATEGORY_COLOR = '#6366f1';
 
@@ -230,7 +231,7 @@ export function CategoryBreakdown({ categories, onAddExpense, onEditCategory, on
                   {detailData.map((exp: any) => (
                     <TableRow key={exp.id || exp._id}>
                       <TableCell className="py-2 text-sm font-mono text-muted-foreground whitespace-nowrap">{exp.expenseNumber || '—'}</TableCell>
-                      <TableCell className="py-2 text-sm whitespace-nowrap">{format(new Date(exp.date), 'dd MMM yyyy')}</TableCell>
+                      <TableCell className="py-2 text-sm whitespace-nowrap">{formatAppDate(new Date(exp.date))}</TableCell>
                       <TableCell className="py-2 text-sm font-medium">{exp.description || '—'}</TableCell>
                       <TableCell className="py-2 text-sm text-muted-foreground whitespace-nowrap">{exp.reference || '—'}</TableCell>
                       <TableCell className="py-2">
@@ -258,7 +259,7 @@ export function CategoryBreakdown({ categories, onAddExpense, onEditCategory, on
           {!detailLoading && detailData.length > 0 && (
             <div className={cn('border-t px-6 py-4 shrink-0')}>
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">{format(range.startDate, 'dd MMM yyyy')} — {format(range.endDate, 'dd MMM yyyy')}</span>
+                <span className="text-muted-foreground">{formatAppDate(range.startDate)} — {formatAppDate(range.endDate)}</span>
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground">Total Expense</p>
                   <p className="font-bold text-lg">{formatMoney(detailTotal)}</p>

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { formatAppDateTime } from '@/lib/date-format'
 
 export default function RestaurantReservationsPage() {
   const from = new Date()
@@ -106,7 +107,7 @@ export default function RestaurantReservationsPage() {
                     <div>
                       <div className='font-medium'>{r.customerName}</div>
                       <div className='text-xs text-muted-foreground'>
-                        {new Date(r.startAt).toLocaleString()} · party {r.partySize}
+                        {formatAppDateTime(new Date(r.startAt))} · party {r.partySize}
                       </div>
                       {r.phone ? (
                         <div className='text-xs text-muted-foreground'>{r.phone}</div>

@@ -26,6 +26,7 @@ import { useGetWalletBalanceStatementQuery, type WalletBalanceDetailItem } from 
 import { filterCashWallets } from '@/features/mobile-shop/utils/wallet-utils'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface MyWalletReportProps {
   startDate: string
@@ -158,7 +159,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
           XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary')
 
           const txRows = ledgerRows.map((row) => ({
-            Date: format(new Date(row.date), 'dd MMM yyyy'),
+            Date: formatAppDate(new Date(row.date)),
             Type: row.title,
             'Number / Account': row.accountNumber,
             'Account Type': row.accountType,
@@ -215,7 +216,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
             <div className='rounded-lg border p-3'>
               <p className='text-xs text-muted-foreground'>Period</p>
               <p className='font-medium'>
-                {data ? `${format(new Date(data.period.startDate), 'dd MMM yyyy')} - ${format(new Date(data.period.endDate), 'dd MMM yyyy')}` : '-'}
+                {data ? `${formatAppDate(new Date(data.period.startDate))} - ${formatAppDate(new Date(data.period.endDate))}` : '-'}
               </p>
             </div>
             <div className='rounded-lg border p-3'>
@@ -313,7 +314,7 @@ export const MyWalletReport = forwardRef<{ exportToExcel: () => void }, MyWallet
                     <TableBody>
                       {ledgerRows.map((row) => (
                         <TableRow key={row.id}>
-                          <TableCell>{format(new Date(row.date), 'dd MMM yyyy')}</TableCell>
+                          <TableCell>{formatAppDate(new Date(row.date))}</TableCell>
                           <TableCell className='font-medium'>{row.title}</TableCell>
                           <TableCell>{row.accountNumber}</TableCell>
                           <TableCell className='capitalize'>{row.accountType}</TableCell>

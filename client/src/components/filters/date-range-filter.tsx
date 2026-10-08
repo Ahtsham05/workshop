@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { DayPicker, type DateRange } from 'react-day-picker'
-import { format } from 'date-fns'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useIsPhone } from '@/hooks/use-mobile'
 import { getBusinessToday } from '@/lib/business-timezone'
 import { cn } from '@/lib/utils'
+import { formatAppDate } from '@/lib/date-format'
 
 /** Business calendar keys ("YYYY-MM-DD") ↔ local calendar dates, with no timezone shifting. */
 const keyToDate = (key: string) => {
@@ -49,8 +49,8 @@ export function DateRangeFilter({ startDate, endDate, onChange, className }: Pro
   const label =
     startDate && endDate
       ? startDate === endDate
-        ? format(keyToDate(startDate), 'MMM d, yyyy')
-        : `${format(keyToDate(startDate), 'MMM d, yyyy')} – ${format(keyToDate(endDate), 'MMM d, yyyy')}`
+        ? formatAppDate(keyToDate(startDate))
+        : `${formatAppDate(keyToDate(startDate))} – ${formatAppDate(keyToDate(endDate))}`
       : 'All dates'
 
   return (

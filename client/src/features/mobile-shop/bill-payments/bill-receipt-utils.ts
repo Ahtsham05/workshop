@@ -3,6 +3,7 @@ import type { BillPaymentReceipt } from '@/stores/mobile-shop.api'
 import { billReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import type { CurrencyOption } from '@/stores/localization.api'
+import { formatAppDate } from '@/lib/date-format'
 
 interface BillReceiptOptions {
   orgName?: string
@@ -29,7 +30,7 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
 
   const companyName = options.branchDetails?.name || options.orgName || 'Mobile Shop'
   const fmt = (n: number) => formatMoneyWithMeta(n, options.currencyMeta ?? FALLBACK_CURRENCY)
-  const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString(locale) : '—')
+  const fmtDate = (d?: string) => (d ? formatAppDate(new Date(d)) : '—')
   const fmtTime = (d?: string) => {
     if (!d) return ''
     try { return new Date(d).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) } catch { return '' }

@@ -1,6 +1,7 @@
 import { forwardRef } from 'react'
 import type { RestaurantOrder, RestaurantTable } from '@/stores/restaurant.api'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDateTime } from '@/lib/date-format'
 
 export const KitchenTicket = forwardRef<
   HTMLDivElement,
@@ -53,7 +54,7 @@ export const CustomerReceipt = forwardRef<
         {order.serviceMode === 'takeaway' ? 'Takeaway / pickup' : 'Dine-in'}
       </div>
       <div className='text-center text-xs font-mono mt-1'>{order.orderNumber}</div>
-      <div className='text-center text-xs'>{new Date(order.createdAt || '').toLocaleString()}</div>
+      <div className='text-center text-xs'>{formatAppDateTime(new Date(order.createdAt || ''))}</div>
       <div className='my-3 border-t border-b border-dashed border-gray-400 py-2 space-y-1'>
         {order.lines.map((line) => (
           <div key={line._id || line.name} className='flex justify-between text-xs'>

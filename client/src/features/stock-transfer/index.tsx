@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import { ArrowLeftRight, ArrowDownToLine, Ban, Plus, Layers, Eye, Printer } from 'lucide-react'
-import { formatDateSafe } from '@/lib/utils'
 
 import type { RootState } from '@/stores/store'
 import {
@@ -32,6 +31,7 @@ import { BulkTransferPanel } from './components/bulk-transfer-panel'
 import { SuggestedTransfersPanel } from './components/suggested-transfers-panel'
 import { TransferDetailsDialog } from './components/transfer-details-dialog'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { formatAppDateTime } from '@/lib/date-format'
 
 
 function branchName(ref: GroupedTransferRow['fromBranchId']): string {
@@ -219,7 +219,7 @@ export default function StockTransfer() {
                   return (
                     <TableRow key={tr.groupId}>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                        {formatDateSafe(tr.suggestedAt, 'MMM dd, yyyy hh:mm a')}
+                        {formatAppDateTime(tr.suggestedAt)}
                       </TableCell>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
                         {tr.transferNumber || '—'}

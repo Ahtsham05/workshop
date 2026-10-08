@@ -43,6 +43,7 @@ import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { BilingualName } from '@/components/bilingual-name'
 import { SerialPickDialog } from '@/components/serial-pick-dialog'
+import { formatAppDate } from '@/lib/date-format'
 
 type LangFn = (key: string, vars?: Record<string, string | number>) => string
 
@@ -277,7 +278,7 @@ function BatchChipsRow({
             key={b.id}
             type='button'
             onClick={() => onBatchClick(b.id)}
-            title={b.expiryDate ? `${t('Expires')} ${new Date(b.expiryDate).toLocaleDateString()}${expiringSoon ? ` — ${t('expiring soon')}` : ''}` : undefined}
+            title={b.expiryDate ? `${t('Expires')} ${formatAppDate(new Date(b.expiryDate))}${expiringSoon ? ` — ${t('expiring soon')}` : ''}` : undefined}
             className={cn(
               'rounded-full border px-1.5 py-0.5 text-[11px] transition-colors',
               isActive

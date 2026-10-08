@@ -46,6 +46,7 @@ import {
 } from '@/stores/taxExemption.api'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { formatAppDate } from '@/lib/date-format'
 
 interface CustomerOption {
   _id?: string
@@ -350,8 +351,8 @@ export default function TaxExemptionsSettings() {
                   <TableCell className='text-muted-foreground'>{exemption.certificateNumber || '—'}</TableCell>
                   <TableCell className='max-w-xs truncate text-muted-foreground'>{exemption.reason || '—'}</TableCell>
                   <TableCell className='text-muted-foreground'>
-                    {exemption.validFrom ? new Date(exemption.validFrom).toLocaleDateString() : '—'} —{' '}
-                    {exemption.validTo ? new Date(exemption.validTo).toLocaleDateString() : 'Ongoing'}
+                    {exemption.validFrom ? formatAppDate(new Date(exemption.validFrom)) : '—'} —{' '}
+                    {exemption.validTo ? formatAppDate(new Date(exemption.validTo)) : 'Ongoing'}
                   </TableCell>
                   <TableCell>
                     <Badge variant={exemption.status === 'inactive' ? 'outline' : 'default'}>

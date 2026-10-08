@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import type { RootState } from '@/stores/store'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
@@ -72,6 +71,7 @@ import {
   resolvePurchaseSettlement,
 } from '../utils/purchase-settlement'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 interface PurchaseListProps {
   onBack?: () => void
@@ -528,7 +528,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
                           </div>
                           {purchase.dueDate && (
                             <p className={cn('text-[11px]', isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}>
-                              {t('Due')} {format(new Date(purchase.dueDate), 'dd MMM yyyy')}
+                              {t('Due')} {formatAppDate(new Date(purchase.dueDate))}
                             </p>
                           )}
                         </TableCell>
@@ -558,7 +558,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
                         </TableCell>
 
                         <TableCell className='whitespace-nowrap'>
-                          {format(new Date(purchase.purchaseDate || purchase.createdAt), 'dd MMM yyyy')}
+                          {formatAppDate(new Date(purchase.purchaseDate || purchase.createdAt))}
                         </TableCell>
 
                         <TableCell>
@@ -607,7 +607,7 @@ export default function PurchaseList({ onBack, onCreateNew, onEdit, onDuplicate 
                         )}
 
                         <TableCell className='whitespace-nowrap text-xs text-muted-foreground'>
-                          {purchase.updatedAt ? format(new Date(purchase.updatedAt), 'dd MMM yyyy HH:mm') : '—'}
+                          {purchase.updatedAt ? formatAppDateTime(new Date(purchase.updatedAt)) : '—'}
                         </TableCell>
 
                         <TableCell className='text-right' onClick={(event) => event.stopPropagation()}>

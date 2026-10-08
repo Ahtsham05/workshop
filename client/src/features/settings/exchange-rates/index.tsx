@@ -44,6 +44,7 @@ import {
 } from '@/stores/exchangeRate.api'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { formatAppDate } from '@/lib/date-format'
 
 const formSchema = z
   .object({
@@ -285,7 +286,7 @@ export default function ExchangeRatesSettings() {
                     {rate.fromCurrency} → {rate.toCurrency}
                   </TableCell>
                   <TableCell>{rate.rate}</TableCell>
-                  <TableCell className='text-muted-foreground'>{new Date(rate.rateDate).toLocaleDateString()}</TableCell>
+                  <TableCell className='text-muted-foreground'>{formatAppDate(new Date(rate.rateDate))}</TableCell>
                   <TableCell>
                     <Badge variant='outline' className='capitalize'>
                       {rate.source || 'manual'}
@@ -333,7 +334,7 @@ export default function ExchangeRatesSettings() {
             <AlertDialogTitle>Delete exchange rate?</AlertDialogTitle>
             <AlertDialogDescription>
               This removes the {deleteTarget?.fromCurrency} → {deleteTarget?.toCurrency} rate for{' '}
-              {deleteTarget ? new Date(deleteTarget.rateDate).toLocaleDateString() : ''}. Transactions that already
+              {deleteTarget ? formatAppDate(new Date(deleteTarget.rateDate)) : ''}. Transactions that already
               used it keep their own snapshot and are not affected.
             </AlertDialogDescription>
           </AlertDialogHeader>

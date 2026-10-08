@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import {
@@ -766,10 +767,9 @@ export function PurchaseAiScanDialog({
 
                   <div className="space-y-2">
                     <Label>{t('purchase_date')}</Label>
-                    <Input
-                      type="date"
+                    <DatePicker
                       value={purchaseDate}
-                      onChange={(e) => setPurchaseDate(e.target.value)}
+                      onChange={setPurchaseDate}
                     />
                   </div>
                 </div>

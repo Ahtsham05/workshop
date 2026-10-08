@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Briefcase, DollarSign, User, ReceiptText } from 'lucide-react';
-import { format } from 'date-fns';
 import { formatMoneyWithMeta, useCurrencyMeta } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 export const Route = createFileRoute('/_authenticated/hr/employees/$id')({
   component: EmployeeDetails,
@@ -133,7 +133,7 @@ function EmployeeDetails() {
                 <div>
                   <p className="text-xs text-muted-foreground">{t('Joining Date')}</p>
                   <p className="text-sm font-medium">
-                    {employee.joiningDate ? format(new Date(employee.joiningDate), 'MMM dd, yyyy') : '-'}
+                    {employee.joiningDate ? formatAppDate(new Date(employee.joiningDate)) : '-'}
                   </p>
                 </div>
               </div>
@@ -151,7 +151,7 @@ function EmployeeDetails() {
               {t('Final Settlement')}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              {t('Amount owed as of')} {settlement?.asOfDate ? format(new Date(settlement.asOfDate), 'MMM dd, yyyy') : '-'}
+              {t('Amount owed as of')} {settlement?.asOfDate ? formatAppDate(new Date(settlement.asOfDate)) : '-'}
             </p>
           </CardHeader>
           <CardContent>
@@ -208,7 +208,7 @@ function EmployeeDetails() {
               <div>
                 <p className="text-sm text-muted-foreground">{t('Date of Birth')}</p>
                 <p className="font-medium">
-                  {employee.dateOfBirth ? format(new Date(employee.dateOfBirth), 'MMM dd, yyyy') : '-'}
+                  {employee.dateOfBirth ? formatAppDate(new Date(employee.dateOfBirth)) : '-'}
                 </p>
               </div>
               <div>
@@ -290,7 +290,7 @@ function EmployeeDetails() {
               <div>
                 <p className="text-sm text-muted-foreground">{t('Joining Date')}</p>
                 <p className="font-medium">
-                  {employee.joiningDate ? format(new Date(employee.joiningDate), 'MMM dd, yyyy') : '-'}
+                  {employee.joiningDate ? formatAppDate(new Date(employee.joiningDate)) : '-'}
                 </p>
               </div>
               <div>
@@ -304,7 +304,7 @@ function EmployeeDetails() {
                   <div>
                     <p className="text-sm text-muted-foreground">{t('Last Working Date')}</p>
                     <p className="font-medium">
-                      {employee.lastWorkingDate ? format(new Date(employee.lastWorkingDate), 'MMM dd, yyyy') : '-'}
+                      {employee.lastWorkingDate ? formatAppDate(new Date(employee.lastWorkingDate)) : '-'}
                     </p>
                   </div>
                   <div className="col-span-2">

@@ -16,6 +16,7 @@ import {
 } from '@/stores/school.api';
 import { toast } from 'sonner';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 const PAYMENT_METHODS = ['cash', 'bank_transfer', 'cheque', 'online', 'other'];
 
@@ -173,7 +174,7 @@ export default function FeeTransactions() {
             <tbody>
               {transactions.map((t: any) => (
                 <tr key={t.id} className="border-b hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-2 text-muted-foreground">{new Date(t.date).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{formatAppDate(new Date(t.date))}</td>
                   <td className="px-4 py-2">
                     <span className="text-xs">{t.categoryId?.name || '—'}</span>
                   </td>

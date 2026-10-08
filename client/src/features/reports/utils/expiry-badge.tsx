@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { formatAppDate } from '@/lib/date-format'
 
 const EXPIRY_WARNING_DAYS = 30
 
@@ -11,7 +12,7 @@ export function expiryBadge(expiryDate?: string | null) {
   if (days <= EXPIRY_WARNING_DAYS) {
     return <Badge className='bg-amber-500 text-white hover:bg-amber-500'>Expires in {days}d</Badge>
   }
-  return <Badge variant='outline'>{new Date(expiryDate).toLocaleDateString()}</Badge>
+  return <Badge variant='outline'>{formatAppDate(new Date(expiryDate))}</Badge>
 }
 
 export function daysUntilExpiry(expiryDate?: string | null) {

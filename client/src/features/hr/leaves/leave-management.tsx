@@ -63,6 +63,7 @@ import { usePermissions } from '@/context/permission-context';
 import { useFormatMoney } from '@/lib/format-money';
 import { useStateDraft } from '@/hooks/use-form-draft';
 import { FormDraftNotice } from '@/components/form-draft-notice';
+import { formatAppDate } from '@/lib/date-format'
 
 export default function LeaveManagement() {
   const { t } = useLanguage();
@@ -566,8 +567,8 @@ export default function LeaveManagement() {
                         {leave.employee?.firstName} {leave.employee?.lastName}
                       </TableCell>
                       <TableCell>{getLeaveTypeLabel(leave.leaveType)}</TableCell>
-                      <TableCell>{format(new Date(leave.startDate), 'MMM dd, yyyy')}</TableCell>
-                      <TableCell>{format(new Date(leave.endDate), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell>{formatAppDate(new Date(leave.startDate))}</TableCell>
+                      <TableCell>{formatAppDate(new Date(leave.endDate))}</TableCell>
                       <TableCell>
                         {leave.totalDays} {leave.isHalfDay ? '(Half Day)' : ''}
                       </TableCell>
@@ -786,7 +787,7 @@ export default function LeaveManagement() {
                     ) : (
                       dateWiseProgressRows.map((row: any) => (
                         <TableRow key={row.date}>
-                          <TableCell>{format(new Date(row.date), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell>{formatAppDate(new Date(row.date))}</TableCell>
                           <TableCell>{row.status}</TableCell>
                           <TableCell>{row.checkIn}</TableCell>
                           <TableCell>{row.checkOut}</TableCell>

@@ -50,6 +50,7 @@ import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/l
 import { useFormatMoney } from '@/lib/format-money'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { usePreviewTaxMutation, type TaxLine } from '@/stores/taxCalculator.api'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
@@ -1857,7 +1858,7 @@ export default function InvoicePage() {
                         >
                           <p className='text-sm font-medium leading-snug'>{h.label}</p>
                           <p className='text-xs text-muted-foreground'>
-                            {new Date(h.savedAt).toLocaleString()}
+                            {formatAppDateTime(new Date(h.savedAt))}
                           </p>
                           <div className='flex flex-wrap gap-2'>
                             <Button size='sm' type='button' onClick={() => resumeSaleHeld(h.id)}>
@@ -1924,7 +1925,7 @@ export default function InvoicePage() {
               into a details+totals / items two-column layout ("fast invoicing" mode) so
               hiding the catalog actually reclaims the freed-up width instead of just
               centering a narrower column. */}
-          <div className='min-w-0 space-y-4 pb-6'>
+          <div className={cn('min-w-0 space-y-4', showProductCatalog && 'pb-6')}>
             <InvoicePanel
               invoice={invoice}
               setInvoice={setInvoice}

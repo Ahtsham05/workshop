@@ -24,6 +24,7 @@ import { useStockCountAccess } from '../lib/use-stock-count-access'
 import { ClassBadge, CountStatusBadge } from './count-badges'
 import { NewCountDialog } from './new-count-dialog'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { formatAppDateTime } from '@/lib/date-format'
 
 
 export function CountsTab() {
@@ -270,7 +271,7 @@ function CountsTable({ counts }: { counts: StockCount[] }) {
                 {count.blind && <EyeOff className='size-3.5 text-muted-foreground' aria-label={t('Blind count')} />}
               </div>
             </TableCell>
-            <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>{new Date(count.createdAt).toLocaleString()}</TableCell>
+            <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>{formatAppDateTime(new Date(count.createdAt))}</TableCell>
             <TableCell className='text-sm'>{summary(count)}</TableCell>
             <TableCell>
               <CountStatusBadge status={count.status} />
@@ -307,7 +308,7 @@ function CountCard({ count }: { count: StockCount }) {
             </Badge>
             {count.blind && <EyeOff className='size-3.5 shrink-0 text-muted-foreground' />}
           </div>
-          <div className='truncate text-xs text-muted-foreground'>{new Date(count.createdAt).toLocaleString()}</div>
+          <div className='truncate text-xs text-muted-foreground'>{formatAppDateTime(new Date(count.createdAt))}</div>
         </div>
         <CountStatusBadge status={count.status} />
       </div>

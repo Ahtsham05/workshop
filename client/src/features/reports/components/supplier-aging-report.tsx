@@ -20,6 +20,7 @@ import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-
 import { cn } from '@/lib/utils'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { buildAgingBuckets, AGING_BUCKET_SIZES, DEFAULT_AGING_BUCKET_SIZE, AgingBucketSize } from '../utils/aging-buckets'
+import { formatAppDate } from '@/lib/date-format'
 
 export const SupplierAgingReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
   const { t, language } = useLanguage()
@@ -92,7 +93,7 @@ export const SupplierAgingReport = forwardRef<{ exportToExcel: () => void }, {}>
               <PopoverTrigger asChild>
                 <Button variant='outline' className='w-[240px] justify-start text-left font-normal'>
                   <CalendarIcon className='mr-2 h-4 w-4' />
-                  {format(asOfDate, 'PPP')}
+                  {formatAppDate(asOfDate)}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className='w-auto p-0' align='start'>
@@ -255,10 +256,10 @@ export const SupplierAgingReport = forwardRef<{ exportToExcel: () => void }, {}>
                                             )}
                                           </TableCell>
                                           <TableCell className='text-sm text-muted-foreground'>
-                                            {format(new Date(pur.purchaseDate), 'dd MMM yyyy')}
+                                            {formatAppDate(new Date(pur.purchaseDate))}
                                           </TableCell>
                                           <TableCell className='text-sm text-muted-foreground'>
-                                            {format(new Date(pur.dueDate), 'dd MMM yyyy')}
+                                            {formatAppDate(new Date(pur.dueDate))}
                                           </TableCell>
                                           <TableCell className='text-right'>{pur.daysOverdue > 0 ? pur.daysOverdue : 0}</TableCell>
                                           <TableCell className='text-right'>{formatCurrency(pur.totalAmount)}</TableCell>

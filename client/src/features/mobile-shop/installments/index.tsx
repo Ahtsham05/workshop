@@ -71,6 +71,7 @@ import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { useStateDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
+import { formatAppDate } from '@/lib/date-format'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -673,7 +674,7 @@ export default function InstallmentsPage() {
                           {plan.nextDueDate && plan.status === 'active' && (
                             <p className={`text-xs mt-1 ${overdue ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
                               <CalendarClock className='inline h-3 w-3 mr-1' />
-                              Next due: {format(new Date(plan.nextDueDate), 'dd MMM yyyy')}
+                              Next due: {formatAppDate(new Date(plan.nextDueDate))}
                             </p>
                           )}
                         </div>
@@ -701,7 +702,7 @@ export default function InstallmentsPage() {
                                 { label: 'Installments Paid', value: `${plan.paidInstallments}/${plan.totalInstallments}` },
                                 {
                                   label: 'Next Due',
-                                  value: plan.nextDueDate ? format(new Date(plan.nextDueDate), 'dd MMM yyyy') : '',
+                                  value: plan.nextDueDate ? formatAppDate(new Date(plan.nextDueDate)) : '',
                                 },
                               ],
                             })}
@@ -728,7 +729,7 @@ export default function InstallmentsPage() {
                                 { label: 'Installments Paid', value: `${plan.paidInstallments}/${plan.totalInstallments}` },
                                 {
                                   label: 'Next Due',
-                                  value: plan.nextDueDate ? format(new Date(plan.nextDueDate), 'dd MMM yyyy') : '',
+                                  value: plan.nextDueDate ? formatAppDate(new Date(plan.nextDueDate)) : '',
                                 },
                               ],
                             })}
@@ -1173,7 +1174,7 @@ export default function InstallmentsPage() {
                 <div className='max-h-48 overflow-y-auto space-y-1.5'>
                   {(paymentDialogPayments.data?.results ?? []).map((pmt: InstallmentPaymentRecord) => (
                     <div key={pmt.id} className='flex items-center justify-between text-xs rounded bg-muted/50 px-3 py-1.5'>
-                      <span className='text-muted-foreground'>{pmt.isDownPayment ? 'Down Payment' : `#${pmt.paymentNumber}`} — {format(new Date(pmt.date), 'dd MMM yyyy')}</span>
+                      <span className='text-muted-foreground'>{pmt.isDownPayment ? 'Down Payment' : `#${pmt.paymentNumber}`} — {formatAppDate(new Date(pmt.date))}</span>
                       <div className='flex items-center gap-2'>
                         <span className='font-medium text-green-700'>{fmt(pmt.amount)}</span>
                         {!pmt.isDownPayment && canManage && (
@@ -1227,9 +1228,9 @@ export default function InstallmentsPage() {
                   <DetailRow label='Paid' value={`${fmt(detailPlan.totalPaid)} (${detailPlan.paidInstallments}/${detailPlan.totalInstallments})`} />
                   <DetailRow label='Outstanding' value={fmt(detailPlan.totalOutstanding)} highlight danger={detailPlan.totalOutstanding > 0} />
                   {detailPlan.nextDueDate && detailPlan.status === 'active' && (
-                    <DetailRow label='Next Due' value={format(new Date(detailPlan.nextDueDate), 'dd MMM yyyy')} danger={!!isDue(detailPlan)} />
+                    <DetailRow label='Next Due' value={formatAppDate(new Date(detailPlan.nextDueDate))} danger={!!isDue(detailPlan)} />
                   )}
-                  <DetailRow label='Start Date' value={format(new Date(detailPlan.startDate), 'dd MMM yyyy')} />
+                  <DetailRow label='Start Date' value={formatAppDate(new Date(detailPlan.startDate))} />
                 </div>
               </div>
 
@@ -1289,7 +1290,7 @@ export default function InstallmentsPage() {
                       {paymentsData!.results.map((pmt: InstallmentPaymentRecord) => (
                         <TableRow key={pmt.id}>
                           <TableCell className='text-xs'>{pmt.isDownPayment ? 'DP' : `#${pmt.paymentNumber}`}</TableCell>
-                          <TableCell className='text-xs'>{format(new Date(pmt.date), 'dd MMM yyyy')}</TableCell>
+                          <TableCell className='text-xs'>{formatAppDate(new Date(pmt.date))}</TableCell>
                           <TableCell className='text-green-700 font-medium'>{fmt(pmt.amount)}</TableCell>
                           <TableCell className='text-xs capitalize'>{pmt.paymentMethod}</TableCell>
                           <TableCell className='text-xs text-muted-foreground'>{pmt.notes || '—'}</TableCell>

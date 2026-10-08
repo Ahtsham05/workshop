@@ -5,6 +5,7 @@ import { useGetStudentAdmissionFormQuery } from '@/stores/school.api';
 import { Printer, Download, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useFormatMoney } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 interface Props {
   studentId: string;
@@ -16,11 +17,7 @@ interface Props {
 
 function fmt(date?: string | Date | null): string {
   if (!date) return '—';
-  return new Date(date).toLocaleDateString('en-PK', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatAppDate(new Date(date));
 }
 
 function capitalize(s: string): string {
@@ -259,7 +256,7 @@ function A4Sheet({
           color: '#9ca3af',
         }}
       >
-        <span>Generated on {new Date().toLocaleDateString('en-PK')} — {school.name}</span>
+        <span>Generated on {formatAppDate(new Date())} — {school.name}</span>
         <span>Admission No: {student.admissionNumber}</span>
       </div>
     </div>

@@ -35,6 +35,7 @@ import {
   useGetExpenseCategoriesQuery,
 } from '@/stores/school.api';
 import { CategoryCombobox } from './category-combobox';
+import { formatAppDate } from '@/lib/date-format'
 
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -316,7 +317,7 @@ export function SchoolRecurringExpenseManager() {
                       <TableCell className="font-semibold">{formatMoney(rule.amount)}</TableCell>
                       <TableCell className="text-muted-foreground">{describeSchedule(rule)}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">
-                        {rule.nextRunDate ? new Date(rule.nextRunDate).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                        {rule.nextRunDate ? formatAppDate(new Date(rule.nextRunDate)) : '—'}
                         {rule.pendingCount > 0 && (
                           <Badge variant="outline" className="ml-1.5 text-[10px] border-amber-400 text-amber-600 bg-amber-50">
                             {rule.pendingCount} due
@@ -556,7 +557,7 @@ function PayRuleDialogBody({ rule, onPayAll, isPayingAll }: { rule: any; onPayAl
         {pending.map((txn) => (
           <div key={txn.id || txn._id} className="flex items-center justify-between px-3 py-2 text-sm">
             <div>
-              <p className="font-medium">{new Date(txn.date).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: '2-digit' })}</p>
+              <p className="font-medium">{formatAppDate(new Date(txn.date))}</p>
               <p className="text-xs text-muted-foreground">{formatMoney(txn.amount)}</p>
             </div>
             <Button

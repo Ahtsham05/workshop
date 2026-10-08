@@ -54,7 +54,6 @@ import type { RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { usePermissions } from '@/context/permission-context'
-import { format } from 'date-fns'
 import { getBusinessToday, parseBusinessDateTimeLocal, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { ListPrintButton } from '@/features/mobile-shop/components/list-print-button'
 import { MobileReceiptPreviewDialog } from '@/features/mobile-shop/components/mobile-receipt-preview-dialog'
@@ -78,6 +77,7 @@ import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { CustomerPhoneAutocomplete } from '@/components/ui/customer-phone-autocomplete'
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { formatAppDate } from '@/lib/date-format'
 
 type SimSaleFormState = {
   date: string
@@ -721,7 +721,7 @@ export default function SimSalePage({ initialCustomerId }: { initialCustomerId?:
                       {filteredSales.map(sale => (
                         <TableRow key={sale.id}>
                           <TableCell className='font-medium'>#{sale.jobNumber}</TableCell>
-                          <TableCell>{format(new Date(sale.date), 'dd-MM-yyyy')}</TableCell>
+                          <TableCell>{formatAppDate(new Date(sale.date))}</TableCell>
                           <TableCell className='max-w-[180px] truncate' title={sale.productName || undefined}>{sale.productName || '—'}</TableCell>
                           <TableCell>{sale.walletType || '—'}</TableCell>
                           <TableCell>

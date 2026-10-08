@@ -14,7 +14,6 @@ import { useLanguage } from '@/context/language-context';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
 import { toast } from 'sonner';
 import Axios from '@/utils/Axios';
 import summery from '@/utils/summery';
@@ -34,6 +33,7 @@ import { supplierPaymentApi } from '@/stores/supplierPayment.api';
 import { invoiceApi } from '@/stores/invoice.api';
 import { customerPaymentApi } from '@/stores/customerPayment.api';
 import { formatMoneyWithMeta } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 interface LedgerEntryFormProps {
   ledgerType: 'customer' | 'supplier';
@@ -363,7 +363,7 @@ export function LedgerEntryForm({
                     className="w-full justify-start text-left font-normal overflow-hidden"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(date, 'PPP')}
+                    {formatAppDate(date)}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">

@@ -37,6 +37,7 @@ import {
 } from '@/stores/reports.api'
 import type { BankAccountType } from '@/stores/mobile-shop.api'
 import { printBankReconciliationReport } from '../utils/print-bank-reconciliation-report'
+import { formatAppDate } from '@/lib/date-format'
 
 interface BankPositionReportProps {
   startDate: string
@@ -60,7 +61,7 @@ const ACCOUNT_TYPE_BADGE_CLASS: Record<BankAccountType | 'other', string> = {
 const fmtDate = (value: string | null) => {
   if (!value) return 'Never'
   try {
-    return format(new Date(value), 'PP')
+    return formatAppDate(new Date(value))
   } catch {
     return value
   }
@@ -333,7 +334,7 @@ export const BankPositionReport = forwardRef<{ exportToExcel: () => void }, Bank
                       const isBalanced = Math.abs(s.difference) < 0.01
                       return (
                         <TableRow key={s._id}>
-                          <TableCell className='text-sm'>{format(new Date(s.statementEndDate), 'PP')}</TableCell>
+                          <TableCell className='text-sm'>{formatAppDate(new Date(s.statementEndDate))}</TableCell>
                           <TableCell className='font-medium'>{s.bankAccountName}</TableCell>
                           <TableCell className='text-right tabular-nums'>{fmt(s.statementClosingBalance)}</TableCell>
                           <TableCell className='text-right tabular-nums'>{fmt(s.bookClosingBalance)}</TableCell>

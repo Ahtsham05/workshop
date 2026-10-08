@@ -22,6 +22,7 @@ import { INVOICE_TEMPLATE_ITEMS_PER_PAGE, INVOICE_TEMPLATE_CSS, type InvoiceTemp
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
 import type { TaxLine } from '@/stores/taxCalculator.api'
+import { formatAppDate } from '@/lib/date-format'
 
 export type { PrintWindowContact }
 export type { PaperSize }
@@ -274,7 +275,7 @@ export const generateInvoiceHTML = (
   const printNumber = resolvePrintDocumentNumber(invoiceNumber, isQuotationPrint(data))
   const documentTitle = resolvePrintDocumentTitle(data, labels)
   const documentDate = resolvePrintDocumentDate(data)
-  const formattedDocumentDate = documentDate.toLocaleDateString(locale)
+  const formattedDocumentDate = formatAppDate(documentDate)
 
   const getTypeText = (type: string) => {
     switch(type) {
@@ -943,7 +944,7 @@ export const generateA4InvoiceHTML = (
     : urduTexts.invoice_details
 
   const documentDate = resolvePrintDocumentDate(data)
-  const formattedDocumentDate = documentDate.toLocaleDateString(locale)
+  const formattedDocumentDate = formatAppDate(documentDate)
 
   const headerBlock = `
 <div class="invoice-header">

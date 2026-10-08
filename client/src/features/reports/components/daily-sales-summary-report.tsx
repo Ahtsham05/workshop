@@ -27,6 +27,7 @@ import { useBranchName } from '@/hooks/use-branch-name'
 import { toneIconWrapClass, type StatCardTone } from '@/lib/stat-card-tones'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface DailySalesSummaryReportProps {
   startDate: string
@@ -209,8 +210,8 @@ export const DailySalesSummaryReport = forwardRef<{ exportToExcel: () => void },
             <CardTitle className='text-xl'>Daily Sales Summary</CardTitle>
             <CardDescription>
               {sameDay
-                ? format(new Date(startDate), 'dd MMM yyyy')
-                : `${format(new Date(startDate), 'dd MMM yyyy')} — ${format(new Date(endDate), 'dd MMM yyyy')}`}
+                ? formatAppDate(new Date(startDate))
+                : `${formatAppDate(new Date(startDate))} — ${formatAppDate(new Date(endDate))}`}
             </CardDescription>
           </CardHeader>
           <CardContent className='pt-4'>

@@ -1,5 +1,6 @@
 import type { StockCount, StockCountLine } from '@/stores/stockCount.api'
 import { fmtQty } from './labels'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const escapeHtml = (value: unknown) =>
   String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
@@ -51,7 +52,7 @@ export function printCountSheet(count: StockCount, lines: StockCountLine[], show
     @media print { body { margin: 0; } }
   </style></head><body>
   <h1>${escapeHtml(count.number)} — ${escapeHtml(count.title)}</h1>
-  <div class="meta">${escapeHtml(branchName || '')} · ${new Date().toLocaleString()} · ${lines.length} item(s)${count.blind ? ' · Blind count' : ''}</div>
+  <div class="meta">${escapeHtml(branchName || '')} · ${formatAppDateTime(new Date())} · ${lines.length} item(s)${count.blind ? ' · Blind count' : ''}</div>
   <table><thead><tr><th>#</th><th>Item</th><th>Barcode</th><th>Unit</th>${showExpected ? '<th class="num">Expected</th>' : ''}<th>Counted</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="sign"><div>Counted by</div><div>Checked by</div><div>Date</div></div>

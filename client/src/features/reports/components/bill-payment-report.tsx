@@ -50,6 +50,7 @@ import { useGetBillPaymentReportQuery, useGetUtilityCompaniesQuery } from '@/sto
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -546,7 +547,7 @@ export const BillPaymentReport = forwardRef<{ exportToExcel: () => void }, BillP
                       : '0'
                     return (
                       <TableRow key={row._id}>
-                        <TableCell className='font-medium'>{format(new Date(row._id), 'dd MMM yyyy')}</TableCell>
+                        <TableCell className='font-medium'>{formatAppDate(new Date(row._id))}</TableCell>
                         <TableCell className='text-right'>{row.billCount}</TableCell>
                         <TableCell className='text-right'>{fmt(row.totalBillAmount)}</TableCell>
                         <TableCell className='text-right text-green-600 font-medium'>{fmt(row.totalServiceCharges)}</TableCell>

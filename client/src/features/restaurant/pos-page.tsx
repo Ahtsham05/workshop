@@ -50,6 +50,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDateTime } from '@/lib/date-format'
 
 type CartLine = {
   productId: string
@@ -776,7 +777,7 @@ export default function RestaurantPosPage() {
                                       </Badge>
                                       {row.createdAt ? (
                                         <span className='text-[10px] text-muted-foreground'>
-                                          {new Date(row.createdAt).toLocaleString()}
+                                          {formatAppDateTime(new Date(row.createdAt))}
                                         </span>
                                       ) : null}
                                     </div>
@@ -1337,7 +1338,7 @@ function PosOrderRow({
           ) : null}
           {order.deliveredAt ? (
             <Badge variant='outline' className='mt-1 text-[10px]'>
-              Delivered {new Date(order.deliveredAt).toLocaleString()}
+              Delivered {formatAppDateTime(new Date(order.deliveredAt))}
             </Badge>
           ) : null}
         </div>

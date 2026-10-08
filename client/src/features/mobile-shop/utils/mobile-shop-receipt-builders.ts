@@ -7,12 +7,13 @@ import type {
   LoadTransactionRecord,
   SimSaleRecord,
 } from '@/stores/mobile-shop.api'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const refFromId = (id: string) => String(id).slice(-10).toUpperCase()
 
 const formatDate = (date: string) => {
   try {
-    return new Date(date).toLocaleString()
+    return formatAppDateTime(new Date(date))
   } catch {
     return date
   }

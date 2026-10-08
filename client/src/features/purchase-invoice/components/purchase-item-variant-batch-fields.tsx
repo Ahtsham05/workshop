@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -20,6 +21,7 @@ import { generateBatchNumber } from '@/features/products/components/variants/gen
 import { cn } from '@/lib/utils'
 import { focusField, onEnterAdvance } from '@/lib/invoice-form-keyboard'
 import type { PurchaseItem } from '../index'
+import { formatAppDate } from '@/lib/date-format'
 
 interface Props {
   item: PurchaseItem
@@ -249,7 +251,7 @@ export function PurchaseItemVariantBatchFields({
               const isSelected = item.batchNumber === b.batchNumber
               const fundedByName = typeof b.partnerId === 'object' ? b.partnerId?.name : undefined
               const titleParts = [
-                b.expiryDate ? `Expires ${new Date(b.expiryDate).toLocaleDateString()}` : null,
+                b.expiryDate ? `Expires ${formatAppDate(new Date(b.expiryDate))}` : null,
                 fundedByName ? `Funded by ${fundedByName}` : null,
               ].filter(Boolean)
               return (
@@ -284,7 +286,7 @@ export function PurchaseItemVariantBatchFields({
             {isNewBatch && (
               <span
                 className={pillClass(true)}
-                title={isExpirable ? (item.expiryDate ? `Expires ${new Date(item.expiryDate).toLocaleDateString()}` : 'No expiry set') : undefined}
+                title={isExpirable ? (item.expiryDate ? `Expires ${formatAppDate(new Date(item.expiryDate))}` : 'No expiry set') : undefined}
               >
                 <button type='button' onClick={openEditDialog} className='py-1 pl-2.5'>
                   <Sparkles className='mr-1 inline h-3 w-3' />
@@ -340,13 +342,12 @@ export function PurchaseItemVariantBatchFields({
             {isExpirable && (
               <div className='space-y-1.5'>
                 <Label htmlFor={`batch-expiry-${index}`}>Expiry Date</Label>
-                <Input
+                <DatePicker
                   id={`batch-expiry-${index}`}
                   ref={expiryInputRef}
-                  type='date'
                   value={draftExpiryDate}
-                  showVoiceInput={false}
-                  onChange={(e) => setDraftExpiryDate(e.target.value)}
+                  clearable
+                  onChange={setDraftExpiryDate}
                   onKeyDown={(e) => onEnterAdvance(e, commitBatch)}
                   className='h-9'
                 />

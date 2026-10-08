@@ -3,7 +3,6 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { format } from 'date-fns'
 import { CalendarIcon, Info, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppDispatch, RootState } from '@/stores/store'
@@ -39,6 +38,7 @@ import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { formatAppDate } from '@/lib/date-format'
 
 const lineSchema = z
   .object({
@@ -330,7 +330,7 @@ export function PaymentVoucherDialog({ open, onOpenChange, voucher, onCreated, o
                     )}
                   >
                     <CalendarIcon className='mr-2 h-4 w-4' />
-                    {form.watch('date') ? format(form.watch('date'), 'PPP') : <span>Pick a date</span>}
+                    {form.watch('date') ? formatAppDate(form.watch('date')) : <span>Pick a date</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className='w-auto p-0'>

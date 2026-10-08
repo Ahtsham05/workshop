@@ -41,6 +41,7 @@ import { useLanguage } from '@/context/language-context';
 import toast from 'react-hot-toast';
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import { formatAppDate } from '@/lib/date-format'
 
 const ruleSchema = z
   .object({
@@ -189,7 +190,7 @@ export function ProfitShareRuleDialog({ open, onOpenChange, rule, onSuccess }: P
     () =>
       (batchesData || []).map((b) => {
         const id = (b._id || b.id) as string;
-        const expiry = b.expiryDate ? ` · exp ${new Date(b.expiryDate).toLocaleDateString()}` : '';
+        const expiry = b.expiryDate ? ` · exp ${formatAppDate(new Date(b.expiryDate))}` : '';
         return { value: id, label: `${b.batchNumber} · ${b.quantity} left${expiry}` };
       }),
     [batchesData]

@@ -24,6 +24,7 @@ import { Download, Wallet, TrendingUp, ArrowDownCircle, ArrowUpCircle, ChevronDo
 import { useGetWalletBalanceStatementQuery, type WalletBalanceStatement as WalletBalanceStatementData } from '@/stores/reports.api'
 import { kpiCardClass } from '@/lib/stat-card-tones'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -40,9 +41,9 @@ interface WalletBalanceStatementProps {
 
 const formatCalendarDate = (dateStr: string) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
-  if (!match) return format(new Date(dateStr), 'dd MMM yyyy')
+  if (!match) return formatAppDate(new Date(dateStr))
   const [, y, m, d] = match
-  return format(new Date(Number(y), Number(m) - 1, Number(d)), 'dd MMM yyyy')
+  return formatAppDate(new Date(Number(y), Number(m) - 1, Number(d)))
 }
 
 const getFlowBadgeStyles = (impact: number) =>
@@ -121,14 +122,14 @@ export function WalletBalanceStatement({
         { Metric: 'Period Opening Balance', Value: data.periodOpeningBalance },
         { Metric: 'Period Closing Balance', Value: data.periodClosingBalance },
         { Metric: '', Value: '' },
-        { Metric: 'Period Start', Value: format(new Date(data.period.startDate), 'dd MMM yyyy') },
-        { Metric: 'Period End', Value: format(new Date(data.period.endDate), 'dd MMM yyyy') },
+        { Metric: 'Period Start', Value: formatAppDate(new Date(data.period.startDate)) },
+        { Metric: 'Period End', Value: formatAppDate(new Date(data.period.endDate)) },
       ]
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Summary')
 
       // Daily rows
       const rows = data.rows.map((r) => ({
-        Date: format(new Date(r.date), 'dd MMM yyyy'),
+        Date: formatAppDate(new Date(r.date)),
         [`Opening Balance (${currencySymbol})`]: r.openingBalance,
         [`Sold (${currencySymbol})`]: r.hasSales ? r.totalSold : '',
         [`Profit (${currencySymbol})`]: r.hasSales ? r.totalProfit : '',
@@ -140,7 +141,7 @@ export function WalletBalanceStatement({
 
       const detailRows = data.rows.flatMap((r) =>
         r.detailItems.map((item) => ({
-          Date: format(new Date(item.date), 'dd MMM yyyy'),
+          Date: formatAppDate(new Date(item.date)),
           Type: item.title,
           'Account / Number': item.accountNumber || '',
           Customer: item.customerName || '',
@@ -260,9 +261,9 @@ export function WalletBalanceStatement({
         {/* Period info */}
         {data && (
           <p className='text-xs text-muted-foreground -mt-2'>
-            {format(new Date(data.period.startDate), 'dd MMM yyyy')}
+            {formatAppDate(new Date(data.period.startDate))}
             {' — '}
-            {format(new Date(data.period.endDate), 'dd MMM yyyy')}
+            {formatAppDate(new Date(data.period.endDate))}
           </p>
         )}
 
@@ -551,7 +552,7 @@ export function WalletBalanceStatement({
                       return (
                         <TableRow key={`${entry.date}-${entry.item.id}-${idx}`}>
                           <TableCell className='font-medium'>
-                            {showDate ? format(new Date(entry.date), 'dd MMM yyyy') : ''}
+                            {showDate ? formatAppDate(new Date(entry.date)) : ''}
                           </TableCell>
                           <TableCell>{entry.item.title}</TableCell>
                           <TableCell>

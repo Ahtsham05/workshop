@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react';
-import { format } from 'date-fns';
 import { escapeHtml } from '@/lib/escape-html';
 import { useLanguage } from '@/context/language-context';
 import { paymentReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language';
@@ -11,6 +10,7 @@ import { PrintFormatButton } from '@/components/print-format-button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useFormatMoney } from '@/lib/format-money';
+import { formatAppDate } from '@/lib/date-format'
 
 function resolveReceiptPartyName(lang: InvoiceLanguage, name: string, nameUrdu?: string): string {
   return lang === 'ur' && nameUrdu?.trim() ? nameUrdu.trim() : name;
@@ -152,7 +152,7 @@ export function PaymentReceipt({
 
   const formatDate = (dateString: string) => {
     try {
-      return format(new Date(dateString), 'PPP');
+      return formatAppDate(new Date(dateString));
     } catch {
       return dateString;
     }

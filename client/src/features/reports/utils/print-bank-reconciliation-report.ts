@@ -1,10 +1,10 @@
-import { format } from 'date-fns'
 import { escapeHtml } from '@/lib/escape-html'
 import { openPrintWindowForFormat } from '@/features/invoice/utils/print-utils'
 import { PAPER_FORMATS } from '@/features/invoice/utils/paper-format'
 import type { BankReconciliationSessionEntry, BankReconciliationSessionRow } from '@/stores/reports.api'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import type { CurrencyOption } from '@/stores/localization.api'
+import { formatAppDate } from '@/lib/date-format'
 
 const FONT_STACK = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
 
@@ -19,7 +19,7 @@ interface PrintCompany {
 const fmtDate = (value: string | null) => {
   if (!value) return '-'
   try {
-    return format(new Date(value), 'PPP')
+    return formatAppDate(new Date(value))
   } catch {
     return value
   }

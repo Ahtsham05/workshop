@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { Link } from '@tanstack/react-router'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -92,6 +91,7 @@ import { formatImeiEntries } from '@/stores/imei.api'
 import { TaxBreakdownSummary } from './tax-breakdown-summary'
 import type { TaxLine } from '@/stores/taxCalculator.api'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 interface InvoiceListProps {
   onBack?: () => void
@@ -811,7 +811,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       </div>
                       {invoice.dueDate && (
                         <p className={cn('text-[11px]', isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}>
-                          {t('Due')} {format(new Date(invoice.dueDate), 'dd MMM yyyy')}
+                          {t('Due')} {formatAppDate(new Date(invoice.dueDate))}
                         </p>
                       )}
                     </TableCell>
@@ -866,7 +866,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
                       )}
                     </TableCell>
                     <TableCell className='whitespace-nowrap'>
-                      {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy')}
+                      {formatAppDate(new Date(invoice.invoiceDate || invoice.createdAt))}
                     </TableCell>
                     <TableCell className='text-right font-semibold tabular-nums'>{formatMoney(invoice.total || 0)}</TableCell>
                     <TableCell className='text-right tabular-nums'>{formatMoney(settlement.settledAmount)}</TableCell>
@@ -1108,7 +1108,7 @@ function InvoiceDetails({
         <div>
           <Label>{t('date')}</Label>
           <p className="font-medium">
-            {format(new Date(invoice.invoiceDate || invoice.createdAt), 'MMM dd, yyyy HH:mm')}
+            {formatAppDateTime(new Date(invoice.invoiceDate || invoice.createdAt))}
           </p>
         </div>
         <div>

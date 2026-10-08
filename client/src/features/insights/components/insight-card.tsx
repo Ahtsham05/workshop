@@ -8,6 +8,7 @@ import type { Insight, InsightBranchRef, InsightCustomerRef, InsightProductRef }
 import { useMarkInsightReadMutation } from '@/stores/insight.api'
 import { getTypeIcon, PRIORITY_THEME, formatMoney, formatNumber, isPositiveType } from '../utils/insight-display'
 import { HeroStat, LevelBar, RankBarList, TwoBarCompare, MiniDonut, type Tone } from './insight-visuals'
+import { formatAppDate } from '@/lib/date-format'
 
 /** STOCK_OUT_RISK_DAYS from the rule engine's CONFIG — the reference window a days-remaining gauge fills against. */
 const STOCK_OUT_RISK_WINDOW = 14
@@ -221,10 +222,10 @@ const CUSTOMER_COLUMNS: Record<string, { label: string; render: (c: any) => stri
     { label: 'Orders', render: (c) => `${c.totalOrders}` },
   ],
   inactive_customer: [
-    { label: 'Last order', render: (c) => (c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString() : '—') },
+    { label: 'Last order', render: (c) => (c.lastOrderAt ? formatAppDate(new Date(c.lastOrderAt)) : '—') },
   ],
   at_risk_customer: [
-    { label: 'Last order', render: (c) => (c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString() : '—') },
+    { label: 'Last order', render: (c) => (c.lastOrderAt ? formatAppDate(new Date(c.lastOrderAt)) : '—') },
     { label: 'Spent', render: (c) => formatMoney(c.totalRevenue) },
   ],
 }

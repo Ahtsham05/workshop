@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import type { Reminder, ReminderPriority } from '@/stores/reminder.api'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const PRIORITY_ACCENT: Record<
   ReminderPriority,
@@ -132,7 +133,7 @@ export function ReminderAlarmSplash({ reminder, queueLength, onSnooze, onComplet
             </span>
             <span className="flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-xs text-white/50 ring-1 ring-inset ring-white/10">
               <Clock className="h-3 w-3" />
-              {format(new Date(reminder.dueAt), 'PPP p')}
+              {formatAppDateTime(new Date(reminder.dueAt))}
             </span>
           </div>
 

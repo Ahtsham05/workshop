@@ -46,6 +46,7 @@ import {
   type WhatsAppConversation,
   type WhatsAppMessage,
 } from '@/stores/whatsappCloud.api'
+import { formatAppDate } from '@/lib/date-format'
 
 // WhatsApp's own default-avatar palette, picked deterministically per contact so the
 // same phone/name always renders the same color across renders and sessions.
@@ -108,7 +109,7 @@ function formatConversationTimestamp(iso?: string) {
   const withinWeek = now.getTime() - date.getTime() < 6 * 24 * 60 * 60 * 1000
   if (withinWeek) return date.toLocaleDateString([], { weekday: 'short' })
 
-  return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' })
+  return formatAppDate(date)
 }
 
 function formatMessageTime(iso?: string) {
@@ -130,7 +131,7 @@ function formatDayDivider(iso: string) {
   const withinWeek = now.getTime() - date.getTime() < 6 * 24 * 60 * 60 * 1000
   if (withinWeek) return date.toLocaleDateString([], { weekday: 'long' })
 
-  return date.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' })
+  return formatAppDate(date)
 }
 
 // Groups a chronological message list into day buckets, and flags whether each message

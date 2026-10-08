@@ -24,6 +24,7 @@ import { type ChatUser, type Convo } from './data/chat-types'
 // Fake Data
 import { conversations } from './data/convo.json'
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { formatAppDate } from '@/lib/date-format'
 
 export default function Chats() {
   const [search, setSearch] = useState('')
@@ -39,7 +40,7 @@ export default function Chats() {
 
   const currentMessage = selectedUser?.messages.reduce(
     (acc: Record<string, Convo[]>, obj) => {
-      const key = format(obj.timestamp, 'd MMM, yyyy')
+      const key = formatAppDate(obj.timestamp)
 
       // Create an array for the category if it doesn't exist
       if (!acc[key]) {

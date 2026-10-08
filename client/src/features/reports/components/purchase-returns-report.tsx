@@ -15,6 +15,7 @@ import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface PurchaseReturnsReportProps {
   startDate: string
@@ -219,7 +220,7 @@ export const PurchaseReturnsReport = forwardRef<{ exportToExcel: () => void }, P
                     const pn = reportEntityName(language, row.productName, row.productNameUrdu)
                     return (
                       <TableRow key={`${row.returnNumber}-${idx}`}>
-                        <TableCell className='whitespace-nowrap'>{format(new Date(row.date), 'MMM dd, yyyy')}</TableCell>
+                        <TableCell className='whitespace-nowrap'>{formatAppDate(new Date(row.date))}</TableCell>
                         <TableCell className='font-mono text-xs'>{row.returnNumber}</TableCell>
                         <TableCell className='font-medium max-w-[200px]'>
                           <LongText className={reportEntityNameClass(language, pn)}>{pn}</LongText>

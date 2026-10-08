@@ -6,6 +6,8 @@ import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/ui/date-picker'
+import { getBusinessToday, toBusinessCalendarDate } from '@/lib/business-timezone'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -36,7 +38,8 @@ import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { BilingualName } from '@/components/bilingual-name'
 import { getDisplayStock } from '@/lib/product-stock-display'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
-import { useIsPhone } from '@/hooks/use-mobile'
+import { useIsBelowXl, useIsPhone } from '@/hooks/use-mobile'
+import { useFitListToViewport } from '@/lib/use-fit-list-to-viewport'
 import { useIsNarrower } from '@/hooks/use-element-width'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
 import { PurchaseAttachmentsField } from './purchase-attachments-field'
@@ -402,10 +405,13 @@ interface PurchasePanelProps {
   stickyActionsContainer?: HTMLElement | null
 }
 
+// Pakistan calendar day, not the UTC one — `toISOString()` put a purchase made between
+// 00:00 and 05:00 PKT on the previous day. Picked days are stored as UTC midnight, which
+// reads back as the same day here.
 const isoDay = (v?: string | Date | null) => {
   if (!v) return '';
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+  return Number.isNaN(d.getTime()) ? '' : toBusinessCalendarDate(d);
 };
 
 export default function PurchasePanel({
@@ -613,7 +619,7 @@ export default function PurchasePanel({
   const purchaseDateRef = useRef<HTMLInputElement>(null)
   const vendorBillNumberRef = useRef<HTMLInputElement>(null)
   const itemsScrollRef = useRef<HTMLDivElement>(null)
-  // The items table (colgroup: 8 + auto + 110 + 100 + 100 + 85 + 90 + 10px) needs ~700px+ to
+  // The items table (colgroup: 48 + auto + 116 + 120 + 124 + 100 + 124 + 40px) needs ~740px+ to
   // render its fixed-width columns without table-fixed proportionally squeezing all of them
   // below their intended width (that's what causes headers/values to visually run together —
   // not overflow, since the table is forced to 100% of a too-narrow container). Below that,
@@ -622,7 +628,16 @@ export default function PurchasePanel({
   // just triggered by the item area's actual rendered width instead of viewport width alone,
   // so a docked devtools panel or a collapsed sidebar can trigger it too.
   const itemsAreaRef = useRef<HTMLDivElement>(null)
-  const isItemsAreaNarrow = useIsNarrower(itemsAreaRef, 700)
+  const isItemsAreaNarrow = useIsNarrower(itemsAreaRef, 740)
+  // Three-column desktop layout: size the items list to the space left in the viewport, so a
+  // long purchase scrolls only inside the list instead of the list *and* the page (the fixed
+  // 460px cap below left the page overflowing too). Phones, the stacked tablet layout and
+  // catalog mode keep the fixed cap — there the page is meant to scroll.
+  const panelRootRef = useRef<HTMLDivElement>(null)
+  const isBelowXl = useIsBelowXl()
+  const itemsListMaxHeight = useFitListToViewport(itemsScrollRef, panelRootRef, {
+    enabled: !showProductCatalog && !isPhone && !isBelowXl,
+  })
   const [, setPaymentMethodSelectOpen] = useState(false)
 
   // Auto-scroll items list when items change
@@ -1768,6 +1783,16 @@ export default function PurchasePanel({
         supplierName={purchase.supplier?.name}
       />
     )
+    // Table rows: floats below the input instead of taking row height, so the Purchase Price
+    // input lines up with the row's other inputs (see PriceChangeIndicator `floating`).
+    const floatingPriceComparisonIndicator = (
+      <PriceChangeIndicator
+        comparison={getPriceComparison(item.variantId || productId)}
+        currentPrice={item.purchasePrice}
+        supplierName={purchase.supplier?.name}
+        floating
+      />
+    )
 
     const productCell = (
       <div className='flex items-start gap-2'>
@@ -1933,7 +1958,7 @@ export default function PurchasePanel({
       </Button>
     )
 
-    return { productCell, qtyControl, purchasePriceControl, priceComparisonIndicator, sellingPriceControl, discountControl, totalDisplay, deleteButton }
+    return { productCell, qtyControl, purchasePriceControl, priceComparisonIndicator, floatingPriceComparisonIndicator, sellingPriceControl, discountControl, totalDisplay, deleteButton }
   }
 
   // Phones only (sm:hidden below 640px): Preview/Save/Save & Print always reachable at the
@@ -2005,6 +2030,7 @@ export default function PurchasePanel({
 
   return (
     <div
+      ref={panelRootRef}
       className={cn(
         !showProductCatalog
           ? // Three columns — details / items / summary+payment+actions — mirrors
@@ -2343,24 +2369,19 @@ export default function PurchasePanel({
               <Label htmlFor="purchase-date">
                 {t('Purchase Date')} <span className="text-red-500">*</span>
               </Label>
-              <Input
+              <DatePicker
                 ref={purchaseDateRef}
                 id="purchase-date"
-                type="date"
-                value={(() => {
-                  const d = purchase.date ? new Date(purchase.date) : new Date();
-                  return (Number.isNaN(d.getTime()) ? new Date() : d).toISOString().split('T')[0];
-                })()}
-                onChange={(e) => {
-                  const next = new Date(e.target.value);
-                  if (Number.isNaN(next.getTime())) return; // cleared/partial date input
+                value={isoDay(purchase.date) || getBusinessToday()}
+                onChange={(day) => {
+                  const next = new Date(day);
+                  if (Number.isNaN(next.getTime())) return;
                   setPurchase((prev) => ({
                     ...prev,
                     date: next.toISOString(),
                   }));
                 }}
                 onKeyDown={(e) => onEnterAdvance(e, focusVendorBillNumber)}
-                className="w-full"
               />
             </div>
 
@@ -2370,18 +2391,17 @@ export default function PurchasePanel({
             {purchase.type === 'credit' && (
               <div>
                 <Label htmlFor="purchase-due-date">{t('Payment Due Date')}</Label>
-                <Input
+                <DatePicker
                   id="purchase-due-date"
-                  type="date"
                   value={isoDay(purchase.dueDate)}
                   min={isoDay(purchase.date) || undefined}
-                  onChange={(e) =>
+                  clearable
+                  onChange={(day) =>
                     setPurchase((prev) => ({
                       ...prev,
-                      dueDate: e.target.value && !Number.isNaN(new Date(e.target.value).getTime()) ? new Date(e.target.value).toISOString() : undefined,
+                      dueDate: day && !Number.isNaN(new Date(day).getTime()) ? new Date(day).toISOString() : undefined,
                     }))
                   }
-                  className="w-full"
                 />
               </div>
             )}
@@ -2544,9 +2564,11 @@ export default function PurchasePanel({
           <div
             ref={itemsScrollRef}
             className={cn(
-              'overflow-y-auto max-h-[460px]',
+              'overflow-y-auto',
+              itemsListMaxHeight === undefined && 'max-h-[460px]',
               (showProductCatalog || isPhone || isItemsAreaNarrow) ? 'space-y-2 p-3' : 'overflow-x-auto',
             )}
+            style={itemsListMaxHeight !== undefined ? { maxHeight: itemsListMaxHeight } : undefined}
           >
             {purchase.items.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
@@ -2559,26 +2581,28 @@ export default function PurchasePanel({
               // same gating InvoicePanel uses (see invoice-panel.tsx), plus the width check.
               purchase.items.map((item: PurchaseItem, index: number) => renderPurchaseItemCard(item, index))
             ) : (
-              <Table className='table-fixed'>
+              // This div already scrolls the list — the Table's own scroll wrapper would nest a
+              // second scrollbar inside it (and steal the sticky header from this one).
+              <Table className='table-fixed' containerClassName='max-h-none overflow-visible'>
                 <colgroup>
-                  <col className='w-8' />
+                  <col className='w-12' />
                   <col />
-                  <col className='w-[104px]' />
+                  <col className='w-[116px]' />
                   <col className='w-[120px]' />
-                  <col className='w-[120px]' />
-                  <col className='w-[96px]' />
-                  <col className='w-[120px]' />
+                  <col className='w-[124px]' />
+                  <col className='w-[100px]' />
+                  <col className='w-[124px]' />
                   <col className='w-10' />
                 </colgroup>
                 <TableHeader className='sticky top-0 z-10 bg-muted'>
                   <TableRow className='hover:bg-transparent'>
-                    <TableHead className='w-8 pl-3'>#</TableHead>
+                    <TableHead className='w-12 pl-3 pr-1'>#</TableHead>
                     <TableHead className='min-w-[140px]'>{t('product') || 'Product'}</TableHead>
-                    <TableHead className='w-[104px]'>{t('Qty')}</TableHead>
+                    <TableHead className='w-[116px]'>{t('Qty')}</TableHead>
                     <TableHead className='w-[120px]'>{t('Purchase Price')}</TableHead>
-                    <TableHead className='w-[120px]'>{t('Sale Price')}</TableHead>
-                    <TableHead className='w-[96px]'>{t('discount') || 'Discount'}</TableHead>
-                    <TableHead className='w-[120px] text-right'>{t('total') || 'Total'}</TableHead>
+                    <TableHead className='w-[124px]'>{t('Sale Price')}</TableHead>
+                    <TableHead className='w-[100px]'>{t('discount') || 'Discount'}</TableHead>
+                    <TableHead className='w-[124px] text-right'>{t('total') || 'Total'}</TableHead>
                     <TableHead className='w-10 pr-2' />
                   </TableRow>
                 </TableHeader>
@@ -2597,7 +2621,7 @@ export default function PurchasePanel({
                         </TableRow>
                       )
                     }
-                    const { productCell, qtyControl, purchasePriceControl, priceComparisonIndicator, sellingPriceControl, discountControl, totalDisplay, deleteButton } = renderPurchaseItemParts(item, index)
+                    const { productCell, qtyControl, purchasePriceControl, floatingPriceComparisonIndicator, sellingPriceControl, discountControl, totalDisplay, deleteButton } = renderPurchaseItemParts(item, index)
                     // Batch/expiry/variant-tracked items still render as a normal, fully
                     // column-aligned row — only their extra batch UI drops into a second,
                     // full-width row right below, instead of swapping the whole row to the
@@ -2606,19 +2630,20 @@ export default function PurchasePanel({
                     return (
                       <Fragment key={`${productId}-${index}`}>
                         <TableRow className={needsExpandedRow ? 'hover:bg-transparent border-b-0' : undefined}>
-                          <TableCell className='py-3 pl-3 align-top text-xs text-muted-foreground'>{index + 1}</TableCell>
+                          <TableCell className='overflow-visible py-3 pl-3 pr-1 align-top text-xs tabular-nums text-muted-foreground'>{index + 1}</TableCell>
                           <TableCell className='whitespace-normal py-2.5 align-top'>{productCell}</TableCell>
                           <TableCell className='align-middle py-3'>{qtyControl}</TableCell>
-                          <TableCell className='align-middle py-3'>
-                            <div className='flex min-w-0 flex-col items-center'>
+                          {/* overflow-visible: the floating change line sits just below the cell's content box. */}
+                          <TableCell className='overflow-visible align-middle py-3'>
+                            <div className='relative flex min-w-0 flex-col items-center'>
                               {purchasePriceControl}
-                              {priceComparisonIndicator}
+                              {floatingPriceComparisonIndicator}
                             </div>
                           </TableCell>
                           <TableCell className='align-middle py-3'>{sellingPriceControl}</TableCell>
                           <TableCell className='align-middle py-3'>{discountControl}</TableCell>
                           <TableCell className='align-middle py-3 text-right'>{totalDisplay}</TableCell>
-                          <TableCell className='py-3 pr-2 align-middle'>{deleteButton}</TableCell>
+                          <TableCell className='overflow-visible px-1 py-3 align-middle'>{deleteButton}</TableCell>
                         </TableRow>
                         {needsExpandedRow && (
                           <TableRow className='hover:bg-transparent'>

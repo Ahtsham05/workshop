@@ -28,11 +28,13 @@ import { getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-time
 import { useFormatMoney } from '@/lib/format-money'
 import { fitValueSize } from '@/lib/fit-value-size'
 import { cn } from '@/lib/utils'
+import { NativeDateInput } from '@/components/ui/date-picker'
+import { formatAppDate } from '@/lib/date-format'
 
 const formatDate = (value?: string) => {
   if (!value) return '-'
   try {
-    return format(new Date(value), 'dd MMM yyyy')
+    return formatAppDate(new Date(value))
   } catch {
     return value
   }
@@ -238,18 +240,16 @@ export default function BankAccountStatementPage({ initialWalletType }: BankAcco
           <div className='space-y-2 md:col-span-2'>
             <p className='text-sm font-medium'>Date Range</p>
             <div className='flex flex-wrap items-center gap-2'>
-              <input
-                type='date'
+              <NativeDateInput
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className='h-9 rounded-md border bg-background px-3 text-sm'
+                className='h-9 w-40'
               />
               <span className='text-muted-foreground'>to</span>
-              <input
-                type='date'
+              <NativeDateInput
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className='h-9 rounded-md border bg-background px-3 text-sm'
+                className='h-9 w-40'
               />
               <Button type='button' variant='outline' size='sm' onClick={setTodayFilter}>Today</Button>
               <Button type='button' variant='outline' size='sm' onClick={setLast7DaysFilter}>Last 7 Days</Button>

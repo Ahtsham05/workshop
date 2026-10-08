@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-name'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface SimSaleReportProps {
   startDate: string
@@ -391,7 +392,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                       <TableCell className='capitalize'>{row.paymentMethod || 'cash'}</TableCell>
                       <TableCell>{row.paymentWalletType || '—'}</TableCell>
                       <TableCell>{row.walletType ?? '—'}</TableCell>
-                      <TableCell>{row.date ? format(new Date(row.date), 'dd MMM yyyy') : '—'}</TableCell>
+                      <TableCell>{row.date ? formatAppDate(new Date(row.date)) : '—'}</TableCell>
                     </TableRow>
                     )
                   })}
@@ -456,7 +457,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
                       return (
                         <TableRow key={row._id || idx}>
                           <TableCell className='whitespace-nowrap text-sm'>
-                            {row.date ? format(new Date(row.date), 'dd MMM yyyy') : '—'}
+                            {row.date ? formatAppDate(new Date(row.date)) : '—'}
                           </TableCell>
                           <TableCell className={cn('text-sm', reportEntityNameClass(language, cust))}>
                             {cust || '—'}
@@ -487,7 +488,7 @@ export const SimSaleReport = forwardRef<{ exportToExcel: () => void }, SimSaleRe
               <div className='border-t px-6 py-4 flex-shrink-0'>
                 <div className='flex justify-between items-center text-sm'>
                   <span className='text-muted-foreground'>
-                    {format(new Date(startDate), 'dd MMM yyyy')} — {format(new Date(endDate), 'dd MMM yyyy')}
+                    {formatAppDate(new Date(startDate))} — {formatAppDate(new Date(endDate))}
                   </span>
                   <div className='text-right'>
                     <p className='text-xs text-muted-foreground'>{t('Total Sale Amount')}</p>

@@ -51,6 +51,7 @@ import {
 import { cn } from '@/lib/utils'
 import { kpiCardClass, toneIconWrapClass } from '@/lib/stat-card-tones'
 import { useFormatMoney } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 
 interface ExpenseReportProps {
   startDate: string
@@ -438,7 +439,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
                           {exp.expenseNumber || '—'}
                         </TableCell>
                         <TableCell className="py-2 text-sm whitespace-nowrap">
-                          {exp.date ? format(new Date(exp.date), 'dd MMM yyyy') : '—'}
+                          {exp.date ? formatAppDate(new Date(exp.date)) : '—'}
                         </TableCell>
                         <TableCell className="py-2 text-sm">
                           <div className="font-medium">{exp.description}</div>
@@ -476,7 +477,7 @@ export const ExpenseReport = forwardRef<{ exportToExcel: () => void }, ExpenseRe
               <div className="border-t px-6 py-4 flex-shrink-0">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">
-                    {format(new Date(startDate), 'dd MMM yyyy')} — {format(new Date(endDate), 'dd MMM yyyy')}
+                    {formatAppDate(new Date(startDate))} — {formatAppDate(new Date(endDate))}
                   </span>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">{t('Total Expense')}</p>

@@ -55,6 +55,7 @@ import { useBranchName } from '@/hooks/use-branch-name'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { filterAndRankBySearch, matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { formatAppDateTime } from '@/lib/date-format'
 
 type CatalogForm = {
   serviceName: string
@@ -364,7 +365,7 @@ export default function ServicesPage({
       setSavedReceipt({
         title: 'Service invoice',
         reference: inv.invoiceNumber,
-        issuedAt: new Date(inv.date).toLocaleString(),
+        issuedAt: formatAppDateTime(new Date(inv.date)),
         lines: [
           { label: 'Customer', value: inv.customerName || '—' },
           { label: 'Phone', value: inv.customerPhone || '—' },

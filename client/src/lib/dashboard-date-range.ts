@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { formatAppDate } from '@/lib/date-format'
 
 import { getBusinessToday, shiftBusinessCalendarDate } from '@/lib/business-timezone'
 
@@ -95,22 +95,12 @@ export function formatDashboardRangeSubtitle(range: DashboardDateRange): string 
   const start = parseRangeDate(range.startDate)
   const end = parseRangeDate(range.endDate)
 
+  // Settings → Localization date format, so the subtitle reads the same as every other date.
   if (range.startDate === range.endDate) {
-    return format(start, 'MMM d, yyyy')
+    return formatAppDate(start)
   }
 
-  const sameYear = start.getFullYear() === end.getFullYear()
-  const sameMonth = sameYear && start.getMonth() === end.getMonth()
-
-  if (sameMonth) {
-    return `${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`
-  }
-
-  if (sameYear) {
-    return `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`
-  }
-
-  return `${format(start, 'MMM d, yyyy')} – ${format(end, 'MMM d, yyyy')}`
+  return `${formatAppDate(start)} – ${formatAppDate(end)}`
 }
 
 export function dashboardRangeQueryParams(range: DashboardDateRange) {

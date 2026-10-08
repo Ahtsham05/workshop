@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import {
   ShieldCheck, Search, X, ChevronRight, ShieldAlert, ShieldX, PackageCheck,
@@ -38,6 +37,7 @@ import {
   type ImeiRecord,
   type ImeiStatus,
 } from '@/stores/imei.api'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 const statusConfig: Record<ImeiStatus, { label: string; color: string }> = {
   in_stock: { label: 'In Stock', color: 'bg-blue-100 text-blue-700' },
@@ -56,7 +56,7 @@ function warrantyBadge(record: ImeiRecord) {
   const daysLeft = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
   if (daysLeft < 0) return <Badge className='text-xs bg-gray-100 text-gray-600'>Expired</Badge>
   if (daysLeft <= 30) return <Badge className='text-xs bg-orange-100 text-orange-700'>Expiring in {daysLeft}d</Badge>
-  return <Badge className='text-xs bg-green-100 text-green-700'>Active till {format(end, 'dd MMM yyyy')}</Badge>
+  return <Badge className='text-xs bg-green-100 text-green-700'>Active till {formatAppDate(end)}</Badge>
 }
 
 type QuickFilter = 'lost_stolen' | 'warranty_expiring' | null
@@ -351,13 +351,13 @@ export default function ImeiTrackingPage() {
                   <DetailRow label='Color / Storage' value={[detailRecord.color, detailRecord.storage].filter(Boolean).join(' · ') || '—'} />
                   <DetailRow label='Supplier' value={detailRecord.supplierName || '—'} />
                   <DetailRow label='Batch' value={(typeof detailRecord.batchId === 'object' && detailRecord.batchId?.batchNumber) || '—'} />
-                  <DetailRow label='Purchase Date' value={detailRecord.purchaseDate ? format(new Date(detailRecord.purchaseDate), 'dd MMM yyyy') : '—'} />
+                  <DetailRow label='Purchase Date' value={detailRecord.purchaseDate ? formatAppDate(new Date(detailRecord.purchaseDate)) : '—'} />
                 </div>
                 <div className='space-y-3'>
                   <DetailRow label='Customer' value={detailRecord.customerName || '—'} />
                   <DetailRow label='Customer Phone' value={detailRecord.customerPhone || '—'} />
-                  <DetailRow label='Sale Date' value={detailRecord.saleDate ? format(new Date(detailRecord.saleDate), 'dd MMM yyyy') : '—'} />
-                  <DetailRow label='Warranty' value={detailRecord.warrantyEndDate ? `${detailRecord.warrantyMonths} months · until ${format(new Date(detailRecord.warrantyEndDate), 'dd MMM yyyy')}` : 'No warranty'} />
+                  <DetailRow label='Sale Date' value={detailRecord.saleDate ? formatAppDate(new Date(detailRecord.saleDate)) : '—'} />
+                  <DetailRow label='Warranty' value={detailRecord.warrantyEndDate ? `${detailRecord.warrantyMonths} months · until ${formatAppDate(new Date(detailRecord.warrantyEndDate))}` : 'No warranty'} />
                   {(detailRecord.status === 'lost' || detailRecord.status === 'stolen') && (
                     <DetailRow label='Reported' value={detailRecord.lostStolenReason || '(no reason given)'} danger />
                   )}
@@ -398,7 +398,7 @@ export default function ImeiTrackingPage() {
                         </Badge>
                         <div className='flex-1 min-w-0'>
                           {entry.note && <p className='text-foreground'>{entry.note}</p>}
-                          <p className='text-xs text-muted-foreground'>{format(new Date(entry.at), 'dd MMM yyyy, hh:mm a')}{entry.byUserName ? ` · ${entry.byUserName}` : ''}</p>
+                          <p className='text-xs text-muted-foreground'>{formatAppDateTime(new Date(entry.at))}{entry.byUserName ? ` · ${entry.byUserName}` : ''}</p>
                         </div>
                       </div>
                     ))}

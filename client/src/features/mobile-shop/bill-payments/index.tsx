@@ -97,6 +97,7 @@ import { SmsSendButton } from '@/components/sms/sms-send-button'
 import { buildMobileShopReceiptMessage } from '@/utils/sms-messages'
 import { useBranchName } from '@/hooks/use-branch-name'
 import { usePermissions } from '@/context/permission-context'
+import { formatAppDate } from '@/lib/date-format'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1337,20 +1338,12 @@ export default function BillPaymentsPage() {
                             <TableCell className='text-sm'>{bill.companyName || '—'}</TableCell>
                             <TableCell className='text-sm'>
                               {bill.collectionDate
-                                ? new Date(bill.collectionDate).toLocaleDateString('en-PK', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric',
-                                  })
+                                ? formatAppDate(new Date(bill.collectionDate))
                                 : '—'}
                             </TableCell>
                             <TableCell className='text-sm'>
                               {bill.dueDate
-                                ? new Date(bill.dueDate).toLocaleDateString('en-PK', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric',
-                                  })
+                                ? formatAppDate(new Date(bill.dueDate))
                                 : '—'}
                             </TableCell>
                             <TableCell className='text-right text-sm'>
