@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { LedgerPeriodSelector, formatLedgerPeriodRange } from './ledger-period-selector';
+import { getStoredLedgerPeriod, isAllTimePeriod, storeLedgerPeriod, type LedgerPeriod } from '../utils/ledger-period';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,8 +9,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Sheet,
   SheetContent,
@@ -29,7 +29,7 @@ import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
-import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, FileText, CalendarIcon, List, LayoutGrid, ExternalLink, Target } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, FileText, List, LayoutGrid, ExternalLink, Target } from 'lucide-react';
 import { expiryBadge } from '@/features/reports/utils/expiry-badge';
 import { useNavigate } from '@tanstack/react-router';
 import * as XLSX from 'xlsx';
@@ -74,7 +74,6 @@ import {
   getCustomerLedgerEntryActions,
   getLedgerFormPreset,
 } from '@/features/accounting/utils/customer-ledger-entry-navigation';
-import { cn } from '@/lib/utils';
 import { resolveBranchCompanyName } from '@/utils/branch-company-name';
 import { withCustomerContactForPrint } from '@/features/invoice/utils/invoice-print-whatsapp';
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
@@ -89,10 +88,7 @@ import {
 } from '@/features/invoice/utils/invoice-print-contact-bridge';
 import { getInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
 import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop-print-utils';
-import {
-  generateCustomerLedgerStatementHTML,
-  type LedgerStatementRow,
-} from '@/features/accounting/utils/ledger-print-utils';
+import { generateLedgerBankStatementHTML } from '@/features/accounting/utils/ledger-bank-statement-print';
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 interface LedgerEntry {
@@ -750,15 +746,19 @@ function CashWithdrawalDetailDialogContent({
   );
 }
 
-function getDefaultLedgerDateRange() {
-  const now = new Date();
-  return {
-    startDate: format(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30), 'yyyy-MM-dd'),
-    endDate: format(now, 'yyyy-MM-dd'),
-  };
-}
-
 const CUSTOMER_LEDGER_VIEW_MODE_KEY = 'customer-ledger-view-mode';
+const STATEMENT_LAYOUT_KEY = 'customer-statement-layout';
+
+/** 'bank' = Debit / Credit / running Balance register; 'products' = sale invoices item-wise. */
+type StatementLayout = 'bank' | 'products';
+
+function getStoredStatementLayout(): StatementLayout {
+  try {
+    return localStorage.getItem(STATEMENT_LAYOUT_KEY) === 'products' ? 'products' : 'bank';
+  } catch {
+    return 'bank';
+  }
+}
 
 type LedgerViewMode = 'list' | 'category';
 
@@ -814,7 +814,12 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const [cashWithdrawalDialogOpen, setCashWithdrawalDialogOpen] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
   const [openingBalance, setOpeningBalance] = useState(0);
-  const [dateRange, setDateRange] = useState(getDefaultLedgerDateRange);
+  const [dateRange, setDateRangeState] = useState<LedgerPeriod>(() => getStoredLedgerPeriod('customer-ledger-period'));
+  /** Remembered per page, so the period the user picked is the default next time. */
+  const setDateRange = (period: LedgerPeriod) => {
+    setDateRangeState(period);
+    storeLedgerPeriod('customer-ledger-period', period);
+  };
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
@@ -822,6 +827,15 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const [statementDialogOpen, setStatementDialogOpen] = useState(false);
   const [statementLanguage, setStatementLanguage] = useState<'en' | 'ur'>(preferredLanguage === 'ur' ? 'ur' : 'en');
   const [statementShowInvoiceNumbers, setStatementShowInvoiceNumbers] = useState(true);
+  const [statementLayout, setStatementLayoutState] = useState<StatementLayout>(getStoredStatementLayout);
+  const setStatementLayout = (layout: StatementLayout) => {
+    setStatementLayoutState(layout);
+    try {
+      localStorage.setItem(STATEMENT_LAYOUT_KEY, layout);
+    } catch {
+      // Remembering the layout is a convenience only.
+    }
+  };
   const [viewMode, setViewMode] = useState<LedgerViewMode>(getStoredLedgerViewMode);
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   const [activeCategoryGroup, setActiveCategoryGroup] = useState<LedgerCategoryGroup | null>(null);
@@ -979,8 +993,6 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
       : openingBalance;
     return { periodDebit, periodCredit, closingBalance };
   }, [entries, openingBalance]);
-
-  const applyLast30Days = () => setDateRange(getDefaultLedgerDateRange());
 
   const categoryGroups = useMemo(() => groupCustomerLedgerEntries(entries), [entries]);
 
@@ -1344,70 +1356,71 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
     language: 'en' | 'ur';
     showInvoiceNumbers: boolean;
     paperSize?: PaperSize;
+    layout?: StatementLayout;
   }) => {
     const sheetSize = withPrintOrientation(resolveSheetSize(options.paperSize ?? defaultPaperSize), printOrientation);
     if (entries.length === 0 && Math.abs(openingBalance) < 0.005) {
       toast.error(t('No transactions found'));
       return;
     }
+    const productWise = options.layout === 'products';
     setPrintingStatement(true);
     try {
+      // Product-wise lists each sale's items, so load those invoices first.
       const invoicesById = new Map<string, any>();
-      await Promise.all(
-        entries
-          .filter(isDetailedSaleEntry)
-          .map(async (entry) => {
-            const rid = String(entry.referenceId);
-            if (invoicesById.has(rid)) return;
-            try {
-              const invoice = await dispatch(invoiceApi.endpoints.getInvoiceById.initiate(rid)).unwrap();
-              invoicesById.set(rid, invoice);
-            } catch (error) {
-              console.error('Failed to load invoice for statement print:', error);
-            }
-          }),
-      );
+      if (productWise) {
+        await Promise.all(
+          entries
+            .filter(isDetailedSaleEntry)
+            .map(async (entry) => {
+              const rid = String(entry.referenceId);
+              if (invoicesById.has(rid)) return;
+              try {
+                const invoice = await dispatch(invoiceApi.endpoints.getInvoiceById.initiate(rid)).unwrap();
+                invoicesById.set(rid, invoice);
+              } catch (error) {
+                console.error('Failed to load invoice for statement print:', error);
+              }
+            }),
+        );
+      }
 
-      const statementRows: LedgerStatementRow[] = entries.map((entry) => {
-        const invoice = isDetailedSaleEntry(entry) ? invoicesById.get(String(entry.referenceId)) : undefined;
-        const items = invoice
-          ? (invoice.items || []).map((item: any) => ({
-              name: item.name,
-              nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
-              quantity: Number(item.quantity) || 0,
-              unit: item.unit,
-              unitPrice: Number(item.unitPrice) || 0,
-              subtotal: Number(item.subtotal ?? (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)),
-              discountAmount: Number(item.discountAmount || 0),
-            }))
-          : undefined;
-
-        return {
-          date: entry.transactionDate,
-          transactionType: entry.transactionType,
-          isManual: isManualEntry(entry),
-          description: entry.description,
-          reference: entry.reference,
-          invoiceType: entry.invoiceType,
-          debit: entry.debit,
-          credit: entry.credit,
-          balance: entry.balance,
-          items,
-        };
-      });
-
-      const html = generateCustomerLedgerStatementHTML({
-        customerName: customer.name,
-        customerNameUrdu: customer.nameUrdu,
-        customerPhone: customer.phone,
-        customerAddress: customer.address,
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate,
+      const html = generateLedgerBankStatementHTML({
+        party: 'customer',
+        layout: productWise ? 'products' : 'bank',
+        accountName: customer.name,
+        accountNameUrdu: customer.nameUrdu,
+        accountPhone: customer.phone,
+        accountAddress: customer.address,
+        periodStart: dateRange.startDate,
+        periodEnd: dateRange.endDate,
+        allTime: isAllTimePeriod(dateRange),
         openingBalance,
-        rows: statementRows,
-        totalDebit: periodSummary.periodDebit,
-        totalCredit: periodSummary.periodCredit,
-        closingBalance: periodSummary.closingBalance,
+        rows: entries.map((entry) => {
+          const invoice = isDetailedSaleEntry(entry) ? invoicesById.get(String(entry.referenceId)) : undefined;
+          return {
+            date: entry.transactionDate,
+            transactionType: entry.transactionType,
+            isManual: isManualEntry(entry),
+            description: entry.description,
+            reference: entry.reference,
+            invoiceType: entry.invoiceType,
+            debit: Number(entry.debit) || 0,
+            credit: Number(entry.credit) || 0,
+            balance: Number(entry.balance) || 0,
+            items: invoice
+              ? (invoice.items || []).map((item: any) => ({
+                  name: item.name,
+                  nameUrdu: item.nameUrdu || (typeof item.productId === 'object' ? item.productId?.nameUrdu : undefined),
+                  quantity: Number(item.quantity) || 0,
+                  unit: item.unit,
+                  unitPrice: Number(item.unitPrice) || 0,
+                  subtotal: Number(item.subtotal ?? (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)),
+                  discountAmount: Number(item.discountAmount || 0),
+                }))
+              : undefined,
+          };
+        }),
         companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
         companyAddress: [branchData?.location?.address, branchData?.location?.city, branchData?.location?.country]
@@ -1416,9 +1429,9 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         companyPhone: branchData?.phone,
         companyEmail: branchData?.email,
         companyLogo: orgData?.logo?.url,
-        isTrial: orgData?.subscription?.isTrial,
         language: options.language,
-        showInvoiceNumbers: options.showInvoiceNumbers,
+        showReferences: options.showInvoiceNumbers,
+        currencyMeta,
       }, sheetSize);
 
       openPrintWindowForFormat(html, sheetSize);
@@ -1550,6 +1563,35 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
           </DialogHeader>
           <div className="space-y-5 py-2">
             <div className="space-y-2">
+              <Label>{t('Layout')}</Label>
+              <RadioGroup
+                value={statementLayout}
+                onValueChange={(value) => setStatementLayout(value === 'products' ? 'products' : 'bank')}
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              >
+                <Label
+                  htmlFor="statement-layout-bank"
+                  className="flex cursor-pointer items-start gap-2 rounded-md border p-3 font-normal has-[[data-state=checked]]:border-primary"
+                >
+                  <RadioGroupItem value="bank" id="statement-layout-bank" className="mt-0.5" />
+                  <span>
+                    <span className="block font-medium">{t('Bank statement')}</span>
+                    <span className="block text-xs text-muted-foreground">{t('Every entry with debit, credit and running balance')}</span>
+                  </span>
+                </Label>
+                <Label
+                  htmlFor="statement-layout-products"
+                  className="flex cursor-pointer items-start gap-2 rounded-md border p-3 font-normal has-[[data-state=checked]]:border-primary"
+                >
+                  <RadioGroupItem value="products" id="statement-layout-products" className="mt-0.5" />
+                  <span>
+                    <span className="block font-medium">{t('Product-wise')}</span>
+                    <span className="block text-xs text-muted-foreground">{t('Items sold on each invoice')}</span>
+                  </span>
+                </Label>
+              </RadioGroup>
+            </div>
+            <div className="space-y-2">
               <Label>{t('Language')}</Label>
               <RadioGroup
                 value={statementLanguage}
@@ -1590,7 +1632,12 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                 allowedFormats={['a4', 'a5']}
                 disabled={printingStatement}
                 onPrint={(paperSize) =>
-                  handlePrintStatement({ language: statementLanguage, showInvoiceNumbers: statementShowInvoiceNumbers, paperSize })
+                  handlePrintStatement({
+                    language: statementLanguage,
+                    showInvoiceNumbers: statementShowInvoiceNumbers,
+                    paperSize,
+                    layout: statementLayout,
+                  })
                 }
                 mainButtonContent={
                   <>
@@ -1827,74 +1874,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               )}
             </div>
 
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">{t('Statement Period')}</p>
-                <Button variant="outline" size="sm" onClick={applyLast30Days}>
-                  {t('last_30_days')}
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">{t('start_date')}</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={cn('w-full justify-start text-left font-normal')}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatAppDate(new Date(dateRange.startDate))}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={new Date(dateRange.startDate)}
-                        onSelect={(date) => {
-                          if (!date) return;
-                          setDateRange((prev) => ({
-                            ...prev,
-                            startDate: format(date, 'yyyy-MM-dd'),
-                          }));
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">{t('end_date')}</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={cn('w-full justify-start text-left font-normal')}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatAppDate(new Date(dateRange.endDate))}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={new Date(dateRange.endDate)}
-                        onSelect={(date) => {
-                          if (!date) return;
-                          setDateRange((prev) => ({
-                            ...prev,
-                            endDate: format(date, 'yyyy-MM-dd'),
-                          }));
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-            </div>
+            <LedgerPeriodSelector period={dateRange} onChange={setDateRange} />
           </div>
 
           <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
@@ -1924,7 +1904,6 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
             </div>
           </div>
 
-          <CustomerBalanceReconciliation customerId={customer._id} customerName={customer.name} />
 
           {originLead && (
             <Can permission="viewLeads">
@@ -1958,7 +1937,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-muted-foreground">
-                  {formatAppDate(new Date(dateRange.startDate))} — {formatAppDate(new Date(dateRange.endDate))}
+                  {formatLedgerPeriodRange(dateRange, t('Beginning'))}
                   {' · '}
                   {totalResults} {t('entries')}
                 </span>
@@ -1998,6 +1977,12 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               )}
             </>
           )}
+
+          {/* Shown last: it explains a difference between lists, so it shouldn't push the
+              statement itself down the page. */}
+          <div className="mt-6 [&>div]:mb-0">
+            <CustomerBalanceReconciliation customerId={customer._id} customerName={customer.name} />
+          </div>
         </CardContent>
       </Card>
 

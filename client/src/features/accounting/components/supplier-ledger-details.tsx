@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { LedgerPeriodSelector, formatLedgerPeriodRange } from './ledger-period-selector';
+import { getStoredLedgerPeriod, storeLedgerPeriod, type LedgerPeriod } from '../utils/ledger-period';
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Sheet,
   SheetContent,
@@ -27,7 +26,7 @@ import { RootState } from '@/stores/store';
 import { AppDispatch } from '@/stores/store';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
-import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, CalendarIcon, List, LayoutGrid, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, Download, Receipt, Printer, List, LayoutGrid, ExternalLink } from 'lucide-react';
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, resolveSheetFormat, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format';
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template';
 import { PrintFormatButton } from '@/components/print-format-button';
@@ -72,7 +71,6 @@ import {
   getSupplierLedgerEntryActions,
   getSupplierLedgerFormPreset,
 } from '@/features/accounting/utils/supplier-ledger-entry-navigation';
-import { cn } from '@/lib/utils';
 import { resolveBranchCompanyName } from '@/utils/branch-company-name';
 import { WhatsAppSendButton } from '@/components/whatsapp/whatsapp-send-button'
 import { SmsSendButton } from '@/components/sms/sms-send-button';
@@ -618,14 +616,6 @@ function LoadPurchaseDetailDialogContent({
   );
 }
 
-function getDefaultLedgerDateRange() {
-  const now = new Date();
-  return {
-    startDate: format(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30), 'yyyy-MM-dd'),
-    endDate: format(now, 'yyyy-MM-dd'),
-  };
-}
-
 const SUPPLIER_LEDGER_VIEW_MODE_KEY = 'supplier-ledger-view-mode';
 
 type LedgerViewMode = 'list' | 'category';
@@ -679,7 +669,12 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
   const [loadPurchaseDialogOpen, setLoadPurchaseDialogOpen] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
   const [openingBalance, setOpeningBalance] = useState(0);
-  const [dateRange, setDateRange] = useState(getDefaultLedgerDateRange);
+  const [dateRange, setDateRangeState] = useState<LedgerPeriod>(() => getStoredLedgerPeriod('supplier-ledger-period'));
+  /** Remembered per page, so the period the user picked is the default next time. */
+  const setDateRange = (period: LedgerPeriod) => {
+    setDateRangeState(period);
+    storeLedgerPeriod('supplier-ledger-period', period);
+  };
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
@@ -834,8 +829,6 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
       : openingBalance;
     return { periodDebit, periodCredit, closingBalance };
   }, [entries, openingBalance]);
-
-  const applyLast30Days = () => setDateRange(getDefaultLedgerDateRange());
 
   const categoryGroups = useMemo(() => groupSupplierLedgerEntries(entries), [entries]);
 
@@ -1544,74 +1537,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               )}
             </div>
 
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">{t('Statement Period')}</p>
-                <Button variant="outline" size="sm" onClick={applyLast30Days}>
-                  {t('last_30_days')}
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">{t('start_date')}</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={cn('w-full justify-start text-left font-normal')}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatAppDate(new Date(dateRange.startDate))}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={new Date(dateRange.startDate)}
-                        onSelect={(date) => {
-                          if (!date) return;
-                          setDateRange((prev) => ({
-                            ...prev,
-                            startDate: format(date, 'yyyy-MM-dd'),
-                          }));
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">{t('end_date')}</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={cn('w-full justify-start text-left font-normal')}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatAppDate(new Date(dateRange.endDate))}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={new Date(dateRange.endDate)}
-                        onSelect={(date) => {
-                          if (!date) return;
-                          setDateRange((prev) => ({
-                            ...prev,
-                            endDate: format(date, 'yyyy-MM-dd'),
-                          }));
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-            </div>
+            <LedgerPeriodSelector period={dateRange} onChange={setDateRange} />
           </div>
 
           <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
@@ -1641,10 +1567,6 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             </div>
           </div>
 
-          {/* The purchase list totals gross open invoices while this page shows the net
-              account balance — this lays out every rupee of that difference rather than
-              leaving two numbers that look wrong next to each other. */}
-          <SupplierBalanceReconciliation supplierId={supplier._id} supplierName={supplier.name} />
 
           <Can permission="viewCommunicationLog">
             <div className="mb-6">
@@ -1664,7 +1586,7 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-muted-foreground">
-                  {formatAppDate(new Date(dateRange.startDate))} — {formatAppDate(new Date(dateRange.endDate))}
+                  {formatLedgerPeriodRange(dateRange, t('Beginning'))}
                   {' · '}
                   {totalResults} {t('entries')}
                 </span>
@@ -1704,6 +1626,12 @@ export function SupplierLedgerDetails({ supplier, onBack, initialLedgerEntry }: 
               )}
             </>
           )}
+
+          {/* Shown last: it explains a difference between lists, so it shouldn't push the
+              statement itself down the page. */}
+          <div className="mt-6 [&>div]:mb-0">
+            <SupplierBalanceReconciliation supplierId={supplier._id} supplierName={supplier.name} />
+          </div>
         </CardContent>
       </Card>
 

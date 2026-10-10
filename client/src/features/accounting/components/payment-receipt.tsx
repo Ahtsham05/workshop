@@ -2,15 +2,19 @@ import { useState, type ReactNode } from 'react';
 import { escapeHtml } from '@/lib/escape-html';
 import { useLanguage } from '@/context/language-context';
 import { paymentReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language';
-import { openPrintWindowForFormat, extractA4PrintBodyInner, buildA4TwoUpPageHTML } from '@/features/invoice/utils/print-utils';
+import { openPrintWindowForFormat } from '@/features/invoice/utils/print-utils';
 import { PAPER_FORMATS, useBranchPaperSize, useBranchPrintOrientation, withPrintOrientation, type PaperSize, type SheetSize } from '@/features/invoice/utils/paper-format';
-import { useBranchInvoiceTemplate, INVOICE_TEMPLATE_CSS } from '@/features/invoice/utils/invoice-template';
 import { getInvoicePrintInUrdu, setInvoicePrintInUrdu } from '@/features/invoice/utils/print-preferences';
 import { PrintFormatButton } from '@/components/print-format-button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useFormatMoney } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import {
+  generatePaymentReceiptHalfSheetHTML,
+  generatePaymentReceiptPageHTML,
+  type ReceiptPrintData,
+} from '../utils/payment-receipt-print';
 
 function resolveReceiptPartyName(lang: InvoiceLanguage, name: string, nameUrdu?: string): string {
   return lang === 'ur' && nameUrdu?.trim() ? nameUrdu.trim() : name;
@@ -142,7 +146,6 @@ export function PaymentReceipt({
   const displayCustomerName = resolveReceiptPartyName(language, customer.name, customer.nameUrdu);
   const defaultPaperSize = useBranchPaperSize();
   const printOrientation = useBranchPrintOrientation();
-  const invoiceTemplate = useBranchInvoiceTemplate();
 
   // Wrapped (not a bare useFormatMoney()) to preserve the original's Math.abs — this receipt
   // always shows a positive amount, since direction (paid/received, payable/receivable) is
@@ -191,15 +194,35 @@ export function PaymentReceipt({
       isTrial: isTrial ?? false,
     };
 
+    // Sheet prints (A4 / A5 / half A4) use the bank-style receipt; thermal keeps its own layout.
+    const sheetReceipt: ReceiptPrintData = {
+      party: partyType,
+      language,
+      receiptNumber: printData.receiptNumber,
+      partyName: printData.customer.name,
+      partyPhone: customer.phone,
+      partyAddress: customer.address,
+      amount: payment.amount,
+      date: payment.date,
+      paymentMethod: payment.paymentMethod,
+      reference: payment.reference,
+      description: payment.description,
+      previousBalance: balance.previousBalance,
+      currentBalance: balance.currentBalance,
+      company: printData.company,
+      isTrial: printData.isTrial,
+      formatMoney: formatCurrency,
+    };
+
     if (paperSize === 'a4-half-left' || paperSize === 'a4-half-right') {
-      const htmlContent = generateA4HalfReceiptHTML(printData, paperSize === 'a4-half-left' ? 'left' : 'right');
+      const htmlContent = generatePaymentReceiptHalfSheetHTML(sheetReceipt, paperSize === 'a4-half-left' ? 'left' : 'right');
       openPrintWindowForFormat(htmlContent, paperSize);
       return;
     }
 
     const resolvedFormat = withPrintOrientation(paperSize, printOrientation);
     const htmlContent = PAPER_FORMATS[resolvedFormat].family === 'sheet'
-      ? generateA4ReceiptHTML(printData, resolvedFormat as SheetSize)
+      ? generatePaymentReceiptPageHTML(sheetReceipt, resolvedFormat as SheetSize)
       : generateReceiptHTML(printData, paperSize);
     openPrintWindowForFormat(htmlContent, resolvedFormat);
   };
@@ -603,338 +626,6 @@ export function PaymentReceipt({
 
   /** Full A4/A5 sheet layout — mirrors `generateA4InvoiceHTML`'s structure/class names so the
    * branch's selected invoice template (`INVOICE_TEMPLATE_CSS`) applies to the receipt too. */
-  const generateA4ReceiptHTML = (data: any, sheetSize: SheetSize): string => {
-    const paperFormat = PAPER_FORMATS[sheetSize];
-    const endAlign = isUrdu ? 'left' : 'right';
-    const contactLine = data.company.phone
-      ? `<span class="contact-label">${escapeHtml(labels.contact_label)}:</span> ${escapeHtml(data.company.phone)}`
-      : '';
-
-    const balanceStatus = getBalanceStatus(data.balance.currentBalance);
-    const balanceStatusLabel = getStatusLabel(balanceStatus);
-    const balanceColors = BALANCE_STATUS_COLORS[balanceStatus];
-
-    return `
-<!DOCTYPE html>
-<html dir="${dir}" lang="${language}">
-<head>
-  <meta charset="UTF-8">
-  <title>${labels.payment_receipt} ${escapeHtml(data.receiptNumber)}</title>
-  <style>
-    @media print {
-      @page {
-        margin: ${paperFormat.pageMargin};
-        size: ${paperFormat.pageCss};
-      }
-      body {
-        margin: 0;
-        padding: 0;
-        font-size: ${paperFormat.baseFontPx}px;
-      }
-      .no-print {
-        display: none !important;
-      }
-    }
-
-    body {
-      font-family: ${RECEIPT_FONT_STACK};
-      font-size: ${paperFormat.baseFontPx}px;
-      line-height: 1.4;
-      margin: 0;
-      padding: 20px;
-      background: white;
-      color: #000;
-      direction: ${dir};
-      text-align: ${startAlign};
-    }
-
-    .invoice-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 30px;
-      border-bottom: 3px solid black;
-      padding-bottom: 20px;
-    }
-
-    .company-info { flex: 1; }
-    .company-logo { max-width: 150px; height: auto; margin-bottom: 10px; display: block; }
-    .company-name { font-size: 42px; font-weight: 900; color: #007bff; margin-bottom: 8px; }
-    .company-details { font-size: 16px; color: #000; line-height: 1.4; }
-    .invoice-details { text-align: ${endAlign}; flex: 1; }
-    .invoice-title { font-size: 26px; font-weight: bold; color: #333; margin-bottom: 10px; }
-    .invoice-meta { font-size: 15px; color: #666; }
-    .invoice-meta div { margin-bottom: 2px; }
-    .company-contact-line { display: inline-block; margin-top: 4px; font-size: 16px; color: #000; }
-    .company-contact-line .contact-label { font-weight: 700; color: #000; }
-
-    .status-badge {
-      display: inline-block;
-      padding: 4px 14px;
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      margin-top: 6px;
-    }
-
-    .amount-banner {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      color: #111827;
-      border-radius: 8px;
-      padding: 18px 24px;
-      margin-bottom: 24px;
-    }
-
-    .amount-banner .info-label { color: #15803d; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; margin: 0; }
-    .amount-banner .amount-banner-value { font-size: 32px; font-weight: 800; color: #15803d; }
-
-    .invoice-info {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px 32px;
-      margin-bottom: 26px;
-      padding: 20px 24px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      align-items: start;
-    }
-
-    .info-section { display: flex; flex-direction: column; gap: 10px; min-width: 0; text-align: start; align-items: flex-start; }
-
-    .info-title {
-      font-weight: bold;
-      font-size: 17px;
-      color: #333;
-      margin: 0 0 4px;
-      padding-bottom: 6px;
-      border-bottom: 2px solid #dee2e6;
-      width: 100%;
-    }
-
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-      font-size: 15px;
-      width: 100%;
-    }
-
-    .info-label { font-weight: 600; color: #555; flex-shrink: 0; }
-    .detail-value { font-weight: 500; color: #000; word-break: break-word; text-align: ${endAlign}; }
-
-    .bill-to-customer-name {
-      font-size: 19px;
-      font-weight: 700;
-      color: #000;
-      line-height: 1.4;
-      word-wrap: break-word;
-    }
-
-    .totals-wrapper {
-      display: flex;
-      justify-content: flex-end;
-      padding-top: 20px;
-      margin-top: 10px;
-      margin-bottom: 24px;
-    }
-
-    .totals-table { width: 420px; border-collapse: collapse; border: 2px solid black; border-radius: 8px; overflow: hidden; }
-    .totals-table td { padding: 12px 14px; border-bottom: 1px solid #e9ecef; font-size: 16px; }
-    .totals-table .total-label { font-weight: 700; text-align: ${endAlign}; background: #f8f9fa; border-right: 1px solid #dee2e6; }
-    .totals-table .total-amount { text-align: ${startAlign}; font-weight: 600; background: white; }
-    .totals-table .final-total { background: white; color: black; font-weight: bold; font-size: 19px; border-bottom: none; }
-    .totals-table .final-total .total-label,
-    .totals-table .final-total .total-amount { background: white; color: black; border-right: none; }
-
-    .notes-section {
-      margin: 22px 0;
-      padding: 15px;
-      background: #f8f9fa;
-      border-right: 4px solid black;
-      border-radius: 8px 0 0 8px;
-      page-break-inside: avoid;
-    }
-    .terms-heading { font-weight: bold; margin-bottom: 8px; font-size: 16px; }
-    .notes-content { font-size: 15px; line-height: 1.5; white-space: normal; word-break: break-word; }
-
-    .signature-section {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 40px;
-      margin-top: 60px;
-    }
-
-    .signature-line {
-      border-top: 1px solid #374151;
-      padding-top: 10px;
-      text-align: center;
-      font-weight: 600;
-      font-size: 14px;
-      color: #374151;
-    }
-
-    .footer {
-      text-align: center;
-      font-size: 13px;
-      color: #666;
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 2px solid #e9ecef;
-    }
-    .footer-line { margin-bottom: 5px; }
-    .footer-thank-you { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
-
-    .no-print {
-      text-align: center;
-      margin: 30px 0;
-      padding: 20px;
-      background: #f5f5f5;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .print-btn { padding: 10px 20px; margin: 0; font-size: 14px; border: none; border-radius: 5px; cursor: pointer; font-family: inherit; }
-    .print-btn-primary { background: #007bff; color: white; }
-    .print-btn-secondary { background: #6c757d; color: white; }
-
-    @media screen {
-      body {
-        max-width: 800px;
-        margin: 20px auto;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        padding: 40px;
-        border-radius: 12px;
-      }
-    }
-    ${INVOICE_TEMPLATE_CSS[invoiceTemplate] ?? ''}
-  </style>
-  <link href="${RECEIPT_GOOGLE_FONTS_HREF}" rel="stylesheet">
-</head>
-<body>
-  <div id="invoice-print-root">
-    <div class="invoice-header">
-      <div class="company-info">
-        ${data.company.logo ? `<img src="${escapeHtml(data.company.logo)}" alt="" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus Solutions" class="company-logo" />` : ''}
-        <div class="company-name">${escapeHtml(data.company.name)}</div>
-        ${data.company.address || contactLine ? `
-        <div class="company-details">
-          ${data.company.address ? `${escapeHtml(data.company.address)}<br>` : ''}
-          ${contactLine ? `<span class="company-contact-line">${contactLine}</span>` : ''}
-        </div>
-        ` : ''}
-      </div>
-      <div class="invoice-details">
-        <div class="invoice-title">${labels.payment_receipt}</div>
-        <div class="invoice-meta">
-          <div><strong>#${escapeHtml(data.receiptNumber)}</strong></div>
-          <div>${labels.payment_date}: ${formatDate(data.payment.date)}</div>
-          <div>${labels.payment_time}: ${formatTime(data.payment.date)}</div>
-        </div>
-        <div class="status-badge" style="color: ${balanceColors.fg}; background: ${balanceColors.bg};">${balanceStatusLabel}</div>
-      </div>
-    </div>
-
-    <div class="amount-banner">
-      <div class="info-label">${amountLabel}</div>
-      <div class="amount-banner-value">${formatCurrency(data.payment.amount)}</div>
-    </div>
-
-    <div class="invoice-info">
-      <div class="info-section">
-        <div class="info-title">${partyLabel}</div>
-        <div class="bill-to-customer-name">${escapeHtml(data.customer.name)}</div>
-        ${data.customer.phone ? `
-        <div class="info-row"><span class="info-label">${labels.phone}:</span><span class="detail-value">${escapeHtml(data.customer.phone)}</span></div>
-        ` : ''}
-        ${data.customer.address ? `
-        <div class="info-row"><span class="info-label">${labels.address}:</span><span class="detail-value">${escapeHtml(data.customer.address)}</span></div>
-        ` : ''}
-      </div>
-      <div class="info-section">
-        <div class="info-title">${labels.payment_info}</div>
-        ${data.payment.paymentMethod ? `
-        <div class="info-row"><span class="info-label">${labels.payment_method}:</span><span class="detail-value">${escapeHtml(data.payment.paymentMethod)}</span></div>
-        ` : ''}
-        ${data.payment.reference ? `
-        <div class="info-row"><span class="info-label">${labels.reference}:</span><span class="detail-value">${escapeHtml(data.payment.reference)}</span></div>
-        ` : ''}
-      </div>
-    </div>
-
-    ${data.payment.description ? `
-    <div class="notes-section">
-      <div class="terms-heading">${labels.description}:</div>
-      <div class="notes-content">${escapeHtml(data.payment.description)}</div>
-    </div>
-    ` : ''}
-
-    <div class="totals-wrapper">
-      <table class="totals-table">
-        <tr>
-          <td class="total-label">${labels.previous_balance}:</td>
-          <td class="total-amount">${formatCurrency(data.balance.previousBalance)}</td>
-        </tr>
-        <tr>
-          <td class="total-label">${amountLabel}:</td>
-          <td class="total-amount" style="color: #15803d;">${formatCurrency(data.payment.amount)}</td>
-        </tr>
-        <tr class="final-total">
-          <td class="total-label">${labels.remaining_balance}:</td>
-          <td class="total-amount" style="color: ${balanceColors.fg};">${formatCurrency(data.balance.currentBalance)} (${balanceStatusLabel})</td>
-        </tr>
-      </table>
-    </div>
-
-    <div class="signature-section">
-      <div class="signature-line">${receivedByLabel}</div>
-      <div class="signature-line">${partySignatureLabel}</div>
-    </div>
-
-    <div class="footer">
-      <div class="footer-line footer-thank-you">${labels.thank_you}</div>
-      <div class="footer-line">${labels.computer_generated}</div>
-      <div class="footer-line" style="font-style: italic;">${labels.powered_by}</div>
-    </div>
-  </div>
-
-  <div class="no-print">
-    <button onclick="window.print()" class="print-btn print-btn-primary">
-      🖨️ ${labels.print_receipt}
-    </button>
-    <button onclick="window.close()" class="print-btn print-btn-secondary">
-      ✕ ${labels.close}
-    </button>
-  </div>
-</body>
-</html>
-    `.trim();
-  };
-
-  /** "A4 — Left/right half" — same landscape two-up split used for half-sheet invoice printing,
-   * so a printer loaded with A4 stock only marks the chosen half instead of stretching the
-   * receipt across the full sheet width. */
-  const generateA4HalfReceiptHTML = (data: any, half: 'left' | 'right'): string => {
-    const full = generateA4ReceiptHTML(data, 'a4');
-    const body = extractA4PrintBodyInner(full);
-    const label = half === 'left'
-      ? `${labels.print_receipt} (left half of A4 sheet)`
-      : `${labels.print_receipt} (right half of A4 sheet)`;
-    return half === 'left'
-      ? buildA4TwoUpPageHTML(full, body, '', label)
-      : buildA4TwoUpPageHTML(full, '', body, label);
-  };
-
   const previewStatus = getBalanceStatus(balance.currentBalance);
   const previewColors = BALANCE_STATUS_COLORS[previewStatus];
 

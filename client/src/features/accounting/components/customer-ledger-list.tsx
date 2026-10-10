@@ -15,6 +15,7 @@ import {
 } from './customer-ledger-card-grid';
 import { CustomerLedgerTable } from './customer-ledger-table';
 import { LedgerListToolbar } from './ledger-list-toolbar';
+import { BalanceSheetPrintButton } from './balance-sheet-print-button';
 import {
   getStoredLedgerListViewMode,
   storeLedgerListViewMode,
@@ -153,6 +154,7 @@ export function CustomerLedgerList({ onSelectCustomer }: CustomerLedgerListProps
                 <MessageSquare className="w-4 h-4 mr-2" />
                 {t('Send SMS')}
               </Button>
+              <BalanceSheetPrintButton party="customer" rows={customers} disabled={loading} />
               <Button variant="outline" onClick={exportToExcel} className="shrink-0">
                 <Download className="w-4 h-4 mr-2" />
                 {t('Export to Excel')}

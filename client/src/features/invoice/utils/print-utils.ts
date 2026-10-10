@@ -1979,6 +1979,9 @@ export function extractA4PrintBodyInner(html: string): string {
 export function buildA4TwoUpPageHTML(headSource: string, leftBodyHtml: string, rightBodyHtml: string, noPrintLabel: string): string {
   const headEnd = headSource.indexOf('</head>')
   const head = headEnd === -1 ? headSource : headSource.slice(0, headEnd + 7)
+  // The halves are physical sheet positions: lay them out LTR even for an Urdu (RTL) page,
+  // otherwise "left half" lands on the right. Each column keeps the document's direction.
+  const docDir = /<html[^>]*\bdir=["']rtl["']/i.test(head) ? 'rtl' : 'ltr'
 
   const extraCss = `
     @media print {
@@ -2020,9 +2023,9 @@ export function buildA4TwoUpPageHTML(headSource: string, leftBodyHtml: string, r
 
   return `${mergedHead}
 <body>
-  <div class="a4-two-up">
-    <div class="a4-two-up-col">${leftBodyHtml}</div>
-    <div class="a4-two-up-col">${rightBodyHtml}</div>
+  <div class="a4-two-up" dir="ltr">
+    <div class="a4-two-up-col" dir="${docDir}">${leftBodyHtml}</div>
+    <div class="a4-two-up-col" dir="${docDir}">${rightBodyHtml}</div>
   </div>
   <script>${HALF_SHEET_REPAGINATE_SCRIPT}</script>
   <div class="no-print">

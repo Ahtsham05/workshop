@@ -7,6 +7,14 @@
 export function resolveBranchCompanyName(orgName?: string | null, branchName?: string | null): string | undefined {
   const org = orgName?.trim();
   const branch = branchName?.trim();
-  if (org && branch) return org === branch ? org : `${org} - ${branch}`;
+  if (org && branch) {
+    const orgKey = org.toLowerCase();
+    const branchKey = branch.toLowerCase();
+    // A branch often already carries the business name ("Logix Plus Solutions - Main Branch");
+    // don't print it twice.
+    if (branchKey.startsWith(orgKey)) return branch;
+    if (orgKey.includes(branchKey)) return org;
+    return `${org} - ${branch}`;
+  }
   return org || branch || undefined;
 }

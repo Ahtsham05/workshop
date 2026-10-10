@@ -17,6 +17,10 @@ import { PersonalLedger } from './components/personal-ledger';
 import { RecurringExpenseManager } from './components/recurring-expense-manager';
 import { useLanguage } from '@/context/language-context';
 import { fetchAndStashPrintContact } from '@/features/invoice/utils/invoice-print-contact-bridge';
+import { store } from '@/stores/store';
+import { customerApi } from '@/stores/customer.api';
+import Axios from '@/utils/Axios';
+import summery from '@/utils/summery';
 import { usePermissions } from '@/context/permission-context';
 
 export default function AccountingPage() {
@@ -62,24 +66,36 @@ export default function AccountingPage() {
         _id: customerId,
         name: searchParams.customerName || 'Customer',
       });
-      fetchAndStashPrintContact(customerId)
-        .then((c) => {
-          setInitialCustomer({
-            _id: customerId,
-            name: searchParams.customerName || 'Customer',
-            phone: c.phone,
-            whatsapp: c.whatsapp,
-          });
+      // Links from reminders, reloads etc. may carry only the id — load the real record so the
+      // header and prints show the customer's actual name (not the 'Customer' placeholder).
+      store
+        .dispatch(customerApi.endpoints.getCustomerById.initiate(customerId))
+        .unwrap()
+        .then((c: any) => {
+          if (!c?.name) return;
+          setInitialCustomer((prev: any) =>
+            prev?._id === customerId ? { ...prev, ...c, _id: customerId } : prev,
+          );
         })
         .catch(() => {});
+      fetchAndStashPrintContact(customerId).catch(() => {});
     } else if (searchParams?.tab === 'supplier-ledger' && searchParams?.supplierId) {
       console.log('Opening supplier ledger for:', searchParams.supplierName);
       setManualTab(null); // Reset manual tab to allow URL params to control
       setInitialLedgerEntry(searchParams.ledgerEntry as string | undefined);
-      setInitialSupplier({ 
-        _id: searchParams.supplierId, 
+      const supplierId = searchParams.supplierId as string;
+      setInitialSupplier({
+        _id: supplierId,
         name: searchParams.supplierName || 'Supplier'
       });
+      Axios.get(`${summery.fetchSuppliers.url}/${supplierId}`)
+        .then(({ data }) => {
+          if (!data?.name) return;
+          setInitialSupplier((prev: any) =>
+            prev?._id === supplierId ? { ...prev, ...data, _id: supplierId } : prev,
+          );
+        })
+        .catch(() => {});
     } else {
       setInitialCustomer(null);
       setInitialSupplier(null);
