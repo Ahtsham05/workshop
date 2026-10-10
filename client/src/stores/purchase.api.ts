@@ -5,6 +5,7 @@ import { imeiApi } from './imei.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
 import { invalidateWalletCaches } from './wallet-cache-invalidation'
+import type { TransactionHistoryResult } from './transactionHistory.types'
 
 /** Purchase mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
  *  batchApi/the wallet-cache slices, so receiving/editing/deleting a purchase doesn't
@@ -122,6 +123,13 @@ export const purchaseApi = createApi({
     // Flattened rows (no pagination) behind Export CSV / Export PDF.
     exportPurchases: builder.query<{ results: PurchaseExportRow[]; limit: number; truncated: boolean }, Record<string, unknown>>({
       query: (params = {}) => ({ url: '/export', params }),
+    }),
+
+    // Invoice-wise + item-wise history for the New Purchase side panel — same filters as
+    // the list, every line flattened (see stores/transactionHistory.types.ts).
+    getPurchaseHistory: builder.query<TransactionHistoryResult, Record<string, unknown>>({
+      query: (params = {}) => ({ url: '/history', params }),
+      providesTags: ['Purchase'],
     }),
 
     // Comment thread on one purchase — see purchase.model.js's embedded `comments`.
@@ -263,6 +271,7 @@ export const {
   useGetPurchasesQuery,
   useGetPurchasesSummaryQuery,
   useLazyExportPurchasesQuery,
+  useGetPurchaseHistoryQuery,
   useAddPurchaseCommentMutation,
   useDeletePurchaseCommentMutation,
   useGetPurchaseByIdQuery,

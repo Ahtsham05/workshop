@@ -2046,6 +2046,127 @@ const getPurchaseListForExport = async (filter, options = {}) => {
 };
 
 /**
+ * Purchase history for the New Purchase screen's side panel (invoice-wise + item-wise
+ * views) — same filters as the list, newest first, with every line item flattened to plain
+ * display values. Products/variants are resolved in two bulk reads instead of populating
+ * whole product documents per purchase, so a month of history stays one quick response.
+ */
+const HISTORY_DEFAULT_LIMIT = 500;
+const HISTORY_MAX_LIMIT = 2000;
+
+const variantLabelOf = (variant) => {
+  if (!variant?.attributes) return '';
+  const attributes = variant.attributes instanceof Map ? Object.fromEntries(variant.attributes) : variant.attributes;
+  return Object.values(attributes || {}).filter(Boolean).join(' / ');
+};
+
+const getPurchaseHistory = async (filter, options = {}) => {
+  const limit = Math.min(HISTORY_MAX_LIMIT, Math.max(1, parseInt(options.limit, 10) || HISTORY_DEFAULT_LIMIT));
+  const pipeline = await buildPurchaseListPipeline(filter, options);
+
+  const rows = await Purchase.aggregate([
+    ...pipeline,
+    { $sort: { purchaseDate: -1, _id: -1 } },
+    // One extra row tells us whether the range held more than we're returning.
+    { $limit: limit + 1 },
+    { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: '_createdByDoc' } },
+    {
+      $project: {
+        invoiceNumber: 1,
+        vendorBillNumber: 1,
+        purchaseDate: 1,
+        createdAt: 1,
+        supplier: 1,
+        supplierName: 1,
+        type: 1,
+        paymentMethod: 1,
+        walletType: 1,
+        discount: 1,
+        tax: 1,
+        totalAmount: 1,
+        settledAmount: 1,
+        remainingAmount: 1,
+        settlementStatus: 1,
+        notes: 1,
+        items: 1,
+        createdByName: { $ifNull: [{ $arrayElemAt: ['$_createdByDoc.name', 0] }, ''] },
+      },
+    },
+  ]).option({ allowDiskUse: true });
+
+  const truncated = rows.length > limit;
+  if (truncated) rows.length = limit;
+
+  const productIds = new Set();
+  const variantIds = new Set();
+  rows.forEach((row) =>
+    (row.items || []).forEach((item) => {
+      if (item.product) productIds.add(String(item.product));
+      if (item.variantId) variantIds.add(String(item.variantId));
+    })
+  );
+  const [products, variants] = await Promise.all([
+    productIds.size
+      ? Product.find({ _id: { $in: [...productIds] } }).select('name nameUrdu sku barcode').lean()
+      : [],
+    variantIds.size
+      ? ProductVariant.find({ _id: { $in: [...variantIds] } }).select('attributes sku barcode').lean()
+      : [],
+  ]);
+  const productById = new Map(products.map((product) => [String(product._id), product]));
+  const variantById = new Map(variants.map((variant) => [String(variant._id), variant]));
+
+  const results = rows.map((row) => {
+    const items = (row.items || []).map((item) => {
+      const product = productById.get(String(item.product)) || {};
+      const variant = item.variantId ? variantById.get(String(item.variantId)) : null;
+      const variantLabel = variantLabelOf(variant);
+      const quantity = Number(item.quantity) || 0;
+      const price = Number(item.priceAtPurchase) || 0;
+      return {
+        productId: item.product ? String(item.product) : null,
+        name: `${product.name || 'Unknown Product'}${variantLabel ? ` — ${variantLabel}` : ''}`,
+        nameUrdu: product.nameUrdu || '',
+        sku: variant?.sku || product.sku || '',
+        barcode: variant?.barcode || product.barcode || '',
+        quantity,
+        unit: item.unit || '',
+        price,
+        salePrice: item.sellingPriceAtPurchase ?? null,
+        discountAmount: Number(item.discountAmount) || 0,
+        taxAmount: Number(item.taxAmount) || 0,
+        total: item.total != null ? Number(item.total) : Money.roundMoney(quantity * price),
+        batchNumber: item.batchNumber || '',
+        imeiCount: Array.isArray(item.imeis) ? item.imeis.length : 0,
+      };
+    });
+    return {
+      id: String(row._id),
+      invoiceNumber: row.invoiceNumber,
+      referenceNumber: row.vendorBillNumber || '',
+      date: row.purchaseDate || row.createdAt,
+      partyId: row.supplier ? String(row.supplier) : null,
+      partyName: row.supplierName || '',
+      type: row.type || 'cash',
+      paymentMethod: row.paymentMethod || 'cash',
+      walletType: row.walletType || '',
+      discount: Number(row.discount) || 0,
+      tax: Number(row.tax) || 0,
+      total: Number(row.totalAmount) || 0,
+      paid: Money.roundMoney(row.settledAmount || 0),
+      remaining: Money.roundMoney(row.remainingAmount || 0),
+      settlementStatus: row.settlementStatus,
+      notes: row.notes || '',
+      createdByName: row.createdByName || '',
+      totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
+      items,
+    };
+  });
+
+  return { results, limit, truncated };
+};
+
+/**
  * Append a comment to a purchase. Comments are a plain embedded thread (see
  * purchase.model.js) — no edit, because an audit-relevant note that can be rewritten in
  * place is worth less than one that can't.
@@ -2087,6 +2208,7 @@ module.exports = {
   queryPurchaseList,
   getPurchaseListSummary,
   getPurchaseListForExport,
+  getPurchaseHistory,
   addPurchaseComment,
   deletePurchaseComment,
   getPurchaseById,

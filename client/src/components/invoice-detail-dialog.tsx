@@ -42,6 +42,9 @@ interface InvoiceDetailDialogProps {
   invoiceId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Where focus goes when the dialog closes — e.g. back to the list that opened it, since a
+   *  dialog opened without a Trigger otherwise drops focus on <body>. */
+  onCloseAutoFocus?: (event: Event) => void
 }
 
 /**
@@ -51,7 +54,7 @@ interface InvoiceDetailDialogProps {
  * supplier-ledger-details.tsx) plus a payment-status block, kept here as the one shared
  * copy instead of a third/fourth inline duplicate.
  */
-export function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: InvoiceDetailDialogProps) {
+export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onCloseAutoFocus }: InvoiceDetailDialogProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const { data: invoice, isLoading, error } = useGetInvoiceByIdQuery(invoiceId, { skip: !invoiceId || !open })
@@ -62,7 +65,7 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: InvoiceDe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!w-fit !max-w-[min(96vw,1100px)] min-w-[min(90vw,520px)] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="!w-fit !max-w-[min(96vw,1100px)] min-w-[min(90vw,520px)] max-h-[85vh] overflow-y-auto" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>
             {t('invoice_details') || 'Invoice Details'}

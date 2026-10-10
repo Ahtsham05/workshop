@@ -14,6 +14,7 @@ const EMPTY_PURCHASE_CATALOG: PurchaseCatalogItem[] = [];
 import { fetchSuppliers } from '@/stores/supplier.slice';
 import { PurchasePanel, PurchaseList } from './components';
 import { ProductCatalog } from './components/product-catalog';
+import { TransactionHistoryButton } from '@/components/transaction-history-sheet';
 import { toast } from 'sonner';
 import { useLanguage } from '@/context/language-context';
 import { usePermissions } from '@/context/permission-context';
@@ -1116,6 +1117,12 @@ const PurchaseInvoicePage = () => {
                 <History className="h-4 w-4 shrink-0" aria-hidden />
                 Purchase history
               </Button>
+              <TransactionHistoryButton
+                mode="purchase"
+                currentParty={
+                  purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null
+                }
+              />
               <Button
                 type="button"
                 variant="outline"

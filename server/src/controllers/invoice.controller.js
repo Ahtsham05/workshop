@@ -155,6 +155,14 @@ const exportInvoices = catchAsync(async (req, res) => {
   res.send(await invoiceService.getInvoiceListForExport(filter, options));
 });
 
+/** Invoice-wise + item-wise sale history for the New Invoice side panel. */
+const getInvoiceHistory = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, INVOICE_LIST_OPTIONS);
+  res.send(await invoiceService.getInvoiceHistory(filter, options));
+});
+
 const getInvoice = catchAsync(async (req, res) => {
   const invoice = await invoiceService.getInvoiceById(req.params.invoiceId);
   if (!invoice) {
@@ -470,6 +478,7 @@ module.exports = {
   getInvoicesList,
   getInvoicesSummary,
   exportInvoices,
+  getInvoiceHistory,
   getInvoice,
   updateInvoice,
   updateInvoiceFlag,

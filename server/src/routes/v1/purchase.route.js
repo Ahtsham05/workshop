@@ -37,6 +37,11 @@ router
   .route('/export')
   .get(auth('viewPurchases'), validate(purchaseValidation.exportPurchases), purchaseController.exportPurchases);
 
+// Invoice-wise + item-wise history for the New Purchase screen's side panel.
+router
+  .route('/history')
+  .get(auth('viewPurchases'), validate(purchaseValidation.getPurchaseHistory), purchaseController.getPurchaseHistory);
+
 router
   .route('/date')
   .get(auth('viewPurchases'), validate(purchaseValidation.getPurchaseByDate), purchaseController.getPurchaseByDate);

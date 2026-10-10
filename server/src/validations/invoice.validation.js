@@ -175,6 +175,8 @@ const getInvoicesSummary = { query: invoiceListQuery };
 
 const exportInvoices = { query: invoiceListQuery };
 
+const getInvoiceHistory = { query: invoiceListQuery };
+
 const updateInvoice = {
   params: Joi.object({
     invoiceId: Joi.string().custom(objectId)
@@ -347,6 +349,7 @@ module.exports = {
   getInvoicesList,
   getInvoicesSummary,
   exportInvoices,
+  getInvoiceHistory,
   getInvoice,
   updateInvoice,
   deleteInvoice,

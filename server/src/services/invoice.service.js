@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Invoice, Product, Customer, CustomerLedger, Organization, Batch } = require('../models');
+const { Invoice, Product, ProductVariant, Customer, CustomerLedger, Organization, Batch } = require('../models');
 const batchService = require('./batch.service');
 const ApiError = require('../utils/ApiError');
 const entitlementService = require('./entitlement.service');
@@ -2298,12 +2298,136 @@ const getInvoiceListForExport = async (filter, options = {}) => {
   return { results: rows, limit: EXPORT_ROW_LIMIT, truncated: rows.length >= EXPORT_ROW_LIMIT };
 };
 
+/**
+ * Sale history for the New Invoice screen's side panel (invoice-wise + item-wise views) —
+ * same filters as the invoice list, newest first, every line flattened to plain display
+ * values. Mirrors purchase.service.js's getPurchaseHistory. Line names come from the
+ * invoice's own snapshot (what was actually printed); products/variants are read in bulk
+ * only for barcode/SKU and the variant label.
+ */
+const HISTORY_DEFAULT_LIMIT = 500;
+const HISTORY_MAX_LIMIT = 2000;
+
+const variantLabelOf = (variant) => {
+  if (!variant?.attributes) return '';
+  const attributes = variant.attributes instanceof Map ? Object.fromEntries(variant.attributes) : variant.attributes;
+  return Object.values(attributes || {}).filter(Boolean).join(' / ');
+};
+
+const getInvoiceHistory = async (filter, options = {}) => {
+  const limit = Math.min(HISTORY_MAX_LIMIT, Math.max(1, parseInt(options.limit, 10) || HISTORY_DEFAULT_LIMIT));
+  const pipeline = await buildInvoiceListPipeline(filter, options);
+
+  const rows = await Invoice.aggregate([
+    ...pipeline,
+    { $sort: { invoiceDate: -1, _id: -1 } },
+    // One extra row tells us whether the range held more than we're returning.
+    { $limit: limit + 1 },
+    { $lookup: { from: 'users', localField: 'createdBy', foreignField: '_id', as: '_createdByDoc' } },
+    {
+      $project: {
+        invoiceNumber: 1,
+        billNumber: 1,
+        invoiceDate: 1,
+        createdAt: 1,
+        customerId: 1,
+        customerDisplayName: 1,
+        type: 1,
+        isConvertedToBill: 1,
+        paymentMethod: 1,
+        walletType: 1,
+        discount: 1,
+        tax: 1,
+        total: 1,
+        settledAmount: 1,
+        remainingAmount: 1,
+        settlementStatus: 1,
+        notes: 1,
+        items: 1,
+        createdByName: { $ifNull: [{ $arrayElemAt: ['$_createdByDoc.name', 0] }, ''] },
+      },
+    },
+  ]).option({ allowDiskUse: true });
+
+  const truncated = rows.length > limit;
+  if (truncated) rows.length = limit;
+
+  const productIds = new Set();
+  const variantIds = new Set();
+  rows.forEach((row) =>
+    (row.items || []).forEach((item) => {
+      if (item.productId) productIds.add(String(item.productId));
+      if (item.variantId) variantIds.add(String(item.variantId));
+    })
+  );
+  const [products, variants] = await Promise.all([
+    productIds.size ? Product.find({ _id: { $in: [...productIds] } }).select('sku barcode').lean() : [],
+    variantIds.size
+      ? ProductVariant.find({ _id: { $in: [...variantIds] } }).select('attributes sku barcode').lean()
+      : [],
+  ]);
+  const productById = new Map(products.map((product) => [String(product._id), product]));
+  const variantById = new Map(variants.map((variant) => [String(variant._id), variant]));
+
+  const results = rows.map((row) => {
+    const items = (row.items || []).map((item) => {
+      const product = productById.get(String(item.productId)) || {};
+      const variant = item.variantId ? variantById.get(String(item.variantId)) : null;
+      const variantLabel = variantLabelOf(variant);
+      const baseName = item.name || 'Unknown Product';
+      const quantity = Number(item.quantity) || 0;
+      return {
+        productId: item.productId ? String(item.productId) : null,
+        name: variantLabel && !baseName.includes(variantLabel) ? `${baseName} — ${variantLabel}` : baseName,
+        nameUrdu: item.nameUrdu || '',
+        sku: variant?.sku || product.sku || '',
+        barcode: variant?.barcode || product.barcode || '',
+        quantity,
+        unit: item.unit || '',
+        price: Number(item.unitPrice) || 0,
+        salePrice: null,
+        discountAmount: Number(item.discountAmount) || 0,
+        taxAmount: Number(item.taxAmount) || 0,
+        // `subtotal` is already net of the line discount (see resolveInvoiceItemDiscount).
+        total: Number(item.subtotal) || 0,
+        batchNumber: item.batchNumber || '',
+        imeiCount: Array.isArray(item.imeis) ? item.imeis.length : 0,
+      };
+    });
+    const customerId = row.customerId ? String(row.customerId) : null;
+    return {
+      id: String(row._id),
+      invoiceNumber: row.invoiceNumber,
+      referenceNumber: row.billNumber || '',
+      date: row.invoiceDate || row.createdAt,
+      partyId: customerId && mongoose.Types.ObjectId.isValid(customerId) ? customerId : null,
+      partyName: row.customerDisplayName || (customerId === 'walk-in' ? 'Walk-in Customer' : ''),
+      type: row.type === 'pending' && row.isConvertedToBill ? 'pending-converted' : row.type || 'cash',
+      paymentMethod: row.paymentMethod || 'cash',
+      walletType: row.walletType || '',
+      discount: Number(row.discount) || 0,
+      tax: Number(row.tax) || 0,
+      total: Number(row.total) || 0,
+      paid: Money.roundMoney(row.settledAmount || 0),
+      remaining: Money.roundMoney(row.remainingAmount || 0),
+      settlementStatus: row.settlementStatus,
+      notes: row.notes || '',
+      createdByName: row.createdByName || '',
+      totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
+      items,
+    };
+  });
+
+  return { results, limit, truncated };
+};
+
 module.exports = {
   createInvoice,
   queryInvoices,
   queryInvoiceList,
   getInvoiceListSummary,
   getInvoiceListForExport,
+  getInvoiceHistory,
   getInvoiceById,
   setInvoiceFlag,
   updateInvoiceById,

@@ -112,6 +112,14 @@ const exportPurchases = catchAsync(async (req, res) => {
   res.send(await purchaseService.getPurchaseListForExport(filter, options));
 });
 
+/** Invoice-wise + item-wise purchase history for the New Purchase side panel. */
+const getPurchaseHistory = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, PURCHASE_LIST_OPTIONS);
+  res.send(await purchaseService.getPurchaseHistory(filter, options));
+});
+
 const addPurchaseComment = catchAsync(async (req, res) => {
   const comment = await purchaseService.addPurchaseComment(req.params.purchaseId, req.body, req.user);
   res.status(httpStatus.CREATED).send(comment);
@@ -278,6 +286,7 @@ module.exports = {
   getPurchases,
   getPurchasesSummary,
   exportPurchases,
+  getPurchaseHistory,
   addPurchaseComment,
   deletePurchaseComment,
   getPurchase,

@@ -27,6 +27,11 @@ router
   .route('/export')
   .get(auth('viewInvoices'), validate(invoiceValidation.exportInvoices), invoiceController.exportInvoices);
 
+// Invoice-wise + item-wise history for the New Invoice screen's side panel.
+router
+  .route('/history')
+  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoiceHistory), invoiceController.getInvoiceHistory);
+
 router
   .route('/generate-bill-number')
   .get(auth('viewInvoices'), invoiceController.generateBillNumber);

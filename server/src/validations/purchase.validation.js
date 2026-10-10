@@ -117,6 +117,8 @@ const getPurchasesSummary = { query: purchaseListQuery };
 
 const exportPurchases = { query: purchaseListQuery };
 
+const getPurchaseHistory = { query: purchaseListQuery };
+
 const addPurchaseComment = {
   params: Joi.object().keys({
     purchaseId: Joi.string().required(),
@@ -240,6 +242,7 @@ module.exports = {
   getPurchases,
   getPurchasesSummary,
   exportPurchases,
+  getPurchaseHistory,
   addPurchaseComment,
   deletePurchaseComment,
   getPurchase,
