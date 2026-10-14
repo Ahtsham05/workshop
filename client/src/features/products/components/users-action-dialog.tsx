@@ -88,6 +88,9 @@ import { SyncToBranchesOption } from './sync-to-branches-option'
 import { useSyncTargetBranches } from '../hooks/use-branch-sync'
 import { startProductSaveFollowUps } from '../lib/product-save-followups'
 import { useFormDraft } from '@/hooks/use-form-draft'
+import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
+import type { ProductType } from '@/stores/manufacturing.api'
+import { PRODUCT_TYPES, PRODUCT_TYPE_META } from '@/features/manufacturing/lib/constants'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 
 const formSchema = z.object({
@@ -157,6 +160,8 @@ const formSchema = z.object({
   tags: z.array(z.string()).optional(),
   color: z.string().nullable().optional(),
   shelfLocation: z.string().optional(),
+  // Manufacturing classification — only shown (and sent) to users with the module.
+  productType: z.string().nullable().optional(),
 }).superRefine((data, ctx) => {
   if (data.hasVariants) return
   if (!data.price || data.price < 1) {
@@ -172,6 +177,8 @@ const formSchema = z.object({
 
 type productForm = z.infer<typeof formSchema>
 
+const NO_PRODUCT_TYPE = '__none__'
+
 // Order fields are visited when pressing Enter moves focus forward through the "Add
 // Product" form. Plain inputs get focused directly (via data-enter-field); the three
 // inline Popover/Command comboboxes (categories, subCategories, unit) are opened
@@ -181,7 +188,7 @@ type productForm = z.infer<typeof formSchema>
 // variants) is skipped over automatically.
 const ENTER_FIELD_ORDER = [
   'barcode', 'name', 'description', 'categories', 'subCategories', 'brand', 'taxCategory',
-  'cost', 'price', 'marginPct', 'marginAmount', 'stockQuantity', 'unit', 'tags', 'shelfLocation',
+  'cost', 'price', 'marginPct', 'marginAmount', 'stockQuantity', 'unit', 'tags', 'productType', 'shelfLocation',
 ] as const
 type EnterFieldId = typeof ENTER_FIELD_ORDER[number]
 
@@ -254,6 +261,12 @@ interface Props {
   setFetch?: any
   onCreated?: (entity: any) => void
   defaultName?: string
+  /**
+   * Manufacturing type a NEW product starts as. Defaults to Finished Good — a product
+   * added from the catalog is normally something you sell; the Manufacturing → Products
+   * page passes the type you're looking at (Raw Material, Component…).
+   */
+  defaultProductType?: ProductType | null
 }
 
 // A blank Add Product form (also what "Save & add another" starts the next product from).
@@ -287,7 +300,15 @@ const newProductValues = () => ({
   shelfLocation: '',
 })
 
-export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
+export function UsersActionDialog({
+  currentRow,
+  open,
+  onOpenChange,
+  setFetch,
+  onCreated,
+  defaultName,
+  defaultProductType,
+}: Props) {
   // A product discovered mid-session by scanning/typing its SKU/barcode in "Add
   // Product" mode (see handleCodeCommitted below) — switches this same dialog into
   // editing that product instead of risking a duplicate create. The explicit
@@ -295,6 +316,12 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [scannedProduct, setScannedProduct] = useState<any>(null)
   const activeRow = currentRow ?? scannedProduct
   const isEdit = !!activeRow
+  // The type field is part of the Manufacturing module: shops that don't use it never see
+  // it, and their products stay unclassified exactly as before.
+  const { enabled: manufacturingOn } = useManufacturingAccess()
+  const showProductType = manufacturingOn
+  const newProductType = showProductType ? (defaultProductType === undefined ? 'finished_good' : defaultProductType) : undefined
+  const blankValues = () => ({ ...newProductValues(), productType: newProductType })
   const { t, isRTL } = useLanguage()
   const { showUrduInput } = useUrduDisplay()
   const [categoriesOpen, setCategoriesOpen] = useState(false)
@@ -306,6 +333,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [draftVariants, setDraftVariants] = useState<VariantDraftRow[]>([])
   const [unitsOpen, setUnitsOpen] = useState(false)
+  const [productTypeOpen, setProductTypeOpen] = useState(false)
   const [imeiDraft, setImeiDraft] = useState('')
   const [imei2Draft, setImei2Draft] = useState('')
   const imei1InputRef = useRef<HTMLInputElement>(null)
@@ -389,6 +417,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         tags: activeRow?.tags || [],
         color: activeRow?.color ?? null,
         shelfLocation: activeRow?.shelfLocation || '',
+        productType: activeRow?.productType ?? null,
       }
       : {
         name: '',
@@ -419,6 +448,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         tags: [],
         color: null,
         shelfLocation: '',
+        productType: newProductType,
       },
   })
 
@@ -454,12 +484,13 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
         tags: activeRow.tags || [],
         color: activeRow.color ?? null,
         shelfLocation: activeRow.shelfLocation || '',
+        productType: activeRow.productType ?? null,
       })
     } else {
-      form.reset(newProductValues())
+      form.reset({ ...newProductValues(), productType: newProductType })
     }
     setDraftVariants([])
-  }, [open, activeRow, isEdit, form])
+  }, [open, activeRow, isEdit, form, newProductType])
 
   const productSessionKey = open ? (activeRow?.id ?? activeRow?._id ?? 'new') : null
   useAutoUrduNameFromEnglish(form, 'name', 'nameUrdu', productSessionKey)
@@ -611,6 +642,8 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       // `null` so "removed" actually clears it (updateProductById assigns it as-is).
       brandId: rawValues.brandId || null,
     }
+    // Not shown → not sent: never touch the classification of a shop without the module.
+    if (!showProductType) delete (values as { productType?: unknown }).productType
     try {
       // The dialog closes as soon as the product itself is saved. What is left — its new
       // variants, and adding a new product to other branches — finishes in the background
@@ -645,7 +678,7 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
       setScannedProduct(null)
       if (!isEdit && addAnotherRef.current) {
         // Straight on to the next product: same dialog, blank form, cursor in the name.
-        form.reset(newProductValues())
+        form.reset(blankValues())
         setDraftVariants([])
         descriptionAutoSyncRef.current = true
         requestAnimationFrame(() => form.setFocus('name'))
@@ -827,6 +860,13 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
     }
     if (id === 'unit') {
       setUnitsOpen(true)
+      return true
+    }
+    if (id === 'productType') {
+      // Only rendered when Manufacturing is on for this business. Opening it is enough —
+      // the dropdown focuses its search box (focusing the trigger too would steal it back).
+      if (!formRef.current?.querySelector('[data-enter-field="productType"]')) return false
+      setProductTypeOpen(true)
       return true
     }
     return focusEnterField(id)
@@ -2034,6 +2074,38 @@ export function UsersActionDialog({ currentRow, open, onOpenChange, setFetch, on
                   </FormItem>
                 )}
               />
+              {showProductType && (
+                <FormField
+                  control={form.control}
+                  name='productType'
+                  render={({ field }) => (
+                    <FormItem className='gap-1.5'>
+                      <FormLabel>{t('Manufacturing type')}</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value ?? NO_PRODUCT_TYPE}
+                          onValueChange={(v) => field.onChange(!v || v === NO_PRODUCT_TYPE ? null : v)}
+                          options={[
+                            ...PRODUCT_TYPES.map((type) => ({ value: type, label: t(PRODUCT_TYPE_META[type].label) })),
+                            { value: NO_PRODUCT_TYPE, label: t('Not used in manufacturing') },
+                          ]}
+                          placeholder={t('Select type')}
+                          searchPlaceholder={t('Search type...')}
+                          deselectable={false}
+                          open={productTypeOpen}
+                          onOpenChange={setProductTypeOpen}
+                          data-enter-field='productType'
+                          onSelected={() => advanceEnterChain('productType')}
+                        />
+                      </FormControl>
+                      <p className='text-xs text-muted-foreground'>
+                        {t('Finished goods are made and sold; raw materials, components and packaging are bought to make them.')}
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={form.control}
                 name='color'
