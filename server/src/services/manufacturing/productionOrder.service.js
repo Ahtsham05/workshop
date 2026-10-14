@@ -1,11 +1,17 @@
 const httpStatus = require('http-status');
 const { ProductionOrder, Product, ProductVariant, Bom, User } = require('../../models');
 const ApiError = require('../../utils/ApiError');
-const { transitionsFor, EDITABLE_PRODUCTION_STATUSES, OPEN_PRODUCTION_STATUSES } = require('../../config/manufacturing');
+const {
+  transitionsFor,
+  EDITABLE_PRODUCTION_STATUSES,
+  OPEN_PRODUCTION_STATUSES,
+  MAX_TEAM_MEMBERS,
+} = require('../../config/manufacturing');
 const settingsService = require('./settings.service');
 const bomService = require('./bom.service');
 const stockService = require('./stock.service');
 const executionService = require('./execution.service');
+const operationsService = require('./operations.service');
 const wip = require('./wip');
 const { roundQty, requireBranch, scopeFilter, escapeRegex, parseDateRange } = require('./common');
 
@@ -23,6 +29,21 @@ const resolveOperator = async (organizationId, operatorId) => {
   const user = await User.findOne({ _id: operatorId, organizationId }).select('name').lean();
   if (!user) throw new ApiError(httpStatus.BAD_REQUEST, 'Operator not found in this organization');
   return { operatorId: user._id, operatorName: user.name || '' };
+};
+
+/** Production team members must be users of the same organization (order kept, no repeats). */
+const resolveTeam = async (organizationId, userIds) => {
+  const ids = [...new Set((userIds || []).filter(Boolean).map(String))];
+  if (ids.length > MAX_TEAM_MEMBERS) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `A production team can have at most ${MAX_TEAM_MEMBERS} people`);
+  }
+  if (!ids.length) return [];
+  const users = await User.find({ _id: { $in: ids }, organizationId })
+    .select('name')
+    .lean();
+  if (users.length !== ids.length) throw new ApiError(httpStatus.BAD_REQUEST, 'Team member not found in this organization');
+  const byId = new Map(users.map((u) => [String(u._id), u]));
+  return ids.map((x) => ({ userId: byId.get(x)._id, name: byId.get(x).name || '' }));
 };
 
 /** A parent (for nested assemblies) must be an order of the same org + branch. */
@@ -89,9 +110,12 @@ const loadProduct = async ({ organizationId, branchId, productId, variantId }) =
   return { product, variant };
 };
 
-const createOrder = async ({ organizationId, branchId, createdBy }, body) => {
-  requireBranch(branchId);
-  const settings = await settingsService.getSettings(organizationId);
+/**
+ * Everything about a new order except its number: loads and checks the product, BOM,
+ * operator, team and parent, and snapshots materials and routing. Read-only — throws on
+ * the first problem (ApiError).
+ */
+const buildOrderDoc = async ({ organizationId, branchId, createdBy }, body, settings) => {
   const { product, variant } = await loadProduct({
     organizationId,
     branchId,
@@ -107,6 +131,14 @@ const createOrder = async ({ organizationId, branchId, createdBy }, body) => {
     settings,
   });
   const plannedQuantity = roundQty(body.plannedQuantity);
+  if (!(plannedQuantity > 0)) throw new ApiError(httpStatus.BAD_REQUEST, 'Enter a planned quantity above 0');
+  if (
+    body.plannedStartDate &&
+    body.plannedCompletionDate &&
+    new Date(body.plannedCompletionDate) < new Date(body.plannedStartDate)
+  ) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Planned completion date cannot be before the planned start date');
+  }
   const materials = await snapshotMaterials({ organizationId, branchId, bom, quantity: plannedQuantity, settings });
 
   const orderType = body.orderType === 'assembly' ? 'assembly' : 'production';
@@ -114,17 +146,13 @@ const createOrder = async ({ organizationId, branchId, createdBy }, body) => {
   const status = body.status === 'planned' && orderType === 'production' ? 'planned' : 'draft';
   const operator = await resolveOperator(organizationId, body.operatorId);
   const parent = await resolveParent({ organizationId, branchId }, body.parentOrderId, body.parentMaterialLineId);
-  const orderNumber = await settingsService.nextDocumentNumber(
-    organizationId,
-    orderType === 'assembly' ? 'assemblyOrder' : 'productionOrder'
-  );
 
-  return ProductionOrder.create({
+  return {
     organizationId,
     branchId,
-    orderNumber,
     orderType,
     ...operator,
+    team: await resolveTeam(organizationId, body.teamMemberIds),
     ...parent,
     productId: product._id,
     variantId: variant ? variant._id : null,
@@ -144,12 +172,23 @@ const createOrder = async ({ organizationId, branchId, createdBy }, body) => {
     priority: body.priority || settings.defaultPriority || 'normal',
     notes: body.notes || '',
     materials,
+    operations: operationsService.planFromBom(bom, plannedQuantity),
     statusHistory: [{ from: null, to: status, by: createdBy, at: new Date(), note: 'Created' }],
     // Only the demo-data seeder sets this (the API validation doesn't accept it).
     isDemo: body.isDemo === true,
     createdBy,
     updatedBy: createdBy,
-  });
+  };
+};
+
+const numberKeyOf = (doc) => (doc.orderType === 'assembly' ? 'assemblyOrder' : 'productionOrder');
+
+const createOrder = async (ctx, body) => {
+  requireBranch(ctx.branchId);
+  const settings = await settingsService.getSettings(ctx.organizationId);
+  const doc = await buildOrderDoc(ctx, body, settings);
+  const orderNumber = await settingsService.nextDocumentNumber(ctx.organizationId, numberKeyOf(doc));
+  return ProductionOrder.create({ ...doc, orderNumber });
 };
 
 const queryOrders = async ({ organizationId, branchId }, filter, options) => {
@@ -198,6 +237,7 @@ const updateOrder = async ({ organizationId, branchId, createdBy }, orderId, bod
     throw new ApiError(httpStatus.BAD_REQUEST, `A ${order.status} ${kindLabel(order)} can no longer be edited`);
   }
   if (body.operatorId !== undefined) Object.assign(order, await resolveOperator(organizationId, body.operatorId));
+  if (body.teamMemberIds !== undefined) order.team = await resolveTeam(organizationId, body.teamMemberIds);
   const recipeChanged =
     (body.productId && String(body.productId) !== String(order.productId)) ||
     (body.variantId !== undefined && String(body.variantId || '') !== String(order.variantId || '')) ||
@@ -230,6 +270,8 @@ const updateOrder = async ({ organizationId, branchId, createdBy }, orderId, bod
     order.bomVersion = bom ? bom.version : undefined;
     order.plannedQuantity = plannedQuantity;
     order.materials = await snapshotMaterials({ organizationId, branchId, bom, quantity: plannedQuantity, settings });
+    // Routing follows the recipe until a step has been worked on.
+    if (operationsService.canReplan(order)) order.operations = operationsService.planFromBom(bom, plannedQuantity);
   }
 
   HEADER_FIELDS.forEach((field) => {
@@ -250,6 +292,7 @@ const refreshMaterials = async ({ organizationId, branchId, createdBy }, orderId
   const settings = await settingsService.getSettings(organizationId);
   const bom = order.bomId ? await Bom.findOne({ _id: order.bomId, organizationId, branchId }) : null;
   order.materials = await snapshotMaterials({ organizationId, branchId, bom, quantity: order.plannedQuantity, settings });
+  if (operationsService.canReplan(order)) order.operations = operationsService.planFromBom(bom, order.plannedQuantity);
   order.updatedBy = createdBy;
   await order.save();
   return order;
@@ -331,17 +374,85 @@ const deleteOrder = async ({ organizationId, branchId }, orderId) => {
   await order.deleteOne();
 };
 
-/** One order's material requirements against current on-hand stock. */
+/**
+ * Soft reservations. On-hand stock is promised to open orders in queue order — orders on
+ * the floor first (in production / paused), then released, then planned; within that by
+ * priority, planned start, and age. An order's *reserved* quantity is what's left of the
+ * stock for each outstanding line after the orders ahead of it take theirs; anything not
+ * covered is its *net shortage*. Draft orders queue behind everyone and reserve nothing;
+ * closed orders need nothing. Nothing is locked: issuing stays first come, first served.
+ */
+const RESERVING_STATUSES = ['planned', 'released', 'in_production', 'paused'];
+const QUEUE_STATUS_RANK = { in_production: 0, paused: 0, released: 1, planned: 2 };
+const QUEUE_PRIORITY_RANK = { urgent: 0, high: 1, normal: 2, low: 3 };
+const queueKey = (o) => [
+  QUEUE_STATUS_RANK[o.status] ?? 3,
+  QUEUE_PRIORITY_RANK[o.priority] ?? 2,
+  o.plannedStartDate ? new Date(o.plannedStartDate).getTime() : Number.MAX_SAFE_INTEGER,
+  new Date(o.createdAt || 0).getTime(),
+  String(o._id),
+];
+const isAheadOf = (a, b) => {
+  const ka = queueKey(a);
+  const kb = queueKey(b);
+  for (let i = 0; i < ka.length; i += 1) {
+    if (ka[i] !== kb[i]) return ka[i] < kb[i];
+  }
+  return false;
+};
+const materialKey = (m) => `${m.productId}:${m.variantId || ''}`;
+
+/** One order's material requirements against on-hand stock and the orders ahead of it. */
 const getOrderRequirements = async ({ organizationId, branchId }, orderId) => {
   const order = await findOrderOrThrow({ organizationId, branchId }, orderId);
-  const availability = await stockService.getAvailability({
-    organizationId,
-    branchId: order.branchId,
-    items: order.materials.map((m) => ({ productId: m.productId, variantId: m.variantId })),
-  });
+  const closed = ['completed', 'cancelled'].includes(order.status);
+  const reserving = RESERVING_STATUSES.includes(order.status);
+  const [availability, competitors] = await Promise.all([
+    stockService.getAvailability({
+      organizationId,
+      branchId: order.branchId,
+      items: order.materials.map((m) => ({ productId: m.productId, variantId: m.variantId })),
+    }),
+    closed || !order.materials.length
+      ? []
+      : ProductionOrder.find({
+          organizationId,
+          branchId: order.branchId,
+          _id: { $ne: order._id },
+          status: { $in: RESERVING_STATUSES },
+          'materials.productId': { $in: order.materials.map((m) => m.productId) },
+        })
+          .select('orderNumber orderType status priority plannedStartDate createdAt materials')
+          .lean(),
+  ]);
+
+  // What the orders ahead in the queue still need, per material.
+  const heldAhead = new Map();
+  competitors
+    .filter((c) => isAheadOf(c, order))
+    .forEach((c) => {
+      c.materials.forEach((m) => {
+        if (m.isOptional) return;
+        const need = wip.lineRemaining(m);
+        if (need <= 0) return;
+        const entry = heldAhead.get(materialKey(m)) || { quantity: 0, orders: [] };
+        entry.quantity = roundQty(entry.quantity + need);
+        entry.orders.push({ orderId: String(c._id), orderNumber: c.orderNumber, orderType: c.orderType, quantity: need });
+        heldAhead.set(materialKey(m), entry);
+      });
+    });
+  const free = new Map();
+
   const lines = order.materials.map((m) => {
-    const available = availability.get(`${m.productId}:${m.variantId || ''}`) || 0;
+    const key = materialKey(m);
+    const available = availability.get(key) || 0;
     const outstanding = wip.lineRemaining(m);
+    const held = heldAhead.get(key) || { quantity: 0, orders: [] };
+    if (!free.has(key)) free.set(key, Math.max(0, roundQty(Math.max(0, available) - held.quantity)));
+    // Optional lines and closed orders don't claim stock.
+    const claims = !closed && !m.isOptional;
+    const coverable = claims ? Math.min(outstanding, free.get(key)) : 0;
+    if (claims) free.set(key, roundQty(free.get(key) - coverable));
     return {
       materialLineId: String(m._id),
       productId: String(m.productId),
@@ -359,7 +470,12 @@ const getOrderRequirements = async ({ organizationId, branchId }, orderId) => {
       wipQuantity: wip.lineWip(order, m),
       outstandingQuantity: outstanding,
       availableQuantity: roundQty(available),
+      // Against on-hand only (what the order list's "Has shortage" flag uses).
       shortageQuantity: m.isOptional ? 0 : Math.max(0, roundQty(outstanding - Math.max(0, available))),
+      reservedQuantity: reserving ? roundQty(coverable) : 0,
+      heldByEarlierOrdersQuantity: closed ? 0 : held.quantity,
+      heldByEarlierOrders: closed ? [] : held.orders.slice(0, 5),
+      netShortageQuantity: claims ? Math.max(0, roundQty(outstanding - coverable)) : 0,
       alternatives: m.alternatives,
     };
   });
@@ -367,8 +483,10 @@ const getOrderRequirements = async ({ organizationId, branchId }, orderId) => {
     orderId: String(order._id),
     orderNumber: order.orderNumber,
     status: order.status,
+    reserving,
     lines,
     shortageCount: lines.filter((l) => l.shortageQuantity > 0).length,
+    netShortageCount: lines.filter((l) => l.netShortageQuantity > 0).length,
   };
 };
 
@@ -562,6 +680,10 @@ const getOrderTree = async (ctx, orderId) => {
 module.exports = {
   createSubAssemblyOrders,
   getOrderTree,
+  buildOrderDoc,
+  numberKeyOf,
+  RESERVING_STATUSES,
+  isAheadOf,
   createOrder,
   queryOrders,
   getOrder,

@@ -1119,6 +1119,9 @@ const getPurchasableCatalog = async (filter = {}) => {
         unit: product.unit,
         trackImei: product.trackImei,
         trackSerial: product.trackSerial,
+        // Manufacturing classification (raw material, component…) — additive, for screens
+        // like the raw material receipt that show or filter by it.
+        productType: product.productType || null,
         brand: toBrand(product),
         category: product.category,
         categories: product.categories,
@@ -1152,6 +1155,7 @@ const getPurchasableCatalog = async (filter = {}) => {
         barcode: variant.barcode || product.barcode,
         image: variant.image?.url ? variant.image : product.image,
         unit: variant.unit || product.unit,
+        productType: product.productType || null,
         brand: toBrand(product),
         category: product.category,
         categories: product.categories,

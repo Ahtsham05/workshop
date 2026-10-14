@@ -56,6 +56,9 @@ const ProductionOutputSchema = new mongoose.Schema(
     inspectedAt: { type: Date, default: null },
     inspectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     inspectionNotes: { type: String, trim: true, default: '' },
+    // Received straight to finished stock although quality checks are required (by someone
+    // allowed to inspect) — the receipt itself was the inspection.
+    directReceipt: { type: Boolean, default: false },
     notes: { type: String, trim: true, default: '' },
     // Created by the manufacturing demo-data seeder (services/manufacturing/demoData.service.js).
     isDemo: { type: Boolean, default: false },

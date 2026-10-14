@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const { Bom, Product, ProductVariant, ProductionOrder } = require('../../models');
 const ApiError = require('../../utils/ApiError');
-const { MAX_BOM_DEPTH } = require('../../config/manufacturing');
+const { MAX_BOM_DEPTH, MAX_OPERATIONS } = require('../../config/manufacturing');
 const settingsService = require('./settings.service');
 const { roundQty, requireBranch, scopeFilter, escapeRegex, idOf } = require('./common');
 
@@ -208,6 +208,24 @@ const syncProductDefault = async ({ organizationId, branchId, productId, bomId }
   await Product.updateOne({ _id: productId, organizationId, branchId }, { $set: { defaultBomId: bomId || null } });
 };
 
+/** Routing steps in the order given (sequence 10, 20, 30 … like a shop routing sheet). */
+const normalizeOperations = (operations) => {
+  if (!Array.isArray(operations)) return [];
+  if (operations.length > MAX_OPERATIONS) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `A routing can have at most ${MAX_OPERATIONS} operations`);
+  }
+  return operations.map((op, index) => ({
+    ...(op._id ? { _id: op._id } : {}),
+    name: String(op.name || '').trim(),
+    workCenter: String(op.workCenter || '').trim(),
+    setupMinutes: Math.max(0, Number(op.setupMinutes) || 0),
+    runMinutesPerUnit: Math.max(0, Number(op.runMinutesPerUnit) || 0),
+    costPerHour: Math.max(0, Number(op.costPerHour) || 0),
+    instructions: String(op.instructions || '').trim(),
+    sequence: (index + 1) * 10,
+  }));
+};
+
 const createBom = async ({ organizationId, branchId, createdBy }, body) => {
   requireBranch(branchId);
   const { product, variant } = await loadOutputProduct({
@@ -240,6 +258,7 @@ const createBom = async ({ organizationId, branchId, createdBy }, body) => {
     quantity: roundQty(body.quantity || 1),
     unit: body.unit || product.unit,
     components,
+    operations: normalizeOperations(body.operations),
     notes: body.notes || '',
     isActive: body.isActive !== false,
     isDefault: false,
@@ -300,6 +319,8 @@ const updateBom = async ({ organizationId, branchId, createdBy }, bomId, body) =
     await assertNoCycle({ organizationId, branchId, outputProductId: bom.productId, components });
     bom.components = components;
   }
+  // Allowed on a locked version too: orders keep their own copy of the routing.
+  if (body.operations !== undefined) bom.operations = normalizeOperations(body.operations);
   bom.updatedBy = createdBy;
   await bom.save();
 
@@ -339,6 +360,9 @@ const createNewVersion = async ({ organizationId, branchId, createdBy }, bomId, 
     quantity: body.quantity !== undefined ? roundQty(body.quantity) : source.quantity,
     unit: body.unit || source.unit,
     components,
+    operations: normalizeOperations(
+      body.operations !== undefined ? body.operations : plain.operations.map(({ _id, ...op }) => op)
+    ),
     notes: body.notes ?? source.notes,
     isActive: true,
     isDefault: false,

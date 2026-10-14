@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const manufacturingAccess = require('../services/manufacturing/access.service');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
 const { organizationService, auditLogService, documentNumberingService } = require('../services');
@@ -124,6 +125,8 @@ const updateOrganization = catchAsync(async (req, res) => {
     fields: TRACKED_ORG_TAX_FIELDS,
   });
 
+  // Business type decides access to Manufacturing — make a change apply at once.
+  if (payload.businessType !== undefined) manufacturingAccess.clearAccessCache(req.params.orgId);
   res.send(org);
 });
 

@@ -43,12 +43,17 @@ const updateSettings = async (organizationId, body, updatedBy) => {
  * serialize every concurrent create on this one settings document. A rolled-back create
  * just leaves a gap in the sequence, which is harmless.
  */
-const nextDocumentNumber = async (organizationId, key) => {
-  await getSettings(organizationId);
+/**
+ * Next number for a document type. With `session` the increment is part of the caller's
+ * transaction (rolled back with it — no gaps); the settings document must already exist
+ * then (call getSettings first, outside the transaction).
+ */
+const nextDocumentNumber = async (organizationId, key, { session } = {}) => {
+  if (!session) await getSettings(organizationId);
   const settings = await ManufacturingSettings.findOneAndUpdate(
     { organizationId },
     { $inc: { [`counters.${key}`]: 1 } },
-    { new: true }
+    { new: true, session }
   );
   const seq = settings.counters[key];
   const prefix = settings.prefixes[key] || key.toUpperCase();

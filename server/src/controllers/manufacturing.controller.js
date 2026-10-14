@@ -6,6 +6,7 @@ const { getBranchContext, resolveWriteBranchId } = require('../utils/branchFilte
 
 const stockService = require('../services/manufacturing/stock.service');
 const { User } = require('../models');
+const ApiError = require('../utils/ApiError');
 
 const {
   settings: settingsService,
@@ -18,6 +19,14 @@ const {
   traceability: traceabilityService,
   demoData: demoDataService,
   orderList: orderListService,
+  operations: operationsService,
+  orderDetail: orderDetailService,
+  materialReceipt: materialReceiptService,
+  materialIssueVoucher: materialIssueVoucherService,
+  materialUsage: materialUsageService,
+  materialIssueByMaterial: byMaterialService,
+  materialIssueEdit: issueEditService,
+  productionOrderBatch: productionOrderBatchService,
 } = manufacturingService;
 
 /** Read context: org always, branch when the client picked one (superAdmins may read org-wide). */
@@ -99,8 +108,10 @@ const removeDemoData = catchAsync(async (req, res) => {
 });
 
 // ── Products ─────────────────────────────────────────────────────────────────────
+const PRODUCT_LIST_FILTERS = ['productType', 'classifiedOnly', 'hasBom', 'procurementType', 'stock', 'search'];
+
 const getProducts = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['productType', 'classifiedOnly', 'hasBom', 'search']);
+  const filter = pick(req.query, [...PRODUCT_LIST_FILTERS, 'sort']);
   res.send(await productsService.queryProducts(readCtx(req), filter, listOptions(req)));
 });
 
@@ -124,6 +135,14 @@ const updateProductAttributes = catchAsync(async (req, res) => {
 const bulkClassifyProducts = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
   res.send(await productsService.bulkClassify(ctx, req.body));
+});
+
+const getProductStats = catchAsync(async (req, res) => {
+  res.send(await productsService.getProductStats(readCtx(req), pick(req.query, PRODUCT_LIST_FILTERS)));
+});
+
+const getProductOverview = catchAsync(async (req, res) => {
+  res.send(await productsService.getProductOverview(readCtx(req), req.params.productId));
 });
 
 const getAssemblies = catchAsync(async (req, res) => {
@@ -243,6 +262,29 @@ const createProductionOrder = catchAsync(async (req, res) => {
     metadata: { plannedQuantity: order.plannedQuantity },
   });
   res.status(httpStatus.CREATED).send(order);
+});
+
+/** Several orders from one entry grid — check (read-only), then create all-or-nothing. */
+const checkProductionOrderBatch = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const { rows, lines } = await productionOrderBatchService.checkBatch(ctx, req.body);
+  res.send({ rows, lines });
+});
+
+const createProductionOrderBatch = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const orders = await productionOrderBatchService.createBatch(ctx, req.body);
+  await Promise.all(
+    orders.map((order) =>
+      audit(req, {
+        module: 'ProductionOrder',
+        entity: order,
+        entityName: orderLabel(order),
+        metadata: { plannedQuantity: order.plannedQuantity, batch: orders.length },
+      })
+    )
+  );
+  res.status(httpStatus.CREATED).send({ orders });
 });
 
 const ORDER_FILTER_KEYS = [
@@ -419,6 +461,140 @@ const issueMaterials = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(issue);
 });
 
+// ── Material Issue Voucher (MIV) ──────────────────────────────────────────────────
+/** Who may override which MIV warning (see materialIssueVoucher.service.js). */
+const issuePermissions = async (req) => ({
+  overIssueMaterials: await userHasPermission(req, 'overIssueMaterials'),
+  manageManufacturingSettings: await userHasPermission(req, 'manageManufacturingSettings'),
+  executeProduction: await userHasPermission(req, 'executeProduction'),
+  manageProductionOrders: await userHasPermission(req, 'manageProductionOrders'),
+});
+
+/** Issuing for a finished good creates a production order — that needs its own permission. */
+const assertCanCreateOrder = async (req) => {
+  if (req.body.newOrder && !(await userHasPermission(req, 'manageProductionOrders'))) {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      'Issuing for a finished good creates a production order — you need permission to manage production orders'
+    );
+  }
+};
+
+const getMaterialIssuePlan = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  res.send(await materialIssueVoucherService.planForProduct(ctx, req.query));
+});
+
+const getPendingMaterials = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  res.send(await byMaterialService.pendingMaterials(ctx, req.query));
+});
+
+const checkMaterialIssueByMaterial = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const permissions = await issuePermissions(req);
+  const check = await byMaterialService.checkByMaterial(ctx, req.body);
+  res.send({ ...materialIssueVoucherService.describeCheck(check, permissions), allocations: check.allocations });
+});
+
+const postMaterialIssueByMaterial = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const result = await byMaterialService.postByMaterial(ctx, req.body, await issuePermissions(req));
+  await Promise.all(
+    result.issues.map((issue) =>
+      audit(req, {
+        action: 'stock_adjust',
+        module: 'MaterialIssue',
+        entity: issue,
+        entityName: `${issue.issueNumber} (${issue.orderNumber})`,
+        metadata: {
+          totalCost: issue.totalCost,
+          lines: issue.lines.length,
+          overIssue: issue.isOverIssue,
+          byMaterial: true,
+          overrides: (issue.overrides || []).map((o) => o.code),
+        },
+      })
+    )
+  );
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getMaterialIssueReversal = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  res.send(await issueEditService.getReversalPreview(ctx, req.params.issueId));
+});
+
+const cancelMaterialIssue = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const issue = await issueEditService.cancelIssue(ctx, req.params.issueId, req.body);
+  await audit(req, {
+    action: 'delete',
+    module: 'MaterialIssue',
+    entity: issue,
+    entityName: `${issue.issueNumber} (${issue.orderNumber}) cancelled`,
+    metadata: { reason: req.body.reason, totalCost: issue.totalCost, cancelOrder: !!req.body.cancelOrder },
+  });
+  res.send(issue);
+});
+
+const editMaterialIssue = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const issue = await issueEditService.editIssue(ctx, req.params.issueId, req.body, await issuePermissions(req));
+  const last = (issue.editHistory || [])[issue.editHistory.length - 1];
+  await audit(req, {
+    action: 'update',
+    module: 'MaterialIssue',
+    entity: issue,
+    entityName: `${issue.issueNumber} (${issue.orderNumber})`,
+    metadata: { kind: last && last.kind, summary: last && last.summary, totalCost: issue.totalCost },
+  });
+  res.send(issue);
+});
+
+const getMaterialUsage = catchAsync(async (req, res) => {
+  res.send(await materialUsageService.getMaterialUsage(readCtx(req), req.query));
+});
+
+const checkMaterialIssue = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  await assertCanCreateOrder(req);
+  const check = await materialIssueVoucherService.checkVoucher(ctx, req.body);
+  res.send(materialIssueVoucherService.describeCheck(check, await issuePermissions(req)));
+});
+
+const postMaterialIssue = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  await assertCanCreateOrder(req);
+  const issue = await materialIssueVoucherService.postVoucher(ctx, req.body, await issuePermissions(req));
+  await audit(req, {
+    action: 'stock_adjust',
+    module: 'MaterialIssue',
+    entity: issue,
+    entityName: `${issue.issueNumber} (${issue.orderNumber})`,
+    metadata: {
+      totalCost: issue.totalCost,
+      lines: issue.lines.length,
+      overIssue: issue.isOverIssue,
+      overrides: (issue.overrides || []).map((o) => o.code),
+    },
+  });
+  res.status(httpStatus.CREATED).send(issue);
+});
+
+const getIssueLocations = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const settings = await settingsService.getSettings(ctx.organizationId);
+  const locations = await materialIssueVoucherService.knownLocations(ctx, settings);
+  res.send({
+    locations: [...new Set(locations)].sort((a, b) => a.localeCompare(b)),
+    defaultSourceLocation: settings.defaultSourceLocation,
+    defaultWipLocation: settings.defaultWipLocation,
+    allowNegativeStockIssue: !!settings.allowNegativeStockIssue,
+    permissions: await issuePermissions(req),
+  });
+});
+
 const returnMaterials = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
   const doc = await executionService.returnMaterials(ctx, req.params.orderId, req.body);
@@ -434,6 +610,15 @@ const returnMaterials = catchAsync(async (req, res) => {
 
 const reportOutput = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
+  if (req.body.qcMode === 'direct') {
+    const settings = await settingsService.getSettings(ctx.organizationId);
+    if (settings.requireQualityCheck && !(await userHasPermission(req, 'inspectProduction'))) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        'Quality checks are required — receiving straight to finished stock needs the inspection permission. Send it to QC instead.'
+      );
+    }
+  }
   const output = await executionService.reportOutput(ctx, req.params.orderId, req.body);
   await audit(req, {
     action: 'stock_adjust',
@@ -445,6 +630,7 @@ const reportOutput = catchAsync(async (req, res) => {
       good: output.goodQuantity,
       rejected: output.rejectedQuantity,
       status: output.status,
+      directReceipt: !!output.directReceipt,
     },
   });
   res.status(httpStatus.CREATED).send(output);
@@ -576,6 +762,171 @@ const getOrderTree = catchAsync(async (req, res) => {
   res.send(await productionOrderService.getOrderTree(readCtx(req), req.params.orderId));
 });
 
+// ── Order routing, costs, activity, documents (detail page) ────────────────────────
+const addOrderOperation = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const order = await operationsService.addOperation(ctx, req.params.orderId, req.body);
+  await audit(req, {
+    action: 'update',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { operationAdded: req.body.name },
+  });
+  res.status(httpStatus.CREATED).send(order);
+});
+
+const updateOrderOperation = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  res.send(await operationsService.updateOperation(ctx, req.params.orderId, req.params.operationId, req.body));
+});
+
+const removeOrderOperation = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const order = await operationsService.removeOperation(ctx, req.params.orderId, req.params.operationId);
+  await audit(req, {
+    action: 'update',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { operationRemoved: req.params.operationId },
+  });
+  res.send(order);
+});
+
+const reorderOrderOperations = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  res.send(await operationsService.reorderOperations(ctx, req.params.orderId, req.body));
+});
+
+const orderOperationAction = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const order = await operationsService.operationAction(ctx, req.params.orderId, req.params.operationId, req.body);
+  const op = order.operations.id(req.params.operationId);
+  await audit(req, {
+    action: 'update',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { operation: op && op.name, action: req.body.action },
+  });
+  res.send(order);
+});
+
+const getOrderCosts = catchAsync(async (req, res) => {
+  res.send(await orderDetailService.getOrderCosts(readCtx(req), req.params.orderId));
+});
+
+const getOrderActivity = catchAsync(async (req, res) => {
+  res.send(await orderDetailService.getOrderActivity(readCtx(req), req.params.orderId));
+});
+
+const addOrderDocumentLink = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const order = await orderDetailService.addDocumentLink(ctx, req.params.orderId, req.body);
+  await audit(req, {
+    action: 'update',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { documentAdded: req.body.title },
+  });
+  res.status(httpStatus.CREATED).send(order);
+});
+
+const uploadOrderDocument = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const order = await orderDetailService.uploadDocument(ctx, req.params.orderId, req.file, req.body);
+  const doc = order.documents[order.documents.length - 1];
+  await audit(req, {
+    action: 'update',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { documentAdded: doc && doc.title, bytes: doc && doc.bytes },
+  });
+  res.status(httpStatus.CREATED).send(order);
+});
+
+const getOrderDocumentUrl = catchAsync(async (req, res) => {
+  res.send(await orderDetailService.getDocumentUrl(readCtx(req), req.params.orderId, req.params.documentId));
+});
+
+const removeOrderDocument = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const canManage = await userHasPermission(req, 'manageProductionOrders');
+  const order = await orderDetailService.removeDocument(ctx, req.params.orderId, req.params.documentId, { canManage });
+  await audit(req, {
+    action: 'update',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { documentRemoved: req.params.documentId },
+  });
+  res.send(order);
+});
+
+// ── Raw material receipts (RMV) ─────────────────────────────────────────────────────
+const receiptLabel = (v) => `${v.voucherNumber}${v.supplierName ? ` — ${v.supplierName}` : ''}`;
+
+const getMaterialReceipts = catchAsync(async (req, res) => {
+  const filter = pick(req.query, ['status', 'supplierId', 'search', 'dateFrom', 'dateTo']);
+  res.send(await materialReceiptService.queryReceipts(readCtx(req), filter, listOptions(req)));
+});
+
+const getMaterialReceipt = catchAsync(async (req, res) => {
+  res.send(await materialReceiptService.getReceipt(readCtx(req), req.params.receiptId));
+});
+
+const auditReceipt = (req, voucher, action) =>
+  audit(req, {
+    action,
+    module: 'RawMaterialReceipt',
+    entity: voucher,
+    entityName: receiptLabel(voucher),
+    metadata: {
+      status: voucher.status,
+      lines: voucher.lines.length,
+      grandTotal: voucher.totals && voucher.totals.grandTotal,
+      purchaseInvoiceNumber: voucher.purchaseInvoiceNumber || undefined,
+    },
+  });
+
+const createMaterialReceipt = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const { confirm, ...body } = req.body;
+  const voucher = confirm
+    ? await materialReceiptService.saveAndConfirm(ctx, null, body)
+    : await materialReceiptService.createReceipt(ctx, body);
+  await auditReceipt(req, voucher, confirm ? 'confirm' : 'create');
+  res.status(httpStatus.CREATED).send(voucher);
+});
+
+const updateMaterialReceipt = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const { confirm, ...body } = req.body;
+  const voucher = confirm
+    ? await materialReceiptService.saveAndConfirm(ctx, req.params.receiptId, body)
+    : await materialReceiptService.updateReceipt(ctx, req.params.receiptId, body);
+  await auditReceipt(req, voucher, confirm ? 'confirm' : 'update');
+  res.send(voucher);
+});
+
+const confirmMaterialReceipt = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const voucher = await materialReceiptService.confirmReceipt(ctx, req.params.receiptId);
+  await auditReceipt(req, voucher, 'confirm');
+  res.send(voucher);
+});
+
+const deleteMaterialReceipt = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const voucher = await materialReceiptService.getReceipt(ctx, req.params.receiptId);
+  await materialReceiptService.deleteReceipt(ctx, req.params.receiptId);
+  await auditReceipt(req, voucher, 'delete');
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 const getOperators = catchAsync(async (req, res) => {
   const users = await User.find({ organizationId: req.organizationId, isActive: { $ne: false } })
     .select('name email')
@@ -624,6 +975,8 @@ module.exports = {
   bulkClassifyProducts,
   getAssemblies,
   getWhereUsed,
+  getProductStats,
+  getProductOverview,
   createBom,
   getBoms,
   getBom,
@@ -661,7 +1014,37 @@ module.exports = {
   completeAssembly,
   createSubAssemblies,
   getOrderTree,
+  getMaterialReceipts,
+  getMaterialReceipt,
+  createMaterialReceipt,
+  updateMaterialReceipt,
+  confirmMaterialReceipt,
+  deleteMaterialReceipt,
+  addOrderOperation,
+  updateOrderOperation,
+  removeOrderOperation,
+  reorderOrderOperations,
+  orderOperationAction,
+  getOrderCosts,
+  getOrderActivity,
+  addOrderDocumentLink,
+  uploadOrderDocument,
+  getOrderDocumentUrl,
+  removeOrderDocument,
   getOperators,
+  checkMaterialIssue,
+  getMaterialIssuePlan,
+  getMaterialUsage,
+  getMaterialIssueReversal,
+  cancelMaterialIssue,
+  editMaterialIssue,
+  getPendingMaterials,
+  checkMaterialIssueByMaterial,
+  postMaterialIssueByMaterial,
+  checkProductionOrderBatch,
+  createProductionOrderBatch,
+  postMaterialIssue,
+  getIssueLocations,
   traceOrder,
   traceFinished,
   traceWhereUsed,

@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 const httpStatus = require('http-status');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
@@ -7,6 +8,8 @@ const ApiError = require('../../utils/ApiError');
 const { Branch } = require('../../models');
 const v = require('../../validations/manufacturing.validation');
 const c = require('../../controllers/manufacturing.controller');
+const documentStorage = require('../../services/manufacturing/documentStorage');
+const accessService = require('../../services/manufacturing/access.service');
 
 const router = express.Router();
 router.use(auth(), branchScope());
@@ -31,6 +34,34 @@ router.use(async (req, res, next) => {
 
 const VIEW = 'viewManufacturing';
 
+// Whether this user may use the module at all (business type + rollout list). Answered
+// before the gate below so the client can hide the module instead of hitting 403s.
+router.get('/access', async (req, res, next) => {
+  try {
+    res.send(await accessService.resolveAccess({ user: req.user, organizationId: req.organizationId }));
+  } catch (error) {
+    next(error);
+  }
+});
+// Every other manufacturing endpoint is behind it.
+router.use(accessService.requireManufacturingAccess);
+
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: documentStorage.MAX_BYTES, files: 1, fields: 10 },
+}).single('file');
+
+/** multer errors (too large, unexpected field) → 400 in the app's error shape. */
+const handleDocumentUpload = (req, res, next) =>
+  documentUpload(req, res, (err) => {
+    if (!err) return next();
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? `The file is too large (max ${documentStorage.MAX_BYTES / 1024 / 1024} MB)`
+        : err.message;
+    return next(new ApiError(httpStatus.BAD_REQUEST, message));
+  });
+
 // Dashboard & settings
 router.get('/dashboard', auth(VIEW), c.getDashboard);
 router.get('/dashboard/analytics', auth(VIEW), validate(v.getAnalytics), c.getAnalytics);
@@ -47,6 +78,7 @@ router
 // Manufacturing view of the existing product catalog (no separate product system)
 router.get('/products', auth(VIEW), validate(v.getProducts), c.getProducts);
 router.get('/products/type-summary', auth(VIEW), c.getProductTypeSummary);
+router.get('/products/stats', auth(VIEW), validate(v.getProductStats), c.getProductStats);
 router.post(
   '/products/bulk-classify',
   auth('manageBoms', 'editProducts'),
@@ -60,6 +92,7 @@ router.patch(
   c.updateProductAttributes
 );
 router.get('/products/:productId/where-used', auth(VIEW), validate(v.productIdParam), c.getWhereUsed);
+router.get('/products/:productId/overview', auth(VIEW), validate(v.productIdParam), c.getProductOverview);
 router.get('/assemblies', auth(VIEW), c.getAssemblies);
 
 // Bills of materials (each document is one version)
@@ -87,6 +120,19 @@ router.get('/requirements', auth(VIEW), validate(v.getRequirements), c.getRequir
 router.get('/production-orders/status-counts', auth(VIEW), validate(v.getOrderStatusCounts), c.getOrderStatusCounts);
 router.get('/production-orders/filter-options', auth(VIEW), c.getProductionOrderFilterOptions);
 router.get('/production-orders/export', auth(VIEW), validate(v.exportProductionOrders), c.exportProductionOrders);
+// Several orders at once (one per product row) — check, then create all-or-nothing.
+router.post(
+  '/production-orders/batch/check',
+  auth('manageProductionOrders'),
+  validate(v.productionOrderBatch),
+  c.checkProductionOrderBatch
+);
+router.post(
+  '/production-orders/batch',
+  auth('manageProductionOrders'),
+  validate(v.productionOrderBatch),
+  c.createProductionOrderBatch
+);
 router.post(
   '/production-orders/bulk',
   auth('manageProductionOrders'),
@@ -128,9 +174,66 @@ router.get('/movements', auth(VIEW), validate(v.listMovements), c.getMovements);
 // Batches / serial units / on-hand of one product, for the issue & scrap pickers.
 router.get('/stock-detail', auth(VIEW), validate(v.stockDetail), c.getStockDetail);
 
+// Raw material receipts (RMV) — confirming posts a purchase (stock + supplier payable),
+// so writing needs the purchase permission.
+router
+  .route('/material-receipts')
+  .get(auth(VIEW), validate(v.getMaterialReceipts), c.getMaterialReceipts)
+  .post(auth('createPurchases'), validate(v.createMaterialReceipt), c.createMaterialReceipt);
+router
+  .route('/material-receipts/:receiptId')
+  .get(auth(VIEW), validate(v.receiptIdParam), c.getMaterialReceipt)
+  .patch(auth('createPurchases'), validate(v.updateMaterialReceipt), c.updateMaterialReceipt)
+  .delete(auth('createPurchases'), validate(v.receiptIdParam), c.deleteMaterialReceipt);
+router.post(
+  '/material-receipts/:receiptId/confirm',
+  auth('createPurchases'),
+  validate(v.receiptIdParam),
+  c.confirmMaterialReceipt
+);
+
 // Execution records
+// Material Issue Voucher (MIV): check (read-only) and post — store → WIP in one transaction.
+router.get('/material-issues/options', auth('executeProduction'), c.getIssueLocations);
+// Issue for a finished good: its BOM exploded for a quantity (the order created on posting).
+router.get('/material-issues/plan', auth('executeProduction'), validate(v.materialIssuePlan), c.getMaterialIssuePlan);
+// Issue by material: what open orders still need, and a voucher split over those orders.
+router.get('/material-issues/pending', auth('executeProduction'), validate(v.pendingMaterials), c.getPendingMaterials);
+router.post(
+  '/material-issues/by-material/check',
+  auth('executeProduction'),
+  validate(v.materialIssueByMaterial),
+  c.checkMaterialIssueByMaterial
+);
+router.post(
+  '/material-issues/by-material',
+  auth('executeProduction'),
+  validate(v.materialIssueByMaterial),
+  c.postMaterialIssueByMaterial
+);
+// Where issued material went: used in output, wastage, returned, still in the factory.
+router.get('/material-usage', auth(VIEW), validate(v.materialUsage), c.getMaterialUsage);
+router.post('/material-issues/check', auth('executeProduction'), validate(v.materialIssueVoucher), c.checkMaterialIssue);
+router.post('/material-issues', auth('executeProduction'), validate(v.materialIssueVoucher), c.postMaterialIssue);
 router.get('/material-issues', auth(VIEW), validate(v.listTransactions), c.getMaterialIssues);
-router.get('/material-issues/:issueId', auth(VIEW), validate(v.issueIdParam), c.getMaterialIssue);
+router
+  .route('/material-issues/:issueId')
+  .get(auth(VIEW), validate(v.issueIdParam), c.getMaterialIssue)
+  // Edit a posted voucher (header only, or lines → reversed and re-posted, same number).
+  .put(auth('executeProduction'), validate(v.editMaterialIssue), c.editMaterialIssue);
+// "Delete": reverse into stock and keep the voucher as cancelled.
+router.get(
+  '/material-issues/:issueId/reversal',
+  auth('executeProduction'),
+  validate(v.issueIdParam),
+  c.getMaterialIssueReversal
+);
+router.post(
+  '/material-issues/:issueId/cancel',
+  auth('manageProductionOrders'),
+  validate(v.cancelMaterialIssue),
+  c.cancelMaterialIssue
+);
 router.get('/finished-goods', auth(VIEW), validate(v.listTransactions), c.getProductionReceipts);
 router
   .route('/scrap')
@@ -153,6 +256,57 @@ router.post(
   c.createSubAssemblies
 );
 router.get('/production-orders/:orderId/tree', auth(VIEW), validate(v.orderIdParam), c.getOrderTree);
+
+// Detail page: routing steps, costs, activity, documents
+router.post(
+  '/production-orders/:orderId/operations',
+  auth('manageProductionOrders'),
+  validate(v.addOrderOperation),
+  c.addOrderOperation
+);
+router.post(
+  '/production-orders/:orderId/operations/reorder',
+  auth('manageProductionOrders'),
+  validate(v.reorderOrderOperations),
+  c.reorderOrderOperations
+);
+router
+  .route('/production-orders/:orderId/operations/:operationId')
+  .patch(auth('manageProductionOrders'), validate(v.updateOrderOperation), c.updateOrderOperation)
+  .delete(auth('manageProductionOrders'), validate(v.operationIdParam), c.removeOrderOperation);
+router.post(
+  '/production-orders/:orderId/operations/:operationId/action',
+  auth('executeProduction', 'manageProductionOrders'),
+  validate(v.orderOperationAction),
+  c.orderOperationAction
+);
+router.get('/production-orders/:orderId/costs', auth(VIEW), validate(v.orderIdParam), c.getOrderCosts);
+router.get('/production-orders/:orderId/activity', auth(VIEW), validate(v.orderIdParam), c.getOrderActivity);
+router.post(
+  '/production-orders/:orderId/documents/link',
+  auth('manageProductionOrders', 'executeProduction'),
+  validate(v.addOrderDocumentLink),
+  c.addOrderDocumentLink
+);
+router.post(
+  '/production-orders/:orderId/documents',
+  auth('manageProductionOrders', 'executeProduction'),
+  handleDocumentUpload,
+  validate(v.uploadOrderDocument),
+  c.uploadOrderDocument
+);
+router.get(
+  '/production-orders/:orderId/documents/:documentId/url',
+  auth(VIEW),
+  validate(v.documentIdParam),
+  c.getOrderDocumentUrl
+);
+router.delete(
+  '/production-orders/:orderId/documents/:documentId',
+  auth('manageProductionOrders', 'executeProduction'),
+  validate(v.documentIdParam),
+  c.removeOrderDocument
+);
 router.get('/operators', auth(VIEW), c.getOperators);
 
 // Traceability — forward (finished → components → batches → suppliers) and reverse

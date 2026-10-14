@@ -12,6 +12,14 @@ const analytics = require('./analytics.service');
 const orderList = require('./orderList.service');
 const traceability = require('./traceability.service');
 const demoData = require('./demoData.service');
+const operations = require('./operations.service');
+const orderDetail = require('./orderDetail.service');
+const materialReceipt = require('./materialReceipt.service');
+const materialIssueVoucher = require('./materialIssueVoucher.service');
+const materialUsage = require('./materialUsage.service');
+const materialIssueByMaterial = require('./materialIssueByMaterial.service');
+const materialIssueEdit = require('./materialIssueEdit.service');
+const productionOrderBatch = require('./productionOrderBatch.service');
 
 module.exports = {
   settings,
@@ -24,4 +32,12 @@ module.exports = {
   orderList,
   traceability,
   demoData,
+  operations,
+  orderDetail,
+  materialReceipt,
+  materialIssueVoucher,
+  materialUsage,
+  materialIssueByMaterial,
+  materialIssueEdit,
+  productionOrderBatch,
 };

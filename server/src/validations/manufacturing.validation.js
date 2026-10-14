@@ -11,6 +11,9 @@ const {
   REJECT_DISPOSITIONS,
   OUTPUT_STATUSES,
   ORDER_TYPES,
+  ORDER_DOCUMENT_CATEGORIES,
+  MAX_OPERATIONS,
+  MAX_TEAM_MEMBERS,
 } = require('../config/manufacturing');
 
 const id = () => Joi.string().custom(objectId);
@@ -42,6 +45,7 @@ const updateSettings = {
         productionOutput: prefix(),
         productionReceipt: prefix(),
         scrap: prefix(),
+        rawMaterialReceipt: prefix(),
       }),
       numberPadding: Joi.number().integer().min(3).max(10),
       defaultSourceLocation: Joi.string().allow('').trim().max(100),
@@ -59,15 +63,24 @@ const updateSettings = {
 };
 
 // ── Products ──────────────────────────────────────────────────────────────────────
+const productListFilters = {
+  productType: Joi.string(),
+  classifiedOnly: Joi.boolean(),
+  hasBom: Joi.boolean(),
+  procurementType: Joi.string().valid(...PROCUREMENT_TYPES, 'none'),
+  stock: Joi.string().valid('in', 'out'),
+  search: Joi.string().allow(''),
+};
+
 const getProducts = {
   query: Joi.object().keys({
-    productType: Joi.string(),
-    classifiedOnly: Joi.boolean(),
-    hasBom: Joi.boolean(),
-    search: Joi.string().allow(''),
+    ...productListFilters,
+    sort: Joi.string().valid('name', 'newest', 'stock', 'stockLow', 'cost'),
     ...pagination,
   }),
 };
+
+const getProductStats = { query: Joi.object().keys(productListFilters) };
 
 const updateProductAttributes = {
   params: Joi.object().keys({ productId: id().required() }),
@@ -123,11 +136,23 @@ const component = Joi.object().keys({
   sequence: Joi.number().integer(),
 });
 
+const routingOperation = Joi.object().keys({
+  _id: id(),
+  name: Joi.string().trim().min(1).max(100).required(),
+  workCenter: Joi.string().allow('').trim().max(100),
+  setupMinutes: Joi.number().min(0).max(100000),
+  runMinutesPerUnit: Joi.number().min(0).max(100000),
+  costPerHour: Joi.number().min(0).max(1e9),
+  instructions: Joi.string().allow('').max(2000),
+  sequence: Joi.number().integer(),
+});
+
 const bomBody = {
   name: Joi.string().allow('').trim().max(200),
   quantity: Joi.number().positive(),
   unit: unit(),
   components: Joi.array().items(component).min(1).max(500),
+  operations: Joi.array().items(routingOperation).max(MAX_OPERATIONS),
   notes: Joi.string().allow('').max(2000),
   isActive: Joi.boolean(),
   isDefault: Joi.boolean(),
@@ -193,6 +218,7 @@ const orderBody = {
   priority: Joi.string().valid(...PRODUCTION_PRIORITIES),
   notes: Joi.string().allow('').max(2000),
   operatorId: id().allow(null, ''),
+  teamMemberIds: Joi.array().items(id()).max(MAX_TEAM_MEMBERS),
 };
 
 const createProductionOrder = {
@@ -204,6 +230,47 @@ const createProductionOrder = {
     parentMaterialLineId: id().allow(null),
     plannedQuantity: orderBody.plannedQuantity.required(),
     status: Joi.string().valid('draft', 'planned'),
+  }),
+};
+
+/** Several production orders at once: header defaults + one row per product. */
+const productionOrderBatch = {
+  body: Joi.object().keys({
+    header: Joi.object()
+      .keys({
+        plannedStartDate: Joi.date().allow(null, ''),
+        plannedCompletionDate: Joi.date().allow(null, ''),
+        priority: Joi.string()
+          .valid(...PRODUCTION_PRIORITIES)
+          .allow(''),
+        operatorId: id().allow(null, ''),
+        teamMemberIds: Joi.array().items(id()).max(MAX_TEAM_MEMBERS),
+        sourceLocation: Joi.string().allow('').trim().max(100),
+        wipLocation: Joi.string().allow('').trim().max(100),
+        finishedGoodsLocation: Joi.string().allow('').trim().max(100),
+        notes: Joi.string().allow('').max(2000),
+        status: Joi.string().valid('draft', 'planned'),
+      })
+      .default({}),
+    lines: Joi.array()
+      .items(
+        Joi.object().keys({
+          // Row problems (missing product, quantity…) are reported per row by the service.
+          productId: id().allow(null, ''),
+          variantId: id().allow(null, ''),
+          bomId: id().allow(null, ''),
+          plannedQuantity: Joi.number().allow(null),
+          priority: Joi.string()
+            .valid(...PRODUCTION_PRIORITIES)
+            .allow('', null),
+          plannedStartDate: Joi.date().allow(null, ''),
+          plannedCompletionDate: Joi.date().allow(null, ''),
+          notes: Joi.string().allow('').max(500),
+        })
+      )
+      .min(1)
+      .max(100)
+      .required(),
   }),
 };
 
@@ -304,6 +371,114 @@ const changeProductionStatus = {
   }),
 };
 
+// ── Order operations (routing steps), documents ──────────────────────────────────
+const operationIdParam = {
+  params: Joi.object().keys({ orderId: id().required(), operationId: id().required() }),
+};
+const operationFields = {
+  name: Joi.string().trim().min(1).max(100),
+  workCenter: Joi.string().allow('').trim().max(100),
+  plannedMinutes: Joi.number().min(0).max(1e6),
+  costPerHour: Joi.number().min(0).max(1e9),
+  instructions: Joi.string().allow('').max(2000),
+};
+
+const addOrderOperation = {
+  ...orderIdParam,
+  body: Joi.object().keys({
+    ...operationFields,
+    name: operationFields.name.required(),
+    // Insert after this step; omitted = at the end.
+    afterOperationId: id().allow(null),
+  }),
+};
+
+const updateOrderOperation = { ...operationIdParam, body: Joi.object().keys(operationFields).min(1) };
+
+const reorderOrderOperations = {
+  ...orderIdParam,
+  body: Joi.object().keys({ operationIds: Joi.array().items(id()).min(1).max(MAX_OPERATIONS).required() }),
+};
+
+const orderOperationAction = {
+  ...operationIdParam,
+  body: Joi.object().keys({
+    action: Joi.string().valid('start', 'complete', 'reopen', 'skip').required(),
+    // When it actually happened (back-filling floor records); never in the future.
+    at: Joi.date()
+      .max(Joi.ref('$now', { adjust: () => new Date(Date.now() + 5 * 60 * 1000) }))
+      .allow(null)
+      .messages({ 'date.max': 'The time cannot be in the future' }),
+    actualMinutes: Joi.number().min(0).max(1e6).allow(null),
+    note: Joi.string().allow('').max(500),
+  }),
+};
+
+const documentIdParam = {
+  params: Joi.object().keys({ orderId: id().required(), documentId: id().required() }),
+};
+
+const addOrderDocumentLink = {
+  ...orderIdParam,
+  body: Joi.object().keys({
+    title: Joi.string().trim().min(1).max(150).required(),
+    url: Joi.string()
+      .trim()
+      .uri({ scheme: ['http', 'https'] })
+      .max(2000)
+      .required(),
+    category: Joi.string().valid(...ORDER_DOCUMENT_CATEGORIES),
+  }),
+};
+
+// multer fills req.body for the multipart upload; the file itself is checked in the service.
+const uploadOrderDocument = {
+  ...orderIdParam,
+  body: Joi.object().keys({
+    title: Joi.string().allow('').trim().max(150),
+    category: Joi.string().valid(...ORDER_DOCUMENT_CATEGORIES),
+  }),
+};
+
+// ── Raw material receipt (RMV) ─────────────────────────────────────────────────────
+const receiptLine = Joi.object().keys({
+  productId: id().required(),
+  variantId: id().allow(null, ''),
+  quantity: Joi.number().min(0).allow(null),
+  unit: Joi.string().allow('').max(20),
+  rate: Joi.number().min(0).allow(null),
+  discountPercent: Joi.number().min(0).max(100).allow(null),
+  taxPercent: Joi.number().min(0).max(100).allow(null),
+  batchNumber: Joi.string().allow('').trim().max(60),
+  expiryDate: Joi.date().allow(null, ''),
+  serials: Joi.array().items(Joi.string().trim().max(60)).max(1000),
+  location: Joi.string().allow('').trim().max(100),
+  notes: Joi.string().allow('').trim().max(300),
+});
+const receiptBody = {
+  date: Joi.date(),
+  supplierId: id().allow(null, ''),
+  purchaseOrderId: id().allow(null, ''),
+  location: Joi.string().allow('').trim().max(100),
+  reference: Joi.string().allow('').trim().max(100),
+  notes: Joi.string().allow('').max(2000),
+  lines: Joi.array().items(receiptLine).max(1000),
+  // true = save and post to stock in the same call ("Save"); false/absent = draft.
+  confirm: Joi.boolean(),
+};
+const receiptIdParam = { params: Joi.object().keys({ receiptId: id().required() }) };
+const createMaterialReceipt = { body: Joi.object().keys(receiptBody) };
+const updateMaterialReceipt = { ...receiptIdParam, body: Joi.object().keys(receiptBody).min(1) };
+const getMaterialReceipts = {
+  query: Joi.object().keys({
+    status: Joi.string(),
+    supplierId: id(),
+    search: Joi.string().allow(''),
+    ...dateRange,
+    ...pagination,
+  }),
+};
+
 const getRequirements = {
   query: Joi.object().keys({ statuses: Joi.string() }),
 };
@@ -349,6 +524,144 @@ const issueMaterials = {
   }),
 };
 
+/** MIV — Material Issue Voucher (check and post share the body). */
+const materialIssueVoucher = {
+  body: Joi.object()
+    .keys({
+      // Either an existing order, or a finished good to create one for (posting creates and
+      // releases it in the same transaction as the issue).
+      productionOrderId: id(),
+      newOrder: Joi.object().keys({
+        productId: id().required(),
+        variantId: id().allow(null, ''),
+        bomId: id().allow(null, ''),
+        plannedQuantity: Joi.number().positive().required(),
+        plannedCompletionDate: Joi.date().allow(null, ''),
+        priority: Joi.string().valid('low', 'normal', 'high', 'urgent'),
+        notes: Joi.string().allow('').max(1000),
+      }),
+      date: Joi.date().allow(null, ''),
+      sourceLocation: Joi.string().allow('').max(120),
+      wipLocation: Joi.string().allow('').max(120),
+      requestedById: id().allow(null, ''),
+      issuedById: id().allow(null, ''),
+      reference: Joi.string().allow('').max(200),
+      notes: Joi.string().allow('').max(1000),
+      overrides: Joi.array().items(Joi.string().valid('exceeds_remaining', 'expired_batch', 'insufficient_stock')).max(3),
+      lines: Joi.array()
+        .items(
+          Joi.object().keys({
+            // An order's material line, or `new:<index>` of a finished-good plan.
+            materialLineId: Joi.alternatives()
+              .try(id(), Joi.string().pattern(/^new:\d{1,4}$/))
+              .required(),
+            // The material's product, so a plan line can be checked against the BOM.
+            productId: id().allow(null, ''),
+            alternativeProductId: id().allow(null, ''),
+            // Range problems are reported per row by the service, not as a request error.
+            quantity: Joi.number().allow(null),
+            batchId: id().allow(null, ''),
+            serialNumbers: serialList(),
+          })
+        )
+        .min(1)
+        .max(500)
+        .required(),
+    })
+    .xor('productionOrderId', 'newOrder'),
+};
+
+/** Edit a posted voucher: the voucher body without its order, plus the revision it came from. */
+const editMaterialIssue = {
+  params: Joi.object().keys({ issueId: id().required() }),
+  body: Joi.object().keys({
+    revision: Joi.number().integer().min(0).required(),
+    editNote: Joi.string().allow('').max(500),
+    date: Joi.date().allow(null, ''),
+    sourceLocation: Joi.string().allow('').max(120),
+    wipLocation: Joi.string().allow('').max(120),
+    requestedById: id().allow(null, ''),
+    issuedById: id().allow(null, ''),
+    reference: Joi.string().allow('').max(200),
+    notes: Joi.string().allow('').max(1000),
+    overrides: Joi.array().items(Joi.string().valid('exceeds_remaining', 'expired_batch', 'insufficient_stock')).max(3),
+    lines: Joi.array()
+      .items(
+        Joi.object().keys({
+          materialLineId: id().required(),
+          productId: id().allow(null, ''),
+          alternativeProductId: id().allow(null, ''),
+          quantity: Joi.number().allow(null),
+          batchId: id().allow(null, ''),
+          serialNumbers: serialList(),
+        })
+      )
+      .min(1)
+      .max(500)
+      .required(),
+  }),
+};
+
+const cancelMaterialIssue = {
+  params: Joi.object().keys({ issueId: id().required() }),
+  body: Joi.object().keys({
+    reason: Joi.string().trim().min(3).max(500).required(),
+    revision: Joi.number().integer().min(0),
+    cancelOrder: Joi.boolean(),
+  }),
+};
+
+const materialIssuePlan = {
+  query: Joi.object().keys({
+    productId: id().required(),
+    variantId: id().allow(null, ''),
+    bomId: id().allow(null, ''),
+    quantity: Joi.number().positive().required(),
+  }),
+};
+
+const pendingMaterials = {
+  query: Joi.object().keys({
+    productType: Joi.string().allow('').max(200),
+    productId: id(),
+  }),
+};
+
+/** Issue by material: each line goes to the orders that need it (or the one named). */
+const materialIssueByMaterial = {
+  body: Joi.object().keys({
+    date: Joi.date().allow(null, ''),
+    sourceLocation: Joi.string().allow('').max(120),
+    wipLocation: Joi.string().allow('').max(120),
+    requestedById: id().allow(null, ''),
+    issuedById: id().allow(null, ''),
+    reference: Joi.string().allow('').max(200),
+    notes: Joi.string().allow('').max(1000),
+    overrides: Joi.array().items(Joi.string().valid('exceeds_remaining', 'expired_batch', 'insufficient_stock')).max(3),
+    lines: Joi.array()
+      .items(
+        Joi.object().keys({
+          productId: id().required(),
+          variantId: id().allow(null, ''),
+          quantity: Joi.number().allow(null),
+          orderId: id().allow(null, ''),
+        })
+      )
+      .min(1)
+      .max(500)
+      .required(),
+  }),
+};
+
+const materialUsage = {
+  query: Joi.object().keys({
+    status: Joi.string().valid('all', 'open', 'completed'),
+    productionOrderId: id(),
+    search: Joi.string().allow(''),
+    ...dateRange,
+  }),
+};
+
 const returnMaterials = {
   ...orderIdParam,
   body: Joi.object().keys({
@@ -378,7 +691,9 @@ const reportOutput = {
   ...orderIdParam,
   body: Joi.object().keys({
     producedQuantity: Joi.number().positive().required(),
-    // Only used when quality checks are turned off (inspection happens immediately).
+    // 'hold' → QC; 'direct' → finished stock now. Default: the require-QC setting.
+    qcMode: Joi.string().valid('direct', 'hold'),
+    // Only used when inspecting now (direct, or quality checks turned off).
     goodQuantity: Joi.number().min(0),
     ...rejectFields,
     notes: Joi.string().allow('').max(1000),
@@ -486,6 +801,7 @@ const listTransactions = {
     stage: Joi.string().valid(...SCRAP_STAGES),
     reason: Joi.string().valid(...SCRAP_REASONS),
     kind: Joi.string().valid('issue', 'return'),
+    status: Joi.string().valid('posted', 'cancelled'),
     search: Joi.string().allow(''),
     ...dateRange,
     ...pagination,
@@ -515,9 +831,30 @@ module.exports = {
   getProductionOrders,
   orderIdParam,
   updateProductionOrder,
+  getProductStats,
+  receiptIdParam,
+  createMaterialReceipt,
+  updateMaterialReceipt,
+  getMaterialReceipts,
+  addOrderOperation,
+  updateOrderOperation,
+  reorderOrderOperations,
+  orderOperationAction,
+  operationIdParam,
+  documentIdParam,
+  addOrderDocumentLink,
+  uploadOrderDocument,
   changeProductionStatus,
   getRequirements,
   issueMaterials,
+  materialIssueVoucher,
+  materialIssuePlan,
+  editMaterialIssue,
+  cancelMaterialIssue,
+  pendingMaterials,
+  materialIssueByMaterial,
+  materialUsage,
+  productionOrderBatch,
   returnMaterials,
   reportOutput,
   inspectOutput,

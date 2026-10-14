@@ -45,4 +45,36 @@ const parseDateRange = (dateFrom, dateTo, field) => {
   return { [field]: range };
 };
 
-module.exports = { roundQty, roundMoney, requireBranch, scopeFilter, aggregateScope, escapeRegex, idOf, parseDateRange };
+/**
+ * Per-line validation problems of an entry grid (RMV, MIV): one 400 with errorCode
+ * ROW_ERRORS and details.rows = [{ line, field, message }] so each shows on its row.
+ */
+class RowErrors {
+  constructor() {
+    this.rows = [];
+  }
+
+  add(line, field, message) {
+    this.rows.push({ line, field, message });
+  }
+
+  throwIfAny(summary = 'Some lines need attention') {
+    if (!this.rows.length) return;
+    const err = new ApiError(httpStatus.BAD_REQUEST, `${summary}: ${this.rows[0].message} (line ${this.rows[0].line})`);
+    err.errorCode = 'ROW_ERRORS';
+    err.details = { rows: this.rows };
+    throw err;
+  }
+}
+
+module.exports = {
+  roundQty,
+  roundMoney,
+  requireBranch,
+  scopeFilter,
+  aggregateScope,
+  escapeRegex,
+  idOf,
+  parseDateRange,
+  RowErrors,
+};

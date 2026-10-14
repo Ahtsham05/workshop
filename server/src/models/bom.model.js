@@ -43,6 +43,25 @@ const BomComponentSchema = new mongoose.Schema(
 );
 
 /**
+ * One step of the BOM's routing — how the product is made (Cutting → Welding → Painting →
+ * Assembly …). Orders snapshot the routing with planned time = setup + run × quantity, then
+ * track each step on the floor. `costPerHour` (labour + machine) prices the conversion
+ * cost shown on the order; it is informational and never posted to stock valuation.
+ */
+const BomOperationSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    workCenter: { type: String, trim: true, default: '' },
+    setupMinutes: { type: Number, min: 0, default: 0 },
+    runMinutesPerUnit: { type: Number, min: 0, default: 0 },
+    costPerHour: { type: Number, min: 0, default: 0 },
+    instructions: { type: String, trim: true, default: '' },
+    sequence: { type: Number, default: 0 },
+  },
+  { _id: true }
+);
+
+/**
  * A Bill of Materials version. Each version is its own document; versions of the same
  * BOM share `bomNumber` and differ by `version`. A version referenced by a production
  * order that has left draft/planned is locked (`isLocked`) — changes then go into a new
@@ -64,6 +83,9 @@ const BomSchema = new mongoose.Schema(
     quantity: { type: Number, required: true, min: 0.000001, default: 1 },
     unit: { type: String, enum: Object.values(UNITS), default: DEFAULT_UNIT },
     components: { type: [BomComponentSchema], default: [] },
+    // Routing. Not part of the locked recipe: orders keep their own snapshot, so a locked
+    // version's steps can still be refined for future orders.
+    operations: { type: [BomOperationSchema], default: [] },
     notes: { type: String, trim: true, default: '' },
     isActive: { type: Boolean, default: true, index: true },
     // The version used for this product by default — mirrored on Product.defaultBomId.

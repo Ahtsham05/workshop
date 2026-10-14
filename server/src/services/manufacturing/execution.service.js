@@ -97,7 +97,7 @@ const plainVariantId = (item) => (item.variant && !item.variant.isDefault ? item
 // ── Material issue ──────────────────────────────────────────────────────────────────
 
 /** Splits what an issue line moves into WIP lots: serial units, batch allocations, or a plain quantity. */
-const resolveIssuePieces = async (item, input, { organizationId, branchId, session }) => {
+const resolveIssuePieces = async (item, input, { organizationId, branchId, session, skipExpired = false }) => {
   if (item.serial) {
     const units = await stockService.pickSerials(item, {
       organizationId,
@@ -118,7 +118,9 @@ const resolveIssuePieces = async (item, input, { organizationId, branchId, sessi
     return [{ quantity: units.length, units, unitCost, batchId: null }];
   }
   if (item.batchTracked) {
-    const allocations = await stockService.allocateBatches(item, roundQty(input.quantity), input.batches, session);
+    const allocations = await stockService.allocateBatches(item, roundQty(input.quantity), input.batches, session, {
+      skipExpired,
+    });
     return allocations.map((a) => ({
       quantity: a.quantity,
       batchId: a.batch._id,
@@ -139,19 +141,44 @@ const resolveIssuePieces = async (item, input, { organizationId, branchId, sessi
  * `batches: [{ batchId, quantity }]` or are allocated FEFO; serial-tracked items take
  * `imeiIds` / `serialNumbers` (quantity = number of units).
  */
-const issueMaterials = async ({ organizationId, branchId, createdBy }, orderId, body, { canOverIssue = false } = {}) => {
+const issueMaterials = async (
+  { organizationId, branchId, createdBy },
+  orderId,
+  body,
+  {
+    canOverIssue = false,
+    session: outerSession = null,
+    settings: knownSettings = null,
+    // Editing a posted voucher re-posts it under its own id and number (see
+    // materialIssueEdit.service.js) — the old document is removed in the same transaction.
+    reuse = null,
+  } = {}
+) => {
   requireBranch(branchId);
-  await precheckOrder({ organizationId, branchId }, orderId);
-  const settings = await settingsService.getSettings(organizationId);
-  const issueNumber = await settingsService.nextDocumentNumber(organizationId, 'materialIssue');
+  // Inside a caller's transaction (e.g. an MIV that creates its order first) the order may
+  // not be visible outside it yet — the in-transaction load below checks it instead.
+  if (!outerSession) await precheckOrder({ organizationId, branchId }, orderId);
+  // getSettings upserts — outside the caller's transaction that would block on the counter
+  // it already bumped, so a caller with a session passes the settings it loaded.
+  const settings = knownSettings || (await settingsService.getSettings(organizationId));
+  const issueNumber = reuse
+    ? reuse.issueNumber
+    : await settingsService.nextDocumentNumber(
+        organizationId,
+        'materialIssue',
+        outerSession ? { session: outerSession } : undefined
+      );
 
-  return runTransaction(async (session) => {
+  const work = async (session) => {
     const order = await loadOrder({ organizationId, branchId }, orderId, session);
     assertExecutable(order);
-    const issueId = new mongoose.Types.ObjectId();
+    const issueId = reuse ? reuse.issueId : new mongoose.Types.ObjectId();
     const lines = [];
     let isOverIssue = false;
     const seenLines = new Set();
+    // A voucher may name its own locations; otherwise the order's.
+    const sourceLocation = body.sourceLocation || order.sourceLocation;
+    const wipLocation = body.wipLocation || order.wipLocation;
 
     // eslint-disable-next-line no-restricted-syntax
     for (const input of body.lines) {
@@ -159,10 +186,12 @@ const issueMaterials = async ({ organizationId, branchId, createdBy }, orderId, 
       if (!(input.quantity > 0) && !hasSerials) continue; // eslint-disable-line no-continue
       const material = order.materials.id(input.materialLineId);
       if (!material) throw new ApiError(httpStatus.BAD_REQUEST, 'Material line not found on this order');
-      if (seenLines.has(String(material._id))) {
+      // The same requirement may be issued as the product and as a listed alternative.
+      const lineKey = `${material._id}:${input.alternativeProductId || ''}`;
+      if (seenLines.has(lineKey)) {
         throw new ApiError(httpStatus.BAD_REQUEST, `"${material.productName}" appears twice in this issue`);
       }
-      seenLines.add(String(material._id));
+      seenLines.add(lineKey);
 
       let { productId, variantId } = material;
       let ratio = 1;
@@ -182,7 +211,12 @@ const issueMaterials = async ({ organizationId, branchId, createdBy }, orderId, 
       // eslint-disable-next-line no-await-in-loop
       const item = await stockService.resolveItem({ organizationId, branchId, productId, variantId, session });
       // eslint-disable-next-line no-await-in-loop
-      const pieces = await resolveIssuePieces(item, input, { organizationId, branchId, session });
+      const pieces = await resolveIssuePieces(item, input, {
+        organizationId,
+        branchId,
+        session,
+        skipExpired: !!body.skipExpiredBatches,
+      });
 
       const physical = roundQty(pieces.reduce((s, p) => s + p.quantity, 0));
       const credited = roundQty(physical / ratio);
@@ -266,7 +300,7 @@ const issueMaterials = async ({ organizationId, branchId, createdBy }, orderId, 
           type: 'production_issue',
           delta: -piece.quantity,
           balanceAfter,
-          location: order.sourceLocation,
+          location: sourceLocation,
         });
         // eslint-disable-next-line no-await-in-loop
         await stockService.writeMovement(item, {
@@ -275,7 +309,7 @@ const issueMaterials = async ({ organizationId, branchId, createdBy }, orderId, 
           bucket: 'wip',
           delta: piece.quantity,
           balanceAfter: wip.wipBalanceOf(order, item.product._id, lotVariantId),
-          location: order.wipLocation,
+          location: wipLocation,
         });
         lines.push({
           materialLineId: material._id,
@@ -322,6 +356,12 @@ const issueMaterials = async ({ organizationId, branchId, createdBy }, orderId, 
           issueDate: body.issueDate || new Date(),
           lines,
           totalCost,
+          sourceLocation: sourceLocation || '',
+          wipLocation: wipLocation || '',
+          reference: body.reference || '',
+          requestedBy: body.requestedBy || undefined,
+          issuedBy: body.issuedBy || undefined,
+          overrides: body.overrides && body.overrides.length ? body.overrides : undefined,
           notes: body.notes || '',
           isDemo: !!order.isDemo,
           createdBy,
@@ -330,7 +370,8 @@ const issueMaterials = async ({ organizationId, branchId, createdBy }, orderId, 
       { session }
     );
     return issue;
-  });
+  };
+  return outerSession ? work(outerSession) : runTransaction(work);
 };
 
 // ── Material return ─────────────────────────────────────────────────────────────────
@@ -869,7 +910,11 @@ const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, bo
   if (!(producedQuantity > 0)) throw new ApiError(httpStatus.BAD_REQUEST, 'Produced quantity must be greater than zero');
   await precheckOrder({ organizationId, branchId }, orderId);
   const settings = await settingsService.getSettings(organizationId);
-  const inspectNow = !settings.requireQualityCheck;
+  // Per receipt: 'hold' sends the units to QC, 'direct' receives them now (good/rejected
+  // given here). Without a choice, the "require quality check" setting decides. Receiving
+  // directly while QC is required needs the inspection permission (checked by the caller).
+  const inspectNow = body.qcMode ? body.qcMode === 'direct' : !settings.requireQualityCheck;
+  const directReceipt = inspectNow && !!settings.requireQualityCheck;
   const rejectedInput = roundQty(body.rejectedQuantity || 0);
   const goodQuantity = inspectNow ? roundQty(body.goodQuantity ?? producedQuantity - rejectedInput) : 0;
   const rejectedQuantity = inspectNow ? roundQty(producedQuantity - goodQuantity) : 0;
@@ -923,6 +968,7 @@ const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, bo
       status: 'pending_qc',
       reportedBy: createdBy,
       notes: body.notes || '',
+      directReceipt,
       isDemo: !!order.isDemo,
     });
 
@@ -1517,6 +1563,9 @@ const withCreator = { populate: [{ path: 'createdBy', select: 'name email' }] };
 const queryIssues = async (ctx, filter, options) => {
   const query = buildListQuery(ctx, filter, 'issueDate');
   if (filter.kind) query.kind = filter.kind;
+  // 'posted' also matches vouchers from before cancelling existed (no status field).
+  if (filter.status === 'cancelled') query.status = 'cancelled';
+  else if (filter.status === 'posted') query.status = { $ne: 'cancelled' };
   if (filter.search) {
     const re = new RegExp(escapeRegex(filter.search), 'i');
     query.$or = [{ issueNumber: re }, { orderNumber: re }, { 'lines.productName': re }];

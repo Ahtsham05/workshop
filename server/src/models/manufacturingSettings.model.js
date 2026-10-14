@@ -10,6 +10,7 @@ const counterDefaults = () => ({
   productionOutput: 0,
   productionReceipt: 0,
   scrap: 0,
+  rawMaterialReceipt: 0,
 });
 
 /**
@@ -30,11 +31,12 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
       bom: { type: String, trim: true, default: 'BOM' },
       productionOrder: { type: String, trim: true, default: 'MO' },
       assemblyOrder: { type: String, trim: true, default: 'ASM' },
-      materialIssue: { type: String, trim: true, default: 'MI' },
+      materialIssue: { type: String, trim: true, default: 'MIV' },
       materialReturn: { type: String, trim: true, default: 'MR' },
       productionOutput: { type: String, trim: true, default: 'PO' },
       productionReceipt: { type: String, trim: true, default: 'FG' },
       scrap: { type: String, trim: true, default: 'SCR' },
+      rawMaterialReceipt: { type: String, trim: true, default: 'RMV' },
     },
     numberPadding: { type: Number, min: 3, max: 10, default: 5 },
     // Default location labels (bins/areas inside a branch) pre-filled on new production
@@ -67,6 +69,7 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
           productionOutput: { type: Number, default: 0 },
           productionReceipt: { type: Number, default: 0 },
           scrap: { type: Number, default: 0 },
+          rawMaterialReceipt: { type: Number, default: 0 },
         },
         { _id: false }
       ),

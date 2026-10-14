@@ -90,23 +90,27 @@ const recordStockChange = async ({
   refId,
   unitCost,
   createdBy,
+  // Optional: write inside the caller's transaction. Then a failure is rethrown so the
+  // whole transaction rolls back instead of leaving the mirror behind; without a session
+  // this stays best-effort, exactly as before.
+  session,
 }) => {
   if (!isDualWriteEnabledForOrg(organizationId)) return;
   if (!productId || !quantityDelta) return;
 
   try {
-    const variant = await getOrCreateDefaultVariant(productId);
+    const variant = await getOrCreateDefaultVariant(productId, session);
     if (!variant) return;
 
-    const inventory = await getOrCreateInventory(variant);
+    const inventory = await getOrCreateInventory(variant, session);
 
     const updated = await Inventory.findOneAndUpdate(
       { _id: inventory._id },
       { $inc: { quantity: quantityDelta } },
-      { new: true }
+      { new: true, session: session || null }
     );
 
-    await InventoryTransaction.create({
+    await InventoryTransaction.create([{
       organizationId: variant.organizationId,
       branchId: variant.branchId,
       inventoryId: inventory._id,
@@ -118,8 +122,9 @@ const recordStockChange = async ({
       refType,
       refId,
       createdBy,
-    });
+    }], { session: session || undefined });
   } catch (err) {
+    if (session) throw err;
     logger.error(`[inventorySync] failed to record stock change for product ${productId}: ${err.message}`);
   }
 };

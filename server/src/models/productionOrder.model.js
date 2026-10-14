@@ -1,7 +1,13 @@
 const mongoose = require('mongoose');
 const { paginate, toJSON } = require('./plugins');
 const { DEFAULT_UNIT, UNITS } = require('../config/units');
-const { PRODUCTION_STATUSES, PRODUCTION_PRIORITIES, ORDER_TYPES } = require('../config/manufacturing');
+const {
+  PRODUCTION_STATUSES,
+  PRODUCTION_PRIORITIES,
+  ORDER_TYPES,
+  OPERATION_STATUSES,
+  ORDER_DOCUMENT_CATEGORIES,
+} = require('../config/manufacturing');
 
 /**
  * A material the order needs, snapshotted from the (exploded) BOM when the order is
@@ -80,6 +86,62 @@ const WipLotSchema = new mongoose.Schema(
   { _id: true }
 );
 
+/**
+ * One routing step of this order, snapshotted from the BOM's routing (or added on the order)
+ * and tracked on the floor. Planned time is setup + run × the order quantity; actual time is
+ * what the person completing the step records (defaults to the elapsed time).
+ */
+const OrderOperationSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    workCenter: { type: String, trim: true, default: '' },
+    sequence: { type: Number, default: 0 },
+    plannedMinutes: { type: Number, min: 0, default: 0 },
+    costPerHour: { type: Number, min: 0, default: 0 },
+    instructions: { type: String, trim: true, default: '' },
+    status: { type: String, enum: OPERATION_STATUSES, default: 'pending' },
+    startedAt: { type: Date, default: null },
+    startedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    startedByName: { type: String, trim: true, default: '' },
+    completedAt: { type: Date, default: null },
+    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    completedByName: { type: String, trim: true, default: '' },
+    actualMinutes: { type: Number, min: 0, default: null },
+    note: { type: String, trim: true, default: '' },
+  },
+  { _id: true }
+);
+
+/**
+ * A file (stored privately — only `storageKey` is kept, downloads go through a signed,
+ * expiring URL) or a link attached to the order: drawings, specs, QC certificates, photos.
+ */
+const OrderDocumentSchema = new mongoose.Schema(
+  {
+    kind: { type: String, enum: ['file', 'link'], required: true },
+    title: { type: String, required: true, trim: true },
+    category: { type: String, enum: ORDER_DOCUMENT_CATEGORIES, default: 'other' },
+    url: { type: String, trim: true, default: '' },
+    storageKey: { type: String, default: '' },
+    fileName: { type: String, trim: true, default: '' },
+    mimeType: { type: String, default: '' },
+    bytes: { type: Number, default: 0 },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    uploadedByName: { type: String, trim: true, default: '' },
+    uploadedAt: { type: Date, default: Date.now },
+  },
+  {
+    _id: true,
+    toJSON: {
+      transform(doc, ret) {
+        // The storage key is never sent to clients; they ask for a signed URL instead.
+        delete ret.storageKey; // eslint-disable-line no-param-reassign
+        return ret;
+      },
+    },
+  }
+);
+
 const StatusHistorySchema = new mongoose.Schema(
   {
     from: { type: String },
@@ -111,6 +173,19 @@ const ProductionOrderSchema = new mongoose.Schema(
     // The person doing the assembly work.
     operatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     operatorName: { type: String, trim: true, default: '' },
+    // Everyone else working the order (the operator leads it).
+    team: {
+      type: [
+        new mongoose.Schema(
+          {
+            userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+            name: { type: String, trim: true, default: '' },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true, index: true },
     variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: null },
     productName: { type: String, trim: true },
@@ -142,6 +217,8 @@ const ProductionOrderSchema = new mongoose.Schema(
     notes: { type: String, trim: true, default: '' },
     materials: { type: [ProductionMaterialSchema], default: [] },
     wipLots: { type: [WipLotSchema], default: [] },
+    operations: { type: [OrderOperationSchema], default: [] },
+    documents: { type: [OrderDocumentSchema], default: [] },
     // Unit cost of output sitting in QC / rework, so it is valued when it finally lands.
     qcPendingCost: { type: Number, default: 0 },
     reworkPendingCost: { type: Number, default: 0 },

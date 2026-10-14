@@ -154,11 +154,16 @@ const applyAvailableDelta = async (item, delta, { batchId = null, allowNegative 
   return updated.quantity;
 };
 
+/** Start of today (UTC date) — a batch whose expiry date is before it has expired. */
+const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
+const isExpired = (batch, today = startOfToday()) => !!(batch && batch.expiryDate && batch.expiryDate < today);
+
 /**
  * Batches to draw `quantity` from: the caller's explicit allocations (validated), or
- * FEFO (earliest expiry, then oldest) across the item's active batches.
+ * FEFO (earliest expiry, then oldest) across the item's active batches. `skipExpired`
+ * leaves expired batches out of FEFO (explicit allocations are the caller's choice).
  */
-const allocateBatches = async (item, quantity, requested, session) => {
+const allocateBatches = async (item, quantity, requested, session, { skipExpired = false } = {}) => {
   await ensureLedgerAnchor(item, session);
   if (requested && requested.length) {
     const ids = requested.map((r) => r.batchId);
@@ -183,9 +188,12 @@ const allocateBatches = async (item, quantity, requested, session) => {
     }
     return allocations;
   }
-  const batches = await Batch.find({ inventoryId: item.inventory._id, status: 'active', quantity: { $gt: 0 } })
-    .sort({ expiryDate: 1, createdAt: 1 })
-    .session(session || null);
+  const today = startOfToday();
+  const batches = (
+    await Batch.find({ inventoryId: item.inventory._id, status: 'active', quantity: { $gt: 0 } })
+      .sort({ expiryDate: 1, createdAt: 1 })
+      .session(session || null)
+  ).filter((b) => !skipExpired || !isExpired(b, today));
   const allocations = [];
   let left = quantity;
   // eslint-disable-next-line no-restricted-syntax
@@ -199,7 +207,7 @@ const allocateBatches = async (item, quantity, requested, session) => {
     const have = roundQty(quantity - left);
     throw new ApiError(
       httpStatus.BAD_REQUEST,
-      `Only ${have} ${item.unit} of "${item.name}" is available across its batches`
+      `Only ${have} ${item.unit} of "${item.name}" is available across its ${skipExpired ? 'unexpired ' : ''}batches`
     );
   }
   return allocations;
@@ -403,11 +411,48 @@ const getStockDetail = async ({ organizationId, branchId, productId, variantId }
   };
 };
 
+/**
+ * Current standard unit cost per item — the same cost an issue would be valued at right
+ * now (resolveItem: the variant's moving average cost, else the variant's cost, else the
+ * product's cost). Keyed `productId:variantId`.
+ */
+const getUnitCosts = async ({ organizationId, items }) => {
+  const productIds = [...new Set(items.map((item) => String(item.productId)))];
+  const [products, variants] = await Promise.all([
+    Product.find({ _id: { $in: productIds }, organizationId })
+      .select('cost')
+      .lean(),
+    ProductVariant.find({ productId: { $in: productIds }, organizationId })
+      .select('productId isDefault cost')
+      .lean(),
+  ]);
+  const inventories = await Inventory.find({ variantId: { $in: variants.map((v) => v._id) }, organizationId })
+    .select('variantId averageCost')
+    .lean();
+  const productById = new Map(products.map((p) => [String(p._id), p]));
+  const variantById = new Map(variants.map((v) => [String(v._id), v]));
+  const defaultByProduct = new Map(variants.filter((v) => v.isDefault).map((v) => [String(v.productId), v]));
+  const avgByVariant = new Map(inventories.map((inv) => [String(inv.variantId), inv.averageCost]));
+
+  const result = new Map();
+  items.forEach((item) => {
+    const variant = item.variantId ? variantById.get(String(item.variantId)) : defaultByProduct.get(String(item.productId));
+    const avg = variant ? avgByVariant.get(String(variant._id)) : null;
+    const product = productById.get(String(item.productId));
+    const cost = avg > 0 ? avg : (variant && !variant.isDefault ? variant.cost : null) ?? (product ? product.cost : 0) ?? 0;
+    result.set(`${item.productId}:${item.variantId || ''}`, roundMoney(cost || 0));
+  });
+  return result;
+};
+
 module.exports = {
+  getUnitCosts,
   resolveItem,
   ensureLedgerAnchor,
   applyAvailableDelta,
   allocateBatches,
+  isExpired,
+  startOfToday,
   pickSerials,
   setSerialStatus,
   writeMovement,

@@ -1,5 +1,9 @@
 const Joi = require('joi');
 const { objectId, imeiEntry } = require('./custom.validation');
+const { PRODUCT_TYPES } = require('../config/manufacturing');
+
+// Manufacturing classification (raw material, finished good…); null = not used in manufacturing.
+const productType = () => Joi.string().valid(...PRODUCT_TYPES).allow(null);
 
 const unitConversionSchema = Joi.object().keys({
   fromUnit: Joi.string().required(),
@@ -35,6 +39,7 @@ const criticalNotAboveLow = (value, helpers) => {
 
 const createProduct = {
   body: Joi.object().keys({
+    productType: productType(),
     name: Joi.string().required(),
     nameUrdu: Joi.string().allow('').optional(),
     price: Joi.number().required(),
@@ -231,6 +236,7 @@ const updateProduct = {
   }),
   body: Joi.object().keys({
     _id: Joi.string(),
+    productType: productType(),
     name: Joi.string(),
     nameUrdu: Joi.string().allow('').optional(),
     price: Joi.number(),

@@ -49,7 +49,54 @@ const MaterialIssueSchema = new mongoose.Schema(
       default: [],
     },
     totalCost: { type: Number, default: 0 },
+    // Material Issue Voucher (MIV) header — set when issued through the voucher screen;
+    // older issues fall back to the order's own locations.
+    sourceLocation: { type: String, trim: true, default: '' },
+    wipLocation: { type: String, trim: true, default: '' },
+    reference: { type: String, trim: true, default: '' },
+    requestedBy: { userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, name: { type: String, trim: true } },
+    issuedBy: { userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, name: { type: String, trim: true } },
+    // Warnings a permitted user chose to override when posting (audit trail).
+    overrides: {
+      type: [
+        new mongoose.Schema(
+          {
+            line: Number,
+            code: { type: String, trim: true },
+            message: { type: String, trim: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: undefined,
+    },
     notes: { type: String, trim: true, default: '' },
+    // A posted voucher is never erased: cancelling reverses its stock (contra ledger rows,
+    // refType 'MaterialIssueReversal') and keeps it here, marked, for the audit trail.
+    status: { type: String, enum: ['posted', 'cancelled'], default: 'posted', index: true },
+    cancelledAt: { type: Date },
+    cancelledBy: { userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, name: { type: String, trim: true } },
+    cancelReason: { type: String, trim: true },
+    // Bumped on every edit; an edit or cancel must name the revision it was made from.
+    revision: { type: Number, default: 0 },
+    editHistory: {
+      type: [
+        new mongoose.Schema(
+          {
+            at: { type: Date, default: Date.now },
+            by: { userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, name: { type: String, trim: true } },
+            // 'header' = date/people/reference/notes only; 'lines' = stock re-posted.
+            kind: { type: String, enum: ['header', 'lines'] },
+            summary: { type: String, trim: true },
+            note: { type: String, trim: true },
+            previousTotal: Number,
+            newTotal: Number,
+          },
+          { _id: false }
+        ),
+      ],
+      default: undefined,
+    },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     // Created by the manufacturing demo-data seeder (services/manufacturing/demoData.service.js).
     isDemo: { type: Boolean, default: false },

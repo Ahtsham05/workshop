@@ -111,6 +111,29 @@ const OUTPUT_STATUSES = ['pending_qc', 'inspected'];
 
 const SCRAP_REASONS = ['defect', 'damage', 'process_loss', 'expired', 'setup', 'rework', 'other'];
 
+/**
+ * Routing operations on a production order (snapshotted from the BOM's routing):
+ *  pending → in_progress → completed, or pending → skipped. Reopening puts a finished
+ *  step back to in_progress (it had started) or pending.
+ */
+const OPERATION_STATUSES = ['pending', 'in_progress', 'completed', 'skipped'];
+
+/** What a file or link attached to a production order is. */
+const ORDER_DOCUMENT_CATEGORIES = [
+  'drawing',
+  'specification',
+  'work_instruction',
+  'quality',
+  'certificate',
+  'photo',
+  'other',
+];
+
+/** Most operations a BOM routing / an order may carry, and documents per order. */
+const MAX_OPERATIONS = 50;
+const MAX_ORDER_DOCUMENTS = 30;
+const MAX_TEAM_MEMBERS = 20;
+
 /** Keys of the per-organization document counters in ManufacturingSettings. */
 const COUNTER_KEYS = [
   'bom',
@@ -121,6 +144,7 @@ const COUNTER_KEYS = [
   'productionOutput',
   'productionReceipt',
   'scrap',
+  'rawMaterialReceipt',
 ];
 
 /** Max depth when exploding a multi-level BOM — guards against pathological trees. */
@@ -145,4 +169,9 @@ module.exports = {
   OUTPUT_STATUSES,
   COUNTER_KEYS,
   MAX_BOM_DEPTH,
+  OPERATION_STATUSES,
+  ORDER_DOCUMENT_CATEGORIES,
+  MAX_OPERATIONS,
+  MAX_ORDER_DOCUMENTS,
+  MAX_TEAM_MEMBERS,
 };

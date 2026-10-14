@@ -14,11 +14,13 @@ const {
   ProductionOutput,
   ScrapRecord,
   ManufacturingSettings,
+  User,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const bomService = require('./bom.service');
 const productionOrderService = require('./productionOrder.service');
 const executionService = require('./execution.service');
+const operationsService = require('./operations.service');
 const settingsService = require('./settings.service');
 const { roundQty, requireBranch, scopeFilter } = require('./common');
 
@@ -328,7 +330,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // Progress steps the scenario reports (products + every BOM / order / status / issue /
 // return / output / rework / scrap) — only drives the progress bar, so being off by a few
 // is harmless.
-const TOTAL_STEPS = 80;
+const TOTAL_STEPS = 88;
 // A running load whose heartbeat is older than this was cut short (e.g. a server restart).
 const STALE_JOB_MS = 90 * 1000;
 
@@ -499,11 +501,36 @@ const runScenario = async (ctx, P, step) => {
   };
   const line = (key, quantity, extra = {}) => ({ productId: id(key), quantity, ...extra });
 
+  // Routing: [name, work centre, setup min, run min per unit, USD per hour, instructions]
+  const factor = await currencyFactor(ctx.organizationId);
+  const routing = (...steps) =>
+    steps.map(([name, workCenter, setupMinutes, runMinutesPerUnit, usdPerHour, instructions = '']) => ({
+      name,
+      workCenter,
+      setupMinutes,
+      runMinutesPerUnit,
+      costPerHour: scaleMoney(usdPerHour, factor),
+      instructions,
+    }));
+  const FAN_ROUTING = routing(
+    ['Cutting', 'Press shop', 30, 2, 6, 'Shear canopy and down-rod blanks; deburr edges.'],
+    ['Welding', 'Fabrication bay', 20, 3, 7, 'MIG-weld canopy brackets. Check weld penetration on the first piece.'],
+    ['Painting', 'Paint shop', 45, 2.5, 6, 'Powder coat, cure 20 min at 180°C.'],
+    ['Assembly', 'Assembly line 1', 15, 8, 5],
+    ['Packing', 'Dispatch', 10, 1.5, 4, 'Carton, thermocol, manual and warranty card.']
+  );
+
   const statorBom = await createBom(-35, {
     productId: id('stator'),
     quantity: 1,
     name: 'Stator winding — 56" fan motor',
     notes: '320 turns, 0.35mm wire. Varnish and bake 2h at 120°C.',
+    operations: routing(
+      ['Lamination stacking', 'Press shop', 20, 1.5, 6],
+      ['Coil winding', 'Winding line', 15, 6, 6, '320 turns, 0.35mm wire.'],
+      ['Varnish & bake', 'Oven', 30, 1, 5, '2h at 120°C — load the oven full.'],
+      ['Electrical test', 'Test bench', 5, 1, 6, 'Insulation resistance > 100 MΩ.']
+    ),
     components: [
       line('copper', 0.35, { scrapPercent: 5, notes: 'Includes lead-out wire' }),
       line('lam', 1.2, { scrapPercent: 2 }),
@@ -514,6 +541,12 @@ const runScenario = async (ctx, P, step) => {
     productId: id('motor'),
     quantity: 1,
     name: 'Fan motor assembly',
+    operations: routing(
+      ['Rotor die-casting', 'Foundry', 40, 2, 8],
+      ['Machining', 'CNC cell', 25, 3, 9],
+      ['Motor assembly', 'Assembly line 2', 10, 6, 5],
+      ['Run test', 'Test bench', 5, 2, 6, '10 minutes at full speed; listen for hum.']
+    ),
     components: [
       line('stator', 1, { childBomId: statorBom._id, notes: 'Pinned to stator BOM v1' }),
       line('bearing', 2, { alternatives: [{ productId: id('bearingImp'), ratio: 1 }] }),
@@ -527,11 +560,18 @@ const runScenario = async (ctx, P, step) => {
     productId: id('blades'),
     quantity: 1,
     name: 'Blade set — 3 blades',
+    operations: routing(
+      ['Cutting', 'Press shop', 20, 1.5, 6],
+      ['Forming', 'Press shop', 15, 1.5, 6, 'Pitch 12° — check with the gauge.'],
+      ['Painting', 'Paint shop', 30, 2, 6],
+      ['Balancing', 'Balancing station', 10, 2, 7, 'Matched sets within 2 g.']
+    ),
     components: [line('alu', 1.5, { scrapPercent: 4 }), line('paint', 0.15, { scrapPercent: 5 }), line('screws', 1)],
   });
   const ceilingV1 = await createBom(-34, {
     productId: id('ceiling'),
     quantity: 1,
+    operations: FAN_ROUTING,
     components: [
       line('motor', 1),
       line('blades', 1),
@@ -545,6 +585,7 @@ const runScenario = async (ctx, P, step) => {
   const pedestalBom = await createBom(-34, {
     productId: id('pedestal'),
     quantity: 1,
+    operations: FAN_ROUTING,
     components: [
       line('motor', 1),
       line('blades', 1),
@@ -560,6 +601,12 @@ const runScenario = async (ctx, P, step) => {
     quantity: 10,
     name: 'Exhaust fan — batch of 10',
     notes: 'Motor wound in-line; built in batches of 10.',
+    operations: routing(
+      ['Coil winding', 'Winding line', 15, 5, 6],
+      ['Frame pressing', 'Press shop', 20, 2, 6],
+      ['Assembly', 'Assembly line 1', 10, 6, 5],
+      ['Packing', 'Dispatch', 10, 1, 4]
+    ),
     components: [
       line('copper', 1.2, { scrapPercent: 5 }),
       line('lam', 5, { scrapPercent: 2 }),
@@ -742,6 +789,63 @@ const runScenario = async (ctx, P, step) => {
 
   const plan = (day, days) => ({ plannedStartDate: at(day, 8), plannedCompletionDate: at(day + days, 18) });
 
+  // Time actually worked on a step: its plan, a little over or under (deterministic).
+  const VARIATION = [0.92, 1.08, 1.15, 0.97, 1.04, 0.88];
+  const workedMinutes = (op, i) => Math.round((op.plannedMinutes || 0) * VARIATION[i % VARIATION.length]);
+
+  /**
+   * Works the order's routing on the floor: `steps[i]` is `[startDay, startHour, endDay,
+   * endHour]` (complete), `[startDay, startHour]` (still in progress) or null (pending).
+   */
+  const work = async (order, steps) => {
+    const current = await ProductionOrder.findById(order._id).select('operations');
+    // eslint-disable-next-line no-restricted-syntax
+    for (const [i, s] of steps.entries()) {
+      const op = current.operations[i];
+      if (!op || !s) continue; // eslint-disable-line no-continue
+      // eslint-disable-next-line no-await-in-loop
+      await operationsService.operationAction(ctx, order._id, op._id, { action: 'start', at: at(s[0], s[1]) });
+      if (s.length === 4) {
+        // eslint-disable-next-line no-await-in-loop
+        await operationsService.operationAction(ctx, order._id, op._id, {
+          action: 'complete',
+          at: at(s[2], s[3]),
+          actualMinutes: workedMinutes(op, i),
+        });
+      }
+    }
+    step(`${order.orderNumber} — routing progress`);
+  };
+  /** Every step done, spread evenly from `fromDay` 08:00 to `toDay` 17:00. */
+  const workAll = async (order, fromDay, toDay) => {
+    const current = await ProductionOrder.findById(order._id).select('operations');
+    const n = current.operations.length;
+    const from = at(fromDay, 8).getTime();
+    const span = Math.max(1, at(toDay, 17).getTime() - from);
+    const slot = (k) => new Date(from + (span * k) / n);
+    // eslint-disable-next-line no-restricted-syntax
+    for (const [k, op] of current.operations.entries()) {
+      // eslint-disable-next-line no-await-in-loop
+      await operationsService.operationAction(ctx, order._id, op._id, { action: 'start', at: slot(k) });
+      // eslint-disable-next-line no-await-in-loop
+      await operationsService.operationAction(ctx, order._id, op._id, {
+        action: 'complete',
+        at: new Date(slot(k + 1).getTime() - 30 * 60 * 1000),
+        actualMinutes: workedMinutes(op, k),
+      });
+    }
+    step(`${order.orderNumber} — routing completed`);
+  };
+  // The person loading the demo leads the active orders; up to three colleagues form the team.
+  const colleagues = (
+    await User.find({ organizationId: ctx.organizationId, _id: { $ne: ctx.createdBy }, isActive: { $ne: false } })
+      .select('_id')
+      .limit(3)
+      .lean()
+  ).map((u) => u._id);
+  const lead = ctx.createdBy ? await User.exists({ _id: ctx.createdBy, organizationId: ctx.organizationId }) : null;
+  const crew = { operatorId: lead ? ctx.createdBy : undefined, teamMemberIds: colleagues };
+
   // 1. Stator windings — completed four weeks ago
   const o1 = await createOrder(-27, {
     productId: id('stator'),
@@ -753,6 +857,7 @@ const runScenario = async (ctx, P, step) => {
   await issue(o1, -26);
   await produce(o1, -25, 25);
   await produce(o1, -24, 15);
+  await workAll(o1, -26, -24);
   await setStatus(o1, 'completed', -24, 17, undefined, 'return');
 
   // 2. Motor assemblies — completed. Demonstrates the full WIP lifecycle: material
@@ -785,6 +890,7 @@ const runScenario = async (ctx, P, step) => {
   });
   await produce(o2, -21, 18);
   await produce(o2, -20, 12);
+  await workAll(o2, -23, -20);
   await setStatus(o2, 'completed', -20, 17, undefined, 'return');
 
   // 3. Blade sets — completed short: two sets failed quality inspection in the second
@@ -798,6 +904,7 @@ const runScenario = async (ctx, P, step) => {
     disposition: 'scrap',
     reason: 'Failed dynamic balancing',
   });
+  await workAll(o3, -19, -17);
   await setStatus(o3, 'completed', -17, 18, 'Closed at 38 good — 2 sets rejected at QC', 'return');
 
   // 4. Ceiling fans on recipe v1 — releasing it locks v1
@@ -813,6 +920,7 @@ const runScenario = async (ctx, P, step) => {
   await produce(o4, -13, 10);
   await produce(o4, -12, 10);
   await produce(o4, -11, 5);
+  await workAll(o4, -15, -11);
   await setStatus(o4, 'completed', -11, 17, undefined, 'return');
 
   // Cancelled before release
@@ -834,6 +942,7 @@ const runScenario = async (ctx, P, step) => {
   await issue(o5, -10, { notes: 'Topping up copper after the set-up loss', hour: 15, minute: 0 });
   await produce(o5, -9, 20);
   await produce(o5, -8, 10);
+  await workAll(o5, -10, -8);
   await setStatus(o5, 'completed', -8, 17, undefined, 'return');
 
   // 6. Pedestal fans — completed; one later dropped in the store and written off.
@@ -842,6 +951,7 @@ const runScenario = async (ctx, P, step) => {
   await issue(o6, -8);
   await produce(o6, -6, 6);
   await produce(o6, -5, 4);
+  await workAll(o6, -8, -5);
   await setStatus(o6, 'completed', -5, 17, undefined, 'return');
   await scrap(o6, -4, {
     stage: 'finished_good',
@@ -890,9 +1000,21 @@ const runScenario = async (ctx, P, step) => {
   step('Bill of materials — Exhaust Fan trial version');
 
   // 7. Pedestal fans — paused and overdue, waiting for stand bases
-  const o9 = await createOrder(-7, { productId: id('pedestal'), plannedQuantity: 20, ...plan(-6, 4), priority: 'high' });
+  const o9 = await createOrder(-7, {
+    productId: id('pedestal'),
+    plannedQuantity: 20,
+    ...plan(-6, 4),
+    priority: 'high',
+    ...crew,
+  });
   await setStatus(o9, 'released', -6, 8);
   await issue(o9, -6, { fraction: { motor: 0.5, blades: 0.5, stand: 0.3 } });
+  await work(o9, [
+    [-6, 9, -6, 15],
+    [-6, 15, -5, 12],
+    [-5, 13, -4, 11],
+    [-4, 11],
+  ]);
   await produce(o9, -4, 5);
   await setStatus(o9, 'paused', -3, 12, 'Waiting for pedestal stand bases from supplier');
 
@@ -902,10 +1024,17 @@ const runScenario = async (ctx, P, step) => {
     productId: id('ceiling'),
     plannedQuantity: 40,
     ...plan(-3, 6),
+    priority: 'high',
     notes: 'Summer stock — retail chain',
+    ...crew,
   });
   await setStatus(o7, 'released', -4, 8);
   await issue(o7, -3, { fraction: { motor: 0.6, blades: 0.6, remote: 0.25 } });
+  await work(o7, [
+    [-3, 9, -3, 16],
+    [-3, 16, -2, 14],
+    [-2, 14],
+  ]);
   await produce(o7, -2, 8);
   await produce(o7, -1, 8, {
     rejected: 1,
@@ -916,7 +1045,13 @@ const runScenario = async (ctx, P, step) => {
   await produce(o7, 0, 5, { hour: 9 });
 
   // 9. Motor assemblies — in production, overdue; imported bearings used as substitute
-  const o8 = await createOrder(-4, { productId: id('motor'), plannedQuantity: 25, ...plan(-3, 2), priority: 'urgent' });
+  const o8 = await createOrder(-4, {
+    productId: id('motor'),
+    plannedQuantity: 25,
+    ...plan(-3, 2),
+    priority: 'urgent',
+    ...crew,
+  });
   await setStatus(o8, 'released', -3, 8);
   await issue(o8, -2, { extra: { bearing: 30 }, notes: 'Local bearings issued' });
   await issue(o8, -2, {
@@ -932,6 +1067,11 @@ const runScenario = async (ctx, P, step) => {
     reason: 'process_loss',
     notes: 'Casting flash',
   });
+  await work(o8, [
+    [-2, 11, -2, 17],
+    [-1, 8, -1, 15],
+    [-1, 15],
+  ]);
   await produce(o8, -1, 10);
 
   // 10–14. Upcoming work
