@@ -14,10 +14,10 @@ export const BUSINESS_TYPE_OPTIONS = [
 ] as const
 
 /**
- * What a brand-new account picks during onboarding. Deliberately three choices, not
- * twelve: the value only decides which module set you get, and there are exactly three
- * of those — the mobile-dealer tools, the school tools, and the standard ERP everyone
- * else uses. The full BUSINESS_TYPE_OPTIONS list above still exists for accounts created
+ * What a brand-new account picks during onboarding. Deliberately a few choices, not
+ * twelve: the value only decides which module set you get, and there are exactly four
+ * of those — the mobile-dealer tools, the school tools, manufacturing, and the standard
+ * ERP everyone else uses. The full BUSINESS_TYPE_OPTIONS list above still exists for accounts created
  * before this and for editing the business profile later.
  */
 export const ONBOARDING_BUSINESS_TYPES = [
@@ -30,6 +30,11 @@ export const ONBOARDING_BUSINESS_TYPES = [
     value: 'mobile_shop',
     label: 'Mobile & Communication',
     description: 'Phone dealers — IMEI/serial tracking, SIM sales, device trade-ins and carrier load.',
+  },
+  {
+    value: 'factory',
+    label: 'Manufacturing',
+    description: 'Factories and workshops — bills of materials, production orders, material issue, finished goods and quality control.',
   },
   {
     value: 'school',

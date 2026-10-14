@@ -4,6 +4,7 @@ import {
   Building2,
   Check,
   CheckCircle2,
+  Factory,
   GraduationCap,
   Landmark,
   ShieldCheck,
@@ -42,6 +43,7 @@ import type { CurrencyOption } from '@/stores/localization.api'
 const BUSINESS_TYPE_ICONS: Record<string, typeof Store> = {
   retail: Store,
   mobile_shop: Smartphone,
+  factory: Factory,
   school: GraduationCap,
 }
 
