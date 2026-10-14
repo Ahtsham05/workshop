@@ -39,6 +39,8 @@ const PurchaseSchema = new mongoose.Schema({
   // reuse the same small bill numbers (e.g. "001").
   vendorBillNumber: { type: String, trim: true },
   purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', index: true },
+  // Set when this purchase was posted by confirming a raw material receipt voucher (RMV).
+  rawMaterialReceipt: { type: mongoose.Schema.Types.ObjectId, ref: 'RawMaterialReceipt', default: null },
   items: [
     {
       product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },

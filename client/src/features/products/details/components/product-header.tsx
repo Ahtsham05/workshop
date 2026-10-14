@@ -24,6 +24,8 @@ interface Props {
   refreshing: boolean
   onRefresh: () => void
   onEdit: () => void
+  /** Where the breadcrumb leads back to (default: the Products list). */
+  parent?: { to: string; label: string }
 }
 
 /** One labelled fact in the details grid; long values truncate with the full text on hover. */
@@ -59,7 +61,7 @@ function PriceFigure({ label, value, sub, tone }: { label: string; value: string
   )
 }
 
-export function ProductHeader({ data, refreshing, onRefresh, onEdit }: Props) {
+export function ProductHeader({ data, refreshing, onRefresh, onEdit, parent }: Props) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const { hasPermission } = usePermissions()
@@ -78,7 +80,7 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit }: Props) {
 
   const goBack = () => {
     if (window.history.length > 1) router.history.back()
-    else navigate({ to: '/products' })
+    else navigate({ to: (parent?.to || '/products') as never })
   }
 
   return (
@@ -87,8 +89,8 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit }: Props) {
         <Button variant='ghost' size='icon' className='-ml-2 h-8 w-8 shrink-0' onClick={goBack} aria-label={t('Back')}>
           <ArrowLeft className='h-4 w-4' />
         </Button>
-        <Link to='/products' className='shrink-0 hover:text-foreground hover:underline'>
-          {t('Products')}
+        <Link to={(parent?.to || '/products') as never} className='shrink-0 hover:text-foreground hover:underline'>
+          {parent ? t(parent.label) : t('Products')}
         </Link>
         <span aria-hidden className='px-1'>
           /

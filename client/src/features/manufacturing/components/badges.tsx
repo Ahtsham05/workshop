@@ -1,0 +1,107 @@
+import type {
+  ProductType,
+  ProductionPriority,
+  ProductionStatus,
+  OrderType,
+} from '@/stores/manufacturing.api'
+import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/language-context'
+import { Badge } from '@/components/ui/badge'
+import {
+  PRIORITY_META,
+  PRODUCT_TYPE_META,
+  STATUS_META,
+  statusLabel,
+} from '../lib/constants'
+
+export function StatusBadge({
+  status,
+  orderType,
+  className,
+}: {
+  status: ProductionStatus
+  orderType?: OrderType
+  className?: string
+}) {
+  const { t } = useLanguage()
+  const meta = { ...STATUS_META[status], label: statusLabel(status, orderType) }
+  return (
+    <Badge
+      variant='outline'
+      className={cn('gap-1.5 font-medium', meta.className, className)}
+    >
+      <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} aria-hidden />
+      {t(meta.label)}
+    </Badge>
+  )
+}
+
+export function ProductTypeBadge({
+  type,
+}: {
+  type: ProductType | null | undefined
+}) {
+  const { t } = useLanguage()
+  if (!type) {
+    return (
+      <Badge
+        variant='outline'
+        className='text-muted-foreground border-dashed font-normal'
+      >
+        {t('Unclassified')}
+      </Badge>
+    )
+  }
+  const meta = PRODUCT_TYPE_META[type]
+  return (
+    <Badge variant='outline' className={cn('font-medium', meta.className)}>
+      {t(meta.label)}
+    </Badge>
+  )
+}
+
+export function PriorityText({ priority }: { priority: ProductionPriority }) {
+  const { t } = useLanguage()
+  const meta = PRIORITY_META[priority]
+  return (
+    <span className={cn('text-xs tracking-wide uppercase', meta.className)}>
+      {t(meta.label)}
+    </span>
+  )
+}
+
+/** Thin two-tone progress bar used across WIP / orders. */
+export function ProgressBar({
+  value,
+  tone = 'primary',
+  label,
+}: {
+  value: number
+  tone?: 'primary' | 'amber' | 'emerald'
+  /** Accessible name; defaults to "Progress". */
+  label?: string
+}) {
+  const { t } = useLanguage()
+  const pct = Math.max(0, Math.min(100, value))
+  const color =
+    tone === 'amber'
+      ? 'bg-amber-500'
+      : tone === 'emerald'
+        ? 'bg-emerald-500'
+        : 'bg-primary'
+  return (
+    <div
+      className='bg-muted h-1.5 w-full overflow-hidden rounded-full'
+      role='progressbar'
+      aria-label={label || t('Progress')}
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        className={cn('h-full rounded-full transition-all', color)}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  )
+}

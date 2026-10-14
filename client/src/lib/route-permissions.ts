@@ -153,6 +153,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/invoice', anyPermission: ['viewInvoices'] },
   { prefix: '/sales-returns', anyPermission: ['viewSalesReturns', 'viewInvoices'] },
   { prefix: '/barcode-generator', anyPermission: ['viewBarcodeGenerator'] },
+  { prefix: '/manufacturing/settings', anyPermission: ['manageManufacturingSettings'], excludeBusinessTypes: ['school', 'restaurant'] },
+  { prefix: '/manufacturing', anyPermission: ['viewManufacturing'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/price-checker', anyPermission: ['viewPriceChecker'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/price-updates', anyPermission: ['viewPriceUpdates', 'managePriceUpdates'], excludeBusinessTypes: ['school', 'restaurant'] },
   // Customer/Supplier Ledger tabs live inside the Accounting page — a role granted

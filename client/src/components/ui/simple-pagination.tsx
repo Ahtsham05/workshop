@@ -70,6 +70,7 @@ export function SimplePagination({
               size='icon'
               className='h-8 w-8 hidden sm:flex'
               onClick={() => onPageChange(1)}
+              aria-label='First page'
               disabled={currentPage === 1}
               title='First page'
             >
@@ -80,6 +81,7 @@ export function SimplePagination({
               size='icon'
               className='h-8 w-8'
               onClick={() => onPageChange(currentPage - 1)}
+              aria-label='Previous page'
               disabled={currentPage === 1}
             >
               <ChevronLeft className='h-4 w-4' />
@@ -94,6 +96,7 @@ export function SimplePagination({
               size='icon'
               className='h-8 w-8'
               onClick={() => onPageChange(currentPage + 1)}
+              aria-label='Next page'
               disabled={currentPage === totalPages}
             >
               <ChevronRight className='h-4 w-4' />
@@ -103,6 +106,7 @@ export function SimplePagination({
               size='icon'
               className='h-8 w-8 hidden sm:flex'
               onClick={() => onPageChange(totalPages)}
+              aria-label='Last page'
               disabled={currentPage === totalPages}
               title='Last page'
             >

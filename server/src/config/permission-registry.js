@@ -358,6 +358,22 @@ const PERMISSION_GROUPS = [
     label: 'Barcode Generator',
     permissions: ['viewBarcodeGenerator'],
   },
+  {
+    // Manufacturing module (routes/v1/manufacturing.route.js).
+    id: 'manufacturing',
+    label: 'Manufacturing',
+    permissions: [
+      'viewManufacturing',
+      'manageBoms',
+      'manageProductionOrders',
+      'executeProduction',
+      // Issue more material than an order still requires (otherwise blocked).
+      'overIssueMaterials',
+      // Quality inspection of reported output, and rework results.
+      'inspectProduction',
+      'manageManufacturingSettings',
+    ],
+  },
 ];
 
 const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))];
@@ -392,6 +408,7 @@ const PERMISSION_TAB_GROUPS = {
     'insights',
     'purchase_suggestions',
     'barcode',
+    'manufacturing',
   ],
   mobile_shop: [
     'wallet',

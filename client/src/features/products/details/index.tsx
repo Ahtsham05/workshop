@@ -11,6 +11,7 @@ import { useLanguage } from '@/context/language-context'
 import type { AppDispatch } from '@/stores/store'
 import { useGetProductQuery } from '@/stores/product.api'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
+import { manufacturingApi } from '@/stores/manufacturing.api'
 import { productAnalyticsApi, useGetProductAnalyticsQuery } from '@/stores/productAnalytics.api'
 import { UsersActionDialog } from '../components/users-action-dialog'
 import { useAnalyticsPeriod } from '../analytics/lib/analytics-period'
@@ -26,6 +27,8 @@ import { ProductPriceHistoryTab } from './components/product-price-history-tab'
 import { ProductCustomersTab } from './components/product-customers-tab'
 import { ProductSuppliersTab } from './components/product-suppliers-tab'
 import { ProductVariantsTab } from './components/product-variants-tab'
+import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
+import { ProductManufacturingPanel } from '@/features/manufacturing/components/product-manufacturing-panel'
 
 function LoadingState() {
   return (
@@ -46,11 +49,25 @@ function LoadingState() {
  * /products/:productId — one product's performance: KPIs vs the previous period, insights,
  * sales/stock/price charts, and its full history (activity, customers, suppliers, variants).
  */
-export default function ProductDetailsPage({ productId }: { productId: string }) {
+export default function ProductDetailsPage({
+  productId,
+  initialTab,
+  from,
+}: {
+  productId: string
+  initialTab?: string
+  from?: 'manufacturing'
+}) {
   const { t } = useLanguage()
+  // Manufacturing business type + rollout list + the user's role (useManufacturingAccess).
+  const { enabled: showManufacturing } = useManufacturingAccess()
+  // Opened from Manufacturing → Products: the manufacturing side leads the page.
+  const fromManufacturing = from === 'manufacturing' && showManufacturing
   const dispatch = useDispatch<AppDispatch>()
   const { preset, range, setPreset, setCustomRange } = useAnalyticsPeriod()
-  const [tab, setTab] = useState('activity')
+  const [tab, setTab] = useState(
+    initialTab && !(fromManufacturing && initialTab === 'manufacturing') ? initialTab : 'activity'
+  )
   const [editOpen, setEditOpen] = useState(false)
 
   const { currentData, data, isFetching, isError, error, refetch } = useGetProductAnalyticsQuery({ productId, ...range })
@@ -100,7 +117,21 @@ export default function ProductDetailsPage({ productId }: { productId: string })
 
   return (
     <div className='space-y-4 pb-8'>
-      <ProductHeader data={analytics} refreshing={isFetching} onRefresh={() => refetch()} onEdit={() => setEditOpen(true)} />
+      <ProductHeader
+        data={analytics}
+        refreshing={isFetching}
+        onRefresh={() => refetch()}
+        onEdit={() => setEditOpen(true)}
+        parent={fromManufacturing ? { to: '/manufacturing/products', label: 'Manufacturing products' } : undefined}
+      />
+
+      {fromManufacturing ? (
+        <section aria-label={t('Manufacturing')} className='space-y-2'>
+          <h2 className='text-base font-semibold'>{t('Manufacturing')}</h2>
+          <ProductManufacturingPanel productId={productId} />
+          <h2 className='pt-2 text-base font-semibold'>{t('Sales & stock')}</h2>
+        </section>
+      ) : null}
 
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <AnalyticsPeriodPicker preset={preset} range={range} onPresetChange={setPreset} onCustomRange={setCustomRange} />
@@ -133,6 +164,9 @@ export default function ProductDetailsPage({ productId }: { productId: string })
             <div className='overflow-x-auto'>
               <TabsList>
                 <TabsTrigger value='activity'>{t('Activity')}</TabsTrigger>
+                {showManufacturing && !fromManufacturing ? (
+                  <TabsTrigger value='manufacturing'>{t('Manufacturing')}</TabsTrigger>
+                ) : null}
                 <TabsTrigger value='prices'>{t('Price history')}</TabsTrigger>
                 <TabsTrigger value='customers'>
                   {t('Customers')}
@@ -154,6 +188,11 @@ export default function ProductDetailsPage({ productId }: { productId: string })
                 ) : null}
               </TabsList>
             </div>
+            {showManufacturing && !fromManufacturing ? (
+              <TabsContent value='manufacturing'>
+                <ProductManufacturingPanel productId={productId} />
+              </TabsContent>
+            ) : null}
             <TabsContent value='activity'>
               <ProductActivityTab productId={productId} range={range} />
             </TabsContent>
@@ -181,7 +220,10 @@ export default function ProductDetailsPage({ productId }: { productId: string })
           open={editOpen}
           onOpenChange={setEditOpen}
           currentRow={productForEdit}
-          setFetch={handleSaved}
+          setFetch={() => {
+            handleSaved()
+            dispatch(manufacturingApi.util.invalidateTags(['MfgProduct']))
+          }}
         />
       ) : null}
     </div>

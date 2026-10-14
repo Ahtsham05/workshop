@@ -4,6 +4,7 @@ import { sidebarData } from '@/components/layout/data/sidebar-data'
 import type { NavGroup } from '@/components/layout/types'
 import { usePermissions } from '@/context/permission-context'
 import { useFeatureAccess } from '@/hooks/use-feature-access'
+import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
 import { normalizeBusinessType } from '@/lib/business-types'
 import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -68,6 +69,7 @@ export function useFilteredNavGroups(): NavGroup[] {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const { data: org } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const userBusinessType = normalizeBusinessType(org?.businessType || user?.businessType)
+  const { available: manufacturingOn } = useManufacturingAccess()
   const { canAccess } = useFeatureAccess()
   const isPlatformAdmin = user?.systemRole === 'system_admin'
   const schoolRole = resolveSchoolRole(user)
@@ -106,6 +108,10 @@ export function useFilteredNavGroups(): NavGroup[] {
         if (!item.businessTypes.includes(userBusinessType)) {
           return false
         }
+      }
+
+      if (item.module === 'manufacturing' && !manufacturingOn) {
+        return false
       }
 
       if (item.excludeBusinessTypes && item.excludeBusinessTypes.length > 0) {
@@ -203,5 +209,6 @@ export function useFilteredNavGroups(): NavGroup[] {
     hasExplicitPermission,
     canAccess,
     org?.businessType,
+    manufacturingOn,
   ])
 }

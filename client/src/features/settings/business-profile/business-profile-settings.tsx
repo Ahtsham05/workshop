@@ -18,6 +18,11 @@ import {
   useUpdateOrganizationMutation,
 } from '@/stores/organization.api'
 import { useGetCountriesQuery, useLazyGetCountryDefaultsQuery } from '@/stores/localization.api'
+import { manufacturingApi } from '@/stores/manufacturing.api'
+import type { AppDispatch } from '@/stores/store'
+import { useDispatch } from 'react-redux'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { BUSINESS_TYPE_OPTIONS, normalizeBusinessType } from '@/lib/business-types'
 
 const formSchema = z.object({
   name: z.string().min(2, 'Business name must be at least 2 characters'),
@@ -27,6 +32,7 @@ const formSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   countryCode: z.string().optional(),
+  businessType: z.string().optional(),
   taxNumber: z.string().optional(),
   website: z.string().optional(),
   description: z.string().optional(),
@@ -40,6 +46,10 @@ export default function BusinessProfileSettings() {
   const [fetchCountryDefaults, { data: countryDefaults }] = useLazyGetCountryDefaultsQuery()
   const [updateOrganization, { isLoading: saving }] = useUpdateOrganizationMutation()
   const [logoFile, setLogoFile] = useState<File | null>(null)
+  const dispatch = useDispatch<AppDispatch>()
+  // Changing the business type changes which modules the whole organization sees, so a
+  // change is confirmed before it's saved.
+  const [pendingSave, setPendingSave] = useState<FormValues | null>(null)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -51,6 +61,7 @@ export default function BusinessProfileSettings() {
       address: '',
       city: '',
       countryCode: '',
+      businessType: '',
       taxNumber: '',
       website: '',
       description: '',
@@ -67,6 +78,7 @@ export default function BusinessProfileSettings() {
       address: org.address || '',
       city: org.city || '',
       countryCode: org.countryCode || '',
+      businessType: normalizeBusinessType(org.businessType),
       taxNumber: org.taxNumber || '',
       website: org.website || '',
       description: org.description || '',
@@ -86,7 +98,21 @@ export default function BusinessProfileSettings() {
   const countryOptions = (countries || []).map((c) => ({ value: c.code, label: c.name }))
   const selectedCountryName = countries?.find((c) => c.code === countryCode)?.name
 
+  const currentType = normalizeBusinessType(org?.businessType)
+  const businessType = form.watch('businessType')
+  const typeChanged = !!businessType && businessType !== currentType
+  const typeLabel = (v?: string) => BUSINESS_TYPE_OPTIONS.find((o) => o.value === v)?.label || v || '—'
+
   const onSubmit = async (values: FormValues) => {
+    if (!org) return
+    if (values.businessType && values.businessType !== currentType && !pendingSave) {
+      setPendingSave(values)
+      return
+    }
+    await save(values)
+  }
+
+  const save = async (values: FormValues) => {
     if (!org) return
     try {
       await updateOrganization({
@@ -99,6 +125,8 @@ export default function BusinessProfileSettings() {
       }).unwrap()
       toast.success('Business profile updated')
       setLogoFile(null)
+      // The business type decides whether Manufacturing is available.
+      dispatch(manufacturingApi.util.invalidateTags(['MfgAccess']))
     } catch {
       toast.error('Failed to update business profile')
     }
@@ -152,6 +180,25 @@ export default function BusinessProfileSettings() {
                 )}
               />
             </div>
+            <FormItem>
+              <FormLabel>Business type</FormLabel>
+              <SearchableSelect
+                options={BUSINESS_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                value={businessType || ''}
+                onValueChange={(value) => form.setValue('businessType', value, { shouldDirty: true })}
+                placeholder='Select business type'
+                searchPlaceholder='Search business types...'
+                data-enter-field='businessType'
+                className='sm:max-w-sm'
+              />
+              <p className={typeChanged ? 'text-xs text-amber-700 dark:text-amber-400' : 'text-xs text-muted-foreground'}>
+                {typeChanged
+                  ? `Changing from ${typeLabel(currentType)} to ${typeLabel(businessType)} changes which modules everyone in this business sees${
+                      businessType === 'factory' ? ' — Manufacturing becomes available' : ''
+                    }${currentType === 'mobile_shop' ? ', and the mobile-shop tools are hidden' : ''}. Your data stays as it is.`
+                  : 'Decides which modules you see — for example Manufacturing for a manufacturing business, mobile-shop tools for a phone dealer.'}
+              </p>
+            </FormItem>
             <div className='space-y-2'>
               <FormLabel>Logo</FormLabel>
               <div className='flex items-center gap-3'>
@@ -301,6 +348,19 @@ export default function BusinessProfileSettings() {
           </div>
         </form>
       </Form>
+      <ConfirmDialog
+        open={!!pendingSave}
+        onOpenChange={(open) => !open && setPendingSave(null)}
+        title='Change the business type?'
+        desc={`From ${typeLabel(currentType)} to ${typeLabel(pendingSave?.businessType)}. The modules shown to everyone in this business change straight away; no data is deleted, and you can change it back at any time.`}
+        confirmText='Change and save'
+        isLoading={saving}
+        handleConfirm={async () => {
+          if (!pendingSave) return
+          await save(pendingSave)
+          setPendingSave(null)
+        }}
+      />
     </ContentSection>
   )
 }

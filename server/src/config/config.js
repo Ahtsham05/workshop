@@ -44,6 +44,12 @@ const envVarsSchema = Joi.object()
     SMTP_USERNAME: Joi.string().description('username for email server'),
     SMTP_PASSWORD: Joi.string().description('password for email server'),
     EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
+    MANUFACTURING_TESTER_EMAILS: Joi.string()
+      .allow('')
+      .description('comma-separated emails that see Manufacturing in any business type (development/testing)'),
+    MANUFACTURING_ALLOWED_EMAILS: Joi.string()
+      .allow('')
+      .description('comma-separated emails allowed to use Manufacturing (empty = every manufacturing organization)'),
     CLOUDINARY_CLOUD_NAME: Joi.string().description('Cloudinary cloud name'),
     CLOUDINARY_API_KEY: Joi.string().description('Cloudinary API key'),
     CLOUDINARY_API_SECRET: Joi.string().description('Cloudinary API secret'),
@@ -119,6 +125,19 @@ module.exports = {
       },
     },
     from: envVars.EMAIL_FROM,
+  },
+  manufacturing: {
+    // Rollout gate: when set, only these logins (in manufacturing organizations) see the
+    // module. Empty/unset = available to every organization whose business type is factory.
+    // Developers/testers: see the module whatever the organization's business type.
+    testerEmails: (envVars.MANUFACTURING_TESTER_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+    allowedEmails: (envVars.MANUFACTURING_ALLOWED_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
   },
   billing: {
     polar: {

@@ -449,7 +449,52 @@ const syncPurchaseCashAndWalletEntries = async (purchase, previous) => {
  * @param {Object} purchaseBody
  * @returns {Promise<Purchase>}
  */
-const createPurchase = async (purchaseBody) => {
+/**
+ * Applies a voucher's own per-line tax (e.g. the raw material receipt, where tax is typed
+ * per line from the supplier's bill) instead of the tax rules — opt-in via
+ * `purchaseBody.manualTax`; every other caller keeps the rule-based tax.
+ */
+const applyManualPurchaseTax = (taxAndCurrency, purchaseBody) => {
+  const decimalPlaces = Money.getCurrencyMeta(taxAndCurrency.currency)?.decimalPlaces ?? Money.DEFAULT_DECIMAL_PLACES;
+  const items = taxAndCurrency.items.map((item, index) => {
+    const taxAmount = Number(purchaseBody.items[index]?.taxAmount || 0);
+    return { ...item, taxAmount, taxableAmount: taxAmount ? Number(item.total || 0) : 0 };
+  });
+  const tax = items.reduce((sum, item) => Money.addMoney(sum, item.taxAmount, decimalPlaces), 0);
+  const totalAmount = Money.addMoney(Math.max(0, Number(purchaseBody.totalAmount || 0)), tax, decimalPlaces);
+  const baseDecimalPlaces = taxAndCurrency.baseCurrency
+    ? Money.getCurrencyMeta(taxAndCurrency.baseCurrency)?.decimalPlaces ?? Money.DEFAULT_DECIMAL_PLACES
+    : Money.DEFAULT_DECIMAL_PLACES;
+  return {
+    ...taxAndCurrency,
+    items,
+    tax,
+    taxLines: tax
+      ? [
+          {
+            taxCategoryName: 'Input tax (entered on the voucher)',
+            taxableAmount: items.reduce((sum, item) => sum + (item.taxAmount ? Number(item.total || 0) : 0), 0),
+            taxAmount: tax,
+          },
+        ]
+      : [],
+    totalAmount,
+    baseCurrencyTotal: taxAndCurrency.baseCurrency
+      ? Money.convertMoney(totalAmount, taxAndCurrency.exchangeRate || 1, baseDecimalPlaces)
+      : totalAmount,
+  };
+};
+
+/**
+ * @param {object} purchaseBody
+ * @param {object} [options]
+ * @param {ClientSession} [options.session] run inside the caller's transaction (the caller
+ *   commits); the stock-ledger mirror then joins that transaction too.
+ * @param {boolean} [options.deferPostCommit] skip cash book / accounts / supplier-ledger
+ *   posting — the caller runs `runPurchasePostCommit(purchase)` after its own commit.
+ */
+const createPurchase = async (purchaseBody, options = {}) => {
+  const { session: outerSession, deferPostCommit = false } = options;
   // Independent pre-checks — the duplicate-bill guard doesn't need the business type
   // (and vice versa) — so run them concurrently instead of one after another.
   const [, businessType] = await Promise.all([
@@ -461,7 +506,7 @@ const createPurchase = async (purchaseBody) => {
     getOrganizationBusinessType(purchaseBody.organizationId),
   ]);
 
-  const taxAndCurrency = await resolvePurchaseTaxAndCurrency({
+  const resolvedTax = await resolvePurchaseTaxAndCurrency({
     organizationId: purchaseBody.organizationId,
     purchaseDate: purchaseBody.purchaseDate,
     items: purchaseBody.items || [],
@@ -470,6 +515,7 @@ const createPurchase = async (purchaseBody) => {
     baseTotalAmount: purchaseBody.totalAmount,
     previousTax: 0,
   });
+  const taxAndCurrency = purchaseBody.manualTax ? applyManualPurchaseTax(resolvedTax, purchaseBody) : resolvedTax;
 
   const normalizedBody = {
     ...purchaseBody,
@@ -502,156 +548,172 @@ const createPurchase = async (purchaseBody) => {
   // the error response tells the user. Ledger/cashbook/accounts posting below stays
   // outside the transaction, same as before — those have always been best-effort and
   // independently fault-tolerant, not part of the purchase's own data integrity.
-  const session = await mongoose.startSession();
+  const ownSession = !outerSession;
+  const session = outerSession || (await mongoose.startSession());
   let purchase;
-  try {
-    await session.withTransaction(async () => {
-      const created = await Purchase.create([normalizedBody], { session });
-      purchase = created[0];
+  const work = async () => {
+    const created = await Purchase.create([normalizedBody], { session });
+    purchase = created[0];
 
-      const supplierDoc = purchase.supplier
-        ? await Supplier.findById(purchase.supplier).select('name').session(session)
-        : null;
-      const purchaseSubtotal = resolvePurchaseSubtotal(purchase.items);
-      const purchaseDiscount = Number(purchase.discount || 0);
+    const supplierDoc = purchase.supplier
+      ? await Supplier.findById(purchase.supplier).select('name').session(session)
+      : null;
+    const purchaseSubtotal = resolvePurchaseSubtotal(purchase.items);
+    const purchaseDiscount = Number(purchase.discount || 0);
 
-      // Batch-fetch every product/variant the items reference up front instead of one
-      // round trip per item (same fix already applied to invoice.service.js's createInvoice
-      // item loop). Sequential, not Promise.all, since a ClientSession can't run concurrent
-      // operations. Variants are read-only here so a shared Map is safe; products are
-      // mutated + saved per item below, and reusing the same fetched document across
-      // repeated saves (when two lines reference the same product) applies the exact same
-      // increments in the exact same order as separate per-item fetches would have.
-      const productIds = [...new Set(purchase.items.filter((i) => !i.variantId && i.product).map((i) => String(i.product)))];
-      const variantIds = [...new Set(purchase.items.filter((i) => i.variantId).map((i) => String(i.variantId)))];
-      const productsList = productIds.length ? await Product.find({ _id: { $in: productIds } }).session(session) : [];
-      const variantsList = variantIds.length ? await ProductVariant.find({ _id: { $in: variantIds } }).session(session) : [];
-      const productById = new Map(productsList.map((p) => [String(p._id), p]));
-      const variantById = new Map(variantsList.map((v) => [String(v._id), v]));
+    // Batch-fetch every product/variant the items reference up front instead of one
+    // round trip per item (same fix already applied to invoice.service.js's createInvoice
+    // item loop). Sequential, not Promise.all, since a ClientSession can't run concurrent
+    // operations. Variants are read-only here so a shared Map is safe; products are
+    // mutated + saved per item below, and reusing the same fetched document across
+    // repeated saves (when two lines reference the same product) applies the exact same
+    // increments in the exact same order as separate per-item fetches would have.
+    const productIds = [...new Set(purchase.items.filter((i) => !i.variantId && i.product).map((i) => String(i.product)))];
+    const variantIds = [...new Set(purchase.items.filter((i) => i.variantId).map((i) => String(i.variantId)))];
+    const productsList = productIds.length ? await Product.find({ _id: { $in: productIds } }).session(session) : [];
+    const variantsList = variantIds.length ? await ProductVariant.find({ _id: { $in: variantIds } }).session(session) : [];
+    const productById = new Map(productsList.map((p) => [String(p._id), p]));
+    const variantById = new Map(variantsList.map((v) => [String(v._id), v]));
 
-      // Now, update the stock quantity of each product in the purchase
-      for (const item of purchase.items) {
-        const netUnitCost = resolveItemNetUnitCost(item, purchaseSubtotal, purchaseDiscount);
-        // Real-variant line item — bypasses the legacy Product.stockQuantity path entirely
-        // (that field is a fallback-only display value once a product hasVariants; it must
-        // never be mutated by variant-specific purchasing). Batch/expiry-tracked variants
-        // create a Batch (the new primary source of batches, see
-        // docs/architecture/universal-product-migration.md); other real variants get a
-        // plain inventory increment via inventory.service.js.
-        if (item.variantId) {
-          const variant = variantById.get(String(item.variantId));
-          if (variant) {
-            const quantityDelta = Number(item.quantity || 0);
-            item.stockQuantity = quantityDelta;
-            let batchId = null;
+    // Now, update the stock quantity of each product in the purchase
+    for (const item of purchase.items) {
+      const netUnitCost = resolveItemNetUnitCost(item, purchaseSubtotal, purchaseDiscount);
+      // Real-variant line item — bypasses the legacy Product.stockQuantity path entirely
+      // (that field is a fallback-only display value once a product hasVariants; it must
+      // never be mutated by variant-specific purchasing). Batch/expiry-tracked variants
+      // create a Batch (the new primary source of batches, see
+      // docs/architecture/universal-product-migration.md); other real variants get a
+      // plain inventory increment via inventory.service.js.
+      if (item.variantId) {
+        const variant = variantById.get(String(item.variantId));
+        if (variant) {
+          const quantityDelta = Number(item.quantity || 0);
+          item.stockQuantity = quantityDelta;
+          let batchId = null;
 
-            if ((variant.trackBatch || variant.trackExpiry) && item.batchNumber) {
-              const batch = await batchService.createBatch(variant._id, {
-                batchNumber: item.batchNumber,
-                quantity: quantityDelta,
-                costPerUnit: netUnitCost,
-                sellingPrice: item.sellingPriceAtPurchase,
-                expiryDate: item.expiryDate,
-                purchaseId: purchase._id,
-                createdBy: purchase.createdBy,
-                session,
-              });
-              batchId = batch._id;
-              await applyInvestorRuleToBatch({ item, batch, variant, purchase, session });
-            } else {
-              await inventoryService.adjustInventory(variant._id, {
-                quantityDelta,
-                reason: 'Purchase',
-                userId: purchase.createdBy,
-                session,
-              });
-            }
-
-            if (item.imeis && item.imeis.length > 0) {
-              await syncVariantSerials({
-                variant,
-                imeis: item.imeis,
-                batchId,
-                purchase,
-                netUnitCost,
-                supplierId: purchase.supplier,
-                supplierName: supplierDoc?.name,
-                session,
-              });
-            }
-          }
-          continue;
-        }
-
-        const product = productById.get(String(item.product));
-
-        if (product) {
-          const conversion = toStockQuantity({ product, item, businessType });
-          item.unit = conversion.lineUnit;
-          item.conversionFactor = conversion.conversionFactor;
-          item.stockQuantity = conversion.stockQuantity;
-
-          // Increase stock in product stock unit (typically pcs)
-          product.stockQuantity += conversion.stockQuantity;
-
-          // Update the product's cost price to the latest purchase price — net of any
-          // item/invoice discount, since that's what was actually paid per unit.
-          if (item.priceAtPurchase > 0) {
-            product.cost = netUnitCost;
-          }
-
-          // Update the product's selling price if provided
-          if (item.sellingPriceAtPurchase > 0) {
-            product.price = item.sellingPriceAtPurchase;
-          }
-
-          // Save the updated product
-          await product.save({ session });
-
-          await inventorySyncService.recordStockChange({
-            organizationId: purchase.organizationId,
-            productId: product._id,
-            quantityDelta: conversion.stockQuantity,
-            type: 'purchase',
-            refType: 'Purchase',
-            refId: purchase._id,
-            unitCost: netUnitCost,
-            createdBy: purchase.createdBy,
-          });
-
-          // Track per-unit IMEI/serial numbers for products that require it (mobile phones / serialized goods)
-          if ((product.trackImei || product.trackSerial) && item.imeis && item.imeis.length > 0) {
-            await imeiService.syncImeisForPurchaseItem({
+          if ((variant.trackBatch || variant.trackExpiry) && item.batchNumber) {
+            const batch = await batchService.createBatch(variant._id, {
+              batchNumber: item.batchNumber,
+              quantity: quantityDelta,
+              costPerUnit: netUnitCost,
+              sellingPrice: item.sellingPriceAtPurchase,
+              expiryDate: item.expiryDate,
               purchaseId: purchase._id,
-              productId: product._id,
-              productName: product.name,
-              imeis: item.imeis,
-              type: product.trackSerial ? 'serial' : 'imei',
-              purchasePrice: netUnitCost,
-              supplierId: purchase.supplier || null,
-              supplierName: supplierDoc?.name || '',
-              purchaseDate: purchase.purchaseDate,
-              organizationId: purchase.organizationId,
-              branchId: purchase.branchId,
               createdBy: purchase.createdBy,
+              session,
+            });
+            batchId = batch._id;
+            await applyInvestorRuleToBatch({ item, batch, variant, purchase, session });
+          } else {
+            await inventoryService.adjustInventory(variant._id, {
+              quantityDelta,
+              reason: 'Purchase',
+              userId: purchase.createdBy,
+              session,
+            });
+          }
+
+          if (item.imeis && item.imeis.length > 0) {
+            await syncVariantSerials({
+              variant,
+              imeis: item.imeis,
+              batchId,
+              purchase,
+              netUnitCost,
+              supplierId: purchase.supplier,
+              supplierName: supplierDoc?.name,
               session,
             });
           }
         }
+        continue;
       }
 
-      // Calculate balance if paidAmount is provided
-      if (purchase.paidAmount !== undefined) {
-        purchase.balance = resolvePurchaseInvoiceBalance(purchase.totalAmount, purchase.paidAmount);
-      }
+      const product = productById.get(String(item.product));
 
-      // Save the purchase with balance calculated
-      await purchase.save({ session });
-    });
+      if (product) {
+        const conversion = toStockQuantity({ product, item, businessType });
+        item.unit = conversion.lineUnit;
+        item.conversionFactor = conversion.conversionFactor;
+        item.stockQuantity = conversion.stockQuantity;
+
+        // Increase stock in product stock unit (typically pcs)
+        product.stockQuantity += conversion.stockQuantity;
+
+        // Update the product's cost price to the latest purchase price — net of any
+        // item/invoice discount, since that's what was actually paid per unit.
+        if (item.priceAtPurchase > 0) {
+          product.cost = netUnitCost;
+        }
+
+        // Update the product's selling price if provided
+        if (item.sellingPriceAtPurchase > 0) {
+          product.price = item.sellingPriceAtPurchase;
+        }
+
+        // Save the updated product
+        await product.save({ session });
+
+        await inventorySyncService.recordStockChange({
+          organizationId: purchase.organizationId,
+          productId: product._id,
+          quantityDelta: conversion.stockQuantity,
+          type: 'purchase',
+          refType: 'Purchase',
+          refId: purchase._id,
+          unitCost: netUnitCost,
+          createdBy: purchase.createdBy,
+          // Joins the caller's transaction when there is one (see options.session).
+          session: outerSession || undefined,
+        });
+
+        // Track per-unit IMEI/serial numbers for products that require it (mobile phones / serialized goods)
+        if ((product.trackImei || product.trackSerial) && item.imeis && item.imeis.length > 0) {
+          await imeiService.syncImeisForPurchaseItem({
+            purchaseId: purchase._id,
+            productId: product._id,
+            productName: product.name,
+            imeis: item.imeis,
+            type: product.trackSerial ? 'serial' : 'imei',
+            purchasePrice: netUnitCost,
+            supplierId: purchase.supplier || null,
+            supplierName: supplierDoc?.name || '',
+            purchaseDate: purchase.purchaseDate,
+            organizationId: purchase.organizationId,
+            branchId: purchase.branchId,
+            createdBy: purchase.createdBy,
+            session,
+          });
+        }
+      }
+    }
+
+    // Calculate balance if paidAmount is provided
+    if (purchase.paidAmount !== undefined) {
+      purchase.balance = resolvePurchaseInvoiceBalance(purchase.totalAmount, purchase.paidAmount);
+    }
+
+    // Save the purchase with balance calculated
+    await purchase.save({ session });
+  };
+  try {
+    if (ownSession) await session.withTransaction(work);
+    else await work();
   } finally {
-    await session.endSession();
+    if (ownSession) await session.endSession();
   }
 
+  if (deferPostCommit) return purchase;
+  // eslint-disable-next-line no-use-before-define
+  await runPurchasePostCommit(purchase);
+  return purchase;
+};
+
+/**
+ * What follows a committed purchase: cash book / wallet entries, the accounts journal and
+ * the supplier ledger — best-effort and re-postable, as they've always been.
+ */
+const runPurchasePostCommit = async (purchase) => {
   await syncPurchaseCashAndWalletEntries(purchase, null);
   postPurchaseToAccounts(purchase);
 
@@ -2202,6 +2264,7 @@ const deletePurchaseComment = async (purchaseId, commentId) => {
 
 module.exports = {
   createPurchase,
+  runPurchasePostCommit,
   generateNextPurchaseInvoiceNumber,
   previewNextPurchaseInvoiceNumber,
   queryPurchases,

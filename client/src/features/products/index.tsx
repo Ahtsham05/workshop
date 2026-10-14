@@ -45,9 +45,13 @@ import { SyncBranchesDialog } from './components/sync-branches-dialog'
 import { useSyncTargetBranches } from './hooks/use-branch-sync'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { BarChart3, LayoutList, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { BarChart3, Factory, LayoutList, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { PerformanceView } from './analytics/performance-view'
+import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
+import { manufacturingApi } from '@/stores/manufacturing.api'
+import ManufacturingProducts from '@/features/manufacturing/pages/products'
 import { isAllRows } from '@/lib/page-size'
+import { cn } from '@/lib/utils'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 
 const SEARCH_DEBOUNCE_MS = 400
@@ -162,12 +166,39 @@ export default function Products() {
   const { t, language } = useLanguage()
   const { view } = useSearch({ from: '/_authenticated/products/' })
   const navigate = useNavigate({ from: '/products' })
-  const isPerformanceView = view === 'performance'
+  // Manufacturing businesses also get the Manufacturing view (type chips, BOM and
+  // procurement — the same list as Manufacturing → Products) and land on it by default.
+  // A tester login in another kind of business gets the tab but keeps Catalog first.
+  const { enabled: manufacturingOn, tester: manufacturingTester } = useManufacturingAccess()
+  const defaultView = manufacturingOn && !manufacturingTester ? 'manufacturing' : 'catalog'
+  const activeView =
+    view === 'performance' || view === 'catalog'
+      ? view
+      : view === 'manufacturing' && manufacturingOn
+        ? 'manufacturing'
+        : defaultView
+  const isPerformanceView = activeView === 'performance'
+  const isManufacturingView = activeView === 'manufacturing'
+  const isCatalogView = activeView === 'catalog'
   const setView = useCallback(
-    (next: string) => navigate({ search: (prev) => ({ ...prev, view: next === 'performance' ? 'performance' : undefined }) }),
-    [navigate]
+    (next: string) =>
+      navigate({
+        search: (prev) => ({
+          ...prev,
+          view: next === defaultView ? undefined : (next as 'catalog' | 'performance' | 'manufacturing'),
+        }),
+      }),
+    [navigate, defaultView]
   )
   const formatCurrency = useFormatMoney()
+  // A product saved from this page's own dialogs (Add Product, edit, import…) also
+  // refreshes the Manufacturing view's list, counts and totals.
+  const mfgRefreshRef = useRef(fetch)
+  useEffect(() => {
+    if (mfgRefreshRef.current === fetch) return
+    mfgRefreshRef.current = fetch
+    if (manufacturingOn) dispatch(manufacturingApi.util.invalidateTags(['MfgProduct', 'MfgDashboard']))
+  }, [fetch, manufacturingOn, dispatch])
   // The user's other branches — empty for a one-branch shop, which hides every sync control.
   const { targets: syncTargets } = useSyncTargetBranches()
   const addedTodayCount = productStats?.addedTodayCount ?? 0
@@ -672,7 +703,7 @@ export default function Products() {
     }
   }, []);
 
-  if (showLowStockDetails && !isPerformanceView) {
+  if (showLowStockDetails && isCatalogView) {
     return (
       <ProductsProvider>
         <div dir={language === 'ur' ? 'ltr' : 'ltr'}>
@@ -698,24 +729,35 @@ export default function Products() {
               <div>
                 <h2 className='text-2xl font-bold tracking-tight'>{t('products_list')}</h2>
                 <p className='text-muted-foreground'>
-                  {isPerformanceView ? t('How every product is selling — rankings, profit and stock movement') : t('manage_products')}
+                  {isPerformanceView
+                    ? t('How every product is selling — rankings, profit and stock movement')
+                    : isManufacturingView
+                      ? t('Raw materials, components, packaging and finished goods — with their BOMs and procurement.')
+                      : t('manage_products')}
                 </p>
               </div>
-              <Tabs value={isPerformanceView ? 'performance' : 'catalog'} onValueChange={setView}>
-                <TabsList>
-                  <TabsTrigger value='catalog' className='gap-1.5 px-3'>
-                    <LayoutList className='h-4 w-4' />
+              <Tabs value={activeView} onValueChange={setView}>
+                {/* Three tabs don't fit a phone with icons — drop them and share the width. */}
+                <TabsList className={cn(manufacturingOn && 'max-sm:w-full')}>
+                  <TabsTrigger value='catalog' className={cn('gap-1.5 px-3', manufacturingOn && 'max-sm:flex-1 max-sm:px-2')}>
+                    <LayoutList className={cn('h-4 w-4', manufacturingOn && 'max-sm:hidden')} />
                     {t('Catalog')}
                   </TabsTrigger>
-                  <TabsTrigger value='performance' className='gap-1.5 px-3'>
-                    <BarChart3 className='h-4 w-4' />
+                  {manufacturingOn && (
+                    <TabsTrigger value='manufacturing' className='gap-1.5 px-3 max-sm:flex-1 max-sm:px-2'>
+                      <Factory className='h-4 w-4 max-sm:hidden' />
+                      {t('Manufacturing')}
+                    </TabsTrigger>
+                  )}
+                  <TabsTrigger value='performance' className={cn('gap-1.5 px-3', manufacturingOn && 'max-sm:flex-1 max-sm:px-2')}>
+                    <BarChart3 className={cn('h-4 w-4', manufacturingOn && 'max-sm:hidden')} />
                     {t('Performance')}
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
             <div className='flex flex-wrap gap-2 max-sm:w-full'>
-              {!isPerformanceView && selectedProducts.length > 0 && !inlineEditMode && (
+              {isCatalogView && selectedProducts.length > 0 && !inlineEditMode && (
                 <>
                   <Button
                     variant="outline"
@@ -761,7 +803,7 @@ export default function Products() {
                   </Can>
                 </>
               )}
-              {!isPerformanceView && inlineEditMode && (
+              {isCatalogView && inlineEditMode && (
                 <>
                   <div className='flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 max-sm:w-full max-sm:flex-wrap'>
                     <Select value={bulkPercentOp} onValueChange={(v) => setBulkPercentOp(v as typeof bulkPercentOp)}>
@@ -802,7 +844,7 @@ export default function Products() {
                   </Button>
                 </>
               )}
-              {!isPerformanceView && syncTargets.length > 0 && (
+              {isCatalogView && syncTargets.length > 0 && (
                 <Can permission='createProducts'>
                   <Button
                     variant='outline'
@@ -824,6 +866,8 @@ export default function Products() {
 
           {isPerformanceView ? (
             <PerformanceView />
+          ) : isManufacturingView ? (
+            <ManufacturingProducts embedded />
           ) : (
           <>
           {/* Stock alerts (stat cards + out-of-stock banner) — collapsible, remembered across visits. */}
