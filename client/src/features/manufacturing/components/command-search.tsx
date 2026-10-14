@@ -1,17 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  ClipboardList,
-  Component,
-  FileStack,
-  Layers,
-  Plus,
-  ScanLine,
-} from 'lucide-react'
+import { ClipboardList, FileStack, Plus } from 'lucide-react'
 import {
   useGetBomsQuery,
   useGetProductionOrdersQuery,
-  useTraceLookupQuery,
 } from '@/stores/manufacturing.api'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -30,7 +22,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { orderPath, statusLabel } from '../lib/constants'
+import { orderPath } from '../lib/constants'
 import { NAV_GROUPS } from '../lib/navigation'
 import { StatusBadge } from './badges'
 
@@ -55,14 +47,13 @@ export function CommandSearch({
 
   const { data: orders, isFetching: ordersLoading } =
     useGetProductionOrdersQuery(
-      { search: q, limit: 6 },
+      { search: q, limit: 6, orderType: 'production' },
       { skip: !open || !searching }
     )
   const { data: boms } = useGetBomsQuery(
     { search: q, limit: 5 },
     { skip: !open || !searching }
   )
-  const { data: hits } = useTraceLookupQuery(q, { skip: !open || !searching })
 
   const go = (to: string, search?: Record<string, unknown>) => {
     onOpenChange(false)
@@ -92,12 +83,6 @@ export function CommandSearch({
       icon: ClipboardList,
       run: () => go('/manufacturing/production-orders', { new: true }),
     },
-    canCreateOrders && {
-      key: 'asm',
-      label: t('New assembly order'),
-      icon: Component,
-      run: () => go('/manufacturing/assembly-orders', { new: true }),
-    },
     canCreateBoms && {
       key: 'bom',
       label: t('New bill of materials'),
@@ -113,15 +98,13 @@ export function CommandSearch({
   const createMatches = creates.filter(
     (c) => !needle || c.label.toLowerCase().includes(needle)
   )
-  const traceHits = (hits || []).filter((h) => h.kind !== 'order')
   const nothing =
     searching &&
     !ordersLoading &&
     !sections.length &&
     !createMatches.length &&
     !orders?.results.length &&
-    !boms?.results.length &&
-    !traceHits.length
+    !boms?.results.length
 
   return (
     <Dialog
@@ -161,11 +144,7 @@ export function CommandSearch({
                     onSelect={() => go(orderPath(o))}
                     className='gap-3'
                   >
-                    {o.orderType === 'assembly' ? (
-                      <Component className='text-muted-foreground' />
-                    ) : (
-                      <ClipboardList className='text-muted-foreground' />
-                    )}
+                    <ClipboardList className='text-muted-foreground' />
                     <span className='font-mono text-xs'>{o.orderNumber}</span>
                     <span className='min-w-0 flex-1 truncate'>
                       {o.productName}
@@ -195,39 +174,6 @@ export function CommandSearch({
                     </span>
                     <span className='min-w-0 flex-1 truncate'>
                       {b.productName}
-                    </span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-
-            {searching && traceHits.length > 0 && (
-              <CommandGroup heading={t('Serials & batches')}>
-                {traceHits.map((h) => (
-                  <CommandItem
-                    key={`${h.kind}-${h.id}`}
-                    value={`trace-${h.kind}-${h.id}`}
-                    onSelect={() =>
-                      go('/manufacturing/traceability', {
-                        kind: h.kind,
-                        id: h.id,
-                        label: h.label,
-                      })
-                    }
-                    className='gap-3'
-                  >
-                    {h.kind === 'serial' ? (
-                      <ScanLine className='text-muted-foreground' />
-                    ) : (
-                      <Layers className='text-muted-foreground' />
-                    )}
-                    <span className='font-mono text-xs'>{h.label}</span>
-                    <span className='min-w-0 flex-1 truncate'>
-                      {h.productName}
-                    </span>
-                    <span className='text-muted-foreground text-xs'>
-                      {h.madeHere ? t('made here') : t('purchased')}
-                      {h.status && ` · ${t(statusLabel(h.status as never))}`}
                     </span>
                   </CommandItem>
                 ))}

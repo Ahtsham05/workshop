@@ -143,8 +143,6 @@ import { Route as AuthenticatedManufacturingRequirementsImport } from './routes/
 import { Route as AuthenticatedManufacturingQualityImport } from './routes/_authenticated/manufacturing/quality'
 import { Route as AuthenticatedManufacturingProductsImport } from './routes/_authenticated/manufacturing/products'
 import { Route as AuthenticatedManufacturingMovementsImport } from './routes/_authenticated/manufacturing/movements'
-import { Route as AuthenticatedManufacturingMaterialIssuesImport } from './routes/_authenticated/manufacturing/material-issues'
-import { Route as AuthenticatedManufacturingFinishedGoodsImport } from './routes/_authenticated/manufacturing/finished-goods'
 import { Route as AuthenticatedManufacturingBomsImport } from './routes/_authenticated/manufacturing/boms'
 import { Route as AuthenticatedManufacturingAssembliesImport } from './routes/_authenticated/manufacturing/assemblies'
 import { Route as AuthenticatedSchoolWhatsappIndexImport } from './routes/_authenticated/school/whatsapp/index'
@@ -174,6 +172,9 @@ import { Route as AuthenticatedSchoolAccountsIndexImport } from './routes/_authe
 import { Route as AuthenticatedProductsBulkEditIndexImport } from './routes/_authenticated/products/bulk-edit/index'
 import { Route as AuthenticatedMobileShopUsedPhonesIndexImport } from './routes/_authenticated/mobile-shop/used-phones/index'
 import { Route as AuthenticatedManufacturingProductionOrdersIndexImport } from './routes/_authenticated/manufacturing/production-orders/index'
+import { Route as AuthenticatedManufacturingMaterialReceiptsIndexImport } from './routes/_authenticated/manufacturing/material-receipts/index'
+import { Route as AuthenticatedManufacturingMaterialIssuesIndexImport } from './routes/_authenticated/manufacturing/material-issues/index'
+import { Route as AuthenticatedManufacturingFinishedGoodsIndexImport } from './routes/_authenticated/manufacturing/finished-goods/index'
 import { Route as AuthenticatedManufacturingAssemblyOrdersIndexImport } from './routes/_authenticated/manufacturing/assembly-orders/index'
 import { Route as AuthenticatedHrSettingsIndexImport } from './routes/_authenticated/hr/settings/index'
 import { Route as AuthenticatedHrPayrollIndexImport } from './routes/_authenticated/hr/payroll/index'
@@ -192,7 +193,13 @@ import { Route as AuthenticatedSchoolPortalsStudentImport } from './routes/_auth
 import { Route as AuthenticatedSchoolPortalsParentImport } from './routes/_authenticated/school/portals/parent'
 import { Route as AuthenticatedMobileShopUsedPhonesOldPhonesImport } from './routes/_authenticated/mobile-shop/used-phones/old-phones'
 import { Route as AuthenticatedMobileShopUsedPhonesNewPhonesImport } from './routes/_authenticated/mobile-shop/used-phones/new-phones'
+import { Route as AuthenticatedManufacturingProductionOrdersNewImport } from './routes/_authenticated/manufacturing/production-orders/new'
 import { Route as AuthenticatedManufacturingProductionOrdersOrderIdImport } from './routes/_authenticated/manufacturing/production-orders/$orderId'
+import { Route as AuthenticatedManufacturingMaterialReceiptsNewImport } from './routes/_authenticated/manufacturing/material-receipts/new'
+import { Route as AuthenticatedManufacturingMaterialReceiptsReceiptIdImport } from './routes/_authenticated/manufacturing/material-receipts/$receiptId'
+import { Route as AuthenticatedManufacturingMaterialIssuesNewImport } from './routes/_authenticated/manufacturing/material-issues/new'
+import { Route as AuthenticatedManufacturingMaterialIssuesIssueIdImport } from './routes/_authenticated/manufacturing/material-issues/$issueId'
+import { Route as AuthenticatedManufacturingFinishedGoodsReceiveImport } from './routes/_authenticated/manufacturing/finished-goods/receive'
 import { Route as AuthenticatedManufacturingAssemblyOrdersOrderIdImport } from './routes/_authenticated/manufacturing/assembly-orders/$orderId'
 import { Route as AuthenticatedHrEmployeesCreateImport } from './routes/_authenticated/hr/employees/create'
 import { Route as AuthenticatedHrEmployeesIdImport } from './routes/_authenticated/hr/employees/$id'
@@ -1101,20 +1108,6 @@ const AuthenticatedManufacturingMovementsRoute =
     getParentRoute: () => AuthenticatedManufacturingRouteRoute,
   } as any)
 
-const AuthenticatedManufacturingMaterialIssuesRoute =
-  AuthenticatedManufacturingMaterialIssuesImport.update({
-    id: '/material-issues',
-    path: '/material-issues',
-    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
-  } as any)
-
-const AuthenticatedManufacturingFinishedGoodsRoute =
-  AuthenticatedManufacturingFinishedGoodsImport.update({
-    id: '/finished-goods',
-    path: '/finished-goods',
-    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
-  } as any)
-
 const AuthenticatedManufacturingBomsRoute =
   AuthenticatedManufacturingBomsImport.update({
     id: '/boms',
@@ -1318,6 +1311,27 @@ const AuthenticatedManufacturingProductionOrdersIndexRoute =
     getParentRoute: () => AuthenticatedManufacturingRouteRoute,
   } as any)
 
+const AuthenticatedManufacturingMaterialReceiptsIndexRoute =
+  AuthenticatedManufacturingMaterialReceiptsIndexImport.update({
+    id: '/material-receipts/',
+    path: '/material-receipts/',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingMaterialIssuesIndexRoute =
+  AuthenticatedManufacturingMaterialIssuesIndexImport.update({
+    id: '/material-issues/',
+    path: '/material-issues/',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingFinishedGoodsIndexRoute =
+  AuthenticatedManufacturingFinishedGoodsIndexImport.update({
+    id: '/finished-goods/',
+    path: '/finished-goods/',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
 const AuthenticatedManufacturingAssemblyOrdersIndexRoute =
   AuthenticatedManufacturingAssemblyOrdersIndexImport.update({
     id: '/assembly-orders/',
@@ -1445,10 +1459,52 @@ const AuthenticatedMobileShopUsedPhonesNewPhonesRoute =
     getParentRoute: () => AuthenticatedMobileShopUsedPhonesRoute,
   } as any)
 
+const AuthenticatedManufacturingProductionOrdersNewRoute =
+  AuthenticatedManufacturingProductionOrdersNewImport.update({
+    id: '/production-orders/new',
+    path: '/production-orders/new',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
 const AuthenticatedManufacturingProductionOrdersOrderIdRoute =
   AuthenticatedManufacturingProductionOrdersOrderIdImport.update({
     id: '/production-orders/$orderId',
     path: '/production-orders/$orderId',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingMaterialReceiptsNewRoute =
+  AuthenticatedManufacturingMaterialReceiptsNewImport.update({
+    id: '/material-receipts/new',
+    path: '/material-receipts/new',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingMaterialReceiptsReceiptIdRoute =
+  AuthenticatedManufacturingMaterialReceiptsReceiptIdImport.update({
+    id: '/material-receipts/$receiptId',
+    path: '/material-receipts/$receiptId',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingMaterialIssuesNewRoute =
+  AuthenticatedManufacturingMaterialIssuesNewImport.update({
+    id: '/material-issues/new',
+    path: '/material-issues/new',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingMaterialIssuesIssueIdRoute =
+  AuthenticatedManufacturingMaterialIssuesIssueIdImport.update({
+    id: '/material-issues/$issueId',
+    path: '/material-issues/$issueId',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
+const AuthenticatedManufacturingFinishedGoodsReceiveRoute =
+  AuthenticatedManufacturingFinishedGoodsReceiveImport.update({
+    id: '/finished-goods/receive',
+    path: '/finished-goods/receive',
     getParentRoute: () => AuthenticatedManufacturingRouteRoute,
   } as any)
 
@@ -1826,20 +1882,6 @@ declare module '@tanstack/react-router' {
       path: '/boms'
       fullPath: '/manufacturing/boms'
       preLoaderRoute: typeof AuthenticatedManufacturingBomsImport
-      parentRoute: typeof AuthenticatedManufacturingRouteImport
-    }
-    '/_authenticated/manufacturing/finished-goods': {
-      id: '/_authenticated/manufacturing/finished-goods'
-      path: '/finished-goods'
-      fullPath: '/manufacturing/finished-goods'
-      preLoaderRoute: typeof AuthenticatedManufacturingFinishedGoodsImport
-      parentRoute: typeof AuthenticatedManufacturingRouteImport
-    }
-    '/_authenticated/manufacturing/material-issues': {
-      id: '/_authenticated/manufacturing/material-issues'
-      path: '/material-issues'
-      fullPath: '/manufacturing/material-issues'
-      preLoaderRoute: typeof AuthenticatedManufacturingMaterialIssuesImport
       parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
     '/_authenticated/manufacturing/movements': {
@@ -2528,11 +2570,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedManufacturingAssemblyOrdersOrderIdImport
       parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
+    '/_authenticated/manufacturing/finished-goods/receive': {
+      id: '/_authenticated/manufacturing/finished-goods/receive'
+      path: '/finished-goods/receive'
+      fullPath: '/manufacturing/finished-goods/receive'
+      preLoaderRoute: typeof AuthenticatedManufacturingFinishedGoodsReceiveImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/material-issues/$issueId': {
+      id: '/_authenticated/manufacturing/material-issues/$issueId'
+      path: '/material-issues/$issueId'
+      fullPath: '/manufacturing/material-issues/$issueId'
+      preLoaderRoute: typeof AuthenticatedManufacturingMaterialIssuesIssueIdImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/material-issues/new': {
+      id: '/_authenticated/manufacturing/material-issues/new'
+      path: '/material-issues/new'
+      fullPath: '/manufacturing/material-issues/new'
+      preLoaderRoute: typeof AuthenticatedManufacturingMaterialIssuesNewImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/material-receipts/$receiptId': {
+      id: '/_authenticated/manufacturing/material-receipts/$receiptId'
+      path: '/material-receipts/$receiptId'
+      fullPath: '/manufacturing/material-receipts/$receiptId'
+      preLoaderRoute: typeof AuthenticatedManufacturingMaterialReceiptsReceiptIdImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/material-receipts/new': {
+      id: '/_authenticated/manufacturing/material-receipts/new'
+      path: '/material-receipts/new'
+      fullPath: '/manufacturing/material-receipts/new'
+      preLoaderRoute: typeof AuthenticatedManufacturingMaterialReceiptsNewImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
     '/_authenticated/manufacturing/production-orders/$orderId': {
       id: '/_authenticated/manufacturing/production-orders/$orderId'
       path: '/production-orders/$orderId'
       fullPath: '/manufacturing/production-orders/$orderId'
       preLoaderRoute: typeof AuthenticatedManufacturingProductionOrdersOrderIdImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/production-orders/new': {
+      id: '/_authenticated/manufacturing/production-orders/new'
+      path: '/production-orders/new'
+      fullPath: '/manufacturing/production-orders/new'
+      preLoaderRoute: typeof AuthenticatedManufacturingProductionOrdersNewImport
       parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
     '/_authenticated/mobile-shop/used-phones/new-phones': {
@@ -2659,6 +2743,27 @@ declare module '@tanstack/react-router' {
       path: '/assembly-orders'
       fullPath: '/manufacturing/assembly-orders'
       preLoaderRoute: typeof AuthenticatedManufacturingAssemblyOrdersIndexImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/finished-goods/': {
+      id: '/_authenticated/manufacturing/finished-goods/'
+      path: '/finished-goods'
+      fullPath: '/manufacturing/finished-goods'
+      preLoaderRoute: typeof AuthenticatedManufacturingFinishedGoodsIndexImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/material-issues/': {
+      id: '/_authenticated/manufacturing/material-issues/'
+      path: '/material-issues'
+      fullPath: '/manufacturing/material-issues'
+      preLoaderRoute: typeof AuthenticatedManufacturingMaterialIssuesIndexImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/material-receipts/': {
+      id: '/_authenticated/manufacturing/material-receipts/'
+      path: '/material-receipts'
+      fullPath: '/manufacturing/material-receipts'
+      preLoaderRoute: typeof AuthenticatedManufacturingMaterialReceiptsIndexImport
       parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
     '/_authenticated/manufacturing/production-orders/': {
@@ -2935,8 +3040,6 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedManufacturingRouteRouteChildren {
   AuthenticatedManufacturingAssembliesRoute: typeof AuthenticatedManufacturingAssembliesRoute
   AuthenticatedManufacturingBomsRoute: typeof AuthenticatedManufacturingBomsRoute
-  AuthenticatedManufacturingFinishedGoodsRoute: typeof AuthenticatedManufacturingFinishedGoodsRoute
-  AuthenticatedManufacturingMaterialIssuesRoute: typeof AuthenticatedManufacturingMaterialIssuesRoute
   AuthenticatedManufacturingMovementsRoute: typeof AuthenticatedManufacturingMovementsRoute
   AuthenticatedManufacturingProductsRoute: typeof AuthenticatedManufacturingProductsRoute
   AuthenticatedManufacturingQualityRoute: typeof AuthenticatedManufacturingQualityRoute
@@ -2947,8 +3050,17 @@ interface AuthenticatedManufacturingRouteRouteChildren {
   AuthenticatedManufacturingWipRoute: typeof AuthenticatedManufacturingWipRoute
   AuthenticatedManufacturingIndexRoute: typeof AuthenticatedManufacturingIndexRoute
   AuthenticatedManufacturingAssemblyOrdersOrderIdRoute: typeof AuthenticatedManufacturingAssemblyOrdersOrderIdRoute
+  AuthenticatedManufacturingFinishedGoodsReceiveRoute: typeof AuthenticatedManufacturingFinishedGoodsReceiveRoute
+  AuthenticatedManufacturingMaterialIssuesIssueIdRoute: typeof AuthenticatedManufacturingMaterialIssuesIssueIdRoute
+  AuthenticatedManufacturingMaterialIssuesNewRoute: typeof AuthenticatedManufacturingMaterialIssuesNewRoute
+  AuthenticatedManufacturingMaterialReceiptsReceiptIdRoute: typeof AuthenticatedManufacturingMaterialReceiptsReceiptIdRoute
+  AuthenticatedManufacturingMaterialReceiptsNewRoute: typeof AuthenticatedManufacturingMaterialReceiptsNewRoute
   AuthenticatedManufacturingProductionOrdersOrderIdRoute: typeof AuthenticatedManufacturingProductionOrdersOrderIdRoute
+  AuthenticatedManufacturingProductionOrdersNewRoute: typeof AuthenticatedManufacturingProductionOrdersNewRoute
   AuthenticatedManufacturingAssemblyOrdersIndexRoute: typeof AuthenticatedManufacturingAssemblyOrdersIndexRoute
+  AuthenticatedManufacturingFinishedGoodsIndexRoute: typeof AuthenticatedManufacturingFinishedGoodsIndexRoute
+  AuthenticatedManufacturingMaterialIssuesIndexRoute: typeof AuthenticatedManufacturingMaterialIssuesIndexRoute
+  AuthenticatedManufacturingMaterialReceiptsIndexRoute: typeof AuthenticatedManufacturingMaterialReceiptsIndexRoute
   AuthenticatedManufacturingProductionOrdersIndexRoute: typeof AuthenticatedManufacturingProductionOrdersIndexRoute
 }
 
@@ -2957,10 +3069,6 @@ const AuthenticatedManufacturingRouteRouteChildren: AuthenticatedManufacturingRo
     AuthenticatedManufacturingAssembliesRoute:
       AuthenticatedManufacturingAssembliesRoute,
     AuthenticatedManufacturingBomsRoute: AuthenticatedManufacturingBomsRoute,
-    AuthenticatedManufacturingFinishedGoodsRoute:
-      AuthenticatedManufacturingFinishedGoodsRoute,
-    AuthenticatedManufacturingMaterialIssuesRoute:
-      AuthenticatedManufacturingMaterialIssuesRoute,
     AuthenticatedManufacturingMovementsRoute:
       AuthenticatedManufacturingMovementsRoute,
     AuthenticatedManufacturingProductsRoute:
@@ -2978,10 +3086,28 @@ const AuthenticatedManufacturingRouteRouteChildren: AuthenticatedManufacturingRo
     AuthenticatedManufacturingIndexRoute: AuthenticatedManufacturingIndexRoute,
     AuthenticatedManufacturingAssemblyOrdersOrderIdRoute:
       AuthenticatedManufacturingAssemblyOrdersOrderIdRoute,
+    AuthenticatedManufacturingFinishedGoodsReceiveRoute:
+      AuthenticatedManufacturingFinishedGoodsReceiveRoute,
+    AuthenticatedManufacturingMaterialIssuesIssueIdRoute:
+      AuthenticatedManufacturingMaterialIssuesIssueIdRoute,
+    AuthenticatedManufacturingMaterialIssuesNewRoute:
+      AuthenticatedManufacturingMaterialIssuesNewRoute,
+    AuthenticatedManufacturingMaterialReceiptsReceiptIdRoute:
+      AuthenticatedManufacturingMaterialReceiptsReceiptIdRoute,
+    AuthenticatedManufacturingMaterialReceiptsNewRoute:
+      AuthenticatedManufacturingMaterialReceiptsNewRoute,
     AuthenticatedManufacturingProductionOrdersOrderIdRoute:
       AuthenticatedManufacturingProductionOrdersOrderIdRoute,
+    AuthenticatedManufacturingProductionOrdersNewRoute:
+      AuthenticatedManufacturingProductionOrdersNewRoute,
     AuthenticatedManufacturingAssemblyOrdersIndexRoute:
       AuthenticatedManufacturingAssemblyOrdersIndexRoute,
+    AuthenticatedManufacturingFinishedGoodsIndexRoute:
+      AuthenticatedManufacturingFinishedGoodsIndexRoute,
+    AuthenticatedManufacturingMaterialIssuesIndexRoute:
+      AuthenticatedManufacturingMaterialIssuesIndexRoute,
+    AuthenticatedManufacturingMaterialReceiptsIndexRoute:
+      AuthenticatedManufacturingMaterialReceiptsIndexRoute,
     AuthenticatedManufacturingProductionOrdersIndexRoute:
       AuthenticatedManufacturingProductionOrdersIndexRoute,
   }
@@ -3482,8 +3608,6 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
   '/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
-  '/manufacturing/finished-goods': typeof AuthenticatedManufacturingFinishedGoodsRoute
-  '/manufacturing/material-issues': typeof AuthenticatedManufacturingMaterialIssuesRoute
   '/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
   '/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
@@ -3582,7 +3706,13 @@ export interface FileRoutesByFullPath {
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/manufacturing/assembly-orders/$orderId': typeof AuthenticatedManufacturingAssemblyOrdersOrderIdRoute
+  '/manufacturing/finished-goods/receive': typeof AuthenticatedManufacturingFinishedGoodsReceiveRoute
+  '/manufacturing/material-issues/$issueId': typeof AuthenticatedManufacturingMaterialIssuesIssueIdRoute
+  '/manufacturing/material-issues/new': typeof AuthenticatedManufacturingMaterialIssuesNewRoute
+  '/manufacturing/material-receipts/$receiptId': typeof AuthenticatedManufacturingMaterialReceiptsReceiptIdRoute
+  '/manufacturing/material-receipts/new': typeof AuthenticatedManufacturingMaterialReceiptsNewRoute
   '/manufacturing/production-orders/$orderId': typeof AuthenticatedManufacturingProductionOrdersOrderIdRoute
+  '/manufacturing/production-orders/new': typeof AuthenticatedManufacturingProductionOrdersNewRoute
   '/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
   '/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -3601,6 +3731,9 @@ export interface FileRoutesByFullPath {
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
   '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
   '/manufacturing/assembly-orders': typeof AuthenticatedManufacturingAssemblyOrdersIndexRoute
+  '/manufacturing/finished-goods': typeof AuthenticatedManufacturingFinishedGoodsIndexRoute
+  '/manufacturing/material-issues': typeof AuthenticatedManufacturingMaterialIssuesIndexRoute
+  '/manufacturing/material-receipts': typeof AuthenticatedManufacturingMaterialReceiptsIndexRoute
   '/manufacturing/production-orders': typeof AuthenticatedManufacturingProductionOrdersIndexRoute
   '/mobile-shop/used-phones/': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
@@ -3677,8 +3810,6 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
   '/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
-  '/manufacturing/finished-goods': typeof AuthenticatedManufacturingFinishedGoodsRoute
-  '/manufacturing/material-issues': typeof AuthenticatedManufacturingMaterialIssuesRoute
   '/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
   '/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
@@ -3776,7 +3907,13 @@ export interface FileRoutesByTo {
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/manufacturing/assembly-orders/$orderId': typeof AuthenticatedManufacturingAssemblyOrdersOrderIdRoute
+  '/manufacturing/finished-goods/receive': typeof AuthenticatedManufacturingFinishedGoodsReceiveRoute
+  '/manufacturing/material-issues/$issueId': typeof AuthenticatedManufacturingMaterialIssuesIssueIdRoute
+  '/manufacturing/material-issues/new': typeof AuthenticatedManufacturingMaterialIssuesNewRoute
+  '/manufacturing/material-receipts/$receiptId': typeof AuthenticatedManufacturingMaterialReceiptsReceiptIdRoute
+  '/manufacturing/material-receipts/new': typeof AuthenticatedManufacturingMaterialReceiptsNewRoute
   '/manufacturing/production-orders/$orderId': typeof AuthenticatedManufacturingProductionOrdersOrderIdRoute
+  '/manufacturing/production-orders/new': typeof AuthenticatedManufacturingProductionOrdersNewRoute
   '/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
   '/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -3794,6 +3931,9 @@ export interface FileRoutesByTo {
   '/hr/payroll': typeof AuthenticatedHrPayrollIndexRoute
   '/hr/settings': typeof AuthenticatedHrSettingsIndexRoute
   '/manufacturing/assembly-orders': typeof AuthenticatedManufacturingAssemblyOrdersIndexRoute
+  '/manufacturing/finished-goods': typeof AuthenticatedManufacturingFinishedGoodsIndexRoute
+  '/manufacturing/material-issues': typeof AuthenticatedManufacturingMaterialIssuesIndexRoute
+  '/manufacturing/material-receipts': typeof AuthenticatedManufacturingMaterialReceiptsIndexRoute
   '/manufacturing/production-orders': typeof AuthenticatedManufacturingProductionOrdersIndexRoute
   '/mobile-shop/used-phones': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/products/bulk-edit': typeof AuthenticatedProductsBulkEditIndexRoute
@@ -3875,8 +4015,6 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
   '/_authenticated/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
-  '/_authenticated/manufacturing/finished-goods': typeof AuthenticatedManufacturingFinishedGoodsRoute
-  '/_authenticated/manufacturing/material-issues': typeof AuthenticatedManufacturingMaterialIssuesRoute
   '/_authenticated/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
   '/_authenticated/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/_authenticated/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
@@ -3975,7 +4113,13 @@ export interface FileRoutesById {
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/_authenticated/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
   '/_authenticated/manufacturing/assembly-orders/$orderId': typeof AuthenticatedManufacturingAssemblyOrdersOrderIdRoute
+  '/_authenticated/manufacturing/finished-goods/receive': typeof AuthenticatedManufacturingFinishedGoodsReceiveRoute
+  '/_authenticated/manufacturing/material-issues/$issueId': typeof AuthenticatedManufacturingMaterialIssuesIssueIdRoute
+  '/_authenticated/manufacturing/material-issues/new': typeof AuthenticatedManufacturingMaterialIssuesNewRoute
+  '/_authenticated/manufacturing/material-receipts/$receiptId': typeof AuthenticatedManufacturingMaterialReceiptsReceiptIdRoute
+  '/_authenticated/manufacturing/material-receipts/new': typeof AuthenticatedManufacturingMaterialReceiptsNewRoute
   '/_authenticated/manufacturing/production-orders/$orderId': typeof AuthenticatedManufacturingProductionOrdersOrderIdRoute
+  '/_authenticated/manufacturing/production-orders/new': typeof AuthenticatedManufacturingProductionOrdersNewRoute
   '/_authenticated/mobile-shop/used-phones/new-phones': typeof AuthenticatedMobileShopUsedPhonesNewPhonesRoute
   '/_authenticated/mobile-shop/used-phones/old-phones': typeof AuthenticatedMobileShopUsedPhonesOldPhonesRoute
   '/_authenticated/school/portals/parent': typeof AuthenticatedSchoolPortalsParentRoute
@@ -3994,6 +4138,9 @@ export interface FileRoutesById {
   '/_authenticated/hr/payroll/': typeof AuthenticatedHrPayrollIndexRoute
   '/_authenticated/hr/settings/': typeof AuthenticatedHrSettingsIndexRoute
   '/_authenticated/manufacturing/assembly-orders/': typeof AuthenticatedManufacturingAssemblyOrdersIndexRoute
+  '/_authenticated/manufacturing/finished-goods/': typeof AuthenticatedManufacturingFinishedGoodsIndexRoute
+  '/_authenticated/manufacturing/material-issues/': typeof AuthenticatedManufacturingMaterialIssuesIndexRoute
+  '/_authenticated/manufacturing/material-receipts/': typeof AuthenticatedManufacturingMaterialReceiptsIndexRoute
   '/_authenticated/manufacturing/production-orders/': typeof AuthenticatedManufacturingProductionOrdersIndexRoute
   '/_authenticated/mobile-shop/used-phones/': typeof AuthenticatedMobileShopUsedPhonesIndexRoute
   '/_authenticated/products/bulk-edit/': typeof AuthenticatedProductsBulkEditIndexRoute
@@ -4076,8 +4223,6 @@ export interface FileRouteTypes {
     | '/'
     | '/manufacturing/assemblies'
     | '/manufacturing/boms'
-    | '/manufacturing/finished-goods'
-    | '/manufacturing/material-issues'
     | '/manufacturing/movements'
     | '/manufacturing/products'
     | '/manufacturing/quality'
@@ -4176,7 +4321,13 @@ export interface FileRouteTypes {
     | '/hr/employees/$id'
     | '/hr/employees/create'
     | '/manufacturing/assembly-orders/$orderId'
+    | '/manufacturing/finished-goods/receive'
+    | '/manufacturing/material-issues/$issueId'
+    | '/manufacturing/material-issues/new'
+    | '/manufacturing/material-receipts/$receiptId'
+    | '/manufacturing/material-receipts/new'
     | '/manufacturing/production-orders/$orderId'
+    | '/manufacturing/production-orders/new'
     | '/mobile-shop/used-phones/new-phones'
     | '/mobile-shop/used-phones/old-phones'
     | '/school/portals/parent'
@@ -4195,6 +4346,9 @@ export interface FileRouteTypes {
     | '/hr/payroll'
     | '/hr/settings'
     | '/manufacturing/assembly-orders'
+    | '/manufacturing/finished-goods'
+    | '/manufacturing/material-issues'
+    | '/manufacturing/material-receipts'
     | '/manufacturing/production-orders'
     | '/mobile-shop/used-phones/'
     | '/products/bulk-edit'
@@ -4270,8 +4424,6 @@ export interface FileRouteTypes {
     | '/'
     | '/manufacturing/assemblies'
     | '/manufacturing/boms'
-    | '/manufacturing/finished-goods'
-    | '/manufacturing/material-issues'
     | '/manufacturing/movements'
     | '/manufacturing/products'
     | '/manufacturing/quality'
@@ -4369,7 +4521,13 @@ export interface FileRouteTypes {
     | '/hr/employees/$id'
     | '/hr/employees/create'
     | '/manufacturing/assembly-orders/$orderId'
+    | '/manufacturing/finished-goods/receive'
+    | '/manufacturing/material-issues/$issueId'
+    | '/manufacturing/material-issues/new'
+    | '/manufacturing/material-receipts/$receiptId'
+    | '/manufacturing/material-receipts/new'
     | '/manufacturing/production-orders/$orderId'
+    | '/manufacturing/production-orders/new'
     | '/mobile-shop/used-phones/new-phones'
     | '/mobile-shop/used-phones/old-phones'
     | '/school/portals/parent'
@@ -4387,6 +4545,9 @@ export interface FileRouteTypes {
     | '/hr/payroll'
     | '/hr/settings'
     | '/manufacturing/assembly-orders'
+    | '/manufacturing/finished-goods'
+    | '/manufacturing/material-issues'
+    | '/manufacturing/material-receipts'
     | '/manufacturing/production-orders'
     | '/mobile-shop/used-phones'
     | '/products/bulk-edit'
@@ -4466,8 +4627,6 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/manufacturing/assemblies'
     | '/_authenticated/manufacturing/boms'
-    | '/_authenticated/manufacturing/finished-goods'
-    | '/_authenticated/manufacturing/material-issues'
     | '/_authenticated/manufacturing/movements'
     | '/_authenticated/manufacturing/products'
     | '/_authenticated/manufacturing/quality'
@@ -4566,7 +4725,13 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/employees/$id'
     | '/_authenticated/hr/employees/create'
     | '/_authenticated/manufacturing/assembly-orders/$orderId'
+    | '/_authenticated/manufacturing/finished-goods/receive'
+    | '/_authenticated/manufacturing/material-issues/$issueId'
+    | '/_authenticated/manufacturing/material-issues/new'
+    | '/_authenticated/manufacturing/material-receipts/$receiptId'
+    | '/_authenticated/manufacturing/material-receipts/new'
     | '/_authenticated/manufacturing/production-orders/$orderId'
+    | '/_authenticated/manufacturing/production-orders/new'
     | '/_authenticated/mobile-shop/used-phones/new-phones'
     | '/_authenticated/mobile-shop/used-phones/old-phones'
     | '/_authenticated/school/portals/parent'
@@ -4585,6 +4750,9 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/payroll/'
     | '/_authenticated/hr/settings/'
     | '/_authenticated/manufacturing/assembly-orders/'
+    | '/_authenticated/manufacturing/finished-goods/'
+    | '/_authenticated/manufacturing/material-issues/'
+    | '/_authenticated/manufacturing/material-receipts/'
     | '/_authenticated/manufacturing/production-orders/'
     | '/_authenticated/mobile-shop/used-phones/'
     | '/_authenticated/products/bulk-edit/'
@@ -4787,8 +4955,6 @@ export const routeTree = rootRoute
       "children": [
         "/_authenticated/manufacturing/assemblies",
         "/_authenticated/manufacturing/boms",
-        "/_authenticated/manufacturing/finished-goods",
-        "/_authenticated/manufacturing/material-issues",
         "/_authenticated/manufacturing/movements",
         "/_authenticated/manufacturing/products",
         "/_authenticated/manufacturing/quality",
@@ -4799,8 +4965,17 @@ export const routeTree = rootRoute
         "/_authenticated/manufacturing/wip",
         "/_authenticated/manufacturing/",
         "/_authenticated/manufacturing/assembly-orders/$orderId",
+        "/_authenticated/manufacturing/finished-goods/receive",
+        "/_authenticated/manufacturing/material-issues/$issueId",
+        "/_authenticated/manufacturing/material-issues/new",
+        "/_authenticated/manufacturing/material-receipts/$receiptId",
+        "/_authenticated/manufacturing/material-receipts/new",
         "/_authenticated/manufacturing/production-orders/$orderId",
+        "/_authenticated/manufacturing/production-orders/new",
         "/_authenticated/manufacturing/assembly-orders/",
+        "/_authenticated/manufacturing/finished-goods/",
+        "/_authenticated/manufacturing/material-issues/",
+        "/_authenticated/manufacturing/material-receipts/",
         "/_authenticated/manufacturing/production-orders/"
       ]
     },
@@ -5010,14 +5185,6 @@ export const routeTree = rootRoute
     },
     "/_authenticated/manufacturing/boms": {
       "filePath": "_authenticated/manufacturing/boms.tsx",
-      "parent": "/_authenticated/manufacturing"
-    },
-    "/_authenticated/manufacturing/finished-goods": {
-      "filePath": "_authenticated/manufacturing/finished-goods.tsx",
-      "parent": "/_authenticated/manufacturing"
-    },
-    "/_authenticated/manufacturing/material-issues": {
-      "filePath": "_authenticated/manufacturing/material-issues.tsx",
       "parent": "/_authenticated/manufacturing"
     },
     "/_authenticated/manufacturing/movements": {
@@ -5420,8 +5587,32 @@ export const routeTree = rootRoute
       "filePath": "_authenticated/manufacturing/assembly-orders/$orderId.tsx",
       "parent": "/_authenticated/manufacturing"
     },
+    "/_authenticated/manufacturing/finished-goods/receive": {
+      "filePath": "_authenticated/manufacturing/finished-goods/receive.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/material-issues/$issueId": {
+      "filePath": "_authenticated/manufacturing/material-issues/$issueId.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/material-issues/new": {
+      "filePath": "_authenticated/manufacturing/material-issues/new.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/material-receipts/$receiptId": {
+      "filePath": "_authenticated/manufacturing/material-receipts/$receiptId.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/material-receipts/new": {
+      "filePath": "_authenticated/manufacturing/material-receipts/new.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
     "/_authenticated/manufacturing/production-orders/$orderId": {
       "filePath": "_authenticated/manufacturing/production-orders/$orderId.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/production-orders/new": {
+      "filePath": "_authenticated/manufacturing/production-orders/new.tsx",
       "parent": "/_authenticated/manufacturing"
     },
     "/_authenticated/mobile-shop/used-phones/new-phones": {
@@ -5497,6 +5688,18 @@ export const routeTree = rootRoute
     },
     "/_authenticated/manufacturing/assembly-orders/": {
       "filePath": "_authenticated/manufacturing/assembly-orders/index.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/finished-goods/": {
+      "filePath": "_authenticated/manufacturing/finished-goods/index.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/material-issues/": {
+      "filePath": "_authenticated/manufacturing/material-issues/index.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/material-receipts/": {
+      "filePath": "_authenticated/manufacturing/material-receipts/index.tsx",
       "parent": "/_authenticated/manufacturing"
     },
     "/_authenticated/manufacturing/production-orders/": {

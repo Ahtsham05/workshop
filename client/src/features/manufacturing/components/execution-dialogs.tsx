@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Layers, ScanLine } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Layers, ScanLine } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   useChangeProductionStatusMutation,
@@ -7,23 +7,19 @@ import {
   useGetManufacturingSettingsQuery,
   useGetStockDetailQuery,
   useInspectOutputMutation,
-  useIssueMaterialsMutation,
   useRecordScrapMutation,
   useReportOutputMutation,
   useResolveReworkMutation,
   useReturnMaterialsMutation,
   type FinishedGoodsInput,
-  type ProductionMaterial,
   type ProductionOrder,
   type ProductionOutput,
   type RejectDisposition,
   type ScrapReason,
-  type StockDetail,
 } from '@/stores/manufacturing.api'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
-import { usePermissions } from '@/context/permission-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -46,11 +42,11 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SCRAP_REASON_LABELS, fmtDate, fmtQty } from '../lib/constants'
-import { lineIssuedNet, lineRemaining, lineWip } from '../lib/material-math'
-import { IssueStatusBadge } from './material-progress'
+import { lineWip } from '../lib/material-math'
+import { cleanFg } from '../lib/output-math'
 import { ProductPicker } from './product-picker'
+import { QualityDecision, type QualityValue } from './quality-decision'
 
-const PRIMARY = '__primary__'
 const EPS = 1e-6
 
 const notify = async (
@@ -132,7 +128,7 @@ function SerialChecklist({
 }
 
 /** Finished-goods tracking inputs: a batch number/expiry, or one serial per good unit. */
-function FinishedGoodsFields({
+export function FinishedGoodsFields({
   order,
   quantity,
   value,
@@ -213,449 +209,6 @@ function FinishedGoodsFields({
   }
   return null
 }
-
-const cleanFg = (fg: FinishedGoodsInput): FinishedGoodsInput => ({
-  ...fg,
-  serialNumbers: fg.serialNumbers?.map((x) => x.trim()).filter(Boolean),
-  batchNumber: fg.batchNumber?.trim() || undefined,
-})
-
-// ── Issue ─────────────────────────────────────────────────────────────────────────
-
-type IssueRowState = {
-  source: string
-  quantity: string
-  batchMode: 'fefo' | 'manual'
-  batches: Record<string, string>
-  imeiIds: string[]
-}
-
-const physicalQuantity = (state: IssueRowState, detail?: StockDetail) => {
-  if (detail?.tracking.serial) return state.imeiIds.length
-  if (detail?.tracking.batch && state.batchMode === 'manual') {
-    return Object.values(state.batches).reduce(
-      (s, v) => s + (Number(v) || 0),
-      0
-    )
-  }
-  return Number(state.quantity) || 0
-}
-
-const fefoPreview = (detail: StockDetail, quantity: number) => {
-  const out = new Map<string, number>()
-  let left = quantity
-  for (const b of detail.batches) {
-    if (left <= EPS) break
-    const take = Math.min(left, b.quantity)
-    out.set(b.id, take)
-    left -= take
-  }
-  return out
-}
-
-function IssueLineRow({
-  material,
-  state,
-  onChange,
-  onPhysical,
-}: {
-  material: ProductionMaterial
-  state: IssueRowState
-  onChange: (s: IssueRowState) => void
-  onPhysical: (physical: number, serial: boolean) => void
-}) {
-  const { t } = useLanguage()
-  const alt = material.alternatives.find((a) => a.productId === state.source)
-  const target = alt
-    ? { productId: alt.productId, variantId: alt.variantId }
-    : { productId: material.productId, variantId: material.variantId }
-  const ratio = alt?.ratio || 1
-  const { data: detail, isFetching } = useGetStockDetailQuery(target)
-  const remaining = lineRemaining(material)
-  const physical = physicalQuantity(state, detail)
-  const credited = physical / ratio
-  const over = credited > remaining + EPS
-  const short = detail ? physical > detail.available + EPS : false
-  const fefo = detail?.tracking.batch
-    ? fefoPreview(detail, Number(state.quantity) || 0)
-    : null
-
-  // Tell the dialog what this row will actually move (serial rows count selected units),
-  // so the over-issue guard sees the real quantity.
-  const isSerial = !!detail?.tracking.serial
-  useEffect(() => onPhysical(physical, isSerial), [physical, isSerial]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <div
-      className={cn(
-        'space-y-2 border-b px-3 py-3 last:border-b-0',
-        over && 'bg-amber-500/5'
-      )}
-    >
-      <div className='flex flex-wrap items-start gap-x-4 gap-y-2'>
-        <div className='min-w-0 flex-1'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <span className='font-medium'>{material.productName}</span>
-            <IssueStatusBadge material={material} />
-            {material.isOptional && (
-              <Badge variant='outline' className='text-[10px] font-normal'>
-                {t('Optional')}
-              </Badge>
-            )}
-          </div>
-          {/* Required / issued / remaining — the numbers a storekeeper works from. */}
-          <div className='text-muted-foreground mt-1 flex flex-wrap gap-x-3 text-xs tabular-nums'>
-            <span>
-              {t('Required')}{' '}
-              <b className='text-foreground'>
-                {fmtQty(material.requiredQuantity)}
-              </b>
-            </span>
-            <span>
-              {t('Issued')}{' '}
-              <b className='text-foreground'>
-                {fmtQty(lineIssuedNet(material))}
-              </b>
-            </span>
-            <span>
-              {t('Remaining')}{' '}
-              <b
-                className={cn(
-                  remaining > 0
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-emerald-600 dark:text-emerald-400'
-                )}
-              >
-                {fmtQty(remaining)}
-              </b>
-            </span>
-            <span>{material.unit}</span>
-            {detail && (
-              <span
-                className={cn(
-                  short && 'font-medium text-rose-600 dark:text-rose-400'
-                )}
-              >
-                · {t('On hand')} {fmtQty(detail.available)}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className='flex items-center gap-2'>
-          {material.alternatives.length > 0 && (
-            <Select
-              value={state.source}
-              onValueChange={(v) =>
-                onChange({ ...state, source: v, batches: {}, imeiIds: [] })
-              }
-            >
-              <SelectTrigger className='h-8 w-44 text-xs'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={PRIMARY}>
-                  {t('Primary component')}
-                </SelectItem>
-                {material.alternatives.map((a) => (
-                  <SelectItem key={a.productId} value={a.productId}>
-                    {a.productName} {a.ratio !== 1 ? `(×${a.ratio})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {!detail?.tracking.serial && (
-            <Input
-              type='number'
-              min={0}
-              step='any'
-              value={
-                state.batchMode === 'manual' && detail?.tracking.batch
-                  ? String(physical || '')
-                  : state.quantity
-              }
-              disabled={
-                state.batchMode === 'manual' && !!detail?.tracking.batch
-              }
-              onChange={(e) => onChange({ ...state, quantity: e.target.value })}
-              className={cn(
-                'h-8 w-28 text-right',
-                over && 'border-amber-500',
-                short && 'border-rose-500'
-              )}
-              aria-label={`${t('Issue now')} — ${material.productName}`}
-            />
-          )}
-        </div>
-      </div>
-
-      {isFetching && !detail && (
-        <p className='text-muted-foreground text-xs'>{t('Loading stock…')}</p>
-      )}
-
-      {detail?.tracking.batch && (
-        <div className='bg-muted/40 rounded-md p-2'>
-          <div className='mb-1.5 flex items-center gap-2 text-xs'>
-            <Layers className='text-muted-foreground h-3.5 w-3.5' />
-            <span className='font-medium'>{t('Batches')}</span>
-            <div className='bg-background ml-auto inline-flex rounded-md border p-0.5'>
-              {(['fefo', 'manual'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type='button'
-                  onClick={() => onChange({ ...state, batchMode: mode })}
-                  className={cn(
-                    'rounded px-2 py-0.5',
-                    state.batchMode === mode
-                      ? 'bg-foreground text-background'
-                      : 'text-muted-foreground'
-                  )}
-                >
-                  {mode === 'fefo' ? t('Auto (FEFO)') : t('Choose')}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className='space-y-1'>
-            {detail.batches.length === 0 && (
-              <p className='text-muted-foreground text-xs'>
-                {t('No batch has stock')}
-              </p>
-            )}
-            {detail.batches.map((b) => {
-              const take = fefo?.get(b.id) || 0
-              return (
-                <div
-                  key={b.id}
-                  className='grid grid-cols-[minmax(0,1fr)_6rem_6rem] items-center gap-2 text-xs'
-                >
-                  <span className='truncate'>
-                    <span className='font-mono'>{b.batchNumber}</span>
-                    <span className='text-muted-foreground'>
-                      {' '}
-                      · {t('exp')} {fmtDate(b.expiryDate)}
-                    </span>
-                  </span>
-                  <span className='text-muted-foreground text-right tabular-nums'>
-                    {fmtQty(b.quantity)}
-                  </span>
-                  {state.batchMode === 'manual' ? (
-                    <Input
-                      type='number'
-                      min={0}
-                      max={b.quantity}
-                      step='any'
-                      className='h-7 text-right text-xs'
-                      value={state.batches[b.id] ?? ''}
-                      onChange={(e) =>
-                        onChange({
-                          ...state,
-                          batches: { ...state.batches, [b.id]: e.target.value },
-                        })
-                      }
-                    />
-                  ) : (
-                    <span
-                      className={cn(
-                        'text-right tabular-nums',
-                        take > 0 ? 'font-medium' : 'text-muted-foreground'
-                      )}
-                    >
-                      {take > 0 ? `−${fmtQty(take)}` : '—'}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {detail?.tracking.serial && (
-        <SerialChecklist
-          serials={detail.serials}
-          selected={state.imeiIds}
-          onChange={(ids) => onChange({ ...state, imeiIds: ids })}
-        />
-      )}
-
-      {over && (
-        <p className='flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400'>
-          <AlertTriangle className='h-3.5 w-3.5' />
-          {t('Over-issue: {{q}} more than still required').replace(
-            '{{q}}',
-            fmtQty(credited - remaining)
-          )}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/**
- * Issue materials. Each line shows required / issued / remaining and is pre-filled with
- * what's still needed — a partial issue is just a smaller number. Going beyond the
- * remaining requirement is blocked unless the user holds overIssueMaterials and confirms.
- */
-export function IssueMaterialsDialog({
-  order,
-  onClose,
-}: {
-  order: ProductionOrder
-  onClose: () => void
-}) {
-  const { t } = useLanguage()
-  const { hasPermission } = usePermissions()
-  const canOverIssue = hasPermission('overIssueMaterials')
-  const [rows, setRows] = useState<Record<string, IssueRowState>>(() =>
-    Object.fromEntries(
-      order.materials.map((m) => [
-        m._id,
-        {
-          source: PRIMARY,
-          quantity: String(+lineRemaining(m).toFixed(6)),
-          batchMode: 'fefo' as const,
-          batches: {},
-          imeiIds: [],
-        },
-      ])
-    )
-  )
-  const [physicalByLine, setPhysicalByLine] = useState<
-    Record<string, { qty: number; serial: boolean }>
-  >({})
-  const [confirmOver, setConfirmOver] = useState(false)
-  const [notes, setNotes] = useState('')
-  const [issue, { isLoading }] = useIssueMaterialsMutation()
-
-  const anyOver = order.materials.some((m) => {
-    const st = rows[m._id]
-    const ratio =
-      m.alternatives.find((a) => a.productId === st.source)?.ratio || 1
-    const qty = physicalByLine[m._id]?.qty ?? (Number(st.quantity) || 0)
-    return qty / ratio > lineRemaining(m) + EPS
-  })
-
-  const submit = async () => {
-    const lines = order.materials
-      .map((m) => {
-        const st = rows[m._id]
-        const isSerial = physicalByLine[m._id]?.serial
-        const manualBatches = Object.entries(st.batches)
-          .map(([batchId, q]) => ({ batchId, quantity: Number(q) || 0 }))
-          .filter((b) => b.quantity > 0)
-        const base = {
-          materialLineId: m._id,
-          alternativeProductId: st.source === PRIMARY ? null : st.source,
-        }
-        if (isSerial) return { ...base, imeiIds: st.imeiIds }
-        if (st.batchMode === 'manual' && manualBatches.length) {
-          return {
-            ...base,
-            batches: manualBatches,
-            quantity: manualBatches.reduce((s, b) => s + b.quantity, 0),
-          }
-        }
-        return { ...base, quantity: Number(st.quantity) || 0 }
-      })
-      .filter((l) =>
-        'imeiIds' in l ? (l.imeiIds?.length ?? 0) > 0 : (l.quantity ?? 0) > 0
-      )
-    if (!lines.length)
-      return toast.error(t('Enter a quantity for at least one material'))
-    const ok = await notify(
-      () =>
-        issue({
-          orderId: order.id,
-          lines,
-          notes,
-          allowOverIssue: anyOver && confirmOver,
-        }).unwrap(),
-      t('Materials issued — moved into WIP'),
-      t('Failed to issue materials')
-    )
-    if (ok) onClose()
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className='flex max-h-[92vh] flex-col sm:max-w-3xl'>
-        <DialogHeader>
-          <DialogTitle>{t('Issue materials')}</DialogTitle>
-          <DialogDescription>
-            {order.orderNumber} · {order.sourceLocation || t('Stock')} →{' '}
-            {order.wipLocation || t('WIP')}.{' '}
-            {t(
-              'Issue all at once or in parts — remaining quantities stay open.'
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className='flex-1 overflow-y-auto rounded-lg border'>
-          {order.materials.map((m) => (
-            <IssueLineRow
-              key={m._id}
-              material={m}
-              state={rows[m._id]}
-              onChange={(s) => setRows((prev) => ({ ...prev, [m._id]: s }))}
-              onPhysical={(qty, serial) =>
-                setPhysicalByLine((prev) =>
-                  prev[m._id]?.qty === qty && prev[m._id]?.serial === serial
-                    ? prev
-                    : { ...prev, [m._id]: { qty, serial } }
-                )
-              }
-            />
-          ))}
-        </div>
-        {anyOver &&
-          (canOverIssue ? (
-            <label className='flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm'>
-              <Checkbox
-                checked={confirmOver}
-                onCheckedChange={(v) => setConfirmOver(!!v)}
-                className='mt-0.5'
-              />
-              <span>
-                <span className='font-medium'>{t('Confirm over-issue')}</span>
-                <span className='text-muted-foreground block text-xs'>
-                  {t(
-                    'Extra material stays in WIP and can be returned to stock later.'
-                  )}
-                </span>
-              </span>
-            </label>
-          ) : (
-            <p className='rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300'>
-              {t(
-                'Some quantities are more than the order still requires. Reduce them — over-issuing needs the “Over-issue materials” permission.'
-              )}
-            </p>
-          ))}
-        <div className='grid gap-1.5'>
-          <Label>{t('Notes')}</Label>
-          <Textarea
-            rows={2}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </div>
-        <DialogFooter>
-          <Button variant='outline' onClick={onClose}>
-            {t('Cancel')}
-          </Button>
-          <Button
-            onClick={submit}
-            disabled={isLoading || (anyOver && (!canOverIssue || !confirmOver))}
-          >
-            {t('Post issue')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ── Return ────────────────────────────────────────────────────────────────────────
 
 export function ReturnMaterialsDialog({
   order,
@@ -1058,29 +611,32 @@ export function InspectOutputDialog({
 }) {
   const { t } = useLanguage()
   const { data: settings } = useGetManufacturingSettingsQuery()
-  const [good, setGood] = useState(String(output.producedQuantity))
-  const [disposition, setDisposition] = useState<RejectDisposition | null>(null)
-  const [reason, setReason] = useState('')
+  const [quality, setQuality] = useState<QualityValue>({
+    good: output.producedQuantity,
+    disposition: settings?.defaultRejectDisposition ?? 'scrap',
+    reason: '',
+  })
   const [fg, setFg] = useState<FinishedGoodsInput>({})
   const [notes, setNotes] = useState('')
   const [inspect, { isLoading }] = useInspectOutputMutation()
-  const effectiveDisposition =
-    disposition ?? settings?.defaultRejectDisposition ?? 'scrap'
+  const good = Math.min(quality.good, output.producedQuantity)
+  const rejected = Math.max(0, output.producedQuantity - good)
 
   const submit = async () => {
-    const goodQuantity = Number(good) || 0
     const ok = await notify(
       () =>
         inspect({
           outputId: output.id,
-          goodQuantity,
-          rejectedQuantity: Math.max(0, output.producedQuantity - goodQuantity),
-          rejectDisposition: effectiveDisposition,
-          rejectReason: reason,
+          goodQuantity: good,
+          rejectedQuantity: rejected,
+          rejectDisposition: quality.disposition,
+          rejectReason: rejected > EPS ? quality.reason : undefined,
           finishedGoods: cleanFg(fg),
           inspectionNotes: notes,
         }).unwrap(),
-      t('Inspection posted'),
+      rejected > EPS
+        ? `${t('Inspection posted')} · ${fmtQty(good)} ${t('to finished stock')}, ${fmtQty(rejected)} → ${t(quality.disposition)}`
+        : `${t('Inspection posted')} · ${fmtQty(good)} ${t('to finished stock')}`,
       t('Failed to post inspection')
     )
     if (ok) onClose()
@@ -1088,29 +644,52 @@ export function InspectOutputDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className='flex max-h-[92vh] flex-col sm:max-w-lg'>
+      <DialogContent className='flex max-h-[92vh] flex-col sm:max-w-xl'>
         <DialogHeader>
-          <DialogTitle>
-            {t('Quality inspection')} · {output.outputNumber}
+          <DialogTitle className='flex items-center gap-2'>
+            {t('Quality inspection')}
+            <span className='font-mono text-sm font-normal'>
+              {output.outputNumber}
+            </span>
           </DialogTitle>
           <DialogDescription>
-            {fmtQty(output.producedQuantity)} {output.unit} {t('of')}{' '}
-            {output.productName} · {t('reported')} {fmtDate(output.reportedAt)}
+            {t(
+              'Pass what meets the standard — it goes to finished stock. Rejected units are scrapped or sent to rework.'
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className='flex-1 space-y-4 overflow-y-auto'>
-          <RejectFields
-            produced={output.producedQuantity}
-            good={good}
-            setGood={setGood}
-            disposition={effectiveDisposition}
-            setDisposition={setDisposition}
-            reason={reason}
-            setReason={setReason}
+          <div className='bg-muted/30 grid grid-cols-2 gap-3 rounded-lg border p-3 text-sm sm:grid-cols-4'>
+            <div className='col-span-2 min-w-0'>
+              <div className='text-muted-foreground text-xs'>
+                {t('Product')}
+              </div>
+              <div className='truncate font-medium'>{output.productName}</div>
+            </div>
+            <div>
+              <div className='text-muted-foreground text-xs'>
+                {t('To inspect')}
+              </div>
+              <div className='font-semibold tabular-nums'>
+                {fmtQty(output.producedQuantity)} {output.unit}
+              </div>
+            </div>
+            <div>
+              <div className='text-muted-foreground text-xs'>
+                {t('Reported')}
+              </div>
+              <div className='tabular-nums'>{fmtDate(output.reportedAt)}</div>
+            </div>
+          </div>
+          <QualityDecision
+            total={output.producedQuantity}
+            unit={output.unit}
+            value={{ ...quality, good }}
+            onChange={setQuality}
           />
           <FinishedGoodsFields
             order={order}
-            quantity={Number(good) || 0}
+            quantity={good}
             value={fg}
             onChange={setFg}
           />
@@ -1120,6 +699,9 @@ export function InspectOutputDialog({
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              placeholder={t(
+                'What was checked, measurements, inspector remarks…'
+              )}
             />
           </div>
         </div>
@@ -1128,7 +710,9 @@ export function InspectOutputDialog({
             {t('Cancel')}
           </Button>
           <Button onClick={submit} disabled={isLoading}>
-            {t('Post inspection')}
+            {rejected > EPS
+              ? `${t('Pass')} ${fmtQty(good)} · ${t('reject')} ${fmtQty(rejected)}`
+              : `${t('Pass all')} ${fmtQty(good)}`}
           </Button>
         </DialogFooter>
       </DialogContent>

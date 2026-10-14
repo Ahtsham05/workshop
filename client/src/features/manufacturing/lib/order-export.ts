@@ -1,5 +1,6 @@
 import type { OrderExportRow } from '@/stores/manufacturing.api'
 import { PRIORITY_META, statusLabel } from './constants'
+import { formatAppDateTime } from '@/lib/date-format'
 
 /*
  * Production order export, following the invoice list's approach: CSV is a download with a
@@ -75,7 +76,7 @@ export function exportOrdersCsv(
   URL.revokeObjectURL(link.href)
 }
 
-const escapeHtml = (value: unknown) =>
+export const escapeHtml = (value: unknown) =>
   String(value ?? '').replace(
     /[&<>"]/g,
     (c) =>
@@ -143,7 +144,7 @@ export function printOrders(
     meta.truncated
       ? ` of ${meta.totalResults} (narrow the filters to print the rest)`
       : ''
-  } · printed ${escapeHtml(new Date().toLocaleString())}</div>
+  } · printed ${escapeHtml(formatAppDateTime(new Date()))}</div>
   <table>
     <thead><tr>
       <th>Order</th><th>Product / BOM</th><th>Status</th><th>Priority</th>

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import { ListPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   useCreateProductionOrderMutation,
@@ -34,6 +36,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { PRIORITIES, PRIORITY_META, fmtQty } from '../lib/constants'
 import { ProductPicker } from './product-picker'
+import { TeamPicker } from './team-picker'
 
 const toDateInput = (value?: string | null) =>
   value ? new Date(value).toISOString().slice(0, 10) : ''
@@ -54,13 +57,15 @@ export function ProductionOrderDialog({
   const { t } = useLanguage()
   const orderType = order?.orderType || orderTypeProp
   const isAssembly = orderType === 'assembly'
-  const { data: operators } = useGetOperatorsQuery(undefined, {
-    skip: !isAssembly,
-  })
+  const { data: operators } = useGetOperatorsQuery()
   const [operatorId, setOperatorId] = useState<string>(
     order?.operatorId || NONE
   )
+  const [teamIds, setTeamIds] = useState<string[]>(
+    () => order?.team?.map((m) => m.userId) || []
+  )
   const branchName = useBranchName()
+  const navigate = useNavigate()
   const { data: settings } = useGetManufacturingSettingsQuery()
   const recipeEditable =
     !order || order.status === 'draft' || order.status === 'planned'
@@ -129,9 +134,8 @@ export function ProductionOrderDialog({
       wipLocation,
       finishedGoodsLocation: fgLocation,
       notes,
-      ...(isAssembly
-        ? { operatorId: operatorId === NONE ? null : operatorId }
-        : {}),
+      operatorId: operatorId === NONE ? null : operatorId,
+      teamMemberIds: teamIds.filter((id) => id !== operatorId),
     }
     try {
       const saved = order
@@ -159,13 +163,33 @@ export function ProductionOrderDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className='sm:max-w-2xl'>
         <DialogHeader>
-          <DialogTitle>
-            {order
-              ? `${t('Edit')} ${order.orderNumber}`
-              : isAssembly
-                ? t('New assembly order')
-                : t('New production order')}
-          </DialogTitle>
+          <div className='flex flex-wrap items-center justify-between gap-2 pr-6'>
+            <DialogTitle>
+              {order
+                ? `${t('Edit')} ${order.orderNumber}`
+                : isAssembly
+                  ? t('New assembly order')
+                  : t('New production order')}
+            </DialogTitle>
+            {!order && !isAssembly && (
+              // Several products at once, invoice-style (keeps the product picked here).
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                onClick={() => {
+                  onClose()
+                  navigate({
+                    to: '/manufacturing/production-orders/new' as never,
+                    search: (product ? { productId: product.id } : {}) as never,
+                  })
+                }}
+              >
+                <ListPlus className='mr-1.5 h-3.5 w-3.5' />
+                {t('Multiple products')}
+              </Button>
+            )}
+          </div>
           <DialogDescription>
             {t(
               'Materials are issued from, and output received into, this branch’s stock'
@@ -253,24 +277,31 @@ export function ProductionOrderDialog({
               </SelectContent>
             </Select>
           </div>
-          {isAssembly && (
-            <div className='grid gap-1.5 md:col-span-6'>
-              <Label>{t('Operator')}</Label>
-              <Select value={operatorId} onValueChange={setOperatorId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t('Assign an operator')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>{t('Unassigned')}</SelectItem>
-                  {operators?.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <div className='grid gap-1.5 md:col-span-6'>
+            <Label>{t('Operator')}</Label>
+            <Select value={operatorId} onValueChange={setOperatorId}>
+              <SelectTrigger>
+                <SelectValue placeholder={t('Assign an operator')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>{t('Unassigned')}</SelectItem>
+                {operators?.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className='grid gap-1.5 md:col-span-6'>
+            <Label>{t('Production team')}</Label>
+            <TeamPicker
+              users={operators || []}
+              value={teamIds}
+              onChange={setTeamIds}
+              excludeId={operatorId === NONE ? null : operatorId}
+            />
+          </div>
           <div className='grid gap-1.5 md:col-span-3'>
             <Label>{t('Planned start')}</Label>
             <Input

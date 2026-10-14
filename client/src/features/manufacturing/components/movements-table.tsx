@@ -13,16 +13,14 @@ import { BUCKET_META, MOVEMENT_LABELS, fmtQty, refName } from '../lib/constants'
 import { DataTable, type Column } from './data-table'
 import { EmptyState } from './page'
 import { Pager } from './pager'
+import { formatAppDateTime } from '@/lib/date-format'
 
 const productLabel = (m: StockMovement) =>
   typeof m.productId === 'object' && m.productId ? m.productId.name : '—'
 const batchLabel = (m: StockMovement) =>
   typeof m.batchId === 'object' && m.batchId ? m.batchId.batchNumber : null
 const when = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
+  formatAppDateTime(new Date(iso))
 
 function Delta({ m }: { m: StockMovement }) {
   return (

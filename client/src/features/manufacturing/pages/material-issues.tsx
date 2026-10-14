@@ -1,6 +1,16 @@
 import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { ArrowRight, PackageMinus } from 'lucide-react'
+import { Link, useNavigate } from '@tanstack/react-router'
+import {
+  ArrowRight,
+  FileText,
+  MoreHorizontal,
+  PackageMinus,
+  Pencil,
+  PieChart,
+  Plus,
+  ReceiptText,
+  Trash2,
+} from 'lucide-react'
 import {
   useGetMaterialIssuesQuery,
   type MaterialIssue,
@@ -8,13 +18,24 @@ import {
 import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DateRangeFilter } from '@/components/filters/date-range-filter'
 import { CellStack, DataTable, type Column } from '../components/data-table'
+import { DeleteIssueDialog } from '../components/delete-issue-dialog'
 import { DetailSheet, SheetSection } from '../components/detail-sheet'
 import { FilterChips, SearchField, Toolbar } from '../components/list-controls'
+import { MaterialUsageView } from '../components/material-usage-view'
 import { EmptyState, Field, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
 import { fmtDate, fmtQty, refName } from '../lib/constants'
@@ -34,6 +55,14 @@ function KindBadge({ issue }: { issue: MaterialIssue }) {
       >
         {issue.kind === 'return' ? t('Return') : t('Issue')}
       </Badge>
+      {issue.status === 'cancelled' && (
+        <Badge
+          variant='outline'
+          className='h-5 border-rose-500/30 bg-rose-500/10 px-1.5 text-[10px] font-medium text-rose-700 dark:text-rose-300'
+        >
+          {t('Cancelled')}
+        </Badge>
+      )}
       {issue.isOverIssue && (
         <Badge
           variant='outline'
@@ -46,12 +75,91 @@ function KindBadge({ issue }: { issue: MaterialIssue }) {
   )
 }
 
-export default function MaterialIssuesPage() {
+/**
+ * Material issues: the vouchers (issues and returns), and Material usage — where the
+ * issued material went (used in output, returned, wastage, still in the factory).
+ */
+export default function MaterialIssuesPage({
+  view,
+  orderId,
+}: {
+  view?: 'usage'
+  orderId?: string
+}) {
+  const { t } = useLanguage()
+  const navigate = useNavigate()
+  const { hasPermission } = usePermissions()
+  const canIssue = hasPermission('executeProduction')
+  const setSearch = (next: { view?: 'usage'; orderId?: string }) =>
+    navigate({
+      to: '/manufacturing/material-issues' as never,
+      search: next as never,
+      replace: true,
+    })
+
+  return (
+    <div className='space-y-5'>
+      <PageHeader
+        title={t('Material issues')}
+        description={
+          view === 'usage'
+            ? t(
+                'Where issued material went: used in finished goods, returned to the store, wasted, or still on the factory floor.'
+              )
+            : t(
+                'Every component moved from stock into WIP (issues) and back (returns). Each is permanent and appears in the stock ledger.'
+              )
+        }
+        actions={
+          canIssue ? (
+            <Button asChild>
+              <Link to={'/manufacturing/material-issues/new' as never}>
+                <Plus className='mr-1.5 h-4 w-4' />
+                {t('New Issue Voucher')}
+              </Link>
+            </Button>
+          ) : undefined
+        }
+      />
+      <Tabs
+        value={view === 'usage' ? 'usage' : 'vouchers'}
+        onValueChange={(v) => setSearch(v === 'usage' ? { view: 'usage' } : {})}
+      >
+        <TabsList>
+          <TabsTrigger value='vouchers' className='gap-1.5 px-3'>
+            <ReceiptText className='h-4 w-4' />
+            {t('Issue vouchers')}
+          </TabsTrigger>
+          <TabsTrigger value='usage' className='gap-1.5 px-3'>
+            <PieChart className='h-4 w-4' />
+            {t('Material usage')}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {view === 'usage' ? (
+        <MaterialUsageView
+          key={orderId || 'all'}
+          orderId={orderId}
+          onClearOrder={() => setSearch({ view: 'usage' })}
+        />
+      ) : (
+        <IssueVouchers />
+      )}
+    </div>
+  )
+}
+
+function IssueVouchers() {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search, 300)
-  const [kind, setKind] = useState<'all' | 'issue' | 'return'>('all')
+  const [kind, setKind] = useState<'all' | 'issue' | 'return' | 'cancelled'>(
+    'all'
+  )
+  const { hasPermission } = usePermissions()
+  const navigate = useNavigate()
+  const [deleting, setDeleting] = useState<MaterialIssue | null>(null)
   const [range, setRange] = useState<{ startDate?: string; endDate?: string }>(
     {}
   )
@@ -61,7 +169,13 @@ export default function MaterialIssuesPage() {
     page,
     limit: 20,
     search: debounced || undefined,
-    kind: kind === 'all' ? undefined : kind,
+    kind: kind === 'issue' || kind === 'return' ? kind : undefined,
+    status:
+      kind === 'cancelled'
+        ? 'cancelled'
+        : kind === 'issue'
+          ? 'posted'
+          : undefined,
     dateFrom: range.startDate,
     dateTo: range.endDate,
   })
@@ -129,7 +243,14 @@ export default function MaterialIssuesPage() {
       header: t('Value'),
       align: 'right',
       cell: (issue) => (
-        <span className='tabular-nums'>{formatMoney(issue.totalCost)}</span>
+        <span
+          className={cn(
+            'tabular-nums',
+            issue.status === 'cancelled' && 'text-muted-foreground line-through'
+          )}
+        >
+          {formatMoney(issue.totalCost)}
+        </span>
       ),
     },
     {
@@ -142,17 +263,73 @@ export default function MaterialIssuesPage() {
         </span>
       ),
     },
+    {
+      id: 'actions',
+      header: <span className='sr-only'>{t('Actions')}</span>,
+      className: 'w-12',
+      align: 'right',
+      cell: (issue) => {
+        const changeable =
+          issue.kind === 'issue' && issue.status !== 'cancelled'
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant='ghost'
+                size='icon'
+                className='h-8 w-8'
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`${t('Actions for')} ${issue.issueNumber}`}
+              >
+                <MoreHorizontal className='h-4 w-4' />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align='end'
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DropdownMenuItem asChild>
+                <Link
+                  to={`/manufacturing/material-issues/${issue.id}` as never}
+                >
+                  <FileText className='mr-2 h-4 w-4' />
+                  {t('Open voucher')}
+                </Link>
+              </DropdownMenuItem>
+              {changeable && hasPermission('executeProduction') && (
+                <DropdownMenuItem
+                  onClick={() =>
+                    navigate({
+                      to: `/manufacturing/material-issues/${issue.id}` as never,
+                      search: { edit: true } as never,
+                    })
+                  }
+                >
+                  <Pencil className='mr-2 h-4 w-4' />
+                  {t('Edit')}
+                </DropdownMenuItem>
+              )}
+              {changeable && hasPermission('manageProductionOrders') && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className='text-rose-600 focus:text-rose-700 dark:text-rose-400'
+                    onClick={() => setDeleting(issue)}
+                  >
+                    <Trash2 className='mr-2 h-4 w-4' />
+                    {t('Delete')}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
+    },
   ]
 
   return (
     <div className='space-y-5'>
-      <PageHeader
-        title={t('Material issues')}
-        description={t(
-          'Every component moved from stock into WIP (issues) and back (returns). Each is permanent and appears in the stock ledger.'
-        )}
-      />
-
       <Toolbar
         end={
           <DateRangeFilter
@@ -184,6 +361,7 @@ export default function MaterialIssuesPage() {
             { value: 'all', label: t('All') },
             { value: 'issue', label: t('Issues') },
             { value: 'return', label: t('Returns') },
+            { value: 'cancelled', label: t('Cancelled'), tone: 'danger' },
           ]}
         />
       </Toolbar>
@@ -209,7 +387,7 @@ export default function MaterialIssuesPage() {
               filtered
                 ? t('Try another type, date range or search.')
                 : t(
-                    'Release a production order, then issue its materials from the order page.'
+                    'Release a production order, then issue its materials with a New Issue Voucher.'
                   )
             }
           />
@@ -240,6 +418,14 @@ export default function MaterialIssuesPage() {
         }
       />
 
+      {deleting && (
+        <DeleteIssueDialog
+          issue={deleting}
+          open
+          onOpenChange={(o) => !o && setDeleting(null)}
+        />
+      )}
+
       {open && (
         <DetailSheet
           open
@@ -256,16 +442,24 @@ export default function MaterialIssuesPage() {
           }
           badges={<KindBadge issue={open} />}
           footer={
-            <Button asChild variant='outline'>
-              <Link
-                to={
-                  `/manufacturing/production-orders/${open.productionOrderId}` as never
-                }
-              >
-                {t('Open order')} {open.orderNumber}
-                <ArrowRight className='ml-1.5 h-3.5 w-3.5' />
-              </Link>
-            </Button>
+            <div className='flex flex-wrap gap-2'>
+              <Button asChild>
+                <Link to={`/manufacturing/material-issues/${open.id}` as never}>
+                  <FileText className='mr-1.5 h-3.5 w-3.5' />
+                  {t('Open voucher')}
+                </Link>
+              </Button>
+              <Button asChild variant='outline'>
+                <Link
+                  to={
+                    `/manufacturing/production-orders/${open.productionOrderId}` as never
+                  }
+                >
+                  {t('Open order')} {open.orderNumber}
+                  <ArrowRight className='ml-1.5 h-3.5 w-3.5' />
+                </Link>
+              </Button>
+            </div>
           }
         >
           <dl className='grid grid-cols-2 gap-4'>

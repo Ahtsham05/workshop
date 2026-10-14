@@ -44,6 +44,13 @@ type SearchableSelectProps = {
   /** Override the dropdown's width/sizing — by default it matches the trigger's width,
    * which is too narrow for picture+name+phone rows (e.g. a supplier picker). */
   popoverClassName?: string
+  /** Control the dropdown from outside — e.g. open it when an Enter-key chain arrives here,
+   * so the search box is ready without a second keypress. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Picking the current value again clears it (the default). Pass false for a required
+   * choice: the current value is then highlighted on open, and Enter keeps it. */
+  deselectable?: boolean
 }
 
 export function SearchableSelect({
@@ -62,10 +69,19 @@ export function SearchableSelect({
   onKeyDownCapture,
   onSelected,
   popoverClassName,
+  open: openProp,
+  onOpenChange,
+  deselectable = true,
 }: SearchableSelectProps) {
-  const [open, setOpen] = React.useState(false)
+  const [openState, setOpenState] = React.useState(false)
+  const open = openProp ?? openState
+  const setOpen = (next: boolean) => {
+    if (openProp === undefined) setOpenState(next)
+    onOpenChange?.(next)
+  }
 
   const selected = options.find((o) => o.value === value)
+  const itemValue = (o: SearchableSelectOption) => `${o.label} ${o.sublabel ?? ''}`.trim()
 
   // Enter is never intercepted for chain-advancement here — a closed combobox should open
   // on Enter (native button behavior), and an open one lets `Command` handle Enter to select
@@ -117,7 +133,7 @@ export function SearchableSelect({
         collisionPadding={8}
         avoidCollisions
       >
-        <Command>
+        <Command defaultValue={!deselectable && selected ? itemValue(selected) : undefined}>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
@@ -141,9 +157,9 @@ export function SearchableSelect({
                 return (
                   <CommandItem
                     key={option.value}
-                    value={`${option.label} ${option.sublabel ?? ''}`}
+                    value={itemValue(option)}
                     onSelect={() => {
-                      onValueChange(option.value === value ? '' : option.value)
+                      onValueChange(deselectable && option.value === value ? '' : option.value)
                       setOpen(false)
                       onSelected?.()
                     }}

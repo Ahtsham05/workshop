@@ -8,7 +8,6 @@ import {
 import {
   ChevronDown,
   ClipboardList,
-  Component,
   Factory,
   FileStack,
   Plus,
@@ -18,6 +17,8 @@ import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { useBranchName } from '@/hooks/use-branch-name'
+import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -52,6 +53,7 @@ export default function ManufacturingShell() {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const branchName = useBranchName()
+  const { tester } = useManufacturingAccess()
   const { hasPermission } = usePermissions()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const [searchOpen, setSearchOpen] = useState(false)
@@ -64,6 +66,8 @@ export default function ManufacturingShell() {
   })).filter((g) => g.sections.length > 0)
   const activeGroup =
     groups.find((g) => g.sections.some((s) => isSectionActive(pathname, s))) ||
+    // A page that isn't in the menu (reached by a link) highlights Overview.
+    groups.find((g) => g.id === 'overview') ||
     groups[0]
 
   // "/" opens search from anywhere in the module (⌘K stays the app-wide palette).
@@ -90,8 +94,19 @@ export default function ManufacturingShell() {
               <Factory className='h-[18px] w-[18px]' aria-hidden />
             </div>
             <div className='min-w-0 flex-1'>
-              <h1 className='truncate text-lg leading-tight font-semibold tracking-tight'>
+              <h1 className='flex items-center gap-2 truncate text-lg leading-tight font-semibold tracking-tight'>
                 {t('Manufacturing')}
+                {tester && (
+                  <Badge
+                    variant='outline'
+                    className='border-amber-500/30 bg-amber-500/10 text-[10px] font-medium text-amber-700 dark:text-amber-300'
+                    title={t(
+                      'You see Manufacturing because your login is on the tester list, whatever the business type.'
+                    )}
+                  >
+                    {t('Tester access')}
+                  </Badge>
+                )}
               </h1>
               {branchName && (
                 <p className='text-muted-foreground truncate text-xs'>
@@ -132,19 +147,6 @@ export default function ManufacturingShell() {
                     >
                       <ClipboardList className='mr-2 h-4 w-4' />
                       {t('Production order')}
-                    </DropdownMenuItem>
-                  )}
-                  {canOrders && (
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        navigate({
-                          to: '/manufacturing/assembly-orders' as never,
-                          search: { new: true } as never,
-                        })
-                      }
-                    >
-                      <Component className='mr-2 h-4 w-4' />
-                      {t('Assembly order')}
                     </DropdownMenuItem>
                   )}
                   {canBoms && (

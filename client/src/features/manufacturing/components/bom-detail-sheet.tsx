@@ -109,7 +109,12 @@ export function BomDetailSheet({
       >
         <SheetHeader className='border-b px-6 py-5'>
           {isLoading || !bom ? (
-            <Skeleton className='h-10 w-64' />
+            <>
+              <SheetTitle className='sr-only'>
+                {t('Bill of materials')}
+              </SheetTitle>
+              <Skeleton className='h-10 w-64' />
+            </>
           ) : (
             <>
               <div className='flex flex-wrap items-center gap-2'>
@@ -229,11 +234,22 @@ export function BomDetailSheet({
           <Tabs defaultValue='structure' className='px-6 py-4'>
             <TabsList>
               <TabsTrigger value='structure'>{t('Structure')}</TabsTrigger>
+              <TabsTrigger value='routing'>
+                {t('Routing')}
+                {(bom.operations?.length ?? 0) > 0 && (
+                  <span className='text-muted-foreground ml-1.5 text-[10px]'>
+                    {bom.operations!.length}
+                  </span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value='versions'>{t('Versions')}</TabsTrigger>
               <TabsTrigger value='where-used'>{t('Where used')}</TabsTrigger>
             </TabsList>
             <TabsContent value='structure' className='mt-4'>
               <StructureTab bom={bom} onSelect={onSelect} />
+            </TabsContent>
+            <TabsContent value='routing' className='mt-4'>
+              <RoutingTab bom={bom} />
             </TabsContent>
             <TabsContent value='versions' className='mt-4'>
               <VersionsTab bom={bom} onSelect={onSelect} />
@@ -493,5 +509,58 @@ function WhereUsedTab({
         </li>
       ))}
     </ul>
+  )
+}
+
+/** The steps orders made from this version will follow on the floor. */
+function RoutingTab({ bom }: { bom: Bom }) {
+  const { t } = useLanguage()
+  const ops = bom.operations || []
+  if (!ops.length) {
+    return (
+      <p className='text-muted-foreground rounded-xl border border-dashed p-6 text-center text-sm'>
+        {t(
+          'No routing on this version. Edit the BOM (or create a new version) to add steps like Cutting, Welding and Assembly.'
+        )}
+      </p>
+    )
+  }
+  return (
+    <ol className='divide-y rounded-xl border'>
+      {ops.map((op, i) => (
+        <li
+          key={op._id || i}
+          className='flex items-start gap-3 px-4 py-3 text-sm'
+        >
+          <span className='bg-muted text-muted-foreground mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-medium tabular-nums'>
+            {i + 1}
+          </span>
+          <div className='min-w-0 flex-1'>
+            <div className='font-medium'>{op.name}</div>
+            <div className='text-muted-foreground text-xs'>
+              {[
+                op.workCenter,
+                op.setupMinutes
+                  ? `${fmtQty(op.setupMinutes)} ${t('min setup')}`
+                  : null,
+                op.runMinutesPerUnit
+                  ? `${fmtQty(op.runMinutesPerUnit)} ${t('min / unit')}`
+                  : null,
+                op.costPerHour
+                  ? `${fmtQty(op.costPerHour)} ${t('/ hour')}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || t('No timings')}
+            </div>
+            {op.instructions && (
+              <p className='text-muted-foreground mt-1 text-xs whitespace-pre-wrap'>
+                {op.instructions}
+              </p>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
   )
 }

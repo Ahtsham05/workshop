@@ -2,7 +2,9 @@ import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
 import { inventoryApi } from './inventory.api'
 import { productApi } from './product.api'
+import { purchaseApi } from './purchase.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
+import { purchaseOrderApi } from './purchaseOrder.api'
 
 /**
  * Manufacturing module (server: routes/v1/manufacturing.route.js). Issues, receipts and
@@ -21,6 +23,28 @@ const invalidateStockCaches = async (
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
     dispatch(productApi.util.invalidateTags(['Product']))
     dispatch(inventoryApi.util.invalidateTags(['Inventory'] as never))
+  } catch {
+    // mutation failed — nothing to invalidate
+  }
+}
+
+/**
+ * A confirmed receipt moves stock and creates a purchase (supplier payable, PO receipt),
+ * so the catalog, inventory, purchase and purchase-order caches all refresh too. A draft
+ * save changes none of them, but refreshing is harmless and keeps this one rule simple.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const invalidateReceiptCaches = async (_arg: unknown, api: any) => {
+  await invalidateStockCaches(_arg, api)
+  try {
+    await api.queryFulfilled
+    api.dispatch(purchaseApi.util.invalidateTags(['Purchase']))
+    api.dispatch(
+      purchaseOrderApi.util.invalidateTags([
+        'PurchaseOrder',
+        'PurchaseOrderStats',
+      ])
+    )
   } catch {
     // mutation failed — nothing to invalidate
   }
@@ -95,6 +119,71 @@ export interface ManufacturingProduct {
   manufacturingLeadTimeDays: number | null
   bomCount: number
   activeBomCount: number
+  categories?: { _id: string; name: string }[]
+  createdAt?: string
+}
+
+export interface ManufacturingProductFilters {
+  productType?: string
+  classifiedOnly?: boolean
+  hasBom?: boolean
+  procurementType?: ProcurementType | 'none'
+  stock?: 'in' | 'out'
+  search?: string
+}
+
+export interface ManufacturingProductStats {
+  products: number
+  stockQuantity: number
+  stockValue: number
+  avgCost: number
+  outOfStock: number
+  withBom: number
+}
+
+/** The manufacturing side of one product (its details page). */
+export interface ManufacturingProductOverview {
+  product: ManufacturingProduct
+  boms: {
+    id: string
+    bomNumber: string
+    version: number
+    name?: string
+    isActive: boolean
+    isDefault: boolean
+    isLocked: boolean
+    quantity: number
+    unit: string
+    componentCount: number
+    operationCount: number
+    updatedAt: string
+  }[]
+  whereUsed: WhereUsedEntry[]
+  making: {
+    id: string
+    orderNumber: string
+    orderType: OrderType
+    status: ProductionStatus
+    priority: ProductionPriority
+    plannedQuantity: number
+    producedQuantity: number
+    completedQuantity: number
+    unit: string
+    plannedCompletionDate?: string | null
+    createdAt: string
+  }[]
+  consuming: {
+    id: string
+    orderNumber: string
+    orderType: OrderType
+    status: ProductionStatus
+    productName: string
+    plannedCompletionDate?: string | null
+    required: number
+    issued: number
+    inWip: number
+  }[]
+  totals: { inProduction: number; requiredByOpenOrders: number; inWip: number }
 }
 
 export interface BomAlternative {
@@ -120,6 +209,19 @@ export interface BomComponent {
   sequence?: number
 }
 
+/** One step of a BOM's routing; orders plan setup + run × quantity minutes from it. */
+export interface BomOperation {
+  _id?: string
+  name: string
+  workCenter?: string
+  setupMinutes?: number
+  runMinutesPerUnit?: number
+  /** Labour + machine rate — conversion cost is informational (not in stock valuation). */
+  costPerHour?: number
+  instructions?: string
+  sequence?: number
+}
+
 export interface Bom {
   id: string
   bomNumber: string
@@ -131,6 +233,7 @@ export interface Bom {
   quantity: number
   unit: string
   components: BomComponent[]
+  operations?: BomOperation[]
   notes?: string
   isActive: boolean
   isDefault: boolean
@@ -148,6 +251,7 @@ export interface BomInput {
   quantity?: number
   unit?: string
   components?: Omit<BomComponent, 'productName' | 'sku'>[]
+  operations?: BomOperation[]
   notes?: string
   isActive?: boolean
   isDefault?: boolean
@@ -241,6 +345,54 @@ export interface WipLot {
   issuedAt: string
 }
 
+export type OperationStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'skipped'
+
+/** A routing step on an order, tracked on the floor. */
+export interface OrderOperation {
+  _id: string
+  name: string
+  workCenter: string
+  sequence: number
+  plannedMinutes: number
+  costPerHour: number
+  instructions: string
+  status: OperationStatus
+  startedAt?: string | null
+  startedByName?: string
+  completedAt?: string | null
+  completedByName?: string
+  /** Time worked; null when not recorded (costed at plan). */
+  actualMinutes?: number | null
+  note?: string
+}
+
+export type OrderDocumentCategory =
+  | 'drawing'
+  | 'specification'
+  | 'work_instruction'
+  | 'quality'
+  | 'certificate'
+  | 'photo'
+  | 'other'
+
+export interface OrderDocument {
+  _id: string
+  kind: 'file' | 'link'
+  title: string
+  category: OrderDocumentCategory
+  url?: string
+  fileName?: string
+  mimeType?: string
+  bytes?: number
+  uploadedBy?: string | null
+  uploadedByName?: string
+  uploadedAt: string
+}
+
 export interface ProductionOrder {
   id: string
   orderNumber: string
@@ -250,6 +402,7 @@ export interface ProductionOrder {
   parentMaterialLineId?: string | null
   operatorId?: string | null
   operatorName?: string
+  team?: { userId: string; name: string }[]
   productId: string
   variantId?: string | null
   productName: string
@@ -279,6 +432,11 @@ export interface ProductionOrder {
   notes?: string
   materials: ProductionMaterial[]
   wipLots: WipLot[]
+  operations?: OrderOperation[]
+  documents?: OrderDocument[]
+  branchId?: string
+  qcPendingCost?: number
+  reworkPendingCost?: number
   materialCost: number
   finishedGoodsValue: number
   statusHistory: {
@@ -291,6 +449,80 @@ export interface ProductionOrder {
   createdBy?: Ref
   createdAt: string
   updatedAt: string
+}
+
+export interface ManufacturingAccess {
+  enabled: boolean
+  /** Why not: the business type isn't Manufacturing, or this login isn't on the rollout list. */
+  reason: null | 'business_type' | 'not_invited'
+  /** 'tester': on the server's tester list — sees the module in any business type. */
+  via?: 'tester'
+}
+
+// ── Raw material receipt (RMV) ───────────────────────────────────────────────────
+export type MaterialReceiptStatus = 'draft' | 'confirmed' | 'cancelled'
+
+export interface MaterialReceiptLine {
+  _id?: string
+  productId: string
+  variantId?: string | null
+  productName?: string
+  sku?: string
+  productType?: ProductType | null
+  quantity: number | null
+  unit?: string
+  rate: number | null
+  discountPercent?: number | null
+  discountAmount?: number
+  taxPercent?: number | null
+  taxAmount?: number
+  netAmount?: number
+  netUnitCost?: number
+  batchNumber?: string
+  expiryDate?: string | null
+  serials?: string[]
+  location?: string
+  notes?: string
+}
+
+export interface MaterialReceipt {
+  id: string
+  voucherNumber: string
+  status: MaterialReceiptStatus
+  date: string
+  supplierId?: string | null
+  supplierName?: string
+  purchaseOrderId?: string | null
+  purchaseOrderNumber?: string
+  location?: string
+  reference?: string
+  notes?: string
+  lines: MaterialReceiptLine[]
+  totals: {
+    items: number
+    quantity: number
+    subtotal: number
+    discount: number
+    tax: number
+    grandTotal: number
+  }
+  purchaseId?: string | null
+  purchaseInvoiceNumber?: string
+  confirmedAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MaterialReceiptInput {
+  date?: string
+  supplierId?: string | null
+  purchaseOrderId?: string | null
+  location?: string
+  reference?: string
+  notes?: string
+  lines?: MaterialReceiptLine[]
+  /** true = post to stock now ("Save"); otherwise a draft. */
+  confirm?: boolean
 }
 
 export interface ProductionOrderInput {
@@ -308,6 +540,7 @@ export interface ProductionOrderInput {
   status?: 'draft' | 'planned'
   orderType?: OrderType
   operatorId?: string | null
+  teamMemberIds?: string[]
   parentOrderId?: string | null
   parentMaterialLineId?: string | null
 }
@@ -326,7 +559,23 @@ export interface RequirementLine {
   issuedQuantity?: number
   outstandingQuantity?: number
   availableQuantity: number
+  /** Against on-hand only (the order list's "Has shortage"). */
   shortageQuantity: number
+  consumedQuantity?: number
+  returnedQuantity?: number
+  scrappedQuantity?: number
+  wipQuantity?: number
+  /** Order detail only — see productionOrder.service.js#getOrderRequirements. */
+  reservedQuantity?: number
+  heldByEarlierOrdersQuantity?: number
+  heldByEarlierOrders?: {
+    orderId: string
+    orderNumber: string
+    orderType?: OrderType
+    quantity: number
+  }[]
+  /** Outstanding minus what this order can count on after the orders ahead of it. */
+  netShortageQuantity?: number
   alternatives?: BomAlternative[]
   orders?: {
     orderId: string
@@ -340,8 +589,96 @@ export interface OrderRequirements {
   orderId: string
   orderNumber: string
   status: ProductionStatus
+  /** Planned → paused orders hold stock; drafts and closed orders don't. */
+  reserving: boolean
   lines: RequirementLine[]
   shortageCount: number
+  netShortageCount: number
+}
+
+interface PlanActualForecast {
+  planned: number
+  actual: number
+  forecast: number
+}
+
+export interface OrderCosts {
+  orderId: string
+  plannedQuantity: number
+  completedQuantity: number
+  unit: string
+  material: PlanActualForecast
+  conversion: PlanActualForecast
+  total: PlanActualForecast
+  unitCost: { planned: number; forecast: number; actualFinished: number | null }
+  variance: number
+  breakdown: {
+    consumed: number
+    inWip: number
+    inQc: number
+    inRework: number
+    finishedGoods: number
+    scrapped: number
+    returned: number
+  }
+  scrapByStage: Partial<Record<ScrapStage, number>>
+  scrapByReason: Partial<Record<ScrapReason, number>>
+  materials: {
+    materialLineId: string
+    productName: string
+    sku?: string
+    unit: string
+    isOptional: boolean
+    requiredQuantity: number
+    issuedQuantity: number
+    remainingQuantity: number
+    standardUnitCost: number
+    actualUnitCost: number | null
+    plannedCost: number
+    actualCost: number
+    consumedCost: number
+    wipValue: number
+    forecastCost: number
+    variance: number
+  }[]
+  operations: {
+    operationId: string
+    name: string
+    workCenter: string
+    status: OperationStatus
+    costPerHour: number
+    plannedMinutes: number
+    actualMinutes: number | null
+    recordedMinutes: number | null
+    plannedCost: number
+    actualCost: number
+    forecastCost: number
+    /** Time to date is estimated (running step capped at plan, or no time recorded). */
+    estimated: boolean
+  }[]
+}
+
+export type OrderActivityType =
+  | 'created'
+  | 'status'
+  | 'issue'
+  | 'return'
+  | 'output'
+  | 'inspection'
+  | 'receipt'
+  | 'scrap'
+  | 'operation_started'
+  | 'operation_completed'
+  | 'operation_skipped'
+  | 'document'
+
+export interface OrderActivityEvent {
+  type: OrderActivityType
+  at: string
+  by: string | null
+  byName: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: Record<string, any>
 }
 
 export interface AggregatedRequirements {
@@ -370,13 +707,335 @@ export interface MaterialIssue {
     unitCost: number
     totalCost: number
     balanceAfter?: number
+    batchId?: string | null
     batchNumber?: string
     serialNumbers?: string[]
+    variantId?: string | null
   }[]
   totalCost: number
   notes?: string
+  /** MIV header (issues posted from the voucher screen). */
+  sourceLocation?: string
+  wipLocation?: string
+  reference?: string
+  requestedBy?: { userId?: string; name?: string }
+  issuedBy?: { userId?: string; name?: string }
+  overrides?: { line: number; code: IssueWarningCode; message: string }[]
+  branchId?: string
   createdBy?: Ref
   createdAt: string
+  /** Cancelling ("deleting") reverses the stock and keeps the voucher, marked. */
+  status?: 'posted' | 'cancelled'
+  cancelledAt?: string
+  cancelledBy?: { userId?: string; name?: string }
+  cancelReason?: string
+  /** Bumped on every edit/cancel; an edit or cancel names the one it was made from. */
+  revision?: number
+  editHistory?: {
+    at: string
+    by?: { userId?: string; name?: string }
+    kind: 'header' | 'lines'
+    summary?: string
+    note?: string
+    previousTotal?: number
+    newTotal?: number
+  }[]
+}
+
+/** What cancelling a voucher would put back (server materialIssueEdit.service.js). */
+export interface IssueReversalPreview {
+  issueNumber: string
+  status: 'posted' | 'cancelled'
+  revision: number
+  canReverse: boolean
+  totalCost: number
+  lines: {
+    productName: string
+    unit: string
+    quantity: number
+    /** Still on the floor (can go back). */
+    inWip: number
+    /** Already used in output, scrapped or returned. */
+    gone: number
+    batchNumber: string | null
+    totalCost: number
+  }[]
+  order: {
+    id: string
+    orderNumber: string
+    productName: string
+    status: ProductionStatus
+    /** Nothing else happened on it — it can be cancelled together with the voucher. */
+    canCancel: boolean
+  }
+}
+
+export type EditIssueBody = Omit<
+  IssueVoucherBody,
+  'productionOrderId' | 'newOrder'
+> & {
+  revision: number
+  editNote?: string
+}
+
+/** Several production orders at once (server productionOrderBatch.service.js). */
+export interface OrderBatchHeader {
+  plannedStartDate?: string | null
+  plannedCompletionDate?: string | null
+  priority?: ProductionPriority | ''
+  operatorId?: string | null
+  teamMemberIds?: string[]
+  sourceLocation?: string
+  wipLocation?: string
+  finishedGoodsLocation?: string
+  notes?: string
+  status: 'draft' | 'planned'
+}
+
+export interface OrderBatchLine {
+  productId: string | null
+  variantId?: string | null
+  bomId?: string | null
+  plannedQuantity: number | null
+  priority?: ProductionPriority | '' | null
+  plannedStartDate?: string | null
+  plannedCompletionDate?: string | null
+  notes?: string
+}
+
+export interface OrderBatchShortage {
+  productName: string
+  unit: string
+  required: number
+  available: number
+  short: number
+  onHand: number
+  heldByOpenOrders: number
+}
+
+export interface OrderBatchCheck {
+  rows: { line: number; field: string; message: string }[]
+  lines: {
+    line: number
+    components: number
+    bomNumber?: string | null
+    steps?: number
+    shortages: OrderBatchShortage[]
+  }[]
+}
+
+/** MIV — Material Issue Voucher (see server materialIssueVoucher.service.js). */
+export type IssueWarningCode =
+  | 'exceeds_remaining'
+  | 'expired_batch'
+  | 'insufficient_stock'
+
+export interface IssueVoucherLine {
+  /** An order's material line, or `new:<index>` of a finished-good plan. */
+  materialLineId: string
+  /** The material's product — lets the server check a plan line against the BOM. */
+  productId?: string | null
+  alternativeProductId?: string | null
+  quantity: number | null
+  batchId?: string | null
+  serialNumbers?: string[]
+}
+
+/** Issue for a finished good: posting creates and releases this production order. */
+export interface IssueNewOrder {
+  productId: string
+  variantId?: string | null
+  bomId?: string | null
+  plannedQuantity: number
+}
+
+export interface IssueVoucherBody {
+  /** Either an existing order… */
+  productionOrderId?: string
+  /** …or a finished good to make (the order is created with the issue). */
+  newOrder?: IssueNewOrder
+  date?: string
+  sourceLocation?: string
+  wipLocation?: string
+  requestedById?: string | null
+  issuedById?: string | null
+  reference?: string
+  notes?: string
+  overrides?: IssueWarningCode[]
+  lines: IssueVoucherLine[]
+}
+
+export interface IssueVoucherCheck {
+  header: Partial<Record<string, string>>
+  rows: { line: number; field: string; message: string }[]
+  warnings: {
+    line: number
+    field: string
+    code: IssueWarningCode
+    message: string
+    permission: string
+    allowed: boolean
+  }[]
+  notes: { line: number; field: string; message: string }[]
+}
+
+/** A finished good's BOM exploded for a quantity — see materialIssueVoucher.service.js#planForProduct. */
+export interface MaterialIssuePlan {
+  productId: string
+  variantId: string | null
+  productName: string
+  unit: string
+  quantity: number
+  bom: { id: string; bomNumber: string; version: number }
+  boms: {
+    id: string
+    bomNumber: string
+    version: number
+    name?: string
+    quantity: number
+    unit: string
+    isDefault: boolean
+  }[]
+  lines: (RequirementLine & { perUnit: number; baseQuantity: number })[]
+  shortageCount: number
+  /** This product's orders already open for issue. */
+  openOrders: {
+    id: string
+    orderNumber: string
+    status: ProductionStatus
+    plannedQuantity: number
+    completedQuantity: number
+    unit: string
+    /** Share of its material still to issue (0–100). */
+    openPercent: number
+  }[]
+}
+
+/** What open orders still have to be issued, per material (materialIssueByMaterial.service.js). */
+export interface PendingOrderNeed {
+  orderId: string
+  orderNumber: string
+  orderType: OrderType
+  status: ProductionStatus
+  productName: string
+  materialLineId: string
+  outstanding: number
+}
+
+export interface PendingMaterial {
+  productId: string
+  variantId: string | null
+  productName: string
+  sku: string
+  unit: string
+  productType: ProductType | null
+  imageUrl: string | null
+  /** Still to issue across all open orders. */
+  outstanding: number
+  available: number
+  /** In production-queue order — "auto" fills them in this order. */
+  orders: PendingOrderNeed[]
+}
+
+export interface IssueByMaterialBody {
+  date?: string
+  sourceLocation?: string
+  wipLocation?: string
+  requestedById?: string | null
+  issuedById?: string | null
+  reference?: string
+  notes?: string
+  overrides?: IssueWarningCode[]
+  lines: {
+    productId: string
+    variantId?: string | null
+    quantity: number | null
+    /** One order; empty = split over the orders that need it, queue order. */
+    orderId?: string | null
+  }[]
+}
+
+export interface IssueByMaterialResult {
+  issues: MaterialIssue[]
+  allocations: { orderId: string; orderNumber: string; quantity: number }[][]
+}
+
+/** Where issued material went (server materialUsage.service.js). Quantities in line units. */
+export interface MaterialUsageLine {
+  materialLineId: string
+  productId: string
+  variantId: string | null
+  productName: string
+  sku: string
+  unit: string
+  isOptional: boolean
+  required: number
+  issued: number
+  returned: number
+  /** Backflushed into output (good + rejected units). */
+  used: number
+  /** Scrapped from WIP. */
+  wastage: number
+  /** Still on the production floor (WIP). */
+  inFactory: number
+  toIssue: number
+  /** What the BOM allows for the good output so far. */
+  standard: number
+  /** (used + wastage) − standard. */
+  variance: number
+  issuedValue: number
+  usedValue: number
+  returnedValue: number
+  wastageValue: number
+  inFactoryValue: number
+}
+
+export interface MaterialUsageOrder {
+  id: string
+  orderNumber: string
+  orderType: OrderType
+  status: ProductionStatus
+  productName: string
+  unit: string
+  plannedQuantity: number
+  producedQuantity: number
+  goodQuantity: number
+  rejectedQuantity: number
+  createdAt: string
+  issuedValue: number
+  usedValue: number
+  returnedValue: number
+  wastageValue: number
+  inFactoryValue: number
+  lines: MaterialUsageLine[]
+}
+
+export type MaterialUsageMaterial = Omit<
+  MaterialUsageLine,
+  'materialLineId' | 'isOptional'
+> & { orderCount: number }
+
+export interface MaterialUsageReport {
+  totals: {
+    issuedValue: number
+    usedValue: number
+    returnedValue: number
+    wastageValue: number
+    inFactoryValue: number
+    orderCount: number
+    wastagePercent: number
+  }
+  materials: MaterialUsageMaterial[]
+  orders: MaterialUsageOrder[]
+  truncated: boolean
+}
+
+export interface IssueOptions {
+  locations: string[]
+  defaultSourceLocation: string
+  defaultWipLocation: string
+  allowNegativeStockIssue: boolean
+  permissions: Record<string, boolean>
 }
 
 export interface ProductionReceipt {
@@ -452,6 +1111,8 @@ export interface ProductionOutput {
   inspectedBy?: Ref
   inspectionNotes?: string
   notes?: string
+  /** Received straight to stock while QC is required (the receipt was the inspection). */
+  directReceipt?: boolean
   createdAt: string
 }
 
@@ -910,6 +1571,7 @@ export interface ManufacturingSettings {
     materialReturn: string
     productionOutput: string
     productionReceipt: string
+    rawMaterialReceipt: string
     scrap: string
   }
   numberPadding: number
@@ -947,6 +1609,8 @@ const TAGS = [
   'MfgOutput',
   'MfgMovement',
   'MfgDemo',
+  'MfgMaterialReceipt',
+  'MfgAccess',
 ] as const
 
 /** Everything a stock movement can change. */
@@ -1003,6 +1667,11 @@ export const manufacturingApi = createApi({
   baseQuery,
   tagTypes: TAGS,
   endpoints: (builder) => ({
+    // Whether this user may use the module (manufacturing business type + rollout list).
+    getManufacturingAccess: builder.query<ManufacturingAccess, void>({
+      query: () => '/manufacturing/access',
+      providesTags: ['MfgAccess'],
+    }),
     getManufacturingDashboard: builder.query<ManufacturingDashboard, void>({
       query: () => '/manufacturing/dashboard',
       providesTags: ['MfgDashboard'],
@@ -1058,14 +1727,27 @@ export const manufacturingApi = createApi({
     // Products
     getManufacturingProducts: builder.query<
       Paginated<ManufacturingProduct>,
-      ListParams & {
-        productType?: string
-        classifiedOnly?: boolean
-        hasBom?: boolean
-      }
+      ListParams &
+        ManufacturingProductFilters & {
+          sort?: 'name' | 'newest' | 'stock' | 'stockLow' | 'cost'
+        }
     >({
       query: (params) => ({ url: '/manufacturing/products', params }),
       providesTags: ['MfgProduct'],
+    }),
+    getManufacturingProductStats: builder.query<
+      ManufacturingProductStats,
+      ManufacturingProductFilters
+    >({
+      query: (params) => ({ url: '/manufacturing/products/stats', params }),
+      providesTags: ['MfgProduct'],
+    }),
+    getManufacturingProductOverview: builder.query<
+      ManufacturingProductOverview,
+      string
+    >({
+      query: (productId) => `/manufacturing/products/${productId}/overview`,
+      providesTags: ['MfgProduct', 'MfgBom', 'MfgOrder'],
     }),
     getProductTypeSummary: builder.query<
       Record<ProductType | 'unclassified', number>,
@@ -1389,6 +2071,210 @@ export const manufacturingApi = createApi({
         'MfgBom',
       ],
     }),
+    addOrderOperation: builder.mutation<
+      ProductionOrder,
+      {
+        orderId: string
+        name: string
+        workCenter?: string
+        plannedMinutes?: number
+        costPerHour?: number
+        instructions?: string
+        afterOperationId?: string | null
+      }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/manufacturing/production-orders/${orderId}/operations`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgOrder'],
+    }),
+    updateOrderOperation: builder.mutation<
+      ProductionOrder,
+      {
+        orderId: string
+        operationId: string
+        name?: string
+        workCenter?: string
+        plannedMinutes?: number
+        costPerHour?: number
+        instructions?: string
+      }
+    >({
+      query: ({ orderId, operationId, ...body }) => ({
+        url: `/manufacturing/production-orders/${orderId}/operations/${operationId}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['MfgOrder'],
+    }),
+    removeOrderOperation: builder.mutation<
+      ProductionOrder,
+      { orderId: string; operationId: string }
+    >({
+      query: ({ orderId, operationId }) => ({
+        url: `/manufacturing/production-orders/${orderId}/operations/${operationId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['MfgOrder'],
+    }),
+    reorderOrderOperations: builder.mutation<
+      ProductionOrder,
+      { orderId: string; operationIds: string[] }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/manufacturing/production-orders/${orderId}/operations/reorder`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgOrder'],
+    }),
+    orderOperationAction: builder.mutation<
+      ProductionOrder,
+      {
+        orderId: string
+        operationId: string
+        action: 'start' | 'complete' | 'reopen' | 'skip'
+        at?: string | null
+        actualMinutes?: number | null
+        note?: string
+      }
+    >({
+      query: ({ orderId, operationId, ...body }) => ({
+        url: `/manufacturing/production-orders/${orderId}/operations/${operationId}/action`,
+        method: 'POST',
+        body,
+      }),
+      // A first step on a Released order moves it to In Production.
+      invalidatesTags: ['MfgOrder', 'MfgDashboard', 'MfgRequirements'],
+    }),
+    getOrderCosts: builder.query<OrderCosts, string>({
+      query: (orderId) => `/manufacturing/production-orders/${orderId}/costs`,
+      providesTags: ['MfgOrder'],
+    }),
+    getOrderActivity: builder.query<OrderActivityEvent[], string>({
+      query: (orderId) =>
+        `/manufacturing/production-orders/${orderId}/activity`,
+      providesTags: ['MfgOrder'],
+    }),
+    addOrderDocumentLink: builder.mutation<
+      ProductionOrder,
+      {
+        orderId: string
+        title: string
+        url: string
+        category?: OrderDocumentCategory
+      }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/manufacturing/production-orders/${orderId}/documents/link`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgOrder'],
+    }),
+    uploadOrderDocument: builder.mutation<
+      ProductionOrder,
+      {
+        orderId: string
+        file: File
+        title?: string
+        category?: OrderDocumentCategory
+      }
+    >({
+      query: ({ orderId, file, title, category }) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        if (title) formData.append('title', title)
+        if (category) formData.append('category', category)
+        return {
+          url: `/manufacturing/production-orders/${orderId}/documents`,
+          method: 'POST',
+          body: formData,
+        }
+      },
+      invalidatesTags: ['MfgOrder'],
+    }),
+    // A mutation, not a query: each call mints a fresh short-lived signed URL.
+    getOrderDocumentUrl: builder.mutation<
+      { url: string },
+      { orderId: string; documentId: string }
+    >({
+      query: ({ orderId, documentId }) => ({
+        url: `/manufacturing/production-orders/${orderId}/documents/${documentId}/url`,
+        method: 'GET',
+      }),
+    }),
+    removeOrderDocument: builder.mutation<
+      ProductionOrder,
+      { orderId: string; documentId: string }
+    >({
+      query: ({ orderId, documentId }) => ({
+        url: `/manufacturing/production-orders/${orderId}/documents/${documentId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['MfgOrder'],
+    }),
+    getMaterialReceipts: builder.query<
+      Paginated<MaterialReceipt>,
+      {
+        status?: string
+        supplierId?: string
+        search?: string
+        dateFrom?: string
+        dateTo?: string
+        page?: number
+        limit?: number
+      }
+    >({
+      query: (params) => ({ url: '/manufacturing/material-receipts', params }),
+      providesTags: ['MfgMaterialReceipt'],
+    }),
+    getMaterialReceipt: builder.query<MaterialReceipt, string>({
+      query: (id) => `/manufacturing/material-receipts/${id}`,
+      providesTags: (_r, _e, id) => [{ type: 'MfgMaterialReceipt', id }],
+    }),
+    saveMaterialReceipt: builder.mutation<
+      MaterialReceipt,
+      { id?: string | null } & MaterialReceiptInput
+    >({
+      query: ({ id, ...body }) =>
+        id
+          ? {
+              url: `/manufacturing/material-receipts/${id}`,
+              method: 'PATCH',
+              body,
+            }
+          : { url: '/manufacturing/material-receipts', method: 'POST', body },
+      invalidatesTags: [
+        'MfgMaterialReceipt',
+        'MfgDashboard',
+        'MfgRequirements',
+        'MfgMovement',
+      ],
+      onQueryStarted: invalidateReceiptCaches,
+    }),
+    confirmMaterialReceipt: builder.mutation<MaterialReceipt, string>({
+      query: (id) => ({
+        url: `/manufacturing/material-receipts/${id}/confirm`,
+        method: 'POST',
+      }),
+      invalidatesTags: [
+        'MfgMaterialReceipt',
+        'MfgDashboard',
+        'MfgRequirements',
+        'MfgMovement',
+      ],
+      onQueryStarted: invalidateReceiptCaches,
+    }),
+    deleteMaterialReceipt: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/manufacturing/material-receipts/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['MfgMaterialReceipt'],
+    }),
     deleteProductionOrder: builder.mutation<void, string>({
       query: (orderId) => ({
         url: `/manufacturing/production-orders/${orderId}`,
@@ -1458,6 +2344,8 @@ export const manufacturingApi = createApi({
       {
         orderId: string
         producedQuantity: number
+        /** 'hold' → QC; 'direct' → finished stock now. Omitted: the require-QC setting. */
+        qcMode?: 'direct' | 'hold'
         goodQuantity?: number
         rejectedQuantity?: number
         rejectDisposition?: RejectDisposition
@@ -1564,11 +2452,147 @@ export const manufacturingApi = createApi({
       }),
       providesTags: ['MfgOrder'],
     }),
+    checkProductionOrderBatch: builder.mutation<
+      OrderBatchCheck,
+      { header: OrderBatchHeader; lines: OrderBatchLine[] }
+    >({
+      query: (body) => ({
+        url: '/manufacturing/production-orders/batch/check',
+        method: 'POST',
+        body,
+      }),
+    }),
+    createProductionOrderBatch: builder.mutation<
+      { orders: ProductionOrder[] },
+      { header: OrderBatchHeader; lines: OrderBatchLine[] }
+    >({
+      query: (body) => ({
+        url: '/manufacturing/production-orders/batch',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgOrder', 'MfgDashboard', 'MfgRequirements'],
+    }),
+    getMaterialIssue: builder.query<MaterialIssue, string>({
+      query: (issueId) => `/manufacturing/material-issues/${issueId}`,
+      providesTags: ['MfgIssue'],
+    }),
+    getIssueOptions: builder.query<IssueOptions, void>({
+      query: () => '/manufacturing/material-issues/options',
+      providesTags: ['MfgSettings', 'MfgOrder'],
+    }),
+    getMaterialIssuePlan: builder.query<
+      MaterialIssuePlan,
+      {
+        productId: string
+        variantId?: string | null
+        bomId?: string | null
+        quantity: number
+      }
+    >({
+      query: (params) => ({
+        url: '/manufacturing/material-issues/plan',
+        params: Object.fromEntries(
+          Object.entries(params).filter(([, v]) => v !== null && v !== '')
+        ),
+      }),
+      providesTags: ['MfgOrder', 'MfgBom'],
+    }),
+    getPendingMaterials: builder.query<
+      { materials: PendingMaterial[] },
+      { productType?: string } | void
+    >({
+      query: (params) => ({
+        url: '/manufacturing/material-issues/pending',
+        params: params?.productType ? { productType: params.productType } : {},
+      }),
+      providesTags: ['MfgOrder', 'MfgIssue'],
+    }),
+    postMaterialIssueByMaterial: builder.mutation<
+      IssueByMaterialResult,
+      IssueByMaterialBody
+    >({
+      query: (body) => ({
+        url: '/manufacturing/material-issues/by-material',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    getMaterialIssueReversal: builder.query<IssueReversalPreview, string>({
+      query: (issueId) => `/manufacturing/material-issues/${issueId}/reversal`,
+      providesTags: ['MfgIssue', 'MfgOrder'],
+    }),
+    cancelMaterialIssue: builder.mutation<
+      MaterialIssue,
+      {
+        issueId: string
+        reason: string
+        revision?: number
+        cancelOrder?: boolean
+      }
+    >({
+      query: ({ issueId, ...body }) => ({
+        url: `/manufacturing/material-issues/${issueId}/cancel`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    editMaterialIssue: builder.mutation<
+      MaterialIssue,
+      { issueId: string; body: EditIssueBody }
+    >({
+      query: ({ issueId, body }) => ({
+        url: `/manufacturing/material-issues/${issueId}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    getMaterialUsage: builder.query<
+      MaterialUsageReport,
+      {
+        status?: 'all' | 'open' | 'completed'
+        search?: string
+        dateFrom?: string
+        dateTo?: string
+        productionOrderId?: string
+      }
+    >({
+      query: (params) => ({
+        url: '/manufacturing/material-usage',
+        params: Object.fromEntries(
+          Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
+        ),
+      }),
+      providesTags: ['MfgIssue', 'MfgOrder'],
+    }),
+    checkMaterialIssue: builder.mutation<IssueVoucherCheck, IssueVoucherBody>({
+      query: (body) => ({
+        url: '/manufacturing/material-issues/check',
+        method: 'POST',
+        body,
+      }),
+    }),
+    postMaterialIssue: builder.mutation<MaterialIssue, IssueVoucherBody>({
+      query: (body) => ({
+        url: '/manufacturing/material-issues',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
     getMaterialIssues: builder.query<
       Paginated<MaterialIssue>,
       ListParams & {
         productionOrderId?: string
         kind?: 'issue' | 'return'
+        status?: 'posted' | 'cancelled'
         dateFrom?: string
         dateTo?: string
       }
@@ -1618,6 +2642,7 @@ export const refreshAfterDemoData =
   }
 
 export const {
+  useGetManufacturingAccessQuery,
   useGetManufacturingDashboardQuery,
   useGetManufacturingAnalyticsQuery,
   useGetManufacturingSettingsQuery,
@@ -1626,6 +2651,8 @@ export const {
   useLoadDemoDataMutation,
   useRemoveDemoDataMutation,
   useGetManufacturingProductsQuery,
+  useGetManufacturingProductStatsQuery,
+  useGetManufacturingProductOverviewQuery,
   useGetProductTypeSummaryQuery,
   useUpdateManufacturingProductMutation,
   useBulkClassifyProductsMutation,
@@ -1652,6 +2679,22 @@ export const {
   useRefreshProductionMaterialsMutation,
   useChangeProductionStatusMutation,
   useDeleteProductionOrderMutation,
+  useGetMaterialReceiptsQuery,
+  useGetMaterialReceiptQuery,
+  useSaveMaterialReceiptMutation,
+  useConfirmMaterialReceiptMutation,
+  useDeleteMaterialReceiptMutation,
+  useAddOrderOperationMutation,
+  useUpdateOrderOperationMutation,
+  useRemoveOrderOperationMutation,
+  useReorderOrderOperationsMutation,
+  useOrderOperationActionMutation,
+  useGetOrderCostsQuery,
+  useGetOrderActivityQuery,
+  useAddOrderDocumentLinkMutation,
+  useUploadOrderDocumentMutation,
+  useGetOrderDocumentUrlMutation,
+  useRemoveOrderDocumentMutation,
   useGetOrderRequirementsQuery,
   useGetRequirementsQuery,
   useIssueMaterialsMutation,
@@ -1664,6 +2707,20 @@ export const {
   useGetStockDetailQuery,
   useRecordScrapMutation,
   useGetMaterialIssuesQuery,
+  useGetMaterialIssueQuery,
+  useCheckProductionOrderBatchMutation,
+  useCreateProductionOrderBatchMutation,
+  useGetIssueOptionsQuery,
+  useGetMaterialIssuePlanQuery,
+  useLazyGetMaterialIssuePlanQuery,
+  useGetMaterialUsageQuery,
+  useGetMaterialIssueReversalQuery,
+  useCancelMaterialIssueMutation,
+  useEditMaterialIssueMutation,
+  useGetPendingMaterialsQuery,
+  usePostMaterialIssueByMaterialMutation,
+  useCheckMaterialIssueMutation,
+  usePostMaterialIssueMutation,
   useGetProductionReceiptsQuery,
   useGetScrapRecordsQuery,
   useGetWipQuery,

@@ -1,7 +1,7 @@
 export const BUSINESS_TYPE_OPTIONS = [
   { value: 'mobile_shop', label: 'Mobile Shop' },
   { value: 'pharmacy', label: 'Pharmacy' },
-  { value: 'factory', label: 'Factory' },
+  { value: 'factory', label: 'Manufacturing / Factory' },
   { value: 'retail', label: 'Retail' },
   { value: 'wholesale', label: 'Wholesale' },
   { value: 'wholesale_retail', label: 'Wholesale to Retail' },

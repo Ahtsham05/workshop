@@ -1,18 +1,11 @@
 import {
-  ArrowLeftRight,
   Boxes,
-  ClipboardCheck,
   ClipboardList,
   Cog,
-  Component,
   FileStack,
   Gauge,
-  Layers,
   ListChecks,
-  Network,
-  PackageCheck,
   PackageMinus,
-  Recycle,
   Workflow,
   type LucideIcon,
 } from 'lucide-react'
@@ -34,9 +27,10 @@ export interface NavGroup {
 }
 
 /**
- * The module's information architecture: a handful of groups that match how a plant
- * works (plan → make → store → trace), each with its own sub-sections. Grouping keeps
- * the top navigation short enough to fit any screen without hiding anything.
+ * The module's navigation: one flat row of tabs, no sub-menus — the pages a plant uses
+ * every day, in the order the user asked for (Overview, Products, then BOM, Material Issues, WIP). (Assembly orders, quality, inventory and traceability pages still exist
+ * as routes but are not in the menus.) A group with one section shows no sub-menu
+ * (manufacturing-shell.tsx); keep it that way unless a tab really needs children.
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
@@ -45,16 +39,16 @@ export const NAV_GROUPS: NavGroup[] = [
     sections: [
       {
         to: '/manufacturing',
-        label: 'Dashboard',
+        label: 'Overview',
         icon: Gauge,
+        keywords: 'home kpi overview dashboard',
         exact: true,
-        keywords: 'home kpi overview',
       },
     ],
   },
   {
-    id: 'planning',
-    label: 'Planning',
+    id: 'products',
+    label: 'Products',
     sections: [
       {
         to: '/manufacturing/products',
@@ -62,18 +56,48 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Boxes,
         keywords: 'items raw material classify',
       },
+    ],
+  },
+  {
+    id: 'boms',
+    label: 'Bills of Materials',
+    sections: [
       {
         to: '/manufacturing/boms',
         label: 'Bills of Materials',
         icon: FileStack,
         keywords: 'bom recipe',
       },
+    ],
+  },
+  {
+    id: 'material-issues',
+    label: 'Material Issues',
+    sections: [
       {
-        to: '/manufacturing/assemblies',
-        label: 'Structures',
-        icon: Layers,
-        keywords: 'assemblies multi-level tree',
+        to: '/manufacturing/material-issues',
+        label: 'Material Issues',
+        icon: PackageMinus,
+        keywords: 'issue return picking miv',
       },
+    ],
+  },
+  {
+    id: 'wip',
+    label: 'Work in Progress',
+    sections: [
+      {
+        to: '/manufacturing/wip',
+        label: 'Work in Progress',
+        icon: Workflow,
+        keywords: 'wip floor',
+      },
+    ],
+  },
+  {
+    id: 'requirements',
+    label: 'Requirements',
+    sections: [
       {
         to: '/manufacturing/requirements',
         label: 'Requirements',
@@ -83,74 +107,14 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: 'production',
-    label: 'Production',
+    id: 'production-orders',
+    label: 'Production Orders',
     sections: [
       {
         to: '/manufacturing/production-orders',
         label: 'Production Orders',
         icon: ClipboardList,
         keywords: 'mo work order',
-      },
-      {
-        to: '/manufacturing/assembly-orders',
-        label: 'Assembly Orders',
-        icon: Component,
-        keywords: 'asm sub-assembly',
-      },
-      {
-        to: '/manufacturing/material-issues',
-        label: 'Material Issues',
-        icon: PackageMinus,
-        keywords: 'issue return picking',
-      },
-      {
-        to: '/manufacturing/wip',
-        label: 'Work in Progress',
-        icon: Workflow,
-        keywords: 'wip floor',
-      },
-      {
-        to: '/manufacturing/quality',
-        label: 'Quality Check',
-        icon: ClipboardCheck,
-        keywords: 'qc inspection',
-      },
-    ],
-  },
-  {
-    id: 'inventory',
-    label: 'Inventory',
-    sections: [
-      {
-        to: '/manufacturing/finished-goods',
-        label: 'Finished Goods',
-        icon: PackageCheck,
-        keywords: 'receipts output stock',
-      },
-      {
-        to: '/manufacturing/scrap',
-        label: 'Scrap',
-        icon: Recycle,
-        keywords: 'waste reject loss',
-      },
-      {
-        to: '/manufacturing/movements',
-        label: 'Stock Movements',
-        icon: ArrowLeftRight,
-        keywords: 'ledger transactions',
-      },
-    ],
-  },
-  {
-    id: 'traceability',
-    label: 'Traceability',
-    sections: [
-      {
-        to: '/manufacturing/traceability',
-        label: 'Traceability',
-        icon: Network,
-        keywords: 'genealogy serial batch lot recall',
       },
     ],
   },

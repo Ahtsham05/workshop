@@ -8,6 +8,7 @@ import type {
   StockBucket,
   OrderType,
 } from '@/stores/manufacturing.api'
+import { formatAppDate } from '@/lib/date-format'
 
 /** Mirrors server/src/config/manufacturing.js — keep the two in sync. */
 export const PRODUCT_TYPE_META: Record<
@@ -69,6 +70,15 @@ export const PRODUCT_TYPE_META: Record<
   },
 }
 export const PRODUCT_TYPES = Object.keys(PRODUCT_TYPE_META) as ProductType[]
+
+/** What a BOM can build (a product filter): things made here — finished goods, and
+ * sub-assemblies, which have their own BOM inside a bigger one. */
+export const BUILDABLE_PRODUCT_TYPES = 'finished_good,sub_assembly'
+/** What a BOM can consume: every type except finished goods, plus unclassified products. */
+export const COMPONENT_PRODUCT_TYPES = [
+  ...PRODUCT_TYPES.filter((type) => type !== 'finished_good'),
+  'unclassified',
+].join(',')
 
 export const PROCUREMENT_LABELS: Record<ProcurementType, string> = {
   buy: 'Buy',
@@ -255,13 +265,7 @@ export const fmtQty = (value: number | null | undefined) =>
   (Number(value) || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })
 
 export const fmtDate = (value?: string | null) =>
-  value
-    ? new Date(value).toLocaleDateString(undefined, {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
-    : '—'
+  value ? formatAppDate(new Date(value)) : '—'
 
 export const refName = (ref: unknown): string => {
   if (!ref || typeof ref !== 'object') return ''

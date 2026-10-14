@@ -35,6 +35,7 @@ const PREFIX_FIELDS: { key: PrefixKey; label: string }[] = [
   { key: 'materialReturn', label: 'Material return' },
   { key: 'productionOutput', label: 'Production output' },
   { key: 'productionReceipt', label: 'Finished goods receipt' },
+  { key: 'rawMaterialReceipt', label: 'Raw material receipt' },
   { key: 'scrap', label: 'Scrap record' },
 ]
 

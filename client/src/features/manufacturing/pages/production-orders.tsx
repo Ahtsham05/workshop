@@ -6,6 +6,7 @@ import {
   Component,
   LayoutGrid,
   List,
+  ListPlus,
   PackageX,
   PencilLine,
   Plus,
@@ -574,12 +575,22 @@ export default function ProductionOrdersPage({
         }
         actions={
           canManage && (
-            <Button onClick={() => setCreating(true)}>
-              <Plus className='mr-1.5 h-4 w-4' />
-              {isAssembly
-                ? t('Create assembly order')
-                : t('Create production order')}
-            </Button>
+            <div className='flex flex-wrap gap-2'>
+              {!isAssembly && (
+                <Button asChild variant='outline'>
+                  <Link to={'/manufacturing/production-orders/new' as never}>
+                    <ListPlus className='mr-1.5 h-4 w-4' />
+                    {t('Multiple orders')}
+                  </Link>
+                </Button>
+              )}
+              <Button onClick={() => setCreating(true)}>
+                <Plus className='mr-1.5 h-4 w-4' />
+                {isAssembly
+                  ? t('Create assembly order')
+                  : t('Create production order')}
+              </Button>
+            </div>
           )
         }
       />
