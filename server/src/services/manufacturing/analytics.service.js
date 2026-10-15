@@ -179,7 +179,7 @@ const getAnalytics = async (ctx, { range = '30d' } = {}, now = new Date()) => {
       ['plannedQuantity']
     ),
     ProductionOutput.aggregate([
-      { $match: { ...match, reportedAt: { $gte: p.start, $lt: p.end } } },
+      { $match: { ...match, status: { $ne: 'reversed' }, reportedAt: { $gte: p.start, $lt: p.end } } },
       { $unwind: '$consumption' },
       {
         $group: {

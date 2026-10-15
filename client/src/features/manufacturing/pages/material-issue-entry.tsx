@@ -929,6 +929,10 @@ function IssueEntry({
           : mode === 'order'
             ? orderFields
             : []),
+      /* Hidden for now — Source Warehouse, WIP Location, Branch, Requested By
+         and Issued By. Uncomment to bring them back. While hidden, the
+         locations come from Manufacturing Settings (defaultSourceLocation /
+         defaultWipLocation) and Issued By falls back to the signed-in user.
       {
         key: 'sourceLocation',
         label: 'Source Warehouse',
@@ -1007,6 +1011,7 @@ function IssueEntry({
           />
         ),
       },
+      */
       {
         key: 'reference',
         label: 'Reference',
@@ -1026,6 +1031,9 @@ function IssueEntry({
           ]
         : []),
     ],
+    // locations/people/branchName/userId are only used by the hidden fields
+    // above — kept here so uncommenting those fields just works.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       edit,
       mode,

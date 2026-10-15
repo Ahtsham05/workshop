@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Layers, ScanLine } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -7,7 +7,6 @@ import {
   useGetManufacturingSettingsQuery,
   useGetStockDetailQuery,
   useInspectOutputMutation,
-  useRecordScrapMutation,
   useReportOutputMutation,
   useResolveReworkMutation,
   useReturnMaterialsMutation,
@@ -15,7 +14,6 @@ import {
   type ProductionOrder,
   type ProductionOutput,
   type RejectDisposition,
-  type ScrapReason,
 } from '@/stores/manufacturing.api'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { cn } from '@/lib/utils'
@@ -33,18 +31,11 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { SCRAP_REASON_LABELS, fmtDate, fmtQty } from '../lib/constants'
+import { fmtDate, fmtQty } from '../lib/constants'
 import { lineWip } from '../lib/material-math'
+import { announceAutoCompletion } from '../lib/order-completion'
 import { cleanFg } from '../lib/output-math'
-import { ProductPicker } from './product-picker'
 import { QualityDecision, type QualityValue } from './quality-decision'
 
 const EPS = 1e-6
@@ -67,7 +58,7 @@ const notify = async (
 // ── Shared pickers ────────────────────────────────────────────────────────────────
 
 /** Checklist of serial/IMEI units with a quick filter. */
-function SerialChecklist({
+export function SerialChecklist({
   serials,
   selected,
   onChange,
@@ -633,7 +624,9 @@ export function InspectOutputDialog({
           rejectReason: rejected > EPS ? quality.reason : undefined,
           finishedGoods: cleanFg(fg),
           inspectionNotes: notes,
-        }).unwrap(),
+        })
+          .unwrap()
+          .then((r) => announceAutoCompletion(r, order.orderNumber, t)),
       rejected > EPS
         ? `${t('Inspection posted')} · ${fmtQty(good)} ${t('to finished stock')}, ${fmtQty(rejected)} → ${t(quality.disposition)}`
         : `${t('Inspection posted')} · ${fmtQty(good)} ${t('to finished stock')}`,
@@ -744,7 +737,9 @@ export function ReworkDialog({
           scrapQuantity: Number(scrap) || 0,
           finishedGoods: cleanFg(fg),
           notes,
-        }).unwrap(),
+        })
+          .unwrap()
+          .then((r) => announceAutoCompletion(r, order.orderNumber, t)),
       t('Rework result posted'),
       t('Failed to post rework result')
     )
@@ -925,228 +920,6 @@ export function CompleteOrderDialog({
           </Button>
           <Button onClick={submit} disabled={isLoading || blockers.length > 0}>
             {t('Complete order')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ── Scrap ─────────────────────────────────────────────────────────────────────────
-
-/** Scrap material from an order's WIP, or write off finished stock (batch/serial aware). */
-export function RecordScrapDialog({
-  order,
-  onClose,
-}: {
-  order?: ProductionOrder | null
-  onClose: () => void
-}) {
-  const { t } = useLanguage()
-  const wipMaterials = useMemo(
-    () => (order?.materials || []).filter((m) => lineWip(m) > EPS),
-    [order]
-  )
-  const [stage, setStage] = useState<'material' | 'finished_good'>(
-    order && wipMaterials.length ? 'material' : 'finished_good'
-  )
-  const [materialLineId, setMaterialLineId] = useState(
-    wipMaterials[0]?._id || ''
-  )
-  const [product, setProduct] = useState<{ id: string; name: string } | null>(
-    order ? { id: order.productId, name: order.productName } : null
-  )
-  const [quantity, setQuantity] = useState('')
-  const [batchId, setBatchId] = useState('')
-  const [imeiIds, setImeiIds] = useState<string[]>([])
-  const [reason, setReason] = useState<ScrapReason>('defect')
-  const [notes, setNotes] = useState('')
-  const [record, { isLoading }] = useRecordScrapMutation()
-  const { data: detail } = useGetStockDetailQuery(
-    {
-      productId: product?.id || '',
-      variantId: product?.id === order?.productId ? order?.variantId : null,
-    },
-    { skip: stage !== 'finished_good' || !product }
-  )
-  const serialMode = stage === 'finished_good' && !!detail?.tracking.serial
-
-  const submit = async () => {
-    const qty = serialMode ? imeiIds.length : Number(quantity)
-    if (!(qty > 0)) return toast.error(t('Quantity must be greater than zero'))
-    const ok = await notify(
-      () =>
-        record({
-          productionOrderId: order?.id ?? null,
-          stage,
-          ...(stage === 'material'
-            ? { materialLineId }
-            : { productId: product?.id }),
-          ...(serialMode ? { imeiIds } : { quantity: qty }),
-          ...(stage === 'finished_good' && batchId ? { batchId } : {}),
-          reason,
-          notes,
-        }).unwrap(),
-      t('Scrap recorded'),
-      t('Failed to record scrap')
-    )
-    if (ok) onClose()
-  }
-
-  const selectedMaterial = wipMaterials.find((m) => m._id === materialLineId)
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className='sm:max-w-md'>
-        <DialogHeader>
-          <DialogTitle>{t('Record scrap')}</DialogTitle>
-          <DialogDescription>
-            {order
-              ? order.orderNumber
-              : t('Write off finished stock as manufacturing scrap')}
-          </DialogDescription>
-        </DialogHeader>
-        <div className='grid gap-4'>
-          {order && (
-            <div className='grid grid-cols-2 gap-1 rounded-lg border p-0.5'>
-              {(['material', 'finished_good'] as const).map((s) => (
-                <button
-                  key={s}
-                  type='button'
-                  disabled={s === 'material' && !wipMaterials.length}
-                  onClick={() => setStage(s)}
-                  className={cn(
-                    'rounded-md px-2 py-1.5 text-xs disabled:opacity-40',
-                    stage === s
-                      ? 'bg-foreground text-background'
-                      : 'text-muted-foreground hover:bg-muted'
-                  )}
-                >
-                  {s === 'material'
-                    ? t('Material in WIP')
-                    : t('Finished stock')}
-                </button>
-              ))}
-            </div>
-          )}
-          <p className='text-muted-foreground -mt-2 text-xs'>
-            {stage === 'material'
-              ? t('Removes the material from this order’s WIP.')
-              : t('Deducts the quantity from finished stock.')}
-          </p>
-          {stage === 'material' ? (
-            <div className='grid gap-1.5'>
-              <Label>{t('Material')}</Label>
-              <Select value={materialLineId} onValueChange={setMaterialLineId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t('Nothing in WIP')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {wipMaterials.map((m) => (
-                    <SelectItem key={m._id} value={m._id}>
-                      {m.productName} — {fmtQty(lineWip(m))} {m.unit}{' '}
-                      {t('in WIP')}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className='grid gap-1.5'>
-              <Label>{t('Product')}</Label>
-              <ProductPicker
-                value={product}
-                onChange={(p) => {
-                  setProduct(p)
-                  setImeiIds([])
-                  setBatchId('')
-                }}
-              />
-            </div>
-          )}
-          {serialMode && detail ? (
-            <SerialChecklist
-              serials={detail.serials}
-              selected={imeiIds}
-              onChange={setImeiIds}
-            />
-          ) : (
-            <div className='grid grid-cols-2 gap-3'>
-              <div className='grid gap-1.5'>
-                <Label>{t('Quantity')}</Label>
-                <Input
-                  type='number'
-                  min={0}
-                  max={
-                    stage === 'material' && selectedMaterial
-                      ? lineWip(selectedMaterial)
-                      : undefined
-                  }
-                  step='any'
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
-              </div>
-              {stage === 'finished_good' && detail?.tracking.batch ? (
-                <div className='grid gap-1.5'>
-                  <Label>{t('Batch')}</Label>
-                  <Select
-                    value={batchId || 'fefo'}
-                    onValueChange={(v) => setBatchId(v === 'fefo' ? '' : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value='fefo'>{t('Auto (FEFO)')}</SelectItem>
-                      {detail.batches.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.batchNumber} · {fmtQty(b.quantity)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div />
-              )}
-            </div>
-          )}
-          <div className='grid gap-1.5'>
-            <Label>{t('Reason')}</Label>
-            <Select
-              value={reason}
-              onValueChange={(v) => setReason(v as ScrapReason)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(SCRAP_REASON_LABELS) as ScrapReason[]).map(
-                  (r) => (
-                    <SelectItem key={r} value={r}>
-                      {t(SCRAP_REASON_LABELS[r])}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className='grid gap-1.5'>
-            <Label>{t('Notes')}</Label>
-            <Textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant='outline' onClick={onClose}>
-            {t('Cancel')}
-          </Button>
-          <Button onClick={submit} disabled={isLoading}>
-            {t('Record scrap')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -208,7 +208,7 @@ const getOrderActivity = async (ctx, orderId) => {
       .lean(),
     ProductionOutput.find(scope)
       .select(
-        'outputNumber producedQuantity goodQuantity rejectedQuantity rejectDisposition status reportedAt reportedBy inspectedAt inspectedBy'
+        'outputNumber producedQuantity goodQuantity rejectedQuantity rejectDisposition status reportedAt reportedBy inspectedAt inspectedBy reversal'
       )
       .lean(),
     ProductionReceipt.find(scope).select('receiptNumber quantity totalCost source receiptDate createdBy batchNumber').lean(),
@@ -237,13 +237,24 @@ const getOrderActivity = async (ctx, orderId) => {
   );
   outputs.forEach((o) => {
     push('output', o.reportedAt, o.reportedBy, { id: String(o._id), number: o.outputNumber, quantity: o.producedQuantity });
-    if (o.status === 'inspected') {
+    if (o.inspectedAt) {
       push('inspection', o.inspectedAt, o.inspectedBy, {
         id: String(o._id),
         number: o.outputNumber,
         good: o.goodQuantity,
         rejected: o.rejectedQuantity,
         disposition: o.rejectDisposition,
+      });
+    }
+    if (o.status === 'reversed' && o.reversal) {
+      push('output_reversed', o.reversal.at, o.reversal.by, {
+        id: String(o._id),
+        number: o.outputNumber,
+        quantity: o.producedQuantity,
+        reason: o.reversal.reason,
+        notes: o.reversal.notes || '',
+        receiptNumber: o.reversal.receiptNumber || '',
+        reopenedOrder: !!o.reversal.reopenedOrder,
       });
     }
   });

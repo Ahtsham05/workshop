@@ -665,6 +665,7 @@ export type OrderActivityType =
   | 'return'
   | 'output'
   | 'inspection'
+  | 'output_reversed'
   | 'receipt'
   | 'scrap'
   | 'operation_started'
@@ -1083,6 +1084,13 @@ export interface ScrapRecord {
   createdAt: string
 }
 
+export type OutputReversalReason =
+  | 'wrong_quantity'
+  | 'wrong_product'
+  | 'wrong_order'
+  | 'duplicate'
+  | 'other'
+
 export interface ProductionOutput {
   id: string
   outputNumber: string
@@ -1096,13 +1104,26 @@ export interface ProductionOutput {
   rejectedQuantity: number
   rejectDisposition?: RejectDisposition | null
   rejectReason?: string
-  status: 'pending_qc' | 'inspected'
+  status: 'pending_qc' | 'inspected' | 'reversed'
   consumption: {
+    materialLineId?: string
     productName: string
     unit: string
     quantity: number
     cost: number
   }[]
+  receiptId?: string | null
+  /** Set once the output was reversed: what it had posted, and why it was undone. */
+  reversal?: {
+    at: string
+    by?: Ref
+    reason: OutputReversalReason
+    notes?: string
+    previousStatus: 'pending_qc' | 'inspected'
+    receiptNumber?: string
+    scrapNumber?: string
+    reopenedOrder?: boolean
+  }
   materialCost: number
   unitCost: number
   reportedAt: string
@@ -1584,6 +1605,8 @@ export interface ManufacturingSettings {
   explodeSubAssemblies: boolean
   requireQualityCheck: boolean
   defaultRejectDisposition: RejectDisposition
+  /** Complete an order once every planned unit is received (unused WIP back to stock). */
+  autoCompleteOrders: boolean
   defaultPriority: ProductionPriority
   counters: Record<string, number>
 }
@@ -2340,7 +2363,7 @@ export const manufacturingApi = createApi({
       onQueryStarted: invalidateStockCaches,
     }),
     reportOutput: builder.mutation<
-      ProductionOutput,
+      ProductionOutput & { orderCompleted?: boolean },
       {
         orderId: string
         producedQuantity: number
@@ -2363,7 +2386,7 @@ export const manufacturingApi = createApi({
       onQueryStarted: invalidateStockCaches,
     }),
     inspectOutput: builder.mutation<
-      ProductionOutput,
+      ProductionOutput & { orderCompleted?: boolean },
       {
         outputId: string
         goodQuantity: number
@@ -2382,8 +2405,21 @@ export const manufacturingApi = createApi({
       invalidatesTags: [...EXECUTION_TAGS],
       onQueryStarted: invalidateStockCaches,
     }),
+    /** Undo an output posted by mistake — stock, QC/rework, WIP; reopens a completed order. */
+    reverseOutput: builder.mutation<
+      ProductionOutput & { orderStatus: ProductionStatus },
+      { outputId: string; reason: OutputReversalReason; notes?: string }
+    >({
+      query: ({ outputId, ...body }) => ({
+        url: `/manufacturing/outputs/${outputId}/reverse`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
     resolveRework: builder.mutation<
-      { reworkPendingQuantity: number },
+      { reworkPendingQuantity: number; orderCompleted?: boolean },
       {
         orderId: string
         goodQuantity?: number
@@ -2407,10 +2443,13 @@ export const manufacturingApi = createApi({
         stage: 'material' | 'finished_good'
         materialLineId?: string
         productId?: string
+        variantId?: string | null
         batchId?: string
         imeiIds?: string[]
         quantity?: number
         reason?: ScrapReason
+        /** Calendar day (YYYY-MM-DD); omitted = now. */
+        scrapDate?: string
         notes?: string
       }
     >({
@@ -2701,6 +2740,7 @@ export const {
   useReturnMaterialsMutation,
   useReportOutputMutation,
   useInspectOutputMutation,
+  useReverseOutputMutation,
   useResolveReworkMutation,
   useGetOutputsQuery,
   useGetMovementsQuery,

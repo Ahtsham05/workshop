@@ -1,4 +1,7 @@
-import type { ProductionMaterial } from '@/stores/manufacturing.api'
+import type {
+  ProductionMaterial,
+  ProductionOrder,
+} from '@/stores/manufacturing.api'
 
 /*
  * Material-line arithmetic, mirroring server/src/services/manufacturing/wip.js.
@@ -37,4 +40,28 @@ export const issueState = (m: ProductionMaterial): IssueState => {
   if (net <= 1e-6) return 'none'
   if (net > m.requiredQuantity + 1e-6) return 'over'
   return lineRemaining(m) <= 1e-6 ? 'full' : 'partial'
+}
+
+/**
+ * What scrapping `quantity` of a line out of WIP is worth — the server takes the oldest
+ * lots first (services/manufacturing/wip.js#takeFromWip), each at its own issue cost.
+ */
+export const wipScrapCost = (
+  order: ProductionOrder,
+  materialLineId: string,
+  quantity: number
+) => {
+  let left = quantity
+  let cost = 0
+  const lots = order.wipLots
+    .filter((l) => l.materialLineId === materialLineId && l.quantity > 1e-6)
+    .sort((a, b) => +new Date(a.issuedAt) - +new Date(b.issuedAt))
+  for (const lot of lots) {
+    if (left <= 1e-6) break
+    const ratio = lot.ratio || 1
+    const units = Math.min(lot.quantity, left * ratio)
+    cost += units * (lot.unitCost || 0)
+    left -= units / ratio
+  }
+  return cost
 }

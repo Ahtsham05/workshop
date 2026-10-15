@@ -3,6 +3,7 @@ import type {
   ProductType,
   ProductionPriority,
   ProductionStatus,
+  OutputReversalReason,
   ScrapReason,
   ScrapStage,
   StockBucket,
@@ -249,6 +250,17 @@ export const BUCKET_META: Record<
     className:
       'bg-violet-500/10 text-violet-700 border-violet-500/25 dark:text-violet-300',
   },
+}
+
+export const OUTPUT_REVERSAL_REASON_LABELS: Record<
+  OutputReversalReason,
+  string
+> = {
+  wrong_quantity: 'Wrong quantity',
+  wrong_product: 'Wrong product',
+  wrong_order: 'Wrong order',
+  duplicate: 'Posted twice',
+  other: 'Other',
 }
 
 export const SCRAP_REASON_LABELS: Record<ScrapReason, string> = {

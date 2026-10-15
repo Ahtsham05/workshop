@@ -169,6 +169,9 @@ router.post('/production-orders/:orderId/outputs', auth('executeProduction'), va
 router.post('/production-orders/:orderId/rework', auth('inspectProduction'), validate(v.resolveRework), c.resolveRework);
 router.get('/outputs', auth(VIEW), validate(v.listOutputs), c.getProductionOutputs);
 router.post('/outputs/:outputId/inspect', auth('inspectProduction'), validate(v.inspectOutput), c.inspectOutput);
+// Undo an output posted by mistake (stock, QC/rework, WIP); reopening a completed order
+// additionally needs manageProductionOrders (checked in the controller).
+router.post('/outputs/:outputId/reverse', auth('executeProduction'), validate(v.reverseOutput), c.reverseOutput);
 // The inventory ledger rows written by manufacturing, with full traceability.
 router.get('/movements', auth(VIEW), validate(v.listMovements), c.getMovements);
 // Batches / serial units / on-hand of one product, for the issue & scrap pickers.

@@ -445,6 +445,170 @@ describeTx('Production flow (stock moves, transactional)', () => {
     expect(await MaterialIssue.countDocuments({ kind: 'return' })).toBe(1);
   });
 
+  describe('reversing an output posted by mistake', () => {
+    const issueExact = async (order) =>
+      svc.issueMaterials(ctx, order._id, {
+        lines: order.materials.map((m) => ({ materialLineId: m._id, quantity: m.requiredQuantity })),
+      });
+    const wipOf = (o, p) =>
+      o.wipLots.filter((l) => String(l.productId) === String(p._id)).reduce((s, l) => s + l.quantity, 0);
+
+    test('reopens a completed order: stock out, receipt gone, material back in WIP, can receive again', async () => {
+      const { motor, bearing, fan } = await buildFanLine();
+      await setSettings({ requireQualityCheck: false });
+      const order = await release(fan._id, 10);
+      await issueExact(order);
+      const output = await svc.reportOutput(ctx, order._id, { producedQuantity: 10 });
+      expect((await svc.autoCompleteIfDone(ctx, order._id)).status).toBe('completed');
+      expect(await stockOf(fan._id)).toBe(10);
+
+      const { output: reversed, order: reopened } = await svc.reverseOutput(ctx, output._id, { reason: 'wrong_quantity' });
+      expect(reversed.status).toBe('reversed');
+      expect(reversed.reversal).toMatchObject({
+        reason: 'wrong_quantity',
+        previousStatus: 'inspected',
+        reopenedOrder: true,
+      });
+      expect(reopened.status).toBe('in_production');
+      expect(reopened.statusHistory.at(-1)).toMatchObject({ from: 'completed', to: 'in_production' });
+      expect(reopened).toMatchObject({ producedQuantity: 0, completedQuantity: 0, finishedGoodsValue: 0 });
+      expect(await stockOf(fan._id)).toBe(0);
+      expect(await ProductionReceipt.countDocuments({ productionOrderId: order._id })).toBe(0);
+      expect(wipOf(reopened, motor)).toBe(10);
+      expect(wipOf(reopened, bearing)).toBe(20);
+      expect(lineFor(reopened, motor).consumedQuantity).toBe(0);
+      expect(lineFor(reopened, motor).consumedCost).toBe(0);
+      const ledger = await InventoryTransaction.find({ refType: 'ProductionOutput', refId: output._id }).lean();
+      expect(ledger.find((r) => r.type === 'production_receipt')).toMatchObject({ quantityDelta: -10, balanceAfter: 0 });
+      expect(
+        ledger
+          .filter((r) => r.type === 'wip_consume' && r.quantityDelta > 0)
+          .map((r) => r.quantityDelta)
+          .sort()
+      ).toEqual([10, 10, 20]);
+
+      // The right quantity can now be received from the restored WIP.
+      await svc.reportOutput(ctx, order._id, { producedQuantity: 7 });
+      const o = await ProductionOrder.findById(order._id);
+      expect(o).toMatchObject({ producedQuantity: 7, completedQuantity: 7 });
+      expect(wipOf(o, motor)).toBe(3);
+      expect(await stockOf(fan._id)).toBe(7);
+      await expect(svc.reverseOutput(ctx, output._id, { reason: 'other' })).rejects.toThrow(/already reversed/);
+    });
+
+    test('output still in QC leaves the hold; scrapped rejects lose their scrap record', async () => {
+      const { motor, fan } = await buildFanLine();
+      const order = await release(fan._id, 10);
+      await issueExact(order);
+      const held = await svc.reportOutput(ctx, order._id, { producedQuantity: 4 });
+      const inspectedOne = await svc.reportOutput(ctx, order._id, { producedQuantity: 6 });
+      await svc.inspectOutput(ctx, inspectedOne._id, { goodQuantity: 5, rejectDisposition: 'scrap' });
+      expect(await ScrapRecord.countDocuments({ stage: 'qc_reject' })).toBe(1);
+
+      await svc.reverseOutput(ctx, held._id, { reason: 'duplicate' });
+      let o = await ProductionOrder.findById(order._id);
+      expect(o).toMatchObject({ qcPendingQuantity: 0, qcPendingCost: 0, producedQuantity: 6 });
+
+      await svc.reverseOutput(ctx, inspectedOne._id, { reason: 'wrong_quantity' });
+      o = await ProductionOrder.findById(order._id);
+      expect(o).toMatchObject({ producedQuantity: 0, completedQuantity: 0, rejectedQuantity: 0, scrappedQuantity: 0 });
+      expect(await ScrapRecord.countDocuments({ stage: 'qc_reject' })).toBe(0);
+      expect(wipOf(o, motor)).toBe(10);
+      expect(await stockOf(fan._id)).toBe(0);
+    });
+
+    test('refuses when the finished goods were already sold — and changes nothing', async () => {
+      const { motor, fan } = await buildFanLine();
+      await setSettings({ requireQualityCheck: false });
+      const order = await release(fan._id, 10);
+      await issueExact(order);
+      const output = await svc.reportOutput(ctx, order._id, { producedQuantity: 10 });
+      await Product.updateOne({ _id: fan._id }, { $inc: { stockQuantity: -4 } }); // 4 sold
+      await expect(svc.reverseOutput(ctx, output._id, { reason: 'wrong_quantity' })).rejects.toThrow(/sold or used/);
+      const o = await ProductionOrder.findById(order._id);
+      expect(o).toMatchObject({ producedQuantity: 10, completedQuantity: 10 });
+      expect(wipOf(o, motor)).toBe(0);
+      expect((await ProductionOutput.findById(output._id)).status).toBe('inspected');
+      expect(await stockOf(fan._id)).toBe(6);
+    });
+  });
+
+  describe('auto-completion once everything planned is received', () => {
+    const issueAll = async (order, lines) =>
+      svc.issueMaterials(
+        ctx,
+        order._id,
+        {
+          lines: lines.map(([p, quantity]) => ({ materialLineId: lineFor(order, p)._id, quantity })),
+          allowOverIssue: true,
+        },
+        { canOverIssue: true }
+      );
+
+    test('completes when the last good unit is received, returning leftover WIP to stock', async () => {
+      const { motor, bearing, body, fan } = await buildFanLine();
+      await setSettings({ requireQualityCheck: false });
+      const order = await release(fan._id, 10);
+      await issueAll(order, [
+        [motor, 12],
+        [bearing, 20],
+        [body, 10],
+      ]);
+      await svc.reportOutput(ctx, order._id, { producedQuantity: 6 });
+      expect(await svc.autoCompleteIfDone(ctx, order._id)).toBeNull(); // 6 of 10 — still open
+      await svc.reportOutput(ctx, order._id, { producedQuantity: 4 });
+      const done = await svc.autoCompleteIfDone(ctx, order._id);
+      expect(done.status).toBe('completed');
+      expect(done.statusHistory.at(-1)).toMatchObject({ to: 'completed', note: expect.stringMatching(/automatically/) });
+      expect(done.wipLots).toHaveLength(0);
+      expect(lineFor(done, motor).returnedQuantity).toBe(2);
+      expect(await stockOf(motor._id)).toBe(150 - 10);
+      expect(await stockOf(fan._id)).toBe(10);
+    });
+
+    test('waits while units are in QC, then completes when the inspection passes them', async () => {
+      const { motor, bearing, body, fan } = await buildFanLine();
+      const order = await release(fan._id, 10);
+      await issueAll(order, [
+        [motor, 10],
+        [bearing, 20],
+        [body, 10],
+      ]);
+      const output = await svc.reportOutput(ctx, order._id, { producedQuantity: 10 });
+      expect(await svc.autoCompleteIfDone(ctx, order._id)).toBeNull(); // all in the QC hold
+      await svc.inspectOutput(ctx, output._id, { goodQuantity: 10 });
+      expect((await svc.autoCompleteIfDone(ctx, order._id)).status).toBe('completed');
+    });
+
+    test('rejected units keep the order open — good units must reach the plan', async () => {
+      const { motor, bearing, body, fan } = await buildFanLine();
+      await setSettings({ requireQualityCheck: false });
+      const order = await release(fan._id, 10);
+      await issueAll(order, [
+        [motor, 10],
+        [bearing, 20],
+        [body, 10],
+      ]);
+      await svc.reportOutput(ctx, order._id, { producedQuantity: 10, rejectedQuantity: 2, rejectDisposition: 'scrap' });
+      expect(await svc.autoCompleteIfDone(ctx, order._id)).toBeNull();
+      expect((await ProductionOrder.findById(order._id)).status).toBe('in_production');
+    });
+
+    test('does nothing when the setting is off', async () => {
+      const { motor, bearing, body, fan } = await buildFanLine();
+      await setSettings({ requireQualityCheck: false, autoCompleteOrders: false });
+      const order = await release(fan._id, 10);
+      await issueAll(order, [
+        [motor, 10],
+        [bearing, 20],
+        [body, 10],
+      ]);
+      await svc.reportOutput(ctx, order._id, { producedQuantity: 10 });
+      expect(await svc.autoCompleteIfDone(ctx, order._id)).toBeNull();
+      expect((await ProductionOrder.findById(order._id)).status).toBe('in_production');
+    });
+  });
+
   describe('batch- and serial-tracked items', () => {
     const insertBatchProduct = async (name, batches) => {
       const total = batches.reduce((s, b) => s + b.quantity, 0);

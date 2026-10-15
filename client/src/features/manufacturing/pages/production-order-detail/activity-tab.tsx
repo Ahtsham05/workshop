@@ -30,6 +30,7 @@ import { StatusBadge } from '../../components/badges'
 import { FilterChips } from '../../components/list-controls'
 import { Panel } from '../../components/page'
 import {
+  OUTPUT_REVERSAL_REASON_LABELS,
   SCRAP_REASON_LABELS,
   SCRAP_STAGE_LABELS,
   fmtQty,
@@ -49,7 +50,7 @@ type Filter =
 const FILTER_TYPES: Record<Exclude<Filter, 'all'>, OrderActivityType[]> = {
   status: ['created', 'status'],
   materials: ['issue', 'return'],
-  quality: ['output', 'inspection', 'receipt'],
+  quality: ['output', 'inspection', 'output_reversed', 'receipt'],
   operations: ['operation_started', 'operation_completed', 'operation_skipped'],
   scrap: ['scrap'],
   documents: ['document'],
@@ -65,6 +66,7 @@ const ICON: Record<
   return: { icon: Undo2, className: 'text-sky-600' },
   output: { icon: Factory, className: 'text-foreground/70' },
   inspection: { icon: ClipboardCheck, className: 'text-sky-600' },
+  output_reversed: { icon: Undo2, className: 'text-rose-600' },
   receipt: { icon: PackageCheck, className: 'text-emerald-600' },
   scrap: { icon: Recycle, className: 'text-rose-600' },
   operation_started: { icon: Play, className: 'text-amber-600' },
@@ -237,6 +239,21 @@ function EventRow({
       detail = `${fmtQty(d.good)} ${t('good')} · ${fmtQty(d.rejected)} ${t('rejected')}${
         d.disposition ? ` → ${t(d.disposition)}` : ''
       }`
+      break
+    case 'output_reversed':
+      title = `${d.number} ${t('reversed')} · ${fmtQty(d.quantity)} ${unit}`
+      detail = [
+        t(
+          OUTPUT_REVERSAL_REASON_LABELS[
+            d.reason as keyof typeof OUTPUT_REVERSAL_REASON_LABELS
+          ] || 'Other'
+        ),
+        d.receiptNumber ? `${d.receiptNumber} ${t('removed')}` : null,
+        d.reopenedOrder ? t('order reopened') : null,
+        d.notes || null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
       break
     case 'receipt':
       title = `${fmtQty(d.quantity)} ${unit} ${t('received into finished goods')}`

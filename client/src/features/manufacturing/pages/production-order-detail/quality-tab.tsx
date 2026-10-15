@@ -1,4 +1,10 @@
-import { ClipboardCheck, Wrench } from 'lucide-react'
+import {
+  ClipboardCheck,
+  MoreHorizontal,
+  RotateCcw,
+  Undo2,
+  Wrench,
+} from 'lucide-react'
 import {
   useGetOutputsQuery,
   type ProductionOrder,
@@ -10,6 +16,12 @@ import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Table,
   TableBody,
   TableCell,
@@ -18,9 +30,19 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Panel, Stat, StatGrid } from '../../components/page'
-import { fmtDate, fmtQty, refName } from '../../lib/constants'
+import {
+  OUTPUT_REVERSAL_REASON_LABELS,
+  fmtDate,
+  fmtQty,
+  refName,
+} from '../../lib/constants'
 import { EPS } from './detail-utils'
 import { Qty } from './shared'
+
+/** An output that had been inspected (still, or before it was reversed). */
+const wasInspected = (o: ProductionOutput) =>
+  o.status === 'inspected' ||
+  (o.status === 'reversed' && o.reversal?.previousStatus === 'inspected')
 
 /** Output reported off the line, its inspections, and the rework queue. */
 export function QualityTab({
@@ -29,12 +51,17 @@ export function QualityTab({
   canInspect,
   onInspect,
   onRework,
+  canReverse = false,
+  onReverse,
 }: {
   order: ProductionOrder
   qualityChecks: boolean
   canInspect: boolean
   onInspect: (o: ProductionOutput) => void
   onRework: () => void
+  /** Receipts posted by mistake can be reversed (and re-entered). */
+  canReverse?: boolean
+  onReverse?: (o: ProductionOutput, intent: 'correct' | 'reverse') => void
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
@@ -190,27 +217,42 @@ export function QualityTab({
                     {t('Unit cost')}
                   </TableHead>
                   <TableHead>{t('QC')}</TableHead>
+                  {canReverse && <TableHead className='w-10' />}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {outputs.map((o) => (
-                  <TableRow key={o.id}>
+                  <TableRow
+                    key={o.id}
+                    className={cn(
+                      o.status === 'reversed' &&
+                        'text-muted-foreground [&_.num]:line-through'
+                    )}
+                  >
                     <TableCell>
-                      <div className='font-mono text-xs font-medium'>
+                      <div className='flex items-center gap-1.5 font-mono text-xs font-medium'>
                         {o.outputNumber}
+                        {o.status === 'reversed' && (
+                          <Badge
+                            variant='outline'
+                            className='h-4 border-rose-500/30 bg-rose-500/10 px-1 font-sans text-[10px] text-rose-700 dark:text-rose-300'
+                          >
+                            {t('Reversed')}
+                          </Badge>
+                        )}
                       </div>
                       <div className='text-muted-foreground text-xs'>
                         {fmtDate(o.reportedAt)} · {refName(o.reportedBy) || '—'}
                       </div>
                     </TableCell>
-                    <TableCell className='text-right tabular-nums'>
+                    <TableCell className='num text-right tabular-nums'>
                       {fmtQty(o.producedQuantity)}
                     </TableCell>
-                    <TableCell className='text-right text-emerald-700 tabular-nums dark:text-emerald-400'>
-                      {o.status === 'inspected' ? fmtQty(o.goodQuantity) : '—'}
+                    <TableCell className='num text-right text-emerald-700 tabular-nums dark:text-emerald-400'>
+                      {wasInspected(o) ? fmtQty(o.goodQuantity) : '—'}
                     </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {o.status === 'inspected' ? (
+                    <TableCell className='num text-right tabular-nums'>
+                      {wasInspected(o) ? (
                         <span
                           className={cn(
                             o.rejectedQuantity > 0 &&
@@ -233,11 +275,21 @@ export function QualityTab({
                         '—'
                       )}
                     </TableCell>
-                    <TableCell className='text-right tabular-nums max-md:hidden'>
+                    <TableCell className='num text-right tabular-nums max-md:hidden'>
                       {formatMoney(o.unitCost)}
                     </TableCell>
                     <TableCell>
-                      {o.status === 'pending_qc' ? (
+                      {o.status === 'reversed' ? (
+                        <span className='text-xs text-rose-700 dark:text-rose-400'>
+                          {t('Reversed')} {fmtDate(o.reversal?.at)} ·{' '}
+                          {t(
+                            OUTPUT_REVERSAL_REASON_LABELS[
+                              o.reversal?.reason || 'other'
+                            ]
+                          )}
+                          {o.reversal?.notes ? ` — ${o.reversal.notes}` : ''}
+                        </span>
+                      ) : o.status === 'pending_qc' ? (
                         canInspect ? (
                           <Button
                             size='sm'
@@ -261,6 +313,39 @@ export function QualityTab({
                         </span>
                       )}
                     </TableCell>
+                    {canReverse && (
+                      <TableCell className='text-right'>
+                        {o.status !== 'reversed' && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant='ghost'
+                                size='icon'
+                                className='h-7 w-7'
+                                aria-label={`${t('Actions')} ${o.outputNumber}`}
+                              >
+                                <MoreHorizontal className='h-4 w-4' />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align='end'>
+                              <DropdownMenuItem
+                                onClick={() => onReverse?.(o, 'correct')}
+                              >
+                                <RotateCcw className='mr-2 h-4 w-4' />
+                                {t('Correct this receipt')}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className='text-destructive'
+                                onClick={() => onReverse?.(o, 'reverse')}
+                              >
+                                <Undo2 className='mr-2 h-4 w-4' />
+                                {t('Reverse receipt')}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

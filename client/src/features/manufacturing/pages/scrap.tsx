@@ -21,10 +21,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CellStack, DataTable, type Column } from '../components/data-table'
-import { RecordScrapDialog } from '../components/execution-dialogs'
 import { FilterChips, SearchField, Toolbar } from '../components/list-controls'
 import { EmptyState, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
+import { RecordScrapDialog } from '../components/record-scrap-dialog'
 import {
   SCRAP_REASON_LABELS,
   SCRAP_STAGE_LABELS,

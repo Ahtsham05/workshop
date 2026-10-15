@@ -46,6 +46,7 @@ const TOGGLES: {
     | 'allowNegativeStockIssue'
     | 'allowOverProduction'
     | 'requireQualityCheck'
+    | 'autoCompleteOrders'
   label: string
   help: string
 }[] = [
@@ -53,6 +54,11 @@ const TOGGLES: {
     key: 'requireQualityCheck',
     label: 'Quality check before finished goods',
     help: 'Reported output waits in a QC hold until inspected. When off, good and rejected quantities are posted with the output.',
+  },
+  {
+    key: 'autoCompleteOrders',
+    label: 'Complete orders automatically',
+    help: 'Once every planned unit is received into finished stock — nothing left in QC or rework — the order moves to Completed. Unused material on the floor goes back to stock.',
   },
   {
     key: 'requireBomForProduction',
@@ -120,6 +126,7 @@ export default function ManufacturingSettingsPage() {
         defaultPriority: form.defaultPriority,
         requireQualityCheck: form.requireQualityCheck,
         defaultRejectDisposition: form.defaultRejectDisposition,
+        autoCompleteOrders: form.autoCompleteOrders,
       }).unwrap()
       toast.success(t('Manufacturing settings saved'))
     } catch (err) {

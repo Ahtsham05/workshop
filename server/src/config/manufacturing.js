@@ -107,7 +107,10 @@ const SCRAP_STAGES = ['material', 'wip', 'qc_reject', 'rework', 'finished_good']
 /** What happens to output rejected at quality inspection. */
 const REJECT_DISPOSITIONS = ['scrap', 'rework'];
 
-const OUTPUT_STATUSES = ['pending_qc', 'inspected'];
+const OUTPUT_STATUSES = ['pending_qc', 'inspected', 'reversed'];
+
+// Why a production output was reversed (services/manufacturing/execution.service.js#reverseOutput).
+const OUTPUT_REVERSAL_REASONS = ['wrong_quantity', 'wrong_product', 'wrong_order', 'duplicate', 'other'];
 
 const SCRAP_REASONS = ['defect', 'damage', 'process_loss', 'expired', 'setup', 'rework', 'other'];
 
@@ -167,6 +170,7 @@ module.exports = {
   SCRAP_REASONS,
   REJECT_DISPOSITIONS,
   OUTPUT_STATUSES,
+  OUTPUT_REVERSAL_REASONS,
   COUNTER_KEYS,
   MAX_BOM_DEPTH,
   OPERATION_STATUSES,

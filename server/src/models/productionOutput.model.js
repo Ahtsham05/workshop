@@ -41,6 +41,15 @@ const ProductionOutputSchema = new mongoose.Schema(
             batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
             imeiIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Imei' }], default: undefined },
             cost: { type: Number, default: 0 },
+            // Enough of the WIP lot to rebuild it exactly if this output is reversed
+            // (absent on outputs reported before reversal existed).
+            variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductVariant', default: undefined },
+            batchNumber: { type: String, trim: true },
+            serialNumbers: { type: [String], default: undefined },
+            ratio: { type: Number },
+            isAlternative: { type: Boolean },
+            issueId: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialIssue' },
+            issuedAt: { type: Date },
           },
           { _id: false }
         ),
@@ -60,6 +69,24 @@ const ProductionOutputSchema = new mongoose.Schema(
     // allowed to inspect) — the receipt itself was the inspection.
     directReceipt: { type: Boolean, default: false },
     notes: { type: String, trim: true, default: '' },
+    // Set when the output was reversed (status 'reversed'): what it had posted, so the
+    // record still explains itself after its receipt / scrap documents were removed.
+    reversal: {
+      type: new mongoose.Schema(
+        {
+          at: { type: Date },
+          by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+          reason: { type: String, trim: true },
+          notes: { type: String, trim: true, default: '' },
+          previousStatus: { type: String },
+          receiptNumber: { type: String },
+          scrapNumber: { type: String },
+          reopenedOrder: { type: Boolean, default: false },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
     // Created by the manufacturing demo-data seeder (services/manufacturing/demoData.service.js).
     isDemo: { type: Boolean, default: false },
   },

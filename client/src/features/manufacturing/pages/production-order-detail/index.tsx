@@ -18,6 +18,7 @@ import {
   Printer,
   Recycle,
   RefreshCw,
+  RotateCcw,
   Trash2,
   Undo2,
 } from 'lucide-react'
@@ -54,12 +55,14 @@ import { StatusBadge } from '../../components/badges'
 import {
   CompleteOrderDialog,
   InspectOutputDialog,
-  RecordScrapDialog,
   ReportOutputDialog,
   ReturnMaterialsDialog,
   ReworkDialog,
 } from '../../components/execution-dialogs'
 import { ProductionOrderDialog } from '../../components/production-order-dialog'
+import { ReceiveFinishedGoodsDialog } from '../../components/receive-finished-goods-dialog'
+import { RecordScrapDialog } from '../../components/record-scrap-dialog'
+import { ReverseOutputDialog } from '../../components/reverse-output-dialog'
 import { useConfirm } from '../../lib/confirm'
 import {
   PRIORITY_META,
@@ -115,6 +118,7 @@ export type DialogKind =
   | 'complete'
   | 'scrap'
   | 'assemble'
+  | 'receive'
 
 const TAB_LABELS: Record<DetailTab, string> = {
   overview: 'Overview',
@@ -142,7 +146,12 @@ export default function ProductionOrderDetail({
   const canExecute = hasPermission('executeProduction')
   const canInspect = hasPermission('inspectProduction')
 
-  const { data: order, isLoading, error } = useGetProductionOrderQuery(orderId)
+  const {
+    data: order,
+    isLoading,
+    error,
+    refetch: refetchOrder,
+  } = useGetProductionOrderQuery(orderId)
   const { data: requirements } = useGetOrderRequirementsQuery(orderId)
   const { data: settings } = useGetManufacturingSettingsQuery()
   const [changeStatus, { isLoading: changing }] =
@@ -154,6 +163,10 @@ export default function ProductionOrderDetail({
   const confirm = useConfirm()
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const [inspecting, setInspecting] = useState<ProductionOutput | null>(null)
+  const [reversing, setReversing] = useState<{
+    output: ProductionOutput
+    intent: 'correct' | 'reverse'
+  } | null>(null)
 
   // The open tab lives in the URL (?tab=…) so it survives reloads and can be linked.
   const search = useSearch({ strict: false }) as { tab?: string }
@@ -426,14 +439,9 @@ export default function ProductionOrderDetail({
                     )}
                   </Link>
                 </Button>
-                <Button asChild>
-                  <Link
-                    to={'/manufacturing/finished-goods/receive' as never}
-                    search={{ orderId: order.id } as never}
-                  >
-                    <Factory className='mr-2 h-4 w-4' />
-                    {t('Receive finished goods')}
-                  </Link>
+                <Button onClick={() => setDialog('receive')}>
+                  <Factory className='mr-2 h-4 w-4' />
+                  {t('Receive finished goods')}
                 </Button>
               </>
             )}
@@ -484,6 +492,17 @@ export default function ProductionOrderDetail({
                     {t('Return unused material')}
                   </DropdownMenuItem>
                 )}
+                {canExecute &&
+                  !isAssembly &&
+                  ['in_production', 'paused', 'completed'].includes(
+                    order.status
+                  ) &&
+                  order.producedQuantity > 0 && (
+                    <DropdownMenuItem onClick={() => setTab('quality')}>
+                      <RotateCcw className='mr-2 h-4 w-4' />
+                      {t('Reverse or correct a receipt')}
+                    </DropdownMenuItem>
+                  )}
                 {canExecute && order.status !== 'cancelled' && (
                   <DropdownMenuItem onClick={() => setDialog('scrap')}>
                     <Recycle className='mr-2 h-4 w-4' />
@@ -732,6 +751,12 @@ export default function ProductionOrderDetail({
             canInspect={canInspect}
             onInspect={setInspecting}
             onRework={() => setDialog('rework')}
+            canReverse={
+              canExecute &&
+              !isAssembly &&
+              ['in_production', 'paused', 'completed'].includes(order.status)
+            }
+            onReverse={(output, intent) => setReversing({ output, intent })}
           />
         </TabsContent>
         <TabsContent value='scrap' className='mt-3'>
@@ -770,6 +795,13 @@ export default function ProductionOrderDetail({
           onClose={() => setDialog(null)}
         />
       )}
+      {dialog === 'receive' && (
+        <ReceiveFinishedGoodsDialog
+          order={order}
+          onClose={() => setDialog(null)}
+          onInspect={setInspecting}
+        />
+      )}
       {dialog === 'rework' && (
         <ReworkDialog order={order} onClose={() => setDialog(null)} />
       )}
@@ -778,6 +810,24 @@ export default function ProductionOrderDetail({
       )}
       {dialog === 'scrap' && (
         <RecordScrapDialog order={order} onClose={() => setDialog(null)} />
+      )}
+      {reversing && (
+        <ReverseOutputDialog
+          order={order}
+          output={reversing.output}
+          initialReason={
+            reversing.intent === 'correct'
+              ? ('wrong_quantity' as const)
+              : undefined
+          }
+          canReopen={canManage}
+          onClose={() => setReversing(null)}
+          onReceiveAgain={async () => {
+            // Open the receipt on the reopened order, with its WIP restored.
+            await refetchOrder()
+            setDialog('receive')
+          }}
+        />
       )}
       {inspecting && (
         <InspectOutputDialog

@@ -11,6 +11,7 @@ const {
   Batch,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
+const logger = require('../../config/logger');
 const { EXECUTABLE_PRODUCTION_STATUSES } = require('../../config/manufacturing');
 const settingsService = require('./settings.service');
 const stockService = require('./stock.service');
@@ -773,6 +774,13 @@ const backflush = async (order, producedQty, ctx) => {
         batchId: t.lot.batchId,
         imeiIds: t.imeiIds,
         cost: t.cost,
+        variantId: t.lot.variantId || null,
+        batchNumber: t.lot.batchNumber,
+        serialNumbers: t.serialNumbers,
+        ratio: t.lot.ratio || 1,
+        isAlternative: !!t.lot.isAlternative,
+        issueId: t.lot.issueId,
+        issuedAt: t.lot.issuedAt,
       })
     );
   }
@@ -1419,6 +1427,268 @@ const recordScrap = async ({ organizationId, branchId, createdBy }, body) => {
   });
 };
 
+// ── Reversal ────────────────────────────────────────────────────────────────────────
+
+const REOPENABLE = ['in_production', 'paused', 'completed'];
+
+/** The order behind an output — for the caller's permission check before a reversal. */
+const getOutputOrderStatus = async ({ organizationId, branchId }, outputId) => {
+  const output = await ProductionOutput.findOne({ _id: outputId, organizationId, branchId })
+    .select('productionOrderId')
+    .lean();
+  if (!output) throw new ApiError(httpStatus.NOT_FOUND, 'Production output not found');
+  const order = await ProductionOrder.findById(output.productionOrderId).select('orderNumber status').lean();
+  return { orderNumber: order ? order.orderNumber : '', orderStatus: order ? order.status : null };
+};
+
+/**
+ * Reverses a production output posted by mistake (wrong quantity, wrong product or order,
+ * posted twice) — everything it did, in one transaction:
+ *  - good units leave finished stock again (refused if some were already sold or used);
+ *    serial units it created are removed, a batch gives the quantity back
+ *  - rejects: the QC-reject scrap record is removed, or the units leave the rework queue
+ *    (refused once rework results for them were posted)
+ *  - units still waiting in QC leave the QC hold
+ *  - the material it backflushed goes back into the order's WIP, lot by lot
+ *  - a completed order is reopened (In Production)
+ * The output stays, marked 'reversed' with a snapshot of what it had posted; its receipt and
+ * scrap documents are removed so stock, receipts and scrap reports no longer count it.
+ */
+const reverseOutput = async ({ organizationId, branchId, createdBy }, outputId, { reason, notes } = {}) => {
+  requireBranch(branchId);
+  return runTransaction(async (session) => {
+    const output = await ProductionOutput.findOne({ _id: outputId, organizationId, branchId }).session(session);
+    if (!output) throw new ApiError(httpStatus.NOT_FOUND, 'Production output not found');
+    if (output.status === 'reversed')
+      throw new ApiError(httpStatus.BAD_REQUEST, `${output.outputNumber} is already reversed`);
+    const order = await loadOrder({ organizationId, branchId }, output.productionOrderId, session);
+    if (order.orderType === 'assembly') {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        'Assembly output can’t be reversed — correct it on the parent order instead'
+      );
+    }
+    if (!REOPENABLE.includes(order.status)) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Order ${order.orderNumber} is ${order.status.replace('_', ' ')} — its output can’t be reversed`
+      );
+    }
+    const ctx = { organizationId, branchId, createdBy, session };
+    const ref = { refType: 'ProductionOutput', refId: output._id };
+    const produced = output.producedQuantity;
+    const previousStatus = output.status;
+    let receiptNumber;
+    let scrapNumber;
+
+    // 1. Good units back out of finished stock.
+    if (previousStatus === 'inspected' && output.receiptId) {
+      const receipt = await ProductionReceipt.findById(output.receiptId).session(session);
+      if (receipt) {
+        receiptNumber = receipt.receiptNumber;
+        const item = await stockService.resolveItem({
+          ...ctx,
+          productId: order.productId,
+          variantId: order.variantId,
+        });
+        if (receipt.imeiIds && receipt.imeiIds.length) {
+          const gone = await Imei.find({ _id: { $in: receipt.imeiIds }, status: { $ne: 'in_stock' } })
+            .select('imei status')
+            .session(session)
+            .lean();
+          if (gone.length) {
+            throw new ApiError(
+              httpStatus.CONFLICT,
+              `Already sold or moved: ${gone.map((u) => `${u.imei} (${u.status})`).join(', ')} — return them to stock first`
+            );
+          }
+        }
+        let balanceAfter;
+        try {
+          balanceAfter = await stockService.applyAvailableDelta(item, -receipt.quantity, {
+            batchId: receipt.batchId,
+            session,
+          });
+        } catch (err) {
+          if (!(err instanceof ApiError)) throw err; // let the transaction retry/abort as usual
+          throw new ApiError(
+            httpStatus.CONFLICT,
+            `Only part of the ${receipt.quantity} ${order.unit} "${order.productName}" from ${receipt.receiptNumber} is still in stock — the rest was sold or used. Return it to stock first.`
+          );
+        }
+        await stockService.writeMovement(item, {
+          ...ctx,
+          ...ref,
+          type: 'production_receipt',
+          delta: -receipt.quantity,
+          balanceAfter,
+          unitCost: receipt.unitCost,
+          productionOrderId: order._id,
+          location: receipt.location,
+          batchId: receipt.batchId,
+          imeiIds: receipt.imeiIds,
+          serialNumbers: receipt.serialNumbers,
+        });
+        if (receipt.imeiIds && receipt.imeiIds.length) {
+          await Imei.deleteMany({ _id: { $in: receipt.imeiIds } }, { session });
+        }
+        order.completedQuantity = roundQty(Math.max(0, order.completedQuantity - receipt.quantity));
+        order.finishedGoodsValue = roundMoney(Math.max(0, order.finishedGoodsValue - receipt.totalCost));
+        await ProductionReceipt.deleteOne({ _id: receipt._id }, { session });
+      }
+    }
+
+    // 2. Rejects: out of the rework queue, or their scrap record removed.
+    const rejected = previousStatus === 'inspected' ? output.rejectedQuantity : 0;
+    if (rejected > EPS) {
+      if (output.rejectDisposition === 'rework') {
+        if (order.reworkPendingQuantity + EPS < rejected) {
+          throw new ApiError(
+            httpStatus.CONFLICT,
+            `Rework results were already posted for the ${rejected} rejected unit(s) of ${output.outputNumber} — it can’t be reversed`
+          );
+        }
+        order.reworkPendingQuantity = roundQty(order.reworkPendingQuantity - rejected);
+        order.reworkPendingCost =
+          order.reworkPendingQuantity > EPS
+            ? roundMoney(Math.max(0, order.reworkPendingCost - rejected * output.unitCost))
+            : 0;
+        await writeOutputBucket(order, {
+          ...ctx,
+          ...ref,
+          type: 'rework_out',
+          bucket: 'rework',
+          delta: -rejected,
+          balanceAfter: order.reworkPendingQuantity,
+          unitCost: output.unitCost,
+        });
+      } else {
+        order.scrappedQuantity = roundQty(Math.max(0, order.scrappedQuantity - rejected));
+        if (output.scrapId) {
+          const scrap = await ScrapRecord.findOneAndDelete({ _id: output.scrapId }, { session });
+          scrapNumber = scrap ? scrap.scrapNumber : undefined;
+        }
+      }
+      order.rejectedQuantity = roundQty(Math.max(0, order.rejectedQuantity - rejected));
+    }
+
+    // 3. Units still waiting for inspection leave the QC hold.
+    if (previousStatus === 'pending_qc') {
+      order.qcPendingQuantity = roundQty(Math.max(0, order.qcPendingQuantity - produced));
+      order.qcPendingCost =
+        order.qcPendingQuantity > EPS ? roundMoney(Math.max(0, order.qcPendingCost - output.materialCost)) : 0;
+      await writeOutputBucket(order, {
+        ...ctx,
+        ...ref,
+        type: 'qc_out',
+        bucket: 'qc',
+        delta: -produced,
+        balanceAfter: order.qcPendingQuantity,
+        unitCost: output.unitCost,
+      });
+    }
+
+    // 4. The material it used goes back into WIP, lot by lot.
+    // eslint-disable-next-line no-restricted-syntax
+    for (const c of output.consumption) {
+      const material = order.materials.id(c.materialLineId);
+      if (!material || !(c.quantity > EPS)) continue; // eslint-disable-line no-continue
+      let lot = order.wipLots.id(c.wipLotId);
+      const ratio = c.ratio || (lot && lot.ratio) || 1;
+      const variantId =
+        c.variantId !== undefined ? c.variantId : lot ? lot.variantId : ratio === 1 ? material.variantId : null;
+      if (lot) {
+        lot.quantity = roundQty(lot.quantity + c.quantity);
+        if (c.imeiIds && c.imeiIds.length) {
+          lot.imeiIds = [...(lot.imeiIds || []), ...c.imeiIds];
+          if (c.serialNumbers && c.serialNumbers.length)
+            lot.serialNumbers = [...(lot.serialNumbers || []), ...c.serialNumbers];
+        }
+      } else {
+        order.wipLots.push({
+          _id: c.wipLotId,
+          materialLineId: material._id,
+          productId: c.productId,
+          variantId: variantId || null,
+          productName: c.productName,
+          unit: c.unit,
+          batchId: c.batchId || null,
+          batchNumber: c.batchNumber,
+          imeiIds: c.imeiIds && c.imeiIds.length ? c.imeiIds : undefined,
+          serialNumbers: c.serialNumbers && c.serialNumbers.length ? c.serialNumbers : undefined,
+          quantity: roundQty(c.quantity),
+          ratio,
+          isAlternative: c.isAlternative !== undefined ? c.isAlternative : ratio !== 1,
+          unitCost: roundMoney(c.cost / c.quantity),
+          issueId: c.issueId,
+          issuedAt: c.issuedAt || output.reportedAt,
+        });
+        lot = order.wipLots[order.wipLots.length - 1];
+      }
+      material.consumedQuantity = roundQty(Math.max(0, material.consumedQuantity - c.quantity / ratio));
+      material.consumedCost = roundMoney(Math.max(0, material.consumedCost - (c.cost || 0)));
+      if (c.imeiIds && c.imeiIds.length) {
+        // eslint-disable-next-line no-await-in-loop
+        await stockService.setSerialStatus(c.imeiIds, {
+          status: 'in_production',
+          productionOrderId: order._id,
+          note: `Back in WIP — ${output.outputNumber} reversed`,
+          userId: createdBy,
+          session,
+        });
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const item = await stockService.resolveItem({ ...ctx, productId: c.productId, variantId: lot.variantId });
+      // eslint-disable-next-line no-await-in-loop
+      await stockService.writeMovement(item, {
+        ...ctx,
+        ...ref,
+        type: 'wip_consume',
+        bucket: 'wip',
+        delta: c.quantity,
+        balanceAfter: wip.wipBalanceOf(order, c.productId, lot.variantId),
+        unitCost: c.quantity ? c.cost / c.quantity : 0,
+        productionOrderId: order._id,
+        location: order.wipLocation,
+        batchId: c.batchId,
+        imeiIds: c.imeiIds,
+        serialNumbers: c.serialNumbers,
+      });
+    }
+    order.producedQuantity = roundQty(Math.max(0, order.producedQuantity - produced));
+
+    // 5. A completed order opens again.
+    const reopenedOrder = order.status === 'completed';
+    if (reopenedOrder) {
+      order.statusHistory.push({
+        from: 'completed',
+        to: 'in_production',
+        note: `Reopened — ${output.outputNumber} reversed`,
+        by: createdBy,
+        at: new Date(),
+      });
+      order.status = 'in_production';
+      order.actualCompletionDate = null;
+    }
+    order.updatedBy = createdBy;
+
+    output.status = 'reversed';
+    output.reversal = {
+      at: new Date(),
+      by: createdBy,
+      reason: reason || 'other',
+      notes: notes || '',
+      previousStatus,
+      receiptNumber,
+      scrapNumber,
+      reopenedOrder,
+    };
+    await order.save({ session });
+    await output.save({ session });
+    return { output, order };
+  });
+};
+
 // ── Completion ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -1545,6 +1815,40 @@ const completeOrder = async ({ organizationId, branchId, createdBy }, orderId, {
     await order.save({ session });
     return order;
   });
+};
+
+/**
+ * Auto-completion (setting `autoCompleteOrders`, on by default): once every planned unit has
+ * been received as good — nothing waiting in QC or rework — a production order completes
+ * itself. Material still in WIP goes back to stock, as with completing an assembly.
+ * Runs after the receipt's own transaction; if it fails the receipt stands and the order
+ * simply stays open for a manual Complete. Resolves to the completed order, or null.
+ */
+const autoCompleteIfDone = async (ctx, orderId) => {
+  try {
+    const settings = await settingsService.getSettings(ctx.organizationId);
+    if (settings.autoCompleteOrders === false) return null;
+    const order = await ProductionOrder.findOne({ _id: orderId, organizationId: ctx.organizationId, branchId: ctx.branchId })
+      .select('orderType status plannedQuantity completedQuantity qcPendingQuantity reworkPendingQuantity')
+      .lean();
+    if (
+      !order ||
+      order.orderType === 'assembly' || // assemblies complete through their own flow
+      !['in_production', 'paused'].includes(order.status) ||
+      order.completedQuantity + EPS < order.plannedQuantity ||
+      order.qcPendingQuantity > EPS ||
+      order.reworkPendingQuantity > EPS
+    ) {
+      return null;
+    }
+    return await completeOrder(ctx, orderId, {
+      wipDisposition: 'return',
+      note: 'Completed automatically — every planned unit was received',
+    });
+  } catch (err) {
+    logger.warn(`Manufacturing: auto-complete of order ${orderId} skipped — ${err.message}`);
+    return null;
+  }
 };
 
 // ── Queries ─────────────────────────────────────────────────────────────────────────
@@ -1732,6 +2036,9 @@ module.exports = {
   resolveRework,
   recordScrap,
   completeOrder,
+  autoCompleteIfDone,
+  reverseOutput,
+  getOutputOrderStatus,
   startAssembly,
   completeAssembly,
   queryIssues,

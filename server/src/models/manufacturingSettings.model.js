@@ -57,6 +57,9 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
     // quantities are entered with the output and posted straight away.
     requireQualityCheck: { type: Boolean, default: true },
     defaultRejectDisposition: { type: String, enum: ['scrap', 'rework'], default: 'scrap' },
+    // A production order completes itself once every planned unit is received as good
+    // (unused WIP goes back to stock); when off, it waits for a manual Complete.
+    autoCompleteOrders: { type: Boolean, default: true },
     defaultPriority: { type: String, enum: ['low', 'normal', 'high', 'urgent'], default: 'normal' },
     counters: {
       type: new mongoose.Schema(

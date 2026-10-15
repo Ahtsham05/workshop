@@ -10,6 +10,7 @@ const {
   SCRAP_REASONS,
   REJECT_DISPOSITIONS,
   OUTPUT_STATUSES,
+  OUTPUT_REVERSAL_REASONS,
   ORDER_TYPES,
   ORDER_DOCUMENT_CATEGORIES,
   MAX_OPERATIONS,
@@ -53,6 +54,7 @@ const updateSettings = {
       defaultFinishedGoodsLocation: Joi.string().allow('').trim().max(100),
       allowNegativeStockIssue: Joi.boolean(),
       allowOverProduction: Joi.boolean(),
+      autoCompleteOrders: Joi.boolean(),
       requireQualityCheck: Joi.boolean(),
       defaultRejectDisposition: Joi.string().valid(...REJECT_DISPOSITIONS),
       requireBomForProduction: Joi.boolean(),
@@ -709,6 +711,16 @@ const inspectOutput = {
   }),
 };
 
+const reverseOutput = {
+  params: Joi.object().keys({ outputId: id().required() }),
+  body: Joi.object().keys({
+    reason: Joi.string()
+      .valid(...OUTPUT_REVERSAL_REASONS)
+      .required(),
+    notes: Joi.string().allow('').max(1000),
+  }),
+};
+
 const resolveRework = {
   ...orderIdParam,
   body: Joi.object().keys({
@@ -858,6 +870,7 @@ module.exports = {
   returnMaterials,
   reportOutput,
   inspectOutput,
+  reverseOutput,
   resolveRework,
   recordScrap,
   stockDetail,

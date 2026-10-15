@@ -21,6 +21,7 @@ const UPDATABLE_FIELDS = [
   'defaultPriority',
   'requireQualityCheck',
   'defaultRejectDisposition',
+  'autoCompleteOrders',
 ];
 
 const updateSettings = async (organizationId, body, updatedBy) => {

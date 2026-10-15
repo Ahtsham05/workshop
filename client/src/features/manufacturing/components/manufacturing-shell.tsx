@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Factory,
   FileStack,
+  PackageMinus,
   Plus,
   Search,
 } from 'lucide-react'
@@ -24,6 +25,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { NAV_GROUPS, isSectionActive, type NavGroup } from '../lib/navigation'
@@ -84,6 +87,46 @@ export default function ManufacturingShell() {
 
   const canOrders = hasPermission('manageProductionOrders')
   const canBoms = hasPermission('manageBoms')
+  const canIssue = hasPermission('executeProduction')
+
+  // The "New" menu: what you'd create, in the order the work happens.
+  const createItems = [
+    canOrders && {
+      key: 'order',
+      icon: ClipboardList,
+      label: 'Production order',
+      hint: 'Plan what to make and when',
+      go: () =>
+        navigate({
+          to: '/manufacturing/production-orders' as never,
+          search: { new: true } as never,
+        }),
+    },
+    canIssue && {
+      key: 'issue',
+      icon: PackageMinus,
+      label: 'Material issue',
+      hint: 'Move components from stock to the floor',
+      go: () => navigate({ to: '/manufacturing/material-issues/new' as never }),
+    },
+    canBoms && {
+      key: 'bom',
+      icon: FileStack,
+      label: 'Bill of materials',
+      hint: 'Define the recipe for a product',
+      go: () =>
+        navigate({
+          to: '/manufacturing/boms' as never,
+          search: { new: true } as never,
+        }),
+    },
+  ].filter(Boolean) as {
+    key: string
+    icon: typeof Plus
+    label: string
+    hint: string
+    go: () => void
+  }[]
 
   return (
     <ConfirmProvider>
@@ -126,7 +169,7 @@ export default function ManufacturingShell() {
                 /
               </kbd>
             </Button>
-            {(canOrders || canBoms) && (
+            {createItems.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button className='h-9 gap-1.5 max-sm:w-9 max-sm:px-0'>
@@ -135,33 +178,30 @@ export default function ManufacturingShell() {
                     <ChevronDown className='h-3.5 w-3.5 opacity-70 max-sm:hidden' />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align='end' className='w-56'>
-                  {canOrders && (
+                <DropdownMenuContent align='end' className='w-72 p-1.5'>
+                  <DropdownMenuLabel className='text-muted-foreground px-2 pt-1 pb-1.5 text-[11px] font-medium tracking-wide uppercase'>
+                    {t('Create new')}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator className='-mx-1.5 mb-1' />
+                  {createItems.map(({ key, icon: Icon, label, hint, go }) => (
                     <DropdownMenuItem
-                      onSelect={() =>
-                        navigate({
-                          to: '/manufacturing/production-orders' as never,
-                          search: { new: true } as never,
-                        })
-                      }
+                      key={key}
+                      onSelect={go}
+                      className='gap-3 rounded-md px-2 py-2'
                     >
-                      <ClipboardList className='mr-2 h-4 w-4' />
-                      {t('Production order')}
+                      <span className='bg-muted text-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-md border'>
+                        <Icon className='h-4 w-4' aria-hidden />
+                      </span>
+                      <span className='min-w-0 flex-1'>
+                        <span className='block text-sm leading-tight font-medium'>
+                          {t(label)}
+                        </span>
+                        <span className='text-muted-foreground block truncate text-xs leading-snug'>
+                          {t(hint)}
+                        </span>
+                      </span>
                     </DropdownMenuItem>
-                  )}
-                  {canBoms && (
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        navigate({
-                          to: '/manufacturing/boms' as never,
-                          search: { new: true } as never,
-                        })
-                      }
-                    >
-                      <FileStack className='mr-2 h-4 w-4' />
-                      {t('Bill of materials')}
-                    </DropdownMenuItem>
-                  )}
+                  ))}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}

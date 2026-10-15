@@ -608,6 +608,24 @@ const returnMaterials = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(doc);
 });
 
+/**
+ * After a receipt, inspection or rework result: completes the order if everything planned is
+ * now in finished stock (setting `autoCompleteOrders`), audited like a manual completion.
+ * Resolves to true when the order was completed.
+ */
+const autoComplete = async (req, ctx, orderId) => {
+  const order = await executionService.autoCompleteIfDone(ctx, orderId);
+  if (!order) return false;
+  await audit(req, {
+    action: 'status_change',
+    module: 'ProductionOrder',
+    entity: order,
+    entityName: orderLabel(order),
+    metadata: { status: order.status, note: 'Completed automatically', auto: true },
+  });
+  return true;
+};
+
 const reportOutput = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
   if (req.body.qcMode === 'direct') {
@@ -633,7 +651,8 @@ const reportOutput = catchAsync(async (req, res) => {
       directReceipt: !!output.directReceipt,
     },
   });
-  res.status(httpStatus.CREATED).send(output);
+  const orderCompleted = await autoComplete(req, ctx, req.params.orderId);
+  res.status(httpStatus.CREATED).send({ ...output.toJSON(), orderCompleted });
 });
 
 const inspectOutput = catchAsync(async (req, res) => {
@@ -646,7 +665,44 @@ const inspectOutput = catchAsync(async (req, res) => {
     entityName: `${output.outputNumber} (${output.orderNumber})`,
     metadata: { good: output.goodQuantity, rejected: output.rejectedQuantity, disposition: output.rejectDisposition },
   });
-  res.send(output);
+  const orderCompleted = await autoComplete(req, ctx, output.productionOrderId);
+  res.send({ ...output.toJSON(), orderCompleted });
+});
+
+const reverseOutput = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const pre = await executionService.getOutputOrderStatus(ctx, req.params.outputId);
+  if (pre.orderStatus === 'completed' && !(await userHasPermission(req, 'manageProductionOrders'))) {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      `${pre.orderNumber} is completed — reopening it to reverse a receipt needs the "manage production orders" permission`
+    );
+  }
+  const { output, order } = await executionService.reverseOutput(ctx, req.params.outputId, req.body);
+  await audit(req, {
+    action: 'stock_adjust',
+    module: 'ProductionOutput',
+    entity: output,
+    entityName: `${output.outputNumber} (${output.orderNumber}) reversed`,
+    metadata: {
+      reason: req.body.reason,
+      produced: output.producedQuantity,
+      good: output.goodQuantity,
+      rejected: output.rejectedQuantity,
+      previousStatus: output.reversal.previousStatus,
+      reopenedOrder: output.reversal.reopenedOrder,
+    },
+  });
+  if (output.reversal.reopenedOrder) {
+    await audit(req, {
+      action: 'status_change',
+      module: 'ProductionOrder',
+      entity: order,
+      entityName: orderLabel(order),
+      metadata: { status: order.status, note: `Reopened — ${output.outputNumber} reversed` },
+    });
+  }
+  res.send({ ...output.toJSON(), orderStatus: order.status });
 });
 
 const resolveRework = catchAsync(async (req, res) => {
@@ -659,7 +715,8 @@ const resolveRework = catchAsync(async (req, res) => {
     entityName: 'Rework result',
     metadata: { good: req.body.goodQuantity || 0, scrapped: req.body.scrapQuantity || 0 },
   });
-  res.send(result);
+  const orderCompleted = await autoComplete(req, ctx, req.params.orderId);
+  res.send({ ...result, orderCompleted });
 });
 
 const recordScrap = catchAsync(async (req, res) => {
@@ -1000,6 +1057,7 @@ module.exports = {
   returnMaterials,
   reportOutput,
   inspectOutput,
+  reverseOutput,
   resolveRework,
   recordScrap,
   getProductionOutputs,
