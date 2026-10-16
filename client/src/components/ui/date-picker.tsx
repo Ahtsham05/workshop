@@ -2,19 +2,41 @@ import * as React from 'react'
 import { format } from 'date-fns'
 import { CalendarIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getBusinessToday, shiftBusinessCalendarDate, toBusinessCalendarDate } from '@/lib/business-timezone'
+import { getBusinessToday, toBusinessCalendarDate } from '@/lib/business-timezone'
 import {
-  formatAppDate,
   getAppDatePlaceholder,
   maskAppDateInput,
   parseAppDateInput,
   useAppDateFormat,
 } from '@/lib/date-format'
+import {
+  type DateFieldState,
+  EMPTY_SEGMENTS,
+  backspace,
+  clearSegments,
+  deleteSegment,
+  focusSegment,
+  initialFieldState,
+  isAllEmpty,
+  isAllFilled,
+  renderSegments,
+  segmentAt,
+  segmentRange,
+  segmentsFromIso,
+  segmentsFromPaste,
+  segmentsInSelection,
+  segmentsToIso,
+  settle,
+  stepSegment,
+  typeDigit,
+  typeSeparator,
+} from '@/lib/date-field-segments'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 const CALENDAR_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
+const SEPARATOR_RE = /^[/\-.\s,]$/
 
 /** `YYYY-MM-DD` (or any parseable date/ISO string, read as a Pakistan calendar day) → `YYYY-MM-DD`. */
 function normalizeCalendarDate(value?: string | null): string {
@@ -45,20 +67,44 @@ export type DatePickerProps = Omit<
   clearable?: boolean
 }
 
+type EditAction = { type: 'insert'; data: string } | { type: 'backspace' } | { type: 'delete' } | { type: 'clear' }
+
 /**
  * The app's date field, used in place of the browser's `<input type="date">` (whose display
- * format follows the OS, not the business). You can type the date like the native input —
- * in the format chosen under Settings → Localization, separators fill in as you type — or
- * pick it from the calendar button. Values are plain `YYYY-MM-DD` strings like the native
- * input, so it drops into the same state.
+ * format follows the OS, not the business). It types like the native input — in the format
+ * chosen under Settings → Localization — or the date can be picked from the calendar button.
+ * Values are plain `YYYY-MM-DD` strings like the native input, so it drops into the same state.
  *
- * Keyboard: type digits; ArrowUp/ArrowDown step a day; Alt+ArrowDown or F4 opens the
- * calendar. A complete, valid date is committed as soon as it's typed (like the native
- * input's change event); anything incomplete reverts on blur. Enter commits pending text
- * before the caller's onKeyDown runs (e.g. to advance to the next field).
+ * Editing is per segment (see `date-field-segments.ts`): clicking the day selects the day,
+ * typing `12` replaces just the day and moves on to the month; Backspace trims the selected
+ * segment without shifting the rest of the date. The day/month/year never re-flow into each
+ * other, which is what made the old free-text mask jump around.
+ *
+ * Keyboard: digits fill the selected segment; ArrowLeft/ArrowRight (or typing `/`) move
+ * between segments; ArrowUp/ArrowDown step the selected segment (the day steps across month
+ * ends); Alt+ArrowDown or F4 opens the calendar; Escape undoes unfinished typing. The value is
+ * committed as soon as every segment is finished and makes a valid day; anything incomplete
+ * reverts on blur. Enter finishes a half-typed segment before the caller's onKeyDown runs (e.g. to
+ * advance to the next field).
  */
 export const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(function DatePicker(
-  { value, onChange, min, max, placeholder, clearable = false, className, onKeyDown, onBlur, disabled, ...inputProps },
+  {
+    value,
+    onChange,
+    min,
+    max,
+    placeholder,
+    clearable = false,
+    className,
+    onKeyDown,
+    onBlur,
+    onFocus,
+    onClick,
+    onMouseDown,
+    onPaste,
+    disabled,
+    ...inputProps
+  },
   ref,
 ) {
   const dateFormat = useAppDateFormat()
@@ -74,13 +120,23 @@ export const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(fu
   )
 
   const day = normalizeCalendarDate(value)
-  const display = React.useCallback((iso: string) => (iso ? formatAppDate(iso, '') : ''), [])
-  const [text, setText] = React.useState(() => display(day))
-  // Follow outside changes (and a changed app format) without clobbering text that already
-  // means the same day — e.g. the value that typing just committed.
+  const [field, setField] = React.useState<DateFieldState>(() => initialFieldState(day))
+  // Latest state for back-to-back key events that land before React re-renders.
+  const fieldRef = React.useRef(field)
+  fieldRef.current = field
+  // Bumped whenever the selected segment should be (re)highlighted after a render.
+  const [selectTick, setSelectTick] = React.useState(0)
+  const pointerDownRef = React.useRef(false)
+
+  // Follow outside changes without clobbering typing that already shows the same day — e.g.
+  // the value this field just committed.
   React.useEffect(() => {
-    setText((prev) => (parseAppDateInput(prev) === day && prev ? prev : display(day)))
-  }, [day, dateFormat, display])
+    setField((prev) =>
+      segmentsToIso(prev.segments) === day && day ? prev : { ...initialFieldState(day), active: prev.active },
+    )
+  }, [day])
+
+  const text = renderSegments(field.segments, dateFormat)
 
   const selected = day ? calendarDateToLocal(day) : undefined
   const minDate = min ? calendarDateToLocal(normalizeCalendarDate(min)) : undefined
@@ -96,25 +152,131 @@ export const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(fu
     return true
   }
 
-  const parsed = parseAppDateInput(text)
-  const complete = text.replace(/\D/g, '').length >= 8
-  const invalid = complete && (!parsed || !inRange(parsed))
+  const shownIso = segmentsToIso(field.segments)
+  const invalid = isAllFilled(field.segments) && !field.pending && (!shownIso || !inRange(shownIso))
+  const editable = !disabled && !inputProps.readOnly
 
-  const handleTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = event.target.value
-    const next = maskAppDateInput(raw, raw.length > text.length)
-    setText(next)
-    if (next === '') {
-      if (clearable) commit('')
-      return
-    }
-    const iso = parseAppDateInput(next)
-    if (iso) commit(iso)
+  /**
+   * Show `next`, highlight its active segment, and commit it once it's a complete valid day.
+   * Not while a segment is half-typed: Backspace on `16` shows `01` on the way to `12`, and
+   * leaving the field there should restore the 16th, not save the 1st.
+   */
+  const apply = (next: DateFieldState) => {
+    fieldRef.current = next
+    setField(next)
+    setSelectTick((tick) => tick + 1)
+    if (next.pending) return
+    const iso = segmentsToIso(next.segments)
+    if (iso) {
+      if (inRange(iso)) commit(iso)
+    } else if (isAllEmpty(next.segments) && clearable) commit('')
   }
 
-  const revertIfIncomplete = () => {
-    if (text === '' && clearable) return
-    if (!parsed || !inRange(parsed)) setText(display(day))
+  React.useLayoutEffect(() => {
+    const input = inputRef.current
+    if (!input || document.activeElement !== input || !input.value) return
+    const [start, end] = segmentRange(fieldRef.current.active, dateFormat)
+    input.setSelectionRange(start, end)
+  }, [selectTick, dateFormat])
+
+  /** One edit at the current selection: the segment(s) under it are what gets edited. */
+  const edit = (action: EditAction) => {
+    const input = inputRef.current
+    let state = fieldRef.current
+    let consumed = false
+    if (input && input.value) {
+      const start = input.selectionStart ?? 0
+      const end = input.selectionEnd ?? start
+      const touched = end > start ? segmentsInSelection(start, end, dateFormat) : [segmentAt(start, dateFormat)]
+      if (touched.length > 1) {
+        // A selection across segments (e.g. Ctrl+A) is replaced as a whole.
+        state = clearSegments(state, touched, dateFormat)
+        consumed = action.type !== 'insert'
+      } else if (touched[0] !== state.active) {
+        state = focusSegment(state, touched[0])
+      }
+    }
+    if (!consumed) {
+      if (action.type === 'insert') {
+        const pasted = action.data.length >= 6 ? segmentsFromPaste(action.data, parseAppDateInput, maskAppDateInput) : null
+        if (pasted) state = { segments: pasted, active: state.active, pending: false }
+        else
+          for (const char of action.data) {
+            if (/\d/.test(char)) state = typeDigit(state, char, dateFormat)
+            else if (SEPARATOR_RE.test(char)) state = typeSeparator(state, dateFormat)
+          }
+      } else if (action.type === 'backspace') state = backspace(state, dateFormat)
+      else if (action.type === 'delete') state = deleteSegment(state, dateFormat)
+      else state = clearSegments(state, [state.active], dateFormat)
+    }
+    apply(state)
+  }
+
+  // Typing on phones reports `Unidentified` keys, so text edits are taken from `beforeinput`
+  // (cancelled — the field never holds text this component didn't render). Desktop keys are
+  // handled in onKeyDown below, which cancels them before `beforeinput` fires.
+  const beforeInputRef = React.useRef<(event: InputEvent) => void>(() => {})
+  beforeInputRef.current = (event: InputEvent) => {
+    if (!event.cancelable || !editable) return
+    const type = event.inputType
+    if (type === 'historyUndo' || type === 'historyRedo') return event.preventDefault()
+    if (type === 'insertFromPaste') return // onPaste handles it
+    event.preventDefault()
+    if (type.startsWith('insert')) {
+      const data = event.data ?? event.dataTransfer?.getData('text/plain') ?? ''
+      if (data) edit({ type: 'insert', data })
+    } else if (type === 'deleteContentBackward') edit({ type: 'backspace' })
+    else if (type === 'deleteContentForward') edit({ type: 'delete' })
+    else if (type.startsWith('delete')) edit({ type: 'clear' }) // word/line deletes, cut
+  }
+  React.useEffect(() => {
+    const input = inputRef.current
+    if (!input) return
+    const listener = (event: Event) => beforeInputRef.current(event as InputEvent)
+    input.addEventListener('beforeinput', listener)
+    return () => input.removeEventListener('beforeinput', listener)
+  }, [])
+
+  // Only reached when an edit slipped past `beforeinput` (non-cancellable IME composition):
+  // read the segments back from their fixed positions instead of re-flowing the digits.
+  const handleFallbackChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = event.target.value
+    const digits = raw.replace(/\D/g, '')
+    if (!digits) return apply(clearSegments(fieldRef.current, [0, 1, 2], dateFormat))
+    const masked = segmentsFromPaste(raw, parseAppDateInput, maskAppDateInput)
+    if (masked) return apply({ segments: masked, active: fieldRef.current.active, pending: false })
+    // Unusable text: redraw what was there.
+    setField({ ...fieldRef.current })
+    setSelectTick((tick) => tick + 1)
+  }
+
+  const selectSegmentAtCaret = () => {
+    const input = inputRef.current
+    if (!input || !input.value) return
+    const start = input.selectionStart ?? 0
+    const end = input.selectionEnd ?? start
+    const touched = end > start ? segmentsInSelection(start, end, dateFormat) : [segmentAt(start, dateFormat)]
+    if (touched.length > 1) return // a deliberate multi-segment selection (to copy / replace)
+    const state = fieldRef.current
+    const next = touched[0] === state.active && state.pending ? state : focusSegment(state, touched[0])
+    fieldRef.current = next
+    setField(next)
+    setSelectTick((tick) => tick + 1)
+  }
+
+  const finishEditing = () => {
+    const state = settle(fieldRef.current)
+    const iso = segmentsToIso(state.segments)
+    let next: DateFieldState
+    if (iso && inRange(iso)) {
+      commit(iso)
+      next = { ...state, active: 0 }
+    } else if (isAllEmpty(state.segments) && clearable) {
+      commit('')
+      next = { ...state, active: 0 }
+    } else next = initialFieldState(day) // incomplete / impossible → back to the saved day
+    fieldRef.current = next
+    setField(next)
   }
 
   const today = getBusinessToday()
@@ -126,8 +288,52 @@ export const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(fu
   const disabledDays = [...(minDate ? [{ before: minDate }] : []), ...(maxDate ? [{ after: maxDate }] : [])]
 
   const pick = (iso: string) => {
-    if (commit(iso)) setText(display(iso))
+    if (commit(iso)) {
+      const next = { segments: segmentsFromIso(iso), active: 0, pending: false }
+      fieldRef.current = next
+      setField(next)
+    }
     setOpen(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const state = fieldRef.current
+      if (state.pending) apply(settle(state))
+    }
+    onKeyDown?.(e)
+    if (e.defaultPrevented) return
+    const plain = !e.ctrlKey && !e.metaKey && !e.altKey
+    const state = fieldRef.current
+    if ((e.altKey && e.key === 'ArrowDown') || e.key === 'F4') {
+      e.preventDefault()
+      setOpen(true)
+    } else if (plain && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault()
+      if (!editable) return
+      const delta = e.key === 'ArrowUp' ? 1 : -1
+      apply(
+        isAllEmpty(state.segments)
+          ? { ...initialFieldState(today), active: state.active }
+          : stepSegment(state, delta, today, dateFormat),
+      )
+    } else if (plain && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && text) {
+      e.preventDefault()
+      const target = state.active + (e.key === 'ArrowLeft' ? -1 : 1)
+      if (target >= 0 && target <= 2) apply(focusSegment(state, target))
+      else setSelectTick((tick) => tick + 1) // keep the edge segment highlighted
+    } else if (plain && !e.shiftKey && (e.key === 'Home' || e.key === 'End') && text) {
+      e.preventDefault()
+      apply(focusSegment(state, e.key === 'Home' ? 0 : 2))
+    } else if (e.key === 'Escape' && segmentsToIso(state.segments) !== (day || null)) {
+      apply(initialFieldState(day))
+    } else if (plain && editable && (/^\d$/.test(e.key) || SEPARATOR_RE.test(e.key))) {
+      e.preventDefault()
+      edit({ type: 'insert', data: e.key })
+    } else if (plain && editable && (e.key === 'Backspace' || e.key === 'Delete')) {
+      e.preventDefault()
+      edit({ type: e.key === 'Backspace' ? 'backspace' : 'delete' })
+    }
   }
 
   return (
@@ -154,26 +360,41 @@ export const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(fu
             placeholder={placeholder ?? getAppDatePlaceholder(dateFormat)}
             className='placeholder:text-muted-foreground h-full w-full min-w-0 bg-transparent py-1 pl-3 text-base tabular-nums outline-none md:text-sm'
             value={text}
-            onChange={handleTextChange}
+            onChange={handleFallbackChange}
+            onMouseDown={(e) => {
+              pointerDownRef.current = true
+              onMouseDown?.(e)
+            }}
+            onClick={(e) => {
+              // After the browser has placed the caret: select the segment that was clicked.
+              pointerDownRef.current = false
+              selectSegmentAtCaret()
+              onClick?.(e)
+            }}
+            onFocus={(e) => {
+              // Tabbing / Enter-advancing in starts on the first segment; a click picks its own.
+              if (!pointerDownRef.current) {
+                const next = focusSegment(fieldRef.current, 0)
+                fieldRef.current = next
+                setField(next)
+                setSelectTick((tick) => tick + 1)
+              }
+              onFocus?.(e)
+            }}
             onBlur={(e) => {
-              revertIfIncomplete()
+              pointerDownRef.current = false
+              finishEditing()
               onBlur?.(e)
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && parsed && parsed !== day) commit(parsed)
-              onKeyDown?.(e)
+            onPaste={(e) => {
+              onPaste?.(e)
               if (e.defaultPrevented) return
-              if ((e.altKey && e.key === 'ArrowDown') || e.key === 'F4') {
-                e.preventDefault()
-                setOpen(true)
-              } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                e.preventDefault()
-                const next = shiftBusinessCalendarDate(parsed || day || today, e.key === 'ArrowUp' ? 1 : -1)
-                if (commit(next)) setText(display(next))
-              } else if (e.key === 'Escape' && text !== display(day)) {
-                setText(display(day))
-              }
+              e.preventDefault()
+              if (!editable) return
+              const pasted = segmentsFromPaste(e.clipboardData.getData('text'), parseAppDateInput, maskAppDateInput)
+              if (pasted) apply({ segments: pasted, active: 2, pending: false })
             }}
+            onKeyDown={handleKeyDown}
             {...inputProps}
           />
           <PopoverTrigger asChild>
@@ -232,7 +453,8 @@ export const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(fu
               disabled={!day}
               onClick={() => {
                 commit('')
-                setText('')
+                fieldRef.current = { segments: { ...EMPTY_SEGMENTS }, active: 0, pending: false }
+                setField(fieldRef.current)
                 setOpen(false)
               }}
             >

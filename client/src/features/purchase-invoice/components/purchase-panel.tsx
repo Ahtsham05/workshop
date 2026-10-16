@@ -119,7 +119,7 @@ import { cn } from '@/lib/utils'
 import { ContactPhotoCell } from '@/components/contact-photo-cell'
 import { normalizeSuppliersList } from '../utils/catalog-helpers'
 import { getSupplierId } from '../utils/scan-matching'
-import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
+import { focusField, onEnterAdvance, useInvoiceSaveShortcuts, usePickerEnterGuard } from '@/lib/invoice-form-keyboard'
 import { PAPER_FORMATS, resolveThermalSize, resolveSheetSize, withPrintOrientation, type PaperSize, type PrintOrientation } from '@/features/invoice/utils/paper-format'
 import type { InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { PrintFormatButton } from '@/components/print-format-button'
@@ -452,6 +452,9 @@ export default function PurchasePanel({
   const [loadingBalance, setLoadingBalance] = useState(false)
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
+  // A stray second Enter landing in a just-opened, empty product search must not add
+  // the first product in the list (see usePickerEnterGuard).
+  const productPickerEnterGuard = usePickerEnterGuard(productSelectOpen, productSearchQuery)
   const [suppliersLoading, setSuppliersLoading] = useState(false)
   const [aiScanOpen, setAiScanOpen] = useState(false)
   const [isEditingPurchaseNumber, setIsEditingPurchaseNumber] = useState(false)
@@ -966,14 +969,14 @@ export default function PurchasePanel({
       setProductSelectOpen(`manual-${nextEmptyIdx}`)
       return
     }
-    setPurchase((prev) => {
-      const nextIndex = prev.items.length
-      setTimeout(() => setProductSelectOpen(`manual-${nextIndex}`), 150)
-      return {
-        ...prev,
-        items: [...prev.items, createEmptyPurchaseManualItem()],
-      }
-    })
+    // Open it in the same render the row is added in (React batches both) — the old
+    // 150ms timer left a window where a fast second Enter still hit the price field.
+    const nextIndex = purchase.items.length
+    setPurchase((prev) => ({
+      ...prev,
+      items: [...prev.items, createEmptyPurchaseManualItem()],
+    }))
+    setProductSelectOpen(`manual-${nextIndex}`)
   }, [setPurchase, purchase.items])
 
   const openPurchaseProductSelector = useCallback(() => {
@@ -1452,7 +1455,7 @@ export default function PurchasePanel({
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-[calc(100vw-2rem)] max-w-[560px] p-0" align="start">
-                              <Command shouldFilter={false}>
+                              <Command shouldFilter={false} {...productPickerEnterGuard}>
                                 <div className="relative">
                                   <CommandInput
                                     placeholder={t('Search products...')}

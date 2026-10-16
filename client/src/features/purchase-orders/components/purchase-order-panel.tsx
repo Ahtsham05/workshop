@@ -52,7 +52,7 @@ import {
 } from '@/stores/purchaseOrder.api'
 import { normalizeSuppliersList } from '@/features/purchase-invoice/utils/catalog-helpers'
 import { computeDiscountAmount, type DiscountType } from '@/features/purchase-invoice/utils/discount'
-import { focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
+import { focusField, onEnterAdvance, useInvoiceSaveShortcuts, usePickerEnterGuard } from '@/lib/invoice-form-keyboard'
 import { getUrduSecondaryNameClasses, filterAndRankBySearch } from '@/utils/urdu-text-utils'
 import { cn } from '@/lib/utils'
 import { getDisplayStock } from '@/lib/product-stock-display'
@@ -271,6 +271,9 @@ export default function PurchaseOrderPanel({
   const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
+  // A stray second Enter landing in a just-opened, empty product search must not add
+  // the first product in the list (see usePickerEnterGuard).
+  const productPickerEnterGuard = usePickerEnterGuard(productSelectOpen, productSearchQuery)
   const [applyDiscountOpen, setApplyDiscountOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -438,11 +441,11 @@ export default function PurchaseOrderPanel({
       setProductSelectOpen(`manual-${emptyIdx}`)
       return
     }
-    setDraft((prev) => {
-      const nextIndex = prev.items.length
-      setTimeout(() => setProductSelectOpen(`manual-${nextIndex}`), 120)
-      return { ...prev, items: [...prev.items, createEmptyOrderManualItem()] }
-    })
+    // Open it in the same render the row is added in (React batches both) — the old
+    // 120ms timer left a window where a fast second Enter still hit the price field.
+    const nextIndex = draft.items.length
+    setDraft((prev) => ({ ...prev, items: [...prev.items, createEmptyOrderManualItem()] }))
+    setProductSelectOpen(`manual-${nextIndex}`)
   }, [draft.items])
 
   const openProductSelector = useCallback(() => {
@@ -1002,7 +1005,7 @@ export default function PurchaseOrderPanel({
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent className='w-[calc(100vw-2rem)] max-w-[560px] p-0' align='start'>
-                              <Command shouldFilter={false}>
+                              <Command shouldFilter={false} {...productPickerEnterGuard}>
                                 <div className='relative'>
                                   <CommandInput
                                     placeholder='Search name or barcode...'

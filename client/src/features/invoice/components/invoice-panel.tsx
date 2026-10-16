@@ -126,7 +126,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { calculateInvoiceLineValues, getProductUnitOptions, getUnitAdjustedPrice } from '@/lib/inventory-unit-conversions'
 import { applyLineDiscount, computeDiscountAmount, type DiscountType } from '@/lib/discount'
-import { afterPaint, focusField, onEnterAdvance, useInvoiceSaveShortcuts } from '@/lib/invoice-form-keyboard'
+import { afterPaint, focusField, onEnterAdvance, useInvoiceSaveShortcuts, usePickerEnterGuard } from '@/lib/invoice-form-keyboard'
 import { useSync } from '@/lib/sync/use-sync'
 import { buildOfflineInvoicePayload } from '@/lib/sync/offline-invoice'
 import { getElectronAPI } from '@/lib/sync/electron'
@@ -296,6 +296,9 @@ export function InvoicePanel({
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
   const [productSelectOpen, setProductSelectOpen] = useState<string>('')
   const [productSearchQuery, setProductSearchQuery] = useState('')
+  // A stray second Enter landing in a just-opened, empty product search must not add
+  // the first product in the list (see usePickerEnterGuard).
+  const productPickerEnterGuard = usePickerEnterGuard(productSelectOpen, productSearchQuery)
   // Which line's serial/IMEI picker dialog is open — '' means none.
   const [serialDialogItemId, setSerialDialogItemId] = useState<string>('')
   const [savingType, setSavingType] = useState<'none' | PaperSize | null>(null)
@@ -2210,7 +2213,7 @@ export function InvoicePanel({
                                   picker (see purchase-panel.tsx) — unchanged above ~592px viewports, where
                                   the calc already exceeds 560 and max-w caps it at the same 560px as before. */}
                               <PopoverContent className="w-[calc(100vw-2rem)] max-w-[560px] p-0" align="start" side="bottom" sideOffset={4}>
-                                <Command shouldFilter={false}>
+                                <Command shouldFilter={false} {...productPickerEnterGuard}>
                                   <div className="relative">
                                     <CommandInput
                                       placeholder={t('search_products')}

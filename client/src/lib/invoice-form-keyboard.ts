@@ -1,11 +1,75 @@
-import { useEffect, useRef } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
-/** Run `action` on Enter (no Shift); prevents default. */
+/**
+ * Run `action` on Enter (no Shift); prevents default. Auto-repeat from a held-down
+ * Enter is swallowed — otherwise holding the key races through qty → price → the next
+ * row's product picker in a fraction of a second.
+ */
 export function onEnterAdvance(e: ReactKeyboardEvent, action: () => void) {
   if (e.key !== 'Enter' || e.shiftKey) return
   e.preventDefault()
+  if (e.repeat) return
   action()
+}
+
+const PICKER_NAV_KEYS = new Set(['ArrowDown', 'ArrowUp'])
+const PICKER_VIM_KEYS = new Set(['n', 'j', 'p', 'k'])
+
+/**
+ * Guards a cmdk product picker against an accidental Enter. cmdk silently highlights
+ * the first item the moment the list mounts, so when Enter on a row's last field opens
+ * the next row's picker, a stray second Enter (double press) used to add whatever
+ * product happened to be first in the list.
+ *
+ * While the search is empty and the user hasn't picked a row with ↑/↓ or the mouse,
+ * nothing is shown as highlighted and Enter does nothing. Typing a search (or a
+ * barcode scan) behaves exactly as before: the first match is highlighted and Enter
+ * adds it. The first ↑/↓ only reveals the highlight on the first item rather than
+ * skipping past it. Held-down Enter repeats never select.
+ *
+ * `openKey` identifies the open picker (e.g. the open row id); the guard re-arms
+ * whenever it changes. Spread the result onto `<Command>`.
+ */
+export function usePickerEnterGuard(openKey: string | boolean, query: string) {
+  const [navigated, setNavigated] = useState(false)
+  const [prevKey, setPrevKey] = useState(openKey)
+  if (prevKey !== openKey) {
+    setPrevKey(openKey)
+    setNavigated(false)
+  }
+  const ready = navigated || query.trim() !== ''
+
+  const onKeyDown = useCallback(
+    (e: ReactKeyboardEvent) => {
+      if (e.key === 'Enter') {
+        // preventDefault makes cmdk skip its own select-on-Enter.
+        if (e.repeat || !ready) e.preventDefault()
+        return
+      }
+      const isNav = PICKER_NAV_KEYS.has(e.key) || (e.ctrlKey && PICKER_VIM_KEYS.has(e.key))
+      if (isNav && !ready) {
+        e.preventDefault()
+        setNavigated(true)
+      }
+    },
+    [ready],
+  )
+
+  const onPointerMove = useCallback(
+    (e: ReactPointerEvent) => {
+      if (!ready && (e.target as Element).closest?.('[cmdk-item]')) setNavigated(true)
+    },
+    [ready],
+  )
+
+  return {
+    'data-enter-ready': ready ? 'true' : 'false',
+    className:
+      '[&[data-enter-ready=false]_[cmdk-item][data-selected=true]]:bg-transparent [&[data-enter-ready=false]_[cmdk-item][data-selected=true]]:text-inherit',
+    onKeyDown,
+    onPointerMove,
+  }
 }
 
 /**

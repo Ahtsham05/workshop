@@ -15,7 +15,8 @@ import { format as formatWithPattern } from 'date-fns'
 
 export type AppDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'
 
-type Part = 'd' | 'm' | 'y'
+export type DatePart = 'd' | 'm' | 'y'
+type Part = DatePart
 
 const FORMATS: Record<AppDateFormat, { pattern: string; separator: string; order: Part[] }> = {
   'DD/MM/YYYY': { pattern: 'dd/MM/yyyy', separator: '/', order: ['d', 'm', 'y'] },
@@ -71,6 +72,12 @@ export function useAppDateFormat(): AppDateFormat {
 /** date-fns pattern for the current format, e.g. `dd/MM/yyyy`. */
 export function getAppDatePattern(dateFormat: AppDateFormat = current): string {
   return FORMATS[dateFormat].pattern
+}
+
+/** Segment order and separator of a format, e.g. `DD/MM/YYYY` → `['d','m','y']` and `/`. */
+export function getAppDateLayout(dateFormat: AppDateFormat = current): { order: Part[]; separator: string } {
+  const { order, separator } = FORMATS[dateFormat]
+  return { order, separator }
 }
 
 /** Placeholder for a typed date field, e.g. `DD/MM/YYYY`. */
