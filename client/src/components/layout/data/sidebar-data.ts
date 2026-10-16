@@ -129,6 +129,7 @@ export const sidebarData: SidebarData = {
             { title: 'Work in Progress', url: '/manufacturing/wip', icon: Workflow, permission: 'viewManufacturing' },
             { title: 'Material Requirements', url: '/manufacturing/requirements', icon: ListChecks, permission: 'viewManufacturing' },
             { title: 'Production Orders', url: '/manufacturing/production-orders', icon: ClipboardList, permission: 'viewManufacturing' },
+            { title: 'Production Reports', url: '/manufacturing/reports', icon: BarChart3, permission: 'viewManufacturing' },
           ],
         },
         {

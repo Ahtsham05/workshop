@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Boxes,
   ClipboardList,
   Cog,
@@ -115,6 +116,18 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Production Orders',
         icon: ClipboardList,
         keywords: 'mo work order',
+      },
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    sections: [
+      {
+        to: '/manufacturing/reports',
+        label: 'Reports',
+        icon: BarChart3,
+        keywords: 'report statement finished goods dispatch issue register in process batch scrap print',
       },
     ],
   },

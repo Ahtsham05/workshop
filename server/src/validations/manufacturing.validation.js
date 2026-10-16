@@ -655,6 +655,34 @@ const materialIssueByMaterial = {
   }),
 };
 
+const report = {
+  params: Joi.object().keys({
+    report: Joi.string()
+      .valid(
+        'production',
+        'material-issues',
+        'material-consumption',
+        'finished-goods',
+        'raw-materials',
+        'stock-register',
+        'in-process',
+        'scrap',
+        'daily',
+        'batch'
+      )
+      .required(),
+  }),
+  query: Joi.object().keys({
+    startDate: calendarDay(),
+    endDate: calendarDay(),
+    status: Joi.string().valid('all', 'open', 'completed'),
+    productId: id(),
+    productionOrderId: id(),
+    search: Joi.string().allow(''),
+    hideIdle: Joi.boolean(),
+  }),
+};
+
 const materialUsage = {
   query: Joi.object().keys({
     status: Joi.string().valid('all', 'open', 'completed'),
@@ -826,6 +854,7 @@ module.exports = {
   exportProductionOrders,
   bulkUpdateProductionOrders,
   getAnalytics,
+  report,
   getOrderStatusCounts,
   updateSettings,
   getProducts,

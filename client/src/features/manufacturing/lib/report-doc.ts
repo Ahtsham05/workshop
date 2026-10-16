@@ -1,0 +1,1358 @@
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
+import {
+  SCRAP_REASON_LABELS,
+  SCRAP_STAGE_LABELS,
+  fmtQty,
+  statusLabel,
+} from './constants'
+import type {
+  BatchReport,
+  ConsumptionLine,
+  DailyReport,
+  ConsumptionReport,
+  InProcessReport,
+  IssueRegisterReport,
+  ManufacturingReport,
+  MovementKey,
+  ProductionReport,
+  ReportKey,
+  ScrapReport,
+  StockRegisterReport,
+  StockStatementReport,
+} from './report-types'
+
+/*
+ * A report is first turned into a plain "document" — title, summary figures, and ruled
+ * tables of already-formatted cells — and that one document is drawn three ways: on
+ * screen (components/report-view.tsx), printed (report-print.ts) and exported to Excel
+ * (report-excel.ts). So the three can never disagree about a figure.
+ *
+ * Bank-statement conventions throughout: figures are bare (the currency is named once in
+ * the column header), zero movements are left blank, balances always show.
+ */
+
+export type Align = 'left' | 'right' | 'center'
+
+export interface DocColumn {
+  key: string
+  label: string
+  align?: Align
+  /** Width hint for print (CSS length, e.g. '8%'). */
+  width?: string
+  /** Header band above several adjacent columns ("Receipts (In)" / "Issues (Out)"). */
+  group?: string
+  /** Keep on one line (document numbers, dates). */
+  nowrap?: boolean
+}
+
+export interface DocCell {
+  text: string
+  /** Raw value for Excel (number stays a number). */
+  value?: number | string
+  sub?: string
+  strong?: boolean
+  tone?: 'danger' | 'muted' | 'success'
+}
+
+export type CellInput = DocCell | string | null | undefined
+
+/** Screen only: open a product's stock register or a batch's production report. */
+export type ReportDrill = { productId: string } | { orderId: string }
+
+export interface DocRow {
+  kind?: 'line' | 'group' | 'subtotal' | 'total' | 'opening' | 'closing'
+  cells: Record<string, CellInput>
+  /** A label cell spanning the first N columns (group headers, brought forward, totals). */
+  label?: string
+  labelSub?: string
+  labelSpan?: number
+  /** First line of a multi-line entry — drawn with a heavier rule above. */
+  groupStart?: boolean
+  /** Screen only: open this order / product register. */
+  link?: string
+  drill?: ReportDrill
+}
+
+export interface DocSection {
+  id: string
+  title?: string
+  note?: string
+  columns: DocColumn[]
+  rows: DocRow[]
+  empty?: string
+}
+
+export interface ReportDoc {
+  key: ReportKey
+  title: string
+  /** Second title line, e.g. the product of a stock register. */
+  subtitle?: string
+  periodStart?: string
+  periodEnd?: string
+  asOf?: string
+  orientation: 'portrait' | 'landscape'
+  info?: { label: string; value: string }[]
+  summary: { label: string; value: string; hint?: string; emphasis?: boolean }[]
+  sections: DocSection[]
+  footnotes?: string[]
+}
+
+export interface DocContext {
+  t: (s: string) => string
+  /** Bare money figure, e.g. "12,345.00". */
+  figure: (n: number) => string
+  /** Currency symbol for headers, e.g. "Rs". */
+  currency: string
+}
+
+const EPS = 1e-9
+const isZero = (n: number) => Math.abs(Number(n) || 0) < EPS
+const day = (iso?: string | null) => (iso ? formatAppDate(new Date(iso)) : '—')
+/** "YYYY-MM-DD" → local date without the UTC shift. */
+export const keyToDate = (key: string) => {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+const qty = (n: number, { blank = true, strong = false } = {}): DocCell => ({
+  text: blank && isZero(n) ? '' : fmtQty(n),
+  value: Number(n) || 0,
+  strong,
+})
+const cash = (ctx: DocContext, n: number, { blank = true, strong = false } = {}): DocCell => ({
+  text: blank && isZero(n) ? '' : ctx.figure(n),
+  value: Math.round((Number(n) || 0) * 100) / 100,
+  strong,
+})
+const pct = (n: number): DocCell => ({ text: `${Math.round(n * 10) / 10}%`, value: n })
+const withCur = (ctx: DocContext, label: string) =>
+  ctx.currency ? `${ctx.t(label)} (${ctx.currency})` : ctx.t(label)
+
+/* ── Production ──────────────────────────────────────────────────────────────── */
+
+function productionDoc(data: ProductionReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const orderCols: DocColumn[] = [
+    { key: 'order', label: t('Order No.'), width: '8%', nowrap: true },
+    { key: 'product', label: t('Product'), width: '15%' },
+    { key: 'start', label: t('Started'), width: '7%', nowrap: true },
+    { key: 'due', label: t('Due'), width: '7%', nowrap: true },
+    { key: 'status', label: t('Status'), width: '7%' },
+    { key: 'unit', label: t('Unit'), width: '4%' },
+    { key: 'planned', label: t('Planned'), align: 'right', group: t('Quantity') },
+    { key: 'produced', label: t('Produced'), align: 'right', group: t('Quantity') },
+    { key: 'good', label: t('Completed'), align: 'right', group: t('Quantity') },
+    { key: 'rejected', label: t('Rejected'), align: 'right', group: t('Quantity') },
+    { key: 'inQc', label: t('In QC'), align: 'right', group: t('Quantity') },
+    { key: 'balance', label: t('Remaining'), align: 'right', group: t('Quantity') },
+    { key: 'pct', label: t('Done'), align: 'right', width: '5%' },
+    { key: 'materialCost', label: withCur(ctx, 'Material cost'), align: 'right', width: '9%' },
+    { key: 'finishedValue', label: withCur(ctx, 'FG value'), align: 'right', width: '9%' },
+  ]
+  const orderRows: DocRow[] = data.orders.map((o) => ({
+    drill: { orderId: o.id },
+    cells: {
+      order: { text: o.orderNumber, sub: o.bomNumber || undefined, strong: true },
+      product: { text: o.productName, sub: o.sku || undefined },
+      start: day(o.startDate),
+      due: { text: day(o.dueDate), tone: o.isLate ? 'danger' : undefined },
+      status: statusLabel(o.status, o.orderType),
+      unit: o.unit,
+      planned: qty(o.planned, { blank: false }),
+      produced: qty(o.produced),
+      good: qty(o.good, { strong: true }),
+      rejected: { ...qty(o.rejected), tone: o.rejected > 0 ? 'danger' : undefined },
+      inQc: qty(o.inQc),
+      balance: qty(o.balance, { blank: false, strong: true }),
+      pct: pct(o.completionPercent),
+      materialCost: cash(ctx, o.materialCost),
+      finishedValue: cash(ctx, o.finishedValue),
+    },
+  }))
+  if (orderRows.length) {
+    orderRows.push({
+      kind: 'total',
+      label: `${t('Total')} — ${data.orders.length} ${t('orders')}`,
+      labelSpan: 13,
+      cells: {
+        materialCost: cash(ctx, data.totals.materialCost, { blank: false, strong: true }),
+        finishedValue: cash(ctx, data.totals.finishedValue, { blank: false, strong: true }),
+      },
+    })
+  }
+
+  const productCols: DocColumn[] = [
+    { key: 'product', label: t('Product'), width: '22%' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'orders', label: t('Orders'), align: 'right' },
+    { key: 'planned', label: t('Planned'), align: 'right' },
+    { key: 'produced', label: t('Produced'), align: 'right' },
+    { key: 'good', label: t('Completed'), align: 'right' },
+    { key: 'rejected', label: t('Rejected'), align: 'right' },
+    { key: 'balance', label: t('Remaining'), align: 'right' },
+    { key: 'periodGood', label: t('Completed in period'), align: 'right' },
+    { key: 'materialCost', label: withCur(ctx, 'Material cost'), align: 'right' },
+    { key: 'finishedValue', label: withCur(ctx, 'FG value'), align: 'right' },
+  ]
+  const productRows: DocRow[] = data.byProduct.map((p) => ({
+    cells: {
+      product: { text: p.productName, sub: p.sku || undefined, strong: true },
+      unit: p.unit,
+      orders: { text: String(p.orders), value: p.orders },
+      planned: qty(p.planned, { blank: false }),
+      produced: qty(p.produced),
+      good: qty(p.good, { strong: true }),
+      rejected: qty(p.rejected),
+      balance: qty(p.balance, { blank: false, strong: true }),
+      periodGood: qty(p.periodGood),
+      materialCost: cash(ctx, p.materialCost),
+      finishedValue: cash(ctx, p.finishedValue),
+    },
+  }))
+
+  return {
+    key: 'production',
+    title: t('Production Summary'),
+    periodStart: data.period.startDate,
+    periodEnd: data.period.endDate,
+    orientation: 'landscape',
+    summary: [
+      {
+        label: t('Orders worked'),
+        value: String(data.totals.orderCount),
+        hint: `${data.totals.openCount} ${t('open')} · ${data.totals.completedCount} ${t('completed')}${data.totals.lateCount ? ` · ${data.totals.lateCount} ${t('late')}` : ''}`,
+      },
+      { label: withCur(ctx, 'Material issued in period'), value: ctx.figure(data.totals.periodIssued) },
+      { label: withCur(ctx, 'Finished goods received in period'), value: ctx.figure(data.totals.periodGoodValue) },
+      { label: withCur(ctx, 'Finished goods value (orders)'), value: ctx.figure(data.totals.finishedValue), emphasis: true },
+    ],
+    sections: [
+      {
+        id: 'orders',
+        title: t('Batch-wise production summary'),
+        note: t('Remaining = planned − completed − waiting in QC / rework. Quantities are the whole order to date.'),
+        columns: orderCols,
+        rows: orderRows,
+        empty: t('No production orders were worked in this period.'),
+      },
+      {
+        id: 'products',
+        title: t('Product-wise summary'),
+        columns: productCols,
+        rows: productRows,
+        empty: t('No products.'),
+      },
+    ],
+  }
+}
+
+/* ── Material issue register ─────────────────────────────────────────────────── */
+
+function issueRegisterDoc(data: IssueRegisterReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const cols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '8%', nowrap: true },
+    { key: 'voucher', label: t('Voucher'), width: '9%', nowrap: true },
+    { key: 'order', label: t('Production order'), width: '15%', nowrap: true },
+    { key: 'material', label: t('Material'), width: '20%' },
+    { key: 'qty', label: t('Qty'), align: 'right' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'rate', label: withCur(ctx, 'Rate'), align: 'right' },
+    { key: 'issued', label: withCur(ctx, 'Issued'), align: 'right' },
+    { key: 'returned', label: withCur(ctx, 'Returned'), align: 'right' },
+    { key: 'balance', label: withCur(ctx, 'Net balance'), align: 'right' },
+  ]
+  let running = 0
+  const rows: DocRow[] = []
+  data.vouchers.forEach((v) => {
+    const isReturn = v.kind === 'return'
+    v.lines.forEach((l, i) => {
+      running += isReturn ? -l.totalCost : l.totalCost
+      const first = i === 0
+      rows.push({
+        groupStart: first,
+        drill: first ? { orderId: v.orderId } : undefined,
+        cells: {
+          date: first ? day(v.date) : '',
+          voucher: first
+            ? { text: v.number, sub: isReturn ? t('Return') : v.issuedBy || undefined, strong: true }
+            : '',
+          order: first ? { text: v.orderNumber, sub: v.orderProduct || undefined } : '',
+          material: {
+            text: l.productName,
+            sub: [l.isAlternative ? t('Alternative') : '', l.batchNumber ? `${t('Batch')} ${l.batchNumber}` : '']
+              .filter(Boolean)
+              .join(' · ') || undefined,
+          },
+          qty: qty(l.quantity, { blank: false }),
+          unit: l.unit,
+          rate: cash(ctx, l.unitCost),
+          issued: isReturn ? '' : cash(ctx, l.totalCost),
+          returned: isReturn ? cash(ctx, l.totalCost) : '',
+          balance: i === v.lines.length - 1 ? cash(ctx, running, { blank: false, strong: true }) : '',
+        },
+      })
+    })
+  })
+  if (rows.length) {
+    rows.push({
+      kind: 'closing',
+      label: t('Total for the period'),
+      labelSpan: 7,
+      cells: {
+        issued: cash(ctx, data.totals.issuedValue, { blank: false, strong: true }),
+        returned: cash(ctx, data.totals.returnedValue, { blank: false, strong: true }),
+        balance: cash(ctx, data.totals.netValue, { blank: false, strong: true }),
+      },
+    })
+  }
+
+  const matCols: DocColumn[] = [
+    { key: 'material', label: t('Material'), width: '26%' },
+    { key: 'unit', label: t('Unit'), width: '6%' },
+    { key: 'issuedQty', label: t('Qty'), align: 'right', group: t('Issued') },
+    { key: 'issuedValue', label: withCur(ctx, 'Value'), align: 'right', group: t('Issued') },
+    { key: 'returnedQty', label: t('Qty'), align: 'right', group: t('Returned') },
+    { key: 'returnedValue', label: withCur(ctx, 'Value'), align: 'right', group: t('Returned') },
+    { key: 'netQty', label: t('Qty'), align: 'right', group: t('Net issued') },
+    { key: 'netValue', label: withCur(ctx, 'Value'), align: 'right', group: t('Net issued') },
+  ]
+  const matRows: DocRow[] = data.byMaterial.map((m) => ({
+    cells: {
+      material: { text: m.productName, strong: true },
+      unit: m.unit,
+      issuedQty: qty(m.issuedQty),
+      issuedValue: cash(ctx, m.issuedValue),
+      returnedQty: qty(m.returnedQty),
+      returnedValue: cash(ctx, m.returnedValue),
+      netQty: qty(m.netQty, { blank: false, strong: true }),
+      netValue: cash(ctx, m.netValue, { blank: false, strong: true }),
+    },
+  }))
+  if (matRows.length) {
+    matRows.push({
+      kind: 'total',
+      label: t('Total'),
+      labelSpan: 2,
+      cells: {
+        issuedValue: cash(ctx, data.totals.issuedValue, { blank: false, strong: true }),
+        returnedValue: cash(ctx, data.totals.returnedValue, { blank: false, strong: true }),
+        netValue: cash(ctx, data.totals.netValue, { blank: false, strong: true }),
+      },
+    })
+  }
+
+  return {
+    key: 'material-issues',
+    title: t('Material Issue Register'),
+    periodStart: data.period.startDate,
+    periodEnd: data.period.endDate,
+    orientation: 'landscape',
+    summary: [
+      {
+        label: t('Vouchers'),
+        value: String(data.totals.voucherCount),
+        hint: `${data.totals.returnCount} ${t('returns')} · ${data.totals.lineCount} ${t('lines')}`,
+      },
+      { label: withCur(ctx, 'Issued to production'), value: ctx.figure(data.totals.issuedValue) },
+      { label: withCur(ctx, 'Returned to store'), value: ctx.figure(data.totals.returnedValue) },
+      { label: withCur(ctx, 'Net issued'), value: ctx.figure(data.totals.netValue), emphasis: true },
+    ],
+    sections: [
+      {
+        id: 'register',
+        title: t('Voucher register'),
+        columns: cols,
+        rows,
+        empty: t('No material was issued in this period.'),
+      },
+      {
+        id: 'materials',
+        title: t('Material-wise summary'),
+        columns: matCols,
+        rows: matRows,
+        empty: t('No materials.'),
+      },
+    ],
+    footnotes: data.totals.cancelledCount
+      ? [`${data.totals.cancelledCount} ${t('cancelled voucher(s) in this period are not included — their stock was reversed.')}`]
+      : undefined,
+  }
+}
+
+/* ── Issue vs consumption ────────────────────────────────────────────────────── */
+
+function consumptionColumns(ctx: DocContext, first: DocColumn): DocColumn[] {
+  const { t } = ctx
+  return [
+    first,
+    { key: 'unit', label: t('Unit'), width: '4%' },
+    { key: 'required', label: t('Required'), align: 'right' },
+    { key: 'issued', label: t('Issued'), align: 'right', group: t('Quantity') },
+    { key: 'returned', label: t('Returned'), align: 'right', group: t('Quantity') },
+    { key: 'used', label: t('Consumed'), align: 'right', group: t('Quantity') },
+    { key: 'wastage', label: t('Wastage'), align: 'right', group: t('Quantity') },
+    { key: 'inFactory', label: t('On floor'), align: 'right', group: t('Quantity') },
+    { key: 'toIssue', label: t('To issue'), align: 'right' },
+    { key: 'variance', label: t('Variance'), align: 'right' },
+    { key: 'issuedValue', label: t('Issued'), align: 'right', group: withCur(ctx, 'Value') },
+    { key: 'usedValue', label: t('Consumed'), align: 'right', group: withCur(ctx, 'Value') },
+    { key: 'wastageValue', label: t('Wastage'), align: 'right', group: withCur(ctx, 'Value') },
+  ]
+}
+
+const consumptionCells = (ctx: DocContext, l: ConsumptionLine) => ({
+  unit: l.unit,
+  required: qty(l.required, { blank: false }),
+  issued: qty(l.issued),
+  returned: qty(l.returned),
+  used: qty(l.used),
+  wastage: { ...qty(l.wastage), tone: l.wastage > 0 ? ('danger' as const) : undefined },
+  inFactory: qty(l.inFactory, { strong: true }),
+  toIssue: qty(l.toIssue),
+  variance: {
+    ...qty(l.variance),
+    text: isZero(l.variance) ? '' : `${l.variance > 0 ? '+' : ''}${fmtQty(l.variance)}`,
+    tone: l.variance > 0 ? ('danger' as const) : l.variance < 0 ? ('success' as const) : undefined,
+  },
+  issuedValue: cash(ctx, l.issuedValue),
+  usedValue: cash(ctx, l.usedValue),
+  wastageValue: cash(ctx, l.wastageValue),
+})
+
+function consumptionDoc(data: ConsumptionReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const totalCells = {
+    issuedValue: cash(ctx, data.totals.issuedValue, { blank: false, strong: true }),
+    usedValue: cash(ctx, data.totals.usedValue, { blank: false, strong: true }),
+    wastageValue: cash(ctx, data.totals.wastageValue, { blank: false, strong: true }),
+  }
+  const matRows: DocRow[] = data.materials.map((m) => ({
+    cells: { material: { text: m.productName, sub: m.sku || undefined, strong: true }, ...consumptionCells(ctx, m) },
+  }))
+  if (matRows.length) matRows.push({ kind: 'total', label: t('Total'), labelSpan: 10, cells: totalCells })
+
+  const orderRows: DocRow[] = []
+  data.orders.forEach((o) => {
+    const lines = o.lines.filter((l) => l.issued > 0 || l.toIssue > 0)
+    if (!lines.length) return
+    orderRows.push({
+      kind: 'group',
+      label: `${o.orderNumber} — ${o.productName}`,
+      labelSub: `${t('Planned')} ${fmtQty(o.planned)} ${o.unit} · ${t('Completed')} ${fmtQty(o.good)} ${o.unit} · ${statusLabel(o.status)}`,
+      labelSpan: 13,
+      drill: { orderId: o.id },
+      cells: {},
+    })
+    lines.forEach((l) => {
+      orderRows.push({ cells: { material: { text: l.productName }, ...consumptionCells(ctx, l) } })
+    })
+  })
+
+  return {
+    key: 'material-consumption',
+    title: t('Material Issue vs Consumption'),
+    periodStart: data.period.startDate,
+    periodEnd: data.period.endDate,
+    orientation: 'landscape',
+    summary: [
+      { label: withCur(ctx, 'Issued to production'), value: ctx.figure(data.totals.issuedValue), hint: `${data.totals.orderCount} ${t('orders')} · ${data.totals.materialCount} ${t('materials')}` },
+      { label: withCur(ctx, 'Consumed in output'), value: ctx.figure(data.totals.usedValue) },
+      { label: withCur(ctx, 'Wastage'), value: ctx.figure(data.totals.wastageValue), hint: `${data.totals.wastagePercent}% ${t('of issued')}` },
+      { label: withCur(ctx, 'Still on the floor'), value: ctx.figure(data.totals.inFactoryValue), emphasis: true },
+    ],
+    sections: [
+      {
+        id: 'materials',
+        title: t('Material-wise reconciliation'),
+        note: t('Issued − returned − consumed − wastage = on floor. Variance = (consumed + wastage) − what the BOM allows for the completed output; + means over-use.'),
+        columns: consumptionColumns(ctx, { key: 'material', label: t('Material'), width: '16%' }),
+        rows: matRows,
+        empty: t('No material was issued to the orders of this period.'),
+      },
+      {
+        id: 'orders',
+        title: t('Order-wise detail'),
+        columns: consumptionColumns(ctx, { key: 'material', label: t('Material'), width: '16%' }),
+        rows: orderRows,
+        empty: t('No orders.'),
+      },
+    ],
+  }
+}
+
+/* ── Stock statements ────────────────────────────────────────────────────────── */
+
+const MOVEMENT_META: Record<MovementKey, { label: string; side: 'in' | 'out' | 'both' }> = {
+  produced: { label: 'Produced', side: 'in' },
+  purchased: { label: 'Purchased', side: 'in' },
+  salesReturn: { label: 'Sales returns', side: 'in' },
+  returnedFromProduction: { label: 'Returned from production', side: 'in' },
+  transferIn: { label: 'Transfer in', side: 'in' },
+  sold: { label: 'Sold / Dispatched', side: 'out' },
+  purchaseReturn: { label: 'Purchase returns', side: 'out' },
+  issued: { label: 'Issued to production', side: 'out' },
+  transferOut: { label: 'Transfer out', side: 'out' },
+  scrapped: { label: 'Scrapped', side: 'out' },
+  adjustment: { label: 'Adjustment (±)', side: 'both' },
+}
+
+const STATEMENT_ORDER: Record<'finished-goods' | 'raw-materials', { always: MovementKey[]; order: MovementKey[] }> = {
+  'finished-goods': {
+    always: ['produced', 'sold'],
+    order: ['produced', 'salesReturn', 'transferIn', 'purchased', 'returnedFromProduction', 'sold', 'transferOut', 'issued', 'purchaseReturn', 'scrapped', 'adjustment'],
+  },
+  'raw-materials': {
+    always: ['purchased', 'issued', 'returnedFromProduction'],
+    order: ['purchased', 'returnedFromProduction', 'transferIn', 'salesReturn', 'produced', 'issued', 'purchaseReturn', 'transferOut', 'sold', 'scrapped', 'adjustment'],
+  },
+}
+
+function statementDoc(data: StockStatementReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const finished = data.report === 'finished-goods'
+  const layout = STATEMENT_ORDER[data.report]
+  const keys = layout.order.filter((k) => layout.always.includes(k) || data.rows.some((r) => !isZero(r.movements[k])))
+  const inGroup = t('Received (In)')
+  const outGroup = t('Issued (Out)')
+  const cols: DocColumn[] = [
+    { key: 'product', label: finished ? t('Finished good') : t('Material'), width: '18%' },
+    { key: 'unit', label: t('Unit'), width: '4%' },
+    { key: 'opening', label: t('Opening'), align: 'right' },
+    ...keys.map((k) => ({
+      key: k,
+      label: t(MOVEMENT_META[k].label),
+      align: 'right' as const,
+      group: MOVEMENT_META[k].side === 'in' ? inGroup : MOVEMENT_META[k].side === 'out' ? outGroup : undefined,
+    })),
+    { key: 'closing', label: finished ? t('Closing (Remaining)') : t('Closing'), align: 'right' },
+    { key: 'rate', label: withCur(ctx, 'Rate'), align: 'right' },
+    { key: 'value', label: withCur(ctx, 'Value'), align: 'right' },
+  ]
+  const rows: DocRow[] = data.rows.map((r) => {
+    const cells: Record<string, CellInput> = {
+      product: { text: r.productName, sub: r.sku || undefined, strong: true },
+      unit: r.unit,
+      opening: qty(r.opening, { blank: false }),
+      closing: { ...qty(r.closing, { blank: false, strong: true }), tone: r.closing < 0 ? 'danger' : undefined },
+      rate: cash(ctx, r.unitCost),
+      value: cash(ctx, r.closingValue, { blank: false }),
+    }
+    keys.forEach((k) => {
+      const v = r.movements[k]
+      // In/out columns show plain positive figures; the adjustment column keeps its sign.
+      cells[k] =
+        MOVEMENT_META[k].side === 'both'
+          ? { text: isZero(v) ? '' : `${v > 0 ? '+' : '−'}${fmtQty(Math.abs(v))}`, value: v }
+          : qty(Math.abs(v))
+    })
+    return { cells, drill: { productId: r.productId } }
+  })
+  if (rows.length) {
+    rows.push({
+      kind: 'total',
+      label: `${t('Total')} — ${data.totals.productCount} ${t('products')}`,
+      labelSpan: cols.length - 1,
+      cells: { value: cash(ctx, data.totals.closingValue, { blank: false, strong: true }) },
+    })
+  }
+  const unitSet = new Set(data.rows.map((r) => r.unit))
+  const oneUnit = unitSet.size === 1 ? [...unitSet][0] : null
+  const sumQty = (fn: (r: (typeof data.rows)[number]) => number) => data.rows.reduce((s, r) => s + fn(r), 0)
+  const qtySummary = (label: string, n: number, emphasis = false) => ({
+    label: t(label),
+    value: oneUnit ? `${fmtQty(n)} ${oneUnit}` : fmtQty(n),
+    hint: oneUnit ? undefined : t('all products'),
+    emphasis,
+  })
+  return {
+    key: data.report,
+    title: finished ? t('Finished Goods Stock Statement') : t('Raw Material Stock Statement'),
+    periodStart: data.period.startDate,
+    periodEnd: data.period.endDate,
+    orientation: 'landscape',
+    summary: finished
+      ? [
+          qtySummary('Opening stock', sumQty((r) => r.opening)),
+          qtySummary('Produced', data.totals.movements.produced),
+          qtySummary('Sold / Dispatched', -data.totals.movements.sold),
+          qtySummary('Remaining stock', sumQty((r) => r.closing), true),
+        ]
+      : [
+          qtySummary('Purchased', data.totals.movements.purchased),
+          qtySummary('Issued to production', -data.totals.movements.issued),
+          qtySummary('Returned from production', data.totals.movements.returnedFromProduction),
+          { label: withCur(ctx, 'Closing stock value'), value: ctx.figure(data.totals.closingValue), emphasis: true },
+        ],
+    sections: [
+      {
+        id: 'statement',
+        title: finished ? t('Production, dispatch and remaining stock') : t('Material movement'),
+        note: t('Opening + received − issued = closing. Closing on today’s date equals the live stock.'),
+        columns: cols,
+        rows,
+        empty: t('No products to show.'),
+      },
+    ],
+  }
+}
+
+/* ── Stock register (one product, bank-statement style) ─────────────────────── */
+
+const SOURCE_LABEL: Record<string, string> = {
+  produced: 'Production receipt',
+  sold: 'Sale',
+  salesReturn: 'Sales return',
+  purchased: 'Purchase',
+  purchaseReturn: 'Purchase return',
+  issued: 'Issued to production',
+  returnedFromProduction: 'Returned from production',
+  transferIn: 'Transfer in',
+  transferOut: 'Transfer out',
+  scrapped: 'Scrapped',
+  adjustment: 'Stock adjustment',
+}
+
+function registerDoc(data: StockRegisterReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const p = data.product
+  const cols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '11%', nowrap: true },
+    { key: 'details', label: t('Particulars'), width: '45%' },
+    { key: 'rate', label: withCur(ctx, 'Rate'), align: 'right', width: '11%' },
+    { key: 'in', label: t('Received'), align: 'right', width: '11%' },
+    { key: 'out', label: t('Issued'), align: 'right', width: '11%' },
+    { key: 'balance', label: t('Balance'), align: 'right', width: '11%' },
+  ]
+  const rows: DocRow[] = [
+    {
+      kind: 'opening',
+      label: `${formatAppDate(keyToDate(data.period.startDate))} — ${t('Opening balance brought forward')}`,
+      labelSpan: 5,
+      cells: { balance: qty(data.opening, { blank: false, strong: true }) },
+    },
+  ]
+  data.rows.forEach((r) => {
+    const title = `${t(SOURCE_LABEL[r.source] || r.source)}${r.number ? ` ${r.number}` : ''}`
+    const sub = [
+      r.partyName ? (r.source === 'transferIn' ? `${t('from')} ${r.partyName}` : r.source === 'transferOut' ? `${t('to')} ${r.partyName}` : r.partyName) : '',
+      r.orderNumber ? `${t('Order')} ${r.orderNumber}` : '',
+      r.invoiceType && r.invoiceType !== 'cash' ? t(r.invoiceType) : '',
+      r.note || '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+    rows.push({
+      cells: {
+        date: day(r.date),
+        details: { text: title, sub: sub || undefined, strong: true },
+        rate: r.rate != null ? cash(ctx, r.rate) : '',
+        in: qty(r.in),
+        out: qty(r.out),
+        balance: { ...qty(r.balance, { blank: false, strong: true }), tone: r.balance < 0 ? 'danger' : undefined },
+      },
+    })
+  })
+  rows.push({
+    kind: 'closing',
+    label: `${formatAppDate(keyToDate(data.period.endDate))} — ${t('Closing balance')}`,
+    labelSpan: 3,
+    cells: {
+      in: qty(data.totals.in, { blank: false, strong: true }),
+      out: qty(data.totals.out, { blank: false, strong: true }),
+      balance: qty(data.closing, { blank: false, strong: true }),
+    },
+  })
+  return {
+    key: 'stock-register',
+    title: t('Stock Register'),
+    subtitle: p.name,
+    periodStart: data.period.startDate,
+    periodEnd: data.period.endDate,
+    orientation: 'portrait',
+    info: [
+      { label: t('Product'), value: p.name },
+      { label: t('SKU'), value: p.sku || '—' },
+      { label: t('Unit'), value: p.unit || '—' },
+      { label: t('Stock now'), value: `${fmtQty(p.current)} ${p.unit}` },
+    ],
+    summary: [
+      { label: t('Opening balance'), value: `${fmtQty(data.opening)} ${p.unit}` },
+      { label: t('Total received'), value: `${fmtQty(data.totals.in)} ${p.unit}`, hint: `${data.rows.filter((r) => r.in > 0).length} ${t('entries')}` },
+      { label: t('Total issued'), value: `${fmtQty(data.totals.out)} ${p.unit}`, hint: `${data.rows.filter((r) => r.out > 0).length} ${t('entries')}` },
+      { label: t('Closing balance'), value: `${fmtQty(data.closing)} ${p.unit}`, emphasis: true },
+    ],
+    sections: [{ id: 'register', columns: cols, rows, empty: t('No movement in this period.') }],
+  }
+}
+
+/* ── In-process batches ──────────────────────────────────────────────────────── */
+
+function inProcessDoc(data: InProcessReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const cols: DocColumn[] = [
+    { key: 'order', label: t('Batch / Order'), width: '9%', nowrap: true },
+    { key: 'product', label: t('Product'), width: '15%' },
+    { key: 'status', label: t('Status'), width: '7%' },
+    { key: 'stage', label: t('Current stage'), width: '11%' },
+    { key: 'started', label: t('Started'), width: '7%', nowrap: true },
+    { key: 'days', label: t('Days'), align: 'right', width: '4%' },
+    { key: 'due', label: t('Due'), width: '7%', nowrap: true },
+    { key: 'unit', label: t('Unit'), width: '4%' },
+    { key: 'planned', label: t('Planned'), align: 'right', group: t('Quantity') },
+    { key: 'produced', label: t('Produced'), align: 'right', group: t('Quantity') },
+    { key: 'good', label: t('Completed'), align: 'right', group: t('Quantity') },
+    { key: 'qc', label: t('QC / Rework'), align: 'right', group: t('Quantity') },
+    { key: 'balance', label: t('Remaining'), align: 'right', group: t('Quantity') },
+    { key: 'wipValue', label: withCur(ctx, 'WIP value'), align: 'right', width: '9%' },
+  ]
+  const rows: DocRow[] = data.batches.map((b) => ({
+    drill: { orderId: b.id },
+    cells: {
+      order: { text: b.orderNumber, sub: b.wipLocation || undefined, strong: true },
+      product: { text: b.productName, sub: b.operatorName || b.sku || undefined },
+      status: statusLabel(b.status, b.orderType),
+      stage: {
+        text: b.stage || '—',
+        sub: b.operationsTotal ? `${b.operationsDone}/${b.operationsTotal} ${t('steps done')}` : undefined,
+      },
+      started: b.startedAt ? day(b.startedAt) : { text: t('Not started'), tone: 'muted' },
+      days: b.daysInProcess == null ? '' : { text: String(b.daysInProcess), value: b.daysInProcess },
+      due: {
+        text: day(b.dueDate),
+        sub: b.daysOverdue > 0 ? `${b.daysOverdue} ${b.daysOverdue === 1 ? t('day late') : t('days late')}` : undefined,
+        tone: b.daysOverdue > 0 ? 'danger' : undefined,
+      },
+      unit: b.unit,
+      planned: qty(b.planned, { blank: false }),
+      produced: qty(b.produced),
+      good: qty(b.good, { strong: true }),
+      qc: qty(b.qcPending + b.reworkPending),
+      balance: qty(b.balance, { blank: false, strong: true }),
+      wipValue: cash(ctx, b.wipValue, { blank: false }),
+    },
+  }))
+  if (rows.length) {
+    rows.push({
+      kind: 'total',
+      label: `${t('Total')} — ${data.totals.batchCount} ${t('batches')}`,
+      labelSpan: 13,
+      cells: { wipValue: cash(ctx, data.totals.wipValue, { blank: false, strong: true }) },
+    })
+  }
+
+  const matCols: DocColumn[] = [
+    { key: 'material', label: t('Material'), width: '22%' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'required', label: t('Required'), align: 'right' },
+    { key: 'issued', label: t('Issued (net)'), align: 'right' },
+    { key: 'consumed', label: t('Consumed'), align: 'right' },
+    { key: 'scrapped', label: t('Scrapped'), align: 'right' },
+    { key: 'inWip', label: t('In WIP'), align: 'right' },
+    { key: 'toIssue', label: t('To issue'), align: 'right' },
+    { key: 'wipValue', label: withCur(ctx, 'WIP value'), align: 'right' },
+    { key: 'lots', label: t('Batch / Lot'), width: '12%' },
+  ]
+  const matRows: DocRow[] = []
+  data.batches.forEach((b) => {
+    matRows.push({
+      kind: 'group',
+      label: `${b.orderNumber} — ${b.productName}`,
+      labelSub: `${t('Planned')} ${fmtQty(b.planned)} ${b.unit} · ${t('Remaining')} ${fmtQty(b.balance)} ${b.unit}${b.stage ? ` · ${t('Stage')}: ${b.stage}` : ''}`,
+      labelSpan: 8,
+      drill: { orderId: b.id },
+      cells: { wipValue: cash(ctx, b.wipValue, { blank: false, strong: true }), lots: '' },
+    })
+    b.materials.forEach((m) => {
+      matRows.push({
+        cells: {
+          material: m.productName,
+          unit: m.unit,
+          required: qty(m.required, { blank: false }),
+          issued: qty(m.issued),
+          consumed: qty(m.consumed),
+          scrapped: { ...qty(m.scrapped), tone: m.scrapped > 0 ? 'danger' : undefined },
+          inWip: qty(m.inWip, { strong: true }),
+          toIssue: { ...qty(m.toIssue), tone: m.toIssue > 0 ? 'danger' : undefined },
+          wipValue: cash(ctx, m.wipValue),
+          lots: m.batches.join(', '),
+        },
+      })
+    })
+  })
+
+  return {
+    key: 'in-process',
+    title: t('In-Process Batch Details'),
+    asOf: data.asOf,
+    orientation: 'landscape',
+    summary: [
+      {
+        label: t('Batches on the floor'),
+        value: String(data.totals.batchCount),
+        hint: data.totals.notStartedCount ? `${data.totals.notStartedCount} ${t('not started yet')}` : undefined,
+      },
+      { label: t('Awaiting QC / rework'), value: fmtQty(data.totals.qcPending + data.totals.reworkPending) },
+      { label: t('Overdue batches'), value: String(data.totals.overdueCount) },
+      { label: withCur(ctx, 'Value in process (WIP)'), value: ctx.figure(data.totals.wipValue), emphasis: true },
+    ],
+    sections: [
+      {
+        id: 'batches',
+        title: t('Batch position'),
+        columns: cols,
+        rows,
+        empty: t('Nothing is in process right now.'),
+      },
+      {
+        id: 'materials',
+        title: t('Material position by batch'),
+        note: t('In WIP = issued − consumed − scrapped, still on the production floor. To issue = still needed from the store.'),
+        columns: matCols,
+        rows: matRows,
+        empty: t('No materials.'),
+      },
+    ],
+  }
+}
+
+/* ── Scrap ───────────────────────────────────────────────────────────────────── */
+
+function scrapDoc(data: ScrapReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const cols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '8%', nowrap: true },
+    { key: 'number', label: t('Scrap No.'), width: '9%', nowrap: true },
+    { key: 'order', label: t('Order'), width: '9%', nowrap: true },
+    { key: 'product', label: t('Product / Material'), width: '22%' },
+    { key: 'stage', label: t('Stage'), width: '12%' },
+    { key: 'reason', label: t('Reason'), width: '10%' },
+    { key: 'qty', label: t('Qty'), align: 'right' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'rate', label: withCur(ctx, 'Rate'), align: 'right' },
+    { key: 'value', label: withCur(ctx, 'Value'), align: 'right' },
+  ]
+  const rows: DocRow[] = data.rows.map((r) => ({
+    cells: {
+      date: day(r.date),
+      number: { text: r.number, strong: true },
+      order: r.orderNumber || '—',
+      product: { text: r.productName, sub: r.notes || undefined },
+      stage: { text: t(SCRAP_STAGE_LABELS[r.stage] || r.stage), sub: r.affectsStock ? t('from finished stock') : undefined },
+      reason: t(SCRAP_REASON_LABELS[r.reason] || r.reason),
+      qty: qty(r.quantity, { blank: false }),
+      unit: r.unit,
+      rate: cash(ctx, r.unitCost),
+      value: cash(ctx, r.value, { blank: false, strong: true }),
+    },
+  }))
+  if (rows.length) {
+    rows.push({ kind: 'total', label: t('Total'), labelSpan: 9, cells: { value: cash(ctx, data.totals.value, { blank: false, strong: true }) } })
+  }
+  const share = (v: number) => (data.totals.value > 0 ? pct((v / data.totals.value) * 100) : pct(0))
+  const groupSection = (id: string, title: string, label: string, items: { key: string; count: number; value: number }[], names: Record<string, string>): DocSection => ({
+    id,
+    title,
+    columns: [
+      { key: 'k', label, width: '40%' },
+      { key: 'count', label: t('Entries'), align: 'right' },
+      { key: 'value', label: withCur(ctx, 'Value'), align: 'right' },
+      { key: 'share', label: t('Share'), align: 'right' },
+    ],
+    rows: items.map((g) => ({
+      cells: {
+        k: { text: t(names[g.key] || g.key), strong: true },
+        count: { text: String(g.count), value: g.count },
+        value: cash(ctx, g.value, { blank: false }),
+        share: share(g.value),
+      },
+    })),
+    empty: t('No scrap.'),
+  })
+  const top = data.byReason[0]
+  return {
+    key: 'scrap',
+    title: t('Scrap & Rejection Report'),
+    periodStart: data.period.startDate,
+    periodEnd: data.period.endDate,
+    orientation: 'landscape',
+    summary: [
+      { label: t('Scrap entries'), value: String(data.totals.count) },
+      {
+        label: t('Main reason'),
+        value: top ? t(SCRAP_REASON_LABELS[top.key] || top.key) : '—',
+        hint: top ? ctx.figure(top.value) : undefined,
+      },
+      {
+        label: withCur(ctx, 'From finished stock'),
+        value: ctx.figure(data.rows.filter((r) => r.affectsStock).reduce((s, r) => s + r.value, 0)),
+      },
+      { label: withCur(ctx, 'Total scrap value'), value: ctx.figure(data.totals.value), emphasis: true },
+    ],
+    sections: [
+      { id: 'register', title: t('Scrap register'), columns: cols, rows, empty: t('No scrap was recorded in this period.') },
+      groupSection('stage', t('By stage'), t('Stage'), data.byStage, SCRAP_STAGE_LABELS),
+      groupSection('reason', t('By reason'), t('Reason'), data.byReason, SCRAP_REASON_LABELS),
+      {
+        id: 'product',
+        title: t('By product / material'),
+        columns: [
+          { key: 'product', label: t('Product / Material'), width: '40%' },
+          { key: 'unit', label: t('Unit') },
+          { key: 'count', label: t('Entries'), align: 'right' },
+          { key: 'qty', label: t('Qty'), align: 'right' },
+          { key: 'value', label: withCur(ctx, 'Value'), align: 'right' },
+        ],
+        rows: data.byProduct.map((p) => ({
+          cells: {
+            product: { text: p.productName, strong: true },
+            unit: p.unit,
+            count: { text: String(p.count), value: p.count },
+            qty: qty(p.quantity, { blank: false }),
+            value: cash(ctx, p.value, { blank: false }),
+          },
+        })),
+        empty: t('No scrap.'),
+      },
+    ],
+  }
+}
+
+/* ── Date-wise: issue, production, remaining ─────────────────────────────────── */
+
+function dailyDoc(data: DailyReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const mat = withCur(ctx, 'Material on the floor')
+  const out = t('Production output')
+  const cols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '9%', nowrap: true },
+    { key: 'batches', label: t('Batches'), align: 'right', width: '6%' },
+    { key: 'issued', label: t('Issued'), align: 'right', group: mat },
+    { key: 'returned', label: t('Returned'), align: 'right', group: mat },
+    { key: 'consumed', label: t('Used in production'), align: 'right', group: mat },
+    { key: 'floorScrap', label: t('Scrapped'), align: 'right', group: mat },
+    { key: 'balance', label: t('Remaining (balance)'), align: 'right', group: mat },
+    { key: 'produced', label: t('Produced'), align: 'right', group: out },
+    { key: 'good', label: t('Completed'), align: 'right', group: out },
+    { key: 'rejected', label: t('Rejected'), align: 'right', group: out },
+    { key: 'goodValue', label: withCur(ctx, 'FG value'), align: 'right' },
+  ]
+  const rows: DocRow[] = [
+    {
+      kind: 'opening',
+      label: `${formatAppDate(keyToDate(data.period.startDate))} — ${t('Opening balance on the floor')}`,
+      labelSpan: 6,
+      cells: { balance: cash(ctx, data.openingWip, { blank: false, strong: true }) },
+    },
+    ...data.days.map((d) => ({
+      cells: {
+        date: { text: formatAppDate(keyToDate(d.date)), strong: true },
+        batches: d.batches ? { text: String(d.batches), value: d.batches } : '',
+        issued: cash(ctx, d.issued),
+        returned: cash(ctx, d.returned),
+        consumed: cash(ctx, d.consumed),
+        floorScrap: { ...cash(ctx, d.floorScrap), tone: d.floorScrap > 0 ? ('danger' as const) : undefined },
+        balance: cash(ctx, d.wipBalance, { blank: false, strong: true }),
+        produced: qty(d.produced),
+        good: qty(d.good, { strong: true }),
+        rejected: { ...qty(d.rejected), tone: d.rejected > 0 ? ('danger' as const) : undefined },
+        goodValue: cash(ctx, d.goodValue),
+      },
+    })),
+    {
+      kind: 'closing',
+      label: `${formatAppDate(keyToDate(data.period.endDate))} — ${t('Closing balance')}`,
+      labelSpan: 2,
+      cells: {
+        issued: cash(ctx, data.totals.issued, { blank: false, strong: true }),
+        returned: cash(ctx, data.totals.returned, { blank: false, strong: true }),
+        consumed: cash(ctx, data.totals.consumed, { blank: false, strong: true }),
+        floorScrap: cash(ctx, data.totals.floorScrap, { blank: false, strong: true }),
+        balance: cash(ctx, data.closingWip, { blank: false, strong: true }),
+        produced: qty(data.totals.produced, { blank: false, strong: true }),
+        good: qty(data.totals.good, { blank: false, strong: true }),
+        rejected: '',
+        goodValue: cash(ctx, data.totals.goodValue, { blank: false, strong: true }),
+      },
+    },
+  ]
+
+  const batchCols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '9%', nowrap: true },
+    { key: 'order', label: t('Batch / Order'), width: '9%', nowrap: true },
+    { key: 'product', label: t('Product'), width: '18%' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'planned', label: t('Planned'), align: 'right' },
+    { key: 'issued', label: withCur(ctx, 'Issued (net)'), align: 'right' },
+    { key: 'produced', label: t('Produced'), align: 'right', group: t('This day') },
+    { key: 'good', label: t('Completed'), align: 'right', group: t('This day') },
+    { key: 'rejected', label: t('Rejected'), align: 'right', group: t('This day') },
+    { key: 'cumulative', label: t('Completed to date'), align: 'right', group: t('Batch position') },
+    { key: 'remaining', label: t('Remaining'), align: 'right', group: t('Batch position') },
+    { key: 'goodValue', label: withCur(ctx, 'FG value'), align: 'right' },
+  ]
+  let lastDate = ''
+  const batchRows: DocRow[] = data.batches.map((b) => {
+    const first = b.date !== lastDate
+    lastDate = b.date
+    return {
+      groupStart: first,
+      drill: { orderId: b.orderId },
+      cells: {
+        date: first ? { text: formatAppDate(keyToDate(b.date)), strong: true } : '',
+        order: { text: b.orderNumber, strong: true },
+        product: b.productName,
+        unit: b.unit,
+        planned: qty(b.planned, { blank: false }),
+        issued: cash(ctx, b.issued),
+        produced: qty(b.produced),
+        good: qty(b.good, { strong: true }),
+        rejected: { ...qty(b.rejected), tone: b.rejected > 0 ? 'danger' : undefined },
+        cumulative: qty(b.cumulativeGood, { blank: false }),
+        remaining: { ...qty(b.remaining, { blank: false, strong: true }), tone: b.remaining === 0 ? 'success' : undefined },
+        goodValue: cash(ctx, b.goodValue),
+      },
+    }
+  })
+
+  return {
+    key: 'daily',
+    title: t('Date-wise Issue & Production'),
+    periodStart: data.period.startDate,
+    periodEnd: data.period.endDate,
+    orientation: 'landscape',
+    summary: [
+      { label: withCur(ctx, 'Opening on the floor'), value: ctx.figure(data.openingWip) },
+      {
+        label: withCur(ctx, 'Issued (net of returns)'),
+        value: ctx.figure(data.totals.issued - data.totals.returned),
+        hint: `${data.totals.activeDays} ${t('working days')} · ${data.totals.batchCount} ${t('batches')}`,
+      },
+      {
+        label: withCur(ctx, 'Used in production'),
+        value: ctx.figure(data.totals.consumed),
+        hint: `${t('FG received')} ${ctx.figure(data.totals.goodValue)}`,
+      },
+      { label: withCur(ctx, 'Remaining on the floor'), value: ctx.figure(data.closingWip), emphasis: true },
+    ],
+    sections: [
+      {
+        id: 'days',
+        title: t('Day-wise issue, production and remaining'),
+        note: t('Opening + issued − returned − used in production − scrapped = remaining on the floor (WIP), valued at issue cost. Output quantities add all products together.'),
+        columns: cols,
+        rows,
+        empty: t('No days in this period.'),
+      },
+      {
+        id: 'batches',
+        title: t('Batch-wise by date'),
+        note: t('Remaining = planned − completed to date, after that day. Click a batch for its full production report.'),
+        columns: batchCols,
+        rows: batchRows,
+        empty: t('No batch had issues or output in this period.'),
+      },
+    ],
+  }
+}
+
+/* ── One batch: the production record ────────────────────────────────────────── */
+
+const OUTPUT_STATUS: Record<string, string> = {
+  pending_qc: 'Waiting for QC',
+  inspected: 'Inspected',
+  reversed: 'Reversed',
+}
+const RECEIPT_SOURCE: Record<string, string> = {
+  output: 'Production',
+  rework: 'Passed rework',
+  direct: 'Direct',
+}
+const OP_STATUS: Record<string, string> = {
+  pending: 'Pending',
+  in_progress: 'Running',
+  completed: 'Done',
+  skipped: 'Skipped',
+}
+
+function batchDoc(data: BatchReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const o = data.order
+  const q = data.quantities
+  const c = data.costs
+  const u = o.unit
+  const kv = (label: string, value: DocCell, strong = false): DocRow => ({
+    cells: { k: { text: label, strong }, v: { ...value, strong: strong || value.strong } },
+  })
+  const kvCols = (valueLabel: string): DocColumn[] => [
+    { key: 'k', label: t('Particulars'), width: '72%' },
+    { key: 'v', label: valueLabel, align: 'right' },
+  ]
+  const quantities: DocRow[] = [
+    kv(t('Planned quantity'), qty(q.planned, { blank: false })),
+    kv(t('Produced (reported from the floor)'), qty(q.produced, { blank: false })),
+    kv(t('Completed — received into finished stock'), qty(q.good, { blank: false, strong: true })),
+    ...(q.reworkedGood ? [kv(`— ${t('of which passed after rework')}`, qty(q.reworkedGood))] : []),
+    kv(t('Rejected at QC'), qty(q.rejected, { blank: false })),
+    kv(t('Scrapped'), qty(q.scrapped, { blank: false })),
+    kv(t('Waiting for QC'), qty(q.qcPending, { blank: false })),
+    kv(t('Waiting in rework'), qty(q.reworkPending, { blank: false })),
+    { kind: 'total', cells: { k: t('Remaining to produce'), v: qty(q.remaining, { blank: false, strong: true }) } },
+  ]
+  const costRows: DocRow[] = [
+    kv(t('Material issued'), cash(ctx, c.issuedValue, { blank: false })),
+    kv(t('Returned to store'), cash(ctx, c.returnedValue, { blank: false })),
+    kv(t('Used in production (consumed)'), cash(ctx, c.usedValue, { blank: false })),
+    kv(t('Wastage'), cash(ctx, c.wastageValue, { blank: false })),
+    kv(t('Still on the floor (WIP)'), cash(ctx, c.inFactoryValue, { blank: false })),
+    kv(t('Scrap value (all stages)'), cash(ctx, c.scrapValue, { blank: false })),
+    kv(t('Finished goods value'), cash(ctx, c.finishedValue, { blank: false, strong: true })),
+    { kind: 'total', cells: { k: t('Cost per completed unit'), v: cash(ctx, c.unitCost, { blank: false, strong: true }) } },
+  ]
+
+  const matRows: DocRow[] = data.materials.map((l) => ({
+    cells: { material: { text: l.productName, sub: l.sku || undefined, strong: true }, ...consumptionCells(ctx, l) },
+  }))
+  if (matRows.length) {
+    matRows.push({
+      kind: 'total',
+      label: t('Total'),
+      labelSpan: 10,
+      cells: {
+        issuedValue: cash(ctx, c.issuedValue, { blank: false, strong: true }),
+        usedValue: cash(ctx, c.usedValue, { blank: false, strong: true }),
+        wastageValue: cash(ctx, c.wastageValue, { blank: false, strong: true }),
+      },
+    })
+  }
+
+  const issueCols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '9%', nowrap: true },
+    { key: 'voucher', label: t('Voucher'), width: '10%', nowrap: true },
+    { key: 'material', label: t('Material'), width: '24%' },
+    { key: 'qty', label: t('Qty'), align: 'right' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'rate', label: withCur(ctx, 'Rate'), align: 'right' },
+    { key: 'issued', label: withCur(ctx, 'Issued'), align: 'right' },
+    { key: 'returned', label: withCur(ctx, 'Returned'), align: 'right' },
+    { key: 'balance', label: withCur(ctx, 'Net balance'), align: 'right' },
+  ]
+  const issueRows: DocRow[] = data.issues.map((l) => ({
+    groupStart: l.first,
+    cells: {
+      date: l.first ? day(l.date) : '',
+      voucher: l.first ? { text: l.number, sub: l.kind === 'return' ? t('Return') : l.issuedBy || undefined, strong: true } : '',
+      material: { text: l.productName, sub: l.batchNumber ? `${t('Batch')} ${l.batchNumber}` : undefined },
+      qty: qty(l.quantity, { blank: false }),
+      unit: l.unit,
+      rate: cash(ctx, l.unitCost),
+      issued: l.kind === 'return' ? '' : cash(ctx, l.totalCost),
+      returned: l.kind === 'return' ? cash(ctx, l.totalCost) : '',
+      balance: l.last ? cash(ctx, l.balance, { blank: false, strong: true }) : '',
+    },
+  }))
+  if (issueRows.length) {
+    issueRows.push({
+      kind: 'closing',
+      label: t('Total'),
+      labelSpan: 6,
+      cells: {
+        issued: cash(ctx, c.issuedValue, { blank: false, strong: true }),
+        returned: cash(ctx, c.returnedValue, { blank: false, strong: true }),
+        balance: cash(ctx, c.issuedValue - c.returnedValue, { blank: false, strong: true }),
+      },
+    })
+  }
+
+  const outputCols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '12%', nowrap: true },
+    { key: 'number', label: t('Output No.'), width: '12%', nowrap: true },
+    { key: 'produced', label: t('Produced'), align: 'right' },
+    { key: 'good', label: t('Completed'), align: 'right' },
+    { key: 'rejected', label: t('Rejected'), align: 'right' },
+    { key: 'disposition', label: t('Rejected to'), width: '14%' },
+    { key: 'status', label: t('Status'), width: '12%' },
+    { key: 'cost', label: withCur(ctx, 'Material used'), align: 'right' },
+  ]
+  const outputRows: DocRow[] = data.outputs.map((x) => ({
+    cells: {
+      date: day(x.date),
+      number: { text: x.number, strong: true },
+      produced: qty(x.produced, { blank: false }),
+      good: qty(x.good, { strong: true }),
+      rejected: { ...qty(x.rejected), tone: x.rejected > 0 ? 'danger' : undefined },
+      disposition: x.disposition ? { text: x.disposition === 'rework' ? t('Rework') : t('Scrap'), sub: x.reason || undefined } : '',
+      status: { text: t(OUTPUT_STATUS[x.status] || x.status), tone: x.status === 'reversed' ? 'muted' : undefined },
+      cost: cash(ctx, x.materialCost),
+    },
+  }))
+
+  const receiptCols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '12%', nowrap: true },
+    { key: 'number', label: t('Receipt No.'), width: '12%', nowrap: true },
+    { key: 'source', label: t('Source'), width: '12%' },
+    { key: 'qty', label: t('Received'), align: 'right' },
+    { key: 'cumulative', label: t('Completed to date'), align: 'right' },
+    { key: 'remaining', label: t('Remaining'), align: 'right' },
+    { key: 'rate', label: withCur(ctx, 'Unit cost'), align: 'right' },
+    { key: 'value', label: withCur(ctx, 'Value'), align: 'right' },
+  ]
+  const receiptRows: DocRow[] = data.receipts.map((r) => ({
+    cells: {
+      date: day(r.date),
+      number: { text: r.number, sub: r.batchNumber ? `${t('Lot')} ${r.batchNumber}` : undefined, strong: true },
+      source: t(RECEIPT_SOURCE[r.source] || r.source),
+      qty: qty(r.quantity, { blank: false, strong: true }),
+      cumulative: qty(r.cumulative, { blank: false }),
+      remaining: { ...qty(r.remaining, { blank: false, strong: true }), tone: r.remaining === 0 ? 'success' : undefined },
+      rate: cash(ctx, r.unitCost),
+      value: cash(ctx, r.value, { blank: false }),
+    },
+  }))
+  if (receiptRows.length) {
+    receiptRows.push({
+      kind: 'total',
+      label: t('Total received'),
+      labelSpan: 3,
+      cells: {
+        qty: qty(q.good, { blank: false, strong: true }),
+        cumulative: '',
+        remaining: qty(Math.max(0, q.planned - q.good), { blank: false, strong: true }),
+        rate: '',
+        value: cash(ctx, c.finishedValue, { blank: false, strong: true }),
+      },
+    })
+  }
+
+  const sections: DocSection[] = [
+    { id: 'qty', title: t('Production quantities'), columns: kvCols(`${t('Quantity')} (${u})`), rows: quantities },
+    {
+      id: 'materials',
+      title: t('Material requirement, issue and consumption'),
+      note: t('Issued − returned − consumed − wastage = on floor. Variance = (consumed + wastage) − what the BOM allows for the completed output.'),
+      columns: consumptionColumns(ctx, { key: 'material', label: t('Material'), width: '16%' }),
+      rows: matRows,
+      empty: t('This batch has no materials.'),
+    },
+    { id: 'issues', title: t('Material issue vouchers'), columns: issueCols, rows: issueRows, empty: t('No material has been issued to this batch.') },
+    { id: 'outputs', title: t('Production output (date-wise)'), columns: outputCols, rows: outputRows, empty: t('No output has been reported yet.') },
+    { id: 'receipts', title: t('Finished goods received'), columns: receiptCols, rows: receiptRows, empty: t('Nothing received into finished stock yet.') },
+  ]
+  if (data.scrap.length) {
+    sections.push({
+      id: 'scrap',
+      title: t('Scrap'),
+      columns: [
+        { key: 'date', label: t('Date'), width: '12%', nowrap: true },
+        { key: 'number', label: t('Scrap No.'), width: '12%', nowrap: true },
+        { key: 'item', label: t('Product / Material'), width: '28%' },
+        { key: 'stage', label: t('Stage') },
+        { key: 'reason', label: t('Reason') },
+        { key: 'qty', label: t('Qty'), align: 'right' },
+        { key: 'value', label: withCur(ctx, 'Value'), align: 'right' },
+      ],
+      rows: data.scrap.map((x) => ({
+        cells: {
+          date: day(x.date),
+          number: { text: x.number, strong: true },
+          item: x.productName,
+          stage: t(SCRAP_STAGE_LABELS[x.stage] || x.stage),
+          reason: t(SCRAP_REASON_LABELS[x.reason] || x.reason),
+          qty: { text: `${fmtQty(x.quantity)} ${x.unit}`, value: x.quantity },
+          value: cash(ctx, x.value, { blank: false }),
+        },
+      })),
+    })
+  }
+  if (data.operations.length) {
+    sections.push({
+      id: 'operations',
+      title: t('Routing / operations'),
+      columns: [
+        { key: 'n', label: '#', align: 'right', width: '4%' },
+        { key: 'name', label: t('Operation'), width: '20%' },
+        { key: 'wc', label: t('Work centre'), width: '14%' },
+        { key: 'status', label: t('Status'), width: '9%' },
+        { key: 'started', label: t('Started'), nowrap: true },
+        { key: 'completed', label: t('Completed'), nowrap: true },
+        { key: 'plan', label: t('Planned min'), align: 'right' },
+        { key: 'actual', label: t('Actual min'), align: 'right' },
+        { key: 'by', label: t('By') },
+      ],
+      rows: data.operations.map((op, i) => ({
+        cells: {
+          n: String(i + 1),
+          name: { text: op.name, strong: true },
+          wc: op.workCenter || '—',
+          status: t(OP_STATUS[op.status] || op.status),
+          started: op.startedAt ? formatAppDateTime(new Date(op.startedAt)) : '',
+          completed: op.completedAt ? formatAppDateTime(new Date(op.completedAt)) : '',
+          plan: qty(op.plannedMinutes),
+          actual: op.actualMinutes == null ? '' : qty(op.actualMinutes),
+          by: op.by,
+        },
+      })),
+    })
+  }
+  sections.push({ id: 'costs', title: t('Cost summary'), columns: kvCols(withCur(ctx, 'Amount')), rows: costRows })
+
+  const footnotes = [
+    ...data.cancelledVouchers.map((v) => `${t('Cancelled voucher')} ${v.number}${v.reason ? ` — ${v.reason}` : ''} ${t('(stock reversed, not counted)')}`),
+    ...(o.notes ? [`${t('Notes')}: ${o.notes}`] : []),
+  ]
+  return {
+    key: 'batch',
+    title: t('Batch Production Report'),
+    subtitle: `${o.orderNumber} — ${o.productName}`,
+    orientation: 'landscape',
+    info: [
+      { label: t('Batch / Order'), value: o.orderNumber },
+      { label: t('Product'), value: o.sku ? `${o.productName} (${o.sku})` : o.productName },
+      { label: t('BOM'), value: o.bomNumber ? `${o.bomNumber}${o.bomVersion ? ` v${o.bomVersion}` : ''}` : '—' },
+      { label: t('Status'), value: statusLabel(o.status, o.orderType) },
+      { label: t('Started'), value: day(o.actualStartDate || o.plannedStartDate) },
+      { label: t('Due'), value: day(o.plannedCompletionDate) },
+      { label: t('Completed on'), value: day(o.actualCompletionDate) },
+      { label: t('Operator / team'), value: [o.operatorName, ...o.team].filter(Boolean).join(', ') || '—' },
+    ],
+    summary: [
+      { label: `${t('Planned')} (${u})`, value: fmtQty(q.planned) },
+      { label: `${t('Completed')} (${u})`, value: fmtQty(q.good), hint: `${q.completionPercent}% ${t('done')}` },
+      { label: `${t('Remaining')} (${u})`, value: fmtQty(q.remaining), emphasis: true },
+      {
+        label: withCur(ctx, 'Material issued (net)'),
+        value: ctx.figure(c.issuedValue - c.returnedValue),
+        hint: c.unitCost ? `${t('Cost per unit')} ${ctx.figure(c.unitCost)}` : undefined,
+      },
+    ],
+    sections,
+    footnotes: footnotes.length ? footnotes : undefined,
+  }
+}
+
+export function buildReportDoc(data: ManufacturingReport, ctx: DocContext): ReportDoc {
+  switch (data.report) {
+    case 'production':
+      return productionDoc(data, ctx)
+    case 'material-issues':
+      return issueRegisterDoc(data, ctx)
+    case 'material-consumption':
+      return consumptionDoc(data, ctx)
+    case 'finished-goods':
+    case 'raw-materials':
+      return statementDoc(data, ctx)
+    case 'stock-register':
+      return registerDoc(data, ctx)
+    case 'in-process':
+      return inProcessDoc(data, ctx)
+    case 'scrap':
+      return scrapDoc(data, ctx)
+    case 'daily':
+      return dailyDoc(data, ctx)
+    case 'batch':
+      return batchDoc(data, ctx)
+  }
+}
+
+export const cellOf = (c: CellInput): DocCell =>
+  c == null ? { text: '' } : typeof c === 'string' ? { text: c, value: c } : c

@@ -140,6 +140,7 @@ import { Route as AuthenticatedManufacturingTraceabilityImport } from './routes/
 import { Route as AuthenticatedManufacturingSettingsImport } from './routes/_authenticated/manufacturing/settings'
 import { Route as AuthenticatedManufacturingScrapImport } from './routes/_authenticated/manufacturing/scrap'
 import { Route as AuthenticatedManufacturingRequirementsImport } from './routes/_authenticated/manufacturing/requirements'
+import { Route as AuthenticatedManufacturingReportsImport } from './routes/_authenticated/manufacturing/reports'
 import { Route as AuthenticatedManufacturingQualityImport } from './routes/_authenticated/manufacturing/quality'
 import { Route as AuthenticatedManufacturingProductsImport } from './routes/_authenticated/manufacturing/products'
 import { Route as AuthenticatedManufacturingMovementsImport } from './routes/_authenticated/manufacturing/movements'
@@ -1087,6 +1088,13 @@ const AuthenticatedManufacturingRequirementsRoute =
     getParentRoute: () => AuthenticatedManufacturingRouteRoute,
   } as any)
 
+const AuthenticatedManufacturingReportsRoute =
+  AuthenticatedManufacturingReportsImport.update({
+    id: '/reports',
+    path: '/reports',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
 const AuthenticatedManufacturingQualityRoute =
   AuthenticatedManufacturingQualityImport.update({
     id: '/quality',
@@ -1903,6 +1911,13 @@ declare module '@tanstack/react-router' {
       path: '/quality'
       fullPath: '/manufacturing/quality'
       preLoaderRoute: typeof AuthenticatedManufacturingQualityImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/reports': {
+      id: '/_authenticated/manufacturing/reports'
+      path: '/reports'
+      fullPath: '/manufacturing/reports'
+      preLoaderRoute: typeof AuthenticatedManufacturingReportsImport
       parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
     '/_authenticated/manufacturing/requirements': {
@@ -3043,6 +3058,7 @@ interface AuthenticatedManufacturingRouteRouteChildren {
   AuthenticatedManufacturingMovementsRoute: typeof AuthenticatedManufacturingMovementsRoute
   AuthenticatedManufacturingProductsRoute: typeof AuthenticatedManufacturingProductsRoute
   AuthenticatedManufacturingQualityRoute: typeof AuthenticatedManufacturingQualityRoute
+  AuthenticatedManufacturingReportsRoute: typeof AuthenticatedManufacturingReportsRoute
   AuthenticatedManufacturingRequirementsRoute: typeof AuthenticatedManufacturingRequirementsRoute
   AuthenticatedManufacturingScrapRoute: typeof AuthenticatedManufacturingScrapRoute
   AuthenticatedManufacturingSettingsRoute: typeof AuthenticatedManufacturingSettingsRoute
@@ -3075,6 +3091,8 @@ const AuthenticatedManufacturingRouteRouteChildren: AuthenticatedManufacturingRo
       AuthenticatedManufacturingProductsRoute,
     AuthenticatedManufacturingQualityRoute:
       AuthenticatedManufacturingQualityRoute,
+    AuthenticatedManufacturingReportsRoute:
+      AuthenticatedManufacturingReportsRoute,
     AuthenticatedManufacturingRequirementsRoute:
       AuthenticatedManufacturingRequirementsRoute,
     AuthenticatedManufacturingScrapRoute: AuthenticatedManufacturingScrapRoute,
@@ -3611,6 +3629,7 @@ export interface FileRoutesByFullPath {
   '/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
   '/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
+  '/manufacturing/reports': typeof AuthenticatedManufacturingReportsRoute
   '/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
   '/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
   '/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
@@ -3813,6 +3832,7 @@ export interface FileRoutesByTo {
   '/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
   '/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
+  '/manufacturing/reports': typeof AuthenticatedManufacturingReportsRoute
   '/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
   '/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
   '/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
@@ -4018,6 +4038,7 @@ export interface FileRoutesById {
   '/_authenticated/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
   '/_authenticated/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/_authenticated/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
+  '/_authenticated/manufacturing/reports': typeof AuthenticatedManufacturingReportsRoute
   '/_authenticated/manufacturing/requirements': typeof AuthenticatedManufacturingRequirementsRoute
   '/_authenticated/manufacturing/scrap': typeof AuthenticatedManufacturingScrapRoute
   '/_authenticated/manufacturing/settings': typeof AuthenticatedManufacturingSettingsRoute
@@ -4226,6 +4247,7 @@ export interface FileRouteTypes {
     | '/manufacturing/movements'
     | '/manufacturing/products'
     | '/manufacturing/quality'
+    | '/manufacturing/reports'
     | '/manufacturing/requirements'
     | '/manufacturing/scrap'
     | '/manufacturing/settings'
@@ -4427,6 +4449,7 @@ export interface FileRouteTypes {
     | '/manufacturing/movements'
     | '/manufacturing/products'
     | '/manufacturing/quality'
+    | '/manufacturing/reports'
     | '/manufacturing/requirements'
     | '/manufacturing/scrap'
     | '/manufacturing/settings'
@@ -4630,6 +4653,7 @@ export interface FileRouteTypes {
     | '/_authenticated/manufacturing/movements'
     | '/_authenticated/manufacturing/products'
     | '/_authenticated/manufacturing/quality'
+    | '/_authenticated/manufacturing/reports'
     | '/_authenticated/manufacturing/requirements'
     | '/_authenticated/manufacturing/scrap'
     | '/_authenticated/manufacturing/settings'
@@ -4958,6 +4982,7 @@ export const routeTree = rootRoute
         "/_authenticated/manufacturing/movements",
         "/_authenticated/manufacturing/products",
         "/_authenticated/manufacturing/quality",
+        "/_authenticated/manufacturing/reports",
         "/_authenticated/manufacturing/requirements",
         "/_authenticated/manufacturing/scrap",
         "/_authenticated/manufacturing/settings",
@@ -5197,6 +5222,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/manufacturing/quality": {
       "filePath": "_authenticated/manufacturing/quality.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/reports": {
+      "filePath": "_authenticated/manufacturing/reports.tsx",
       "parent": "/_authenticated/manufacturing"
     },
     "/_authenticated/manufacturing/requirements": {

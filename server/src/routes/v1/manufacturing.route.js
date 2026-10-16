@@ -216,6 +216,7 @@ router.post(
 );
 // Where issued material went: used in output, wastage, returned, still in the factory.
 router.get('/material-usage', auth(VIEW), validate(v.materialUsage), c.getMaterialUsage);
+router.get('/reports/:report', auth(VIEW), validate(v.report), c.getReport);
 router.post('/material-issues/check', auth('executeProduction'), validate(v.materialIssueVoucher), c.checkMaterialIssue);
 router.post('/material-issues', auth('executeProduction'), validate(v.materialIssueVoucher), c.postMaterialIssue);
 router.get('/material-issues', auth(VIEW), validate(v.listTransactions), c.getMaterialIssues);

@@ -20,6 +20,7 @@ const materialUsage = require('./materialUsage.service');
 const materialIssueByMaterial = require('./materialIssueByMaterial.service');
 const materialIssueEdit = require('./materialIssueEdit.service');
 const productionOrderBatch = require('./productionOrderBatch.service');
+const reports = require('./reports.service');
 
 module.exports = {
   settings,
@@ -40,4 +41,5 @@ module.exports = {
   materialIssueByMaterial,
   materialIssueEdit,
   productionOrderBatch,
+  reports,
 };

@@ -27,6 +27,7 @@ const {
   materialIssueByMaterial: byMaterialService,
   materialIssueEdit: issueEditService,
   productionOrderBatch: productionOrderBatchService,
+  reports: reportsService,
 } = manufacturingService;
 
 /** Read context: org always, branch when the client picked one (superAdmins may read org-wide). */
@@ -1010,11 +1011,16 @@ const traceLookup = catchAsync(async (req, res) => {
   res.send(await traceabilityService.lookup(readCtx(req), req.query.q));
 });
 
+const getReport = catchAsync(async (req, res) => {
+  res.send(await reportsService.getReport(readCtx(req), req.params.report, req.query));
+});
+
 const getWip = catchAsync(async (req, res) => {
   res.send(await executionService.getWip(readCtx(req)));
 });
 
 module.exports = {
+  getReport,
   getProductionOrderFilterOptions,
   exportProductionOrders,
   bulkUpdateProductionOrders,

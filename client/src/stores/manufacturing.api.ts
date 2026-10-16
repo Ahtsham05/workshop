@@ -1,5 +1,9 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQuery } from './base-query'
+import type {
+  ManufacturingReport,
+  ReportParams,
+} from '@/features/manufacturing/lib/report-types'
 import { inventoryApi } from './inventory.api'
 import { productApi } from './product.api'
 import { purchaseApi } from './purchase.api'
@@ -2667,6 +2671,16 @@ export const manufacturingApi = createApi({
       query: () => '/manufacturing/wip',
       providesTags: ['MfgWip'],
     }),
+    // Reports centre (features/manufacturing/pages/reports.tsx) — read-only statements.
+    getManufacturingReport: builder.query<ManufacturingReport, ReportParams>({
+      query: ({ report, ...params }) => ({
+        url: `/manufacturing/reports/${report}`,
+        params: Object.fromEntries(
+          Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
+        ),
+      }),
+      providesTags: [...EXECUTION_TAGS],
+    }),
   }),
 })
 
@@ -2764,6 +2778,7 @@ export const {
   useGetProductionReceiptsQuery,
   useGetScrapRecordsQuery,
   useGetWipQuery,
+  useGetManufacturingReportQuery,
   useStartAssemblyMutation,
   useCompleteAssemblyMutation,
   useCreateSubAssembliesMutation,
