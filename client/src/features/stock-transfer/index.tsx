@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { format } from 'date-fns'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
-import { ArrowLeftRight, ArrowDownToLine, Ban, Plus, Layers, Eye, Printer } from 'lucide-react'
+import { ArrowLeftRight, ArrowDownToLine, Ban, CalendarDays, Plus, Layers, Eye, Printer } from 'lucide-react'
 
 import type { RootState } from '@/stores/store'
 import {
@@ -20,7 +21,7 @@ import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow }
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SimplePagination } from '@/components/ui/simple-pagination'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -34,7 +35,18 @@ import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 import { DatePicker } from '@/components/ui/date-picker'
 import { isBackDated } from './lib/transfer-date'
+import {
+  TRANSFER_PERIOD_PRESETS,
+  getStoredTransferPeriod,
+  resolveTransferPeriod,
+  storeTransferPeriod,
+  type TransferPeriod,
+  type TransferPeriodPreset,
+} from './lib/transfer-period'
+import { useFormatMoney } from '@/lib/format-money'
 
+
+const formatTime = (value?: string) => (value ? format(new Date(value), 'h:mm a') : '')
 
 function branchName(ref: GroupedTransferRow['fromBranchId']): string {
   if (typeof ref === 'string') return ref
@@ -55,8 +67,14 @@ export default function StockTransfer() {
   const [statusFilter, setStatusFilter] = useState<TransferStatus | 'all'>('all')
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all')
   const [page, setPage] = useState(1)
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [period, setPeriodState] = useState<TransferPeriod>(getStoredTransferPeriod)
+  const { dateFrom, dateTo } = period
+  const setPeriod = (next: TransferPeriod) => {
+    setPeriodState(next)
+    storeTransferPeriod(next)
+    setPage(1)
+  }
+  const formatMoney = useFormatMoney()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [prefill, setPrefill] = useState<TransferPrefill | null>(null)
   const [detailsGroupId, setDetailsGroupId] = useState<string | null>(null)
@@ -91,6 +109,7 @@ export default function StockTransfer() {
   }
 
   const transfers = data?.results || []
+  const totals = data?.totals
 
   const handlePrint = async (groupId: string) => {
     try {
@@ -194,27 +213,65 @@ export default function StockTransfer() {
                 <SelectItem value='cancelled'>{t('Cancelled')}</SelectItem>
               </SelectContent>
             </Select>
-            <DatePicker
-              value={dateFrom}
-              onChange={(v) => { setDateFrom(v); setPage(1) }}
-              max={dateTo || undefined}
-              clearable
-              placeholder={t('From date')}
-              aria-label={t('From date')}
-              className='h-9 w-36 max-sm:w-full'
-            />
-            <DatePicker
-              value={dateTo}
-              onChange={(v) => { setDateTo(v); setPage(1) }}
-              min={dateFrom || undefined}
-              clearable
-              placeholder={t('To date')}
-              aria-label={t('To date')}
-              className='h-9 w-36 max-sm:w-full'
-            />
+            <Select
+              value={period.preset}
+              onValueChange={(v) => setPeriod(resolveTransferPeriod(v as TransferPeriodPreset, period))}
+            >
+              <SelectTrigger className='h-9 w-44 max-sm:col-span-2 max-sm:w-full' aria-label={t('Period')}>
+                <CalendarDays className='mr-1 h-4 w-4 shrink-0 text-muted-foreground' />
+                <SelectValue placeholder={t('Period')} />
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSFER_PERIOD_PRESETS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>{t(p.label)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {period.preset === 'custom' && (
+              <>
+                <DatePicker
+                  value={dateFrom}
+                  onChange={(v) => setPeriod({ preset: 'custom', dateFrom: v, dateTo })}
+                  max={dateTo || undefined}
+                  clearable
+                  placeholder={t('From date')}
+                  aria-label={t('From date')}
+                  className='h-9 w-36 max-sm:w-full'
+                />
+                <DatePicker
+                  value={dateTo}
+                  onChange={(v) => setPeriod({ preset: 'custom', dateFrom, dateTo: v })}
+                  min={dateFrom || undefined}
+                  clearable
+                  placeholder={t('To date')}
+                  aria-label={t('To date')}
+                  className='h-9 w-36 max-sm:w-full'
+                />
+              </>
+            )}
           </div>
         </CardHeader>
         <CardContent className='max-sm:px-3'>
+          {/* Totals for everything the filters match (all pages), not just the rows on screen. */}
+          <div className='mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3'>
+            <div className='rounded-lg border bg-muted/30 px-3 py-2'>
+              <div className='text-xs text-muted-foreground'>{t('Transfers')}</div>
+              <div className='text-lg font-semibold tabular-nums'>{data?.totalResults ?? 0}</div>
+            </div>
+            <div className='rounded-lg border bg-muted/30 px-3 py-2'>
+              <div className='text-xs text-muted-foreground'>{t('Total Quantity')}</div>
+              <div className='text-lg font-semibold tabular-nums'>{(totals?.quantity ?? 0).toLocaleString()}</div>
+            </div>
+            <div className='col-span-2 rounded-lg border bg-muted/30 px-3 py-2 sm:col-span-1'>
+              <div className='text-xs text-muted-foreground'>{t('Total Amount')} <span className='text-[10px]'>({t('at cost')})</span></div>
+              <div className='text-lg font-semibold tabular-nums'>{formatMoney(totals?.amount ?? 0)}</div>
+            </div>
+          </div>
+          {period.preset !== 'all' && (dateFrom || dateTo) && (
+            <p className='mb-2 text-xs text-muted-foreground'>
+              {t('Showing')}: {dateFrom ? formatAppDate(dateFrom) : '…'} – {dateTo ? formatAppDate(dateTo) : '…'}
+            </p>
+          )}
           {isFetching ? (
             <div className='space-y-2'>
               {[...Array(5)].map((_, i) => (
@@ -231,6 +288,8 @@ export default function StockTransfer() {
                   <TableHead>{t('From')}</TableHead>
                   <TableHead>{t('To')}</TableHead>
                   <TableHead className='text-right'>{t('Qty')}</TableHead>
+                  <TableHead className='text-right whitespace-nowrap'>{t('Cost Price')}</TableHead>
+                  <TableHead className='text-right'>{t('Amount')}</TableHead>
                   <TableHead>{t('Status')}</TableHead>
                   <TableHead className='text-right'>{t('Actions')}</TableHead>
                 </TableRow>
@@ -251,7 +310,11 @@ export default function StockTransfer() {
                             </div>
                           </>
                         ) : (
-                          formatAppDateTime(tr.transferDate || tr.suggestedAt)
+                          // Date over time (not side by side) leaves room for Cost Price / Amount.
+                          <>
+                            <div>{formatAppDate(tr.transferDate || tr.suggestedAt)}</div>
+                            <div className='text-[11px]'>{formatTime(tr.transferDate || tr.suggestedAt)}</div>
+                          </>
                         )}
                       </TableCell>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
@@ -274,7 +337,14 @@ export default function StockTransfer() {
                       </TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.fromBranchId)}</TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.toBranchId)}</TableCell>
-                      <TableCell className='text-right'>{tr.totalQuantity}</TableCell>
+                      <TableCell className='text-right tabular-nums'>{tr.totalQuantity}</TableCell>
+                      <TableCell className='text-right whitespace-nowrap tabular-nums'>
+                        {formatMoney(tr.unitCost || 0)}
+                        {tr.itemCount > 1 && (
+                          <div className='text-[10px] text-muted-foreground'>{t('avg')}</div>
+                        )}
+                      </TableCell>
+                      <TableCell className='text-right whitespace-nowrap font-medium tabular-nums'>{formatMoney(tr.totalAmount || 0)}</TableCell>
                       <TableCell><TransferStatusBadge status={tr.status} /></TableCell>
                       <TableCell className='text-right'>
                         <div className='flex justify-end gap-1.5'>
@@ -282,17 +352,22 @@ export default function StockTransfer() {
                             size='sm'
                             variant='ghost'
                             onClick={() => setDetailsGroupId(tr.groupId)}
+                            title={t('View')}
+                            aria-label={t('View')}
                           >
-                            <Eye className='mr-1 h-3.5 w-3.5' />
-                            {t('View')}
+                            {/* Label only on very wide screens — keeps Cost Price / Amount and the actions in view. */}
+                            <Eye className='h-3.5 w-3.5 2xl:mr-1' />
+                            <span className='hidden 2xl:inline'>{t('View')}</span>
                           </Button>
                           <Button
                             size='sm'
                             variant='ghost'
                             onClick={() => handlePrint(tr.groupId)}
+                            title={t('Print')}
+                            aria-label={t('Print')}
                           >
-                            <Printer className='mr-1 h-3.5 w-3.5' />
-                            {t('Print')}
+                            <Printer className='h-3.5 w-3.5 2xl:mr-1' />
+                            <span className='hidden 2xl:inline'>{t('Print')}</span>
                           </Button>
                           {isSingle && tr.status === 'in_transit' && isDest && (
                             <Button
@@ -323,12 +398,30 @@ export default function StockTransfer() {
                 })}
                 {transfers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className='text-center text-muted-foreground'>
+                    <TableCell colSpan={10} className='text-center text-muted-foreground'>
                       {t('No transfers found')}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
+              {transfers.length > 0 && (
+                <TableFooter>
+                  <TableRow className='font-semibold'>
+                    <TableCell colSpan={5}>
+                      {t('Total')}
+                      {(data?.totalPages || 1) > 1 && (
+                        <span className='ml-1 text-xs font-normal text-muted-foreground'>
+                          ({t('all {{count}} transfers', { count: String(data?.totalResults ?? 0) })})
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className='text-right tabular-nums'>{(totals?.quantity ?? 0).toLocaleString()}</TableCell>
+                    <TableCell />
+                    <TableCell className='text-right whitespace-nowrap tabular-nums'>{formatMoney(totals?.amount ?? 0)}</TableCell>
+                    <TableCell colSpan={2} />
+                  </TableRow>
+                </TableFooter>
+              )}
             </Table>
           )}
           <SimplePagination

@@ -70,6 +70,11 @@ const InventoryTransferSchema = new mongoose.Schema(
 
     quantity: { type: Number, required: true, min: 1 },
 
+    // Cost per unit at the source when the transfer was created (see
+    // inventoryTransfer.service.js#sourceUnitCost). Absent on rows created before this
+    // field existed — the list falls back to the batch snapshot / current product cost.
+    unitCost: { type: Number, min: 0 },
+
     // Set instead of relying on quantity alone when the product is IMEI/serial-tracked —
     // a snapshot of exactly which units are moving (for display; the authoritative link
     // during the transfer is each Imei record's own transferId, see imei.model.js).

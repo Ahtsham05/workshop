@@ -54,6 +54,8 @@ export interface InventoryTransfer {
   batchSnapshot?: BatchSnapshot
   productName: string
   quantity: number
+  /** Cost per unit when transferred (older rows: batch / current product cost, filled in by the server). */
+  unitCost?: number
   // Present for IMEI/serial-tracked products — the specific units this transfer moves,
   // instead of (or alongside, for display) the bulk quantity above.
   imeis?: string[]
@@ -93,6 +95,10 @@ export interface GroupedTransferRow {
   toBranchId: BranchRef | string
   itemCount: number
   totalQuantity: number
+  /** Σ quantity × cost per unit across the transfer's lines. */
+  totalAmount: number
+  /** Cost per unit — the product's own for one line, the quantity-weighted average for several. */
+  unitCost: number
   productNames: string[]
   // 'partial' is a display-only status this row shows when its line items span more than
   // one real status (e.g. 2 of 3 products already received) — it's never stored as such.
@@ -116,6 +122,8 @@ export interface GroupedTransfersResponse {
   limit: number
   totalPages: number
   totalResults: number
+  /** Grand totals across every transfer the filters match (all pages). */
+  totals?: { quantity: number; amount: number }
 }
 
 export interface CreateTransferRequest {

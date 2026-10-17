@@ -20,6 +20,7 @@ import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow }
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 import { transferDateOf } from '@/stores/inventoryTransfer.api'
 import { isBackDated } from '../lib/transfer-date'
+import { useFormatMoney } from '@/lib/format-money'
 
 interface TransferDetailsDialogProps {
   groupId: string | null
@@ -47,6 +48,7 @@ function DetailField({ label, value }: { label: string; value: ReactNode }) {
 
 export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialogProps) {
   const { t, language } = useLanguage()
+  const formatMoney = useFormatMoney()
   const { data: items, isFetching } = useGetTransferGroupQuery(groupId!, { skip: !groupId })
   const user = useSelector((s: RootState) => s.auth.data?.user)
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
@@ -64,6 +66,7 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
   const isSource = first ? branchIdOf(first.fromBranchId) === activeBranchId : false
   const isDest = first ? branchIdOf(first.toBranchId) === activeBranchId : false
   const totalQuantity = items?.reduce((sum, i) => sum + i.quantity, 0) || 0
+  const totalAmount = items?.reduce((sum, i) => sum + i.quantity * (i.unitCost || 0), 0) || 0
   const receivableIds = items?.filter((i) => i.status === 'in_transit' && isDest).map((i) => i.id) || []
   const cancellableIds = items?.filter((i) => ['suggested', 'approved', 'in_transit'].includes(i.status) && (isSource || isDest)).map((i) => i.id) || []
 
@@ -124,6 +127,7 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
               <DetailField label={t('To')} value={branchLabel(first!.toBranchId)} />
               <DetailField label={t('Products')} value={items.length} />
               <DetailField label={t('Total Qty')} value={totalQuantity} />
+              <DetailField label={t('Total Amount')} value={formatMoney(totalAmount)} />
               <DetailField
                 label={t('Transfer Date')}
                 value={isBackDated(first!) ? formatAppDate(transferDateOf(first!)) : formatDate(transferDateOf(first!))}
@@ -138,6 +142,8 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
                   <TableRow>
                     <TableHead>{t('Product')}</TableHead>
                     <TableHead className='text-right'>{t('Qty')}</TableHead>
+                    <TableHead className='text-right whitespace-nowrap'>{t('Cost Price')}</TableHead>
+                    <TableHead className='text-right'>{t('Amount')}</TableHead>
                     <TableHead>{t('Status')}</TableHead>
                     <TableHead className='text-right'>{t('Actions')}</TableHead>
                   </TableRow>
@@ -157,6 +163,8 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
                         )}
                       </TableCell>
                       <TableCell className='text-right'>{line.quantity}</TableCell>
+                      <TableCell className='text-right whitespace-nowrap'>{formatMoney(line.unitCost || 0)}</TableCell>
+                      <TableCell className='text-right whitespace-nowrap'>{formatMoney(line.quantity * (line.unitCost || 0))}</TableCell>
                       <TableCell><TransferStatusBadge status={line.status} /></TableCell>
                       <TableCell className='text-right'>
                         <div className='flex justify-end gap-1.5'>

@@ -356,6 +356,22 @@ const resolveSerializedSource = async ({ organizationId, fromBranchId, fromProdu
  * IMEI/serial-tracked products) a named set of individual units — and how much of it is
  * available at the source. See docs/architecture/universal-product-migration.md.
  */
+/**
+ * Cost per unit of what's leaving the source, snapshotted onto the transfer so its value
+ * (Stock Transfer list → Cost Price / Amount) doesn't drift when the product's cost is
+ * edited later: the batch's own cost, else the units' average purchase price for
+ * IMEI/serial stock, else the variant's / product's cost.
+ */
+const sourceUnitCost = (source) => {
+  if (source.fromBatch && Number.isFinite(source.fromBatch.costPerUnit)) return source.fromBatch.costPerUnit;
+  if (source.kind === 'serialized') {
+    const prices = source.imeiRecords.map((r) => Number(r.purchasePrice) || 0).filter((p) => p > 0);
+    if (prices.length) return Math.round((prices.reduce((a, b) => a + b, 0) / prices.length) * 100) / 100;
+  }
+  const cost = source.fromVariant?.cost ?? source.fromProduct?.cost;
+  return Number.isFinite(cost) ? cost : 0;
+};
+
 const resolveSource = async ({ organizationId, fromBranchId, fromProductId, fromVariantId, fromBatchId, imeis, session }) => {
   const fromProduct = await Product.findOne({ _id: fromProductId, organizationId, branchId: fromBranchId }).session(session || null);
   if (!fromProduct) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found in the source branch');
@@ -767,6 +783,7 @@ const createTransfer = async ({
         }
       : undefined,
     quantity: effectiveQuantity,
+    unitCost: sourceUnitCost(source),
     imeis: source.kind === 'serialized' ? source.imeiRecords.map((r) => r.imei) : undefined,
     reason,
     notes,
@@ -888,6 +905,7 @@ const createBulkTransfer = async ({ organizationId, fromBranchId, toBranchId, it
                 }
               : undefined,
             quantity: effectiveQuantity,
+            unitCost: sourceUnitCost(source),
             imeis: source.kind === 'serialized' ? source.imeiRecords.map((r) => r.imei) : undefined,
             reason,
             notes,
@@ -1065,6 +1083,27 @@ const getTransferGroup = async (groupId, organizationId) => {
     .populate('decidedBy', 'name')
     .sort({ createdAt: 1 });
   if (items.length === 0) throw new ApiError(httpStatus.NOT_FOUND, 'Transfer not found');
+
+  // Lines created before `unitCost` was snapshotted: show the batch cost, else the source
+  // variant's / product's current cost (display only — nothing is written back).
+  const missing = items.filter((it) => it.unitCost == null);
+  if (missing.length) {
+    const variantIds = missing.map((it) => it.fromVariantId).filter(Boolean);
+    const productIds = missing.map((it) => it.fromProductId).filter(Boolean);
+    const [variants, products] = await Promise.all([
+      variantIds.length ? ProductVariant.find({ _id: { $in: variantIds } }).select('cost').lean() : [],
+      productIds.length ? Product.find({ _id: { $in: productIds } }).select('cost').lean() : [],
+    ]);
+    const variantCost = new Map(variants.map((v) => [String(v._id), v.cost]));
+    const productCost = new Map(products.map((p) => [String(p._id), p.cost]));
+    missing.forEach((it) => {
+      it.unitCost =
+        it.batchSnapshot?.costPerUnit ??
+        variantCost.get(String(it.fromVariantId)) ??
+        productCost.get(String(it.fromProductId)) ??
+        0;
+    });
+  }
   return items;
 };
 
@@ -1121,6 +1160,41 @@ const queryTransfers = async (
   const pipeline = [
     { $match: match },
     { $addFields: { effectiveGroupId: { $ifNull: ['$groupId', '$_id'] } } },
+    // Cost per unit for each line: the snapshot taken at creation, else (rows created before
+    // `unitCost` existed) the batch snapshot, else the source variant's / product's current cost.
+    {
+      $lookup: {
+        from: ProductVariant.collection.name,
+        localField: 'fromVariantId',
+        foreignField: '_id',
+        pipeline: [{ $project: { cost: 1 } }],
+        as: 'costVariant',
+      },
+    },
+    {
+      $lookup: {
+        from: Product.collection.name,
+        localField: 'fromProductId',
+        foreignField: '_id',
+        pipeline: [{ $project: { cost: 1 } }],
+        as: 'costProduct',
+      },
+    },
+    {
+      $addFields: {
+        lineUnitCost: {
+          $ifNull: [
+            '$unitCost',
+            '$batchSnapshot.costPerUnit',
+            { $arrayElemAt: ['$costVariant.cost', 0] },
+            { $arrayElemAt: ['$costProduct.cost', 0] },
+            0,
+          ],
+        },
+      },
+    },
+    { $addFields: { lineAmount: { $multiply: ['$lineUnitCost', '$quantity'] } } },
+    { $project: { costVariant: 0, costProduct: 0 } },
     { $sort: { suggestedAt: 1 } },
     {
       $group: {
@@ -1137,6 +1211,8 @@ const queryTransfers = async (
         decidedBy: { $first: '$decidedBy' },
         itemCount: { $sum: 1 },
         totalQuantity: { $sum: '$quantity' },
+        totalAmount: { $sum: '$lineAmount' },
+        singleUnitCost: { $first: '$lineUnitCost' },
         productNames: { $push: '$productName' },
         statuses: { $push: '$status' },
         singleItemId: { $first: '$_id' },
@@ -1148,6 +1224,8 @@ const queryTransfers = async (
       $facet: {
         metadata: [{ $count: 'total' }],
         data: [{ $skip: skip }, { $limit: limit }],
+        // Grand totals across every row the filters match, not just this page.
+        totals: [{ $group: { _id: null, quantity: { $sum: '$totalQuantity' }, amount: { $sum: '$totalAmount' } } }],
       },
     },
   ];
@@ -1179,6 +1257,9 @@ const queryTransfers = async (
       toBranchId: branchMap.get(String(r.toBranchId)) || String(r.toBranchId),
       itemCount: r.itemCount,
       totalQuantity: r.totalQuantity,
+      totalAmount: r.totalAmount || 0,
+      // One product → its cost per unit; several → the quantity-weighted average.
+      unitCost: r.itemCount === 1 ? r.singleUnitCost || 0 : r.totalQuantity ? (r.totalAmount || 0) / r.totalQuantity : 0,
       productNames: r.productNames || [],
       status: derivedStatus,
       reason: r.reason || undefined,
@@ -1196,7 +1277,15 @@ const queryTransfers = async (
   });
 
   const totalPages = Math.max(Math.ceil(totalResults / limit), 1);
-  return { results, page, limit, totalPages, totalResults };
+  const totals = agg?.totals?.[0];
+  return {
+    results,
+    page,
+    limit,
+    totalPages,
+    totalResults,
+    totals: { quantity: totals?.quantity || 0, amount: totals?.amount || 0 },
+  };
 };
 
 module.exports = {
