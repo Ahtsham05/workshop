@@ -1,3 +1,4 @@
+const { productNameKey } = require('../utils/productNameKey');
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { Product, ProductVariant, Inventory, Batch, Imei, Organization, Category, SubCategory, Supplier } = require('../models');
@@ -286,6 +287,53 @@ const attachVariantAggregates = async (products) => {
         : null,
     };
   });
+};
+
+/**
+ * The product in this branch whose name is the same as `name` once case, spaces and
+ * punctuation are ignored (see utils/productNameKey.js), or null. Reads names only, off
+ * the {organizationId, branchId, name} index; active and inactive products both count.
+ * @param {{ organizationId: string, branchId: string, name: string, excludeId?: string }} args
+ */
+const findSameNameProduct = async ({ organizationId, branchId, name, excludeId }) => {
+  const key = productNameKey(name);
+  if (!key) return null;
+  const filter = { organizationId, branchId };
+  if (excludeId) filter._id = { $ne: excludeId };
+  const rows = await Product.find(filter).select('_id name').lean();
+  const hit = rows.find((row) => productNameKey(row.name) === key);
+  if (!hit) return null;
+  return Product.findById(hit._id).select('name barcode sku isActive stockQuantity price source createdAt image').lean();
+};
+
+/**
+ * Every product in the branch (active and inactive), reduced to what Add Product's live
+ * "similar products" panel needs to rank and show a match. One request per dialog session,
+ * cached client-side; the ranking itself runs in the browser on each keystroke.
+ */
+const getProductNameIndex = async ({ organizationId, branchId }) => {
+  const rows = await Product.find({ organizationId, branchId })
+    .select('name nameUrdu barcode sku isActive stockQuantity price image.url source createdAt hasVariants brandId categories.name')
+    .populate('brandId', 'name')
+    .sort({ _id: 1 })
+    .limit(50000)
+    .lean();
+  return rows.map((p) => ({
+    id: String(p._id),
+    name: p.name,
+    nameUrdu: p.nameUrdu || undefined,
+    barcode: p.barcode || undefined,
+    sku: p.sku || undefined,
+    isActive: p.isActive !== false,
+    stockQuantity: p.stockQuantity ?? 0,
+    price: p.price ?? 0,
+    imageUrl: p.image?.url || undefined,
+    source: p.source || null,
+    createdAt: p.createdAt,
+    hasVariants: !!p.hasVariants,
+    brandName: p.brandId?.name || undefined,
+    categoryNames: (p.categories || []).map((c) => c.name).filter(Boolean),
+  }));
 };
 
 /**
@@ -1455,6 +1503,8 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
   const duplicateStrategy = ['skip', 'update', 'error'].includes(options.duplicateStrategy)
     ? options.duplicateStrategy
     : 'skip';
+  // Excel/CSV (default) or the AI scanner — both arrive here; recorded on each new product.
+  const source = options.source === 'ai_scan' ? 'ai_scan' : 'excel_import';
 
   // Row-level normalization first — pure, no DB access — so the batched lookups below
   // only ever see clean, trimmed names.
@@ -1673,6 +1723,7 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
           createdBy,
           businessType: branchContext.businessType,
           isActive: false,
+          source,
           barcode: row.barcode || undefined,
           sku: row.sku || undefined,
           trackImei: !!product.trackImei,
@@ -1709,6 +1760,7 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
       // rather than immediately live. Toggled on later via the product list's Active
       // switch or a bulk "Activate selected" action — see bulkUpdateProducts below.
       isActive: false,
+      source,
     };
     // insertMany() does NOT run the schema's pre('save') hook, which is what normally
     // converts an empty barcode/sku to a genuinely *absent* field. Without this, every
@@ -1875,6 +1927,8 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
 };
 
 module.exports = {
+  findSameNameProduct,
+  getProductNameIndex,
   ensureProductIndexes,
   createProduct,
   queryProducts,

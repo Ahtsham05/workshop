@@ -92,6 +92,14 @@ import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
 import type { ProductType } from '@/stores/manufacturing.api'
 import { PRODUCT_TYPES, PRODUCT_TYPE_META } from '@/features/manufacturing/lib/constants'
 import { FormDraftNotice } from '@/components/form-draft-notice'
+import {
+  DuplicateProductDialog,
+  SimilarProductsPanel,
+  matchFromDuplicateError,
+  useSimilarProducts,
+  type SimilarProductMatch,
+} from './similar-products-panel'
+import type { ProductNameIndexEntry } from '@/stores/product.api'
 
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
@@ -565,6 +573,29 @@ export function UsersActionDialog({
     label: 'product',
   })
 
+  // Live "already in this branch?" matches while a NEW product's name/barcode is typed,
+  // and the save-time stop for a likely duplicate (open the existing one, or create anyway).
+  const similar = useSimilarProducts({
+    name: form.watch('name') || '',
+    code: form.watch('barcode') || '',
+    enabled: open && !isEdit,
+  })
+  const [duplicateMatches, setDuplicateMatches] = useState<SimilarProductMatch[] | null>(null)
+  // Set by "Create anyway" for the one save that follows; sent as allowDuplicateName.
+  const allowDuplicateRef = useRef(false)
+  const openExistingProduct = async (entry: ProductNameIndexEntry) => {
+    setDuplicateMatches(null)
+    try {
+      const product = await dispatch(productApi.endpoints.getProduct.initiate(entry.id, { forceRefetch: true })).unwrap()
+      // What was typed belonged to a new-product draft — the existing product replaces it.
+      draft.clear()
+      setScannedProduct(product)
+      toast.success(`Opened "${entry.name}" for editing`)
+    } catch {
+      toast.error(`Could not open "${entry.name}"`)
+    }
+  }
+
   // The draft variants generated in this session, in the variant endpoint's shape. They are
   // created after the product itself is saved (the endpoint needs its id) — in the
   // background, see startProductSaveFollowUps.
@@ -599,6 +630,9 @@ export function UsersActionDialog({
 
 
   const onSubmit = async (rawValues: productForm) => {
+    // "Create anyway" covers exactly this one save attempt.
+    const allowDuplicate = allowDuplicateRef.current
+    allowDuplicateRef.current = false
     if (rawValues.trackImei || rawValues.trackSerial) {
       const label = rawValues.trackSerial ? 'serial' : 'IMEI'
       // Purchase-received units count toward the total even though they aren't part of
@@ -617,6 +651,14 @@ export function UsersActionDialog({
     if ((rawValues.trackBatch || rawValues.trackExpiry) && rawValues.stockQuantity > 0 && !freshProduct?.defaultVariantId && !rawValues.batchNumber) {
       toast.error('Enter a batch number for the existing stock before turning on batch tracking')
       return
+    }
+    // Same (or near-same) name/barcode as a product already here: ask before creating it.
+    if (!isEdit && !allowDuplicate) {
+      const duplicates = similar.findDuplicates(rawValues.name || '', rawValues.barcode || '')
+      if (duplicates.length) {
+        setDuplicateMatches(duplicates)
+        return
+      }
     }
     // Sale price below the purchase price is almost always the two fields swapped.
     if (!rawValues.hasVariants && rawValues.cost > rawValues.price && !window.confirm(t('Purchase price ({{cost}}) is higher than the sale price ({{price}}). Save anyway?', { cost: rawValues.cost, price: rawValues.price }))) {
@@ -641,6 +683,7 @@ export function UsersActionDialog({
       // server then sees no `brandId` key at all and keeps the old one. Send an explicit
       // `null` so "removed" actually clears it (updateProductById assigns it as-is).
       brandId: rawValues.brandId || null,
+      ...(!isEdit && allowDuplicate ? { allowDuplicateName: true } : {}),
     }
     // Not shown → not sent: never touch the classification of a shop without the module.
     if (!showProductType) delete (values as { productType?: unknown }).productType
@@ -650,7 +693,7 @@ export function UsersActionDialog({
       // (header indicator + a toast), so the person can go straight on to the next thing.
       const refreshList = () => {
         setFetch?.((prev: any) => !prev)
-        dispatch(productApi.util.invalidateTags([{ type: 'Product', id: productId }]))
+        dispatch(productApi.util.invalidateTags([{ type: 'Product', id: productId }, { type: 'Product', id: 'NAME_INDEX' }]))
       }
       let productId: string
       if (isEdit) {
@@ -686,7 +729,10 @@ export function UsersActionDialog({
       }
       form.reset()
       onOpenChange(false)
-    } catch {
+    } catch (error) {
+      // Another save got the same name in first (the index was a moment old): same stop.
+      const match = matchFromDuplicateError(error)
+      if (match) setDuplicateMatches([match])
       return
     } finally {
       setIsSubmitting(false)
@@ -1274,6 +1320,7 @@ export function UsersActionDialog({
                       />
                     </FormControl>
                     <FormMessage />
+                    {!isEdit && <SimilarProductsPanel matches={similar.matches} onOpen={openExistingProduct} />}
                   </FormItem>
                 )}
               />
@@ -2253,6 +2300,19 @@ export function UsersActionDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <DuplicateProductDialog
+        matches={duplicateMatches}
+        onOpenExisting={openExistingProduct}
+        onCancel={() => setDuplicateMatches(null)}
+        onCreateAnyway={() => {
+          setDuplicateMatches(null)
+          allowDuplicateRef.current = true
+          // Cleared again if validation stops the save before onSubmit reads it.
+          void form.handleSubmit(onSubmit, onInvalid)().finally(() => {
+            allowDuplicateRef.current = false
+          })
+        }}
+      />
     </Dialog>
   )
 }

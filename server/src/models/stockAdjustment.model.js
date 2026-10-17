@@ -4,8 +4,13 @@ const { toJSON, paginate } = require('./plugins');
 // Reason types with a fixed direction can only ever move stock one way — the service
 // layer enforces this (see stockAdjustment.service.js#resolveDirection) so the ledger
 // can never end up with e.g. a "damage" entry that increased stock.
-const DECREASE_ONLY_TYPES = ['damage', 'theft', 'expired', 'lost'];
-const INCREASE_ONLY_TYPES = ['found'];
+// Warranty claims (warrantyClaim.service.js) post their own stock moves — never offered
+// on the Stock Adjustments form: 'warranty_out' a defective unit leaves sellable stock,
+// 'warranty_replacement' a unit from stock is handed to a customer as a replacement,
+// 'warranty_in' a repaired/replacement unit comes back into sellable stock.
+const WARRANTY_TYPES = ['warranty_out', 'warranty_replacement', 'warranty_in'];
+const DECREASE_ONLY_TYPES = ['damage', 'theft', 'expired', 'lost', 'warranty_out', 'warranty_replacement'];
+const INCREASE_ONLY_TYPES = ['found', 'warranty_in'];
 // 'count': the variance a posted stock count found (stockCount.service.js#postCount).
 const FLEXIBLE_TYPES = ['correction', 'count', 'other'];
 const ADJUSTMENT_TYPES = [...DECREASE_ONLY_TYPES, ...INCREASE_ONLY_TYPES, ...FLEXIBLE_TYPES];
@@ -49,6 +54,8 @@ const StockAdjustmentSchema = new mongoose.Schema(
 
     // Set when the adjustment was posted from a stock count (cycle count, audit, initial count).
     stockCountId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockCount', index: true },
+    // Set on the warranty_* types — the claim that moved this stock.
+    warrantyClaimId: { type: mongoose.Schema.Types.ObjectId, ref: 'WarrantyClaim', index: true },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
@@ -76,3 +83,4 @@ module.exports.ADJUSTMENT_TYPES = ADJUSTMENT_TYPES;
 module.exports.DECREASE_ONLY_TYPES = DECREASE_ONLY_TYPES;
 module.exports.INCREASE_ONLY_TYPES = INCREASE_ONLY_TYPES;
 module.exports.FLEXIBLE_TYPES = FLEXIBLE_TYPES;
+module.exports.WARRANTY_TYPES = WARRANTY_TYPES;

@@ -95,6 +95,8 @@ import { Separator } from '@/components/ui/separator'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState, AppDispatch } from '@/stores/store'
 import { useCreatePurchaseMutation, useUpdatePurchaseMutation, useGetNextPurchaseNumberQuery, purchaseApi } from '@/stores/purchase.api'
+import { useDuplicateEntryGuard } from '@/components/duplicate-entry-guard'
+import { useDoNotOrderWarning } from '@/features/products/lists/use-do-not-order-warning'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
@@ -443,6 +445,9 @@ export default function PurchasePanel({
   const dispatch = useDispatch<AppDispatch>()
   const { hasPermission } = usePermissions()
   const { isElectron, online } = useSync()
+  // "Has this bill already been entered?" — checked just before a new purchase is saved.
+  const { confirm: confirmNotDuplicate, element: duplicateGuardElement } = useDuplicateEntryGuard('purchase')
+  const warnIfDoNotOrder = useDoNotOrderWarning()
   const canCreateSupplier = hasPermission('createSuppliers' as never)
   const canCreateProduct = hasPermission('createProducts' as never)
   const [savingType, setSavingType] = useState<'none' | PaperSize | null>(null)
@@ -917,10 +922,11 @@ export default function PurchasePanel({
       })
       setProductSelectOpen('')
       setProductSearchQuery('')
+      warnIfDoNotOrder(product?.id || product?._id, product?.name)
       // Focus the quantity input of the just-selected row
       setTimeout(() => focusItemField(itemIndex, 'quantity'), 100)
     },
-    [setPurchase]
+    [setPurchase, warnIfDoNotOrder]
   )
 
   // Selecting a flat catalog row (product or real variant) — builds the product-shaped
@@ -1224,6 +1230,23 @@ export default function PurchasePanel({
 
       console.log('Purchase data being sent to backend:', purchaseData)
 
+      // Same supplier bill number, or same supplier + amount a few days either side → show
+      // those first. Only for a new purchase while online (an offline save has nothing to
+      // check against; a failed check never blocks the save).
+      if (!isEditing && online) {
+        const save = await confirmNotDuplicate({
+          mode: 'purchase',
+          supplier: supplierId,
+          vendorBillNumber: purchaseData.vendorBillNumber,
+          totalAmount: totals.total,
+          purchaseDate: purchaseData.purchaseDate,
+        })
+        if (!save) {
+          setSavingType(null)
+          return
+        }
+      }
+
       const canQueueOffline = isElectron && !isEditing
 
       const saveOffline = async () => {
@@ -1318,6 +1341,7 @@ export default function PurchasePanel({
       isElectron,
       online,
       dispatch,
+      confirmNotDuplicate,
     ]
   )
 
@@ -3118,6 +3142,7 @@ export default function PurchasePanel({
           `hidden` attribute) and added a stray 16px gap below the last card even while this bar
           itself rendered nothing on desktop. */}
       {createPortal(mobileActionsBar, document.body)}
+      {duplicateGuardElement}
     </div>
   )
 }

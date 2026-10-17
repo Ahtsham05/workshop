@@ -720,7 +720,7 @@ const removeImportedProducts = async (productIds) => {
  *
  * @returns {Promise<{ importedCount: number, alreadyImportedCount: number, failedCount: number, failed: Array<{ masterProductId: string, name: string|null, error: string }> }>}
  */
-const importMasterProductsUnlocked = async ({ organizationId, branchId, createdBy, items, activate = false }) => {
+const importMasterProductsUnlocked = async ({ organizationId, branchId, createdBy, items, activate = false, source = 'branch_import' }) => {
   const productService = require('./product.service');
   const isActive = !!activate;
 
@@ -898,6 +898,8 @@ const importMasterProductsUnlocked = async ({ organizationId, branchId, createdB
       masterProductId: master._id,
       taxCategoryId: entry.taxCategoryId,
       isActive: typeof entry.item.isActive === 'boolean' ? entry.item.isActive : isActive,
+      // 'branch_import' (pulled here) or 'branch_sync' (pushed from another branch).
+      source: source === 'branch_sync' ? 'branch_sync' : 'branch_import',
       // Only ever present when a caller pushed a concrete product's values (`overrides`) —
       // a MasterProduct itself carries none of these, so a plain import is unchanged.
       // Shelf location is deliberately never copied: it is a place in one shop.

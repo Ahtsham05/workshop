@@ -49,6 +49,7 @@ import { Route as authForgotPasswordImport } from './routes/(auth)/forgot-passwo
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedManufacturingRouteImport } from './routes/_authenticated/manufacturing/route'
 import { Route as AuthenticatedWhatsappIndexImport } from './routes/_authenticated/whatsapp/index'
+import { Route as AuthenticatedWarrantyClaimsIndexImport } from './routes/_authenticated/warranty-claims/index'
 import { Route as AuthenticatedUsersIndexImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedUsersManagementIndexImport } from './routes/_authenticated/users-management/index'
 import { Route as AuthenticatedTasksIndexImport } from './routes/_authenticated/tasks/index'
@@ -459,6 +460,13 @@ const AuthenticatedWhatsappIndexRoute = AuthenticatedWhatsappIndexImport.update(
     getParentRoute: () => AuthenticatedRoute,
   } as any,
 )
+
+const AuthenticatedWarrantyClaimsIndexRoute =
+  AuthenticatedWarrantyClaimsIndexImport.update({
+    id: '/warranty-claims/',
+    path: '/warranty-claims/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexImport.update({
   id: '/users/',
@@ -2557,6 +2565,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsersIndexImport
       parentRoute: typeof AuthenticatedImport
     }
+    '/_authenticated/warranty-claims/': {
+      id: '/_authenticated/warranty-claims/'
+      path: '/warranty-claims'
+      fullPath: '/warranty-claims'
+      preLoaderRoute: typeof AuthenticatedWarrantyClaimsIndexImport
+      parentRoute: typeof AuthenticatedImport
+    }
     '/_authenticated/whatsapp/': {
       id: '/_authenticated/whatsapp/'
       path: '/whatsapp'
@@ -3461,6 +3476,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersManagementIndexRoute: typeof AuthenticatedUsersManagementIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedWarrantyClaimsIndexRoute: typeof AuthenticatedWarrantyClaimsIndexRoute
   AuthenticatedWhatsappIndexRoute: typeof AuthenticatedWhatsappIndexRoute
   AuthenticatedHrEmployeesIdRoute: typeof AuthenticatedHrEmployeesIdRouteWithChildren
   AuthenticatedHrEmployeesCreateRoute: typeof AuthenticatedHrEmployeesCreateRoute
@@ -3568,6 +3584,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedUsersManagementIndexRoute:
     AuthenticatedUsersManagementIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedWarrantyClaimsIndexRoute: AuthenticatedWarrantyClaimsIndexRoute,
   AuthenticatedWhatsappIndexRoute: AuthenticatedWhatsappIndexRoute,
   AuthenticatedHrEmployeesIdRoute: AuthenticatedHrEmployeesIdRouteWithChildren,
   AuthenticatedHrEmployeesCreateRoute: AuthenticatedHrEmployeesCreateRoute,
@@ -3721,6 +3738,7 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/warranty-claims': typeof AuthenticatedWarrantyClaimsIndexRoute
   '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
@@ -3923,6 +3941,7 @@ export interface FileRoutesByTo {
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users-management': typeof AuthenticatedUsersManagementIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/warranty-claims': typeof AuthenticatedWarrantyClaimsIndexRoute
   '/whatsapp': typeof AuthenticatedWhatsappIndexRoute
   '/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
@@ -4130,6 +4149,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users-management/': typeof AuthenticatedUsersManagementIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/warranty-claims/': typeof AuthenticatedWarrantyClaimsIndexRoute
   '/_authenticated/whatsapp/': typeof AuthenticatedWhatsappIndexRoute
   '/_authenticated/hr/employees/$id': typeof AuthenticatedHrEmployeesIdRouteWithChildren
   '/_authenticated/hr/employees/create': typeof AuthenticatedHrEmployeesCreateRoute
@@ -4339,6 +4359,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users-management'
     | '/users'
+    | '/warranty-claims'
     | '/whatsapp'
     | '/hr/employees/$id'
     | '/hr/employees/create'
@@ -4540,6 +4561,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/users-management'
     | '/users'
+    | '/warranty-claims'
     | '/whatsapp'
     | '/hr/employees/$id'
     | '/hr/employees/create'
@@ -4745,6 +4767,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/'
     | '/_authenticated/users-management/'
     | '/_authenticated/users/'
+    | '/_authenticated/warranty-claims/'
     | '/_authenticated/whatsapp/'
     | '/_authenticated/hr/employees/$id'
     | '/_authenticated/hr/employees/create'
@@ -4960,6 +4983,7 @@ export const routeTree = rootRoute
         "/_authenticated/tasks/",
         "/_authenticated/users-management/",
         "/_authenticated/users/",
+        "/_authenticated/warranty-claims/",
         "/_authenticated/whatsapp/",
         "/_authenticated/hr/employees/$id",
         "/_authenticated/hr/employees/create",
@@ -5595,6 +5619,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/users/": {
       "filePath": "_authenticated/users/index.tsx",
+      "parent": "/_authenticated"
+    },
+    "/_authenticated/warranty-claims/": {
+      "filePath": "_authenticated/warranty-claims/index.tsx",
       "parent": "/_authenticated"
     },
     "/_authenticated/whatsapp/": {

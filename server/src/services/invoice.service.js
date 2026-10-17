@@ -2422,6 +2422,8 @@ const getInvoiceHistory = async (filter, options = {}) => {
 };
 
 module.exports = {
+  buildInvoiceListMatch,
+
   createInvoice,
   queryInvoices,
   queryInvoiceList,

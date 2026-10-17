@@ -31,6 +31,7 @@ import { useIsNarrower } from '@/hooks/use-element-width'
 import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, useGetNextInvoiceNumberQuery, invoiceApi } from '@/stores/invoice.api'
+import { useDuplicateEntryGuard } from '@/components/duplicate-entry-guard'
 import { useGetAllSalesmanProfilesQuery } from '@/stores/salesmanProfile.api'
 import { useSendSmsMutation } from '@/stores/smsGateway.api'
 import { generateInvoiceHTML, generateA4InvoiceHTML, openPrintWindowForFormat } from '../utils/print-utils'
@@ -386,6 +387,8 @@ export function InvoicePanel({
   const [updateInvoice] = useUpdateInvoiceMutation()
   const [updateInvoiceFlag] = useUpdateInvoiceFlagMutation()
   const { isElectron, online } = useSync()
+  // "Has this bill already been entered?" — checked just before a new sale is saved.
+  const { confirm: confirmNotDuplicate, element: duplicateGuardElement } = useDuplicateEntryGuard('sale')
   
   // Fetch active branch data for invoice printing
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
@@ -1613,6 +1616,19 @@ export function InvoicePanel({
       
       let result: Record<string, unknown>
 
+      // Same customer + amount on the same day → show those first (a walk-in sale only when
+      // it is dated another day — see entryGuard.service.js). New sales only, online only;
+      // a failed check never blocks the save. Going back leaves the form as it is.
+      if (!isEditing && online && invoice.type !== 'quotation') {
+        const save = await confirmNotDuplicate({
+          mode: 'sale',
+          customerId: invoice.customerId || undefined,
+          total: Number(invoice.total) || 0,
+          invoiceDate: invoice.invoiceDate || undefined,
+        })
+        if (!save) return
+      }
+
       const canQueueOffline = isElectron && !isEditing
 
       const saveOffline = async (): Promise<Record<string, unknown>> => {
@@ -1909,7 +1925,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate])
+  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate, confirmNotDuplicate])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
@@ -4441,6 +4457,7 @@ export function InvoicePanel({
           `hidden` attribute) and added a stray 16px gap below the last card even while this bar
           itself rendered nothing on desktop. */}
       {createPortal(mobileActionsBar, document.body)}
+      {duplicateGuardElement}
     </div>
   )
 }

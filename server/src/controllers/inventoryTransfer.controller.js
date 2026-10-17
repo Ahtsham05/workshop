@@ -34,7 +34,7 @@ const getTransferGroup = catchAsync(async (req, res) => {
 
 const getTransfers = catchAsync(async (req, res) => {
   const { organizationId, branchId } = getBranchContext(req);
-  const filter = pick(req.query, ['status', 'direction', 'fromBranchId', 'toBranchId', 'search']);
+  const filter = pick(req.query, ['status', 'direction', 'fromBranchId', 'toBranchId', 'search', 'dateFrom', 'dateTo']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await inventoryTransferService.queryTransfers({ organizationId, branchId, ...filter }, options);
   res.send(result);

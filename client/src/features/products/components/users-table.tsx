@@ -52,6 +52,8 @@ declare module '@tanstack/react-table' {
 
 // Persisted across sessions so a user's column setup ("I hid Description and moved
 // Stock next to Name") sticks around instead of resetting on every reload.
+const productRowId = (product: Product, index: number) => String(product._id || product.id || index)
+
 const COLUMN_VISIBILITY_STORAGE_KEY = 'products-table-column-visibility'
 const COLUMN_ORDER_STORAGE_KEY = 'products-table-column-order'
 const COLUMN_SIZING_STORAGE_KEY = 'products-table-column-sizing'
@@ -392,13 +394,14 @@ export function ProductTable({
     }
   }, [columnVisibility])
 
-  // Get selected products whenever rowSelection changes
+  // Get selected products whenever rowSelection changes. Selection is keyed by product id
+  // (getRowId below), not row position — by position, a tick on page 1 (or in one list /
+  // category) silently became a different product once the rows changed, which bulk
+  // delete/deactivate would then act on.
   React.useEffect(() => {
     if (onSelectedRowsChange) {
-      const selectedProducts = Object.keys(rowSelection)
-        .filter(key => rowSelection[key as keyof typeof rowSelection])
-        .map(index => data[parseInt(index)])
-        .filter(Boolean)
+      const selected = rowSelection as Record<string, boolean>
+      const selectedProducts = data.filter((product, index) => selected[productRowId(product, index)])
       onSelectedRowsChange(selectedProducts)
     }
   }, [rowSelection, data, onSelectedRowsChange])
@@ -417,6 +420,7 @@ export function ProductTable({
       rowSelection,
       columnFilters,
     },
+    getRowId: productRowId,
     enableRowSelection: true,
     enableColumnResizing: true,
     columnResizeMode: 'onChange',

@@ -7,6 +7,7 @@ const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
 const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
 
 const { DECREASE_ONLY_TYPES, INCREASE_ONLY_TYPES, TYPES } = StockAdjustment;
+const { WARRANTY_TYPES } = require('../models/stockAdjustment.model');
 
 // Only damage/theft get their own ledger type (they're the two reasons worth reporting
 // on separately); every other reason rolls up under the existing generic 'adjustment' type.
@@ -27,7 +28,15 @@ const IMEI_STATUS_BY_ADJUSTMENT_TYPE = {
   // A unit a stock count couldn't find on the shelf.
   count: 'lost',
   other: 'scrapped',
+  // Away on a warranty claim; the claim brings it back with a 'warranty_in'.
+  warranty_out: 'in_warranty',
+  // Handed to a customer as a warranty replacement (the claim sets the customer on it).
+  warranty_replacement: 'sold',
 };
+
+// The status a unit must be in to be adjusted, by type — only 'warranty_in' takes units
+// that aren't on the shelf (they're coming back from a claim).
+const SOURCE_STATUS_BY_TYPE = { warranty_in: 'in_warranty' };
 
 /** A fixed-direction reason overrides whatever direction was requested; a flexible type (correction/other) requires the caller to specify one. */
 const resolveDirection = (type, direction) => {
@@ -44,7 +53,7 @@ const resolveDirection = (type, direction) => {
  * product. Only used for decrease-direction adjustments — see IMEI_STATUS_BY_ADJUSTMENT_TYPE.
  * Mirrors inventoryTransfer.service.js#resolveSerializedSource.
  */
-const resolveSerializedTarget = async ({ organizationId, branchId, product, variantId, imeis }) => {
+const resolveSerializedTarget = async ({ organizationId, branchId, product, variantId, imeis, sourceStatus = 'in_stock' }) => {
   const numbers = [...new Set((imeis || []).map((n) => String(n).trim()).filter(Boolean))];
   if (numbers.length === 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Select at least one IMEI/serial number to adjust');
@@ -55,12 +64,15 @@ const resolveSerializedTarget = async ({ organizationId, branchId, product, vari
     branchId,
     productId: product._id,
     ...matchesEitherImei(numbers),
-    status: 'in_stock',
+    status: sourceStatus,
   });
   if (records.length !== numbers.length) {
     const found = collectImeiNumbers(records);
     const missing = numbers.filter((n) => !found.has(n));
-    throw new ApiError(httpStatus.BAD_REQUEST, `Not currently in stock: ${missing.join(', ')}`);
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `${sourceStatus === 'in_stock' ? 'Not currently in stock' : `Not ${sourceStatus.replace('_', ' ')}`}: ${missing.join(', ')}`
+    );
   }
 
   // Imei records aren't linked to a variant directly (see imei.model.js) — this is only
@@ -85,12 +97,12 @@ const resolveSerializedTarget = async ({ organizationId, branchId, product, vari
  * products) a named set of individual units — and how much is currently on hand. Mirrors
  * inventoryTransfer.service.js#resolveSource.
  */
-const resolveTarget = async ({ organizationId, branchId, productId, variantId, batchId, imeis }) => {
+const resolveTarget = async ({ organizationId, branchId, productId, variantId, batchId, imeis, sourceStatus }) => {
   const product = await Product.findOne({ _id: productId, organizationId, branchId });
   if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found in this branch');
 
   if (product.trackImei || product.trackSerial) {
-    return resolveSerializedTarget({ organizationId, branchId, product, variantId, imeis });
+    return resolveSerializedTarget({ organizationId, branchId, product, variantId, imeis, sourceStatus });
   }
 
   if (!variantId) {
@@ -221,16 +233,22 @@ const createAdjustment = async ({
   reason,
   notes,
   stockCountId,
+  warrantyClaimId,
   createdBy,
 }) => {
+  if (WARRANTY_TYPES.includes(type) && !warrantyClaimId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Warranty stock moves are made from a warranty claim');
+  }
   if (type === 'other' && !reason?.trim()) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'A reason is required for "Other" adjustments');
   }
 
   const resolvedDirection = resolveDirection(type, direction);
-  const target = await resolveTarget({ organizationId, branchId, productId, variantId, batchId, imeis });
+  const target = await resolveTarget({ organizationId, branchId, productId, variantId, batchId, imeis, sourceStatus: SOURCE_STATUS_BY_TYPE[type] });
 
-  if (target.kind === 'serialized' && resolvedDirection === 'increase') {
+  // Serialized units only come back in through a purchase — or from a warranty claim,
+  // whose units already exist (in_warranty) with their real cost/supplier history.
+  if (target.kind === 'serialized' && resolvedDirection === 'increase' && type !== 'warranty_in') {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
       "Increasing stock for IMEI/serial-tracked products isn't supported via adjustments — receive them through a purchase instead."
@@ -241,6 +259,7 @@ const createAdjustment = async ({
   // never a number typed separately — there's no such thing as a partial unit.
   const effectiveQuantity = target.kind === 'serialized' ? target.imeiRecords.length : quantity;
 
+  // A serialized increase brings back exactly the units named; `available` counts those.
   if (resolvedDirection === 'decrease' && target.available < effectiveQuantity) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock: only ${target.available} unit(s) available`);
   }
@@ -252,7 +271,7 @@ const createAdjustment = async ({
 
   if (target.kind === 'serialized') {
     await applySerializedStatusChange(target, {
-      status: IMEI_STATUS_BY_ADJUSTMENT_TYPE[type] || 'scrapped',
+      status: resolvedDirection === 'increase' ? 'in_stock' : IMEI_STATUS_BY_ADJUSTMENT_TYPE[type] || 'scrapped',
       note: reason?.trim() || `Stock adjustment: ${type}`,
       createdBy,
     });
@@ -276,6 +295,7 @@ const createAdjustment = async ({
     reason: reason?.trim() || undefined,
     notes: notes?.trim() || undefined,
     stockCountId,
+    warrantyClaimId,
     createdBy,
   });
 
@@ -313,9 +333,16 @@ const resolveSerializedReversalTarget = async ({ organizationId, productId, vari
 };
 
 /** Reverses a completed adjustment by creating an opposite-direction entry and applying it — the original is marked 'reversed' but never mutated or deleted. */
-const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy }) => {
+const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy, fromWarrantyClaim = false }) => {
   const original = await StockAdjustment.findOne({ _id: adjustmentId, organizationId });
   if (!original) throw new ApiError(httpStatus.NOT_FOUND, 'Adjustment not found');
+  // The claim owns these — undoing one here would leave the claim saying otherwise.
+  if (WARRANTY_TYPES.includes(original.type) && !fromWarrantyClaim) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'This stock move belongs to a warranty claim — cancel it from the claim instead');
+  }
+  if (original.direction === 'increase' && original.imeis && original.imeis.length > 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'A serialized unit brought back into stock cannot be reversed here');
+  }
   if (original.status === 'reversed') {
     throw new ApiError(httpStatus.BAD_REQUEST, 'This adjustment has already been reversed');
   }
@@ -374,6 +401,7 @@ const reverseAdjustment = async ({ adjustmentId, organizationId, reversedBy }) =
     reason: `Reversal of adjustment ${original._id}`,
     notes: original.reason ? `Original reason: ${original.reason}` : undefined,
     reversalOf: original._id,
+    warrantyClaimId: original.warrantyClaimId,
     createdBy: reversedBy,
   });
 

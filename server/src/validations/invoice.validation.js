@@ -177,6 +177,25 @@ const exportInvoices = { query: invoiceListQuery };
 
 const getInvoiceHistory = { query: invoiceListQuery };
 
+// Previous/next full-record stepping on New Invoice — the list filters plus a position.
+const getInvoiceNavigation = {
+  query: invoiceListQuery.keys({
+  index: Joi.number().integer().min(0),
+  order: Joi.string().valid('entered', 'date'),
+  around: Joi.string().custom(objectId),
+  }),
+};
+
+// Checked just before a sale is saved — see entryGuard.service.js.
+const getPossibleDuplicateInvoices = {
+  query: Joi.object().keys({
+    customerId: Joi.string().allow('').max(100),
+    total: Joi.number().min(0).required(),
+    invoiceDate: Joi.string().allow('').max(40),
+    excludeId: Joi.string().custom(objectId),
+  }),
+};
+
 const updateInvoice = {
   params: Joi.object({
     invoiceId: Joi.string().custom(objectId)
@@ -344,6 +363,9 @@ const convertQuotation = {
 };
 
 module.exports = {
+  getInvoiceNavigation,
+  getPossibleDuplicateInvoices,
+
   createInvoice,
   getInvoices,
   getInvoicesList,

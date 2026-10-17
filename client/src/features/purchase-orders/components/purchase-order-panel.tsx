@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDoNotOrderWarning } from '@/features/products/lists/use-do-not-order-warning'
 import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { createPortal } from 'react-dom'
 import { useSelector } from 'react-redux'
@@ -459,6 +460,7 @@ export default function PurchaseOrderPanel({
     addNewRowAndOpenProduct()
   }, [draft.items, addNewRowAndOpenProduct])
 
+  const warnIfDoNotOrder = useDoNotOrderWarning()
   const handleProductSelect = useCallback(
     (itemIndex: number, product: Product, variantId?: string, meta?: { trackBatch?: boolean; trackExpiry?: boolean }) => {
       setDraft((prev) => {
@@ -479,9 +481,10 @@ export default function PurchaseOrderPanel({
       setProductSelectOpen('')
       setProductSearchQuery('')
       const productId = product.id || (product as { _id?: string })._id
+      warnIfDoNotOrder(productId, product.name)
       setTimeout(() => focusField(qtyInputRefs.current[rowKey(String(productId), variantId)]), 80)
     },
-    [],
+    [warnIfDoNotOrder],
   )
 
   const handleCatalogItemSelect = useCallback(

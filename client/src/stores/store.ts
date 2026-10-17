@@ -70,6 +70,9 @@ import { inventoryTransferApi } from './inventoryTransfer.api';
 import { stockAdjustmentApi } from './stockAdjustment.api';
 import { manufacturingApi } from './manufacturing.api';
 import { stockCountApi } from './stockCount.api';
+import { productListApi } from './productList.api';
+import { inventoryCleanupApi } from './inventoryCleanup.api';
+import { warrantyClaimApi } from './warrantyClaim.api';
 import { auditLogApi } from './auditLog.api';
 import { aiAssistantApi } from './aiAssistant.api';
 import { recurringExpenseApi } from './recurringExpense.api';
@@ -159,6 +162,9 @@ export const store = configureStore({
     [stockAdjustmentApi.reducerPath]: stockAdjustmentApi.reducer,
     [manufacturingApi.reducerPath]: manufacturingApi.reducer,
     [stockCountApi.reducerPath]: stockCountApi.reducer,
+    [productListApi.reducerPath]: productListApi.reducer,
+    [inventoryCleanupApi.reducerPath]: inventoryCleanupApi.reducer,
+    [warrantyClaimApi.reducerPath]: warrantyClaimApi.reducer,
     [auditLogApi.reducerPath]: auditLogApi.reducer,
     [aiAssistantApi.reducerPath]: aiAssistantApi.reducer,
     [recurringExpenseApi.reducerPath]: recurringExpenseApi.reducer,
@@ -241,6 +247,9 @@ export const store = configureStore({
       stockAdjustmentApi.middleware,
       manufacturingApi.middleware,
       stockCountApi.middleware,
+      productListApi.middleware,
+      inventoryCleanupApi.middleware,
+      warrantyClaimApi.middleware,
       auditLogApi.middleware,
       aiAssistantApi.middleware,
       recurringExpenseApi.middleware,

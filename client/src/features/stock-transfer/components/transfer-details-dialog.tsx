@@ -17,7 +17,9 @@ import { useLanguage } from '@/context/language-context'
 import type { RootState } from '@/stores/store'
 import { TransferStatusBadge } from './transfer-status-badge'
 import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow } from '../utils/print-utils'
-import { formatAppDateTime } from '@/lib/date-format'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
+import { transferDateOf } from '@/stores/inventoryTransfer.api'
+import { isBackDated } from '../lib/transfer-date'
 
 interface TransferDetailsDialogProps {
   groupId: string | null
@@ -122,7 +124,11 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
               <DetailField label={t('To')} value={branchLabel(first!.toBranchId)} />
               <DetailField label={t('Products')} value={items.length} />
               <DetailField label={t('Total Qty')} value={totalQuantity} />
-              <DetailField label={t('Transfer Date')} value={formatDate(first!.suggestedAt)} />
+              <DetailField
+                label={t('Transfer Date')}
+                value={isBackDated(first!) ? formatAppDate(transferDateOf(first!)) : formatDate(transferDateOf(first!))}
+              />
+              {isBackDated(first!) && <DetailField label={t('Entered on')} value={formatDate(first!.suggestedAt)} />}
               <DetailField label={t('Decided By')} value={personLabel(first!.decidedBy)} />
             </div>
 

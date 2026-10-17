@@ -8,6 +8,7 @@ import { ImportProductsDialog } from './import-products-dialog'
 import { useDispatch } from 'react-redux'
 import { AppDispatch } from '@/stores/store'
 import { bulkAddProducts } from '@/stores/product.slice'
+import { productApi } from '@/stores/product.api'
 
 export default function UsersDialogs({setFetch}:any) {
   const { open, setOpen, currentRow, setCurrentRow } = useUsers()
@@ -15,18 +16,21 @@ export default function UsersDialogs({setFetch}:any) {
 
   const handleImport = async (
     products: any[],
-    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' }
+    options?: { duplicateStrategy?: 'skip' | 'update' | 'error' },
+    // Recorded on each new product (Products list "Source" badge/filter).
+    source: 'excel_import' | 'ai_scan' = 'excel_import'
   ) => {
     try {
       // duplicateStrategy tells the server what to do with a row whose barcode/SKU is
       // already in the catalogue — skip it, update it, or report it. The AI scan dialog
       // doesn't ask, and gets the server default.
       const result = await dispatch(
-        bulkAddProducts({ products, duplicateStrategy: options?.duplicateStrategy })
+        bulkAddProducts({ products, duplicateStrategy: options?.duplicateStrategy, source })
       )
 
       if (result.meta.requestStatus === 'fulfilled') {
         setFetch((prev: boolean) => !prev)
+        dispatch(productApi.util.invalidateTags([{ type: 'Product', id: 'NAME_INDEX' }]))
         return result.payload
       } else {
         const payload = result.payload as { response?: { data?: { message?: string } }; message?: string } | undefined
@@ -58,7 +62,7 @@ export default function UsersDialogs({setFetch}:any) {
         key='product-ai-scan'
         open={open === 'ai-scan'}
         onOpenChange={() => setOpen('ai-scan')}
-        onImport={handleImport}
+        onImport={(products) => handleImport(products, undefined, 'ai_scan')}
       />
 
       <ImportProductsDialog

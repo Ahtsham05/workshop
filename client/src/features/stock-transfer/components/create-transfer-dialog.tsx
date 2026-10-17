@@ -28,6 +28,8 @@ import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select'
 import { SerialPickDialog } from '@/components/serial-pick-dialog'
 import { formatAppDate } from '@/lib/date-format'
+import { DatePicker } from '@/components/ui/date-picker'
+import { getBusinessToday } from '@/lib/business-timezone'
 
 export interface TransferPrefill {
   fromProductId: string
@@ -67,6 +69,7 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
   const [toBranchId, setToBranchId] = useState('')
   const [quantity, setQuantity] = useState('')
   const [reason, setReason] = useState('')
+  const [transferDate, setTransferDate] = useState(() => getBusinessToday())
 
   // IMEI/serial-tracked products move per-unit — quantity just sets the target for the
   // serial picker dialog below; `imeis` (not `quantity`) is what's actually sent. See
@@ -115,6 +118,7 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
     setToBranchId(prefill?.toBranchId || onlyOtherBranchId)
     setQuantity(prefill?.quantity ? String(prefill.quantity) : '')
     setReason(prefill?.reason || '')
+    setTransferDate(getBusinessToday())
     // No product given: straight into the product search, so typing finds it.
     setPickerOpen(!prefill)
     setSearchQuery('')
@@ -173,7 +177,7 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
   const qtyNum = Number(quantity)
   const qtyValid = Number.isFinite(qtyNum) && qtyNum > 0 && qtyNum <= available
 
-  const canSubmit = Boolean(selectedItem && toBranchId && qtyValid && (!needsSerials || selectedImeis.length > 0)) && !isSubmitting
+  const canSubmit = Boolean(selectedItem && toBranchId && qtyValid && transferDate && (!needsSerials || selectedImeis.length > 0)) && !isSubmitting
 
   const handleSubmit = async () => {
     if (!canSubmit || !selectedItem) return
@@ -185,6 +189,7 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
         toBranchId,
         ...(needsSerials ? { imeis: selectedImeis } : { quantity: qtyNum }),
         reason: reason.trim() || undefined,
+        transferDate,
       }).unwrap()
       toast.success(t('Transfer created — stock has left the source branch'), {
         description: `${selectedItem.name} → ${branches.find((b) => b.id === toBranchId)?.name ?? ''}`,
@@ -448,6 +453,17 @@ export function CreateTransferDialog({ open, onOpenChange, prefill, onTransferAn
               </button>
             </div>
           )}
+
+          <div className='space-y-1.5'>
+            <Label htmlFor='transfer-date'>{t('Transfer date')}</Label>
+            <DatePicker
+              id='transfer-date'
+              value={transferDate}
+              onChange={setTransferDate}
+              max={getBusinessToday()}
+              className='sm:w-48'
+            />
+          </div>
 
           <div className='space-y-1.5'>
             <Label>{t('Reason')} <span className='text-muted-foreground'>({t('optional')})</span></Label>

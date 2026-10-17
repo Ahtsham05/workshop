@@ -86,6 +86,8 @@ export const productSchema = z.object({
   // Defaults true for a manual create; bulk imports (Excel/AI scan/import-from-other-
   // branches) create products deactivated — see server product.service.js#bulkAddProducts.
   isActive: z.boolean().optional(),
+  // How it was created (manual / excel_import / ai_scan / …) — server config/productSources.js.
+  source: z.string().nullable().optional(),
   flag: z.object({
     color: z.string(),
     reason: z.string().optional(),

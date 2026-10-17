@@ -22,6 +22,13 @@ const PERMISSION_GROUPS = [
     permissions: ['viewImeiTracking', 'manageImeiTracking'],
   },
   {
+    // Warranty claims (routes/v1/warrantyClaim.route.js). Roles with viewProducts /
+    // editProducts (or the IMEI ones) already get in; these grant it on its own.
+    id: 'warranty_claims',
+    label: 'Warranty Claims',
+    permissions: ['viewWarrantyClaims', 'manageWarrantyClaims'],
+  },
+  {
     id: 'price_checker',
     label: 'Price Checker',
     permissions: ['viewPriceChecker', 'managePriceCheckerSources'],
@@ -383,6 +390,7 @@ const PERMISSION_TAB_GROUPS = {
     'products',
     'stock_counts',
     'imei_tracking',
+    'warranty_claims',
     'price_updates',
     'invoices',
     'purchases',

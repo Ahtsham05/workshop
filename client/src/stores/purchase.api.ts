@@ -5,7 +5,7 @@ import { imeiApi } from './imei.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
 import { invalidateWalletCaches } from './wallet-cache-invalidation'
-import type { TransactionHistoryResult } from './transactionHistory.types'
+import type { PossibleDuplicate, RecordNavigationParams, RecordNavigationResult, TransactionHistoryResult } from './transactionHistory.types'
 
 /** Purchase mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
  *  batchApi/the wallet-cache slices, so receiving/editing/deleting a purchase doesn't
@@ -130,6 +130,20 @@ export const purchaseApi = createApi({
     getPurchaseHistory: builder.query<TransactionHistoryResult, Record<string, unknown>>({
       query: (params = {}) => ({ url: '/history', params }),
       providesTags: ['Purchase'],
+    }),
+
+    // Previous/next full-record stepping on New Purchase (see record-navigator.tsx).
+    getPurchaseNavigation: builder.query<RecordNavigationResult, RecordNavigationParams>({
+      query: (params) => ({ url: '/navigate', params }),
+      providesTags: ['Purchase'],
+    }),
+    // Run just before saving — same bill number / same amount from this supplier.
+    getPossibleDuplicatePurchases: builder.query<
+      { matches: PossibleDuplicate[] },
+      { supplier: string; vendorBillNumber?: string; totalAmount?: number; purchaseDate?: string; excludeId?: string }
+    >({
+      query: (params) => ({ url: '/possible-duplicates', params }),
+      keepUnusedDataFor: 0,
     }),
 
     // Comment thread on one purchase — see purchase.model.js's embedded `comments`.
@@ -267,6 +281,9 @@ export interface PriceComparisonEntry {
 }
 
 export const {
+  useGetPurchaseNavigationQuery,
+  useLazyGetPossibleDuplicatePurchasesQuery,
+
   useCreatePurchaseMutation,
   useGetPurchasesQuery,
   useGetPurchasesSummaryQuery,

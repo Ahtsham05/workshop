@@ -23,6 +23,7 @@ export type PermissionKey =
   | 'viewBillPayments' | 'manageBillPayments'
   | 'viewInstallments' | 'manageInstallments'
   | 'viewImeiTracking' | 'manageImeiTracking'
+  | 'viewWarrantyClaims' | 'manageWarrantyClaims'
   | 'viewPriceChecker' | 'managePriceCheckerSources'
   | 'viewPriceUpdates' | 'managePriceUpdates'
   | 'viewUsedPhones' | 'buyUsedPhones' | 'editUsedPhones' | 'sellUsedPhones' | 'deleteUsedPhones'
@@ -86,6 +87,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'products', label: 'Products', permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'] },
   { id: 'stock_counts', label: 'Stock Counts', permissions: ['countStock', 'approveStockCounts'] },
   { id: 'imei_tracking', label: 'IMEI / Serial Tracking', permissions: ['viewImeiTracking', 'manageImeiTracking'] },
+  { id: 'warranty_claims', label: 'Warranty Claims', permissions: ['viewWarrantyClaims', 'manageWarrantyClaims'] },
   { id: 'price_checker', label: 'Price Checker', permissions: ['viewPriceChecker', 'managePriceCheckerSources'] },
   { id: 'price_updates', label: 'Price Updates', permissions: ['viewPriceUpdates', 'managePriceUpdates'] },
   { id: 'invoices', label: 'Invoices', permissions: ['viewInvoices', 'createInvoices', 'editInvoices', 'deleteInvoices', 'printInvoices'] },
@@ -187,7 +189,7 @@ export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.pe
 
 export const PERMISSION_TAB_GROUPS = {
   business: [
-    'products', 'stock_counts', 'imei_tracking', 'price_checker', 'price_updates', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
+    'products', 'stock_counts', 'imei_tracking', 'warranty_claims', 'price_checker', 'price_updates', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
     'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system', 'leads',
     'communication_log', 'reminders', 'whatsapp', 'sms', 'website_connections', 'ai_assistant', 'insights', 'purchase_suggestions', 'barcode',
     'manufacturing',

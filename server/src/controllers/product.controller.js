@@ -3,6 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const { productService } = require('../services');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
+const productListService = require('../services/productList.service');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upload');
 const { applyBranchFilter, getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 const { searchPexelsAndUpload } = require('../services/imageSearch.service');
@@ -65,7 +66,21 @@ const createProduct = catchAsync(async (req, res) => {
   
   try {
     await resolveWriteBranchId(req);
-    const product = await productService.createProduct({ ...productData, ...getBranchContext(req), createdBy: req.user.id, businessType: req.user.businessType });
+    // Same name (ignoring case/spaces/punctuation) as a product already in this branch —
+    // refused unless the person saw the warning and chose "Create anyway".
+    const { allowDuplicateName, ...fields } = productData;
+    productData = fields;
+    if (!(allowDuplicateName === true || allowDuplicateName === 'true')) {
+      const { organizationId, branchId } = getBranchContext(req);
+      const existing = await productService.findSameNameProduct({ organizationId, branchId, name: productData.name });
+      if (existing) {
+        const error = new ApiError(httpStatus.CONFLICT, `"${existing.name}" already exists in this branch`);
+        error.errorCode = 'DUPLICATE_PRODUCT_NAME';
+        error.details = { product: { ...existing, id: String(existing._id), _id: undefined } };
+        throw error;
+      }
+    }
+    const product = await productService.createProduct({ ...productData, source: 'manual', ...getBranchContext(req), createdBy: req.user.id, businessType: req.user.businessType });
     await auditLogService.recordAuditLog({
       req,
       action: 'create',
@@ -172,10 +187,29 @@ const applyAddedTodayFilter = (filter, addedTodayParam) => {
   if (addedTodayParam === true || addedTodayParam === 'true') Object.assign(filter, addedTodayFilter());
 };
 
+/** `?source=excel_import,ai_scan` → Product.source filter; 'unknown' matches products created before it was recorded. */
+const applySourceFilter = (filter, sourceParam) => {
+  if (!sourceParam) return;
+  const values = String(sourceParam).split(',').map((v) => v.trim()).filter(Boolean);
+  if (!values.length) return;
+  const known = values.filter((v) => v !== 'unknown');
+  filter.source = values.includes('unknown') ? { $in: [...known, null] } : { $in: known };
+};
+
+/** `?listId=` → only the products on that product list (manual items, or a smart list's live result). */
+const applyProductListFilter = async (filter, req) => {
+  if (!req.query.listId) return;
+  const { organizationId, branchId } = getBranchContext(req);
+  const ids = await productListService.resolveListProductIds({ organizationId, branchId }, req.query.listId);
+  filter._id = { $in: ids };
+};
+
 const getProducts = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'description', 'isActive', 'brandId', 'trackImei', 'trackSerial']);
   applyBranchFilter(filter, req);
   applyAddedTodayFilter(filter, req.query.addedToday);
+  applySourceFilter(filter, req.query.source);
+  await applyProductListFilter(filter, req);
   applyCategoryFilter(filter, req.query.category);
   applySubCategoryFilter(filter, req.query.subCategory);
   applyStockQuantityFilter(filter, req.query.stockQuantity, req.query.stockQuantityOp);
@@ -185,6 +219,13 @@ const getProducts = catchAsync(async (req, res) => {
   const options = pick(req.query, ['sortBy', 'limit', 'page', 'search', 'fieldName']);
   const result = await productService.queryProducts(filter, options);
   res.send(result);
+});
+
+// Add Product's live "similar products" panel — see productService.getProductNameIndex.
+const getProductNameIndex = catchAsync(async (req, res) => {
+  await resolveWriteBranchId(req);
+  const { organizationId, branchId } = getBranchContext(req);
+  res.send(await productService.getProductNameIndex({ organizationId, branchId }));
 });
 
 const getProduct = catchAsync(async (req, res) => {
@@ -401,6 +442,7 @@ const getProductStats = catchAsync(async (req, res) => {
   // the whole catalog.
   applyCategoryFilter(filter, req.query.category);
   applyAddedTodayFilter(filter, req.query.addedToday);
+  await applyProductListFilter(filter, req);
   const [stats, addedTodayCount] = await Promise.all([
     productService.getProductStats(filter),
     // Always this branch's whole "added today" count, whatever the filters above are —
@@ -488,7 +530,7 @@ const scanProductImage = catchAsync(async (req, res) => {
 });
 
 const bulkAddProducts = catchAsync(async (req, res) => {
-  const { products, duplicateStrategy } = req.body;
+  const { products, duplicateStrategy, source } = req.body;
 
   if (!products || !Array.isArray(products) || products.length === 0) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Products array is required');
@@ -511,7 +553,7 @@ const bulkAddProducts = catchAsync(async (req, res) => {
       ...getBranchContext(req),
       businessType: req.user.businessType,
     },
-    { duplicateStrategy },
+    { duplicateStrategy, source },
   );
 
   const failedCount = result.errors?.length || 0;
@@ -538,6 +580,7 @@ const bulkAddProducts = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getProductNameIndex,
   createProduct,
   getProducts,
   getProduct,

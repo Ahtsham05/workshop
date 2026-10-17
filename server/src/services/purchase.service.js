@@ -2263,6 +2263,8 @@ const deletePurchaseComment = async (purchaseId, commentId) => {
 };
 
 module.exports = {
+  buildPurchaseListMatch,
+
   createPurchase,
   runPurchasePostCommit,
   generateNextPurchaseInvoiceNumber,

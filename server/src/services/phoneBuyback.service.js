@@ -87,6 +87,7 @@ const getOrCreateUsedPhonesProduct = async ({ organizationId, branchId, createdB
     organizationId,
     branchId,
     createdBy,
+    source: 'phone_buyback',
     name: USED_PHONES_PRODUCT_NAME,
     description: 'Catalog entry for individually-tracked used/old mobile phones bought from customers.',
     price: 0,

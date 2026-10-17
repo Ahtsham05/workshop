@@ -1,6 +1,7 @@
 import { escapeHtml, invoiceNoteToSafeHtml } from '@/lib/escape-html'
-import type { InventoryTransfer, TransferStatus } from '@/stores/inventoryTransfer.api'
+import { transferDateOf, type InventoryTransfer, type TransferStatus } from '@/stores/inventoryTransfer.api'
 import { formatAppDate } from '@/lib/date-format'
+import { isBackDated } from '../lib/transfer-date'
 
 export type TransferPrintLanguage = 'en' | 'ur'
 
@@ -27,6 +28,8 @@ export interface PrintTransferData {
   reason?: string
   notes?: string
   transferDate?: string
+  /** Set when the transfer was back-dated: when it was actually entered. */
+  enteredAt?: string
   completedAt?: string
   companyName?: string
   companyAddress?: string
@@ -44,6 +47,7 @@ const labels = {
     from_branch: 'From',
     to_branch: 'To',
     completed_on: 'Completed On',
+    entered_on: 'Entered On',
     items_header: 'Product Details',
     item: 'Item',
     imei_serial: 'IMEI/Serial',
@@ -81,6 +85,7 @@ const labels = {
     from_branch: 'بھیجنے والی برانچ',
     to_branch: 'وصول کرنے والی برانچ',
     completed_on: 'تکمیل کی تاریخ',
+    entered_on: 'اندراج کی تاریخ',
     items_header: 'پروڈکٹ کی تفصیلات',
     item: 'آئٹم',
     imei_serial: 'آئی ایم ای آئی / سیریل',
@@ -160,7 +165,8 @@ export function buildTransferPrintData(
     status,
     reason: first.reason,
     notes: first.notes,
-    transferDate: first.suggestedAt,
+    transferDate: transferDateOf(first),
+    enteredAt: isBackDated(first) ? first.suggestedAt : undefined,
     completedAt: completedDates.length === list.length && completedDates.length > 0 ? completedDates.sort().slice(-1)[0] : undefined,
     companyName: extra.companyName,
     companyAddress: extra.companyAddress,
@@ -301,7 +307,8 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
 
   <div class="transfer-info">
     ${infoRow(texts.transfer_no, `<span class="highlight">${transferRef}</span>`)}
-    ${infoRow(texts.date, fmtDate(data.transferDate))}
+    ${infoRow(texts.date, data.enteredAt ? (data.transferDate ? formatAppDate(new Date(data.transferDate)) : '—') : fmtDate(data.transferDate))}
+    ${data.enteredAt ? infoRow(texts.entered_on, fmtDate(data.enteredAt)) : ''}
     ${infoRow(texts.status, statusText)}
     ${infoRow(texts.from_branch, fromBranch)}
     ${infoRow(texts.to_branch, toBranch)}

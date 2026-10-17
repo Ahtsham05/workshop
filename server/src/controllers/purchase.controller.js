@@ -4,6 +4,8 @@ const ApiError = require('../utils/ApiError');
 const { purchaseService, supplierService, productService, auditLogService, documentNumberingService } = require('../services');
 const purchaseVisionService = require('../services/purchaseVision.service');
 const pick = require('../utils/pick');
+const entryGuardService = require('../services/entryGuard.service');
+const { Purchase: PurchaseModel } = require('../models');
 const { applyBranchFilter, getBranchContext } = require('../utils/branchFilter');
 const { uploadAttachmentToCloudinary } = require('../middlewares/attachmentUpload');
 const { deleteFromCloudinary } = require('../middlewares/upload');
@@ -110,6 +112,31 @@ const exportPurchases = catchAsync(async (req, res) => {
   applyBranchFilter(filter, req);
   const options = pick(req.query, PURCHASE_LIST_OPTIONS);
   res.send(await purchaseService.getPurchaseListForExport(filter, options));
+});
+
+/** One saved purchase at a position (newest first) — New Purchase's previous/next stepping. */
+const getPurchaseNavigation = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, PURCHASE_LIST_OPTIONS);
+  const match = await purchaseService.buildPurchaseListMatch(filter, options);
+  res.send(
+    await entryGuardService.navigateRecords({
+      Model: PurchaseModel,
+      match,
+      dateField: 'purchaseDate',
+      order: req.query.order,
+      index: req.query.index,
+      around: req.query.around,
+    })
+  );
+});
+
+/** Saved purchases the one about to be saved may repeat (same bill no., or same amount). */
+const getPossibleDuplicatePurchases = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  res.send({ matches: await entryGuardService.findPossibleDuplicatePurchases(filter, req.query) });
 });
 
 /** Invoice-wise + item-wise purchase history for the New Purchase side panel. */
@@ -282,6 +309,9 @@ const getBulkPriceComparison = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getPurchaseNavigation,
+  getPossibleDuplicatePurchases,
+
   createPurchase,
   getPurchases,
   getPurchasesSummary,

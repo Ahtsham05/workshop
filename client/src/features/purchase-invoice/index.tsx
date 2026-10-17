@@ -15,6 +15,8 @@ import { fetchSuppliers } from '@/stores/supplier.slice';
 import { PurchasePanel, PurchaseList } from './components';
 import { ProductCatalog } from './components/product-catalog';
 import { TransactionHistoryButton } from '@/components/transaction-history-sheet';
+import { RecordNavigatorButton } from '@/components/record-navigator';
+import { useDoNotOrderWarning } from '@/features/products/lists/use-do-not-order-warning';
 import { toast } from 'sonner';
 import { useLanguage } from '@/context/language-context';
 import { usePermissions } from '@/context/permission-context';
@@ -607,7 +609,10 @@ const PurchaseInvoicePage = () => {
   }, [purchasableCatalog]);
 
   // Add product to purchase
+  const warnIfDoNotOrder = useDoNotOrderWarning();
   const addToPurchase = useCallback((product: Product, quantity: number = 1, variantId?: string) => {
+    // Catalog tiles, barcode search and list prefill all add through here.
+    warnIfDoNotOrder(product.id || (product as any)._id, product.name);
     setPurchase((prev) => {
       const productIdToMatch = product.id || (product as any)._id;
       // Match by (productId, variantId) — two different variants of the same product
@@ -658,7 +663,7 @@ const PurchaseInvoicePage = () => {
 
       return { ...prev, items: [...prev.items, newItem] };
     });
-  }, []);
+  }, [warnIfDoNotOrder]);
 
   // Apply reorder-suggestion prefill once: when products have loaded, drop the default
   // empty manual placeholder row and add each prefilled product with its suggested quantity.
@@ -1118,6 +1123,12 @@ const PurchaseInvoicePage = () => {
                 Purchase history
               </Button>
               <TransactionHistoryButton
+                mode="purchase"
+                currentParty={
+                  purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null
+                }
+              />
+              <RecordNavigatorButton
                 mode="purchase"
                 currentParty={
                   purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null

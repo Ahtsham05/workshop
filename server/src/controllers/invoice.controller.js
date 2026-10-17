@@ -1,5 +1,7 @@
 const httpStatus = require('http-status');
 const pick = require('../utils/pick');
+const entryGuardService = require('../services/entryGuard.service');
+const { Invoice: InvoiceModel } = require('../models');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { invoiceService, auditLogService } = require('../services');
@@ -153,6 +155,31 @@ const exportInvoices = catchAsync(async (req, res) => {
   applyBranchFilter(filter, req);
   const options = pick(req.query, INVOICE_LIST_OPTIONS);
   res.send(await invoiceService.getInvoiceListForExport(filter, options));
+});
+
+/** One saved invoice at a position (newest first) — New Invoice's previous/next stepping. */
+const getInvoiceNavigation = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  const options = pick(req.query, INVOICE_LIST_OPTIONS);
+  const match = await invoiceService.buildInvoiceListMatch(filter, options);
+  res.send(
+    await entryGuardService.navigateRecords({
+      Model: InvoiceModel,
+      match,
+      dateField: 'invoiceDate',
+      order: req.query.order,
+      index: req.query.index,
+      around: req.query.around,
+    })
+  );
+});
+
+/** Saved sales the one about to be saved may repeat (same customer, amount and day). */
+const getPossibleDuplicateInvoices = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  res.send({ matches: await entryGuardService.findPossibleDuplicateInvoices(filter, req.query) });
 });
 
 /** Invoice-wise + item-wise sale history for the New Invoice side panel. */
@@ -473,6 +500,9 @@ const getPendingInvoiceSummaryByCustomer = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getInvoiceNavigation,
+  getPossibleDuplicateInvoices,
+
   createInvoice,
   getInvoices,
   getInvoicesList,

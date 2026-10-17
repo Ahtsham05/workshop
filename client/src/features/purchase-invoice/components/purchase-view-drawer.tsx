@@ -61,6 +61,8 @@ interface PurchaseViewDrawerProps {
   /** Where focus goes when the drawer closes — e.g. back to the list that opened it, since a
    *  drawer opened without a Trigger otherwise drops focus on <body>. */
   onCloseAutoFocus?: (event: Event) => void
+  /** Optional bar above the header — the previous/next stepper (see record-navigator.tsx). */
+  navigation?: React.ReactNode
 }
 
 /** Label + value, the drawer's smallest building block. */
@@ -96,6 +98,7 @@ export function PurchaseViewDrawer({
   onPrint,
   onRecordPayment,
   onCloseAutoFocus,
+  navigation,
 }: PurchaseViewDrawerProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
@@ -174,6 +177,7 @@ export function PurchaseViewDrawer({
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side='right' className='w-full sm:max-w-3xl' onCloseAutoFocus={onCloseAutoFocus}>
+          {navigation}
           <SheetHeader>
             <SheetTitle>{t('Purchase Details')}</SheetTitle>
             <SheetDescription>{t('Loading...')}</SheetDescription>
@@ -189,6 +193,7 @@ export function PurchaseViewDrawer({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side='right' className='flex w-full flex-col gap-0 p-0 sm:max-w-3xl lg:max-w-4xl' onCloseAutoFocus={onCloseAutoFocus}>
+        {navigation}
         {/* pr-12 keeps the action buttons clear of SheetContent's own close button, which is
             absolutely positioned at top-4 right-4 and would otherwise sit on top of them. */}
         <SheetHeader className='space-y-3 border-b px-6 py-4 pr-12'>

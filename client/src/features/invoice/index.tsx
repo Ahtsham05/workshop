@@ -52,6 +52,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { usePreviewTaxMutation, type TaxLine } from '@/stores/taxCalculator.api'
 import { formatAppDateTime } from '@/lib/date-format'
 import { TransactionHistoryButton } from '@/components/transaction-history-sheet'
+import { RecordNavigatorButton } from '@/components/record-navigator'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
@@ -1810,6 +1811,20 @@ export default function InvoicePage() {
                 {t('invoice_history')}
               </Button>
               <TransactionHistoryButton
+                mode='sale'
+                currentParty={
+                  invoice.customerId && invoice.customerId !== 'walk-in'
+                    ? {
+                        id: invoice.customerId,
+                        name:
+                          invoice.customerName ||
+                          customers.find((c) => c._id === invoice.customerId)?.name ||
+                          t('customer'),
+                      }
+                    : null
+                }
+              />
+              <RecordNavigatorButton
                 mode='sale'
                 currentParty={
                   invoice.customerId && invoice.customerId !== 'walk-in'

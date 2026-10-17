@@ -4,6 +4,7 @@ const syncVersionPlugin = require('./plugins/syncVersion.plugin');
 const { DEFAULT_UNIT, UNITS } = require('../config/units');
 const { BUSINESS_TYPES } = require('../config/businessTypes');
 const { PRODUCT_TYPES, PROCUREMENT_TYPES } = require('../config/manufacturing');
+const { PRODUCT_SOURCES } = require('../config/productSources');
 
 const ProductSchema = new mongoose.Schema({
     organizationId: {
@@ -171,6 +172,9 @@ const ProductSchema = new mongoose.Schema({
     // live; see product.service.js#bulkAddProducts and
     // masterProduct.service.js#importMasterProducts.
     isActive: { type: Boolean, default: true, index: true },
+    // How this product was created (manual / excel_import / ai_scan / branch_import / …,
+    // see config/productSources.js). null = created before this was recorded.
+    source: { type: String, enum: [...PRODUCT_SOURCES, null], default: null },
     // Set when a staff member marks this product as having a data discrepancy that needs
     // review (wrong price, mismatched stock, etc). Absence (null) = not flagged. Set/cleared
     // only via the dedicated PATCH .../flag endpoint — see product.service.js#setProductFlag.

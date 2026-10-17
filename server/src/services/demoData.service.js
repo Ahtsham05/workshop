@@ -181,6 +181,7 @@ const seedPurchases = async ({ organizationId, branchId, userId }, suppliers, pr
         product: product._id,
         quantity,
         priceAtPurchase,
+        source: 'demo',
         total: quantity * priceAtPurchase,
       };
     });

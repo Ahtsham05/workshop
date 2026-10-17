@@ -5,7 +5,7 @@ import { imeiApi } from './imei.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 import { batchApi } from './batch.api'
 import { invalidateWalletCaches } from './wallet-cache-invalidation'
-import type { TransactionHistoryResult } from './transactionHistory.types'
+import type { PossibleDuplicate, RecordNavigationParams, RecordNavigationResult, TransactionHistoryResult } from './transactionHistory.types'
 
 /** Invoice mutations live in separate RTK Query slices from imeiApi/purchaseCatalogApi/
  *  batchApi/the wallet-cache slices, so a sale's effect on stock/IMEI status, or on the
@@ -174,6 +174,20 @@ export const invoiceApi = createApi({
     getInvoiceHistory: builder.query<TransactionHistoryResult, Record<string, unknown>>({
       query: (params = {}) => ({ url: '/history', params }),
       providesTags: ['Invoice'],
+    }),
+
+    // Previous/next full-record stepping on New Invoice (see record-navigator.tsx).
+    getInvoiceNavigation: builder.query<RecordNavigationResult, RecordNavigationParams>({
+      query: (params) => ({ url: '/navigate', params }),
+      providesTags: ['Invoice'],
+    }),
+    // Run just before saving — same customer, amount and day.
+    getPossibleDuplicateInvoices: builder.query<
+      { matches: PossibleDuplicate[] },
+      { customerId?: string; total: number; invoiceDate?: string; excludeId?: string }
+    >({
+      query: (params) => ({ url: '/possible-duplicates', params }),
+      keepUnusedDataFor: 0,
     }),
 
     getInvoiceById: builder.query({
@@ -374,6 +388,9 @@ export interface InvoiceListResult {
 }
 
 export const {
+  useGetInvoiceNavigationQuery,
+  useLazyGetPossibleDuplicateInvoicesQuery,
+
   useCreateInvoiceMutation,
   useGetInvoicesQuery,
   useLazyGetInvoicesQuery,

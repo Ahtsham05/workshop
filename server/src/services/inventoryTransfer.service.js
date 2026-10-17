@@ -6,6 +6,42 @@ const inventorySyncService = require('./inventorySync.service');
 const { matchesEitherImei, collectImeiNumbers } = require('./imei.service');
 const { findBestMatch } = require('../utils/productMatchKey');
 const { tokenSearchClauses, addTokenSearch } = require('../utils/searchQuery');
+const {
+  atBusinessTimeOfDay,
+  getBusinessDayRange,
+  parseBusinessDateBoundary,
+} = require('../utils/businessTimezone');
+
+/** Effective transfer date in aggregations — rows from before `transferDate` existed use their creation time. */
+const TRANSFER_DATE_EXPR = { $ifNull: ['$transferDate', '$suggestedAt'] };
+
+/**
+ * The date picked on the transfer form → the stored moment. Blank = now. A future day is
+ * refused: stock can't have moved on a day that hasn't happened yet.
+ */
+const resolveTransferDate = (value, now = new Date()) => {
+  if (!value) return now;
+  const date = atBusinessTimeOfDay(value, now);
+  if (!date) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid transfer date');
+  if (date.getTime() > getBusinessDayRange(now).end.getTime()) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Transfer date cannot be in the future');
+  }
+  return date;
+};
+
+/**
+ * Mongo match for "effective transfer date within [dateFrom, dateTo]" (Pakistan days,
+ * inclusive), or null when neither bound is given.
+ */
+const buildTransferDateMatch = (dateFrom, dateTo) => {
+  const range = {};
+  const start = dateFrom ? parseBusinessDateBoundary(dateFrom, false) : null;
+  const end = dateTo ? parseBusinessDateBoundary(dateTo, true) : null;
+  if (start) range.$gte = start;
+  if (end) range.$lte = end;
+  if (Object.keys(range).length === 0) return null;
+  return { $or: [{ transferDate: range }, { transferDate: { $exists: false }, suggestedAt: range }] };
+};
 
 /**
  * Generates a human-readable, org-scoped, gap-tolerant transfer number ("TRF-1001",
@@ -150,6 +186,7 @@ const findOrCreateDestinationProduct = async ({ sourceProduct, organizationId, t
       organizationId,
       branchId: toBranchId,
       createdBy: sourceProduct.createdBy,
+      source: 'stock_transfer',
       name: sourceProduct.name,
       nameUrdu: sourceProduct.nameUrdu,
       description: sourceProduct.description,
@@ -683,8 +720,10 @@ const createTransfer = async ({
   imeis,
   reason,
   notes,
+  transferDate,
   createdBy,
 }) => {
+  const effectiveDate = resolveTransferDate(transferDate);
   if (String(fromBranchId) === String(toBranchId)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Source and destination branch must be different');
   }
@@ -731,6 +770,7 @@ const createTransfer = async ({
     imeis: source.kind === 'serialized' ? source.imeiRecords.map((r) => r.imei) : undefined,
     reason,
     notes,
+    transferDate: effectiveDate,
     status: 'in_transit',
     decidedBy: createdBy,
     decidedAt: new Date(),
@@ -760,7 +800,8 @@ const createTransfer = async ({
  * and cancellation stay per-line (the existing completeTransfer/cancelTransfer, unchanged)
  * since a destination branch may reasonably receive some products before others.
  */
-const createBulkTransfer = async ({ organizationId, fromBranchId, toBranchId, items, reason, notes, createdBy }) => {
+const createBulkTransfer = async ({ organizationId, fromBranchId, toBranchId, items, reason, notes, transferDate, createdBy }) => {
+  const effectiveDate = resolveTransferDate(transferDate);
   if (String(fromBranchId) === String(toBranchId)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Source and destination branch must be different');
   }
@@ -850,6 +891,7 @@ const createBulkTransfer = async ({ organizationId, fromBranchId, toBranchId, it
             imeis: source.kind === 'serialized' ? source.imeiRecords.map((r) => r.imei) : undefined,
             reason,
             notes,
+            transferDate: effectiveDate,
             status: 'in_transit',
             decidedBy: createdBy,
             decidedAt: new Date(),
@@ -919,6 +961,8 @@ const approveTransfer = async ({ transferId, organizationId, decidedBy }) => {
   transfer.status = 'in_transit';
   transfer.decidedBy = decidedBy;
   transfer.decidedAt = new Date();
+  // A suggestion's suggestedAt is when the engine proposed it — the stock moves today.
+  if (!transfer.transferDate) transfer.transferDate = transfer.decidedAt;
   await transfer.save();
 
   return transfer;
@@ -1035,7 +1079,7 @@ const getTransferGroup = async (groupId, organizationId) => {
  * transfer can show a smaller item count than the transfer actually has.
  */
 const queryTransfers = async (
-  { organizationId, branchId, status, direction, fromBranchId, toBranchId, search },
+  { organizationId, branchId, status, direction, fromBranchId, toBranchId, search, dateFrom, dateTo },
   options
 ) => {
   const toOid = (id) => (id ? new mongoose.Types.ObjectId(String(id)) : id);
@@ -1059,13 +1103,20 @@ const queryTransfers = async (
   // An explicit ?status=suggested still honors it, e.g. for API/debugging use.
   match.status = status || { $ne: 'suggested' };
   if (search) addTokenSearch(match, search, ['productName']);
+  const dateMatch = buildTransferDateMatch(dateFrom, dateTo);
+  // The branch scope above may already own the top-level $or — combine with $and.
+  if (dateMatch) match.$and = [...(match.$and || []), dateMatch];
 
   const page = Math.max(parseInt(options.page, 10) || 1, 1);
   const limit = Math.max(parseInt(options.limit, 10) || 10, 1);
   const skip = (page - 1) * limit;
 
-  const [sortField, sortDirRaw] = (options.sortBy || 'suggestedAt:desc').split(':');
-  const sortStage = { [sortField || 'suggestedAt']: sortDirRaw === 'asc' ? 1 : -1 };
+  const [sortFieldRaw, sortDirRaw] = (options.sortBy || 'transferDate:desc').split(':');
+  // Grouped rows carry `transferDate` (effective) — the legacy `suggestedAt` sort maps onto it.
+  const sortField = !sortFieldRaw || sortFieldRaw === 'suggestedAt' ? 'transferDate' : sortFieldRaw;
+  const sortDir = sortDirRaw === 'asc' ? 1 : -1;
+  // Same-day ties: the transfer entered last first (stable across pages).
+  const sortStage = sortField === 'transferDate' ? { transferDate: sortDir, createdAtMax: sortDir } : { [sortField]: sortDir };
 
   const pipeline = [
     { $match: match },
@@ -1080,6 +1131,8 @@ const queryTransfers = async (
         reason: { $first: '$reason' },
         notes: { $first: '$notes' },
         suggestedAt: { $min: '$suggestedAt' },
+        transferDate: { $min: TRANSFER_DATE_EXPR },
+        createdAtMax: { $max: '$createdAt' },
         completedAt: { $max: '$completedAt' },
         decidedBy: { $first: '$decidedBy' },
         itemCount: { $sum: 1 },
@@ -1131,6 +1184,7 @@ const queryTransfers = async (
       reason: r.reason || undefined,
       notes: r.notes || undefined,
       suggestedAt: r.suggestedAt,
+      transferDate: r.transferDate || r.suggestedAt,
       completedAt: r.completedAt || undefined,
       decidedBy: r.decidedBy ? userMap.get(String(r.decidedBy)) || String(r.decidedBy) : undefined,
       // Preserves today's one-click Send/Receive/Cancel in the list row for the common
@@ -1146,6 +1200,9 @@ const queryTransfers = async (
 };
 
 module.exports = {
+  TRANSFER_DATE_EXPR,
+  buildTransferDateMatch,
+  resolveTransferDate,
   createTransfer,
   createBulkTransfer,
   approveTransfer,

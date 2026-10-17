@@ -53,3 +53,36 @@ export interface TransactionHistoryResult {
   /** More rows matched than were returned — the panel asks the user to narrow the range. */
   truncated: boolean
 }
+
+/** GET /purchases/navigate · /invoices/navigate — one saved document at a position, newest first. */
+export interface RecordNavigationResult {
+  total: number
+  /** 0 = newest; null when the list is empty. */
+  index: number | null
+  id: string | null
+  /** Invoice / bill number. */
+  number: string | null
+}
+
+export interface RecordNavigationParams {
+  index?: number
+  order?: 'entered' | 'date'
+  /** A document id — returns that one, at its own position. */
+  around?: string
+  supplier?: string
+  customerId?: string
+  type?: string
+}
+
+/** A saved document the one being saved may repeat — see server entryGuard.service.js. */
+export interface PossibleDuplicate {
+  id: string
+  number: string
+  partyBillNumber: string | null
+  date: string
+  amount: number
+  itemCount: number
+  enteredAt: string
+  enteredBy: string | null
+  reason: 'same_bill_number' | 'same_amount'
+}

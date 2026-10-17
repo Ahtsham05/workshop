@@ -69,6 +69,35 @@ export interface ProductLookupResult {
   product: (Record<string, unknown> & { id?: string; _id?: string; name: string }) | null
 }
 
+/** One row of GET /products/name-index — see server productService.getProductNameIndex. */
+export interface ProductNameIndexEntry {
+  id: string
+  name: string
+  nameUrdu?: string
+  barcode?: string
+  sku?: string
+  isActive: boolean
+  stockQuantity: number
+  price: number
+  imageUrl?: string
+  source: ProductSource | null
+  createdAt?: string
+  hasVariants: boolean
+  brandName?: string
+  categoryNames: string[]
+}
+
+/** How a product was created — server config/productSources.js. */
+export type ProductSource =
+  | 'manual'
+  | 'excel_import'
+  | 'ai_scan'
+  | 'branch_import'
+  | 'branch_sync'
+  | 'stock_transfer'
+  | 'phone_buyback'
+  | 'demo'
+
 export const productApi = createApi({
   reducerPath: 'productApi',
   baseQuery: baseQueryWithAuth,
@@ -96,6 +125,14 @@ export const productApi = createApi({
     lookupProductByCode: builder.query<ProductLookupResult, string>({
       query: (code) => ({ url: '/lookup-by-code', params: { code } }),
     }),
+    // Every product in the branch (inactive/imported too) for Add Product's live
+    // similar-products panel. Fetched once per session (kept 10 min) and refreshed when a
+    // product is saved (the 'Product' tag), so it never fires per keystroke.
+    getProductNameIndex: builder.query<ProductNameIndexEntry[], void>({
+      query: () => '/name-index',
+      providesTags: [{ type: 'Product', id: 'NAME_INDEX' }],
+      keepUnusedDataFor: 600,
+    }),
   }),
 })
 
@@ -104,4 +141,5 @@ export const {
   useSearchProductsQuery,
   useGetDistinctProductTagsQuery,
   useLazyLookupProductByCodeQuery,
+  useGetProductNameIndexQuery,
 } = productApi

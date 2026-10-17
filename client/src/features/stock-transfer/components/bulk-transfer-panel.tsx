@@ -38,6 +38,8 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select'
+import { DatePicker } from '@/components/ui/date-picker'
+import { getBusinessToday } from '@/lib/business-timezone'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -443,6 +445,7 @@ export function BulkTransferPanel({
   const [toBranchId, setToBranchId] = useState(initialToBranchId || '')
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
+  const [transferDate, setTransferDate] = useState(() => getBusinessToday())
   const [lines, setLines] = useState<BulkTransferLine[]>(() => Array.from({ length: INITIAL_ROWS }, createEmptyRow))
 
   const [productSelectOpen, setProductSelectOpen] = useState('')
@@ -544,7 +547,7 @@ export function BulkTransferPanel({
   const filledLines = lines.filter((l): l is BulkTransferLine & { item: PurchaseCatalogItem } => l.item !== null)
   const totalQuantity = filledLines.reduce((sum, l) => sum + (lineNeedsSerials(l.item) ? l.imeis.length : l.quantity), 0)
   const hasInvalidLine = filledLines.some((l) => !lineIsValid(l))
-  const canSubmit = Boolean(toBranchId) && filledLines.length > 0 && !hasInvalidLine && !isSubmitting
+  const canSubmit = Boolean(toBranchId) && Boolean(transferDate) && filledLines.length > 0 && !hasInvalidLine && !isSubmitting
 
   const isDirty = filledLines.length > 0 || !!reason.trim() || !!notes.trim()
   useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange])
@@ -649,6 +652,7 @@ export function BulkTransferPanel({
         items,
         reason: reason.trim() || undefined,
         notes: notes.trim() || undefined,
+        transferDate,
       }).unwrap()
       toast.success(t('Bulk transfer {{n}} created — {{count}} product(s) left the source branch', { n: result.transferNumber, count: String(filledLines.length) }))
       if (printWindow) {
@@ -723,6 +727,17 @@ export function BulkTransferPanel({
                     className='h-9 w-full'
                   />
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor='bulk-transfer-date' className='mb-1 block text-xs text-muted-foreground'>{t('Transfer date')}</label>
+                <DatePicker
+                  id='bulk-transfer-date'
+                  value={transferDate}
+                  onChange={setTransferDate}
+                  max={getBusinessToday()}
+                  className='h-9'
+                />
               </div>
 
               <div>

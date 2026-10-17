@@ -31,7 +31,9 @@ import { BulkTransferPanel } from './components/bulk-transfer-panel'
 import { SuggestedTransfersPanel } from './components/suggested-transfers-panel'
 import { TransferDetailsDialog } from './components/transfer-details-dialog'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
-import { formatAppDateTime } from '@/lib/date-format'
+import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
+import { DatePicker } from '@/components/ui/date-picker'
+import { isBackDated } from './lib/transfer-date'
 
 
 function branchName(ref: GroupedTransferRow['fromBranchId']): string {
@@ -53,6 +55,8 @@ export default function StockTransfer() {
   const [statusFilter, setStatusFilter] = useState<TransferStatus | 'all'>('all')
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all')
   const [page, setPage] = useState(1)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [prefill, setPrefill] = useState<TransferPrefill | null>(null)
   const [detailsGroupId, setDetailsGroupId] = useState<string | null>(null)
@@ -66,6 +70,8 @@ export default function StockTransfer() {
     limit: limit,
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
     ...(directionFilter !== 'all' ? { direction: directionFilter } : {}),
+    ...(dateFrom ? { dateFrom } : {}),
+    ...(dateTo ? { dateTo } : {}),
   })
 
   const [completeTransfer, { isLoading: completing }] = useCompleteTransferMutation()
@@ -188,6 +194,24 @@ export default function StockTransfer() {
                 <SelectItem value='cancelled'>{t('Cancelled')}</SelectItem>
               </SelectContent>
             </Select>
+            <DatePicker
+              value={dateFrom}
+              onChange={(v) => { setDateFrom(v); setPage(1) }}
+              max={dateTo || undefined}
+              clearable
+              placeholder={t('From date')}
+              aria-label={t('From date')}
+              className='h-9 w-36 max-sm:w-full'
+            />
+            <DatePicker
+              value={dateTo}
+              onChange={(v) => { setDateTo(v); setPage(1) }}
+              min={dateFrom || undefined}
+              clearable
+              placeholder={t('To date')}
+              aria-label={t('To date')}
+              className='h-9 w-36 max-sm:w-full'
+            />
           </div>
         </CardHeader>
         <CardContent className='max-sm:px-3'>
@@ -219,7 +243,16 @@ export default function StockTransfer() {
                   return (
                     <TableRow key={tr.groupId}>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                        {formatAppDateTime(tr.suggestedAt)}
+                        {isBackDated(tr) ? (
+                          <>
+                            <div className='font-medium text-foreground'>{formatAppDate(tr.transferDate)}</div>
+                            <div className='text-[11px]' title={formatAppDateTime(tr.suggestedAt)}>
+                              {t('Entered')} {formatAppDate(tr.suggestedAt)}
+                            </div>
+                          </>
+                        ) : (
+                          formatAppDateTime(tr.transferDate || tr.suggestedAt)
+                        )}
                       </TableCell>
                       <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
                         {tr.transferNumber || '—'}

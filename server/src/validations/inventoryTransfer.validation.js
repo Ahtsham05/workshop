@@ -1,6 +1,13 @@
 const Joi = require('joi');
 const { objectId } = require('./custom.validation');
 
+// `YYYY-MM-DD` from the date field (or a full ISO timestamp). Kept a string so Joi doesn't
+// turn a calendar day into UTC midnight — the service resolves it in Pakistan time.
+const transferDate = Joi.alternatives().try(
+  Joi.string().trim().pattern(/^\d{4}-\d{2}-\d{2}$/),
+  Joi.string().isoDate()
+);
+
 const createTransfer = {
   // Exactly one of quantity (bulk products) or imeis (IMEI/serial-tracked products, moved
   // per-unit) applies to a given line — which one is required is enforced service-side,
@@ -15,6 +22,7 @@ const createTransfer = {
     imeis: Joi.array().items(Joi.string().trim()).min(1),
     reason: Joi.string().allow('').trim(),
     notes: Joi.string().allow('').trim(),
+    transferDate: transferDate,
   }),
 };
 
@@ -36,6 +44,7 @@ const createBulkTransfer = {
       .required(),
     reason: Joi.string().allow('').trim(),
     notes: Joi.string().allow('').trim(),
+    transferDate: transferDate,
   }),
 };
 
@@ -55,6 +64,8 @@ const getTransfers = {
     page: Joi.number(),
     sortBy: Joi.string(),
     search: Joi.string(),
+    dateFrom: Joi.string().trim(),
+    dateTo: Joi.string().trim(),
   }),
 };
 

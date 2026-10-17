@@ -18,10 +18,12 @@ import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
 import { useGetDistinctProductTagsQuery } from '@/stores/product.api'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
+import { PRODUCT_SOURCE_META, PRODUCT_SOURCE_VALUES } from '@/lib/product-source'
 
 export const ALL_SUBCATEGORIES = 'all'
 export const ALL_BRANDS = 'all'
 export const NO_QUANTITY_OP = 'none'
+export const ALL_SOURCES = 'all'
 
 export interface QuantityFilter {
   op: string
@@ -66,6 +68,9 @@ interface ProductFiltersPanelProps {
   onCostRangeChange: (next: RangeFilter) => void
   tracking: TrackingFilter
   onTrackingChange: (next: TrackingFilter) => void
+  /** Product.source value, 'unknown', or ALL_SOURCES. */
+  source: string
+  onSourceChange: (next: string) => void
 }
 
 const QUANTITY_OPERATORS: { value: string; label: string }[] = [
@@ -216,6 +221,8 @@ export function ProductFiltersPanel({
   onCostRangeChange,
   tracking,
   onTrackingChange,
+  source,
+  onSourceChange,
 }: ProductFiltersPanelProps) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
@@ -232,6 +239,7 @@ export function ProductFiltersPanel({
   const [draftPriceRange, setDraftPriceRange] = useState(priceRange)
   const [draftCostRange, setDraftCostRange] = useState(costRange)
   const [draftTracking, setDraftTracking] = useState(tracking)
+  const [draftSource, setDraftSource] = useState(source)
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
@@ -242,6 +250,7 @@ export function ProductFiltersPanel({
       setDraftPriceRange(priceRange)
       setDraftCostRange(costRange)
       setDraftTracking(tracking)
+      setDraftSource(source)
     }
     setOpen(next)
   }
@@ -255,7 +264,8 @@ export function ProductFiltersPanel({
     (tags.length > 0 ? 1 : 0) +
     (priceRange.min.trim() !== '' || priceRange.max.trim() !== '' ? 1 : 0) +
     (costRange.min.trim() !== '' || costRange.max.trim() !== '' ? 1 : 0) +
-    (tracking.imei || tracking.serial ? 1 : 0)
+    (tracking.imei || tracking.serial ? 1 : 0) +
+    (source !== ALL_SOURCES ? 1 : 0)
 
   const applyFilters = () => {
     onSubCategoryChange(draftSubCategory)
@@ -265,6 +275,7 @@ export function ProductFiltersPanel({
     onPriceRangeChange(draftPriceRange)
     onCostRangeChange(draftCostRange)
     onTrackingChange(draftTracking)
+    onSourceChange(draftSource)
     setOpen(false)
   }
 
@@ -276,6 +287,8 @@ export function ProductFiltersPanel({
     setDraftPriceRange({ min: '', max: '' })
     setDraftCostRange({ min: '', max: '' })
     setDraftTracking({ imei: false, serial: false })
+    setDraftSource(ALL_SOURCES)
+    onSourceChange(ALL_SOURCES)
     onSubCategoryChange(ALL_SUBCATEGORIES)
     onBrandChange(ALL_BRANDS)
     onQuantityChange({ op: NO_QUANTITY_OP, value: '' })
@@ -412,6 +425,22 @@ export function ProductFiltersPanel({
                 onChange={(e) => setDraftCostRange({ ...draftCostRange, max: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className='space-y-1.5'>
+            <label className='text-xs font-medium text-muted-foreground'>{t('How it was added')}</label>
+            <Select value={draftSource} onValueChange={setDraftSource}>
+              <SelectTrigger className='h-9 w-full'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_SOURCES}>{t('Any source')}</SelectItem>
+                {PRODUCT_SOURCE_VALUES.map((value) => (
+                  <SelectItem key={value} value={value}>{t(PRODUCT_SOURCE_META[value].label)}</SelectItem>
+                ))}
+                <SelectItem value='unknown'>{t('Not recorded (older products)')}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className='space-y-1.5'>

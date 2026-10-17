@@ -27,6 +27,14 @@ router
   .route('/export')
   .get(auth('viewInvoices'), validate(invoiceValidation.exportInvoices), invoiceController.exportInvoices);
 
+// Previous/next full-record stepping + the duplicate check run before saving.
+router
+  .route('/navigate')
+  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoiceNavigation), invoiceController.getInvoiceNavigation);
+router
+  .route('/possible-duplicates')
+  .get(auth('createInvoices', 'editInvoices'), validate(invoiceValidation.getPossibleDuplicateInvoices), invoiceController.getPossibleDuplicateInvoices);
+
 // Invoice-wise + item-wise history for the New Invoice screen's side panel.
 router
   .route('/history')

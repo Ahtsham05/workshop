@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { objectId } = require('./custom.validation');
 
 const attachmentEntry = Joi.object().keys({
   url: Joi.string().required(),
@@ -119,6 +120,26 @@ const exportPurchases = { query: purchaseListQuery };
 
 const getPurchaseHistory = { query: purchaseListQuery };
 
+// Previous/next full-record stepping on New Purchase — the list filters plus a position.
+const getPurchaseNavigation = {
+  query: purchaseListQuery.keys({
+  index: Joi.number().integer().min(0),
+  order: Joi.string().valid('entered', 'date'),
+  around: Joi.string().custom(objectId),
+  }),
+};
+
+// Checked just before a purchase is saved — see entryGuard.service.js.
+const getPossibleDuplicatePurchases = {
+  query: Joi.object().keys({
+    supplier: Joi.string().custom(objectId).required(),
+    vendorBillNumber: Joi.string().allow('').max(100),
+    totalAmount: Joi.number().min(0),
+    purchaseDate: Joi.string().allow('').max(40),
+    excludeId: Joi.string().custom(objectId),
+  }),
+};
+
 const addPurchaseComment = {
   params: Joi.object().keys({
     purchaseId: Joi.string().required(),
@@ -238,6 +259,9 @@ const getBulkPriceComparison = {
 };
 
 module.exports = {
+  getPurchaseNavigation,
+  getPossibleDuplicatePurchases,
+
   createPurchase,
   getPurchases,
   getPurchasesSummary,

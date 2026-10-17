@@ -22,6 +22,7 @@ import { getDisplayStockValue, getStockStatus } from '@/lib/product-stock-displa
 import { useExpiringBatchesByProduct, daysUntil } from '../hooks/use-expiring-batches-by-product'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
+import { SourceBadge } from './similar-products-panel'
 
 export const useProductColumns = (
   lowStockThreshold = 10,
@@ -440,6 +441,17 @@ export const useProductColumns = (
     size: 140,
     header: ({ column }) => <DataTableColumnHeader column={column} title='date_added' />,
     cell: ({ row }) => <div>{formatAppDate(row.original.createdAt)}</div>,
+    enableHiding: true,
+  },
+  {
+    // How the product was created — typed in, Excel import, AI scan, another branch…
+    id: 'source',
+    accessorKey: 'source',
+    size: 120,
+    header: ({ column }) => <DataTableColumnHeader column={column} title='Source' />,
+    cell: ({ row }) =>
+      row.original.source ? <SourceBadge source={row.original.source} /> : <span className='text-muted-foreground'>-</span>,
+    enableSorting: false,
     enableHiding: true,
   },
 {

@@ -95,7 +95,9 @@ const imeiSchema = new mongoose.Schema(
       type: String,
       // 'in_production': issued to a production order and sitting in WIP (productionOrderId
       // set); 'consumed': built into a manufactured product. See services/manufacturing.
-      enum: ['in_stock', 'sold', 'returned', 'scrapped', 'lost', 'stolen', 'in_transit', 'in_production', 'consumed'],
+      // 'in_warranty': the shop's own unit is away on a warranty claim (warrantyClaim.service.js) —
+      // out of sellable stock until it comes back repaired/replaced.
+      enum: ['in_stock', 'sold', 'returned', 'scrapped', 'lost', 'stolen', 'in_transit', 'in_production', 'consumed', 'in_warranty'],
       default: 'in_stock',
       index: true,
     },

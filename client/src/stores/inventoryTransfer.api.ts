@@ -64,10 +64,16 @@ export interface InventoryTransfer {
   // date". createdAt/updatedAt are NOT usable here: the model's toJSON plugin strips them
   // from every API response, so they'd always be undefined despite existing in the DB.
   suggestedAt?: string
+  // The business date picked on the transfer form (back-dating). Absent on rows created
+  // before the field existed — use transferDateOf() for the effective date.
+  transferDate?: string
   decidedBy?: { id: string; name: string } | string
   decidedAt?: string
   completedAt?: string
 }
+
+/** Effective transfer date: the picked date, else (older rows) when it was created. */
+export const transferDateOf = (tr: { transferDate?: string; suggestedAt?: string }) => tr.transferDate || tr.suggestedAt
 
 export interface TransfersResponse {
   results: InventoryTransfer[]
@@ -94,6 +100,8 @@ export interface GroupedTransferRow {
   reason?: string
   notes?: string
   suggestedAt?: string
+  /** Effective transfer date (server falls back to suggestedAt for older rows). */
+  transferDate?: string
   completedAt?: string
   decidedBy?: { id: string; name: string } | string
   // Present only when itemCount === 1 — lets the list row keep today's one-click
@@ -121,6 +129,8 @@ export interface CreateTransferRequest {
   imeis?: string[]
   reason?: string
   notes?: string
+  /** `YYYY-MM-DD`; omitted = today. */
+  transferDate?: string
 }
 
 export interface BulkTransferLineInput {
@@ -136,6 +146,8 @@ export interface CreateBulkTransferRequest {
   items: BulkTransferLineInput[]
   reason?: string
   notes?: string
+  /** `YYYY-MM-DD`; omitted = today. */
+  transferDate?: string
 }
 
 export interface CreateBulkTransferResponse {
@@ -150,6 +162,9 @@ export interface GetTransfersParams {
   fromBranchId?: string
   toBranchId?: string
   search?: string
+  /** `YYYY-MM-DD`, inclusive, on the effective transfer date. */
+  dateFrom?: string
+  dateTo?: string
   page?: number
   limit?: number
   sortBy?: string

@@ -414,6 +414,7 @@ const seedProducts = async ({ organizationId, branchId, createdBy }) => {
       branchId,
       createdBy,
       isDemo: true,
+      source: 'demo',
       tags: [DEMO_TAG],
       name: p.name,
       ...(taken.has(p.sku) ? {} : { sku: p.sku }),

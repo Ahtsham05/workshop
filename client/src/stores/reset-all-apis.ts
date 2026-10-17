@@ -41,6 +41,9 @@ import { inventoryTransferApi } from './inventoryTransfer.api'
 import { stockAdjustmentApi } from './stockAdjustment.api'
 import { manufacturingApi } from './manufacturing.api'
 import { stockCountApi } from './stockCount.api'
+import { productListApi } from './productList.api'
+import { inventoryCleanupApi } from './inventoryCleanup.api'
+import { warrantyClaimApi } from './warrantyClaim.api'
 import { auditLogApi } from './auditLog.api'
 import { aiAssistantApi } from './aiAssistant.api'
 import { recurringExpenseApi } from './recurringExpense.api'
@@ -62,7 +65,7 @@ const ALL_APIS = [
   whatsappCloudApi, smsGatewayApi, cashRegisterApi, imeiApi, usedPhoneBuybackApi,
   insightApi, purchaseSuggestionsApi, productAttributeApi, productVariantApi,
   productApi, inventoryApi, batchApi, brandApi, purchaseCatalogApi,
-  inventoryTransferApi, stockAdjustmentApi, stockCountApi, auditLogApi, aiAssistantApi,
+  inventoryTransferApi, stockAdjustmentApi, stockCountApi, productListApi, inventoryCleanupApi, warrantyClaimApi, auditLogApi, aiAssistantApi,
   recurringExpenseApi, expenseApi, communicationLogApi, reminderApi, noteApi, leadApi,
   productAnalyticsApi, manufacturingApi,
 ]

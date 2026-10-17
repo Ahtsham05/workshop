@@ -85,6 +85,11 @@ const InventoryTransferSchema = new mongoose.Schema(
     },
 
     suggestedAt: { type: Date, default: Date.now },
+    // The business date of the transfer, picked on the New/Bulk Transfer form (back-dating
+    // a transfer entered late). Stored at a real moment (see businessTimezone.js#
+    // atBusinessTimeOfDay). Absent on rows created before the field existed — every read
+    // falls back to suggestedAt (their creation time), see TRANSFER_DATE_EXPR in the service.
+    transferDate: { type: Date },
     decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     decidedAt: { type: Date },
     completedAt: { type: Date },
@@ -97,6 +102,7 @@ const InventoryTransferSchema = new mongoose.Schema(
 InventoryTransferSchema.index({ organizationId: 1, status: 1, suggestedAt: -1 });
 InventoryTransferSchema.index({ organizationId: 1, fromBranchId: 1, toBranchId: 1 });
 InventoryTransferSchema.index({ organizationId: 1, groupId: 1 });
+InventoryTransferSchema.index({ organizationId: 1, transferDate: -1 });
 
 InventoryTransferSchema.plugin(toJSON);
 InventoryTransferSchema.plugin(paginate);

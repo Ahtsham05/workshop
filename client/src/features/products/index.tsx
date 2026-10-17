@@ -10,7 +10,7 @@ import { ProductStatCards } from './components/product-stat-cards'
 import { ProductSummaryChip } from './components/product-summary-chip'
 import { CategoryFilterCombobox, NO_CATEGORY_FILTER, ALL_CATEGORIES_BREAKDOWN, UNCATEGORIZED_CATEGORY } from './components/category-filter-combobox'
 import { CategoryBreakdown, type CategoryBreakdownRow } from './components/category-breakdown'
-import { ProductFiltersPanel, ALL_SUBCATEGORIES, ALL_BRANDS, NO_QUANTITY_OP, type QuantityFilter, type RangeFilter, type TrackingFilter } from './components/product-filters-panel'
+import { ProductFiltersPanel, ALL_SUBCATEGORIES, ALL_BRANDS, ALL_SOURCES, NO_QUANTITY_OP, type QuantityFilter, type RangeFilter, type TrackingFilter } from './components/product-filters-panel'
 import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
@@ -45,8 +45,10 @@ import { SyncBranchesDialog } from './components/sync-branches-dialog'
 import { useSyncTargetBranches } from './hooks/use-branch-sync'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { BarChart3, Factory, LayoutList, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { BarChart3, Factory, LayoutList, ChevronDown, ChevronRight, Loader2, Scissors } from 'lucide-react'
+import { CleanupView } from './cleanup/cleanup-view'
 import { PerformanceView } from './analytics/performance-view'
+import { AddToListMenu, ProductListsBar, SelectedListHeader } from './lists/product-lists-bar'
 import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
 import { manufacturingApi } from '@/stores/manufacturing.api'
 import ManufacturingProducts from '@/features/manufacturing/pages/products'
@@ -143,6 +145,7 @@ export default function Products() {
   const [priceRange, setPriceRange] = useState<RangeFilter>({ min: '', max: '' })
   const [costRange, setCostRange] = useState<RangeFilter>({ min: '', max: '' })
   const [trackingFilter, setTrackingFilter] = useState<TrackingFilter>({ imei: false, serial: false })
+  const [sourceFilter, setSourceFilter] = useState(ALL_SOURCES)
   const [statusFilter, setStatusFilter] = useState(ALL_STATUS)
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -164,7 +167,9 @@ export default function Products() {
 
   const dispatch = useDispatch<AppDispatch>()
   const { t, language } = useLanguage()
-  const { view } = useSearch({ from: '/_authenticated/products/' })
+  const { view, list: listParam } = useSearch({ from: '/_authenticated/products/' })
+  // The product list being viewed (URL ?list=), or null for all products.
+  const selectedListId = listParam ?? null
   const navigate = useNavigate({ from: '/products' })
   // Manufacturing businesses also get the Manufacturing view (type chips, BOM and
   // procurement — the same list as Manufacturing → Products) and land on it by default.
@@ -172,7 +177,7 @@ export default function Products() {
   const { enabled: manufacturingOn, tester: manufacturingTester } = useManufacturingAccess()
   const defaultView = manufacturingOn && !manufacturingTester ? 'manufacturing' : 'catalog'
   const activeView =
-    view === 'performance' || view === 'catalog'
+    view === 'performance' || view === 'catalog' || view === 'cleanup'
       ? view
       : view === 'manufacturing' && manufacturingOn
         ? 'manufacturing'
@@ -180,15 +185,23 @@ export default function Products() {
   const isPerformanceView = activeView === 'performance'
   const isManufacturingView = activeView === 'manufacturing'
   const isCatalogView = activeView === 'catalog'
+  const isCleanupView = activeView === 'cleanup'
   const setView = useCallback(
     (next: string) =>
       navigate({
         search: (prev) => ({
           ...prev,
-          view: next === defaultView ? undefined : (next as 'catalog' | 'performance' | 'manufacturing'),
+          view: next === defaultView ? undefined : (next as 'catalog' | 'performance' | 'manufacturing' | 'cleanup'),
         }),
       }),
     [navigate, defaultView]
+  )
+  const setSelectedListId = useCallback(
+    (next: string | null) => {
+      setSelectedProducts([])
+      navigate({ search: (prev) => ({ ...prev, list: next ?? undefined }) })
+    },
+    [navigate]
   )
   const formatCurrency = useFormatMoney()
   // A product saved from this page's own dialogs (Add Product, edit, import…) also
@@ -299,12 +312,13 @@ export default function Products() {
   // only a different view (category / Added Today) shows the loading state.
   const statsViewRef = useRef<string | null>(null)
   useEffect(() => {
-    const view = `${isSingleCategorySelected ? categoryFilter : ''}|${addedTodayOnly}`
+    const view = `${isSingleCategorySelected ? categoryFilter : ''}|${addedTodayOnly}|${selectedListId ?? ''}`
     if (statsViewRef.current !== view) setLoadingStats(true)
     let cancelled = false
     dispatch(fetchProductStats({
       ...(isSingleCategorySelected ? { category: categoryFilter } : {}),
       ...(addedTodayOnly ? { addedToday: true } : {}),
+      ...(selectedListId ? { listId: selectedListId } : {}),
     }))
       .then((data) => {
         if (cancelled) return
@@ -321,11 +335,11 @@ export default function Products() {
     return () => {
       cancelled = true
     }
-  }, [fetch, dispatch, categoryFilter, isSingleCategorySelected, addedTodayOnly])
+  }, [fetch, dispatch, categoryFilter, isSingleCategorySelected, addedTodayOnly, selectedListId])
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, addedTodayOnly])
+  }, [debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, sourceFilter, addedTodayOnly, selectedListId])
 
   // Fetch paginated products for table display — skipped in breakdown mode, which
   // shows the per-category rollup instead of the flat table.
@@ -358,7 +372,9 @@ export default function Products() {
       ...(costMax ? { costMax } : {}),
       ...(trackingFilter.imei ? { trackImei: true } : {}),
       ...(trackingFilter.serial ? { trackSerial: true } : {}),
+      ...(sourceFilter !== ALL_SOURCES ? { source: sourceFilter } : {}),
       ...(addedTodayOnly ? { addedToday: true } : {}),
+      ...(selectedListId ? { listId: selectedListId } : {}),
     };
 
     let cancelled = false
@@ -430,7 +446,7 @@ export default function Products() {
     return () => {
       cancelled = true
     }
-  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, addedTodayOnly, dispatch, isBreakdownMode, isSingleCategorySelected])
+  }, [currentPage, limit, fetch, debouncedSearch, categoryFilter, subCategoryFilter, brandFilter, quantityFilter, statusFilter, sorting, tagsFilter, priceRange, costRange, trackingFilter, sourceFilter, addedTodayOnly, selectedListId, dispatch, isBreakdownMode, isSingleCategorySelected])
 
   // Category-wise rollup for the "All Categories" breakdown view — fetched only while
   // that mode is active.
@@ -643,13 +659,13 @@ export default function Products() {
   // with the pages already paged through — but only while unfiltered: a search
   // changes which rows land on which page, so the two datasets no longer align.
   const broughtForward = useMemo(() => {
-    if (loadingAllProducts || debouncedSearch.trim() || currentPage <= 1) return null
+    if (loadingAllProducts || debouncedSearch.trim() || selectedListId || currentPage <= 1) return null
     const priorProducts = allProducts.slice(0, (currentPage - 1) * limit)
     return {
       qty: priorProducts.reduce((sum, product) => sum + getDisplayStock(product), 0),
       value: priorProducts.reduce((sum, product) => sum + getDisplayStockValue(product), 0),
     }
-  }, [allProducts, currentPage, limit, debouncedSearch, loadingAllProducts])
+  }, [allProducts, currentPage, limit, debouncedSearch, loadingAllProducts, selectedListId])
 
   // Out of Stock / Low Stock / Critical Stock counts for the header stat cards — uses
   // each product's own threshold override when set (see getStockStatus), falling back to
@@ -731,6 +747,8 @@ export default function Products() {
                 <p className='text-muted-foreground'>
                   {isPerformanceView
                     ? t('How every product is selling — rankings, profit and stock movement')
+                    : isCleanupView
+                      ? t('Dead stock, unsold and wrongly priced products and duplicates — category by category')
                     : isManufacturingView
                       ? t('Raw materials, components, packaging and finished goods — with their BOMs and procurement.')
                       : t('manage_products')}
@@ -752,6 +770,10 @@ export default function Products() {
                   <TabsTrigger value='performance' className={cn('gap-1.5 px-3', manufacturingOn && 'max-sm:flex-1 max-sm:px-2')}>
                     <BarChart3 className={cn('h-4 w-4', manufacturingOn && 'max-sm:hidden')} />
                     {t('Performance')}
+                  </TabsTrigger>
+                  <TabsTrigger value='cleanup' className={cn('gap-1.5 px-3', manufacturingOn && 'max-sm:flex-1 max-sm:px-2')}>
+                    <Scissors className={cn('h-4 w-4', manufacturingOn && 'max-sm:hidden')} />
+                    {t('Clean up')}
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -791,6 +813,9 @@ export default function Products() {
                     <Tags size={16} />
                     <span>{t('bulk_set_category')} ({selectedProducts.length})</span>
                   </Button>
+                  <Can permission='editProducts'>
+                    <AddToListMenu products={selectedProducts} onAdded={() => selectedListId && setFetch((prev) => !prev)} />
+                  </Can>
                   <Can permission='deleteProducts'>
                     <Button
                       variant="destructive"
@@ -866,6 +891,8 @@ export default function Products() {
 
           {isPerformanceView ? (
             <PerformanceView />
+          ) : isCleanupView ? (
+            <CleanupView />
           ) : isManufacturingView ? (
             <ManufacturingProducts embedded />
           ) : (
@@ -927,6 +954,19 @@ export default function Products() {
               </>
             )}
           </div>
+
+          <ProductListsBar selectedListId={selectedListId} onSelect={setSelectedListId} />
+          {selectedListId && (
+            <SelectedListHeader
+              listId={selectedListId}
+              selectedProducts={selectedProducts}
+              onClose={() => setSelectedListId(null)}
+              onChanged={() => {
+                setSelectedProducts([])
+                setFetch((prev) => !prev)
+              }}
+            />
+          )}
 
           <div className='mb-4 flex flex-wrap items-center gap-2'>
             <CategoryFilterCombobox value={categoryFilter} onChange={setCategoryFilter} categories={categories} className='max-sm:w-full' />
@@ -1084,6 +1124,8 @@ export default function Products() {
                     onCostRangeChange={setCostRange}
                     tracking={trackingFilter}
                     onTrackingChange={setTrackingFilter}
+                    source={sourceFilter}
+                    onSourceChange={setSourceFilter}
                   />
                   <AiScanButton />
                 </>

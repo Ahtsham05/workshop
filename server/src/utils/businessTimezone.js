@@ -156,6 +156,31 @@ const parseBusinessDateTime = (value) => {
 };
 
 /**
+ * A business date picked on a date-only field, stored at a real moment: today → now; an
+ * earlier/later day → that day at the current Pakistan time of day. Midnight would stack
+ * every back-dated record ahead of the ones actually made earlier that day (the Cash Book
+ * lesson — see cashBook.service.js#resolveEntryDate). Full timestamps pass through.
+ * @param {string|Date} value `YYYY-MM-DD`, an ISO timestamp, or a Date
+ * @param {Date} [now=new Date()]
+ * @returns {Date|null}
+ */
+const atBusinessTimeOfDay = (value, now = new Date()) => {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const raw = String(value).trim();
+  if (!CALENDAR_DATE_RE.test(raw)) {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const start = startOfBusinessDay(raw);
+  if (!start) return null;
+  const today = toBusinessCalendarDate(now);
+  if (raw === today) return now;
+  const timeOfDay = now.getTime() - startOfBusinessDay(today).getTime();
+  return new Date(start.getTime() + timeOfDay);
+};
+
+/**
  * Inclusive list of YYYY-MM-DD calendar dates between two Date boundaries (Pakistan).
  * @param {Date} startDate
  * @param {Date} endDate
@@ -186,6 +211,7 @@ module.exports = {
   getBusinessDayRange,
   parseBusinessDateBoundary,
   parseBusinessDateTime,
+  atBusinessTimeOfDay,
   applyBusinessDateRange,
   eachBusinessCalendarDate,
 };

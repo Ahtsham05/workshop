@@ -114,10 +114,12 @@ export const fetchAllProducts = createAsyncThunk(
 
 export const fetchProductStats = createAsyncThunk(
     'product/fetchProductStats',
-    catchAsync(async (params: { category?: string; addedToday?: boolean } = {}) => {
+    catchAsync(async (params: { category?: string; addedToday?: boolean; listId?: string } = {}) => {
         const query = new URLSearchParams({
             ...(params.category ? { category: params.category } : {}),
             ...(params.addedToday ? { addedToday: 'true' } : {}),
+            // A product list's totals (features/products/lists) instead of the whole catalog.
+            ...(params.listId ? { listId: params.listId } : {}),
         }).toString();
         const response = await Axios({
             ...summery.fetchProductStats,
@@ -163,7 +165,7 @@ export const bulkAddProducts = createAsyncThunk(
     'product/bulkAddProducts',
     // duplicateStrategy decides what happens to a row whose barcode/SKU already exists:
     // 'skip' (default), 'update', or 'error'. Omitted by callers that don't ask.
-    catchAsync(async (data: { products: any[]; duplicateStrategy?: 'skip' | 'update' | 'error' }) => {
+    catchAsync(async (data: { products: any[]; duplicateStrategy?: 'skip' | 'update' | 'error'; source?: 'excel_import' | 'ai_scan' }) => {
         const response = await Axios({
             ...summery.bulkAddProducts,
             data: data

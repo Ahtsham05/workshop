@@ -1710,7 +1710,17 @@ const getStockTransferReport = catchAsync(async (req, res) => {
   const { start, end } = parseRange(req.query);
   const { status, direction, productId } = req.query;
 
-  const baseMatch = { organizationId: scope.organizationId, createdAt: { $gte: start, $lte: end } };
+  // By the transfer's own date (back-dated transfers land on the day they happened);
+  // rows from before transferDate existed fall back to createdAt.
+  const baseMatch = {
+    organizationId: scope.organizationId,
+    $and: [{
+      $or: [
+        { transferDate: { $gte: start, $lte: end } },
+        { transferDate: { $exists: false }, createdAt: { $gte: start, $lte: end } },
+      ],
+    }],
+  };
   if (scope.branchId) {
     if (direction === 'outgoing') baseMatch.fromBranchId = scope.branchId;
     else if (direction === 'incoming') baseMatch.toBranchId = scope.branchId;
@@ -1722,12 +1732,7 @@ const getStockTransferReport = catchAsync(async (req, res) => {
     const productMatch = { $or: [{ fromProductId: pid }, { toProductId: pid }] };
     // Branch scoping above may already own the top-level $or — combine both with $and
     // instead of letting the second one silently overwrite the first.
-    if (baseMatch.$or) {
-      baseMatch.$and = [{ $or: baseMatch.$or }, productMatch];
-      delete baseMatch.$or;
-    } else {
-      Object.assign(baseMatch, productMatch);
-    }
+    baseMatch.$and.push(productMatch);
   }
 
   const [datewise, statusAgg, transfers] = await Promise.all([
@@ -1735,7 +1740,7 @@ const getStockTransferReport = catchAsync(async (req, res) => {
       { $match: baseMatch },
       {
         $group: {
-          _id: businessDateGroup('$createdAt'),
+          _id: businessDateGroup({ $ifNull: ['$transferDate', '$createdAt'] }),
           count: { $sum: 1 },
           quantity: { $sum: '$quantity' },
         },
@@ -1750,7 +1755,7 @@ const getStockTransferReport = catchAsync(async (req, res) => {
       { $group: { _id: '$status', count: { $sum: 1 }, quantity: { $sum: '$quantity' } } },
     ]),
     InventoryTransfer.find(baseMatch)
-      .sort({ createdAt: -1 })
+      .sort({ transferDate: -1, createdAt: -1 })
       .limit(500)
       .populate('fromBranchId', 'name')
       .populate('toBranchId', 'name')
@@ -1776,7 +1781,7 @@ const getStockTransferReport = catchAsync(async (req, res) => {
 
   const lineItems = transfers.map((tr) => ({
     id: tr._id,
-    date: tr.createdAt,
+    date: tr.transferDate || tr.createdAt,
     productName: tr.productName,
     fromBranchName: tr.fromBranchId?.name || '',
     toBranchName: tr.toBranchId?.name || '',

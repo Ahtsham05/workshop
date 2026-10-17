@@ -108,7 +108,28 @@ const createProduct = {
     color: Joi.string().trim().allow('', null).optional(),
     shelfLocation: Joi.string().trim().allow('').optional(),
     isActive: Joi.boolean().optional(),
+    // "Create anyway" after the same-name warning — see product.controller.js#createProduct.
+    allowDuplicateName: Joi.boolean().optional(),
   }).custom(noBothImeiAndSerial).custom(criticalNotAboveLow),
+};
+
+const getProductNameIndex = {};
+
+const cleanupIdleDays = Joi.number().valid(30, 60, 90, 180, 365);
+// `nonce`: set after the screen changed products itself → read past the analytics cache.
+const cleanupNonce = Joi.number().integer().min(0);
+const getCleanupOverview = { query: Joi.object().keys({ idleDays: cleanupIdleDays, nonce: cleanupNonce }) };
+const getCleanupItems = {
+  query: Joi.object().keys({
+    idleDays: cleanupIdleDays,
+    bucket: Joi.string().valid('dead_stock', 'zero_unsold', 'inactive_with_stock', 'below_cost', 'missing_price', 'duplicate'),
+    categoryId: Joi.alternatives().try(Joi.string().valid('uncategorized'), Joi.string().custom(objectId)),
+    search: Joi.string().allow('').max(200),
+    sortBy: Joi.string().valid('stockValue', 'idle', 'name', 'stock'),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(500),
+    nonce: cleanupNonce,
+  }),
 };
 
 const fetchImageFromSearch = {
@@ -138,6 +159,10 @@ const getProducts = {
     trackSerial: Joi.boolean(),
     // Only products created today (Pakistan time) — see utils/addedToday.js.
     addedToday: Joi.boolean(),
+    // Comma-separated Product.source values (config/productSources.js); 'unknown' = not recorded.
+    source: Joi.string().pattern(/^[a-z_]+(,[a-z_]+)*$/),
+    // A product list's id (see productList.service.js).
+    listId: Joi.string().custom(objectId),
     sortBy: Joi.string(),
     limit: Joi.number(),
     page: Joi.number(),
@@ -152,6 +177,7 @@ const getProductStats = {
   query: Joi.object().keys({
     category: Joi.string(),
     addedToday: Joi.boolean(),
+    listId: Joi.string().custom(objectId),
   }),
 };
 
@@ -402,6 +428,8 @@ const bulkAddProducts = {
     // What to do with a row whose barcode/SKU is already in this branch's catalogue.
     // Absent means the service's default ('skip') — see product.service.js#bulkAddProducts.
     duplicateStrategy: Joi.string().valid('skip', 'update', 'error').optional(),
+    // Which importer sent the rows — recorded as Product.source on the new products.
+    source: Joi.string().valid('excel_import', 'ai_scan').optional(),
     products: Joi.array().items(
       Joi.object().keys({
         name: Joi.any(),
@@ -474,6 +502,9 @@ const syncProductsToBranches = {
 };
 
 module.exports = {
+  getCleanupOverview,
+  getCleanupItems,
+  getProductNameIndex,
   createProduct,
   fetchImageFromSearch,
   getProducts,

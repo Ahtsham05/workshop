@@ -306,6 +306,7 @@ const syncProductsToBranches = async ({ userId, organizationId, branchId, produc
         branchId: target._id,
         createdBy: userId,
         items,
+        source: 'branch_sync',
       });
       row.syncedCount = result.importedCount;
       row.alreadyPresentCount = result.alreadyImportedCount;

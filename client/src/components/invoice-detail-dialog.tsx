@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import { Loader2 } from 'lucide-react'
 import { useGetInvoiceByIdQuery } from '@/stores/invoice.api'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -45,6 +47,8 @@ interface InvoiceDetailDialogProps {
   /** Where focus goes when the dialog closes — e.g. back to the list that opened it, since a
    *  dialog opened without a Trigger otherwise drops focus on <body>. */
   onCloseAutoFocus?: (event: Event) => void
+  /** Optional bar above the details — the previous/next stepper (see record-navigator.tsx). */
+  navigation?: ReactNode
 }
 
 /**
@@ -54,10 +58,10 @@ interface InvoiceDetailDialogProps {
  * supplier-ledger-details.tsx) plus a payment-status block, kept here as the one shared
  * copy instead of a third/fourth inline duplicate.
  */
-export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onCloseAutoFocus }: InvoiceDetailDialogProps) {
+export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onCloseAutoFocus, navigation }: InvoiceDetailDialogProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const { data: invoice, isLoading, error } = useGetInvoiceByIdQuery(invoiceId, { skip: !invoiceId || !open })
+  const { data: invoice, isLoading, isFetching, error } = useGetInvoiceByIdQuery(invoiceId, { skip: !invoiceId || !open })
   const formatCurrency = (amount: unknown) => {
     const num = Number(amount)
     return formatMoney(isNaN(num) ? 0 : num)
@@ -66,10 +70,14 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onCloseAuto
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!w-fit !max-w-[min(96vw,1100px)] min-w-[min(90vw,520px)] max-h-[85vh] overflow-y-auto" onCloseAutoFocus={onCloseAutoFocus}>
+        {navigation}
         <DialogHeader>
-          <DialogTitle>
-            {t('invoice_details') || 'Invoice Details'}
-            {invoice?.invoiceNumber && <span className="text-muted-foreground font-normal"> — {invoice.invoiceNumber}</span>}
+          <DialogTitle className="flex items-center gap-2">
+            <span>
+              {t('invoice_details') || 'Invoice Details'}
+              {invoice?.invoiceNumber && <span className="text-muted-foreground font-normal"> — {invoice.invoiceNumber}</span>}
+            </span>
+            {isFetching && !isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </DialogTitle>
         </DialogHeader>
 

@@ -607,11 +607,13 @@ const CACHE_TTL_MS = 15 * 1000;
 const MAX_CACHE_ENTRIES = 50;
 const analyticsCache = new Map();
 
-const getBranchAnalytics = ({ organizationId, branchId, period }) => {
+// `fresh`: skip a cached result (still caches the new one) — for a screen re-reading
+// right after it changed products itself (e.g. Clean up's "Deactivate selected").
+const getBranchAnalytics = ({ organizationId, branchId, period, fresh = false }) => {
   const key = [organizationId, branchId || '*', period.start.toISOString(), period.end.toISOString()].join('|');
   const now = Date.now();
   const hit = analyticsCache.get(key);
-  if (hit && hit.expiresAt > now) return hit.promise;
+  if (hit && hit.expiresAt > now && !fresh) return hit.promise;
 
   if (analyticsCache.size >= MAX_CACHE_ENTRIES) {
     for (const [cacheKey, entry] of analyticsCache) {

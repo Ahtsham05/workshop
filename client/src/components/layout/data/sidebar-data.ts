@@ -99,7 +99,7 @@ export const sidebarData: SidebarData = {
         {
           title: 'Catalog & Inventory',
           icon: IconPackages,
-          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'countStock', 'approveStockCounts', 'viewImeiTracking', 'viewPriceChecker', 'viewPriceUpdates', 'managePriceUpdates'],
+          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'countStock', 'approveStockCounts', 'viewImeiTracking', 'viewWarrantyClaims', 'manageWarrantyClaims', 'viewPriceChecker', 'viewPriceUpdates', 'managePriceUpdates'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
             { title: 'Categories', url: '/categories', icon: IconCategory, permission: 'viewCategories' },
@@ -109,6 +109,7 @@ export const sidebarData: SidebarData = {
             { title: 'Stock Adjustments', url: '/stock-adjustments', icon: ClipboardEdit, permission: 'viewProducts' },
             { title: 'Stock Counts', url: '/stock-counts', icon: ClipboardCheck, anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
             { title: 'IMEI / Serial Tracking', url: '/mobile-shop/imei-tracking', icon: ShieldCheck, permission: 'viewImeiTracking' },
+            { title: 'Warranty Claims', url: '/warranty-claims', icon: ShieldCheck, anyPermission: ['viewWarrantyClaims', 'manageWarrantyClaims', 'viewImeiTracking', 'viewProducts'] },
             { title: 'Price Checker', url: '/price-checker', icon: DollarSign, permission: 'viewPriceChecker' },
             { title: 'Price Updates', url: '/price-updates', icon: TrendingUp, anyPermission: ['viewPriceUpdates', 'managePriceUpdates'] },
           ],

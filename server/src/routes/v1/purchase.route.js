@@ -37,6 +37,14 @@ router
   .route('/export')
   .get(auth('viewPurchases'), validate(purchaseValidation.exportPurchases), purchaseController.exportPurchases);
 
+// Previous/next full-record stepping + the duplicate check run before saving.
+router
+  .route('/navigate')
+  .get(auth('viewPurchases'), validate(purchaseValidation.getPurchaseNavigation), purchaseController.getPurchaseNavigation);
+router
+  .route('/possible-duplicates')
+  .get(auth('createPurchases', 'editPurchases'), validate(purchaseValidation.getPossibleDuplicatePurchases), purchaseController.getPossibleDuplicatePurchases);
+
 // Invoice-wise + item-wise history for the New Purchase screen's side panel.
 router
   .route('/history')

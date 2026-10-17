@@ -6,6 +6,7 @@ const productValidation = require('../../validations/product.validation');
 const productController = require('../../controllers/product.controller');
 const productAnalyticsController = require('../../controllers/productAnalytics.controller');
 const productBranchSyncController = require('../../controllers/productBranchSync.controller');
+const inventoryCleanupController = require('../../controllers/inventoryCleanup.controller');
 const { upload } = require('../../middlewares/upload');
 
 const router = express.Router();
@@ -82,6 +83,20 @@ router
 router
   .route('/lookup-by-code')
   .get(auth('createProducts'), validate(productValidation.lookupProductByCode), productController.lookupProductByCode);
+
+// Category-wise "Clean up" view: dead stock, unsold zero-stock, priced wrong, duplicates.
+router
+  .route('/cleanup/overview')
+  .get(auth('viewProducts'), validate(productValidation.getCleanupOverview), inventoryCleanupController.getCleanupOverview);
+router
+  .route('/cleanup/items')
+  .get(auth('viewProducts'), validate(productValidation.getCleanupItems), inventoryCleanupController.getCleanupItems);
+
+// Every product in the branch (incl. inactive/imported) reduced to name/codes/stock — the
+// Add Product dialog ranks "similar products" against it as the name is typed.
+router
+  .route('/name-index')
+  .get(auth('createProducts'), validate(productValidation.getProductNameIndex), productController.getProductNameIndex);
 
 router.route('/purchasable').get(
   auth(...CATALOG_READ_PERMISSIONS),
