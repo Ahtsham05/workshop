@@ -1,9 +1,38 @@
+const mongoose = require('mongoose');
 const logger = require('../config/logger');
-const { Category, Product, Customer, Supplier, Invoice, Purchase, Expense } = require('../models');
+const {
+  Category,
+  Product,
+  Customer,
+  Supplier,
+  Invoice,
+  Purchase,
+  Expense,
+  PurchaseOrder,
+  SalesReturn,
+  PurchaseReturn,
+  StockAdjustment,
+  InventoryTransfer,
+  WarrantyClaim,
+  CustomerLedger,
+  CustomerPayment,
+  SupplierLedger,
+  SupplierPayment,
+  EmployeeLedger,
+  SalesmanCommissionLedger,
+  JournalEntry,
+  AccountHead,
+  CashBookEntry,
+  WalletEntry,
+  Imei,
+} = require('../models');
 const invoiceService = require('./invoice.service');
 const purchaseService = require('./purchase.service');
 const expenseService = require('./expense.service');
 const walletService = require('./wallet.service');
+const customerLedgerService = require('./customerLedger.service');
+const supplierLedgerService = require('./supplierLedger.service');
+const inventorySyncService = require('./inventorySync.service');
 
 /**
  * Trial-account demo-data seeder.
@@ -152,6 +181,7 @@ const seedProducts = async ({ organizationId, branchId, userId }, categories) =>
         branchId,
         createdBy: userId,
         isDemo: true,
+        source: 'demo',
         name: p.name,
         price: p.price,
         cost: p.cost,
@@ -181,7 +211,6 @@ const seedPurchases = async ({ organizationId, branchId, userId }, suppliers, pr
         product: product._id,
         quantity,
         priceAtPurchase,
-        source: 'demo',
         total: quantity * priceAtPurchase,
       };
     });
@@ -317,67 +346,400 @@ const seedDemoData = async (ctx) => {
   };
 };
 
+// One demo-data job (remove or reset) per organization at a time. Before this guard, two
+// overlapping resets each cleared and reseeded, which left an account with two or three
+// copies of the sample invoices/expenses that a later reset could never fully catch up on.
+// The server runs as a single process (ecosystem.config.json instances: 1), so an
+// in-memory map is enough; a restart mid-job just leaves the remainder for the next click.
+const runningJobs = new Map();
+
+const getDemoDataJob = (organizationId) => runningJobs.get(String(organizationId)) || null;
+
 /**
- * Clear every isDemo-tagged record for an organization and reseed a fresh batch.
- * Invoices/Purchases/Expenses go through their real delete-service functions so stock,
- * wallet balances, ledgers, and the cash book are all correctly reversed rather than
- * left dangling by a raw deleteMany.
- * @param {{organizationId: ObjectId, branchId: ObjectId, userId: ObjectId}} ctx
+ * Run a seed/remove/reset job for an org unless one is already running.
+ * @returns {Promise|null} the job's promise (resolves to its result, never rejects —
+ *   failures are logged and resolve to `{ error }`), or null when a job was already running
  */
-const resetDemoData = async (ctx) => {
-  const { organizationId } = ctx;
+const startDemoDataJob = (organizationId, kind, run) => {
+  const key = String(organizationId);
+  if (runningJobs.has(key)) return null;
+  const job = { kind, startedAt: new Date(), step: 'Starting' };
+  runningJobs.set(key, job);
+  return Promise.resolve()
+    .then(() => run(job))
+    .catch((err) => {
+      logger.error(`Demo data ${kind} failed for organization ${key}: ${err.message}`);
+      return { error: err.message };
+    })
+    .finally(() => runningJobs.delete(key));
+};
+
+/**
+ * How many isDemo-tagged records are still in the organization.
+ * @param {ObjectId} organizationId
+ */
+const getDemoDataCounts = async (organizationId) => {
+  const filter = { organizationId, isDemo: true };
+  const [products, customers, suppliers, categories, invoices, purchases, expenses] = await Promise.all([
+    Product.countDocuments(filter),
+    Customer.countDocuments(filter),
+    Supplier.countDocuments(filter),
+    Category.countDocuments(filter),
+    Invoice.countDocuments(filter),
+    Purchase.countDocuments(filter),
+    Expense.countDocuments(filter),
+  ]);
+  return { products, customers, suppliers, categories, invoices, purchases, expenses };
+};
+
+// Matches customer/supplier ledger payment rows that moved a wallet (see parseWalletType
+// in customerLedger.service.js) — those reverse a wallet balance on delete.
+const WALLET_PAYMENT_METHOD = /wallet|jazzcash|easypaisa/i;
+
+const hasWalletLeg = (doc) =>
+  String(doc.paymentMethod || '').toLowerCase() === 'wallet' ||
+  Boolean(doc.walletType) ||
+  String(doc.splitPaymentMethod || '').toLowerCase() === 'wallet' ||
+  Boolean(doc.splitWalletType);
+
+const hasTrackedLine = (item) =>
+  Boolean(item.variantId) ||
+  Boolean(item.batchId) ||
+  (item.batchAllocations || []).length > 0 ||
+  (item.imeis || []).length > 0;
+
+/**
+ * Split demo invoices/purchases/expenses into the ones the bulk remover can undo exactly
+ * and the ones with side effects it doesn't model (wallet balances, variants/batches/IMEIs,
+ * salesman commission, employee/supplier offsets, payment allocations). The seeder only
+ * creates plain cash/credit documents, so in practice everything is "simple"; anything a
+ * user has since edited into something richer still goes through the real delete services.
+ */
+const classifyDemoDocuments = async (organizationId, invoices, purchases, expenses) => {
+  const invoiceIds = invoices.map((d) => d._id);
+  const purchaseIds = purchases.map((d) => d._id);
+  const byOrg = { organizationId };
+
+  const [customerEntries, supplierEntries, employeeRefs, offsetRefs, commissionRefs] = await Promise.all([
+    CustomerLedger.find({ ...byOrg, referenceId: { $in: invoiceIds } })
+      .select('_id customer referenceId transactionType paymentMethod')
+      .lean(),
+    SupplierLedger.find({ ...byOrg, referenceId: { $in: [...purchaseIds, ...invoiceIds] } })
+      .select('_id supplier referenceId transactionType paymentMethod')
+      .lean(),
+    EmployeeLedger.distinct('referenceId', { ...byOrg, referenceId: { $in: invoiceIds } }),
+    SupplierLedger.distinct('referenceId', { ...byOrg, referenceId: { $in: invoiceIds } }),
+    SalesmanCommissionLedger.distinct('referenceId', { ...byOrg, referenceId: { $in: invoiceIds } }),
+  ]);
+  const ledgerIds = [...customerEntries, ...supplierEntries].map((e) => e._id);
+  const [customerPayments, supplierPayments] = await Promise.all([
+    CustomerPayment.find({
+      ...byOrg,
+      $or: [{ 'allocations.invoice': { $in: invoiceIds } }, { customerLedgerEntryId: { $in: ledgerIds } }],
+    })
+      .select('allocations.invoice customerLedgerEntryId')
+      .lean(),
+    SupplierPayment.find({
+      ...byOrg,
+      $or: [{ 'allocations.purchase': { $in: purchaseIds } }, { supplierLedgerEntryId: { $in: ledgerIds } }],
+    })
+      .select('allocations.purchase supplierLedgerEntryId')
+      .lean(),
+  ]);
+
+  const complex = new Set([...employeeRefs, ...offsetRefs, ...commissionRefs].map(String));
+  const entryOwner = new Map([...customerEntries, ...supplierEntries].map((e) => [String(e._id), String(e.referenceId)]));
+  for (const p of customerPayments) {
+    (p.allocations || []).forEach((a) => complex.add(String(a.invoice)));
+    if (p.customerLedgerEntryId) complex.add(entryOwner.get(String(p.customerLedgerEntryId)));
+  }
+  for (const p of supplierPayments) {
+    (p.allocations || []).forEach((a) => complex.add(String(a.purchase)));
+    if (p.supplierLedgerEntryId) complex.add(entryOwner.get(String(p.supplierLedgerEntryId)));
+  }
+  for (const e of [...customerEntries, ...supplierEntries]) {
+    if (WALLET_PAYMENT_METHOD.test(e.paymentMethod || '')) complex.add(String(e.referenceId));
+  }
+  invoices.forEach((d) => {
+    if (hasWalletLeg(d) || d.salesmanId || (d.items || []).some(hasTrackedLine)) complex.add(String(d._id));
+  });
+  purchases.forEach((d) => {
+    if (hasWalletLeg(d) || (d.items || []).some(hasTrackedLine)) complex.add(String(d._id));
+  });
+  expenses.forEach((d) => {
+    if (String(d.paymentMethod) === 'Wallet' && d.walletType) complex.add(String(d._id));
+  });
+
+  const isSimple = (d) => !complex.has(String(d._id));
+  const simpleIds = new Set([...invoices, ...purchases, ...expenses].filter(isSimple).map((d) => String(d._id)));
+  return {
+    simple: { invoices: invoices.filter(isSimple), purchases: purchases.filter(isSimple), expenses: expenses.filter(isSimple) },
+    complex: {
+      invoices: invoices.filter((d) => !isSimple(d)),
+      purchases: purchases.filter((d) => !isSimple(d)),
+      expenses: expenses.filter((d) => !isSimple(d)),
+    },
+    // Ledger rows owned by simple documents — removed in bulk with them.
+    customerEntries: customerEntries.filter((e) => simpleIds.has(String(e.referenceId))),
+    supplierEntries: supplierEntries.filter((e) => simpleIds.has(String(e.referenceId))),
+  };
+};
+
+/**
+ * Undo simple demo documents in bulk, inside one transaction: the same end state the
+ * per-document delete services reach (stock back, cash book / wallet / ledger rows gone,
+ * account balances restored), in a fixed handful of round trips instead of ~50 per
+ * document. Journal entries are deleted outright and their exact effect on
+ * AccountHead.currentBalance is backed out, rather than posting reversal entries — demo
+ * postings should leave no trace in the books. All-or-nothing, so a server restart midway
+ * leaves nothing half-removed and the next click simply starts over.
+ */
+const bulkRemoveDemoDocuments = async (organizationId, { invoices, purchases, expenses }, customerEntries, supplierEntries) => {
+  const docIds = [...invoices, ...purchases, ...expenses].map((d) => d._id);
+  if (docIds.length === 0) return;
+  const ledgerIds = [...customerEntries, ...supplierEntries].map((e) => e._id);
+  const refIds = [...docIds, ...ledgerIds];
+  const byOrg = { organizationId };
+
+  // Net stock movement to undo, per product (same quantities the delete services use).
+  const stockDelta = new Map();
+  const addDelta = (productId, qty) => {
+    if (!productId || !qty) return;
+    const key = String(productId);
+    stockDelta.set(key, (stockDelta.get(key) || 0) + qty);
+  };
+  invoices
+    .filter((inv) => inv.type !== 'quotation')
+    .forEach((inv) => inv.items.forEach((i) => addDelta(i.productId, Number(i.stockQuantity || i.quantity || 0))));
+  purchases.forEach((pur) => pur.items.forEach((i) => addDelta(i.product, -Number(i.stockQuantity || i.quantity || 0))));
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const journals = await JournalEntry.find({ ...byOrg, referenceId: { $in: refIds } })
+        .select('_id lines.accountId lines.debit lines.credit')
+        .session(session)
+        .lean();
+      const accountIds = [...new Set(journals.flatMap((j) => j.lines.map((l) => String(l.accountId))))];
+      const accounts = await AccountHead.find({ _id: { $in: accountIds } })
+        .select('_id balanceType')
+        .session(session)
+        .lean();
+      const balanceType = new Map(accounts.map((a) => [String(a._id), a.balanceType]));
+      // Every entry (originals and any reversals) moved currentBalance when it was posted
+      // (accountsSystem.createJournalEntry); subtract that net effect.
+      const accountDelta = new Map();
+      for (const line of journals.flatMap((j) => j.lines)) {
+        const key = String(line.accountId);
+        if (!balanceType.has(key)) continue;
+        const debitMinusCredit = (line.debit || 0) - (line.credit || 0);
+        const delta = balanceType.get(key) === 'DEBIT' ? debitMinusCredit : -debitMinusCredit;
+        accountDelta.set(key, (accountDelta.get(key) || 0) + delta);
+      }
+
+      const accountOps = [...accountDelta]
+        .filter(([, delta]) => delta !== 0)
+        .map(([id, delta]) => ({ updateOne: { filter: { _id: id }, update: { $inc: { currentBalance: -delta } } } }));
+      const stockOps = [...stockDelta]
+        .filter(([, qty]) => qty !== 0)
+        .map(([id, qty]) => ({ updateOne: { filter: { _id: id }, update: { $inc: { stockQuantity: qty } } } }));
+      // Sequential on purpose: operations sharing a transaction's session must not run in
+      // parallel. Purchases with IMEI lines are never "simple", so no IMEI cleanup here.
+      const writes = [
+        () => JournalEntry.deleteMany({ _id: { $in: journals.map((j) => j._id) } }, { session }),
+        () => accountOps.length && AccountHead.bulkWrite(accountOps, { session }),
+        () => CashBookEntry.deleteMany({ ...byOrg, referenceId: { $in: refIds } }, { session }),
+        () => WalletEntry.deleteMany({ ...byOrg, referenceId: { $in: refIds } }, { session }),
+        () => CustomerLedger.deleteMany({ _id: { $in: customerEntries.map((e) => e._id) } }, { session }),
+        () => SupplierLedger.deleteMany({ _id: { $in: supplierEntries.map((e) => e._id) } }, { session }),
+        () => stockOps.length && Product.bulkWrite(stockOps, { session }),
+        () => Invoice.deleteMany({ _id: { $in: invoices.map((d) => d._id) } }, { session }),
+        () => Purchase.deleteMany({ _id: { $in: purchases.map((d) => d._id) } }, { session }),
+        () => Expense.deleteMany({ _id: { $in: expenses.map((d) => d._id) } }, { session }),
+      ];
+      for (const write of writes) {
+        // eslint-disable-next-line no-await-in-loop
+        await write();
+      }
+
+      // Inventory mirror (only for orgs on the dual-write rollout).
+      for (const [productId, qty] of stockDelta) {
+        // eslint-disable-next-line no-await-in-loop
+        await inventorySyncService.recordStockChange({
+          organizationId,
+          productId,
+          quantityDelta: qty,
+          type: 'adjustment',
+          refType: 'DemoDataRemoval',
+          session,
+        });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+};
+
+/**
+ * Clear every isDemo-tagged record for an organization, without reseeding.
+ * Plain demo invoices/purchases/expenses are undone in bulk (bulkRemoveDemoDocuments);
+ * any with richer side effects go through their real delete services. Demo products/
+ * customers/suppliers/categories that a real (non-demo) record still points at are kept,
+ * so removing the samples can never break the user's own invoices, purchases or products.
+ * @param {{organizationId: ObjectId}} ctx
+ * @param {object} [job] - running job record; `step` is updated for the status endpoint
+ */
+const clearDemoData = async ({ organizationId }, job = {}) => {
+  const failed = [];
 
   // Manufacturing demo products are isDemo too — clear them (and the BOMs/orders that use
   // them) first, so the Product.deleteMany below never orphans manufacturing documents.
+  job.step = 'Removing manufacturing samples';
   try {
     // eslint-disable-next-line global-require
     await require('./manufacturing/demoData.service').clearDemoData({ organizationId });
   } catch (err) {
-    logger.warn(`Demo data reset: failed to clear manufacturing demo data — ${err.message}`);
+    logger.warn(`Demo data clear: failed to clear manufacturing demo data — ${err.message}`);
   }
 
+  job.step = 'Removing sample invoices, purchases and expenses';
   const [demoInvoices, demoPurchases, demoExpenses] = await Promise.all([
-    Invoice.find({ organizationId, isDemo: true }).select('_id'),
-    Purchase.find({ organizationId, isDemo: true }).select('_id'),
-    Expense.find({ organizationId, isDemo: true }).select('_id'),
+    Invoice.find({ organizationId, isDemo: true }).lean(),
+    Purchase.find({ organizationId, isDemo: true }).lean(),
+    Expense.find({ organizationId, isDemo: true }).lean(),
+  ]);
+  const { simple, complex, customerEntries, supplierEntries } = await classifyDemoDocuments(
+    organizationId,
+    demoInvoices,
+    demoPurchases,
+    demoExpenses
+  );
+
+  await bulkRemoveDemoDocuments(organizationId, simple, customerEntries, supplierEntries);
+
+  const slowSteps = [
+    ['invoice', complex.invoices, (id) => invoiceService.deleteInvoiceById(id)],
+    ['purchase', complex.purchases, (id) => purchaseService.deletePurchaseById(id)],
+    ['expense', complex.expenses, (id) => expenseService.deleteExpenseById(id)],
+  ];
+  for (const [label, docs, remove] of slowSteps) {
+    for (let i = 0; i < docs.length; i += 1) {
+      job.step = `Removing edited sample ${label}s (${i + 1} of ${docs.length})`;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await remove(docs[i]._id);
+      } catch (err) {
+        failed.push(`${label} ${docs[i]._id}`);
+        logger.warn(`Demo data clear: failed to delete ${label} ${docs[i]._id} — ${err.message}`);
+      }
+    }
+  }
+
+  // Master records: keep any demo record a real record still references. Demo invoices/
+  // purchases are gone by now, so whatever still points at a demo product, customer or
+  // supplier is the user's own data.
+  job.step = 'Removing sample products, customers, suppliers and categories';
+  const real = { organizationId, isDemo: { $ne: true } };
+  const demoProductIds = await Product.distinct('_id', { organizationId, isDemo: true });
+  const inUse = { $in: demoProductIds };
+  // [model, product path] — scoped to the org so the lookups stay on its indexes.
+  const productRefs = [
+    [Invoice, 'items.productId'],
+    [Purchase, 'items.product'],
+    [PurchaseOrder, 'items.product'],
+    [SalesReturn, 'items.productId'],
+    [PurchaseReturn, 'items.productId'],
+    [StockAdjustment, 'productId'],
+    [InventoryTransfer, 'fromProductId'],
+    [InventoryTransfer, 'toProductId'],
+    [WarrantyClaim, 'productId'],
+  ];
+  // Ledger entries left after the demo documents were reversed are the user's own
+  // (payments, opening balances, adjustments), so they also keep a customer/supplier.
+  const byOrg = { organizationId };
+  const [productUses, customerUses, supplierUses, realProducts] = await Promise.all([
+    Promise.all(productRefs.map(([Model, path]) => Model.distinct(path, { organizationId, [path]: inUse }))),
+    Promise.all([
+      Invoice.distinct('customerId', real),
+      CustomerLedger.distinct('customer', byOrg),
+      CustomerPayment.distinct('customer', byOrg),
+    ]),
+    Promise.all([
+      Purchase.distinct('supplier', real),
+      PurchaseOrder.distinct('supplier', byOrg),
+      Product.distinct('supplier', real),
+      SupplierLedger.distinct('supplier', byOrg),
+      SupplierPayment.distinct('supplier', byOrg),
+    ]),
+    Product.find(real).select('categories._id categories.name category').lean(),
+  ]);
+  const keepCategoryIds = new Set();
+  const keepCategoryNames = new Set();
+  for (const p of realProducts) {
+    if (p.category) keepCategoryNames.add(p.category);
+    for (const c of p.categories || []) {
+      if (c._id) keepCategoryIds.add(String(c._id));
+      else if (c.name) keepCategoryNames.add(c.name);
+    }
+  }
+  const demoCategories = await Category.find({ organizationId, isDemo: true }).select('_id name').lean();
+  const removableCategoryIds = demoCategories
+    .filter((c) => !keepCategoryIds.has(String(c._id)) && !keepCategoryNames.has(c.name))
+    .map((c) => c._id);
+
+  // invoice.customerId is Mixed ('walk-in' or an id), so drop anything that isn't an id.
+  const ids = (values) => values.filter((v) => v && mongoose.isValidObjectId(v)).map(String);
+  const keepProductIds = new Set(ids(productUses.flat()));
+  const removableProductIds = demoProductIds.filter((id) => !keepProductIds.has(String(id)));
+  const [products, , customers, suppliers, categories] = await Promise.all([
+    Product.deleteMany({ _id: { $in: removableProductIds } }),
+    // Same cleanup as productService's delete: unsold IMEIs go with the product.
+    Imei.deleteMany({ organizationId, productId: { $in: removableProductIds }, status: 'in_stock' }),
+    Customer.deleteMany({ organizationId, isDemo: true, _id: { $nin: ids(customerUses.flat()) } }),
+    Supplier.deleteMany({ organizationId, isDemo: true, _id: { $nin: ids(supplierUses.flat()) } }),
+    Category.deleteMany({ organizationId, isDemo: true, _id: { $in: removableCategoryIds } }),
   ]);
 
-  for (const { _id } of demoInvoices) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      await invoiceService.deleteInvoiceById(_id);
-    } catch (err) {
-      logger.warn(`Demo data reset: failed to delete invoice ${_id} — ${err.message}`);
-    }
-  }
-  for (const { _id } of demoPurchases) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      await purchaseService.deletePurchaseById(_id);
-    } catch (err) {
-      logger.warn(`Demo data reset: failed to delete purchase ${_id} — ${err.message}`);
-    }
-  }
-  for (const { _id } of demoExpenses) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      await expenseService.deleteExpenseById(_id);
-    } catch (err) {
-      logger.warn(`Demo data reset: failed to delete expense ${_id} — ${err.message}`);
-    }
-  }
-
+  // Running balances of any customer/supplier that survived (one a real record uses) —
+  // once per party instead of once per deleted ledger row.
+  job.step = 'Updating balances';
+  const [survivingCustomers, survivingSuppliers] = await Promise.all([
+    Customer.distinct('_id', { _id: { $in: customerEntries.map((e) => e.customer) } }),
+    Supplier.distinct('_id', { _id: { $in: supplierEntries.map((e) => e.supplier) } }),
+  ]);
   await Promise.all([
-    Product.deleteMany({ organizationId, isDemo: true }),
-    Customer.deleteMany({ organizationId, isDemo: true }),
-    Supplier.deleteMany({ organizationId, isDemo: true }),
-    Category.deleteMany({ organizationId, isDemo: true }),
+    ...survivingCustomers.map((id) => customerLedgerService.recalculateBalances(id)),
+    ...survivingSuppliers.map((id) => supplierLedgerService.recalculateBalances(id)),
   ]);
 
+  return {
+    invoices: demoInvoices.length,
+    purchases: demoPurchases.length,
+    expenses: demoExpenses.length,
+    products: products.deletedCount,
+    customers: customers.deletedCount,
+    suppliers: suppliers.deletedCount,
+    categories: categories.deletedCount,
+    failed,
+  };
+};
+
+/**
+ * Clear every isDemo-tagged record for an organization and reseed a fresh batch.
+ * @param {{organizationId: ObjectId, branchId: ObjectId, userId: ObjectId}} ctx
+ * @param {object} [job]
+ */
+const resetDemoData = async (ctx, job = {}) => {
+  await clearDemoData(ctx, job);
+  job.step = 'Loading fresh sample data';
   return seedDemoData(ctx);
 };
 
 module.exports = {
   seedDemoData,
+  clearDemoData,
   resetDemoData,
+  getDemoDataCounts,
+  getDemoDataJob,
+  startDemoDataJob,
 };

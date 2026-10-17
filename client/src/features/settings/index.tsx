@@ -29,17 +29,24 @@ import { WHATSAPP_UI_ENABLED } from '@/config/whatsapp-ui'
 import { isElectronApp } from '@/lib/sync/electron'
 import { usePermissions } from '@/context/permission-context'
 import type { PermissionKey } from '@/lib/permission-registry'
-import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import { useGetDemoDataStatusQuery, useGetMyOrganizationQuery } from '@/stores/organization.api'
 
 export default function Settings() {
-  const { hasAnyPermission } = usePermissions()
+  const { hasAnyPermission, hasPermission } = usePermissions()
   const { data: organization } = useGetMyOrganizationQuery()
   const isTrial = Boolean(organization?.subscription?.isTrial)
+  // A trial that converted to a paid plan can still carry the sample data, so the Demo
+  // Data page stays reachable for as long as any of it is left.
+  const canManageDemo = hasPermission('manageBusinessProfile')
+  const { data: demoStatus } = useGetDemoDataStatusQuery(organization?.id ?? '', {
+    skip: !organization?.id || isTrial || !canManageDemo,
+  })
+  const hasDemoData = Boolean(demoStatus && (demoStatus.total > 0 || demoStatus.job))
   const isVisible = (item: SettingsNavItem) => {
     if (!WHATSAPP_UI_ENABLED && item.href === '/settings/whatsapp') return false
     if (item.desktopOnly && !isElectronApp()) return false
     if (item.anyPermission && !hasAnyPermission(...item.anyPermission)) return false
-    if (item.trialOnly && !isTrial) return false
+    if (item.trialOnly && !isTrial && !hasDemoData) return false
     return true
   }
 

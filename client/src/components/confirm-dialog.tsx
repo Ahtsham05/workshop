@@ -1,3 +1,4 @@
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   AlertDialog,
@@ -58,6 +59,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
             onClick={handleConfirm}
             disabled={disabled || isLoading}
           >
+            {isLoading && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
             {confirmText ?? 'Continue'}
           </Button>
         </AlertDialogFooter>

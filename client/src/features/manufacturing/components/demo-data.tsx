@@ -184,16 +184,7 @@ function DemoConfirm({
           ))}
         </div>
       }
-      confirmText={
-        isLoading ? (
-          <>
-            <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-            {current.confirm}
-          </>
-        ) : (
-          current.confirm
-        )
-      }
+      confirmText={current.confirm}
       isLoading={isLoading}
       handleConfirm={() => kind && onConfirm(kind)}
     />

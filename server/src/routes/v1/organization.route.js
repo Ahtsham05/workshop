@@ -26,10 +26,12 @@ router.patch(
   organizationController.updateOrganization
 );
 
-// POST /v1/organizations/:orgId/demo-data/reset — wipe + reseed this trial org's sample
-// data. Same permission as the profile PATCH above; further gated to trial accounts only
-// in the controller.
+// Demo data — same permission as the profile PATCH above. GET: remaining sample records +
+// running job. reset: wipe + reseed (trial accounts only, checked in the controller).
+// remove: wipe without reseeding (any plan).
+router.get('/:orgId/demo-data', auth('manageBusinessProfile'), organizationController.getDemoDataStatus);
 router.post('/:orgId/demo-data/reset', auth('manageBusinessProfile'), organizationController.resetDemoData);
+router.post('/:orgId/demo-data/remove', auth('manageBusinessProfile'), organizationController.removeDemoData);
 
 // POST /v1/organizations/:orgId/document-numbering/preview — non-mutating live preview for
 // the Document Numbering settings page. Same permission as the profile PATCH above.

@@ -122,10 +122,24 @@ export interface SetupOrganizationRequest {
   logoFile?: File | null;
 }
 
+export interface DemoDataStatus {
+  counts: {
+    products: number;
+    customers: number;
+    suppliers: number;
+    categories: number;
+    invoices: number;
+    purchases: number;
+    expenses: number;
+  };
+  total: number;
+  job: { kind: 'seed' | 'reset' | 'remove'; step: string; startedAt: string } | null;
+}
+
 export const organizationApi = createApi({
   reducerPath: 'organizationApi',
   baseQuery,
-  tagTypes: ['Organization'],
+  tagTypes: ['Organization', 'DemoData'],
   endpoints: (builder) => ({
     setupOrganization: builder.mutation<{ organization: Organization; branch: any }, SetupOrganizationRequest>({
       query: (body) => {
@@ -235,15 +249,30 @@ export const organizationApi = createApi({
       query: () => '/payments/subscription/usage',
       providesTags: ['Organization'],
     }),
+    // Sample (isDemo) records still in the org + any running remove/reset job.
+    getDemoDataStatus: builder.query<DemoDataStatus, string>({
+      query: (orgId) => `/organizations/${orgId}/demo-data`,
+      providesTags: ['DemoData'],
+    }),
     // Wipes and reseeds this trial org's sample data (Products, Customers, Suppliers,
     // Categories, Invoices, Purchases, Expenses). The server responds immediately and
-    // runs the actual clear+reseed in the background (it can take a minute or two), so
-    // this resolves right away with just a status message, not the finished counts.
+    // runs the actual clear+reseed in the background (it can take a minute or two);
+    // getDemoDataStatus reports progress.
     resetDemoData: builder.mutation<{ success: boolean; message: string }, string>({
       query: (orgId) => ({
         url: `/organizations/${orgId}/demo-data/reset`,
         method: 'POST',
       }),
+      invalidatesTags: ['DemoData'],
+    }),
+    // Permanently removes the sample data without reseeding — any plan. One bulk,
+    // all-or-nothing request that resolves when it's done (a few seconds).
+    removeDemoData: builder.mutation<{ success: boolean; message: string }, string>({
+      query: (orgId) => ({
+        url: `/organizations/${orgId}/demo-data/remove`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['DemoData'],
     }),
   }),
 });
@@ -257,5 +286,7 @@ export const {
   usePreviewDocumentNumberingMutation,
   useSetDocumentNumberingNextNumberMutation,
   useGetSubscriptionUsageQuery,
+  useGetDemoDataStatusQuery,
   useResetDemoDataMutation,
+  useRemoveDemoDataMutation,
 } = organizationApi;

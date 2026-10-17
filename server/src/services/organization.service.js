@@ -110,11 +110,12 @@ const setupOrganization = async (userId, orgData) => {
   // never left the onboarding screen, and a retry then hit the "already completed" guard
   // above. Let it run in the background after the response has gone out instead; a
   // seeding hiccup must never break account creation, so failures are only logged.
-  demoDataService
-    .seedDemoData({ organizationId: organization._id, branchId: branch._id, userId })
-    .catch((err) => {
-      logger.error(`Failed to seed demo data for organization ${organization._id}: ${err.message}`);
-    });
+  // Registered as a demo-data job so a Reset/Remove clicked while it is still running is
+  // refused instead of racing it (that race once left an account with triple samples).
+  demoDataService.startDemoDataJob(organization._id, 'seed', (job) => {
+    job.step = 'Loading sample data';
+    return demoDataService.seedDemoData({ organizationId: organization._id, branchId: branch._id, userId });
+  });
 
   return { organization, branch };
 };
@@ -297,10 +298,11 @@ const clearOrganizationData = async (orgId) => {
 /**
  * Self-service reset of a trial org's seeded demo data (Products, Customers, Suppliers,
  * Categories, Invoices, Purchases, Expenses tagged isDemo: true) — wipes it and reseeds a
- * fresh batch. Only permitted while the org is still on a trial subscription; enforced by
- * the caller (organization.controller.js), not here.
+ * fresh batch in the background (reseeding goes through the real create services and takes
+ * a minute or two). Only permitted while the org is still on a trial subscription;
+ * enforced by the caller (organization.controller.js), not here.
  * @param {ObjectId} orgId
- * @returns {Promise<{categories, suppliers, customers, products, purchases, invoices, expenses}>}
+ * @returns {Promise<boolean>} false when a demo-data job is already running
  */
 const resetDemoData = async (orgId) => {
   const org = await Organization.findById(orgId);
@@ -311,11 +313,49 @@ const resetDemoData = async (orgId) => {
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Default branch not found for this organization');
   }
-  return demoDataService.resetDemoData({
-    organizationId: orgId,
-    branchId: branch._id,
-    userId: org.owner,
-  });
+  const ctx = { organizationId: org._id, branchId: branch._id, userId: org.owner };
+  return demoDataService.startDemoDataJob(org._id, 'reset', (job) => demoDataService.resetDemoData(ctx, job)) !== null;
+};
+
+/**
+ * Permanently remove the seeded demo data (any plan — this is how a trial that converted
+ * to paid gets rid of the samples), without reseeding. Bulk + transactional, so it finishes
+ * in seconds and is awaited rather than run in the background.
+ * @param {ObjectId} orgId
+ * @returns {Promise<object|null>} what was removed, or null when a demo-data job is already running
+ */
+const removeDemoData = async (orgId) => {
+  const org = await Organization.findById(orgId).select('_id');
+  if (!org) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
+  }
+  const job = demoDataService.startDemoDataJob(org._id, 'remove', (j) =>
+    demoDataService.clearDemoData({ organizationId: org._id }, j)
+  );
+  if (!job) return null;
+  const startedAt = Date.now();
+  const result = await job;
+  if (result.error) throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Could not remove demo data: ${result.error}`);
+  logger.info(`Demo data removed for organization ${org._id} in ${Date.now() - startedAt} ms: ${JSON.stringify(result)}`);
+  return result;
+};
+
+/**
+ * Remaining demo records + any running remove/reset job, for the Demo Data settings page.
+ * @param {ObjectId} orgId
+ */
+const getDemoDataStatus = async (orgId) => {
+  const org = await Organization.findById(orgId).select('_id');
+  if (!org) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Organization not found');
+  }
+  const counts = await demoDataService.getDemoDataCounts(org._id);
+  const job = demoDataService.getDemoDataJob(org._id);
+  return {
+    counts,
+    total: Object.values(counts).reduce((sum, n) => sum + n, 0),
+    job: job && { kind: job.kind, step: job.step, startedAt: job.startedAt },
+  };
 };
 
 module.exports = {
@@ -327,6 +367,8 @@ module.exports = {
   deleteOrganization,
   clearOrganizationData,
   resetDemoData,
+  removeDemoData,
+  getDemoDataStatus,
   getAllOrganizations,
 };
 
