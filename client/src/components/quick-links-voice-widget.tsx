@@ -8,6 +8,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { VoiceOrb } from '@/features/ai-assistant/components/voice-mode/voice-orb'
 import { useLanguage } from '@/context/language-context'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useFloatingPosition } from '@/hooks/use-floating-position'
+
+const LAUNCHER_DEFAULT = { side: 20, bottom: 20 }
 import { cn } from '@/lib/utils'
 import { resolveQuickLinkIcon } from '@/lib/quick-link-icons'
 import { QUICK_LINK_CATEGORY_GROUPS, getQuickLinkCategoryGroupId } from '@/lib/quick-link-category-groups'
@@ -37,6 +40,8 @@ export function QuickLinksVoiceWidget() {
   const { t } = useLanguage()
   const runQuickLink = useRunQuickLink()
   const isMobile = useIsMobile()
+  // Drag the launcher anywhere on screen; a plain click still opens it.
+  const launcher = useFloatingPosition('assistant-launcher', LAUNCHER_DEFAULT)
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [activeGroup, setActiveGroup] = useState('all')
@@ -147,8 +152,13 @@ export function QuickLinksVoiceWidget() {
       <PopoverTrigger asChild>
         <button
           type='button'
-          title={`${t('Quick links & voice assistant')} (⌘.)`}
-          className='fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95'
+          title={`${t('Quick links & voice assistant')} (⌘.) — ${t('drag to move')}`}
+          style={launcher.style}
+          {...launcher.handlers}
+          className={cn(
+            'z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95',
+            launcher.dragging && 'scale-110 shadow-2xl ring-4 ring-primary/30'
+          )}
           aria-label={t('Quick links & voice assistant')}
         >
           <Sparkles className='h-6 w-6' />

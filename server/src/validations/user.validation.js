@@ -84,6 +84,16 @@ const updateUiPreferences = {
         'yellow', 'amber', 'orange', 'bronze', 'red', 'maroon',
         'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose'
       ),
+      dashboardLayout: Joi.object().keys({
+        sections: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,60}$/)).max(20),
+        cards: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,60}$/)).max(100),
+      }),
+      customColors: Joi.object().keys({
+        background: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).allow(null),
+        header: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).allow(null),
+        sidebar: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).allow(null),
+        accent: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).allow(null),
+      }),
     })
     .min(1),
 };

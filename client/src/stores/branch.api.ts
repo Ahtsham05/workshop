@@ -1,4 +1,6 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
+import type { PrintColors } from '@/lib/print-colors';
+import type { PrintDesign } from '@/lib/print-design';
 import { baseQuery } from './base-query';
 import type { BranchColorKey } from '@/lib/appearance';
 
@@ -16,7 +18,9 @@ export interface BranchBankAccount {
 export type PaperSize = 'thermal80' | 'thermal58' | 'a4' | 'a5' | 'a4-half-left' | 'a4-half-right';
 
 /** A4/A5 invoice layout/design template */
-export type InvoiceTemplate = 'standard' | 'compact' | 'modern' | 'classic' | 'bold' | 'ledger';
+export type InvoiceTemplate =
+  | 'standard' | 'compact' | 'modern' | 'classic' | 'bold' | 'ledger'
+  | 'banking' | 'corporate' | 'statement' | 'executive' | 'challan' | 'minimal';
 
 /** Print orientation for the A5 paper size (ignored for other sizes) */
 export type PrintOrientation = 'portrait' | 'landscape';
@@ -25,6 +29,10 @@ export interface BranchPrintSettings {
   paperSize: PaperSize;
   template?: InvoiceTemplate;
   printOrientation?: PrintOrientation;
+  /** User-chosen A4/A5 colours (see lib/print-colors.ts); unset = template default. */
+  colors?: PrintColors;
+  /** Invoice designer settings (see lib/print-design.ts); null = template as designed. */
+  design?: Partial<PrintDesign> | null;
 }
 
 export interface Branch {

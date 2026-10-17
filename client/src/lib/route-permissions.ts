@@ -167,6 +167,8 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/reminders', anyPermission: ['viewReminders'] },
   // Personal notepad — every signed-in user, no role permission needed.
   { prefix: '/notes', allowAllAuthenticated: true },
+  // Team chat between branches — every staff member; the server scopes each conversation.
+  { prefix: '/chats', allowAllAuthenticated: true },
   { prefix: '/leads', anyPermission: ['viewLeads'] },
   {
     prefix: '/reports',

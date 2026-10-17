@@ -169,6 +169,12 @@ module.exports.Reminder = require('./reminder.model');
 // Notepad — personal / shared quick notes
 module.exports.Note = require('./note.model');
 
+// Team chat between branches
+module.exports.ChatConversation = require('./chatConversation.model');
+module.exports.ChatMessage = require('./chatMessage.model');
+module.exports.ChatReadState = require('./chatReadState.model');
+module.exports.ChatEvent = require('./chatEvent.model');
+
 // CRM Leads
 module.exports.Lead = require('./lead.model');
 

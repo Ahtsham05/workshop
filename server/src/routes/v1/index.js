@@ -41,6 +41,7 @@ const customerLedgerRoute = require('./customerLedger.route');
 const communicationLogRoute = require('./communicationLog.route');
 const reminderRoute = require('./reminder.route');
 const noteRoute = require('./note.route');
+const chatRoute = require('./chat.route');
 const leadRoute = require('./lead.route');
 const quickLinksRoute = require('./quickLinks.route');
 const supplierLedgerRoute = require('./supplierLedger.route');
@@ -347,6 +348,10 @@ const defaultRoutes = [
   {
     path: '/notes',
     route: noteRoute
+  },
+  {
+    path: '/chat',
+    route: chatRoute
   },
   {
     path: '/leads',

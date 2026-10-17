@@ -6,18 +6,21 @@ import { RowColorsSection } from './row-colors-section'
 import { BranchColorsSection } from './branch-colors-section'
 import { ThemeColorSection } from './theme-color-section'
 import { ThemePresetSection } from './theme-preset-section'
+import { CustomColorsSection } from './custom-colors-section'
 
 export default function SettingsAppearance() {
   return (
     <ContentSection
       title='Appearance'
-      desc='A ready-made theme, the app accent colour, the colour of each branch,
-          and the table row colours you read all day.'
+      desc='A ready-made theme, the app accent colour, your own background, header and menu colours,
+          the colour of each branch, and the table row colours you read all day.'
     >
       <div className='space-y-8'>
         <ThemePresetSection />
         <Separator />
         <ThemeColorSection />
+        <Separator />
+        <CustomColorsSection />
         <Separator />
         <BranchColorsSection />
         <Separator />

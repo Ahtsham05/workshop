@@ -30,6 +30,7 @@ import { NavCollapsible, NavItem, NavLink, type NavGroup } from './types'
 import { useLanguage } from '@/context/language-context'
 import { NoTranslate } from '@/components/no-translate'
 import { RemindersNavBadge } from './reminders-nav-badge'
+import { ChatNavBadge } from './chat-nav-badge'
 
 export function NavGroup({ title, items, collapsible }: NavGroup) {
   const { state } = useSidebar()
@@ -121,6 +122,8 @@ const SidebarMenuLink = ({ item, href }: { item: NavLink; href: string }) => {
           </NoTranslate>
           {item.url === '/reminders' ? (
             <RemindersNavBadge />
+          ) : item.url === '/chats' ? (
+            <ChatNavBadge />
           ) : (
             item.badge && <NavBadge>{item.badge}</NavBadge>
           )}

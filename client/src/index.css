@@ -724,3 +724,15 @@ body {
   top: 0;
   z-index: 10;
 }
+
+/* Custom header-bar colour (Settings → Appearance → Your own colours). Outside @layer so it
+   beats the header's own bg-background/95 + backdrop utilities; set only while picked. */
+html[data-custom-header='on'] header.app-header {
+  background: var(--app-header-bg) !important;
+  color: var(--app-header-fg);
+  border-bottom-color: color-mix(in oklab, var(--app-header-fg) 15%, transparent);
+  backdrop-filter: none;
+}
+html[data-custom-header='on'] header.app-header [data-slot='separator'] {
+  background: color-mix(in oklab, var(--app-header-fg) 25%, transparent);
+}

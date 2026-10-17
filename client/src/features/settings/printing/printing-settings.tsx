@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
-import { Loader2, Printer, RectangleVertical, RectangleHorizontal } from 'lucide-react'
+import { Loader2, Paintbrush, Printer, RectangleVertical, RectangleHorizontal } from 'lucide-react'
 import ContentSection from '../components/content-section'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,9 @@ import { PAPER_SIZE_OPTIONS, type PaperSize, type PrintOrientation } from '@/fea
 import { INVOICE_TEMPLATE_OPTIONS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
 import { generateA4InvoiceHTML, type PrintInvoiceData } from '@/features/invoice/utils/print-utils'
 import { useCurrencyMeta } from '@/lib/format-money'
+import { hasPrintColors, normalizePrintColors, withPrintColors, type PrintColors } from '@/lib/print-colors'
+import { compactPrintDesign, isDesignCustomised, normalizePrintDesign, withPrintDesign } from '@/lib/print-design'
+import { InvoiceDesigner, type DesignerValue } from './invoice-designer'
 
 const ORIENTATION_OPTIONS: Array<{ value: PrintOrientation; label: string; description: string; icon: typeof RectangleVertical }> = [
   { value: 'portrait', label: 'Portrait', description: 'Taller than it is wide', icon: RectangleVertical },
@@ -74,6 +77,11 @@ export default function PrintingSettings() {
   const [paperSize, setPaperSize] = useState<PaperSize>('thermal80')
   const [template, setTemplate] = useState<InvoiceTemplate>('standard')
   const [orientation, setOrientation] = useState<PrintOrientation>('portrait')
+  // Colours and the invoice design are edited (and saved) in the designer; the page only
+  // previews them and carries them along when it saves paper size / template.
+  const colors: PrintColors = useMemo(() => normalizePrintColors(branchData?.printSettings?.colors), [branchData?.printSettings?.colors])
+  const design = useMemo(() => normalizePrintDesign(branchData?.printSettings?.design), [branchData?.printSettings?.design])
+  const [designerOpen, setDesignerOpen] = useState(false)
 
   useEffect(() => {
     if (branchData?.printSettings?.paperSize) {
@@ -87,21 +95,36 @@ export default function PrintingSettings() {
     const sampleData: PrintInvoiceData = { ...SAMPLE_INVOICE_DATA, currencyMeta }
     const map: Partial<Record<InvoiceTemplate, string>> = {}
     for (const option of INVOICE_TEMPLATE_OPTIONS) {
-      map[option.value] = toPreviewOnlyHtml(generateA4InvoiceHTML(sampleData, 'a4', option.value))
+      map[option.value] = toPreviewOnlyHtml(
+        withPrintColors(colors, () => withPrintDesign(design, () => generateA4InvoiceHTML(sampleData, 'a4', option.value)))
+      )
     }
     return map
-  }, [currencyMeta])
+  }, [currencyMeta, colors, design])
 
-  const handleSave = async () => {
-    if (!activeBranchId) return
+  /** Saves everything printSettings holds (the server replaces the object as a whole). */
+  const handleSave = async (fromDesigner?: DesignerValue): Promise<boolean> => {
+    if (!activeBranchId) return false
+    const next = fromDesigner ?? { template, colors, design }
     try {
       await updateBranch({
         branchId: activeBranchId,
-        body: { printSettings: { paperSize, template, printOrientation: orientation } },
+        body: {
+          printSettings: {
+            paperSize,
+            template: next.template,
+            printOrientation: orientation,
+            colors: normalizePrintColors(next.colors),
+            design: compactPrintDesign(next.design),
+          },
+        },
       }).unwrap()
-      toast.success('Printing preferences updated')
+      if (fromDesigner) setTemplate(fromDesigner.template)
+      toast.success(fromDesigner ? 'Invoice design saved' : 'Printing preferences updated')
+      return true
     } catch {
       toast.error('Failed to update printing preferences')
+      return false
     }
   }
 
@@ -109,11 +132,12 @@ export default function PrintingSettings() {
     paperSize !== (branchData?.printSettings?.paperSize ?? 'thermal80') ||
     template !== (branchData?.printSettings?.template ?? 'standard') ||
     orientation !== (branchData?.printSettings?.printOrientation ?? 'portrait')
+  const customised = isDesignCustomised(design) || hasPrintColors(colors)
 
   return (
     <ContentSection
       title="Printing"
-      desc="Choose the default paper size used across invoices, receipts, and statements for this branch."
+      desc="Choose the default paper size and invoice design used across invoices, receipts, and statements for this branch."
     >
       <Card>
         <CardContent className="pt-6">
@@ -235,8 +259,27 @@ export default function PrintingSettings() {
                 </RadioGroup>
               </div>
 
+              <div className="mt-8 flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Paintbrush className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">
+                    Invoice designer
+                    {customised && <span className="ms-2 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">Customised</span>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Fonts, every text size (A4 and A5 separately), header layout, margins, table lines, which sections print, your own wording and
+                    colours — with a live preview.
+                  </p>
+                </div>
+                <Button onClick={() => setDesignerOpen(true)} className="shrink-0">
+                  <Paintbrush className="mr-2 size-4" /> Open designer
+                </Button>
+              </div>
+
               <div className="flex justify-end mt-6">
-                <Button onClick={handleSave} disabled={saving || !hasChanges}>
+                <Button onClick={() => void handleSave()} disabled={saving || !hasChanges}>
                   {saving ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -251,6 +294,13 @@ export default function PrintingSettings() {
           )}
         </CardContent>
       </Card>
+      <InvoiceDesigner
+        open={designerOpen}
+        onOpenChange={setDesignerOpen}
+        initial={{ template, colors, design }}
+        saving={saving}
+        onSave={handleSave}
+      />
     </ContentSection>
   )
 }

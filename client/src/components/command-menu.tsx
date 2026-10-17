@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import {
   IconArrowRightDashed,
   IconArrowsExchange,
+  IconCalculator,
   IconDeviceLaptop,
   IconMoon,
   IconSun,
@@ -23,6 +24,16 @@ import {
 import { ScrollArea } from './ui/scroll-area'
 import { useFilteredNavGroups } from '@/hooks/use-filtered-nav-groups'
 import { QUICK_TRANSFER_SHORTCUT_LABEL, useQuickTransfer } from '@/features/stock-transfer/context/quick-transfer-context'
+import { CALCULATOR_SHORTCUT_LABEL, openCalculator, type CalculatorTab } from '@/features/calculator/lib/calculator-store'
+
+const CALCULATOR_COMMANDS: { tab: CalculatorTab; label: string; keywords: string }[] = [
+  { tab: 'basic', label: 'Calculator', keywords: 'calculator calc add sum' },
+  { tab: 'margin', label: 'Margin & markup calculator', keywords: 'margin markup profit selling price cost' },
+  { tab: 'discount', label: 'Discount calculator', keywords: 'discount percent off sale' },
+  { tab: 'tax', label: 'Tax / GST calculator', keywords: 'tax gst vat sales tax inclusive exclusive' },
+  { tab: 'installment', label: 'Installment calculator', keywords: 'installment emi qist easy monthly advance' },
+  { tab: 'breakeven', label: 'Break-even calculator', keywords: 'break even fixed cost units' },
+]
 
 export function CommandMenu() {
   const navigate = useNavigate()
@@ -61,8 +72,15 @@ export function CommandMenu() {
         <ScrollArea type='hover' className='h-72 pr-1'>
           <CommandEmpty>{t('no_results_found')}</CommandEmpty>
           {/* Actions that open over the current page instead of navigating away from it. */}
+          <CommandGroup heading={t('Quick actions')}>
+            {CALCULATOR_COMMANDS.map((command) => (
+              <CommandItem key={command.tab} value={command.keywords} onSelect={() => runCommand(() => openCalculator(command.tab))}>
+                <IconCalculator className='text-muted-foreground' />
+                <span>{t(command.label)}</span>
+                {command.tab === 'basic' && <CommandShortcut>{CALCULATOR_SHORTCUT_LABEL}</CommandShortcut>}
+              </CommandItem>
+            ))}
           {quickTransfer?.canTransfer && (
-            <CommandGroup heading={t('Quick actions')}>
               <CommandItem
                 value='New stock transfer move stock branch'
                 onSelect={() => runCommand(() => quickTransfer.openQuickTransfer())}
@@ -71,8 +89,8 @@ export function CommandMenu() {
                 <span>{t('New stock transfer')}</span>
                 <CommandShortcut>{QUICK_TRANSFER_SHORTCUT_LABEL}</CommandShortcut>
               </CommandItem>
-            </CommandGroup>
           )}
+          </CommandGroup>
           {filteredNavGroups.map((group) => (
             <CommandGroup key={group.title} heading={getNavTranslation(group.title)}>
               {group.items.map((navItem, i) => {

@@ -185,6 +185,16 @@ async function startApplication() {
         } catch (err) {
           logger.warn('SMS Gateway socket skipped:', err.message);
         }
+        // Team chat between branches (live pushes; data still goes through /v1/chat).
+        try {
+          const { initChatSocket } = require('./socket/chat.socket');
+          initChatSocket(server, {
+            origin: (origin, cb) => cb(null, true),
+            methods: ['GET', 'POST'],
+          });
+        } catch (err) {
+          logger.warn('Chat socket skipped:', err.message);
+        }
         try {
           const { startPayrollScheduler } = require('./jobs/payrollScheduler');
           startPayrollScheduler();

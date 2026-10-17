@@ -4,7 +4,9 @@ import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import { purchaseReceiptLabels, resolveInvoiceLanguage, type InvoiceLanguage } from '@/features/invoice/utils/language'
 import { getPurchaseItemDisplayName } from '@/features/purchase-invoice/utils/purchase-item-display'
 import { PAPER_FORMATS, withPrintOrientation, type PaperSize, type PrintOrientation, type SheetSize } from '@/features/invoice/utils/paper-format'
-import { INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
+import { INVOICE_TEMPLATE_CSS, invoiceTemplateExtrasHtml, type InvoiceTemplate } from '@/features/invoice/utils/invoice-template'
+import { printColorsCss } from '@/lib/print-colors'
+import { printDesignCss, printDesignHeadHtml, sheetKindOf } from '@/lib/print-design'
 import type { CurrencyOption } from '@/stores/localization.api'
 import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
 import { formatAppDate } from '@/lib/date-format'
@@ -383,7 +385,10 @@ export function generatePurchaseInvoiceA4HTML(
     .status-cash { background: #d4edda; color: #155724; } .status-credit { background: #cce5ff; color: #004085; } .status-pending { background: #fff3cd; color: #856404; }
     @media screen { body { max-width: 800px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 40px; border-radius: 12px; } }
     ${INVOICE_TEMPLATE_CSS[template] ?? ''}
+    ${printColorsCss()}
+    ${printDesignCss(sheetKindOf(sheetSize))}
   </style>
+  ${printDesignHeadHtml()}
   <link href="${PURCHASE_PRINT_GOOGLE_FONTS}" rel="stylesheet">
 </head>
 <body>
@@ -392,8 +397,8 @@ export function generatePurchaseInvoiceA4HTML(
       ${branchDetails?.logo ? `<img src="${branchDetails.logo}" alt="${companyName}" class="company-logo" />` : branchDetails?.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus Solutions" class="company-logo" />` : ''}
       <div class="company-name">${companyName}</div>
       <div class="company-details">
-        ${companyAddress ? `${companyAddress}<br>` : ''}
-        ${companyPhone ? `${companyPhone}<br>` : ''}
+        ${companyAddress ? `<span class="company-address">${companyAddress}</span><br>` : ''}
+        ${companyPhone ? `<span class="company-contact-line">${companyPhone}</span><br>` : ''}
         ${companyEmail || ''}
       </div>
     </div>
@@ -403,7 +408,7 @@ export function generatePurchaseInvoiceA4HTML(
         <div><strong>#${purchase.invoiceNumber || ''}</strong></div>
         ${purchase.vendorBillNumber ? `<div>${labels.vendor_bill_number}: ${purchase.vendorBillNumber}</div>` : ''}
         <div>${labels.date}: ${purchase.purchaseDate ? formatAppDate(new Date(purchase.purchaseDate)) : formatAppDate(new Date())}</div>
-        <div>${labels.time}: ${new Date().toLocaleTimeString(locale)}</div>
+        <div class="meta-time">${labels.time}: ${new Date().toLocaleTimeString(locale)}</div>
       </div>
     </div>
   </div>
@@ -458,6 +463,8 @@ export function generatePurchaseInvoiceA4HTML(
   ${purchase.notes ? `<div class="notes-section"><div class="terms-heading">${labels.notes}:</div><div class="notes-content">${purchase.notes}</div></div>` : ''}
 
   ${branchDetails?.invoiceNote?.trim() ? `<div class="invoice-branch-note">${invoiceNoteToSafeHtml(branchDetails.invoiceNote)}</div>` : ''}
+
+  ${invoiceTemplateExtrasHtml(template, language, 'supplier')}
 
   <div class="footer">
     <div class="footer-line footer-thank-you">${labels.thank_you}</div>

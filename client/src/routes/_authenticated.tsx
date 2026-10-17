@@ -26,6 +26,9 @@ import { QuickLinksVoiceWidget } from '@/components/quick-links-voice-widget'
 import { NotepadProvider } from '@/features/notepad/context/notepad-context'
 import { QuickTransferProvider } from '@/features/stock-transfer/context/quick-transfer-context'
 import { NotepadWindow } from '@/features/notepad/components/notepad-window'
+import { CalculatorWindow } from '@/features/calculator/components/calculator-window'
+import { ChatLiveProvider } from '@/features/chats/components/chat-live-provider'
+import { PrintColorsSync } from '@/components/print-colors-sync'
 
 /**
  * Authenticated layout component.
@@ -118,6 +121,10 @@ function AuthenticatedLayout() {
             </SidebarProvider>
             </QuickTransferProvider>
             <NotepadWindow />
+            <CalculatorWindow />
+            {/* One chat socket for the session: live badges, toasts and open threads. */}
+            <ChatLiveProvider />
+            <PrintColorsSync />
           </NotepadProvider>
         </WhatsAppProvider>
       </PermissionWrapper>

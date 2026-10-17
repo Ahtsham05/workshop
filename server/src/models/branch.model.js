@@ -75,7 +75,7 @@ const branchSchema = mongoose.Schema(
       /** A4/A5 invoice layout/design template */
       template: {
         type: String,
-        enum: ['standard', 'compact', 'modern', 'classic', 'bold', 'ledger'],
+        enum: ['standard', 'compact', 'modern', 'classic', 'bold', 'ledger', 'banking', 'corporate', 'statement', 'executive', 'challan', 'minimal'],
         default: 'standard',
       },
       /** Print orientation for the A5 paper size (ignored for other sizes) */
@@ -84,6 +84,23 @@ const branchSchema = mongoose.Schema(
         enum: ['portrait', 'landscape'],
         default: 'portrait',
       },
+      /** User-chosen A4/A5 sheet colours (#rrggbb). null = keep the template's own colour. */
+      colors: {
+        pageBg: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        headerBg: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        headerText: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        accent: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        tableHeaderBg: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        tableHeaderText: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        footerBg: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        footerText: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+      },
+      /**
+       * Invoice designer settings (fonts, per-sheet sizes, layout, show/hide, wording) —
+       * shape owned by client/src/lib/print-design.ts, which whitelists/clamps every value
+       * before it reaches CSS and escapes the wording. Size-capped in branch.service.
+       */
+      design: { type: mongoose.Schema.Types.Mixed, default: null },
     },
     /**
      * Optional per-branch tax overrides. Currency stays strictly org-level (see

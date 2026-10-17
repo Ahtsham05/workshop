@@ -13,6 +13,7 @@ import {
   SortableContext,
   arrayMove,
   verticalListSortingStrategy,
+  rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
 } from '@dnd-kit/sortable'
@@ -26,6 +27,8 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { SortableTile } from './sortable-layout'
+import { ARRANGE_AUTOSCROLL, reorder, useArrangeSensors } from '../lib/arrange'
 import { useLanguage } from '@/context/language-context'
 import { useRemindersFeed } from '@/hooks/use-reminders-feed'
 import { resolveQuickLinkIcon } from '@/lib/quick-link-icons'
@@ -92,7 +95,7 @@ function SortableLinkRow({ action, onRemove }: { action: QuickLinkAction; onRemo
   )
 }
 
-export function QuickLinksPanel() {
+export function QuickLinksPanel({ arranging = false }: { arranging?: boolean } = {}) {
   const { t } = useLanguage()
   const runQuickLink = useRunQuickLink()
   const { data: myLinks = [], isLoading } = useGetMyQuickLinksQuery()
@@ -123,6 +126,7 @@ export function QuickLinksPanel() {
     return groups
   }, [availableToAdd])
 
+  const arrangeSensors = useArrangeSensors()
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -210,11 +214,24 @@ export function QuickLinksPanel() {
               </button>
             </p>
           ) : (
+            <DndContext
+              sensors={arrangeSensors}
+              autoScroll={ARRANGE_AUTOSCROLL}
+              collisionDetection={closestCenter}
+              onDragEnd={(event) => {
+                // Arrange dashboard: drop a tile in its new place — saved straight away.
+                const next = reorder(myLinks.map((l) => l.actionKey), event)
+                if (!next) return
+                const ordered = next.map((key) => myLinks.find((l) => l.actionKey === key)!).filter(Boolean)
+                void updateQuickLinks({ links: ordered.map((l) => ({ actionKey: l.actionKey })), optimistic: ordered })
+              }}
+            >
+            <SortableContext items={myLinks.map((l) => l.actionKey)} strategy={rectSortingStrategy} disabled={!arranging}>
             <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8'>
               {myLinks.map((action) => {
                 const Icon = resolveQuickLinkIcon(action.iconKey)
                 const badge = badges[action.actionKey]
-                return (
+                const tile = (
                   <Button
                     key={action.actionKey}
                     onClick={() => runQuickLink(action)}
@@ -232,8 +249,17 @@ export function QuickLinksPanel() {
                     </span>
                   </Button>
                 )
+                return arranging ? (
+                  <SortableTile key={action.actionKey} id={action.actionKey}>
+                    {tile}
+                  </SortableTile>
+                ) : (
+                  tile
+                )
               })}
             </div>
+            </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>

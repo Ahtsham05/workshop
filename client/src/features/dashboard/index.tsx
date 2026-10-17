@@ -1,4 +1,4 @@
-import { useState, useMemo, type ComponentProps } from 'react'
+import { useState, useMemo, type ComponentProps, type ReactNode } from 'react'
 import { isPast, isToday } from 'date-fns'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -11,6 +11,10 @@ import { UpcomingInvoices } from './components/upcoming-invoices'
 import { TopProducts } from './components/top-products'
 import { TopCustomers } from './components/top-customers'
 import { QuickLinksPanel } from './components/quick-links-panel'
+import { SortableCardGrid, SortableSection, SortableSectionList } from './components/sortable-layout'
+import { applyOrder, DASHBOARD_SECTIONS, useDashboardLayout, type DashboardSectionId } from './lib/dashboard-layout'
+import { Button } from '@/components/ui/button'
+import { Check, LayoutDashboard, RotateCcw } from 'lucide-react'
 import { DashboardDateFilter } from './components/dashboard-date-filter'
 import {
   DASHBOARD_QUERY_OPTIONS,
@@ -55,7 +59,8 @@ import { Navigate } from '@tanstack/react-router'
 
 // Every card on this page uses the phone layout with the icon beside the title. It's opt-in on
 // StatCard, so the cards on other pages are unaffected.
-const StatCard = (props: ComponentProps<typeof BaseStatCard>) => (
+// `cardId` is the card's stable id for Arrange dashboard (saved order); it is not passed on.
+const StatCard = ({ cardId: _cardId, ...props }: ComponentProps<typeof BaseStatCard> & { cardId: string }) => (
   <BaseStatCard inlineHeaderOnMobile {...props} />
 )
 
@@ -79,6 +84,9 @@ export default function Dashboard() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const isPlatformAdmin = user?.systemRole === 'superAdmin' || user?.systemRole === 'system_admin'
   const [dateRange, setDateRange] = useState<DashboardDateRange>(getDefaultDashboardDateRange)
+  // Arrange dashboard: drag cards / quick links / sections; the order is saved on the account.
+  const [arranging, setArranging] = useState(false)
+  const dashboardLayout = useDashboardLayout()
   const dateParams = dashboardRangeQueryParams(dateRange)
   const {
     data: stats,
@@ -189,37 +197,18 @@ export default function Dashboard() {
     return <SchoolDashboard />
   }
   
-  return (
-    <>
-        <Card className='mb-6 border bg-card/80 p-4 shadow-sm backdrop-blur-sm'>
-          <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
-            <div className='min-w-0'>
-              <h1 className='text-3xl font-bold tracking-tight'>{t('dashboard')}</h1>
-              <p className='mt-1 text-muted-foreground'>{t('Overview of your business performance')}</p>
-            </div>
-            <DashboardDateFilter
-              value={dateRange}
-              onChange={setDateRange}
-              onRefresh={refreshDashboard}
-              isRefreshing={statsLoading || statsRefreshing}
-              className='lg:shrink-0'
-            />
-          </div>
-        </Card>
-
-        {/* Quick Links */}
-        <div className='mb-6'>
-          <QuickLinksPanel />
-        </div>
-
-        {/* KPI cards — single flowing grid (5 per row on xl) */}
-        <div
-          aria-busy={statsLoading || statsRefreshing}
-          className={cn(DASHBOARD_CARD_GRID, 'transition-opacity', statsRefreshing && 'opacity-60')}
-        >
+  // KPI cards — single flowing grid (5 per row on xl), in the person's own order.
+  const kpiCards = (
+    <SortableCardGrid
+      order={dashboardLayout.layout.cards}
+      arranging={arranging}
+      onReorder={(ids) => dashboardLayout.update({ cards: ids })}
+      className={cn(DASHBOARD_CARD_GRID, 'transition-opacity', statsRefreshing && !arranging && 'opacity-60')}
+    >
           {showMobileCards && (
             <>
               <StatCard
+                cardId='cash-in-hand'
                 title={t('Cash in Hand')}
                 value={stats?.cashInHand || 0}
                 icon={<DollarSign className='h-4 w-4' />}
@@ -230,6 +219,7 @@ export default function Dashboard() {
                 link={{ to: '/cash-register' }}
               />
               <StatCard
+                cardId='bank-accounts-balance'
                 title={t('Bank Accounts Balance')}
                 value={stats?.walletBalance || 0}
                 icon={<WalletCards className='h-4 w-4' />}
@@ -240,6 +230,7 @@ export default function Dashboard() {
                 link={{ to: '/mobile-shop/wallet' }}
               />
               <StatCard
+                cardId='load-sold'
                 title={t('Load Sold')}
                 value={stats?.totalLoadSold || 0}
                 icon={<Smartphone className='h-4 w-4' />}
@@ -254,6 +245,7 @@ export default function Dashboard() {
                 link={reportLink('load')}
               />
               <StatCard
+                cardId='load-purchased'
                 title={t('Load Purchased')}
                 value={stats?.totalLoadPurchased || 0}
                 icon={<ShoppingBag className='h-4 w-4' />}
@@ -268,6 +260,7 @@ export default function Dashboard() {
                 link={reportLink('load')}
               />
               <StatCard
+                cardId='repair-income'
                 title={t('Repair Income')}
                 value={stats?.totalRepairIncome || 0}
                 icon={<Wrench className='h-4 w-4' />}
@@ -282,6 +275,7 @@ export default function Dashboard() {
                 link={reportLink('repair')}
               />
               <StatCard
+                cardId='bill-collection'
                 title={t('Bill Collection')}
                 value={stats?.totalBillCollection || 0}
                 icon={<Receipt className='h-4 w-4' />}
@@ -296,6 +290,7 @@ export default function Dashboard() {
                 link={reportLink('bill-payments')}
               />
               <StatCard
+                cardId='bills-due'
                 title={dateRange.period === 'today' ? t('Bills Due Today') : t('Bills Due in Period')}
                 value={
                   dateRange.period === 'today'
@@ -313,6 +308,7 @@ export default function Dashboard() {
                 link={{ to: '/mobile-shop/bill-payments', search: { filter: 'due-today' } }}
               />
               <StatCard
+                cardId='overdue-bills'
                 title={t('Overdue Bills')}
                 value={stats?.billsOverdue || 0}
                 icon={<AlertCircle className='h-4 w-4' />}
@@ -322,6 +318,7 @@ export default function Dashboard() {
                 link={{ to: '/mobile-shop/bill-payments', search: { filter: 'overdue' } }}
               />
               <StatCard
+                cardId='sim-sale'
                 title={t('Sim Sale')}
                 value={stats?.totalSimSale || 0}
                 icon={<IdCard className='h-4 w-4' />}
@@ -336,6 +333,7 @@ export default function Dashboard() {
                 link={reportLink('sim-sale')}
               />
               <StatCard
+                cardId='services'
                 title={t('Services')}
                 value={stats?.totalServiceIncome || 0}
                 icon={<Briefcase className='h-4 w-4' />}
@@ -350,6 +348,7 @@ export default function Dashboard() {
                 link={reportLink('services')}
               />
               <StatCard
+                cardId='total-cost'
                 title={t('Total Cost')}
                 value={totalCost}
                 icon={<Package className='h-4 w-4' />}
@@ -362,6 +361,7 @@ export default function Dashboard() {
           )}
           {showCashBookFeatures && !showMobileCards && (
             <StatCard
+              cardId='cash-in-hand-2'
               title={t('Cash in Hand')}
               value={stats?.cashInHand || 0}
               icon={<DollarSign className='h-4 w-4' />}
@@ -373,6 +373,7 @@ export default function Dashboard() {
             />
           )}
           <StatCard
+            cardId='total-receivable'
             title='Total Receivable'
             value={stats?.totalReceivable || 0}
             icon={<Users className='h-4 w-4' />}
@@ -383,6 +384,7 @@ export default function Dashboard() {
             link={{ to: '/accounting', search: { tab: 'customers' } }}
           />
           <StatCard
+            cardId='total-payable'
             title='Total Payable'
             value={stats?.totalPayable || 0}
             icon={<Building2 className='h-4 w-4' />}
@@ -393,6 +395,7 @@ export default function Dashboard() {
             link={{ to: '/accounting', search: { tab: 'suppliers' } }}
           />
           <StatCard
+            cardId='payments-received'
             title={t('Payments Received')}
             value={stats?.paymentsReceived || 0}
             icon={<CalendarCheck2 className='h-4 w-4' />}
@@ -407,6 +410,7 @@ export default function Dashboard() {
             link={paymentsLink('customer')}
           />
           <StatCard
+            cardId='payments-paid'
             title={t('Payments Paid')}
             value={stats?.paymentsPaid || 0}
             icon={<CalendarClock className='h-4 w-4' />}
@@ -421,6 +425,7 @@ export default function Dashboard() {
             link={paymentsLink('supplier')}
           />
           <StatCard
+            cardId='my-wallet'
             title='My Wallet'
             value={stats?.myWalletExpense || 0}
             icon={<Wallet className='h-4 w-4' />}
@@ -435,6 +440,7 @@ export default function Dashboard() {
             link={{ to: '/accounting', search: { tab: 'wallet' } }}
           />
           <StatCard
+            cardId='leads'
             title={t('Leads')}
             value={leadStats?.totalCount || 0}
             icon={<Target className='h-4 w-4' />}
@@ -449,6 +455,7 @@ export default function Dashboard() {
           />
           {remindersEnabled && (
             <StatCard
+              cardId='tasks-due-today'
               title={t('Tasks Due Today')}
               value={dueTodayOrOverdueCount}
               icon={<AlarmClock className='h-4 w-4' />}
@@ -460,6 +467,7 @@ export default function Dashboard() {
           {showMobileCards && (
             <>
               <StatCard
+                cardId='send'
                 title={t('Send')}
                 value={stats?.totalCashSend || 0}
                 icon={<ArrowUpRight className='h-4 w-4' />}
@@ -474,6 +482,7 @@ export default function Dashboard() {
                 link={{ to: '/mobile-shop/cash-management' }}
               />
               <StatCard
+                cardId='received'
                 title={t('Received')}
                 value={stats?.totalCashReceived || 0}
                 icon={<ArrowDownLeft className='h-4 w-4' />}
@@ -490,6 +499,7 @@ export default function Dashboard() {
             </>
           )}
           <StatCard
+            cardId='total-revenue'
             title={t('Total Revenue')}
             value={stats?.totalRevenue || 0}
             change={stats?.totalRevenueChange}
@@ -501,6 +511,7 @@ export default function Dashboard() {
             link={reportLink('profit-loss')}
           />
           <StatCard
+            cardId='total-sales'
             title={t('Total Sales')}
             value={stats?.totalSales || 0}
             change={stats?.totalSalesChange}
@@ -511,6 +522,7 @@ export default function Dashboard() {
             link={reportLink('sales')}
           />
           <StatCard
+            cardId='sales-returns'
             title={t('Sales Returns')}
             value={stats?.totalSalesReturns || 0}
             icon={<RefreshCcw className='h-4 w-4' />}
@@ -521,6 +533,7 @@ export default function Dashboard() {
             link={reportLink('sales-returns')}
           />
           <StatCard
+            cardId='net-sales'
             title={t('Net Sales')}
             value={stats?.netSales || 0}
             icon={<ShoppingCart className='h-4 w-4' />}
@@ -535,6 +548,7 @@ export default function Dashboard() {
             link={reportLink('sales')}
           />
           <StatCard
+            cardId='total-purchases'
             title={t('total_purchases')}
             value={stats?.totalPurchases || 0}
             icon={<Package className='h-4 w-4' />}
@@ -545,6 +559,7 @@ export default function Dashboard() {
             link={reportLink('purchases')}
           />
           <StatCard
+            cardId='purchase-returns'
             title={t('Purchase Returns')}
             value={stats?.totalPurchaseReturns || 0}
             icon={<RefreshCcw className='h-4 w-4' />}
@@ -555,6 +570,7 @@ export default function Dashboard() {
             link={reportLink('purchase-returns')}
           />
           <StatCard
+            cardId='net-purchases'
             title={t('Net Purchases')}
             value={stats?.netPurchase || 0}
             icon={<Package className='h-4 w-4' />}
@@ -565,6 +581,7 @@ export default function Dashboard() {
             link={reportLink('purchases')}
           />
           <StatCard
+            cardId='inventory-value'
             title={t('Inventory Value')}
             value={stats?.totalInventoryValue || 0}
             icon={<Package className='h-4 w-4' />}
@@ -575,6 +592,7 @@ export default function Dashboard() {
             link={reportLink('inventory')}
           />
           <StatCard
+            cardId='low-stock-items'
             title={t('Low Stock Items')}
             value={stats?.lowStockCount || 0}
             icon={<AlertTriangle className='h-4 w-4' />}
@@ -584,6 +602,7 @@ export default function Dashboard() {
             link={{ to: '/products' }}
           />
           <StatCard
+            cardId='pending-invoices'
             title={t('Pending Invoices')}
             value={stats?.pendingInvoices || 0}
             icon={<FileText className='h-4 w-4' />}
@@ -594,6 +613,7 @@ export default function Dashboard() {
             link={{ to: '/invoice', search: { view: 'list', type: 'pending' } }}
           />
           <StatCard
+            cardId='total-profit'
             title={t('total_profit')}
             value={stats?.totalProfit || 0}
             icon={<TrendingUp className='h-4 w-4' />}
@@ -604,6 +624,7 @@ export default function Dashboard() {
             link={reportLink('profit-loss')}
           />
           <StatCard
+            cardId='total-expenses'
             title={t('total_expenses')}
             value={stats?.totalExpenses || 0}
             icon={<Receipt className='h-4 w-4' />}
@@ -618,6 +639,7 @@ export default function Dashboard() {
             link={{ to: '/accounting', search: { tab: 'expenses' } }}
           />
           <StatCard
+            cardId='net-profit-after-expense'
             title={t('net_profit_after_expense')}
             value={netProfitAfterExpense}
             icon={<TrendingUp className='h-4 w-4' />}
@@ -628,6 +650,7 @@ export default function Dashboard() {
             link={reportLink('profit-loss')}
           />
           <StatCard
+            cardId='net-profit-after-all-expenses'
             title={t('net_profit_after_all_expenses')}
             value={netProfitAfterAllExpenses}
             icon={<TrendingUp className='h-4 w-4' />}
@@ -642,6 +665,7 @@ export default function Dashboard() {
             link={reportLink('profit-loss')}
           />
           <StatCard
+            cardId='roi'
             title='ROI'
             value={stats?.roi ?? 0}
             icon={<TrendingUp className='h-4 w-4' />}
@@ -651,29 +675,114 @@ export default function Dashboard() {
             tone={(stats?.roi ?? 0) >= 0 ? 'violet' : 'rose'}
             link={reportLink('roi')}
           />
-        </div>
+            </SortableCardGrid>
+  )
 
-        {/* Charts and Widgets */}
+  // ── Page sections, in the person's own order (Arrange dashboard) ──
+  const sectionNodes: Record<DashboardSectionId, { label: string; node: ReactNode }> = {
+    'quick-links': {
+      label: t('Quick Links'),
+      node: (
+        <div className='mb-6'>
+          <QuickLinksPanel arranging={arranging} />
+        </div>
+      ),
+    },
+    kpis: { label: t('Key figures'), node: kpiCards },
+    charts: {
+      label: t('Revenue chart & low stock'),
+      node: (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-7 mb-6'>
           <RevenueChart dateRange={dateRange} />
           <LowStockWidget />
         </div>
-
-        {/* Top Products and Customers */}
+      ),
+    },
+    'top-lists': {
+      label: t('Top products & customers'),
+      node: (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-2 mb-6'>
           <TopProducts dateRange={dateRange} />
           <TopCustomers dateRange={dateRange} />
         </div>
-
-        {/* Recent Activities */}
-        <div className='grid grid-cols-1 gap-6'>
+      ),
+    },
+    activities: {
+      label: t('Recent activities'),
+      node: (
+        <div className='grid grid-cols-1 gap-6 mb-6'>
           <RecentActivities dateRange={dateRange} />
         </div>
-
-        {/* Upcoming Invoices */}
-        <div className='grid grid-cols-1 gap-6 mt-6'>
+      ),
+    },
+    upcoming: {
+      label: t('Upcoming invoices'),
+      node: (
+        <div className='grid grid-cols-1 gap-6 mb-6'>
           <UpcomingInvoices />
         </div>
+      ),
+    },
+  }
+  const sectionIds = applyOrder(DASHBOARD_SECTIONS, dashboardLayout.layout.sections)
+  const sections = sectionIds.map((id) => (
+    <SortableSection key={id} id={id} label={sectionNodes[id].label} arranging={arranging}>
+      {sectionNodes[id].node}
+    </SortableSection>
+  ))
+
+  return (
+    <>
+        <Card className='mb-6 border bg-card/80 p-4 shadow-sm backdrop-blur-sm'>
+          <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
+            <div className='min-w-0'>
+              <h1 className='text-3xl font-bold tracking-tight'>{t('dashboard')}</h1>
+              <p className='mt-1 text-muted-foreground'>{t('Overview of your business performance')}</p>
+            </div>
+            <div className='flex flex-wrap items-center gap-2 lg:shrink-0'>
+              <DashboardDateFilter
+                value={dateRange}
+                onChange={setDateRange}
+                onRefresh={refreshDashboard}
+                isRefreshing={statsLoading || statsRefreshing}
+              />
+              {arranging ? (
+                <>
+                  {dashboardLayout.isCustomised && (
+                    <Button variant='ghost' size='sm' onClick={dashboardLayout.reset} className='gap-1.5'>
+                      <RotateCcw className='size-4' /> {t('Reset layout')}
+                    </Button>
+                  )}
+                  <Button size='sm' onClick={() => setArranging(false)} className='gap-1.5'>
+                    <Check className='size-4' /> {t('Done')}
+                  </Button>
+                </>
+              ) : (
+                <Button variant='outline' size='sm' onClick={() => setArranging(true)} className='gap-1.5' title={t('Drag cards, quick links and sections into your own order')}>
+                  <LayoutDashboard className='size-4' /> {t('Arrange')}
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {arranging && (
+          <div className='mb-6 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm'>
+            <LayoutDashboard className='mt-0.5 size-5 shrink-0 text-primary' />
+            <p>
+              <span className='font-semibold'>{t('Arranging your dashboard.')}</span>{' '}
+              {t('Drag any card or quick link to a new place, or drag a section by its bar. Every change is saved to your account straight away — press Done when finished.')}
+            </p>
+          </div>
+        )}
+
+        {arranging ? (
+          <SortableSectionList ids={sectionIds} onReorder={(ids) => dashboardLayout.update({ sections: ids })}>
+            {sections}
+          </SortableSectionList>
+        ) : (
+          sections
+        )}
     </>
   )
 }

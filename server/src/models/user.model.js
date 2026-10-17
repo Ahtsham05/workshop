@@ -112,6 +112,18 @@ const userSchema = mongoose.Schema(
         ],
         default: 'default',
       },
+      /** Arrange dashboard: section and KPI-card order (ids only; empty = standard order). */
+      dashboardLayout: {
+        sections: { type: [String], default: undefined },
+        cards: { type: [String], default: undefined },
+      },
+      /** Free-choice #rrggbb colours; null = use the theme / default for that surface. */
+      customColors: {
+        background: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        header: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        sidebar: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+        accent: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
+      },
     },
     // School portal links
     linkedTeacherId: {

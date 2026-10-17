@@ -9,6 +9,8 @@ import { BranchIndicator } from '@/components/layout/branch-indicator'
 import { HeaderClock } from '@/components/layout/header-clock'
 import { ScreenCaptureButton } from '@/components/layout/screen-capture-button'
 import { NotepadButton } from '@/components/layout/notepad-button'
+import { CalculatorButton } from '@/components/layout/calculator-button'
+import { ChatHeaderButton } from '@/components/layout/chat-header-button'
 import { BackgroundTasksIndicator } from '@/components/layout/background-tasks-indicator'
 import { QuickTransferButton } from '@/components/layout/quick-transfer-button'
 
@@ -32,7 +34,11 @@ export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderPr
         <WhatsAppHeaderButton className='hidden sm:inline-flex' />
         {/* Always visible, phones included — jotting something down is the one tool
             you never want to hunt for in a menu. */}
+        {/* Team chat with its unread count — phones included, a message from another branch is never hunted for. */}
+        <ChatHeaderButton />
         <NotepadButton />
+        {/* Business calculator (also Ctrl+Alt+C). On phones it lives in the profile menu instead. */}
+        <CalculatorButton className='hidden sm:inline-flex' />
         {/* Stock Transfer from any screen, without leaving it (also Ctrl+Alt+S). From 640px
             up only: on phones it would squeeze out the branch name — there it is on the
             dashboard's quick links, the floating quick-links button and each product's menu. */}

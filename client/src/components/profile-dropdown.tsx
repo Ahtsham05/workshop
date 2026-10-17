@@ -16,7 +16,8 @@ import { RootState } from '@/stores/store'
 import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
 import { useGetBranchQuery } from '@/stores/branch.api'
-import { Building2, Download, Settings, UserRound } from 'lucide-react'
+import { Building2, Calculator, Download, Settings, UserRound } from 'lucide-react'
+import { openCalculator } from '@/features/calculator/lib/calculator-store'
 import { usePWAInstall } from '@/hooks/use-pwa-install'
 import { useLogout } from '@/hooks/use-logout'
 
@@ -98,6 +99,11 @@ export function ProfileDropdown() {
               {t('settings') || 'Settings'}
               <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
             </Link>
+          </DropdownMenuItem>
+          {/* Phones only — from 640px up the calculator has its own header button. */}
+          <DropdownMenuItem className='sm:hidden' onClick={() => openCalculator()}>
+            <Calculator className='mr-2 h-4 w-4' />
+            <span>Calculator</span>
           </DropdownMenuItem>
           {isInstallable && (
             <DropdownMenuItem onClick={handleInstallApp}>

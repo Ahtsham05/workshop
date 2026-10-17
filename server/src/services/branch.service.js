@@ -74,6 +74,10 @@ const updateBranch = async (branchId, updateBody) => {
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Branch not found');
   }
+  const design = updateBody && updateBody.printSettings && updateBody.printSettings.design;
+  if (design != null && (typeof design !== 'object' || JSON.stringify(design).length > 8000)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invoice design settings are not valid');
+  }
   Object.assign(branch, updateBody);
   await branch.save();
   return branch;

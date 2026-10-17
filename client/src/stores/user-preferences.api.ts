@@ -85,6 +85,14 @@ export const userPreferencesApi = createApi({
         body,
       }),
     }),
+    /** Arrange dashboard: section + KPI card order, saved on the account. */
+    updateDashboardLayout: builder.mutation<unknown, { dashboardLayout: { sections: string[]; cards: string[] } }>({
+      query: (body) => ({
+        url: '/users/me/ui-preferences',
+        method: 'PATCH',
+        body,
+      }),
+    }),
     /** Removes the signed-in user's profile photo (upload goes through ImageUpload). */
     deleteMyPhoto: builder.mutation<UserPhoto, void>({
       query: () => ({
@@ -102,5 +110,6 @@ export const {
   useChangeMyPasswordMutation,
   useUpdateLanguageMutation,
   useUpdateUiPreferencesMutation,
+  useUpdateDashboardLayoutMutation,
   useDeleteMyPhotoMutation,
 } = userPreferencesApi

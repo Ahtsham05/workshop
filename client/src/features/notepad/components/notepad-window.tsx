@@ -15,10 +15,12 @@ import {
 } from '../lib/notepad-local'
 import { useNotepadNotes } from '../lib/use-notepad-notes'
 import { NotepadWorkspace } from './notepad-workspace'
+import { useFloatingPosition } from '@/hooks/use-floating-position'
 
 const MIN_WIDTH = 420
 const MIN_HEIGHT = 320
 const EDGE_MARGIN = 8
+const PILL_DEFAULT = { side: 16, bottom: 16 }
 
 const SHORTCUTS: [string, string][] = [
   ['Ctrl + Alt + N', 'Open / close Notes'],
@@ -65,6 +67,8 @@ export function NotepadWindow() {
     useNotepad()
   const isPhone = useIsPhone()
   const controller = useNotepadNotes()
+  // The minimized pill can be dragged anywhere (bottom-left by default).
+  const pill = useFloatingPosition('notes-pill', PILL_DEFAULT, 'left')
 
   const [geometry, setGeometry] = useState<NotepadWindowState>(() => readWindowState())
   const windowRef = useRef<HTMLDivElement>(null)
@@ -238,8 +242,12 @@ export function NotepadWindow() {
       <button
         type='button'
         onClick={restoreNotepad}
+        style={pill.style}
+        {...pill.handlers}
+        title='Open notes — drag to move'
         className={cn(
-          'fixed bottom-4 start-4 flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-xs font-medium shadow-lg transition-transform hover:scale-105',
+          'flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-xs font-medium shadow-lg transition-transform hover:scale-105',
+          pill.dragging && 'scale-105 shadow-2xl ring-2 ring-primary/40',
           WINDOW_LAYER,
         )}
       >

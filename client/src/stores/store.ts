@@ -80,6 +80,7 @@ import { expenseApi } from './expense.api';
 import { communicationLogApi } from './communicationLog.api';
 import { reminderApi } from './reminder.api';
 import { noteApi } from './note.api';
+import { chatApi } from './chat.api';
 import { leadApi } from './lead.api';
 import { quickLinksApi } from './quickLinks.api';
 import { localizationApi } from './localization.api';
@@ -172,6 +173,7 @@ export const store = configureStore({
     [communicationLogApi.reducerPath]: communicationLogApi.reducer,
     [reminderApi.reducerPath]: reminderApi.reducer,
     [noteApi.reducerPath]: noteApi.reducer,
+    [chatApi.reducerPath]: chatApi.reducer,
     [leadApi.reducerPath]: leadApi.reducer,
     [quickLinksApi.reducerPath]: quickLinksApi.reducer,
     [localizationApi.reducerPath]: localizationApi.reducer,
@@ -257,6 +259,7 @@ export const store = configureStore({
       communicationLogApi.middleware,
       reminderApi.middleware,
       noteApi.middleware,
+      chatApi.middleware,
       leadApi.middleware,
       quickLinksApi.middleware,
       localizationApi.middleware,

@@ -1,0 +1,188 @@
+const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
+const config = require('../config/config');
+const logger = require('../config/logger');
+const { tokenTypes } = require('../config/tokens');
+const { User } = require('../models');
+const ChatConversation = require('../models/chatConversation.model');
+const chatService = require('../services/chat.service');
+const chatBus = require('./chatBus');
+
+/**
+ * Live layer for team chat. Sockets only RECEIVE pushes (new message, edit, read receipt,
+ * typing, presence) — everything that changes data goes through the REST API, which
+ * re-checks access. A socket joins:
+ *   user:<id>             direct + group threads, own read sync
+ *   org:<orgId>           the "All branches" channel
+ *   branch:<branchId>     each branch channel the person works in
+ *   orgadmins:<orgId>     super admins (see every branch channel)
+ */
+
+/* ── Presence ────────────────────────────────────────────────────────────── */
+// userId → Map<origin, lastConfirmedAt>. A person is online while any process vouches
+// for them; each process re-announces its own people every SYNC_MS, and a vouch that is
+// not refreshed within STALE_MS (that process died) lapses on its own.
+const SYNC_MS = 60 * 1000;
+const STALE_MS = 150 * 1000;
+const presence = new Map();
+const localSockets = new Map(); // userId → number of sockets on this process
+const userOrg = new Map(); // userId → orgId, for announcing
+
+function vouch(userId, origin, online) {
+  const entry = presence.get(userId) || new Map();
+  if (online) entry.set(origin, Date.now());
+  else entry.delete(origin);
+  if (entry.size) presence.set(userId, entry);
+  else presence.delete(userId);
+}
+
+function isOnline(userId) {
+  const entry = presence.get(String(userId));
+  if (!entry) return false;
+  const now = Date.now();
+  for (const [origin, at] of entry) {
+    if (origin === chatBus.ORIGIN || now - at < STALE_MS) return true;
+  }
+  return false;
+}
+
+function onlineIds() {
+  const ids = new Set();
+  presence.forEach((_entry, userId) => {
+    if (isOnline(userId)) ids.add(userId);
+  });
+  return ids;
+}
+
+function announce(userId, online) {
+  const orgId = userOrg.get(userId);
+  if (!orgId) return;
+  chatBus.publish([`org:${orgId}`], 'chat:presence', { userId, online, origin: chatBus.ORIGIN });
+}
+
+/* ── Typing permission cache ─────────────────────────────────────────────── */
+const accessCache = new Map(); // `${socketId}:${conversationId}` → { rooms, at }
+const ACCESS_TTL = 60 * 1000;
+
+async function roomsIfAllowed(socket, conversationId) {
+  const key = `${socket.id}:${conversationId}`;
+  const cached = accessCache.get(key);
+  if (cached && Date.now() - cached.at < ACCESS_TTL) return cached.rooms;
+  let rooms = null;
+  try {
+    const conversation = await ChatConversation.findById(conversationId).lean();
+    if (conversation && (await chatService.canAccess(socket.data.user, conversation, socket.data.branchIds))) {
+      rooms = chatService.audienceRooms(conversation);
+    }
+  } catch {
+    rooms = null;
+  }
+  accessCache.set(key, { rooms, at: Date.now() });
+  return rooms;
+}
+
+async function authenticate(token) {
+  const payload = jwt.verify(token, config.jwt.secret);
+  if (payload.type !== tokenTypes.ACCESS) throw new Error('Invalid token type');
+  const user = await User.findById(payload.sub);
+  if (!user || user.isActive === false || !user.organizationId || chatService.isPortalUser(user)) throw new Error('Not a staff account');
+  return user;
+}
+
+function initChatSocket(httpServer, corsOptions) {
+  const io = new Server(httpServer, {
+    path: '/socket/chat',
+    cors: corsOptions,
+    transports: ['websocket', 'polling'],
+    // Another socket.io server (the SMS gateway) shares this HTTP server on its own path.
+    destroyUpgrade: false,
+  });
+
+  chatBus.startRelay(io);
+
+  // Other processes' presence announcements.
+  chatBus.onRelay((doc) => {
+    if (doc.event === 'chat:presence' && doc.payload?.userId) vouch(String(doc.payload.userId), doc.origin, !!doc.payload.online);
+    if (doc.event === 'chat:presence-sync' && Array.isArray(doc.payload?.userIds)) {
+      doc.payload.userIds.forEach((id) => vouch(String(id), doc.origin, true));
+    }
+  });
+
+  const syncTimer = setInterval(() => {
+    // Re-announce who is connected here, grouped per organization.
+    const byOrg = new Map();
+    localSockets.forEach((count, userId) => {
+      if (count <= 0) return;
+      const orgId = userOrg.get(userId);
+      if (!orgId) return;
+      byOrg.set(orgId, [...(byOrg.get(orgId) || []), userId]);
+    });
+    byOrg.forEach((userIds, orgId) => {
+      // Only other processes need this (localOnly would make it a no-op), and clients ignore it.
+      chatBus.publish([`orgsync:${orgId}`], 'chat:presence-sync', { userIds });
+    });
+  }, SYNC_MS);
+  if (syncTimer.unref) syncTimer.unref();
+
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      if (!token) return next(new Error('unauthorized'));
+      const user = await authenticate(token);
+      socket.data.user = user;
+      socket.data.branchIds = await chatService.getUserBranchIds(user);
+      return next();
+    } catch {
+      return next(new Error('unauthorized'));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    const { user, branchIds } = socket.data;
+    const userId = String(user._id);
+    const orgId = String(user.organizationId);
+
+    socket.join(`user:${userId}`);
+    socket.join(`org:${orgId}`);
+    branchIds.forEach((branchId) => socket.join(`branch:${branchId}`));
+    if (chatService.isAdmin(user)) socket.join(`orgadmins:${orgId}`);
+
+    userOrg.set(userId, orgId);
+    const count = (localSockets.get(userId) || 0) + 1;
+    localSockets.set(userId, count);
+    vouch(userId, chatBus.ORIGIN, true);
+    if (count === 1) announce(userId, true);
+
+    socket.emit('chat:ready', { userId, online: [...onlineIds()] });
+
+    socket.on('chat:typing', async (payload) => {
+      const conversationId = payload && String(payload.conversationId || '');
+      if (!/^[0-9a-fA-F]{24}$/.test(conversationId)) return;
+      const rooms = await roomsIfAllowed(socket, conversationId);
+      if (!rooms) return;
+      chatBus.publish(
+        rooms,
+        'chat:typing',
+        { conversationId, userId, name: user.name || user.email, stopped: !!payload.stopped },
+        { exceptSocketId: socket.id }
+      );
+    });
+
+    socket.on('disconnect', () => {
+      for (const key of accessCache.keys()) if (key.startsWith(`${socket.id}:`)) accessCache.delete(key);
+      const left = (localSockets.get(userId) || 1) - 1;
+      if (left > 0) {
+        localSockets.set(userId, left);
+        return;
+      }
+      localSockets.delete(userId);
+      vouch(userId, chatBus.ORIGIN, false);
+      if (!isOnline(userId)) announce(userId, false);
+    });
+  });
+
+  logger.info('Chat Socket.io initialized');
+  return io;
+}
+
+module.exports = { initChatSocket, onlineIds, isOnline };

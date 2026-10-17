@@ -18,7 +18,9 @@ import { ensureInvoiceWhatsAppSendBridge } from './invoice-print-whatsapp-bridge
 import { ensureInvoicePrintPdfBridge } from './invoice-print-pdf-bridge'
 import { ensureInvoiceSmsSendBridge } from './invoice-print-sms-bridge'
 import { PAPER_FORMATS, type PaperSize, type SheetSize, type PaperFormatKey } from './paper-format'
-import { INVOICE_TEMPLATE_ITEMS_PER_PAGE, INVOICE_TEMPLATE_CSS, type InvoiceTemplate } from './invoice-template'
+import { INVOICE_TEMPLATE_ITEMS_PER_PAGE, INVOICE_TEMPLATE_CSS, invoiceTemplateExtrasHtml, type InvoiceTemplate } from './invoice-template'
+import { printColorsCss } from '@/lib/print-colors'
+import { getActivePrintDesign, printDesignCss, printDesignHeadHtml, sheetKindOf } from '@/lib/print-design'
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
 import type { TaxLine } from '@/stores/taxCalculator.api'
@@ -909,7 +911,10 @@ export const generateA4InvoiceHTML = (
   )
 
   const printNumber = resolvePrintDocumentNumber(invoiceNumber, isQuotationPrint(data))
-  const documentTitle = resolvePrintDocumentTitle(data, labels)
+  // Invoice designer wording (Settings → Printing). A quotation keeps its own title.
+  const designTexts = getActivePrintDesign().texts
+  const documentTitle =
+    designTexts.title && !isQuotationPrint(data) ? escapeHtml(designTexts.title) : resolvePrintDocumentTitle(data, labels)
 
   const printActions = buildPrintWindowActionsBlock(
     data,
@@ -953,7 +958,7 @@ export const generateA4InvoiceHTML = (
       <div class="company-name">${urduTexts.business_name}</div>
       ${headerAddressLine || contactLine ? `
       <div class="company-details">
-        ${headerAddressLine ? `${headerAddressLine}<br>` : ''}
+        ${headerAddressLine ? `<span class="company-address">${headerAddressLine}</span><br>` : ''}
         ${contactLine ? `<span class="company-contact-line">${contactLine}</span>` : ''}
       </div>
       ` : ''}
@@ -963,7 +968,7 @@ export const generateA4InvoiceHTML = (
       <div class="invoice-meta">
         <div><strong>#${printNumber}</strong></div>
         <div>${urduTexts.date}: ${formattedDocumentDate}</div>
-        <div>${urduTexts.time}: ${new Date().toLocaleTimeString(locale)}</div>
+        <div class="meta-time">${urduTexts.time}: ${new Date().toLocaleTimeString(locale)}</div>
       </div>
     </div>
   </div>
@@ -1093,9 +1098,11 @@ ${itemizedTotalsTable}
     </div>
   ` : ''}
 
+  ${invoiceTemplateExtrasHtml(template, language, 'customer')}
+
   <div class="footer">
-    <div class="footer-line footer-thank-you">${urduTexts.thank_you}</div>
-    <div class="footer-line">${urduTexts.keep_receipt}</div>
+    <div class="footer-line footer-thank-you">${designTexts.thankYou ? escapeHtml(designTexts.thankYou) : urduTexts.thank_you}</div>
+    <div class="footer-line">${designTexts.footerLine ? escapeHtml(designTexts.footerLine) : urduTexts.keep_receipt}</div>
   </div>
 `
 
@@ -1776,7 +1783,10 @@ ${itemizedTotalsTable}
       }
     }
     ${INVOICE_TEMPLATE_CSS[template] ?? ''}
+    ${printColorsCss()}
+    ${printDesignCss(sheetKindOf(sheetSize))}
   </style>
+  ${printDesignHeadHtml()}
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>

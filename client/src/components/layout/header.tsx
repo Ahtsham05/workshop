@@ -68,7 +68,8 @@ export const Header = ({
   return (
     <header
       className={cn(
-        'bg-background/95 flex h-16 items-center gap-3 p-4 sm:gap-4 border-b transition-all duration-200',
+        // app-header: Settings → Appearance can give the bar its own colour (index.css).
+        'app-header bg-background/95 flex h-16 items-center gap-3 p-4 sm:gap-4 border-b transition-all duration-200',
         fixed && 'header-fixed peer/header fixed top-[var(--app-top-banner-height,0px)] z-50 backdrop-blur supports-[backdrop-filter]:bg-background/60',
         offset > 10 && fixed ? 'shadow-sm' : 'shadow-none',
         className

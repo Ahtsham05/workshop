@@ -358,11 +358,53 @@ export function rowScheme(key: RowSchemeKey | undefined | null): RowScheme {
 
 /* ── User preferences ────────────────────────────────────────────────────── */
 
+/**
+ * Free-choice colours ("fully my own colours"), each optional. Unlike the presets above they
+ * are any #rrggbb the person picks, and they win over the theme colour / presets for the
+ * surface they cover. Text on top of each is chosen automatically for contrast.
+ */
+export interface CustomColors {
+  /** Page background behind cards and tables. */
+  background?: string | null
+  /** The top header bar. */
+  header?: string | null
+  /** The side menu panel. */
+  sidebar?: string | null
+  /** Buttons, links, switches, active tabs (replaces the theme colour). */
+  accent?: string | null
+}
+
+export const CUSTOM_COLOR_KEYS: (keyof CustomColors)[] = ['background', 'header', 'sidebar', 'accent']
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+export function normalizeCustomColors(value: Partial<CustomColors> | null | undefined): CustomColors {
+  const out: CustomColors = {}
+  CUSTOM_COLOR_KEYS.forEach((key) => {
+    const raw = value?.[key]
+    if (typeof raw === 'string' && HEX_COLOR.test(raw.trim())) out[key] = raw.trim().toLowerCase()
+  })
+  return out
+}
+
+/** Black or white, whichever reads better on the given fill (WCAG relative luminance). */
+export function readableOn(hex: string): string {
+  const n = Number.parseInt(hex.slice(1), 16)
+  const ch = (c: number) => {
+    const v = c / 255
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  }
+  const L = 0.2126 * ch((n >> 16) & 255) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255)
+  // 0.179 is the luminance where black and white text have equal contrast.
+  return L > 0.179 ? '#0f172a' : '#ffffff'
+}
+
 export interface AppearancePreferences {
   rowScheme: RowSchemeKey
   alternateRows: boolean
   branchTint: BranchTintLevel
   themeColor: ThemeColorKey
+  customColors: CustomColors
 }
 
 // Matches the 'midnight' preset below on purpose: brand-new accounts (nothing saved
@@ -375,6 +417,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   alternateRows: true,
   branchTint: 'subtle',
   themeColor: 'indigo',
+  customColors: {},
 }
 
 /* ── Themes (presets) ────────────────────────────────────────────────────────
@@ -502,6 +545,8 @@ export function themePresetPreferences(preset: ThemePreset): AppearancePreferenc
     rowScheme: preset.rowScheme,
     branchTint: preset.branchTint,
     alternateRows: preset.alternateRows,
+    // Picking a ready-made theme means "make it look like that" — drop any custom colours.
+    customColors: {},
   }
 }
 
@@ -520,7 +565,8 @@ export function matchThemePreset(
         p.themeColor === prefs.themeColor &&
         p.rowScheme === prefs.rowScheme &&
         p.branchTint === prefs.branchTint &&
-        p.alternateRows === prefs.alternateRows
+        p.alternateRows === prefs.alternateRows &&
+        !CUSTOM_COLOR_KEYS.some((k) => prefs.customColors[k])
     ) ?? null
   )
 }
@@ -558,6 +604,7 @@ export function normalizeAppearance(
     themeColor: THEME_COLORS.some((c) => c.key === value?.themeColor)
       ? (value!.themeColor as ThemeColorKey)
       : DEFAULT_APPEARANCE.themeColor,
+    customColors: normalizeCustomColors(value?.customColors),
   }
 }
 
@@ -650,7 +697,12 @@ export function applyAppearance(
   if (branchColor) root.dataset.branchColor = branchColor
   else delete root.dataset.branchColor
 
-  const theme = themeColorOption(prefs.themeColor)
+  const custom = prefs.customColors ?? {}
+  const baseTheme = themeColorOption(prefs.themeColor)
+  // A custom button colour behaves exactly like a theme colour, just with any hex.
+  const theme: ThemeColorOption = custom.accent
+    ? { ...baseTheme, key: baseTheme.key === 'default' ? 'indigo' : baseTheme.key, primary: custom.accent, primaryForeground: readableOn(custom.accent), ring: custom.accent }
+    : baseTheme
   if (theme.key === 'default') {
     root.style.removeProperty('--primary')
     root.style.removeProperty('--primary-foreground')
@@ -701,8 +753,35 @@ export function applyAppearance(
     // this tint — using the same variable for both would make the text disappear into its
     // own background the moment a theme is picked.
     root.style.setProperty('--chart-theme-primary-tint', `color-mix(in oklab, ${theme.primary} 12%, transparent)`)
-    root.dataset.themeColor = theme.key
+    root.dataset.themeColor = custom.accent ? 'custom' : theme.key
   }
+
+  applyCustomSurfaces(root, custom)
+}
+
+/**
+ * Background / header / sidebar colours the person picked. Written as inline custom
+ * properties on <html> (inline beats both the :root and .dark rules, so a custom colour
+ * holds in day and night mode); removing one restores the stylesheet's own value.
+ */
+function applyCustomSurfaces(root: HTMLElement, custom: CustomColors) {
+  const set = (name: string, value: string | null | undefined) => {
+    if (value) root.style.setProperty(name, value)
+    else root.style.removeProperty(name)
+  }
+  // Only the page canvas: cards, tables and text keep their own colours, so a dark canvas
+  // in light mode can't turn card text unreadable (the picker warns about low contrast).
+  set('--background-base', custom.background)
+
+  set('--sidebar-base', custom.sidebar)
+  set('--sidebar-foreground', custom.sidebar ? readableOn(custom.sidebar) : null)
+  // The theme colour normally washes 55% into the sidebar; a picked sidebar colour is exact.
+  if (custom.sidebar) root.style.setProperty('--sidebar-theme-tint', '0%')
+
+  set('--app-header-bg', custom.header)
+  set('--app-header-fg', custom.header ? readableOn(custom.header) : null)
+  if (custom.header) root.dataset.customHeader = 'on'
+  else delete root.dataset.customHeader
 }
 
 /**
