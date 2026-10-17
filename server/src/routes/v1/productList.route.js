@@ -36,6 +36,9 @@ router
   .route('/:listId/products/:productId')
   .patch(auth('editProducts'), validate(productListValidation.updateItem), productListController.updateItem);
 
+// Read-only decision figures (stock health, value, sales) for a list.
+router.route('/:listId/insights').get(auth('viewProducts'), validate(productListValidation.getInsights), productListController.getInsights);
+
 router
   .route('/:listId/order-lines')
   .get(auth('viewProducts', 'createPurchases', 'createPurchaseOrders'), validate(productListValidation.getOrderLines), productListController.getOrderLines);

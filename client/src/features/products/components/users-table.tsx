@@ -365,6 +365,15 @@ export function ProductTable({
   // Named column layouts — applying one pushes its snapshot back through the same
   // persisted setters the table already uses, so it also survives a reload.
   const defaultColumnOrder = React.useMemo(() => columns.map(getColumnId), [columns])
+  // 'select' always leads and 'actions' always trails (LOCKED_COLUMN_IDS), whatever a saved
+  // order says — new columns (e.g. the sales columns a product-list view adds) are appended
+  // to a saved order when loaded, which would otherwise put them after the row actions.
+  const effectiveColumnOrder = React.useMemo(() => {
+    const known = columnOrder.filter((id) => defaultColumnOrder.includes(id))
+    const all = [...known, ...defaultColumnOrder.filter((id) => !known.includes(id))]
+    const middle = all.filter((id) => id !== 'select' && id !== 'actions')
+    return [...(all.includes('select') ? ['select'] : []), ...middle, ...(all.includes('actions') ? ['actions'] : [])]
+  }, [columnOrder, defaultColumnOrder])
   const currentLayout = React.useMemo<TableLayoutSnapshot>(
     () => ({ visibility: columnVisibility, order: columnOrder, sizing: columnSizing }),
     [columnVisibility, columnOrder, columnSizing]
@@ -415,7 +424,7 @@ export function ProductTable({
     state: {
       sorting,
       columnVisibility,
-      columnOrder,
+      columnOrder: effectiveColumnOrder,
       columnSizing,
       rowSelection,
       columnFilters,
@@ -507,7 +516,7 @@ export function ProductTable({
         <Table dir={language === 'ur' ? 'ltl' : 'ltr'} className='table-fixed' style={{ minWidth: table.getTotalSize() }}>
           <DndTableHeader
             table={table}
-            columnOrder={columnOrder}
+            columnOrder={effectiveColumnOrder}
             onColumnOrderChange={setColumnOrder}
             lockedColumnIds={LOCKED_COLUMN_IDS}
             extraHeaderClassName='text-left'

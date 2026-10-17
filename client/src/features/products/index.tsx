@@ -49,6 +49,8 @@ import { BarChart3, Factory, LayoutList, ChevronDown, ChevronRight, Loader2, Sci
 import { CleanupView } from './cleanup/cleanup-view'
 import { PerformanceView } from './analytics/performance-view'
 import { AddToListMenu, ProductListsBar, SelectedListHeader } from './lists/product-lists-bar'
+import { useListPeriod } from './lists/list-insights'
+import { useGetProductAnalyticsMetricsQuery } from '@/stores/productAnalytics.api'
 import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
 import { manufacturingApi } from '@/stores/manufacturing.api'
 import ManufacturingProducts from '@/features/manufacturing/pages/products'
@@ -219,7 +221,19 @@ export default function Products() {
   // toggle — that switch flips instantly on its own but has no way to move the row
   // without this, see active-toggle-cell.tsx.
   const handleProductStatusChange = useCallback(() => setFetch((prev) => !prev), [])
-  const columns = useProductColumns(lowStockThreshold, criticalStockThreshold, handleProductStatusChange) // Get columns with translations
+  // List views add read-only sales columns for the products on screen (same period as the
+  // list header's figures). Lists never change stock — this is for deciding, not doing.
+  const listPeriod = useListPeriod()
+  const pageProductIds = useMemo(() => products.map((p: { _id?: string; id?: string }) => String(p._id || p.id)).filter(Boolean), [products])
+  const { data: listMetrics, isFetching: listMetricsLoading } = useGetProductAnalyticsMetricsQuery(
+    { ids: pageProductIds, startDate: listPeriod.startDate, endDate: listPeriod.endDate },
+    { skip: !selectedListId || pageProductIds.length === 0 },
+  )
+  const listSales = useMemo(
+    () => (selectedListId ? { days: listPeriod.days, loading: listMetricsLoading, data: listMetrics?.data ?? {} } : null),
+    [selectedListId, listPeriod.days, listMetricsLoading, listMetrics],
+  )
+  const columns = useProductColumns(lowStockThreshold, criticalStockThreshold, handleProductStatusChange, listSales) // Get columns with translations
 
   // Store-wide Low/Critical Stock defaults — saved from the Low Stock Alert banner's
   // settings dialog, applied to every product with no threshold override of its own.
@@ -958,6 +972,7 @@ export default function Products() {
           <ProductListsBar selectedListId={selectedListId} onSelect={setSelectedListId} />
           {selectedListId && (
             <SelectedListHeader
+              period={listPeriod}
               listId={selectedListId}
               selectedProducts={selectedProducts}
               onClose={() => setSelectedListId(null)}

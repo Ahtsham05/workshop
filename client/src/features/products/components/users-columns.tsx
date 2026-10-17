@@ -24,16 +24,84 @@ import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate } from '@/lib/date-format'
 import { SourceBadge } from './similar-products-panel'
 
+/** Per-product sales over a period, shown as extra columns while a product list is open. */
+export interface ListSalesColumns {
+  days: number
+  loading: boolean
+  data: Record<string, { netUnits: number; netRevenue: number; netProfit: number; margin: number | null; daysOfCover: number | null; lastSoldAt?: string | null }>
+}
+
 export const useProductColumns = (
   lowStockThreshold = 10,
   criticalStockThreshold: number | null = null,
   onStatusChange?: () => void,
+  listSales?: ListSalesColumns | null,
 ): ColumnDef<Product>[] => {
   const { t } = useLanguage()
   const { showUrdu } = useUrduDisplay()
   const { productNameMaxChars } = useProductDisplay()
   const expiringByProduct = useExpiringBatchesByProduct()
   const formatCurrency = useFormatMoney()
+
+  const sales = (product: Product) => listSales?.data[String(product._id || product.id)]
+  const salesCell = (render: (m: NonNullable<ReturnType<typeof sales>>) => ReactNode) => ({ row }: { row: { original: Product } }) => {
+    const m = sales(row.original)
+    if (!m) return <span className='text-muted-foreground'>{listSales?.loading ? '…' : '-'}</span>
+    return render(m)
+  }
+  // Read-only sales figures for list views — appended before the row actions.
+  const listSalesColumns: ColumnDef<Product>[] = listSales
+    ? [
+        {
+          id: 'listSold',
+          size: 110,
+          header: () => <span>{t('Sold')} ({listSales.days}d)</span>,
+          cell: salesCell((m) => <span className='tabular-nums'>{m.netUnits.toLocaleString()}</span>),
+          enableSorting: false,
+        },
+        {
+          id: 'listRevenue',
+          size: 130,
+          header: () => <span>{t('Revenue')} ({listSales.days}d)</span>,
+          cell: salesCell((m) => <span className='tabular-nums'>{formatCurrency(m.netRevenue)}</span>),
+          enableSorting: false,
+        },
+        {
+          id: 'listProfit',
+          size: 130,
+          header: () => <span>{t('Profit')} ({listSales.days}d)</span>,
+          cell: salesCell((m) => (
+            <span className={cn('tabular-nums', m.netProfit < 0 && 'text-red-600 dark:text-red-400')}>
+              {formatCurrency(m.netProfit)}
+              {m.margin != null && <span className='ml-1 text-[11px] text-muted-foreground'>{m.margin}%</span>}
+            </span>
+          )),
+          enableSorting: false,
+        },
+        {
+          id: 'listCover',
+          size: 110,
+          header: () => <span title={t('How long the stock on hand lasts at the current sales rate')}>{t('Days of stock')}</span>,
+          cell: salesCell((m) =>
+            m.daysOfCover == null ? (
+              <span className='text-muted-foreground'>-</span>
+            ) : (
+              <span className={cn('tabular-nums', m.daysOfCover < 7 ? 'font-medium text-red-600 dark:text-red-400' : m.daysOfCover < 30 ? 'text-amber-600 dark:text-amber-400' : '')}>
+                {Math.round(m.daysOfCover).toLocaleString()}
+              </span>
+            ),
+          ),
+          enableSorting: false,
+        },
+        {
+          id: 'listLastSold',
+          size: 120,
+          header: () => <span>{t('Last sold')}</span>,
+          cell: salesCell((m) => <span className='whitespace-nowrap text-xs'>{m.lastSoldAt ? formatAppDate(m.lastSoldAt) : '-'}</span>),
+          enableSorting: false,
+        },
+      ]
+    : []
 
   return [
   {
@@ -454,6 +522,7 @@ export const useProductColumns = (
     enableSorting: false,
     enableHiding: true,
   },
+...listSalesColumns,
 {
   id: 'actions',
   header: () => t('actions'),

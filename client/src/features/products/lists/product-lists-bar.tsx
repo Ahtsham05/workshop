@@ -28,7 +28,6 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Can } from '@/context/permission-context'
 import { useLanguage } from '@/context/language-context'
-import { useFormatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import {
   useAddProductsToListMutation,
@@ -42,6 +41,7 @@ import {
 } from '@/stores/productList.api'
 import { ProductListDialog } from './product-list-dialog'
 import { PURPOSE_META, describeRule } from './list-meta'
+import { ListInsightsPanel, type ListPeriod } from './list-insights'
 
 const productIdOf = (p: { _id?: string; id?: string }) => p._id || p.id || ''
 
@@ -114,7 +114,10 @@ export function SelectedListHeader({
   selectedProducts,
   onClose,
   onChanged,
+  period,
 }: {
+  /** Sales period for the insight figures (shared with the table's sales columns). */
+  period: ListPeriod
   listId: string
   selectedProducts: { _id?: string; id?: string }[]
   onClose: () => void
@@ -122,7 +125,6 @@ export function SelectedListHeader({
   onChanged: () => void
 }) {
   const { t } = useLanguage()
-  const formatMoney = useFormatMoney()
   const navigate = useNavigate()
   const { data: lists = [] } = useGetProductListsQuery()
   const list = lists.find((l) => l.id === listId)
@@ -184,20 +186,7 @@ export function SelectedListHeader({
               )}
             </div>
             {list.description && <p className='mt-0.5 text-xs text-muted-foreground'>{list.description}</p>}
-            <div className='mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs'>
-              <span>
-                <span className='text-muted-foreground'>{t('Products')}:</span> <span className='font-semibold tabular-nums'>{list.productCount.toLocaleString()}</span>
-              </span>
-              <span>
-                <span className='text-muted-foreground'>{t('Stock qty')}:</span> <span className='font-semibold tabular-nums'>{list.stockQuantity.toLocaleString()}</span>
-              </span>
-              <span>
-                <span className='text-muted-foreground'>{t('Value at cost')}:</span> <span className='font-semibold tabular-nums'>{formatMoney(list.stockValue)}</span>
-              </span>
-              <span>
-                <span className='text-muted-foreground'>{t('Value at sale price')}:</span> <span className='font-semibold tabular-nums'>{formatMoney(list.saleValue)}</span>
-              </span>
-            </div>
+
           </div>
         </div>
         <div className='flex flex-wrap items-center gap-2'>
@@ -246,6 +235,7 @@ export function SelectedListHeader({
           </Button>
         </div>
       </div>
+      <ListInsightsPanel listId={list.id} period={period} />
       {isManual && list.productCount === 0 && (
         <p className='mt-2 text-xs text-muted-foreground'>
           {t('No products yet — tick products in “All products” and use “Add to list”.')}

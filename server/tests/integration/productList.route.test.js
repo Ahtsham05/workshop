@@ -20,7 +20,8 @@ jest.mock('../../src/middlewares/branchScope', () => () => (req, res, next) => {
 });
 
 const { errorConverter, errorHandler } = require('../../src/middlewares/error');
-const { Branch, Product, User } = require('../../src/models');
+const { Branch, Product, User, Invoice } = require('../../src/models');
+const { clearAnalyticsCache } = require('../../src/services/productAnalytics.service');
 const productListRoute = require('../../src/routes/v1/productList.route');
 const productRoute = require('../../src/routes/v1/product.route');
 
@@ -40,6 +41,7 @@ let other;
 let p;
 
 beforeEach(async () => {
+  clearAnalyticsCache();
   [main, other] = await Branch.create([
     { organizationId: ORG, name: 'Main' },
     { organizationId: ORG, name: 'Other' },
@@ -153,5 +155,50 @@ describe('purposes', () => {
 
     const memberships = await api().get(`/v1/product-lists/memberships?productIds=${ids('cable', 'empty', 'tv').join(',')}`);
     expect(memberships.body).toEqual({ [String(p.cable._id)]: [order.body.id], [String(p.empty._id)]: [dno.body.id] });
+  });
+});
+
+describe('list insights (read-only decision figures)', () => {
+  test('stock health, value at cost/sale, potential profit and period sales for the list', async () => {
+    const { body } = await api().post('/v1/product-lists').send({ name: 'Watch' });
+    await api().post(`/v1/product-lists/${body.id}/products`).send({ productIds: ids('tv', 'cable', 'empty', 'low') });
+    const sale = (productId, units, revenue, profit, daysAgo) => ({
+      organizationId: ORG, branchId: main._id, type: 'cash', status: 'finalized', total: revenue, subtotal: revenue,
+      invoiceDate: new Date(Date.now() - daysAgo * 864e5),
+      items: [{ productId, quantity: units, stockQuantity: units, subtotal: revenue, profit }],
+    });
+    await Invoice.collection.insertMany([sale(p.cable._id, 10, 2000, 800, 3), sale(p.tv._id, 1, 60000, 10000, 5), sale(p.tv._id, 1, 60000, 10000, 60)]);
+    const r = await api().get(`/v1/product-lists/${body.id}/insights`);
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({
+      productCount: 4,
+      inStock: 3,
+      outOfStock: 1,
+      lowStock: 2, // TV (2 ≤ default 10) and Charger (3 ≤ its own 5)
+      stockQuantity: 105,
+      stockValue: 100000 + 10000 + 1500,
+      saleValue: 120000 + 20000 + 2400,
+      potentialProfit: 142400 - 111500,
+      unitsSold: 11, // the 60-days-ago TV sale is outside the default 30 days
+      revenue: 62000,
+      profit: 10800,
+      sellingProducts: 2,
+    });
+    expect(r.body.period.days).toBe(30);
+    const wide = await api().get(`/v1/product-lists/${body.id}/insights?startDate=${new Date(Date.now() - 89 * 864e5).toISOString().slice(0, 10)}&endDate=${new Date().toISOString().slice(0, 10)}`);
+    expect(wide.body.unitsSold).toBe(12);
+  });
+
+  test('putting products on lists, taking them off and deleting the list never changes stock', async () => {
+    const stock = async () => (await Product.find({ organizationId: ORG }).sort({ _id: 1 }).lean()).map((x) => x.stockQuantity);
+    const before = await stock();
+    const { body } = await api().post('/v1/product-lists').send({ purpose: 'to_order' });
+    await api().post(`/v1/product-lists/${body.id}/products`).send({ productIds: ids('tv', 'phone', 'cable'), quantity: 25 });
+    await api().patch(`/v1/product-lists/${body.id}/products/${p.tv._id}`).send({ quantity: 99 });
+    await api().get(`/v1/product-lists/${body.id}/order-lines`);
+    await api().get(`/v1/product-lists/${body.id}/insights`);
+    await api().delete(`/v1/product-lists/${body.id}/products`).send({ productIds: ids('phone') });
+    await api().delete(`/v1/product-lists/${body.id}`);
+    expect(await stock()).toEqual(before);
   });
 });

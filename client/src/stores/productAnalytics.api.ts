@@ -386,7 +386,7 @@ export interface ProductMetricsResponse {
     Pick<
       ProductMetricsRow,
       'netUnits' | 'netRevenue' | 'netProfit' | 'margin' | 'revenueGrowth' | 'unitsGrowth' | 'daysOfCover' | 'abcClass' | 'movement' | 'ranks' | 'isNew'
-    >
+    > & { lastSoldAt?: string | null; daysSinceLastSale?: number | null }
   >
   rankedCounts: RankedCounts
   period: AnalyticsPeriod

@@ -874,6 +874,8 @@ const getMetricsForProducts = async ({ organizationId, branchId, productIds, que
       movement: row.movement,
       ranks: row.ranks,
       isNew: row.isNew,
+      lastSoldAt: row.lastSoldAt || null,
+      daysSinceLastSale: row.daysSinceLastSale ?? null,
     };
   });
   return { data, rankedCounts: analytics.rankedCounts, period: periodPayload(period) };

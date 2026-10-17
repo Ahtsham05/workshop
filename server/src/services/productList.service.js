@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const { Product, ProductList } = require('../models');
+const productAnalyticsService = require('./productAnalytics.service');
 
 /**
  * Product lists ("To order", "Do not order", "Online", "High value", custom) — see
@@ -269,6 +270,81 @@ const getDoNotOrderProducts = async (scope) => {
   return out;
 };
 
+/**
+ * Decision-making figures for everything on a list, over a period (default last 30 days):
+ * stock health, money held (at cost and at sale price), and what it sold. Read-only — a
+ * list never changes stock; these numbers only help decide what to order, push or drop.
+ * Same "real sale" rules and per-branch cache as the Products Performance view.
+ */
+const getListInsights = async (scope, listId, { startDate, endDate } = {}) => {
+  const list = await findListOrThrow(scope, listId);
+  const ids = (await resolveListProductIds(scope, list)).map(String);
+  const period = productAnalyticsService.resolvePeriod({ startDate, endDate });
+  const { rowsById } = await productAnalyticsService.getBranchAnalytics({ ...scope, period });
+  const products = ids.length
+    ? await Product.find({ _id: { $in: ids } }).select('stockQuantity cost price lowStockThreshold hasVariants').lean()
+    : [];
+  const productById = new Map(products.map((p) => [String(p._id), p]));
+
+  const t = {
+    productCount: 0,
+    inStock: 0,
+    outOfStock: 0,
+    lowStock: 0,
+    stockQuantity: 0,
+    stockValue: 0,
+    saleValue: 0,
+    unitsSold: 0,
+    revenue: 0,
+    profit: 0,
+    sellingProducts: 0,
+    deadStock: 0,
+    deadStockValue: 0,
+    abc: { A: 0, B: 0, C: 0 },
+  };
+  ids.forEach((id) => {
+    const row = rowsById.get(id);
+    const p = productById.get(id);
+    if (!row && !p) return;
+    t.productCount += 1;
+    // Variant products: the analytics row already resolves stock/cost across variants.
+    const qty = row ? row.currentStock : Number(p.stockQuantity) || 0;
+    const cost = row ? row.cost : Number(p.cost) || 0;
+    const price = row ? row.price : Number(p.price) || 0;
+    if (qty > 0) t.inStock += 1;
+    else t.outOfStock += 1;
+    if (qty > 0 && qty <= (p?.lowStockThreshold ?? 10)) t.lowStock += 1;
+    if (qty > 0) {
+      t.stockQuantity += qty;
+      t.stockValue += qty * cost;
+      t.saleValue += qty * price;
+    }
+    if (row) {
+      t.unitsSold += Math.max(0, row.netUnits || 0);
+      t.revenue += row.netRevenue || 0;
+      t.profit += row.netProfit || 0;
+      if (row.netUnits > 0) t.sellingProducts += 1;
+      if (row.movement === 'dead') {
+        t.deadStock += 1;
+        t.deadStockValue += Math.max(0, row.stockValue || 0);
+      }
+      if (row.abcClass && t.abc[row.abcClass] !== undefined) t.abc[row.abcClass] += 1;
+    }
+  });
+  const round = (n) => Math.round(n * 100) / 100;
+  ['stockValue', 'saleValue', 'revenue', 'profit', 'deadStockValue'].forEach((k) => {
+    t[k] = round(t[k]);
+  });
+  return {
+    listId: String(list._id),
+    period: { startDate: period.startKey, endDate: period.endKey, days: period.days },
+    ...t,
+    // Margin the stock on hand would make if sold at today's prices.
+    potentialProfit: round(t.saleValue - t.stockValue),
+    margin: t.revenue > 0 ? round((t.profit / t.revenue) * 100) : null,
+  };
+};
+
 /** A 'to_order' list as purchase lines: product + quantity to order (list qty, else 1). */
 const getListOrderLines = async (scope, listId) => {
   const list = await findListOrThrow(scope, listId);
@@ -291,4 +367,5 @@ module.exports = {
   getListMemberships,
   getDoNotOrderProducts,
   getListOrderLines,
+  getListInsights,
 };

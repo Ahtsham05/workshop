@@ -51,6 +51,10 @@ const getDoNotOrder = catchAsync(async (req, res) => {
   res.send(await productListService.getDoNotOrderProducts(await scopeOf(req)));
 });
 
+const getInsights = catchAsync(async (req, res) => {
+  res.send(await productListService.getListInsights(await scopeOf(req), req.params.listId, req.query));
+});
+
 const getOrderLines = catchAsync(async (req, res) => {
   res.send(await productListService.getListOrderLines(await scopeOf(req), req.params.listId));
 });
@@ -67,4 +71,5 @@ module.exports = {
   getMemberships,
   getDoNotOrder,
   getOrderLines,
+  getInsights,
 };

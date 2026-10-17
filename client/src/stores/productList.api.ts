@@ -64,6 +64,28 @@ export interface DoNotOrderEntry {
   note: string
 }
 
+/** GET /product-lists/:id/insights — read-only decision figures for a list over a period. */
+export interface ProductListInsights {
+  listId: string
+  period: { startDate: string; endDate: string; days: number }
+  productCount: number
+  inStock: number
+  outOfStock: number
+  lowStock: number
+  stockQuantity: number
+  stockValue: number
+  saleValue: number
+  potentialProfit: number
+  unitsSold: number
+  revenue: number
+  profit: number
+  margin: number | null
+  sellingProducts: number
+  deadStock: number
+  deadStockValue: number
+  abc: { A: number; B: number; C: number }
+}
+
 export const productListApi = createApi({
   reducerPath: 'productListApi',
   baseQuery,
@@ -114,6 +136,10 @@ export const productListApi = createApi({
       providesTags: ['ProductListFlags'],
       keepUnusedDataFor: 300,
     }),
+    getProductListInsights: builder.query<ProductListInsights, { id: string; startDate: string; endDate: string }>({
+      query: ({ id, ...params }) => ({ url: `/product-lists/${id}/insights`, params }),
+      providesTags: (_r, _e, { id }) => [{ type: 'ProductList', id }, 'ProductList'],
+    }),
     getProductListOrderLines: builder.query<{ productId: string; quantity: number | null }[], string>({
       query: (id) => `/product-lists/${id}/order-lines`,
       keepUnusedDataFor: 0,
@@ -133,4 +159,5 @@ export const {
   useGetProductListMembershipsQuery,
   useGetDoNotOrderProductsQuery,
   useLazyGetProductListOrderLinesQuery,
+  useGetProductListInsightsQuery,
 } = productListApi
