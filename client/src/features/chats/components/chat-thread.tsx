@@ -24,16 +24,21 @@ import {
   useReactToChatMessageMutation,
   useSetChatPreferencesMutation,
   type ChatConversation,
+  type ChatMember,
   type ChatMessage,
+  type ChatMessageStatus,
 } from '@/stores/chat.api'
-import { setActiveConversation, useChatLive } from '../lib/chat-live'
+import { laterStatus, receiptStatusFor, setActiveConversation, useChatLive } from '../lib/chat-live'
 import { useOutbox } from '../lib/chat-outbox'
 import { clearUnread, replaceMessage } from '../lib/chat-cache'
-import { chatDayKey, chatDayLabel } from '../lib/chat-format'
+import { chatDayKey, chatDayLabel, presenceLabel } from '../lib/chat-format'
 import { useChatSender } from '../hooks/use-chat-sender'
 import { ConversationIcon } from './conversation-list'
 import { conversationSubtitle } from '../lib/chat-format'
-import { MessageBubble, type SeenState } from './message-bubble'
+import { MessageBubble } from './message-bubble'
+import { MessageInfoDialog } from './message-info-dialog'
+import { MediaViewer, type MediaItem } from './media-viewer'
+import { isVisual } from '../lib/chat-media'
 import { ChatComposer } from './chat-composer'
 
 const GROUP_GAP_MS = 5 * 60 * 1000
@@ -72,6 +77,12 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [atBottom, setAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null)
+  // WhatsApp-style "follow the conversation": stays on until the person scrolls UP, so a
+  // smooth scroll still in flight, a photo finishing loading or the composer growing never
+  // knocks the view off the latest message.
+  const pinnedRef = useRef(true)
+  const lastScrollTopRef = useRef(0)
   // Where "new messages" started when this thread was opened (frozen for the visit).
   const unreadFromRef = useRef<string | null>(conversation.unread > 0 ? conversation.lastReadAt ?? '1970-01-01' : null)
 
@@ -132,26 +143,56 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
     const firstUnread = unreadFromRef.current
       ? messages.find((m) => m.senderId !== meId && new Date(m.createdAt) > new Date(unreadFromRef.current!))
       : null
+    const el = scrollRef.current
     if (firstUnread && !focusMessageId) {
       document.getElementById('chat-unread-divider')?.scrollIntoView({ block: 'center' })
+      pinnedRef.current = !!el && el.scrollHeight - el.scrollTop - el.clientHeight < 80
     } else {
+      pinnedRef.current = true
       scrollToBottom()
     }
+    if (el) lastScrollTopRef.current = el.scrollTop
+    setAtBottom(pinnedRef.current)
   }, [page, conversation.id, messages, meId, focusMessageId, scrollToBottom])
 
-  // New message at the bottom: follow it if the person was already at the bottom (or sent it).
+  // New message at the bottom: follow it if the person was following along (or sent it).
   const lastId = messages[messages.length - 1]?.id
   const lastMine = messages[messages.length - 1]?.senderId === meId
   useLayoutEffect(() => {
     if (initialisedFor.current !== conversation.id) return
-    if (atBottom || lastMine) scrollToBottom(true)
+    if (pinnedRef.current || lastMine) {
+      pinnedRef.current = true
+      setAtBottom(true)
+      scrollToBottom(true)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastId])
+
+  // Anything that changes height after the fact — photos and product cards loading, the
+  // typing indicator, the composer growing or a reply preview opening — keeps a pinned view
+  // on the latest message.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      if (!pinnedRef.current) return
+      el.scrollTop = el.scrollHeight
+      lastScrollTopRef.current = el.scrollTop
+    })
+    observer.observe(el)
+    if (contentEl) observer.observe(contentEl)
+    return () => observer.disconnect()
+  }, [contentEl])
 
   const onScroll = () => {
     const el = scrollRef.current
     if (!el) return
-    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80)
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    // Only the person scrolling up unpins; programmatic scrolls only ever go down.
+    if (nearBottom) pinnedRef.current = true
+    else if (el.scrollTop < lastScrollTopRef.current - 1) pinnedRef.current = false
+    lastScrollTopRef.current = el.scrollTop
+    setAtBottom(pinnedRef.current)
     if (el.scrollTop < 120 && hasMoreOlder && !loadingOlder) void fetchOlder()
   }
 
@@ -195,25 +236,55 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusMessageId, conversation.id, !!page])
 
-  /* ── Seen ticks ───────────────────────────────────────────────────────── */
+  /* ── Ticks ────────────────────────────────────────────────────────────── */
 
   const others = useMemo(() => (detail?.members ?? []).filter((m) => m.id !== meId), [detail, meId])
-  const seenFor = useCallback(
-    (message: ChatMessage): SeenState => {
-      if (conversation.type !== 'direct') return message.pending || message.failed ? null : 'sent'
-      const other = others[0]
-      if (other?.lastReadAt && new Date(other.lastReadAt) >= new Date(message.createdAt)) return 'seen'
-      return 'sent'
+  // Same rule as the server (chat.service.js#statusFrom): every other member must have
+  // received it for ✓✓ and read it for blue — in a group or channel as well as 1:1.
+  const statusFor = useCallback(
+    (message: ChatMessage): ChatMessageStatus => {
+      const at = new Date(message.createdAt).getTime()
+      let status: ChatMessageStatus = 'sent'
+      if (others.length) {
+        const reached = (value: string | null) => !!value && new Date(value).getTime() >= at
+        if (others.every((m) => reached(m.lastDeliveredAt))) status = others.every((m) => reached(m.lastReadAt)) ? 'read' : 'delivered'
+      }
+      // A receipt that landed before the member list caught up still counts.
+      return laterStatus(status, receiptStatusFor(conversation.id, message.createdAt)) ?? status
     },
-    [conversation.type, others]
+    [others, conversation.id]
   )
-  const lastMineId = useMemo(() => [...messages].reverse().find((m) => m.senderId === meId && !m.pending && !m.deletedAt)?.id, [messages, meId])
-  const groupSeenCount = useMemo(() => {
-    if (conversation.type !== 'group' || !lastMineId) return undefined
-    const message = messages.find((m) => m.id === lastMineId)
-    if (!message) return undefined
-    return others.filter((o) => o.lastReadAt && new Date(o.lastReadAt) >= new Date(message.createdAt)).length
-  }, [conversation.type, lastMineId, messages, others])
+  const [infoFor, setInfoFor] = useState<ChatMessage | null>(null)
+
+  /* ── Media viewer: every photo/video in the thread, oldest first ───────── */
+
+  const mediaItems = useMemo<MediaItem[]>(
+    () =>
+      messages.flatMap((m) =>
+        m.deletedAt
+          ? []
+          : m.attachments
+              .map((attachment, index) => ({ attachment, index }))
+              .filter(({ attachment }) => isVisual(attachment) && (attachment.url || attachment.localUrl))
+              .map(({ attachment, index }) => ({
+                key: `${m.clientId && m.pending ? m.clientId : m.id}:${index}`,
+                attachment,
+                senderName: m.senderId === meId ? 'You' : m.senderName,
+                createdAt: m.createdAt,
+                caption: m.text,
+              }))
+      ),
+    [messages, meId]
+  )
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const openMedia = useCallback(
+    (message: ChatMessage, attachmentIndex: number) => {
+      const key = `${message.clientId && message.pending ? message.clientId : message.id}:${attachmentIndex}`
+      const index = mediaItems.findIndex((item) => item.key === key)
+      if (index >= 0) setViewerIndex(index)
+    },
+    [mediaItems]
+  )
 
   /* ── Actions ──────────────────────────────────────────────────────────── */
 
@@ -239,12 +310,18 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
 
   const typing = (live.typing[conversation.id] || []).filter((p) => p.userId !== meId)
   const onlineCount = (detail?.members ?? []).filter((m) => live.online.has(m.id)).length
-  const directOnline = conversation.directUser ? live.online.has(conversation.directUser.id) : false
+  const directId = conversation.directUser?.id
+  const directOnline = directId ? live.online.has(directId) : false
+  // Freshest "last seen": the live presence push, then the member list, then the chat list.
+  const directLastSeen = directId
+    ? [live.lastSeen[directId], detail?.members.find((m: ChatMember) => m.id === directId)?.lastSeenAt, conversation.directUser?.lastSeenAt]
+        .filter((v): v is string => !!v)
+        .sort()
+        .pop()
+    : undefined
   const subtitle =
     conversation.type === 'direct'
-      ? directOnline
-        ? 'Online'
-        : 'Offline'
+      ? presenceLabel(directOnline, directLastSeen)
       : detail
         ? `${detail.members.length} member${detail.members.length === 1 ? '' : 's'}${onlineCount ? ` · ${onlineCount} online` : ''}`
         : conversationSubtitle(conversation)
@@ -309,8 +386,22 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
                 Try again
               </Button>
             </div>
+          ) : messages.length === 0 && !hasMoreOlder ? (
+            <div className='flex h-full flex-col items-center justify-center gap-3 p-6 text-center'>
+              <ConversationIcon conversation={conversation} className='size-14' />
+              <div>
+                <p className='font-semibold'>{conversation.name}</p>
+                <p className='mt-1 max-w-sm text-sm text-muted-foreground'>
+                  {conversation.type === 'organization'
+                    ? 'Announcements and questions for every branch. Share a product to ask who has it in stock.'
+                    : conversation.type === 'branch'
+                      ? 'Everyone who works in this branch is here.'
+                      : 'Say hello — messages arrive instantly.'}
+                </p>
+              </div>
+            </div>
           ) : (
-            <>
+            <div ref={setContentEl}>
               {hasMoreOlder ? (
                 <div className='flex justify-center py-3'>
                   <Button size='sm' variant='ghost' onClick={() => void fetchOlder()} disabled={loadingOlder}>
@@ -320,30 +411,13 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
               ) : (
                 messages.length > 0 && <p className='py-4 text-center text-[11px] text-muted-foreground'>Start of the conversation</p>
               )}
-              {messages.length === 0 && (
-                <div className='flex h-full flex-col items-center justify-center gap-3 p-6 text-center'>
-                  <ConversationIcon conversation={conversation} className='size-14' />
-                  <div>
-                    <p className='font-semibold'>{conversation.name}</p>
-                    <p className='mt-1 max-w-sm text-sm text-muted-foreground'>
-                      {conversation.type === 'organization'
-                        ? 'Announcements and questions for every branch. Share a product to ask who has it in stock.'
-                        : conversation.type === 'branch'
-                          ? 'Everyone who works in this branch is here.'
-                          : 'Say hello — messages arrive instantly.'}
-                    </p>
-                  </div>
-                </div>
-              )}
               {messages.map((message, index) => {
                 const prev = messages[index - 1]
                 const newDay = !prev || chatDayKey(prev.createdAt) !== chatDayKey(message.createdAt)
-                const groupStart =
-                  newDay ||
-                  !prev ||
-                  prev.kind === 'system' ||
-                  prev.senderId !== message.senderId ||
-                  new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() > GROUP_GAP_MS
+                // A run = consecutive messages from one person (WhatsApp shows their name and
+                // avatar once per run); a pause inside a run only adds a little space.
+                const runStart = newDay || !prev || prev.kind === 'system' || prev.senderId !== message.senderId
+                const groupStart = runStart || new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() > GROUP_GAP_MS
                 const showDivider =
                   !unreadDividerShown &&
                   !!unreadFromRef.current &&
@@ -372,9 +446,11 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
                       mine={message.senderId === meId}
                       meId={meId}
                       groupStart={groupStart || showDivider}
+                      runStart={runStart || showDivider}
                       showSender={showSender}
-                      seen={message.senderId === meId ? seenFor(message) : null}
-                      seenByCount={message.id === lastMineId ? groupSeenCount : undefined}
+                      status={message.senderId === meId && !message.pending && !message.failed ? statusFor(message) : null}
+                      onInfo={setInfoFor}
+                      onOpenMedia={openMedia}
                       canModerate={isOrgAdmin}
                       highlighted={highlightId === message.id}
                       onReply={onReply}
@@ -398,7 +474,7 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
                   {typing.map((p) => p.name.split(' ')[0]).join(', ')} {typing.length > 1 ? 'are' : 'is'} typing
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
         {!atBottom && (
@@ -406,7 +482,11 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
             size='icon'
             variant='secondary'
             className='absolute bottom-3 end-4 size-9 rounded-full shadow-md'
-            onClick={() => scrollToBottom(true)}
+            onClick={() => {
+              pinnedRef.current = true
+              setAtBottom(true)
+              scrollToBottom(true)
+            }}
             aria-label='Jump to latest'
           >
             <ArrowDown className='size-4' />
@@ -420,6 +500,15 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
         onCancelReply={() => setReplyTo(null)}
         editing={editing}
         onCancelEdit={() => setEditing(null)}
+      />
+
+      <MediaViewer items={mediaItems} index={viewerIndex} onIndexChange={setViewerIndex} />
+
+      <MessageInfoDialog
+        message={infoFor}
+        members={others}
+        status={infoFor ? statusFor(infoFor) : null}
+        onOpenChange={(open) => !open && setInfoFor(null)}
       />
 
       <AlertDialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>

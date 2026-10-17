@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { Building2, Globe2, MessagesSquare, Package, Users } from 'lucide-react'
+import { Building2, Globe2, MessagesSquare, Package, ShieldAlert, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import type { RootState } from '@/stores/store'
@@ -33,9 +33,15 @@ export default function Chats() {
   const meId: string | undefined = user?.id
   const isOrgAdmin = user?.systemRole === 'superAdmin' || user?.systemRole === 'system_admin'
   const live = useChatLive()
-  const { data: conversations = [], isLoading, isFetching, isError, refetch } = useGetChatConversationsQuery(undefined, {
+  const { data: conversations = [], isLoading, isFetching, isError, error, refetch } = useGetChatConversationsQuery(undefined, {
     pollingInterval: !live.connected && live.settled ? 15_000 : 0,
   })
+  // A 403 is about the account (e.g. it is no longer linked to an organization): retrying
+  // won't help, so say why instead of offering "Try again".
+  const accessProblem =
+    error && 'status' in error && error.status === 403
+      ? ((error.data as { message?: string } | undefined)?.message ?? 'Team chat is not available for your account.')
+      : null
   const [newOpen, setNewOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
 
@@ -65,6 +71,30 @@ export default function Chats() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, active, isLoading, isFetching, conversations.length])
 
+  // The app shell only has a minimum height (min-h-svh), so a percentage height here
+  // resolved to "auto": a long thread grew the whole page, the window scrolled instead of
+  // the thread, and the message box slid off-screen. Size the chat against the viewport
+  // instead — from its own top edge down to the bottom of the screen.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [top, setTop] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    // ceil, so a fractional header height never leaves a 1px page scrollbar.
+    const measure = () => setTop(Math.max(0, Math.ceil(el.getBoundingClientRect().top + window.scrollY)))
+    measure()
+    // The header and the banners above <main> moving changes where the chat starts.
+    const observer = new ResizeObserver(measure)
+    for (let node = el.closest('main')?.previousElementSibling; node; node = node.previousElementSibling) observer.observe(node)
+    window.addEventListener('resize', measure)
+    document.documentElement.setAttribute('data-viewport-page', '')
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+      document.documentElement.removeAttribute('data-viewport-page')
+    }
+  }, [])
+
   const showList = !isMobile || !active
   const showThread = !isMobile || !!active
 
@@ -72,10 +102,26 @@ export default function Chats() {
     // Full-bleed like the WhatsApp inbox: cancels <Main>'s padding and fills the height left —
     // minus the bottom notification / install banners, which are fixed over the page and
     // would otherwise sit on top of the message box.
-    <div className='-mx-4 -my-6 flex h-[calc(100%+3rem-var(--push-banner-height,0px)-var(--pwa-banner-height,0px))] min-h-[420px] overflow-hidden bg-background'>
+    <div
+      ref={rootRef}
+      className='-mx-4 -my-6 flex h-[calc(100%+3rem-var(--push-banner-height,0px)-var(--pwa-banner-height,0px))] min-h-[420px] overflow-hidden bg-background'
+      style={
+        top === null
+          ? undefined
+          : { height: `calc(100dvh - ${top}px - var(--push-banner-height, 0px) - var(--pwa-banner-height, 0px))` }
+      }
+    >
       {showList && (
         <aside className={cn('flex min-h-0 flex-col border-e bg-card', isMobile ? 'w-full' : 'w-80 shrink-0 xl:w-96')}>
-          {isError ? (
+          {accessProblem ? (
+            <div role='alert' className='flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center'>
+              <span className='flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive'>
+                <ShieldAlert className='size-6' />
+              </span>
+              <p className='text-sm font-medium'>Team chat is unavailable</p>
+              <p className='max-w-xs text-sm text-muted-foreground'>{accessProblem}</p>
+            </div>
+          ) : isError ? (
             <div className='flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground'>
               Could not load your conversations.
               <button type='button' onClick={() => refetch()} className='font-medium text-primary underline'>

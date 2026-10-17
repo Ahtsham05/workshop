@@ -1,3 +1,8 @@
+// Fixed test credentials (dotenv never overrides a variable that is already set).
+process.env.CLOUDINARY_CLOUD_NAME = 'logix-test';
+process.env.CLOUDINARY_API_KEY = '1234567890';
+process.env.CLOUDINARY_API_SECRET = 'test-secret';
+
 const request = require('supertest');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -16,7 +21,16 @@ jest.mock('../../src/middlewares/branchScope', () => () => (req, res, next) => {
 });
 
 const { errorConverter, errorHandler } = require('../../src/middlewares/error');
-const { Branch, Membership, Product, User, ChatEvent, ChatMessage } = require('../../src/models');
+const {
+  Branch,
+  Membership,
+  Organization,
+  Product,
+  User,
+  ChatConversation,
+  ChatEvent,
+  ChatMessage,
+} = require('../../src/models');
 const chatRoute = require('../../src/routes/v1/chat.route');
 
 setupTestDB();
@@ -42,6 +56,11 @@ const as = (who, branch) => {
 
 beforeEach(async () => {
   ORG = new mongoose.Types.ObjectId();
+  const OTHER_ORG = new mongoose.Types.ObjectId();
+  await Organization.create([
+    { _id: ORG, name: 'Riaz Mobiles', owner: new mongoose.Types.ObjectId() },
+    { _id: OTHER_ORG, name: 'Someone else', owner: new mongoose.Types.ObjectId() },
+  ]);
   [gulberg, dha] = await Branch.create([
     { organizationId: ORG, name: 'Gulberg' },
     { organizationId: ORG, name: 'DHA' },
@@ -57,6 +76,13 @@ beforeEach(async () => {
     outsider: await User.create({
       name: 'Out',
       email: 'out@example.com',
+      password: 'password1',
+      organizationId: OTHER_ORG,
+    }),
+    // Points at an organization that no longer exists (a database copy / manual move left it behind).
+    orphan: await User.create({
+      name: 'Orphan',
+      email: 'orphan@example.com',
       password: 'password1',
       organizationId: new mongoose.Types.ObjectId(),
     }),
@@ -309,20 +335,75 @@ describe('product cards', () => {
     );
   });
 
-  test('attachments must come from our upload host', async () => {
+  test('attachments must come from OUR Cloudinary account', async () => {
     const orgId = channel((await as('ali').get('/v1/chat/conversations')).body, 'organization').id;
-    const bad = await as('ali')
-      .post(`/v1/chat/conversations/${orgId}/messages`)
-      .send({ attachments: [{ url: 'https://evil.example/x.png' }] });
-    expect(bad.status).toBe(400); // filtered out → empty message
+    const bad = await Promise.all(
+      ['https://evil.example/x.png', 'https://res.cloudinary.com/someone-else/image/upload/x.png'].map((url) =>
+        as('ali')
+          .post(`/v1/chat/conversations/${orgId}/messages`)
+          .send({ attachments: [{ url }] })
+      )
+    );
+    expect(bad.map((r) => r.status)).toEqual([400, 400]); // filtered out → empty message
     const ok = await as('ali')
       .post(`/v1/chat/conversations/${orgId}/messages`)
       .send({
         attachments: [
-          { url: 'https://res.cloudinary.com/demo/image/upload/x.png', name: 'shelf.png', mimeType: 'image/png' },
+          { url: 'https://res.cloudinary.com/logix-test/image/upload/x.png', name: 'shelf.png', mimeType: 'image/png' },
         ],
       });
     expect(ok.body).toMatchObject({ kind: 'attachment' });
+  });
+
+  test('signed direct uploads are locked to the organization folder', async () => {
+    const cloudinary = require('cloudinary').v2;
+    const res = await as('ali').post('/v1/chat/attachments/signature');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ cloudName: 'logix-test', apiKey: '1234567890', folder: `chat/${ORG}` });
+    expect(res.body).not.toHaveProperty('apiSecret');
+    const expected = cloudinary.utils.api_sign_request(
+      { folder: `chat/${ORG}`, timestamp: res.body.timestamp },
+      'test-secret'
+    );
+    expect(res.body.signature).toBe(expected);
+    // Moving the upload to another folder (another organization) breaks the signature.
+    expect(
+      cloudinary.utils.api_sign_request({ folder: 'chat/other', timestamp: res.body.timestamp }, 'test-secret')
+    ).not.toBe(res.body.signature);
+    expect((await as('parent').post('/v1/chat/attachments/signature')).status).toBe(403);
+    expect((await as('orphan').post('/v1/chat/attachments/signature')).status).toBe(403);
+  });
+
+  test('media messages: duration kept, WhatsApp-style previews in the list and in replies', async () => {
+    const { id } = channel((await as('ali').get('/v1/chat/conversations')).body, 'organization');
+    const media = (name, mimeType, extra = {}) => ({
+      url: `https://res.cloudinary.com/logix-test/${mimeType.startsWith('image') ? 'image' : 'video'}/upload/chat/${name}`,
+      name,
+      mimeType,
+      size: 1000,
+      ...extra,
+    });
+    const send = (body) => as('ali').post(`/v1/chat/conversations/${id}/messages`).send(body);
+    const preview = async () =>
+      channel((await as('sara').get('/v1/chat/conversations')).body, 'organization').lastMessage.text;
+
+    await send({ attachments: [media('a.jpg', 'image/jpeg', { width: 1200, height: 900 })] });
+    expect(await preview()).toBe('📷 Photo');
+    await send({ attachments: [media('a.jpg', 'image/jpeg'), media('b.jpg', 'image/jpeg')], text: 'new stock' });
+    expect(await preview()).toBe('📷 new stock');
+    const video = await send({
+      attachments: [media('shelf.mp4', 'video/mp4', { duration: 12.4, width: 720, height: 1280 })],
+    });
+    expect(video.body.attachments[0]).toMatchObject({ duration: 12.4, width: 720, height: 1280 });
+    expect(await preview()).toBe('🎥 Video');
+    await send({ attachments: [media('note.mp3', 'audio/mpeg', { duration: 9 })] });
+    expect(await preview()).toBe('🎵 Audio');
+    await send({ attachments: [media('bill.pdf', 'application/pdf')] });
+    expect(await preview()).toBe('📄 bill.pdf');
+    const reply = await as('sara')
+      .post(`/v1/chat/conversations/${id}/messages`)
+      .send({ text: 'nice', replyToId: video.body.id });
+    expect(reply.body.replyTo.text).toBe('🎥 Video');
   });
 });
 
@@ -353,5 +434,142 @@ describe('search + relay', () => {
     expect(events[0].rooms).toEqual([`branch:${gulberg._id}`, `orgadmins:${ORG}`]);
     expect(events[0].payload.message.text).toBe('relay me');
     expect(await ChatMessage.countDocuments()).toBe(1);
+  });
+});
+
+describe('accounts left on an organization that no longer exists', () => {
+  test('are refused with a reason instead of getting a private one-person "All branches"', async () => {
+    const res = await as('orphan').get('/v1/chat/conversations');
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/not linked to an active organization/);
+    expect((await as('orphan').get('/v1/chat/directory')).status).toBe(403);
+    expect((await as('orphan').get('/v1/chat/unread')).status).toBe(403);
+    expect((await as('orphan').post('/v1/chat/attachments')).status).toBe(403);
+    // The bug: opening chat used to lazily create channels for the dead organization.
+    expect(await ChatConversation.countDocuments({ organizationId: people.orphan.organizationId })).toBe(0);
+
+    const orgId = channel((await as('ali').get('/v1/chat/conversations')).body, 'organization').id;
+    const post = await as('orphan').post(`/v1/chat/conversations/${orgId}/messages`).send({ text: 'hello?' });
+    expect(post.status).toBe(403);
+    expect(await ChatMessage.countDocuments()).toBe(0);
+  });
+
+  test('once relinked to the real organization they share the same rooms as everyone else', async () => {
+    await User.updateOne({ _id: people.orphan._id }, { $set: { organizationId: ORG } });
+    await Membership.create({ userId: people.orphan._id, organizationId: ORG, branchId: gulberg._id });
+
+    const orphan = (await as('orphan').get('/v1/chat/conversations')).body;
+    const owner = (await as('owner').get('/v1/chat/conversations')).body;
+    expect(channel(orphan, 'organization').id).toBe(channel(owner, 'organization').id);
+    expect(channel(orphan, 'branch', gulberg._id)).toBeTruthy();
+
+    await as('orphan', gulberg)
+      .post(`/v1/chat/conversations/${channel(orphan, 'organization').id}/messages`)
+      .send({ text: 'Hi' });
+    const seen = await as('owner').get(`/v1/chat/conversations/${channel(owner, 'organization').id}/messages`);
+    expect(seen.body.messages.map((m) => `${m.senderName}: ${m.text}`)).toEqual(['Orphan: Hi']);
+    const detail = await as('owner').get(`/v1/chat/conversations/${channel(owner, 'organization').id}`);
+    expect(detail.body.members.map((m) => m.name)).toContain('Orphan');
+  });
+});
+
+describe('WhatsApp ticks: sent → delivered → read, and last seen', () => {
+  const chatService = require('../../src/services/chat.service');
+  const statusIn = async (who, id) =>
+    (await as(who).get('/v1/chat/conversations')).body.find((c) => c.id === id).lastMessage.status;
+
+  test('direct: single tick, grey double once her device has it, blue once she reads', async () => {
+    const dm = (
+      await as('ali')
+        .post('/v1/chat/conversations/direct')
+        .send({ userId: String(people.sara._id) })
+    ).body.id;
+    const sent = await as('ali').post(`/v1/chat/conversations/${dm}/messages`).send({ text: 'stock?' });
+    expect(await statusIn('ali', dm)).toBe('sent');
+
+    // Her app loading the list (any page — the provider keeps it subscribed) = delivered.
+    await as('sara').get('/v1/chat/conversations');
+    expect(await statusIn('ali', dm)).toBe('delivered');
+    let detail = await as('ali').get(`/v1/chat/conversations/${dm}`);
+    const sara = detail.body.members.find((m) => m.name === 'Sara');
+    expect(new Date(sara.lastDeliveredAt) >= new Date(sent.body.createdAt)).toBe(true);
+    expect(sara.lastReadAt).toBeNull();
+
+    await as('sara').post(`/v1/chat/conversations/${dm}/read`).send();
+    expect(await statusIn('ali', dm)).toBe('read');
+    detail = await as('ali').get(`/v1/chat/conversations/${dm}`);
+    expect(detail.body.members.find((m) => m.name === 'Sara').lastReadAt).toBeTruthy();
+
+    // A newer message starts again at a single tick; the socket ack (markDelivered) greys it.
+    const next = await as('ali').post(`/v1/chat/conversations/${dm}/messages`).send({ text: 'and cables?' });
+    expect(await statusIn('ali', dm)).toBe('sent');
+    await chatService.markDelivered(people.sara, dm, next.body.createdAt);
+    expect(await statusIn('ali', dm)).toBe('delivered');
+
+    // Each step was pushed to the conversation with the newest message's status.
+    await new Promise((r) => setTimeout(r, 200));
+    const receipts = await ChatEvent.find({ event: 'chat:receipt' }).sort({ _id: 1 }).lean();
+    const fromSara = receipts.filter((e) => e.payload.userId === String(people.sara._id));
+    expect(fromSara.map((e) => e.payload.lastMessageStatus)).toEqual(['delivered', 'read', 'delivered']);
+    expect(fromSara[0].rooms.sort()).toEqual([`user:${people.ali._id}`, `user:${people.sara._id}`].sort());
+  });
+
+  test('a skewed client clock cannot pre-deliver messages that do not exist yet', async () => {
+    const dm = (
+      await as('ali')
+        .post('/v1/chat/conversations/direct')
+        .send({ userId: String(people.sara._id) })
+    ).body.id;
+    await chatService.markDelivered(people.sara, dm, new Date(Date.now() + 60 * 60 * 1000).toISOString());
+    await new Promise((r) => setTimeout(r, 20));
+    await as('ali').post(`/v1/chat/conversations/${dm}/messages`).send({ text: 'after the ack' });
+    expect(await statusIn('ali', dm)).toBe('sent');
+    await expect(chatService.markDelivered(people.bilal, dm, new Date().toISOString())).rejects.toThrow(
+      'Conversation not found'
+    );
+  });
+
+  test('channels: double tick only once EVERY other member has it, blue once everyone read', async () => {
+    const { id } = channel((await as('ali').get('/v1/chat/conversations')).body, 'organization');
+    await as('ali').post(`/v1/chat/conversations/${id}/messages`).send({ text: 'closing early' });
+    // Members: owner, sara, bilal (the parent portal login is not staff).
+    await as('owner').get('/v1/chat/conversations');
+    await as('sara').get('/v1/chat/conversations');
+    expect(await statusIn('ali', id)).toBe('sent');
+    await as('bilal').get('/v1/chat/conversations');
+    expect(await statusIn('ali', id)).toBe('delivered');
+    await as('owner').post(`/v1/chat/conversations/${id}/read`).send();
+    await as('sara').post(`/v1/chat/conversations/${id}/read`).send();
+    expect(await statusIn('ali', id)).toBe('delivered');
+    await as('bilal').post(`/v1/chat/conversations/${id}/read`).send();
+    expect(await statusIn('ali', id)).toBe('read');
+    // Someone else's newest message carries no status for me.
+    await as('sara').post(`/v1/chat/conversations/${id}/messages`).send({ text: 'ok' });
+    expect(await statusIn('ali', id)).toBeNull();
+  });
+
+  test('a deactivated branch member does not hold the ticks at grey forever', async () => {
+    await Membership.create({ userId: people.owner._id, organizationId: ORG, branchId: dha._id });
+    const { id } = channel((await as('sara', dha).get('/v1/chat/conversations')).body, 'branch', dha._id);
+    await User.updateOne({ _id: people.bilal._id }, { $set: { isActive: false } });
+    await as('sara', dha).post(`/v1/chat/conversations/${id}/messages`).send({ text: 'dha only' });
+    await as('owner').post(`/v1/chat/conversations/${id}/read`).send();
+    expect(await statusIn('sara', id)).toBe('read');
+  });
+
+  test('last seen is part of every person payload', async () => {
+    const seen = new Date('2026-10-17T17:43:00Z');
+    await User.updateOne({ _id: people.sara._id }, { $set: { lastSeenAt: seen } });
+    const dm = (
+      await as('ali')
+        .post('/v1/chat/conversations/direct')
+        .send({ userId: String(people.sara._id) })
+    ).body.id;
+    const row = (await as('ali').get('/v1/chat/conversations')).body.find((c) => c.id === dm);
+    expect(new Date(row.directUser.lastSeenAt).toISOString()).toBe(seen.toISOString());
+    const detail = await as('ali').get(`/v1/chat/conversations/${dm}`);
+    expect(new Date(detail.body.members.find((m) => m.name === 'Sara').lastSeenAt).toISOString()).toBe(seen.toISOString());
+    const dir = await as('ali').get('/v1/chat/directory');
+    expect(new Date(dir.body.find((p) => p.name === 'Sara').lastSeenAt).toISOString()).toBe(seen.toISOString());
   });
 });

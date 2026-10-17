@@ -86,8 +86,12 @@ const productStock = catchAsync(async (req, res) => {
   res.send(await chatService.productStockAcrossBranches(req.user, req.params.productId));
 });
 
+const uploadSignature = catchAsync(async (req, res) => {
+  res.send(await chatService.uploadSignature(req.user));
+});
+
 const uploadAttachment = catchAsync(async (req, res) => {
-  if (chatService.isPortalUser(req.user)) throw new ApiError(httpStatus.FORBIDDEN, 'Team chat is for staff accounts');
+  await chatService.assertChatUser(req.user);
   if (!req.file) throw new ApiError(httpStatus.BAD_REQUEST, 'No file uploaded');
   let result;
   try {
@@ -124,5 +128,6 @@ module.exports = {
   directory,
   search,
   productStock,
+  uploadSignature,
   uploadAttachment,
 };

@@ -4,11 +4,12 @@ import { useNavigate } from '@tanstack/react-router'
 import { io, type Socket } from 'socket.io-client'
 import { toast } from 'sonner'
 import { store, type AppDispatch, type RootState } from '@/stores/store'
-import { chatApi, useGetChatConversationsQuery, type ChatMessage } from '@/stores/chat.api'
+import { chatApi, useGetChatConversationsQuery, type ChatMessage, type ChatMessageStatus } from '@/stores/chat.api'
 import { deriveSchoolRole } from '@/lib/school-permissions'
 import {
   chatSocketOrigin,
   getChatLive,
+  noteReceiptStatus,
   playChatChime,
   registerTypingEmitter,
   setChatLive,
@@ -17,7 +18,15 @@ import {
   sweepTyping,
   useChatLive,
 } from '../lib/chat-live'
-import { bumpConversation, clearUnread, previewOf, replaceMessage, upsertMessage } from '../lib/chat-cache'
+import {
+  applyListStatus,
+  applyMemberReceipt,
+  bumpConversation,
+  clearUnread,
+  previewOf,
+  replaceMessage,
+  upsertMessage,
+} from '../lib/chat-cache'
 import { clearOutbox } from '../lib/chat-outbox'
 
 /** Polling cadence while the socket can't connect (e.g. an API host without websockets). */
@@ -84,8 +93,8 @@ export function ChatLiveProvider() {
     socket.on('chat:ready', (payload: { online: string[] }) => {
       setChatLive({ online: new Set(payload.online || []) })
     })
-    socket.on('chat:presence', (payload: { userId: string; online: boolean }) => {
-      if (payload?.userId) setOnline(payload.userId, payload.online)
+    socket.on('chat:presence', (payload: { userId: string; online: boolean; lastSeenAt?: string | null }) => {
+      if (payload?.userId) setOnline(payload.userId, payload.online, payload.lastSeenAt)
     })
 
     socket.on('chat:message', (payload: { conversationId: string; message: ChatMessage }) => {
@@ -96,13 +105,16 @@ export function ChatLiveProvider() {
       const looking = live.activeConversationId === conversationId && document.visibilityState === 'visible'
       upsertMessage(dispatch, conversationId, message)
       const countUnread = !mine && !looking && message.kind !== 'system'
-      const known = bumpConversation(dispatch, conversationId, message, { countUnread })
+      const known = bumpConversation(dispatch, conversationId, message, { countUnread, status: mine ? 'sent' : null })
       if (!known) dispatch(chatApi.util.invalidateTags(['ChatConversations']))
       if (mine || message.kind === 'system') return
       if (looking) {
+        // Reading covers delivery too (one request, blue ticks for the sender).
         dispatch(chatApi.endpoints.markChatRead.initiate(conversationId))
         return
       }
+      // It reached this device — the sender's grey double tick, whatever page we're on.
+      socket?.emit('chat:delivered', { conversationId, at: message.createdAt })
       const conversations = chatApi.endpoints.getChatConversations.select()(storeState())?.data
       const conversation = conversations?.find((c) => c.id === conversationId)
       if (conversation?.muted) return
@@ -115,14 +127,26 @@ export function ChatLiveProvider() {
       if (payload?.conversationId && payload.message) replaceMessage(dispatch, payload.conversationId, payload.message)
     })
 
-    socket.on('chat:read', (payload: { conversationId: string; userId: string; lastReadAt: string }) => {
-      dispatch(
-        chatApi.util.updateQueryData('getChatConversation', payload.conversationId, (draft) => {
-          const member = draft.members.find((m) => m.id === payload.userId)
-          if (member) member.lastReadAt = payload.lastReadAt
-        })
-      )
-    })
+    // Someone received/read further: ticks in the open thread (per member) and in the list
+    // (the newest message's status, worked out by the server).
+    socket.on(
+      'chat:receipt',
+      (payload: {
+        conversationId: string
+        userId: string
+        lastReadAt: string | null
+        lastDeliveredAt: string | null
+        lastMessageAt?: string
+        lastMessageStatus?: ChatMessageStatus | null
+      }) => {
+        if (!payload?.conversationId || !payload.userId) return
+        applyMemberReceipt(dispatch, payload.conversationId, payload)
+        if (payload.lastMessageAt && payload.lastMessageStatus) {
+          noteReceiptStatus(payload.conversationId, payload.lastMessageAt, payload.lastMessageStatus)
+          applyListStatus(dispatch, payload.conversationId, payload.lastMessageAt, payload.lastMessageStatus)
+        }
+      }
+    )
     socket.on('chat:read-self', (payload: { conversationId: string; lastReadAt: string }) => {
       clearUnread(dispatch, payload.conversationId, payload.lastReadAt)
     })

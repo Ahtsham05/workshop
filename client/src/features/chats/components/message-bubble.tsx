@@ -1,11 +1,12 @@
-import { memo, useState } from 'react'
+import { memo, useState, type ReactNode } from 'react'
 import {
   AlertCircle,
   Check,
   CheckCheck,
   Clock,
   Copy,
-  FileText,
+  Download,
+  Info,
   MoreHorizontal,
   Package,
   Pencil,
@@ -25,23 +26,57 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useFormatMoney } from '@/lib/format-money'
-import { REACTION_EMOJIS, useGetChatProductStockQuery, type ChatMessage } from '@/stores/chat.api'
-import { formatChatTime, formatFileSize, linkify } from '../lib/chat-format'
+import { REACTION_EMOJIS, useGetChatProductStockQuery, type ChatMessage, type ChatMessageStatus } from '@/stores/chat.api'
+import { formatChatTime, linkify } from '../lib/chat-format'
+import { downloadUrl, isVisual, mediaKind } from '../lib/chat-media'
+import { AudioPlayer, DocumentCard, MediaAlbum } from './message-media'
+import { PreviewText } from './preview-text'
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000
 
-export type SeenState = 'sent' | 'seen' | null
+const STATUS_LABEL: Record<ChatMessageStatus, string> = {
+  pending: 'Sending',
+  failed: 'Not sent',
+  sent: 'Sent',
+  delivered: 'Delivered',
+  read: 'Read',
+}
+
+/**
+ * WhatsApp ticks: clock while sending, ✓ sent, grey ✓✓ delivered, blue ✓✓ read.
+ * `tone` picks the grey that reads on the surface behind it (own bubble vs. list row).
+ */
+export function MessageTicks({ status, tone = 'bubble', className }: { status: ChatMessageStatus | null | undefined; tone?: 'bubble' | 'list'; className?: string }) {
+  if (!status) return null
+  const grey = tone === 'bubble' ? 'text-primary-foreground/75' : 'text-muted-foreground'
+  const label = STATUS_LABEL[status]
+  return (
+    <span role='img' aria-label={label} title={label} data-status={status} className={cn('inline-flex shrink-0', className)}>
+      {status === 'failed' ? (
+        <AlertCircle className='size-3.5 text-destructive' />
+      ) : status === 'pending' ? (
+        <Clock className={cn('size-3', grey)} />
+      ) : status === 'sent' ? (
+        <Check className={cn('size-3.5', grey)} />
+      ) : (
+        <CheckCheck className={cn('size-3.5', status === 'read' ? (tone === 'bubble' ? 'text-sky-400 drop-shadow-[0_0_1px_rgba(0,0,0,0.35)]' : 'text-sky-500') : grey)} />
+      )}
+    </span>
+  )
+}
 
 interface MessageBubbleProps {
   message: ChatMessage
   mine: boolean
   meId: string | undefined
-  /** First bubble of a run from the same person — shows their name, branch and avatar. */
+  /** First bubble after a pause, a day change or another sender — extra space and a tail. */
   groupStart: boolean
-  /** Channels and groups name the sender; a direct thread doesn't need to. */
+  /** First bubble of a run from the same person — their name, branch and avatar go here once. */
+  runStart: boolean
+  /** Channels and groups name the sender and show their avatar; a direct thread doesn't. */
   showSender: boolean
-  seen: SeenState
-  seenByCount?: number
+  /** My messages only: delivery state (see MessageTicks). */
+  status: ChatMessageStatus | null
   canModerate: boolean
   highlighted?: boolean
   onReply: (message: ChatMessage) => void
@@ -51,6 +86,10 @@ interface MessageBubbleProps {
   onRetry: (message: ChatMessage) => void
   onDiscard: (message: ChatMessage) => void
   onJumpTo: (messageId: string) => void
+  /** Delivered to / read by, per person ("Message info"). */
+  onInfo?: (message: ChatMessage) => void
+  /** Opens a photo/video of this message in the full-screen viewer. */
+  onOpenMedia?: (message: ChatMessage, attachmentIndex: number) => void
 }
 
 function ProductCard({ message, mine }: { message: ChatMessage; mine: boolean }) {
@@ -123,47 +162,11 @@ function ProductCard({ message, mine }: { message: ChatMessage; mine: boolean })
   )
 }
 
-function Attachments({ message }: { message: ChatMessage }) {
-  const images = message.attachments.filter((a) => a.mimeType.startsWith('image/'))
-  const files = message.attachments.filter((a) => !a.mimeType.startsWith('image/'))
+function MessageText({ text, children }: { text: string; children?: ReactNode }) {
   return (
-    <div className='mb-1 space-y-1'>
-      {images.length > 0 && (
-        <div className={cn('grid gap-1', images.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
-          {images.map((image) => (
-            <a key={image.url} href={image.url} target='_blank' rel='noreferrer' className='block overflow-hidden rounded-lg'>
-              <img
-                src={image.url}
-                alt={image.name || 'Image'}
-                loading='lazy'
-                className={cn('w-full bg-muted object-cover', images.length > 1 ? 'h-28' : 'max-h-72')}
-              />
-            </a>
-          ))}
-        </div>
-      )}
-      {files.map((file) => (
-        <a
-          key={file.url}
-          href={file.url}
-          target='_blank'
-          rel='noreferrer'
-          className='flex items-center gap-2 rounded-lg border bg-background px-2.5 py-2 text-foreground hover:bg-accent'
-        >
-          <FileText className='size-5 shrink-0 text-red-600' />
-          <span className='min-w-0 flex-1'>
-            <span className='block truncate text-xs font-medium'>{file.name || 'Document'}</span>
-            <span className='block text-[10px] text-muted-foreground'>{formatFileSize(file.size)}</span>
-          </span>
-        </a>
-      ))}
-    </div>
-  )
-}
-
-function MessageText({ text }: { text: string }) {
-  return (
-    <p className='whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]'>
+    // overflow-wrap: anywhere (inline, so no utility can override it) lets one long unbroken
+    // word or URL break and shrink the bubble; 'break-word' alone left it 787px wide.
+    <p className='whitespace-pre-wrap text-sm leading-relaxed' style={{ overflowWrap: 'anywhere' }}>
       {linkify(text).map((part, i) =>
         part.href ? (
           <a key={i} href={part.href} target='_blank' rel='noreferrer noopener' className='underline underline-offset-2'>
@@ -173,6 +176,7 @@ function MessageText({ text }: { text: string }) {
           <span key={i}>{part.text}</span>
         )
       )}
+      {children}
     </p>
   )
 }
@@ -182,9 +186,9 @@ export const MessageBubble = memo(function MessageBubble({
   mine,
   meId,
   groupStart,
+  runStart,
   showSender,
-  seen,
-  seenByCount,
+  status,
   canModerate,
   highlighted,
   onReply,
@@ -194,8 +198,11 @@ export const MessageBubble = memo(function MessageBubble({
   onRetry,
   onDiscard,
   onJumpTo,
+  onInfo,
+  onOpenMedia,
 }: MessageBubbleProps) {
   const [reactOpen, setReactOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   if (message.kind === 'system') {
     return (
@@ -210,6 +217,35 @@ export const MessageBubble = memo(function MessageBubble({
   const canEdit = live && mine && Date.now() - new Date(message.createdAt).getTime() < EDIT_WINDOW_MS
   const canDelete = live && (mine || canModerate)
 
+  // Time (+ ticks) — WhatsApp puts it in the bubble's bottom-right corner, on the last line
+  // of text when there is room. An invisible copy at the end of the text reserves exactly
+  // that room, so the line wraps (and the bubble grows a line) only when it must.
+  const meta = (
+    <>
+      {message.editedAt && !deleted && <span>edited</span>}
+      <span>{formatChatTime(message.createdAt)}</span>
+      {mine && !deleted && <MessageTicks status={message.failed ? 'failed' : message.pending ? 'pending' : status} />}
+    </>
+  )
+  const metaBase = 'inline-flex items-center gap-1 whitespace-nowrap text-[10px] leading-none'
+  const metaTone = mine && !deleted ? 'text-primary-foreground/75' : 'text-muted-foreground'
+  const endsWithText = deleted || !!message.text
+  const files = deleted ? [] : message.attachments
+  const hasVisual = files.some((a) => isVisual(a))
+  const listed = files.map((a, index) => ({ a, index })).filter(({ a }) => !isVisual(a))
+  // Photos/videos with nothing under them: the time sits on the picture, like WhatsApp.
+  const mediaOnly = hasVisual && !listed.length && !message.text && !message.replyTo
+  const sending = message.pending || message.failed
+  const uploadActions = { onCancel: () => onDiscard(message), onRetry: () => onRetry(message) }
+  const uploadOf = (a: (typeof files)[number]) =>
+    sending ? { ...uploadActions, progress: a.progress ?? 0, failed: !!message.failed && !a.url } : undefined
+  const metaSpacer = (
+    <span aria-hidden className={cn(metaBase, 'invisible ms-2 select-none align-middle')} data-meta-spacer>
+      {meta}
+    </span>
+  )
+  const actionsShown = reactOpen || menuOpen
+
   const copy = () => {
     void navigator.clipboard?.writeText(message.text || message.product?.name || '').then(() => toast.success('Copied'))
   }
@@ -219,14 +255,15 @@ export const MessageBubble = memo(function MessageBubble({
       id={`chat-msg-${message.id}`}
       className={cn('group flex gap-2 px-3 md:px-4', mine ? 'flex-row-reverse' : 'flex-row', groupStart ? 'mt-3' : 'mt-0.5')}
     >
-      {!mine && (
+      {/* A 1:1 chat has no avatars at all; groups show the sender's once per run. */}
+      {!mine && showSender && (
         <div className='w-8 shrink-0'>
-          {groupStart && <UserAvatar name={message.senderName} className='size-8' />}
+          {runStart && <UserAvatar name={message.senderName} className='size-8' />}
         </div>
       )}
 
       <div className={cn('flex min-w-0 max-w-[85%] flex-col sm:max-w-[70%]', mine ? 'items-end' : 'items-start')}>
-        {groupStart && showSender && !mine && (
+        {runStart && showSender && !mine && (
           <p className='mb-0.5 flex items-center gap-1.5 px-1 text-[11px]'>
             <span className='font-semibold'>{message.senderName}</span>
             {message.senderBranchName && (
@@ -235,20 +272,28 @@ export const MessageBubble = memo(function MessageBubble({
           </p>
         )}
 
-        <div className={cn('flex items-end gap-1', mine ? 'flex-row-reverse' : 'flex-row')}>
+        <div className={cn('relative flex items-end gap-1', mine ? 'flex-row-reverse' : 'flex-row')}>
           <div
+            // Touch screens: tapping the bubble focuses it, which shows its actions (below).
+            tabIndex={-1}
             className={cn(
-              'relative min-w-0 rounded-2xl px-3 py-1.5 shadow-xs transition-shadow',
+              'relative min-w-0 rounded-2xl px-3 py-1.5 shadow-xs outline-none transition-shadow',
+              // Photos sit in a thin frame of the bubble colour (WhatsApp's 3px border).
+              hasVisual && 'p-1',
               mine ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
               groupStart && (mine ? 'rounded-tr-md' : 'rounded-tl-md'),
-              message.pending && 'opacity-70',
+              // Media shows its own upload ring instead of dimming.
+              message.pending && !files.length && 'opacity-70',
               message.failed && 'ring-2 ring-destructive',
               highlighted && 'ring-2 ring-amber-400',
               deleted && 'bg-transparent text-muted-foreground shadow-none ring-1 ring-border'
             )}
           >
             {deleted ? (
-              <p className='text-sm italic'>This message was deleted</p>
+              <p className='text-sm italic'>
+                This message was deleted
+                {metaSpacer}
+              </p>
             ) : (
               <>
                 {message.replyTo && (
@@ -257,41 +302,63 @@ export const MessageBubble = memo(function MessageBubble({
                     onClick={() => onJumpTo(message.replyTo!.messageId)}
                     className={cn(
                       'mb-1 block w-full rounded-md border-s-4 px-2 py-1 text-start text-xs',
+                      hasVisual && 'w-[min(330px,68vw)]',
                       mine ? 'border-primary-foreground/60 bg-primary-foreground/15' : 'border-primary bg-background/70'
                     )}
                   >
                     <span className='block font-semibold'>{message.replyTo.senderName}</span>
-                    <span className='line-clamp-2 opacity-80'>{message.replyTo.text}</span>
+                    <PreviewText text={message.replyTo.text} className='opacity-80' />
                   </button>
                 )}
                 {message.kind === 'product' && message.product && <ProductCard message={message} mine={mine} />}
-                {message.attachments.length > 0 && <Attachments message={message} />}
-                {message.text && <MessageText text={message.text} />}
+                {hasVisual && (
+                  <MediaAlbum message={message} upload={uploadActions} onOpen={(index) => onOpenMedia?.(message, index)} />
+                )}
+                {listed.map(({ a, index }) => (
+                  <div key={`${a.url || a.localUrl}-${index}`} className={cn((hasVisual || index > 0) && 'mt-1')}>
+                    {mediaKind(a.mimeType) === 'audio' ? (
+                      <AudioPlayer attachment={a} mine={mine} upload={uploadOf(a)} />
+                    ) : (
+                      <DocumentCard attachment={a} mine={mine} upload={uploadOf(a)} />
+                    )}
+                  </div>
+                ))}
+                {message.text && (
+                  <div className={cn(hasVisual && 'w-[min(330px,68vw)] px-2 pb-0.5 pt-1', listed.length && !hasVisual && 'mt-1')}>
+                    <MessageText text={message.text}>{metaSpacer}</MessageText>
+                  </div>
+                )}
               </>
             )}
-            <span className={cn('mt-0.5 flex items-center justify-end gap-1 text-[10px]', mine && !deleted ? 'text-primary-foreground/75' : 'text-muted-foreground')}>
-              {message.editedAt && !deleted && <span>edited</span>}
-              <span>{formatChatTime(message.createdAt)}</span>
-              {mine && !deleted && (
-                <span aria-label={message.failed ? 'Not sent' : message.pending ? 'Sending' : seen === 'seen' ? 'Seen' : 'Sent'}>
-                  {message.failed ? (
-                    <AlertCircle className='size-3 text-destructive' />
-                  ) : message.pending ? (
-                    <Clock className='size-3' />
-                  ) : seen === 'seen' ? (
-                    <CheckCheck className='size-3.5 text-sky-300' />
-                  ) : seen === 'sent' ? (
-                    <Check className='size-3.5' />
-                  ) : null}
-                </span>
-              )}
-            </span>
+            {endsWithText ? (
+              <span className={cn(metaBase, metaTone, 'absolute bottom-1.5 end-2.5')}>{meta}</span>
+            ) : mediaOnly ? (
+              <span
+                className={cn(
+                  metaBase,
+                  'absolute bottom-2.5 end-2.5 rounded-full bg-black/45 px-1.5 py-1 text-white [&_[data-status]_svg]:text-white/85 [&_[data-status=read]_svg]:text-sky-300'
+                )}
+              >
+                {meta}
+              </span>
+            ) : (
+              <span className={cn(metaBase, metaTone, 'mt-1 flex justify-end')}>{meta}</span>
+            )}
           </div>
 
           {/* Hover actions */}
           {live && (
-            <div className={cn(// Touch screens have no hover, so the actions stay visible there.
-                'flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-60', (reactOpen) && 'opacity-100')}>
+            <div
+              className={cn(
+                // Mouse: beside the bubble, on hover. Touch: hidden (so bubbles keep their full
+                // width) until the bubble is tapped, then a small floating bar above it.
+                'flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100',
+                '[@media(hover:none)]:absolute [@media(hover:none)]:bottom-full [@media(hover:none)]:z-20 [@media(hover:none)]:mb-1 [@media(hover:none)]:hidden [@media(hover:none)]:rounded-full [@media(hover:none)]:border [@media(hover:none)]:bg-card [@media(hover:none)]:p-0.5 [@media(hover:none)]:opacity-100 [@media(hover:none)]:shadow-md [@media(hover:none)]:group-focus-within:flex',
+                mine ? '[@media(hover:none)]:end-0' : '[@media(hover:none)]:start-0',
+                actionsShown && 'opacity-100 [@media(hover:none)]:flex'
+              )}
+              data-message-actions
+            >
               <Popover open={reactOpen} onOpenChange={setReactOpen}>
                 <PopoverTrigger asChild>
                   <button type='button' className='rounded-full p-1 text-muted-foreground hover:bg-accent hover:text-foreground' aria-label='React'>
@@ -317,7 +384,7 @@ export const MessageBubble = memo(function MessageBubble({
               <button type='button' onClick={() => onReply(message)} className='rounded-full p-1 text-muted-foreground hover:bg-accent hover:text-foreground' aria-label='Reply'>
                 <Reply className='size-4' />
               </button>
-              <DropdownMenu>
+              <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                 <DropdownMenuTrigger asChild>
                   <button type='button' className='rounded-full p-1 text-muted-foreground hover:bg-accent hover:text-foreground' aria-label='More actions'>
                     <MoreHorizontal className='size-4' />
@@ -330,6 +397,32 @@ export const MessageBubble = memo(function MessageBubble({
                   {(message.text || message.product) && (
                     <DropdownMenuItem onClick={copy}>
                       <Copy className='mr-2 size-4' /> Copy text
+                    </DropdownMenuItem>
+                  )}
+                  {files.length === 1 && files[0].url && (
+                    <DropdownMenuItem asChild>
+                      <a href={downloadUrl(files[0])} target='_blank' rel='noreferrer' download={files[0].name || true}>
+                        <Download className='mr-2 size-4' /> Download
+                      </a>
+                    </DropdownMenuItem>
+                  )}
+                  {files.length > 1 && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        files.forEach((a, i) =>
+                          window.setTimeout(() => {
+                            const link = Object.assign(document.createElement('a'), { href: downloadUrl(a), target: '_blank', rel: 'noreferrer', download: a.name || '' })
+                            link.click()
+                          }, i * 400)
+                        )
+                      }
+                    >
+                      <Download className='mr-2 size-4' /> Download all ({files.length})
+                    </DropdownMenuItem>
+                  )}
+                  {mine && onInfo && (
+                    <DropdownMenuItem onClick={() => onInfo(message)}>
+                      <Info className='mr-2 size-4' /> Message info
                     </DropdownMenuItem>
                   )}
                   {canEdit && message.kind === 'text' && (
@@ -385,7 +478,6 @@ export const MessageBubble = memo(function MessageBubble({
             })}
           </div>
         )}
-        {mine && seenByCount != null && seenByCount > 0 && <p className='px-1 text-[10px] text-muted-foreground'>Seen by {seenByCount}</p>}
       </div>
     </div>
   )

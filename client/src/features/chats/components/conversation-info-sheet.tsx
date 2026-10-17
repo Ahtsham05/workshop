@@ -15,7 +15,7 @@ import {
 } from '@/stores/chat.api'
 import { readChatSound, useChatLive, writeChatSound } from '../lib/chat-live'
 import { ConversationIcon } from './conversation-list'
-import { conversationSubtitle } from '../lib/chat-format'
+import { conversationSubtitle, presenceLabel } from '../lib/chat-format'
 import { PeoplePicker } from './people-picker'
 
 interface ConversationInfoSheetProps {
@@ -165,8 +165,8 @@ export function ConversationInfoSheet({ conversation, open, onOpenChange, meId, 
                         {member.name}
                         {member.id === meId && <span className='text-muted-foreground'> (you)</span>}
                       </span>
-                      <span className='block text-[11px] text-muted-foreground'>
-                        {online ? 'Online' : 'Offline'}
+                      <span className={online ? 'block text-[11px] text-emerald-600 dark:text-emerald-400' : 'block text-[11px] text-muted-foreground'}>
+                        {member.id === meId ? 'online' : presenceLabel(online, live.lastSeen[member.id] ?? member.lastSeenAt)}
                         {isGroup && memberIsAdmin ? ' · Group admin' : ''}
                       </span>
                     </span>

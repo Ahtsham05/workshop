@@ -20,6 +20,8 @@ const attachmentSchema = new mongoose.Schema(
     size: { type: Number, default: 0 },
     width: { type: Number, default: null },
     height: { type: Number, default: null },
+    /** Seconds, for video and audio (shown on the bubble before anything downloads). */
+    duration: { type: Number, default: null },
   },
   { _id: false }
 );

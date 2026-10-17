@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { ChatMessageStatus } from '@/stores/chat.api'
 
 /**
  * Live, non-persisted chat state shared by the provider (which owns the socket) and the
@@ -17,11 +18,13 @@ interface ChatLiveState {
   /** True once the first connection attempt has either succeeded or clearly failed. */
   settled: boolean
   online: Set<string>
+  /** userId → when they went offline, from live presence (fresher than any fetched value). */
+  lastSeen: Record<string, string>
   typing: Record<string, TypingPerson[]>
   activeConversationId: string | null
 }
 
-let state: ChatLiveState = { connected: false, settled: false, online: new Set(), typing: {}, activeConversationId: null }
+let state: ChatLiveState = { connected: false, settled: false, online: new Set(), lastSeen: {}, typing: {}, activeConversationId: null }
 const listeners = new Set<() => void>()
 
 export function setChatLive(patch: Partial<ChatLiveState>) {
@@ -40,11 +43,41 @@ export function useChatLive(): ChatLiveState {
   return useSyncExternalStore(subscribe, getChatLive, getChatLive)
 }
 
-export function setOnline(userId: string, online: boolean) {
+export function setOnline(userId: string, online: boolean, lastSeenAt?: string | null) {
   const next = new Set(state.online)
   if (online) next.add(userId)
   else next.delete(userId)
-  setChatLive({ online: next })
+  setChatLive({ online: next, ...(lastSeenAt ? { lastSeen: { ...state.lastSeen, [userId]: lastSeenAt } } : {}) })
+}
+
+/* ── Newest-message status (conversation list ticks) ─────────────────────── */
+
+const STATUS_RANK: Record<ChatMessageStatus, number> = { failed: 0, pending: 0, sent: 1, delivered: 2, read: 3 }
+
+/** Ticks only ever move forward for the same message. */
+export function laterStatus(a: ChatMessageStatus | null | undefined, b: ChatMessageStatus | null | undefined) {
+  if (!a) return b ?? null
+  if (!b) return a
+  return STATUS_RANK[b] > STATUS_RANK[a] ? b : a
+}
+
+/**
+ * The latest receipt per conversation, keyed by the message it was about. A receipt can
+ * beat the sender's own POST response (the recipient's ack is that fast on a LAN), so it is
+ * kept here and applied whenever that message lands in the list, in whichever order.
+ */
+const receiptStatus = new Map<string, { at: number; status: ChatMessageStatus }>()
+
+export function noteReceiptStatus(conversationId: string, at: string, status: ChatMessageStatus) {
+  const time = new Date(at).getTime()
+  const prev = receiptStatus.get(conversationId)
+  if (prev && prev.at > time) return
+  receiptStatus.set(conversationId, { at: time, status: prev && prev.at === time ? laterStatus(prev.status, status)! : status })
+}
+
+export function receiptStatusFor(conversationId: string, at: string): ChatMessageStatus | null {
+  const entry = receiptStatus.get(conversationId)
+  return entry && entry.at === new Date(at).getTime() ? entry.status : null
 }
 
 const TYPING_TTL = 4500

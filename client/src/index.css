@@ -53,6 +53,12 @@ body {
   padding-bottom: calc(var(--pwa-banner-height, 0px) + var(--push-banner-height, 0px));
 }
 
+/* Pages that size themselves to the screen (Team chat) already stop above the bottom
+ * banners — the padding above would only let the whole window scroll by a banner's height. */
+html[data-viewport-page] body {
+  padding-bottom: 0;
+}
+
 /* Optional: when the user explicitly opts in via the "Urdu-only" invoice toggle,
  * use the decorative Nastaliq style only on those marked elements. */
 .font-urdu,

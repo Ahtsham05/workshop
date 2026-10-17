@@ -6,12 +6,20 @@ import { baseQuery } from './base-query'
 export type ChatConversationType = 'organization' | 'branch' | 'direct' | 'group'
 export type ChatMessageKind = 'text' | 'product' | 'attachment' | 'system'
 
+/**
+ * WhatsApp-style delivery state of a message, as its sender sees it:
+ * pending (clock) → sent (✓) → delivered (grey ✓✓) → read (blue ✓✓); failed = not sent.
+ */
+export type ChatMessageStatus = 'pending' | 'failed' | 'sent' | 'delivered' | 'read'
+
 export interface ChatLastMessage {
   text: string
   kind: ChatMessageKind
   senderId: string | null
   senderName: string
   at: string
+  /** Status of this newest message for its sender (null when it isn't yours / a system note). */
+  status?: ChatMessageStatus | null
 }
 
 export interface ChatConversation {
@@ -22,7 +30,7 @@ export interface ChatConversation {
   branchId: string | null
   participantIds: string[]
   adminIds: string[]
-  directUser: { id: string; name: string; photoUrl: string; online: boolean } | null
+  directUser: { id: string; name: string; photoUrl: string; online: boolean; lastSeenAt: string | null } | null
   lastMessage: ChatLastMessage | null
   lastMessageAt: string | null
   unread: number
@@ -40,6 +48,19 @@ export interface ChatAttachment {
   size: number
   width?: number | null
   height?: number | null
+  /** Seconds (video / audio). */
+  duration?: number | null
+  /** Client-only, while sending: the picked file's local preview and upload progress (0–1). */
+  localUrl?: string
+  progress?: number
+}
+
+export interface ChatUploadSignature {
+  cloudName: string
+  apiKey: string
+  folder: string
+  timestamp: number
+  signature: string
 }
 
 export interface ChatProductCard {
@@ -85,7 +106,10 @@ export interface ChatMember {
   name: string
   photoUrl: string
   online: boolean
+  lastSeenAt: string | null
   lastReadAt: string | null
+  /** How far their device has received messages (always ≥ lastReadAt). */
+  lastDeliveredAt: string | null
 }
 
 export interface ChatConversationDetail {
@@ -105,6 +129,7 @@ export interface ChatPerson {
   branches: { id: string; name: string }[]
   allBranches: boolean
   online: boolean
+  lastSeenAt: string | null
   isMe: boolean
 }
 
@@ -221,8 +246,9 @@ export const chatApi = createApi({
         }
       },
     }),
-    uploadChatAttachment: builder.mutation<ChatAttachment, FormData>({
-      query: (body) => ({ url: '/chat/attachments', method: 'POST', body }),
+    /** Short-lived signature for uploading straight to Cloudinary (see lib/chat-media.ts). */
+    getChatUploadSignature: builder.mutation<ChatUploadSignature, void>({
+      query: () => ({ url: '/chat/attachments/signature', method: 'POST' }),
     }),
   }),
 })
@@ -245,5 +271,5 @@ export const {
   useUpdateChatGroupMutation,
   useLeaveChatGroupMutation,
   useSetChatPreferencesMutation,
-  useUploadChatAttachmentMutation,
+  useGetChatUploadSignatureMutation,
 } = chatApi

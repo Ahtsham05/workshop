@@ -5,8 +5,11 @@ const { escapeRegex } = require('../utils/listSearchFilter');
 const ChatConversation = require('../models/chatConversation.model');
 const ChatMessage = require('../models/chatMessage.model');
 const ChatReadState = require('../models/chatReadState.model');
-const { User, Branch, Membership, Product } = require('../models');
+const { User, Branch, Membership, Product, Organization } = require('../models');
 const chatBus = require('../socket/chatBus');
+const logger = require('../config/logger');
+const config = require('../config/config');
+const cloudinary = require('../config/cloudinary');
 
 /**
  * Team chat between the branches of one organization.
@@ -30,9 +33,28 @@ const isPortalUser = (user) =>
   (Array.isArray(user.linkedStudentIds) && user.linkedStudentIds.length > 0) ||
   ['teacher', 'parent', 'student'].includes(user.schoolRole);
 
-function assertChatUser(user) {
+const ORPHANED_ACCOUNT_MESSAGE =
+  'Your account is not linked to an active organization, so team chat is unavailable. Ask your admin to re-add you to a branch.';
+
+// Organizations confirmed to exist (orgId → checkedAt). Only hits are cached, so a relinked
+// account works on its very next request.
+const ORG_CHECK_TTL = 60 * 1000;
+const orgCheckedAt = new Map();
+
+/**
+ * Everything is scoped by user.organizationId, so an account pointing at an organization
+ * that no longer exists (left behind by a database copy or a manual move) would otherwise
+ * get its own private, one-person "All branches" channel — it looks like chat works, but
+ * nobody ever sees what it sends. Refuse it with a reason instead.
+ */
+async function assertChatUser(user) {
   if (!user || !user.organizationId) throw new ApiError(httpStatus.FORBIDDEN, 'Chat needs an organization');
   if (isPortalUser(user)) throw new ApiError(httpStatus.FORBIDDEN, 'Team chat is for staff accounts');
+  const key = String(user.organizationId);
+  const checkedAt = orgCheckedAt.get(key);
+  if (checkedAt && Date.now() - checkedAt < ORG_CHECK_TTL) return;
+  if (!(await Organization.exists({ _id: user.organizationId }))) throw new ApiError(httpStatus.FORBIDDEN, ORPHANED_ACCOUNT_MESSAGE);
+  orgCheckedAt.set(key, Date.now());
 }
 
 /* ── Who belongs where ───────────────────────────────────────────────────── */
@@ -102,7 +124,7 @@ async function canAccess(user, conversation, branchIds) {
 }
 
 async function getAccessibleConversation(user, conversationId) {
-  assertChatUser(user);
+  await assertChatUser(user);
   if (!mongoose.Types.ObjectId.isValid(String(conversationId))) throw new ApiError(httpStatus.NOT_FOUND, 'Conversation not found');
   const conversation = await ChatConversation.findById(conversationId);
   if (!(await canAccess(user, conversation))) throw new ApiError(httpStatus.NOT_FOUND, 'Conversation not found');
@@ -119,16 +141,96 @@ async function conversationMemberIds(conversation) {
     return users.filter((u) => !isPortalUser(u)).map((u) => String(u._id));
   }
   const memberships = await Membership.find({ branchId: conversation.branchId, isActive: true }).select('userId').lean();
-  return [...new Set([...memberships.map((m) => String(m.userId)), ...admins.map((a) => String(a._id))])];
+  const ids = [...new Set([...memberships.map((m) => String(m.userId)), ...admins.map((a) => String(a._id))])];
+  // A deactivated account would never read anything, holding every tick at grey forever.
+  const active = await User.find({ _id: { $in: ids }, isActive: { $ne: false } }).select('_id').lean();
+  return active.map((u) => String(u._id));
 }
+
+// Receipts recompute a message's status on every delivery/read, so channel membership
+// (a few queries) is cached briefly. Direct and group threads carry theirs on the document.
+const MEMBER_TTL = 60 * 1000;
+const memberCache = new Map(); // conversationId → { ids, at }
+async function cachedMemberIds(conversation) {
+  if (conversation.type === 'direct' || conversation.type === 'group') return (conversation.participants || []).map(idStr);
+  const key = String(conversation._id);
+  const hit = memberCache.get(key);
+  if (hit && Date.now() - hit.at < MEMBER_TTL) return hit.ids;
+  const ids = await conversationMemberIds(conversation);
+  memberCache.set(key, { ids, at: Date.now() });
+  return ids;
+}
+
+/* ── Delivery + read receipts (WhatsApp ticks) ───────────────────────────── */
+
+const time = (d) => (d ? new Date(d).getTime() : 0);
+const latest = (a, b) => (time(a) >= time(b) ? a || null : b || null);
+
+/**
+ * A message's status for its sender, from everyone else's read-state:
+ *   'read'      every other member has read past it        (blue double tick)
+ *   'delivered' every other member's device has received it (grey double tick)
+ *   'sent'      saved on the server                         (single tick)
+ * Like WhatsApp groups, a channel or group needs ALL other members for each step.
+ */
+function statusFrom(createdAt, otherIds, stateBy) {
+  if (!otherIds.length) return 'sent';
+  const at = time(createdAt);
+  let read = true;
+  for (const id of otherIds) {
+    const state = stateBy.get(id);
+    if (time(latest(state?.lastDeliveredAt, state?.lastReadAt)) < at) return 'sent';
+    if (time(state?.lastReadAt) < at) read = false;
+  }
+  return read ? 'read' : 'delivered';
+}
+
+/** Status of the conversation's newest message (what the conversation list shows). */
+async function lastMessageStatus(conversation) {
+  const last = conversation.lastMessage;
+  if (!last || !last.at || last.kind === 'system' || !last.senderId) return null;
+  const others = (await cachedMemberIds(conversation)).filter((id) => id !== String(last.senderId));
+  const states = others.length
+    ? await ChatReadState.find({ conversationId: conversation._id, userId: { $in: others.map(oid) } })
+        .select('userId lastReadAt lastDeliveredAt')
+        .lean()
+    : [];
+  return statusFrom(last.at, others, new Map(states.map((st) => [String(st.userId), st])));
+}
+
+/**
+ * Tells everyone in the conversation how far `userId` has received and read, plus the
+ * resulting status of the newest message — so senders can update ticks in the open thread
+ * (from member read-states) and in the conversation list (from lastMessageStatus).
+ */
+async function publishReceipt(conversation, userId) {
+  const state = await ChatReadState.findOne({ conversationId: conversation._id, userId })
+    .select('lastReadAt lastDeliveredAt')
+    .lean();
+  const payload = {
+    conversationId: String(conversation._id),
+    userId: String(userId),
+    lastReadAt: state?.lastReadAt || null,
+    lastDeliveredAt: latest(state?.lastDeliveredAt, state?.lastReadAt),
+  };
+  const last = conversation.lastMessage;
+  if (last && last.at && last.senderId && String(last.senderId) !== String(userId)) {
+    payload.lastMessageAt = last.at;
+    payload.lastMessageStatus = await lastMessageStatus(conversation);
+  }
+  chatBus.publish(audienceRooms(conversation), 'chat:receipt', payload);
+}
+
+// Receipts are best-effort; a failure must never fail the request that triggered them.
+const logReceiptError = (err) => logger.warn(`[chat] receipt failed: ${err && err.message}`);
 
 /* ── People ──────────────────────────────────────────────────────────────── */
 
-const PERSON_FIELDS = 'name email photo systemRole isActive linkedTeacherId linkedStudentIds schoolRole';
+const PERSON_FIELDS = 'name email photo systemRole isActive linkedTeacherId linkedStudentIds schoolRole lastSeenAt';
 
 /** Staff of the organization with the branches each works in. */
 async function listDirectory(user, { onlineIds = new Set() } = {}) {
-  assertChatUser(user);
+  await assertChatUser(user);
   const [users, memberships, branches] = await Promise.all([
     User.find({ organizationId: user.organizationId, isActive: { $ne: false } }).select(PERSON_FIELDS).lean(),
     Membership.find({ organizationId: user.organizationId, isActive: true }).select('userId branchId role').lean(),
@@ -152,6 +254,7 @@ async function listDirectory(user, { onlineIds = new Set() } = {}) {
       branches: isAdmin(u) ? [] : byUser.get(String(u._id)) || [],
       allBranches: isAdmin(u),
       online: onlineIds.has(String(u._id)),
+      lastSeenAt: u.lastSeenAt || null,
       isMe: String(u._id) === String(user._id),
     }))
     .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
@@ -160,7 +263,7 @@ async function listDirectory(user, { onlineIds = new Set() } = {}) {
 /* ── Conversation list ───────────────────────────────────────────────────── */
 
 async function listConversations(user, { onlineIds = new Set() } = {}) {
-  assertChatUser(user);
+  await assertChatUser(user);
   await ensureChannels(user.organizationId);
   const branchIds = await getUserBranchIds(user);
   const conversations = await ChatConversation.find({
@@ -175,6 +278,52 @@ async function listConversations(user, { onlineIds = new Set() } = {}) {
   const ids = conversations.map((c) => c._id);
   const readStates = await ChatReadState.find({ userId: user._id, conversationId: { $in: ids } }).lean();
   const stateBy = new Map(readStates.map((s) => [String(s.conversationId), s]));
+
+  // This device now holds every conversation up to its newest message: mark them delivered
+  // (the grey double tick). The socket acks single messages live; this covers coming back
+  // online and the polling fallback when websockets are unavailable.
+  const undelivered = conversations.filter((c) => {
+    const state = stateBy.get(String(c._id));
+    return c.lastMessageAt && time(c.lastMessageAt) > time(latest(state?.lastDeliveredAt, state?.lastReadAt));
+  });
+  if (undelivered.length) {
+    await ChatReadState.bulkWrite(
+      undelivered.map((c) => ({
+        updateOne: {
+          filter: { conversationId: c._id, userId: user._id },
+          update: { $max: { lastDeliveredAt: c.lastMessageAt }, $setOnInsert: { organizationId: user.organizationId } },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
+    Promise.all(undelivered.map((c) => publishReceipt(c, user._id))).catch(logReceiptError);
+  }
+
+  // Ticks for the conversations whose newest message is mine — one read-state query for all.
+  const mineLast = conversations.filter(
+    (c) => c.lastMessage?.at && c.lastMessage.kind !== 'system' && String(c.lastMessage.senderId) === String(user._id)
+  );
+  const statusBy = new Map();
+  if (mineLast.length) {
+    const othersBy = new Map();
+    for (const c of mineLast) {
+      othersBy.set(String(c._id), (await cachedMemberIds(c)).filter((id) => id !== String(user._id)));
+    }
+    const states = await ChatReadState.find({ conversationId: { $in: mineLast.map((c) => c._id) }, userId: { $ne: user._id } })
+      .select('conversationId userId lastReadAt lastDeliveredAt')
+      .lean();
+    const byConversation = new Map();
+    states.forEach((st) => {
+      const key = String(st.conversationId);
+      if (!byConversation.has(key)) byConversation.set(key, new Map());
+      byConversation.get(key).set(String(st.userId), st);
+    });
+    mineLast.forEach((c) => {
+      const key = String(c._id);
+      statusBy.set(key, statusFrom(c.lastMessage.at, othersBy.get(key), byConversation.get(key) || new Map()));
+    });
+  }
 
   // One aggregate for every unread count: each conversation's own "after I last read" cut.
   const clauses = conversations
@@ -201,7 +350,7 @@ async function listConversations(user, { onlineIds = new Set() } = {}) {
     .map((c) => (c.participants || []).map(String).find((p) => p !== String(user._id)))
     .filter(Boolean);
   const [others, branches] = await Promise.all([
-    otherIds.length ? User.find({ _id: { $in: otherIds } }).select('name email photo').lean() : [],
+    otherIds.length ? User.find({ _id: { $in: otherIds } }).select('name email photo lastSeenAt').lean() : [],
     Branch.find({ organizationId: user.organizationId }).select('_id name').lean(),
   ]);
   const otherBy = new Map(others.map((o) => [String(o._id), o]));
@@ -225,8 +374,22 @@ async function listConversations(user, { onlineIds = new Set() } = {}) {
         branchId: c.branchId ? String(c.branchId) : null,
         participantIds: (c.participants || []).map(String),
         adminIds: (c.admins || []).map(String),
-        directUser: other ? { id: otherId, name: other.name || other.email, photoUrl: other.photo?.url || '', online: onlineIds.has(otherId) } : null,
-        lastMessage: c.lastMessage?.at ? { ...c.lastMessage, senderId: c.lastMessage.senderId ? String(c.lastMessage.senderId) : null } : null,
+        directUser: other
+          ? {
+              id: otherId,
+              name: other.name || other.email,
+              photoUrl: other.photo?.url || '',
+              online: onlineIds.has(otherId),
+              lastSeenAt: other.lastSeenAt || null,
+            }
+          : null,
+        lastMessage: c.lastMessage?.at
+          ? {
+              ...c.lastMessage,
+              senderId: c.lastMessage.senderId ? String(c.lastMessage.senderId) : null,
+              status: statusBy.get(String(c._id)) || null,
+            }
+          : null,
         lastMessageAt: c.lastMessageAt,
         unread: unreadBy.get(String(c._id)) || 0,
         lastReadAt: state?.lastReadAt || null,
@@ -249,10 +412,12 @@ async function getConversationDetail(user, conversationId, { onlineIds = new Set
   const conversation = await getAccessibleConversation(user, conversationId);
   const memberIds = await conversationMemberIds(conversation);
   const [members, readStates] = await Promise.all([
-    User.find({ _id: { $in: memberIds } }).select('name email photo systemRole').lean(),
-    ChatReadState.find({ conversationId: conversation._id, userId: { $in: memberIds } }).select('userId lastReadAt').lean(),
+    User.find({ _id: { $in: memberIds } }).select('name email photo systemRole lastSeenAt').lean(),
+    ChatReadState.find({ conversationId: conversation._id, userId: { $in: memberIds } })
+      .select('userId lastReadAt lastDeliveredAt')
+      .lean(),
   ]);
-  const readBy = new Map(readStates.map((s) => [String(s.userId), s.lastReadAt]));
+  const stateBy = new Map(readStates.map((s) => [String(s.userId), s]));
   return {
     id: String(conversation._id),
     type: conversation.type,
@@ -264,7 +429,9 @@ async function getConversationDetail(user, conversationId, { onlineIds = new Set
         name: m.name || m.email,
         photoUrl: m.photo?.url || '',
         online: onlineIds.has(String(m._id)),
-        lastReadAt: readBy.get(String(m._id)) || null,
+        lastSeenAt: m.lastSeenAt || null,
+        lastReadAt: stateBy.get(String(m._id))?.lastReadAt || null,
+        lastDeliveredAt: latest(stateBy.get(String(m._id))?.lastDeliveredAt, stateBy.get(String(m._id))?.lastReadAt),
       }))
       .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name)),
   };
@@ -283,7 +450,7 @@ async function assertOrgStaff(user, userIds) {
 }
 
 async function getOrCreateDirect(user, otherUserId) {
-  assertChatUser(user);
+  await assertChatUser(user);
   if (String(otherUserId) === String(user._id)) throw new ApiError(httpStatus.BAD_REQUEST, 'Pick someone else to message');
   await assertOrgStaff(user, [otherUserId]);
   const directKey = [String(user._id), String(otherUserId)].sort().join(':');
@@ -326,7 +493,7 @@ async function postSystemMessage(conversation, text, actor) {
 }
 
 async function createGroup(user, { name, description = '', participantIds = [] }) {
-  assertChatUser(user);
+  await assertChatUser(user);
   const members = await assertOrgStaff(user, [...participantIds, String(user._id)]);
   if (members.length < 2) throw new ApiError(httpStatus.BAD_REQUEST, 'Add at least one other person');
   const conversation = await ChatConversation.create({
@@ -460,12 +627,53 @@ async function productSnapshot(user, productId) {
   };
 }
 
-const ALLOWED_ATTACHMENT_HOST = /^https:\/\/res\.cloudinary\.com\//;
+/* ── Media uploads ─────────────────────────────────────────────────────── */
+
+// Only files in OUR Cloudinary account can be attached — not any Cloudinary URL.
+const attachmentHost = () =>
+  new RegExp(`^https://res\\.cloudinary\\.com/${config.cloudinary.cloudName ? `${escapeRegex(config.cloudinary.cloudName)}/` : ''}`);
+
+const mediaKind = (mimeType = '') => {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  return 'document';
+};
+
+/** WhatsApp-style list preview: "📷 Photo", "🎥 Video", "🎵 Audio", "📄 invoice.pdf" (+ caption). */
+function attachmentPreview(attachments, caption) {
+  const kinds = [...new Set(attachments.map((a) => mediaKind(a.mimeType)))];
+  let label;
+  if (kinds.length === 1 && kinds[0] === 'image') label = attachments.length > 1 ? `📷 ${attachments.length} photos` : '📷 Photo';
+  else if (kinds.length === 1 && kinds[0] === 'video') label = attachments.length > 1 ? `🎥 ${attachments.length} videos` : '🎥 Video';
+  else if (kinds.every((k) => k === 'image' || k === 'video')) label = `🖼️ ${attachments.length} photos & videos`;
+  else if (kinds.length === 1 && kinds[0] === 'audio') label = '🎵 Audio';
+  else if (attachments.length === 1) label = `📄 ${attachments[0].name || 'Document'}`;
+  else label = `📎 ${attachments.length} files`;
+  return caption ? `${label.split(' ')[0]} ${caption}` : label;
+}
+
+/**
+ * A short-lived signature for uploading one file straight from the browser to Cloudinary
+ * (WhatsApp-style: the bubble shows the local file with real upload progress, and big
+ * videos never pass through this server's memory). The folder is part of the signature, so
+ * a client can only upload into its own organization's chat folder.
+ */
+async function uploadSignature(user) {
+  await assertChatUser(user);
+  const { cloudName, apiKey, apiSecret } = config.cloudinary;
+  if (!cloudName || !apiKey || !apiSecret) throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'File uploads are not configured');
+  const folder = `chat/${user.organizationId}`;
+  const timestamp = Math.round(Date.now() / 1000);
+  const signature = cloudinary.utils.api_sign_request({ folder, timestamp }, apiSecret);
+  return { cloudName, apiKey, folder, timestamp, signature };
+}
 
 async function sendMessage(user, conversationId, body, { branchId } = {}) {
   const conversation = await getAccessibleConversation(user, conversationId);
   const text = String(body.text || '').slice(0, MAX_TEXT);
-  const attachments = (body.attachments || []).filter((a) => a && ALLOWED_ATTACHMENT_HOST.test(String(a.url))).slice(0, 10);
+  const host = attachmentHost();
+  const attachments = (body.attachments || []).filter((a) => a && host.test(String(a.url))).slice(0, 10);
   let kind = 'text';
   let product = null;
   if (body.productId) {
@@ -482,7 +690,10 @@ async function sendMessage(user, conversationId, body, { branchId } = {}) {
     if (original && !original.deletedAt) {
       replyTo = {
         messageId: original._id,
-        text: (original.text || (original.product?.name ? `📦 ${original.product.name}` : original.attachments?.length ? '📎 Attachment' : '')).slice(0, 200),
+        text: (original.attachments?.length
+          ? attachmentPreview(original.attachments, original.text)
+          : original.text || (original.product?.name ? `📦 ${original.product.name}` : '')
+        ).slice(0, 200),
         senderName: original.senderName,
       };
     }
@@ -510,7 +721,7 @@ async function sendMessage(user, conversationId, body, { branchId } = {}) {
   });
 
   const preview =
-    kind === 'product' ? `📦 ${product.name}${text ? ` — ${text}` : ''}` : kind === 'attachment' && !text ? `📎 ${attachments[0].name || 'Attachment'}` : text;
+    kind === 'product' ? `📦 ${product.name}${text ? ` — ${text}` : ''}` : kind === 'attachment' ? attachmentPreview(attachments, text) : text;
   await Promise.all([
     ChatConversation.updateOne(
       { _id: conversation._id },
@@ -524,7 +735,11 @@ async function sendMessage(user, conversationId, body, { branchId } = {}) {
     ),
     ChatReadState.updateOne(
       { conversationId: conversation._id, userId: user._id },
-      { $set: { lastReadAt: message.createdAt }, $setOnInsert: { organizationId: user.organizationId } },
+      {
+        $set: { lastReadAt: message.createdAt },
+        $max: { lastDeliveredAt: message.createdAt },
+        $setOnInsert: { organizationId: user.organizationId },
+      },
       { upsert: true }
     ),
   ]);
@@ -594,16 +809,33 @@ async function markRead(user, conversationId) {
   const at = new Date();
   await ChatReadState.updateOne(
     { conversationId: conversation._id, userId: user._id },
-    { $set: { lastReadAt: at }, $setOnInsert: { organizationId: user.organizationId } },
+    { $set: { lastReadAt: at }, $max: { lastDeliveredAt: at }, $setOnInsert: { organizationId: user.organizationId } },
     { upsert: true }
   );
-  // Only direct and group threads show "Seen"; a read in a big channel is nobody's business.
-  if (conversation.type === 'direct' || conversation.type === 'group') {
-    chatBus.publish(audienceRooms(conversation), 'chat:read', { conversationId: String(conversation._id), userId: String(user._id), lastReadAt: at });
-  }
+  // Blue ticks: every thread type, like WhatsApp groups (blue once everyone has read).
+  await publishReceipt(conversation, user._id).catch(logReceiptError);
   // The reader's other tabs/devices clear their badge too.
   chatBus.publish([`user:${user._id}`], 'chat:read-self', { conversationId: String(conversation._id), lastReadAt: at });
   return { lastReadAt: at };
+}
+
+/**
+ * The person's device has received this conversation's messages up to `at` (the grey
+ * double tick). Sent by the client the moment a pushed message lands, on any page.
+ */
+async function markDelivered(user, conversationId, at) {
+  const conversation = await getAccessibleConversation(user, conversationId);
+  const now = new Date();
+  const asked = at ? new Date(at) : now;
+  // Never in the future, so a skewed client clock can't pre-tick messages not yet sent.
+  const cut = Number.isNaN(asked.getTime()) || asked > now ? now : asked;
+  const result = await ChatReadState.updateOne(
+    { conversationId: conversation._id, userId: user._id },
+    { $max: { lastDeliveredAt: cut }, $setOnInsert: { organizationId: user.organizationId } },
+    { upsert: true }
+  );
+  if (result.modifiedCount || result.upsertedCount) await publishReceipt(conversation, user._id);
+  return { lastDeliveredAt: cut };
 }
 
 async function unreadTotal(user) {
@@ -612,7 +844,7 @@ async function unreadTotal(user) {
 }
 
 async function searchMessages(user, q) {
-  assertChatUser(user);
+  await assertChatUser(user);
   const term = String(q || '').trim();
   if (term.length < 2) return [];
   const conversations = await listConversations(user);
@@ -643,7 +875,7 @@ async function searchMessages(user, q) {
  * then barcode, then SKU, then exact name.
  */
 async function productStockAcrossBranches(user, productId) {
-  assertChatUser(user);
+  await assertChatUser(user);
   if (!mongoose.Types.ObjectId.isValid(String(productId))) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   const product = await Product.findOne({ _id: productId, organizationId: user.organizationId })
     .select('name sku barcode masterProductId')
@@ -685,6 +917,7 @@ module.exports = {
   REACTIONS,
   isPortalUser,
   isAdmin,
+  assertChatUser,
   getUserBranchIds,
   audienceRooms,
   canAccess,
@@ -702,7 +935,9 @@ module.exports = {
   deleteMessage,
   toggleReaction,
   markRead,
+  markDelivered,
   unreadTotal,
+  uploadSignature,
   searchMessages,
   productStockAcrossBranches,
 };

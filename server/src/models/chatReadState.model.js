@@ -3,7 +3,7 @@ const { toJSON } = require('./plugins');
 
 /**
  * Per-person state of one conversation: how far they have read (drives unread badges and
- * "Seen" ticks) and their own mute / pin choice. Missing row = nothing read, not muted.
+ * the WhatsApp-style delivered / read ticks) and their own mute / pin choice. Missing row = nothing read, not muted.
  */
 const chatReadStateSchema = mongoose.Schema(
   {
@@ -11,6 +11,11 @@ const chatReadStateSchema = mongoose.Schema(
     conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatConversation', required: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     lastReadAt: { type: Date, default: null },
+    /**
+     * How far this person's device has RECEIVED messages (the grey double tick). Reading
+     * implies receiving, so readers of this use max(lastDeliveredAt, lastReadAt).
+     */
+    lastDeliveredAt: { type: Date, default: null },
     muted: { type: Boolean, default: false },
     pinned: { type: Boolean, default: false },
     /** Set when someone leaves a group, so it drops out of their list. */

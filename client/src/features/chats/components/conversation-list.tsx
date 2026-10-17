@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { useSearchChatQuery, type ChatConversation } from '@/stores/chat.api'
 import { useChatLive } from '../lib/chat-live'
 import { conversationSubtitle, formatChatStamp } from '../lib/chat-format'
+import { MessageTicks } from './message-bubble'
+import { PreviewText } from './preview-text'
 
 type Filter = 'all' | 'unread' | 'channels' | 'people'
 
@@ -141,11 +143,12 @@ export function ConversationList({ conversations, activeId, meId, activeBranchId
               {shown.map((c) => {
                 const typingHere = (live.typing[c.id] || []).length > 0
                 const fromMe = c.lastMessage?.senderId === meId
-                const preview = c.lastMessage
-                  ? c.lastMessage.kind === 'system'
-                    ? c.lastMessage.text
-                    : `${fromMe ? 'You' : c.type === 'direct' ? '' : c.lastMessage.senderName.split(' ')[0]}${fromMe || c.type !== 'direct' ? ': ' : ''}${c.lastMessage.text}`
-                  : conversationSubtitle(c)
+                // WhatsApp: my own message shows its ticks instead of "You:"; in a group or
+                // channel someone else's is prefixed with their first name.
+                const ticks = fromMe && c.lastMessage?.kind !== 'system' ? c.lastMessage?.status : null
+                const sender =
+                  c.lastMessage && c.lastMessage.kind !== 'system' && !fromMe && c.type !== 'direct' ? `${c.lastMessage.senderName.split(' ')[0]}: ` : ''
+                const preview = c.lastMessage ? c.lastMessage.text : conversationSubtitle(c)
                 return (
                   <li key={c.id}>
                     <button
@@ -170,8 +173,18 @@ export function ConversationList({ conversations, activeId, meId, activeBranchId
                           </span>
                         </span>
                         <span className='flex items-center gap-2'>
-                          <span className={cn('truncate text-xs', typingHere ? 'text-primary' : 'text-muted-foreground', c.unread > 0 && !typingHere && 'text-foreground')}>
-                            {typingHere ? 'typing…' : preview}
+                          <span className={cn('flex min-w-0 items-center gap-1 text-xs', typingHere ? 'text-primary' : 'text-muted-foreground', c.unread > 0 && !typingHere && 'text-foreground')}>
+                            {!typingHere && ticks && <MessageTicks status={ticks} tone='list' />}
+                            {typingHere ? (
+                              <span className='truncate'>typing…</span>
+                            ) : (
+                              <>
+                                {(sender || ticks === 'failed') && (
+                                  <span className={cn('shrink-0', ticks === 'failed' && 'text-destructive')}>{ticks === 'failed' ? 'Not sent:' : sender}</span>
+                                )}
+                                <PreviewText text={preview} />
+                              </>
+                            )}
                           </span>
                           {c.unread > 0 && (
                             <span

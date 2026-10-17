@@ -9,9 +9,10 @@ const chatService = require('../services/chat.service');
 const chatBus = require('./chatBus');
 
 /**
- * Live layer for team chat. Sockets only RECEIVE pushes (new message, edit, read receipt,
- * typing, presence) — everything that changes data goes through the REST API, which
- * re-checks access. A socket joins:
+ * Live layer for team chat. Sockets RECEIVE pushes (new message, edit, delivery/read
+ * receipt, typing, presence) and send only ephemeral signals (typing, "delivered" acks);
+ * everything else goes through the REST API. Every signal is access-checked in the service.
+ * A socket joins:
  *   user:<id>             direct + group threads, own read sync
  *   org:<orgId>           the "All branches" channel
  *   branch:<branchId>     each branch channel the person works in
@@ -54,10 +55,21 @@ function onlineIds() {
   return ids;
 }
 
-function announce(userId, online) {
+function announce(userId, online, lastSeenAt = null) {
   const orgId = userOrg.get(userId);
   if (!orgId) return;
-  chatBus.publish([`org:${orgId}`], 'chat:presence', { userId, online, origin: chatBus.ORIGIN });
+  chatBus.publish([`org:${orgId}`], 'chat:presence', { userId, online, lastSeenAt, origin: chatBus.ORIGIN });
+}
+
+/**
+ * "Last seen": stamped on connect, refreshed every SYNC_MS while connected (so a crashed
+ * process still leaves a time at most a minute old) and finally on disconnect.
+ */
+function stampLastSeen(userIds, at = new Date()) {
+  if (!userIds.length) return;
+  User.updateMany({ _id: { $in: userIds } }, { $set: { lastSeenAt: at } }).catch((err) =>
+    logger.warn(`[chat] last seen update failed: ${err.message}`)
+  );
 }
 
 /* ── Typing permission cache ─────────────────────────────────────────────── */
@@ -85,7 +97,8 @@ async function authenticate(token) {
   const payload = jwt.verify(token, config.jwt.secret);
   if (payload.type !== tokenTypes.ACCESS) throw new Error('Invalid token type');
   const user = await User.findById(payload.sub);
-  if (!user || user.isActive === false || !user.organizationId || chatService.isPortalUser(user)) throw new Error('Not a staff account');
+  if (!user || user.isActive === false) throw new Error('Not a staff account');
+  await chatService.assertChatUser(user);
   return user;
 }
 
@@ -109,6 +122,7 @@ function initChatSocket(httpServer, corsOptions) {
   });
 
   const syncTimer = setInterval(() => {
+    stampLastSeen([...localSockets.entries()].filter(([, count]) => count > 0).map(([userId]) => userId));
     // Re-announce who is connected here, grouped per organization.
     const byOrg = new Map();
     localSockets.forEach((count, userId) => {
@@ -151,7 +165,10 @@ function initChatSocket(httpServer, corsOptions) {
     const count = (localSockets.get(userId) || 0) + 1;
     localSockets.set(userId, count);
     vouch(userId, chatBus.ORIGIN, true);
-    if (count === 1) announce(userId, true);
+    if (count === 1) {
+      announce(userId, true);
+      stampLastSeen([userId]);
+    }
 
     socket.emit('chat:ready', { userId, online: [...onlineIds()] });
 
@@ -168,6 +185,17 @@ function initChatSocket(httpServer, corsOptions) {
       );
     });
 
+    // Delivery ack: this device just received a pushed message (the grey double tick).
+    socket.on('chat:delivered', async (payload) => {
+      const conversationId = payload && String(payload.conversationId || '');
+      if (!/^[0-9a-fA-F]{24}$/.test(conversationId)) return;
+      try {
+        await chatService.markDelivered(user, conversationId, payload.at);
+      } catch {
+        /* no access any more, or a transient DB error — the next list load re-marks it */
+      }
+    });
+
     socket.on('disconnect', () => {
       for (const key of accessCache.keys()) if (key.startsWith(`${socket.id}:`)) accessCache.delete(key);
       const left = (localSockets.get(userId) || 1) - 1;
@@ -177,7 +205,9 @@ function initChatSocket(httpServer, corsOptions) {
       }
       localSockets.delete(userId);
       vouch(userId, chatBus.ORIGIN, false);
-      if (!isOnline(userId)) announce(userId, false);
+      const seenAt = new Date();
+      stampLastSeen([userId], seenAt);
+      if (!isOnline(userId)) announce(userId, false, seenAt);
     });
   });
 

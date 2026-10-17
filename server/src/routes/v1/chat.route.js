@@ -48,6 +48,7 @@ router.get('/unread', chatController.unread);
 router.get('/directory', chatController.directory);
 router.get('/search', validate(chatValidation.search), chatController.search);
 router.get('/products/:productId/stock', validate(chatValidation.productStock), chatController.productStock);
+router.post('/attachments/signature', chatController.uploadSignature);
 router.post('/attachments', uploadChatFile, chatController.uploadAttachment);
 
 module.exports = router;

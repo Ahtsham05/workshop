@@ -1,25 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FileText, Loader2, Package, Paperclip, Pencil, Reply, Search, SendHorizontal, Smile, X } from 'lucide-react'
+import { FileText, Headphones, Image as ImageIcon, Loader2, Package, Paperclip, Pencil, Reply, Search, SendHorizontal, Smile, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSearchProductsQuery } from '@/stores/product.api'
-import { useEditChatMessageMutation, useUploadChatAttachmentMutation, type ChatAttachment, type ChatMessage } from '@/stores/chat.api'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { useEditChatMessageMutation, type ChatMessage } from '@/stores/chat.api'
 import { emitTyping } from '../lib/chat-live'
+import { previewOf } from '../lib/chat-cache'
+import { isVisual, MAX_BYTES, MAX_FILES, mediaKind } from '../lib/chat-media'
 import { useChatSender } from '../hooks/use-chat-sender'
+import { MediaSendDialog } from './media-send-dialog'
+import { PreviewText } from './preview-text'
 
 const EMOJIS = ['😀', '😂', '😊', '😍', '🤔', '😅', '😢', '😡', '👍', '👎', '🙏', '👏', '🙌', '💪', '✅', '❌', '⚠️', '❓', '🔥', '🎉', '📦', '🚚', '💰', '📞']
-const MAX_FILE_BYTES = 10 * 1024 * 1024
 const TYPING_EVERY_MS = 2500
 
-interface PendingFile {
-  key: string
-  name: string
-  previewUrl?: string
-  status: 'uploading' | 'done' | 'error'
-  attachment?: ChatAttachment
-}
+/** The 📎 menu, like WhatsApp's: what each choice lets the file picker show. */
+const PICKERS = [
+  { key: 'media', label: 'Photos & videos', accept: 'image/*,video/*', icon: ImageIcon, tint: 'text-sky-600' },
+  { key: 'audio', label: 'Audio', accept: 'audio/*', icon: Headphones, tint: 'text-orange-600' },
+  {
+    key: 'document',
+    label: 'Document',
+    accept: '.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.zip,.rar,.odt,.ods,application/pdf',
+    icon: FileText,
+    tint: 'text-violet-600',
+  },
+] as const
+const ANY_FILE = 'image/*,video/*,audio/*,' + PICKERS[2].accept
 
 interface ChatComposerProps {
   conversationId: string
@@ -103,20 +113,20 @@ function ProductPicker({ onPick }: { onPick: (product: { productId: string; name
 
 export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, onCancelEdit, disabled }: ChatComposerProps) {
   const [text, setText] = useState(() => readDraft(conversationId))
-  const [files, setFiles] = useState<PendingFile[]>([])
+  // Files picked / pasted / dropped, waiting in the send preview.
+  const [picked, setPicked] = useState<{ files: File[]; accept: string } | null>(null)
   const [product, setProduct] = useState<{ productId: string; name: string } | null>(null)
   const [dragging, setDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastTypingRef = useRef(0)
   const { sendMessage } = useChatSender()
-  const [upload] = useUploadChatAttachmentMutation()
   const [editMessage, { isLoading: savingEdit }] = useEditChatMessageMutation()
 
   // Switching conversation: load that thread's draft, drop half-picked attachments.
   useEffect(() => {
     setText(readDraft(conversationId))
-    setFiles([])
+    setPicked(null)
     setProduct(null)
     lastTypingRef.current = 0
     requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }))
@@ -142,40 +152,47 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`
   }, [text])
 
-  const addFiles = useCallback(
-    (list: FileList | File[]) => {
-      const accepted = Array.from(list).filter((file) => {
-        if (!(file.type.startsWith('image/') || file.type === 'application/pdf')) {
-          toast.error(`${file.name}: only images and PDFs can be sent`)
-          return false
-        }
-        if (file.size > MAX_FILE_BYTES) {
-          toast.error(`${file.name} is larger than 10 MB`)
-          return false
-        }
-        return true
-      })
-      accepted.slice(0, 10).forEach((file) => {
-        const key = `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 7)}`
-        const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
-        setFiles((current) => [...current, { key, name: file.name || 'image.png', previewUrl, status: 'uploading' }])
-        const form = new FormData()
-        form.append('file', file, file.name || 'image.png')
-        upload(form)
-          .unwrap()
-          .then((attachment) => setFiles((current) => current.map((f) => (f.key === key ? { ...f, status: 'done', attachment } : f))))
-          .catch((err) => {
-            setFiles((current) => current.map((f) => (f.key === key ? { ...f, status: 'error' } : f)))
-            toast.error(err?.data?.message || `Could not upload ${file.name}`)
-          })
-      })
-    },
-    [upload]
-  )
+  /** Checks size/count, then opens the WhatsApp-style preview (or adds to the open one). */
+  const addFiles = useCallback((list: FileList | File[], accept: string = ANY_FILE) => {
+    const accepted = Array.from(list).filter((file) => {
+      const limit = MAX_BYTES[mediaKind(file.type)]
+      if (file.size > limit) {
+        toast.error(`${file.name || 'That file'} is larger than ${Math.round(limit / 1024 / 1024)} MB`)
+        return false
+      }
+      if (!file.size) {
+        toast.error(`${file.name || 'That file'} is empty`)
+        return false
+      }
+      return true
+    })
+    if (!accepted.length) return
+    setPicked((current) => {
+      const all = [...(current?.files ?? []), ...accepted]
+      if (all.length > MAX_FILES) toast.info(`Up to ${MAX_FILES} files at a time — the first ${MAX_FILES} are kept`)
+      return { files: all.slice(0, MAX_FILES), accept: current?.accept ?? accept }
+    })
+  }, [])
 
-  const uploading = files.some((f) => f.status === 'uploading')
-  const readyAttachments = files.filter((f) => f.status === 'done' && f.attachment).map((f) => f.attachment!)
-  const canSend = !disabled && !uploading && (text.trim().length > 0 || readyAttachments.length > 0 || !!product)
+  /**
+   * Photos and videos go together as one album message with the caption; each audio clip
+   * or document is its own message (WhatsApp does the same). The bubbles appear at once and
+   * upload from the chat.
+   */
+  const sendPicked = (files: File[], caption: string) => {
+    const visual = files.filter((f) => isVisual({ mimeType: f.type }))
+    const others = files.filter((f) => !isVisual({ mimeType: f.type }))
+    const reply = replyTo ? { messageId: replyTo.id, text: previewOf(replyTo) || 'Attachment', senderName: replyTo.senderName } : undefined
+    if (visual.length) void sendMessage({ conversationId, files: visual, text: caption, replyTo: reply })
+    others.forEach((file, i) =>
+      void sendMessage({ conversationId, files: [file], text: !visual.length && i === 0 ? caption : '', replyTo: !visual.length && i === 0 ? reply : undefined })
+    )
+    setPicked(null)
+    onCancelReply()
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }
+
+  const canSend = !disabled && (text.trim().length > 0 || !!product)
 
   const submit = async () => {
     if (editing) {
@@ -192,17 +209,14 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
       return
     }
     if (!canSend) return
-    sendMessage({
+    void sendMessage({
       conversationId,
       text: text.trim(),
-      attachments: readyAttachments.length ? readyAttachments : undefined,
       product: product ?? undefined,
-      replyTo: replyTo ? { messageId: replyTo.id, text: replyTo.text || replyTo.product?.name || 'Attachment', senderName: replyTo.senderName } : undefined,
+      replyTo: replyTo ? { messageId: replyTo.id, text: previewOf(replyTo) || 'Attachment', senderName: replyTo.senderName } : undefined,
     })
-    files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl))
     setText('')
     writeDraft(conversationId, '')
-    setFiles([])
     setProduct(null)
     onCancelReply()
     emitTyping(conversationId, true)
@@ -261,7 +275,7 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
           {editing ? <Pencil className='size-4 shrink-0 text-primary' /> : <Reply className='size-4 shrink-0 text-primary' />}
           <div className='min-w-0 flex-1 text-xs'>
             <p className='font-semibold'>{editing ? 'Editing message' : `Replying to ${replyTo!.senderName}`}</p>
-            <p className='truncate text-muted-foreground'>{(editing ?? replyTo)!.text || (editing ?? replyTo)!.product?.name || 'Attachment'}</p>
+            <PreviewText text={previewOf((editing ?? replyTo)!) || 'Attachment'} className='text-muted-foreground' />
           </div>
           <button type='button' onClick={editing ? onCancelEdit : onCancelReply} className='rounded p-0.5 text-muted-foreground hover:text-foreground' aria-label='Cancel'>
             <X className='size-4' />
@@ -269,39 +283,15 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
         </div>
       )}
 
-      {(files.length > 0 || product) && !editing && (
+      {product && !editing && (
         <div className='mb-2 flex flex-wrap gap-2'>
-          {product && (
-            <span className='flex items-center gap-1.5 rounded-lg border bg-muted/60 py-1 ps-2 pe-1 text-xs'>
-              <Package className='size-4 text-primary' />
-              <span className='max-w-48 truncate font-medium'>{product.name}</span>
-              <button type='button' onClick={() => setProduct(null)} className='rounded p-0.5 hover:bg-accent' aria-label='Remove product'>
-                <X className='size-3.5' />
-              </button>
-            </span>
-          )}
-          {files.map((file) => (
-            <span key={file.key} className={cn('relative flex items-center gap-1.5 rounded-lg border bg-muted/60 p-1 text-xs', file.status === 'error' && 'border-destructive')}>
-              {file.previewUrl ? (
-                <img src={file.previewUrl} alt='' className='size-10 rounded object-cover' />
-              ) : (
-                <FileText className='size-6 text-red-600' />
-              )}
-              <span className='max-w-28 truncate'>{file.name}</span>
-              {file.status === 'uploading' && <Loader2 className='size-3.5 animate-spin text-muted-foreground' />}
-              <button
-                type='button'
-                onClick={() => {
-                  if (file.previewUrl) URL.revokeObjectURL(file.previewUrl)
-                  setFiles((current) => current.filter((f) => f.key !== file.key))
-                }}
-                className='rounded p-0.5 hover:bg-accent'
-                aria-label={`Remove ${file.name}`}
-              >
-                <X className='size-3.5' />
-              </button>
-            </span>
-          ))}
+          <span className='flex items-center gap-1.5 rounded-lg border bg-muted/60 py-1 ps-2 pe-1 text-xs'>
+            <Package className='size-4 text-primary' />
+            <span className='max-w-48 truncate font-medium'>{product.name}</span>
+            <button type='button' onClick={() => setProduct(null)} className='rounded p-0.5 hover:bg-accent' aria-label='Remove product'>
+              <X className='size-3.5' />
+            </button>
+          </span>
         </div>
       )}
 
@@ -311,25 +301,43 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
             <input
               ref={fileInputRef}
               type='file'
-              accept='image/*,application/pdf'
               multiple
               hidden
               onChange={(e) => {
-                if (e.target.files?.length) addFiles(e.target.files)
+                if (e.target.files?.length) addFiles(e.target.files, e.target.accept)
                 e.target.value = ''
               }}
             />
-            <Button
-              type='button'
-              size='icon'
-              variant='ghost'
-              className='size-9 shrink-0 rounded-full'
-              onClick={() => fileInputRef.current?.click()}
-              title='Attach a photo or PDF (you can also paste or drop one)'
-              aria-label='Attach file'
-            >
-              <Paperclip className='size-5' />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type='button'
+                  size='icon'
+                  variant='ghost'
+                  className='size-9 shrink-0 rounded-full'
+                  title='Attach photos, videos, audio or a document (you can also paste or drop them)'
+                  aria-label='Attach file'
+                >
+                  <Paperclip className='size-5' />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side='top' align='start' className='min-w-48'>
+                {PICKERS.map(({ key, label, accept, icon: Icon, tint }) => (
+                  <DropdownMenuItem
+                    key={key}
+                    onSelect={() => {
+                      const input = fileInputRef.current
+                      if (!input) return
+                      input.accept = accept
+                      // After the menu has closed, or some browsers drop the picker.
+                      window.setTimeout(() => input.click(), 0)
+                    }}
+                  >
+                    <Icon className={cn('mr-2 size-4', tint)} /> {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <ProductPicker onPick={setProduct} />
           </>
         )}
@@ -373,13 +381,29 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
           className='size-9 shrink-0 rounded-full'
           disabled={editing ? savingEdit || !text.trim() : !canSend}
           onClick={() => void submit()}
-          title={uploading ? 'Waiting for the upload to finish' : 'Send (Enter)'}
+          title='Send (Enter)'
           aria-label='Send'
         >
-          {savingEdit || uploading ? <Loader2 className='size-4 animate-spin' /> : <SendHorizontal className='size-4' />}
+          {savingEdit ? <Loader2 className='size-4 animate-spin' /> : <SendHorizontal className='size-4' />}
         </Button>
       </div>
-      <p className='mt-1 hidden px-2 text-[10px] text-muted-foreground sm:block'>Enter to send · Shift+Enter for a new line · paste a screenshot to attach it</p>
+      <p className='mt-1 hidden px-2 text-[10px] text-muted-foreground sm:block'>
+        Enter to send · Shift+Enter for a new line · paste or drop photos, videos and files to send them
+      </p>
+
+      {picked && (
+        <MediaSendDialog
+          files={picked.files}
+          accept={picked.accept}
+          onAdd={(files) => addFiles(files, picked.accept)}
+          onRemove={(index) => {
+            const files = picked.files.filter((_, i) => i !== index)
+            setPicked(files.length ? { ...picked, files } : null)
+          }}
+          onSend={sendPicked}
+          onClose={() => setPicked(null)}
+        />
+      )}
     </div>
   )
 }

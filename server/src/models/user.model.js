@@ -84,6 +84,8 @@ const userSchema = mongoose.Schema(
       url: { type: String, trim: true, default: '' },
       publicId: { type: String, trim: true, default: '' },
     },
+    /** Team chat "last seen": when this person was last connected to chat on any device. */
+    lastSeenAt: { type: Date, default: null },
     /**
      * Per-user appearance choices (table row colours, branch tint strength). Stored on the
      * user rather than the browser so the same eye-comfort setup follows them to every
