@@ -279,7 +279,7 @@ export function TaxTool() {
 
 function PercentLine({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className='space-y-2 rounded-lg border p-3'>
+    <div className='space-y-2 rounded-lg border p-2.5'>
       <p className='text-xs font-semibold'>{title}</p>
       {children}
     </div>
@@ -297,8 +297,10 @@ export function PercentTool() {
   const dUp = num(s.dBase) != null && num(s.dPct) != null ? changeByPercent(num(s.dBase)!, num(s.dPct)!) : null
   const dDown = num(s.dBase) != null && num(s.dPct) != null ? changeByPercent(num(s.dBase)!, -num(s.dPct)!) : null
 
+  // Four question cards make this the tallest tool, so it is spaced a little tighter to fit
+  // a typical laptop / 1080p screen without scrolling.
   return (
-    <div className='space-y-3'>
+    <div className='space-y-2'>
       <div className='flex items-start justify-between gap-2'>
         <ToolIntro>Four everyday percentage questions.</ToolIntro>
         <ResetButton onClick={() => setS(initial)} />
