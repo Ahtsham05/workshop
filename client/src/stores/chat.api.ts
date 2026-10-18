@@ -50,6 +50,9 @@ export interface ChatAttachment {
   height?: number | null
   /** Seconds (video / audio). */
   duration?: number | null
+  /** A voice note recorded in the chat (not a picked audio file), with its loudness bars (0–100). */
+  voice?: boolean
+  waveform?: number[]
   /** Client-only, while sending: the picked file's local preview and upload progress (0–1). */
   localUrl?: string
   progress?: number
@@ -87,6 +90,8 @@ export interface ChatMessage {
   product: ChatProductCard | null
   replyTo: { messageId: string; text: string; senderName: string } | null
   reactions: { emoji: string; userIds: string[] }[]
+  /** Voice notes: who (other than the sender) has played it. */
+  playedBy?: string[]
   clientId: string
   editedAt: string | null
   deletedAt: string | null
@@ -211,6 +216,9 @@ export const chatApi = createApi({
     reactToChatMessage: builder.mutation<ChatMessage, { id: string; emoji: string }>({
       query: ({ id, emoji }) => ({ url: `/chat/messages/${id}/reactions`, method: 'POST', body: { emoji } }),
     }),
+    markChatVoicePlayed: builder.mutation<ChatMessage, string>({
+      query: (id) => ({ url: `/chat/messages/${id}/played`, method: 'POST' }),
+    }),
     markChatRead: builder.mutation<{ lastReadAt: string }, string>({
       query: (id) => ({ url: `/chat/conversations/${id}/read`, method: 'POST' }),
     }),
@@ -266,6 +274,7 @@ export const {
   useDeleteChatMessageMutation,
   useReactToChatMessageMutation,
   useMarkChatReadMutation,
+  useMarkChatVoicePlayedMutation,
   useOpenDirectChatMutation,
   useCreateChatGroupMutation,
   useUpdateChatGroupMutation,

@@ -405,6 +405,39 @@ describe('product cards', () => {
       .send({ text: 'nice', replyToId: video.body.id });
     expect(reply.body.replyTo.text).toBe('🎥 Video');
   });
+
+  test('voice notes: waveform + length kept, 🎤 preview, played once per listener', async () => {
+    const { id } = channel((await as('ali').get('/v1/chat/conversations')).body, 'organization');
+    const url = 'https://res.cloudinary.com/logix-test/video/upload/chat/voice.webm';
+    const waveform = [4, 30, 100, 62, 12];
+    const sent = await as('ali')
+      .post(`/v1/chat/conversations/${id}/messages`)
+      .send({ attachments: [{ url, name: 'Voice message.webm', mimeType: 'audio/webm', size: 9000, duration: 13.2, voice: true, waveform }] });
+    expect(sent.status).toBe(201);
+    expect(sent.body.attachments[0]).toMatchObject({ voice: true, waveform, duration: 13.2 });
+    expect(sent.body.playedBy).toEqual([]);
+    const list = (await as('sara').get('/v1/chat/conversations')).body;
+    expect(channel(list, 'organization').lastMessage.text).toBe('🎤 Voice message (0:13)');
+
+    // Out-of-range bars are refused; "voice" on a non-audio file is dropped.
+    const bad = await as('ali')
+      .post(`/v1/chat/conversations/${id}/messages`)
+      .send({ attachments: [{ url, mimeType: 'audio/webm', voice: true, waveform: [101] }] });
+    expect(bad.status).toBe(400);
+    const pdf = await as('ali')
+      .post(`/v1/chat/conversations/${id}/messages`)
+      .send({ attachments: [{ url: url.replace('voice.webm', 'x.pdf'), name: 'x.pdf', mimeType: 'application/pdf', voice: true }] });
+    expect(pdf.body.attachments[0].voice).toBe(false);
+    expect((await as('ali').post(`/v1/chat/messages/${pdf.body.id}/played`)).status).toBe(404);
+
+    // The sender playing their own note doesn't count; each listener counts once.
+    expect((await as('ali').post(`/v1/chat/messages/${sent.body.id}/played`)).body.playedBy).toEqual([]);
+    const played = await as('sara').post(`/v1/chat/messages/${sent.body.id}/played`);
+    expect(played.body.playedBy).toEqual([String(people.sara._id)]);
+    expect((await as('sara').post(`/v1/chat/messages/${sent.body.id}/played`)).body.playedBy).toHaveLength(1);
+    const events = await ChatEvent.find({ event: 'chat:message-updated' }).lean();
+    expect(events.some((e) => (e.payload?.message?.playedBy || []).map(String).includes(String(people.sara._id)))).toBe(true);
+  });
 });
 
 describe('search + relay', () => {

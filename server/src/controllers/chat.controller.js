@@ -66,6 +66,10 @@ const react = catchAsync(async (req, res) => {
   res.send(await chatService.toggleReaction(req.user, req.params.messageId, req.body.emoji));
 });
 
+const markPlayed = catchAsync(async (req, res) => {
+  res.send(await chatService.markPlayed(req.user, req.params.messageId));
+});
+
 const markRead = catchAsync(async (req, res) => {
   res.send(await chatService.markRead(req.user, req.params.conversationId));
 });
@@ -123,6 +127,7 @@ module.exports = {
   editMessage,
   deleteMessage,
   react,
+  markPlayed,
   markRead,
   unread,
   directory,

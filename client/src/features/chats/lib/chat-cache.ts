@@ -1,7 +1,7 @@
 import type { AppDispatch } from '@/stores/store'
 import { chatApi, type ChatConversation, type ChatMessage, type ChatMessageStatus } from '@/stores/chat.api'
 import { laterStatus, receiptStatusFor } from './chat-live'
-import { mediaKind } from './chat-media'
+import { formatDuration, mediaKind } from './chat-media'
 
 /** Cache surgery shared by the socket provider and the send hook. */
 
@@ -19,6 +19,10 @@ export function sortConversations(list: ChatConversation[]) {
 /** Same wording as the server's list preview (chat.service.js#attachmentPreview). */
 function attachmentPreview(message: ChatMessage): string {
   const all = message.attachments
+  if (all.length === 1 && all[0].voice) {
+    const clock = formatDuration(all[0].duration)
+    return `🎤 Voice message${clock ? ` (${clock})` : ''}`
+  }
   const kinds = [...new Set(all.map((a) => mediaKind(a.mimeType)))]
   let label: string
   if (kinds.length === 1 && kinds[0] === 'image') label = all.length > 1 ? `📷 ${all.length} photos` : '📷 Photo'

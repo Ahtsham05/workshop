@@ -136,6 +136,7 @@ export function useFloatingPosition(key: string, defaults: Position, anchor: Anc
 
   return {
     style,
+    position,
     dragging,
     reset,
     handlers: { onPointerDown, onPointerMove, onPointerUp: end, onPointerCancel: end, onClickCapture },

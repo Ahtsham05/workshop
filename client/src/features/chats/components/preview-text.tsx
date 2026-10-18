@@ -1,4 +1,4 @@
-import { FileText, Headphones, Image as ImageIcon, Images, Package, Paperclip, Video } from 'lucide-react'
+import { FileText, Headphones, Image as ImageIcon, Images, Mic, Package, Paperclip, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // The server writes previews with a leading emoji ("📷 Photo", "🎥 Video", "📄 bill.pdf") so
@@ -7,6 +7,7 @@ const ICONS: [string, typeof ImageIcon][] = [
   ['📷', ImageIcon],
   ['🎥', Video],
   ['🎵', Headphones],
+  ['🎤', Mic],
   ['📄', FileText],
   ['🖼️', Images],
   ['📎', Paperclip],
@@ -17,10 +18,13 @@ export function PreviewText({ text, className }: { text: string; className?: str
   const hit = ICONS.find(([emoji]) => text.startsWith(`${emoji} `))
   if (!hit) return <span className={cn('truncate', className)}>{text}</span>
   const [emoji, Icon] = hit
+  let rest = text.slice(emoji.length + 1)
+  // WhatsApp lists a voice note as just the mic and its length: "🎤 0:13".
+  if (emoji === '🎤') rest = /\((\d+:\d{2}(?::\d{2})?)\)$/.exec(rest)?.[1] ?? rest
   return (
     <span className={cn('flex min-w-0 items-center gap-1', className)}>
       <Icon className='size-3.5 shrink-0 opacity-80' aria-hidden />
-      <span className='truncate'>{text.slice(emoji.length + 1)}</span>
+      <span className='truncate'>{rest}</span>
     </span>
   )
 }

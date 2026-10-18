@@ -17,6 +17,7 @@ import {
   setTyping,
   sweepTyping,
   useChatLive,
+  type TypingActivity,
 } from '../lib/chat-live'
 import {
   applyListStatus,
@@ -151,9 +152,13 @@ export function ChatLiveProvider() {
       clearUnread(dispatch, payload.conversationId, payload.lastReadAt)
     })
 
-    socket.on('chat:typing', (payload: { conversationId: string; userId: string; name: string; stopped?: boolean }) => {
+    socket.on('chat:typing', (payload: { conversationId: string; userId: string; name: string; stopped?: boolean; activity?: TypingActivity }) => {
       if (!payload?.conversationId || payload.userId === userId) return
-      setTyping(payload.conversationId, { userId: payload.userId, name: payload.name }, !!payload.stopped)
+      setTyping(
+        payload.conversationId,
+        { userId: payload.userId, name: payload.name, activity: payload.activity === 'recording' ? 'recording' : 'typing' },
+        !!payload.stopped
+      )
     })
 
     socket.on('chat:conversations-changed', (payload: { conversationId?: string }) => {
@@ -161,8 +166,8 @@ export function ChatLiveProvider() {
       if (payload?.conversationId) dispatch(chatApi.util.invalidateTags([{ type: 'ChatDetail', id: payload.conversationId }]))
     })
 
-    registerTypingEmitter((conversationId, stopped) => {
-      if (socket?.connected) socket.emit('chat:typing', { conversationId, stopped })
+    registerTypingEmitter((conversationId, stopped, activity) => {
+      if (socket?.connected) socket.emit('chat:typing', { conversationId, stopped, activity })
     })
 
     const sweeper = window.setInterval(sweepTyping, 1500)

@@ -7,9 +7,13 @@ import type { ChatMessageStatus } from '@/stores/chat.api'
  * on screen right now (so its messages are marked read instead of counted as unread).
  */
 
+/** What a person is doing in the composer: WhatsApp's "typing…" or "recording audio…". */
+export type TypingActivity = 'typing' | 'recording'
+
 export interface TypingPerson {
   userId: string
   name: string
+  activity?: TypingActivity
   until: number
 }
 
@@ -82,7 +86,7 @@ export function receiptStatusFor(conversationId: string, at: string): ChatMessag
 
 const TYPING_TTL = 4500
 
-export function setTyping(conversationId: string, person: { userId: string; name: string }, stopped: boolean) {
+export function setTyping(conversationId: string, person: { userId: string; name: string; activity?: TypingActivity }, stopped: boolean) {
   const now = Date.now()
   const current = (state.typing[conversationId] || []).filter((p) => p.userId !== person.userId && p.until > now)
   const next = stopped ? current : [...current, { ...person, until: now + TYPING_TTL }]
@@ -108,12 +112,18 @@ export function setActiveConversation(id: string | null) {
 
 /* ── Outgoing typing pings (set by the provider once the socket exists) ───── */
 
-let typingEmitter: ((conversationId: string, stopped: boolean) => void) | null = null
+let typingEmitter: ((conversationId: string, stopped: boolean, activity: TypingActivity) => void) | null = null
 export function registerTypingEmitter(fn: typeof typingEmitter) {
   typingEmitter = fn
 }
-export function emitTyping(conversationId: string, stopped = false) {
-  typingEmitter?.(conversationId, stopped)
+export function emitTyping(conversationId: string, stopped = false, activity: TypingActivity = 'typing') {
+  typingEmitter?.(conversationId, stopped, activity)
+}
+
+/** "Ali is typing…", "Ali is recording audio…", "Ali, Sara are typing…" — the words after the names. */
+export function activityLabel(people: Pick<TypingPerson, 'activity'>[]): string {
+  const recording = people.length > 0 && people.every((p) => p.activity === 'recording')
+  return recording ? 'recording audio…' : 'typing…'
 }
 
 /* ── Sound preference ────────────────────────────────────────────────────── */

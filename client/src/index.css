@@ -59,6 +59,15 @@ html[data-viewport-page] body {
   padding-bottom: 0;
 }
 
+/* …and their composer owns the bottom-right corner (Team chat's mic / send button), so a
+ * floating assistant launcher left down there moves up clear of it while the page is open. */
+html[data-viewport-page] [data-assistant-launcher][data-near-bottom] {
+  translate: 0 -76px;
+}
+html[data-voice-recording] [data-assistant-launcher] {
+  visibility: hidden;
+}
+
 /* Optional: when the user explicitly opts in via the "Urdu-only" invoice toggle,
  * use the decorative Nastaliq style only on those marked elements. */
 .font-urdu,

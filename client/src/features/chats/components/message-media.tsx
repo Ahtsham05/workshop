@@ -20,6 +20,7 @@ import type { ChatAttachment, ChatMessage } from '@/stores/chat.api'
 import { cn } from '@/lib/utils'
 import { formatFileSize } from '../lib/chat-format'
 import {
+  claimPlayback,
   downloadUrl,
   fileExtension,
   formatDuration,
@@ -27,6 +28,7 @@ import {
   isVisual,
   localPreviewFor,
   mediaKind,
+  releasePlayback,
   videoPosterUrl,
 } from '../lib/chat-media'
 
@@ -300,8 +302,6 @@ export function MediaAlbum({
 
 /* ── Audio ───────────────────────────────────────────────────────────────── */
 
-// One clip plays at a time, across the whole chat.
-let playing: HTMLAudioElement | null = null
 const SPEEDS = [1, 1.5, 2]
 
 export function AudioPlayer({
@@ -324,17 +324,14 @@ export function AudioPlayer({
 
   useEffect(() => {
     const el = ref.current
-    return () => {
-      if (el && playing === el) playing = null
-    }
+    return () => releasePlayback(el)
   }, [])
 
   const toggle = () => {
     const el = ref.current
     if (!el) return
     if (el.paused) {
-      if (playing && playing !== el) playing.pause()
-      playing = el
+      claimPlayback(el)
       void el.play()
     } else {
       el.pause()

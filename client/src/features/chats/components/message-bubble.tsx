@@ -30,6 +30,7 @@ import { REACTION_EMOJIS, useGetChatProductStockQuery, type ChatMessage, type Ch
 import { formatChatTime, linkify } from '../lib/chat-format'
 import { downloadUrl, isVisual, mediaKind } from '../lib/chat-media'
 import { AudioPlayer, DocumentCard, MediaAlbum } from './message-media'
+import { VoiceNotePlayer } from './voice-note'
 import { PreviewText } from './preview-text'
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -90,6 +91,8 @@ interface MessageBubbleProps {
   onInfo?: (message: ChatMessage) => void
   /** Opens a photo/video of this message in the full-screen viewer. */
   onOpenMedia?: (message: ChatMessage, attachmentIndex: number) => void
+  /** Someone else's voice note was played for the first time here (turns the sender's mic blue). */
+  onVoicePlayed?: (message: ChatMessage) => void
 }
 
 function ProductCard({ message, mine }: { message: ChatMessage; mine: boolean }) {
@@ -200,6 +203,7 @@ export const MessageBubble = memo(function MessageBubble({
   onJumpTo,
   onInfo,
   onOpenMedia,
+  onVoicePlayed,
 }: MessageBubbleProps) {
   const [reactOpen, setReactOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -235,6 +239,10 @@ export const MessageBubble = memo(function MessageBubble({
   const listed = files.map((a, index) => ({ a, index })).filter(({ a }) => !isVisual(a))
   // Photos/videos with nothing under them: the time sits on the picture, like WhatsApp.
   const mediaOnly = hasVisual && !listed.length && !message.text && !message.replyTo
+  // A voice note keeps its length bottom-left and the time + ticks bottom-right, on one line.
+  const voiceOnly = !hasVisual && listed.length === 1 && !!listed[0].a.voice && !message.text
+  const playedBy = message.playedBy ?? []
+  const voicePlayed = mine ? playedBy.length > 0 : !!meId && playedBy.includes(meId)
   const sending = message.pending || message.failed
   const uploadActions = { onCancel: () => onDiscard(message), onRetry: () => onRetry(message) }
   const uploadOf = (a: (typeof files)[number]) =>
@@ -316,7 +324,16 @@ export const MessageBubble = memo(function MessageBubble({
                 )}
                 {listed.map(({ a, index }) => (
                   <div key={`${a.url || a.localUrl}-${index}`} className={cn((hasVisual || index > 0) && 'mt-1')}>
-                    {mediaKind(a.mimeType) === 'audio' ? (
+                    {a.voice && mediaKind(a.mimeType) === 'audio' ? (
+                      <VoiceNotePlayer
+                        attachment={a}
+                        mine={mine}
+                        senderName={message.senderName}
+                        played={voicePlayed}
+                        onPlayed={live && !mine ? () => onVoicePlayed?.(message) : undefined}
+                        upload={uploadOf(a)}
+                      />
+                    ) : mediaKind(a.mimeType) === 'audio' ? (
                       <AudioPlayer attachment={a} mine={mine} upload={uploadOf(a)} />
                     ) : (
                       <DocumentCard attachment={a} mine={mine} upload={uploadOf(a)} />
@@ -330,7 +347,7 @@ export const MessageBubble = memo(function MessageBubble({
                 )}
               </>
             )}
-            {endsWithText ? (
+            {endsWithText || voiceOnly ? (
               <span className={cn(metaBase, metaTone, 'absolute bottom-1.5 end-2.5')}>{meta}</span>
             ) : mediaOnly ? (
               <span

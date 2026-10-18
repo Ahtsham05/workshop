@@ -13,6 +13,8 @@ const attachment = Joi.object().keys({
   width: Joi.number().allow(null),
   height: Joi.number().allow(null),
   duration: Joi.number().min(0).max(24 * 60 * 60).allow(null),
+  voice: Joi.boolean(),
+  waveform: Joi.array().items(Joi.number().integer().min(0).max(100)).max(128),
 });
 
 const openDirect = {

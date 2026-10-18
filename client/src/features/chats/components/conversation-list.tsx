@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { UserAvatar } from '@/components/user-avatar'
 import { Button } from '@/components/ui/button'
 import { useSearchChatQuery, type ChatConversation } from '@/stores/chat.api'
-import { useChatLive } from '../lib/chat-live'
+import { activityLabel, useChatLive } from '../lib/chat-live'
 import { conversationSubtitle, formatChatStamp } from '../lib/chat-format'
 import { MessageTicks } from './message-bubble'
 import { PreviewText } from './preview-text'
@@ -176,7 +176,7 @@ export function ConversationList({ conversations, activeId, meId, activeBranchId
                           <span className={cn('flex min-w-0 items-center gap-1 text-xs', typingHere ? 'text-primary' : 'text-muted-foreground', c.unread > 0 && !typingHere && 'text-foreground')}>
                             {!typingHere && ticks && <MessageTicks status={ticks} tone='list' />}
                             {typingHere ? (
-                              <span className='truncate'>typing…</span>
+                              <span className='truncate'>{activityLabel(live.typing[c.id] || [])}</span>
                             ) : (
                               <>
                                 {(sender || ticks === 'failed') && (

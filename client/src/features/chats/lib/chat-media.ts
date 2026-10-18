@@ -57,6 +57,20 @@ export function videoPosterUrl(url: string, width = 720): string {
 }
 
 /**
+ * Where a voice note plays from. Chrome/Firefox/Android record Opus (WebM/Ogg), iPhones
+ * record AAC (MP4); when this browser can't play the original, Cloudinary transcodes an MP3
+ * copy on the fly (cached after the first listen).
+ */
+let probe: HTMLAudioElement | null = null
+export function voicePlaybackUrl(attachment: Pick<ChatAttachment, 'url' | 'mimeType'>): string {
+  if (typeof document === 'undefined') return attachment.url
+  probe ??= document.createElement('audio')
+  if (!attachment.mimeType || probe.canPlayType(attachment.mimeType)) return attachment.url
+  if (!/^https:\/\/res\.cloudinary\.com\/[^/]+\/video\/upload\//.test(attachment.url)) return attachment.url
+  return attachment.url.replace(/\.[a-z0-9]+(\?.*)?$/i, '.mp3')
+}
+
+/**
  * A link that downloads instead of opening (Cloudinary's fl_attachment sets
  * Content-Disposition). Raw documents are served as files already.
  */
@@ -82,6 +96,19 @@ export const rememberLocalPreview = (url: string, localUrl: string) =>
   localPreview.set(url, localUrl)
 export const localPreviewFor = (url: string | undefined) =>
   url ? localPreview.get(url) : undefined
+
+/* ── One clip at a time, across the whole chat ───────────────────────────── */
+
+let playing: HTMLAudioElement | null = null
+
+/** Pauses whatever else is playing (voice note or audio file) and marks `el` as the one. */
+export function claimPlayback(el: HTMLAudioElement) {
+  if (playing && playing !== el) playing.pause()
+  playing = el
+}
+export function releasePlayback(el: HTMLAudioElement | null) {
+  if (el && playing === el) playing = null
+}
 
 /* ── Formatting ──────────────────────────────────────────────────────────── */
 

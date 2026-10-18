@@ -16,6 +16,8 @@ export interface OutboxUpload {
   localUrl: string
   progress: number
   attachment?: ChatAttachment
+  /** Recorded voice note (its waveform travels with the attachment). */
+  voice?: { waveform: number[] }
 }
 
 export interface OutboxEntry {
@@ -37,6 +39,7 @@ export function attachmentFromUpload(upload: OutboxUpload): ChatAttachment {
     duration: upload.attachment?.duration ?? upload.meta.duration,
     localUrl: upload.localUrl,
     progress: upload.attachment ? 1 : upload.progress,
+    ...(upload.voice ? { voice: true, waveform: upload.voice.waveform } : {}),
   }
 }
 

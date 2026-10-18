@@ -43,6 +43,7 @@ router
   .patch(validate(chatValidation.editMessage), chatController.editMessage)
   .delete(validate(chatValidation.messageOnly), chatController.deleteMessage);
 router.post('/messages/:messageId/reactions', validate(chatValidation.react), chatController.react);
+router.post('/messages/:messageId/played', validate(chatValidation.messageOnly), chatController.markPlayed);
 
 router.get('/unread', chatController.unread);
 router.get('/directory', chatController.directory);

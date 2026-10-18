@@ -180,7 +180,13 @@ function initChatSocket(httpServer, corsOptions) {
       chatBus.publish(
         rooms,
         'chat:typing',
-        { conversationId, userId, name: user.name || user.email, stopped: !!payload.stopped },
+        {
+          conversationId,
+          userId,
+          name: user.name || user.email,
+          stopped: !!payload.stopped,
+          activity: payload.activity === 'recording' ? 'recording' : 'typing',
+        },
         { exceptSocketId: socket.id }
       );
     });

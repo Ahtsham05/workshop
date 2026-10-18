@@ -11,8 +11,10 @@ import { emitTyping } from '../lib/chat-live'
 import { previewOf } from '../lib/chat-cache'
 import { isVisual, MAX_BYTES, MAX_FILES, mediaKind } from '../lib/chat-media'
 import { useChatSender } from '../hooks/use-chat-sender'
+import { MAX_VOICE_SECONDS, useVoiceRecorder } from '../hooks/use-voice-recorder'
 import { MediaSendDialog } from './media-send-dialog'
 import { PreviewText } from './preview-text'
+import { HoldRecorder, LockedRecorder, MicButton } from './voice-recorder'
 
 const EMOJIS = ['😀', '😂', '😊', '😍', '🤔', '😅', '😢', '😡', '👍', '👎', '🙏', '👏', '🙌', '💪', '✅', '❌', '⚠️', '❓', '🔥', '🎉', '📦', '🚚', '💰', '📞']
 const TYPING_EVERY_MS = 2500
@@ -123,13 +125,88 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
   const { sendMessage } = useChatSender()
   const [editMessage, { isLoading: savingEdit }] = useEditChatMessageMutation()
 
+  /* ── Voice messages ─────────────────────────────────────────────────────── */
+  // none → hold (mic held down) → sent on release, or → locked (hands-free bar).
+  const [voiceMode, setVoiceMode] = useState<'none' | 'hold' | 'locked'>('none')
+  const [slide, setSlide] = useState({ x: 0, y: 0 })
+  const voice = useVoiceRecorder({
+    onLimit: () => toast.info(`Voice messages can be up to ${MAX_VOICE_SECONDS / 60} minutes — send it or delete it`),
+  })
+  const voiceModeRef = useRef(voiceMode)
+  voiceModeRef.current = voiceMode
+  const replyRef = useRef(replyTo)
+  replyRef.current = replyTo
+
+  const pressMic = () => {
+    if (voice.state !== 'idle') return
+    setVoiceMode('hold')
+    voice.start().catch((err: Error) => {
+      setVoiceMode('none')
+      toast.error(err.message || 'Could not start the microphone')
+    })
+  }
+
+  const discardVoice = () => {
+    voice.cancel()
+    setVoiceMode('none')
+    requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }))
+  }
+
+  const sendVoice = async (fromHold = false) => {
+    const note = await voice.stop()
+    setVoiceMode('none')
+    requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }))
+    if (!note) {
+      toast.info(fromHold ? 'Hold to record, release to send' : 'Voice message too short')
+      return
+    }
+    const reply = replyRef.current
+    void sendMessage({
+      conversationId,
+      voice: note,
+      replyTo: reply ? { messageId: reply.id, text: previewOf(reply) || 'Attachment', senderName: reply.senderName } : undefined,
+    })
+    onCancelReply()
+  }
+
+  const releaseMic = (kind: 'tap' | 'send') => {
+    if (voiceModeRef.current !== 'hold') return
+    // Still at the permission prompt, or a quick tap: keep recording hands-free.
+    if (kind === 'tap' || voice.current() === 'starting') setVoiceMode('locked')
+    else void sendVoice(true)
+  }
+
+  // The floating assistant launcher (and its own mic) steps aside while a note is recorded.
+  useEffect(() => {
+    if (voiceMode === 'none') return
+    document.documentElement.setAttribute('data-voice-recording', '')
+    return () => document.documentElement.removeAttribute('data-voice-recording')
+  }, [voiceMode])
+
+  // Others see "recording audio…" while the mic is live.
+  useEffect(() => {
+    if (voice.state !== 'recording') return
+    emitTyping(conversationId, false, 'recording')
+    const timer = window.setInterval(() => emitTyping(conversationId, false, 'recording'), TYPING_EVERY_MS)
+    return () => {
+      window.clearInterval(timer)
+      emitTyping(conversationId, true, 'recording')
+    }
+  }, [voice.state, conversationId])
+
   // Switching conversation: load that thread's draft, drop half-picked attachments.
   useEffect(() => {
     setText(readDraft(conversationId))
     setPicked(null)
     setProduct(null)
+    if (voiceModeRef.current !== 'none') {
+      voice.cancel()
+      setVoiceMode('none')
+      toast.info('Voice message discarded')
+    }
     lastTypingRef.current = 0
     requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId])
 
   // Editing: the box takes the message's text; leaving edit mode restores the draft.
@@ -193,6 +270,9 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
   }
 
   const canSend = !disabled && (text.trim().length > 0 || !!product)
+  // WhatsApp: an empty box shows the mic; typing turns it into Send.
+  const showMic = !editing && !canSend && !disabled
+  const recording = voiceMode !== 'none'
 
   const submit = async () => {
     if (editing) {
@@ -296,99 +376,130 @@ export function ChatComposer({ conversationId, replyTo, onCancelReply, editing, 
       )}
 
       <div className='flex items-end gap-1'>
-        {!editing && (
+        {voiceMode === 'locked' ? (
+          <LockedRecorder
+            state={voice.state}
+            elapsed={voice.elapsed}
+            levels={voice.levels}
+            snapshot={voice.snapshot}
+            onPause={voice.pause}
+            onResume={voice.resume}
+            onDiscard={discardVoice}
+            onSend={() => void sendVoice()}
+          />
+        ) : voiceMode === 'hold' ? (
+          <HoldRecorder state={voice.state} elapsed={voice.elapsed} slide={slide.x} />
+        ) : (
           <>
-            <input
-              ref={fileInputRef}
-              type='file'
-              multiple
-              hidden
-              onChange={(e) => {
-                if (e.target.files?.length) addFiles(e.target.files, e.target.accept)
-                e.target.value = ''
-              }}
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type='button'
-                  size='icon'
-                  variant='ghost'
-                  className='size-9 shrink-0 rounded-full'
-                  title='Attach photos, videos, audio or a document (you can also paste or drop them)'
-                  aria-label='Attach file'
-                >
-                  <Paperclip className='size-5' />
+            {!editing && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type='file'
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    if (e.target.files?.length) addFiles(e.target.files, e.target.accept)
+                    e.target.value = ''
+                  }}
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type='button'
+                      size='icon'
+                      variant='ghost'
+                      className='size-9 shrink-0 rounded-full'
+                      title='Attach photos, videos, audio or a document (you can also paste or drop them)'
+                      aria-label='Attach file'
+                    >
+                      <Paperclip className='size-5' />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side='top' align='start' className='min-w-48'>
+                    {PICKERS.map(({ key, label, accept, icon: Icon, tint }) => (
+                      <DropdownMenuItem
+                        key={key}
+                        onSelect={() => {
+                          const input = fileInputRef.current
+                          if (!input) return
+                          input.accept = accept
+                          // After the menu has closed, or some browsers drop the picker.
+                          window.setTimeout(() => input.click(), 0)
+                        }}
+                      >
+                        <Icon className={cn('mr-2 size-4', tint)} /> {label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <ProductPicker onPick={setProduct} />
+              </>
+            )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type='button' size='icon' variant='ghost' className='size-9 shrink-0 rounded-full' aria-label='Emoji'>
+                  <Smile className='size-5' />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side='top' align='start' className='min-w-48'>
-                {PICKERS.map(({ key, label, accept, icon: Icon, tint }) => (
-                  <DropdownMenuItem
-                    key={key}
-                    onSelect={() => {
-                      const input = fileInputRef.current
-                      if (!input) return
-                      input.accept = accept
-                      // After the menu has closed, or some browsers drop the picker.
-                      window.setTimeout(() => input.click(), 0)
-                    }}
-                  >
-                    <Icon className={cn('mr-2 size-4', tint)} /> {label}
-                  </DropdownMenuItem>
+              </PopoverTrigger>
+              <PopoverContent side='top' align='start' className='grid w-64 grid-cols-8 gap-0.5 p-2'>
+                {EMOJIS.map((emoji) => (
+                  <button key={emoji} type='button' onClick={() => insertEmoji(emoji)} className='rounded p-1 text-lg leading-none hover:bg-accent'>
+                    {emoji}
+                  </button>
                 ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <ProductPicker onPick={setProduct} />
+              </PopoverContent>
+            </Popover>
+            <textarea
+              ref={textareaRef}
+              value={text}
+              rows={1}
+              disabled={disabled}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={onKeyDown}
+              onBlur={() => text && emitTyping(conversationId, true)}
+              onPaste={(e) => {
+                if (editing) return
+                const pasted = Array.from(e.clipboardData.files || [])
+                if (pasted.length) {
+                  e.preventDefault()
+                  addFiles(pasted)
+                }
+              }}
+              placeholder={editing ? 'Edit your message' : 'Type a message'}
+              aria-label='Message'
+              className='max-h-40 min-h-9 flex-1 resize-none rounded-2xl border border-input bg-transparent px-3.5 py-2 text-sm leading-5 outline-none focus-visible:border-input-ring focus-visible:ring-[3px] focus-visible:ring-input-ring/50 dark:bg-input/30'
+            />
           </>
         )}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button type='button' size='icon' variant='ghost' className='size-9 shrink-0 rounded-full' aria-label='Emoji'>
-              <Smile className='size-5' />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent side='top' align='start' className='grid w-64 grid-cols-8 gap-0.5 p-2'>
-            {EMOJIS.map((emoji) => (
-              <button key={emoji} type='button' onClick={() => insertEmoji(emoji)} className='rounded p-1 text-lg leading-none hover:bg-accent'>
-                {emoji}
-              </button>
-            ))}
-          </PopoverContent>
-        </Popover>
-        <textarea
-          ref={textareaRef}
-          value={text}
-          rows={1}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          onBlur={() => text && emitTyping(conversationId, true)}
-          onPaste={(e) => {
-            if (editing) return
-            const pasted = Array.from(e.clipboardData.files || [])
-            if (pasted.length) {
-              e.preventDefault()
-              addFiles(pasted)
-            }
-          }}
-          placeholder={editing ? 'Edit your message' : 'Type a message'}
-          aria-label='Message'
-          className='max-h-40 min-h-9 flex-1 resize-none rounded-2xl border border-input bg-transparent px-3.5 py-2 text-sm leading-5 outline-none focus-visible:border-input-ring focus-visible:ring-[3px] focus-visible:ring-input-ring/50 dark:bg-input/30'
-        />
-        <Button
-          type='button'
-          size='icon'
-          className='size-9 shrink-0 rounded-full'
-          disabled={editing ? savingEdit || !text.trim() : !canSend}
-          onClick={() => void submit()}
-          title='Send (Enter)'
-          aria-label='Send'
-        >
-          {savingEdit ? <Loader2 className='size-4 animate-spin' /> : <SendHorizontal className='size-4' />}
-        </Button>
+        {voiceMode === 'locked' ? null : showMic || voiceMode === 'hold' ? (
+          <MicButton
+            holding={voiceMode === 'hold'}
+            disabled={disabled}
+            onPress={pressMic}
+            onRelease={releaseMic}
+            onSlide={setSlide}
+            onCancel={discardVoice}
+            onLock={() => setVoiceMode('locked')}
+          />
+        ) : (
+          <Button
+            type='button'
+            size='icon'
+            className='size-9 shrink-0 rounded-full'
+            disabled={editing ? savingEdit || !text.trim() : !canSend}
+            onClick={() => void submit()}
+            title='Send (Enter)'
+            aria-label='Send'
+          >
+            {savingEdit ? <Loader2 className='size-4 animate-spin' /> : <SendHorizontal className='size-4' />}
+          </Button>
+        )}
       </div>
       <p className='mt-1 hidden px-2 text-[10px] text-muted-foreground sm:block'>
-        Enter to send · Shift+Enter for a new line · paste or drop photos, videos and files to send them
+        {recording
+          ? 'Recording · pause to listen back, delete to start over, or send'
+          : 'Enter to send · Shift+Enter for a new line · tap the mic for a voice message (or hold it, release to send) · paste or drop files'}
       </p>
 
       {picked && (

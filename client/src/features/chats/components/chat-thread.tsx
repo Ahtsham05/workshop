@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
-import { ArrowDown, ArrowLeft, Bell, BellOff, Info, Loader2, Pin, PinOff } from 'lucide-react'
+import { ArrowDown, ArrowLeft, Bell, BellOff, Info, Loader2, Mic, Pin, PinOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import {
   useGetChatMessagesQuery,
   useLazyGetOlderChatMessagesQuery,
   useMarkChatReadMutation,
+  useMarkChatVoicePlayedMutation,
   useReactToChatMessageMutation,
   useSetChatPreferencesMutation,
   type ChatConversation,
@@ -28,7 +29,7 @@ import {
   type ChatMessage,
   type ChatMessageStatus,
 } from '@/stores/chat.api'
-import { laterStatus, receiptStatusFor, setActiveConversation, useChatLive } from '../lib/chat-live'
+import { activityLabel, laterStatus, receiptStatusFor, setActiveConversation, useChatLive } from '../lib/chat-live'
 import { useOutbox } from '../lib/chat-outbox'
 import { clearUnread, replaceMessage } from '../lib/chat-cache'
 import { chatDayKey, chatDayLabel, presenceLabel } from '../lib/chat-format'
@@ -64,6 +65,7 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
   const [loadOlder, { isFetching: loadingOlder }] = useLazyGetOlderChatMessagesQuery()
   const [markRead] = useMarkChatReadMutation()
   const [react] = useReactToChatMessageMutation()
+  const [markVoicePlayed] = useMarkChatVoicePlayedMutation()
   const [deleteMessage] = useDeleteChatMessageMutation()
   const [setPrefs] = useSetChatPreferencesMutation()
   const { retry, discard } = useChatSender()
@@ -297,6 +299,19 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
     },
     [react, dispatch, conversation.id]
   )
+  // First listen to someone's voice note: the mic turns blue here at once, and for the
+  // sender when the server confirms.
+  const onVoicePlayed = useCallback(
+    (message: ChatMessage) => {
+      if (!meId || message.playedBy?.includes(meId)) return
+      replaceMessage(dispatch, conversation.id, { ...message, playedBy: [...(message.playedBy ?? []), meId] })
+      markVoicePlayed(message.id)
+        .unwrap()
+        .then((updated) => replaceMessage(dispatch, conversation.id, updated))
+        .catch(() => undefined)
+    },
+    [markVoicePlayed, dispatch, conversation.id, meId]
+  )
   const onRetry = useCallback((m: ChatMessage) => void retry(m.clientId), [retry])
   const onDiscard = useCallback((m: ChatMessage) => discard(m.clientId), [discard])
   const onEdit = useCallback((m: ChatMessage) => {
@@ -343,7 +358,7 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
           <span className='min-w-0'>
             <span className='block truncate text-sm font-semibold'>{conversation.name}</span>
             <span className={cn('block truncate text-xs', directOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
-              {typing.length ? <span className='text-primary'>{typing.map((p) => p.name.split(' ')[0]).join(', ')} typing…</span> : subtitle}
+              {typing.length ? <span className='text-primary'>{typing.map((p) => p.name.split(' ')[0]).join(', ')} {activityLabel(typing)}</span> : subtitle}
             </span>
           </span>
         </button>
@@ -451,6 +466,7 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
                       status={message.senderId === meId && !message.pending && !message.failed ? statusFor(message) : null}
                       onInfo={setInfoFor}
                       onOpenMedia={openMedia}
+                      onVoicePlayed={onVoicePlayed}
                       canModerate={isOrgAdmin}
                       highlighted={highlightId === message.id}
                       onReply={onReply}
@@ -466,12 +482,16 @@ export function ChatThread({ conversation, meId, isOrgAdmin, focusMessageId, onB
               })}
               {typing.length > 0 && (
                 <div className='mt-2 flex items-center gap-2 px-4 text-xs text-muted-foreground'>
-                  <span className='flex gap-0.5'>
-                    <span className='size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]' />
-                    <span className='size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]' />
-                    <span className='size-1.5 animate-bounce rounded-full bg-muted-foreground' />
-                  </span>
-                  {typing.map((p) => p.name.split(' ')[0]).join(', ')} {typing.length > 1 ? 'are' : 'is'} typing
+                  {activityLabel(typing) === 'recording audio…' ? (
+                    <Mic className='size-3.5 animate-pulse text-primary' aria-hidden />
+                  ) : (
+                    <span className='flex gap-0.5'>
+                      <span className='size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]' />
+                      <span className='size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]' />
+                      <span className='size-1.5 animate-bounce rounded-full bg-muted-foreground' />
+                    </span>
+                  )}
+                  {typing.map((p) => p.name.split(' ')[0]).join(', ')} {typing.length > 1 ? 'are' : 'is'} {activityLabel(typing).replace('…', '')}
                 </div>
               )}
             </div>

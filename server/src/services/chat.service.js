@@ -602,7 +602,7 @@ async function listMessages(user, conversationId, { before, limit = PAGE_SIZE } 
 function presentMessage(doc) {
   const message = typeof doc.toJSON === 'function' ? doc.toJSON() : doc;
   if (message.deletedAt) {
-    return { ...message, text: '', attachments: [], product: null, reactions: [], replyTo: null };
+    return { ...message, text: '', attachments: [], product: null, reactions: [], replyTo: null, playedBy: [] };
   }
   if (!message.product || !message.product.productId) message.product = null;
   if (!message.replyTo || !message.replyTo.messageId) message.replyTo = null;
@@ -640,8 +640,17 @@ const mediaKind = (mimeType = '') => {
   return 'document';
 };
 
-/** WhatsApp-style list preview: "📷 Photo", "🎥 Video", "🎵 Audio", "📄 invoice.pdf" (+ caption). */
+const clock = (seconds) => {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+};
+
+/** WhatsApp-style list preview: "📷 Photo", "🎥 Video", "🎵 Audio", "🎤 Voice message (0:13)", "📄 invoice.pdf" (+ caption). */
 function attachmentPreview(attachments, caption) {
+  if (attachments.length === 1 && attachments[0].voice) {
+    const { duration } = attachments[0];
+    return `🎤 Voice message${duration ? ` (${clock(duration)})` : ''}`;
+  }
   const kinds = [...new Set(attachments.map((a) => mediaKind(a.mimeType)))];
   let label;
   if (kinds.length === 1 && kinds[0] === 'image') label = attachments.length > 1 ? `📷 ${attachments.length} photos` : '📷 Photo';
@@ -673,7 +682,10 @@ async function sendMessage(user, conversationId, body, { branchId } = {}) {
   const conversation = await getAccessibleConversation(user, conversationId);
   const text = String(body.text || '').slice(0, MAX_TEXT);
   const host = attachmentHost();
-  const attachments = (body.attachments || []).filter((a) => a && host.test(String(a.url))).slice(0, 10);
+  const attachments = (body.attachments || [])
+    .filter((a) => a && host.test(String(a.url)))
+    .slice(0, 10)
+    .map((a) => (a.voice && mediaKind(a.mimeType) === 'audio' ? a : { ...a, voice: false, waveform: undefined }));
   let kind = 'text';
   let product = null;
   if (body.productId) {
@@ -800,6 +812,25 @@ async function toggleReaction(user, messageId, emoji) {
   message.reactions = reactions.filter((r) => r.userIds.length > 0);
   await message.save();
   const presented = presentMessage(message);
+  chatBus.publish(audienceRooms(conversation), 'chat:message-updated', { conversationId: String(conversation._id), message: presented });
+  return presented;
+}
+
+/**
+ * Someone other than the sender played a voice note. Recorded once per person; the sender's
+ * bubble turns its mic blue (WhatsApp's "played"), and the listener's own other devices stop
+ * showing it as new.
+ */
+async function markPlayed(user, messageId) {
+  if (!mongoose.Types.ObjectId.isValid(String(messageId))) throw new ApiError(httpStatus.NOT_FOUND, 'Message not found');
+  const message = await ChatMessage.findOne({ _id: messageId, organizationId: user.organizationId });
+  if (!message || message.deletedAt || !message.attachments?.some((a) => a.voice)) throw new ApiError(httpStatus.NOT_FOUND, 'Message not found');
+  const conversation = await getAccessibleConversation(user, message.conversationId);
+  if (String(message.senderId) === String(user._id) || (message.playedBy || []).some((u) => String(u) === String(user._id))) {
+    return presentMessage(message);
+  }
+  const updated = await ChatMessage.findOneAndUpdate({ _id: message._id }, { $addToSet: { playedBy: user._id } }, { new: true });
+  const presented = presentMessage(updated);
   chatBus.publish(audienceRooms(conversation), 'chat:message-updated', { conversationId: String(conversation._id), message: presented });
   return presented;
 }
@@ -934,6 +965,7 @@ module.exports = {
   editMessage,
   deleteMessage,
   toggleReaction,
+  markPlayed,
   markRead,
   markDelivered,
   unreadTotal,

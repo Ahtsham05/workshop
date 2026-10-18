@@ -42,6 +42,8 @@ export interface OutgoingMessage {
   product?: Pick<ChatProductCard, 'productId' | 'name'> &
     Partial<ChatProductCard>
   replyTo?: ChatMessage['replyTo']
+  /** A voice note recorded in the composer (length and waveform measured while recording). */
+  voice?: { file: File; duration: number; waveform: number[] }
 }
 
 // In-flight uploads per pending message, so the ✕ on a progress ring can stop them.
@@ -95,9 +97,10 @@ export function useChatSender() {
                   },
                 }
               )
-              rememberLocalPreview(attachment.url, upload.localUrl)
-              updateOutboxUpload(clientId, index, { attachment, progress: 1 })
-              return attachment
+              const sent = upload.voice ? { ...attachment, duration: upload.meta.duration, voice: true, waveform: upload.voice.waveform } : attachment
+              rememberLocalPreview(sent.url, upload.localUrl)
+              updateOutboxUpload(clientId, index, { attachment: sent, progress: 1 })
+              return sent
             })
           )
           controllers.delete(clientId)
@@ -134,7 +137,18 @@ export function useChatSender() {
     async (outgoing: OutgoingMessage) => {
       const clientId = newClientId()
       let uploads: OutboxUpload[] | undefined
-      if (outgoing.files?.length) {
+      if (outgoing.voice) {
+        const { file, duration, waveform } = outgoing.voice
+        uploads = [
+          {
+            file,
+            meta: { width: null, height: null, duration },
+            localUrl: URL.createObjectURL(file),
+            progress: 0,
+            voice: { waveform },
+          },
+        ]
+      } else if (outgoing.files?.length) {
         uploads = await Promise.all(
           outgoing.files.map(async (picked) => {
             const file = await compressImage(picked)

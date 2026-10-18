@@ -155,6 +155,9 @@ export function QuickLinksVoiceWidget() {
           title={`${t('Quick links & voice assistant')} (⌘.) — ${t('drag to move')}`}
           style={launcher.style}
           {...launcher.handlers}
+          data-assistant-launcher
+          // Low in the corner it would cover Team chat's mic/send button (index.css lifts it there).
+          data-near-bottom={launcher.position.bottom < 80 || undefined}
           className={cn(
             'z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95',
             launcher.dragging && 'scale-110 shadow-2xl ring-4 ring-primary/30'

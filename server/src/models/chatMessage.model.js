@@ -22,6 +22,10 @@ const attachmentSchema = new mongoose.Schema(
     height: { type: Number, default: null },
     /** Seconds, for video and audio (shown on the bubble before anything downloads). */
     duration: { type: Number, default: null },
+    /** Recorded in the chat (WhatsApp voice note), not a picked audio file. */
+    voice: { type: Boolean, default: false },
+    /** Voice notes: loudness bars (0–100) drawn on the bubble before the audio downloads. */
+    waveform: { type: [Number], default: undefined },
   },
   { _id: false }
 );
@@ -62,6 +66,8 @@ const chatMessageSchema = mongoose.Schema(
       senderName: { type: String, default: '' },
     },
     reactions: { type: [reactionSchema], default: [] },
+    /** Voice notes: who has played it (WhatsApp turns the mic blue for the sender). */
+    playedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     /** Client-generated id so an optimistic bubble can be matched to the saved one. */
     clientId: { type: String, default: '' },
     editedAt: { type: Date, default: null },
