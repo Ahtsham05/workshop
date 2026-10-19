@@ -21,6 +21,7 @@ import { useDispatch } from 'react-redux'
 import { toast } from 'sonner'
 import {
   manufacturingApi,
+  useBatchUnbatchedStockMutation,
   useGetIssueOptionsQuery,
   useGetMaterialIssueQuery,
   useGetOrderRequirementsQuery,
@@ -68,6 +69,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   TransactionEntry,
+  allocationFields,
   rowErrorsFromApi,
   useCatalogProductSource,
   useCatalogStockSource,
@@ -96,6 +98,7 @@ import {
   orderMaterialProducts,
   orderMaterialSource,
   orderStockSource,
+  withBatchCredit,
   requirementRows,
   rowFromProduct,
   rowStatus,
@@ -252,7 +255,46 @@ function IssueEntry({
 
   const catalog = useCatalogProductSource()
   const catalogStock = useCatalogStockSource()
-  const stock = useMemo(() => orderStockSource(catalogStock), [catalogStock])
+  const [batchUnbatched] = useBatchUnbatchedStockMutation()
+  const storeRef = useRef<EntryStore<IssueRow, IssueHeader> | null>(null)
+  // "Put them into a batch" from the batch picker: create the batch, then let every row
+  // of that product see it (rows hold a snapshot of the catalog record).
+  const stock = useMemo(
+    () =>
+      orderStockSource(catalogStock, async (product) => {
+        const made = await batchUnbatched({
+          productId: product.productId,
+          variantId: product.variantId || null,
+        }).unwrap()
+        const store = storeRef.current
+        if (store) {
+          const credit = new Map([
+            [
+              made.id,
+              { batchNumber: made.batchNumber, quantity: made.quantity },
+            ],
+          ])
+          const s = store.getState()
+          s.order.forEach((id) => {
+            const p = s.rows[id].product
+            if (
+              p &&
+              p.productId === product.productId &&
+              (p.variantId || null) === (product.variantId || null)
+            )
+              store.updateRow(id, { product: withBatchCredit(p, credit) })
+          })
+        }
+        return {
+          id: made.id,
+          batchNumber: made.batchNumber,
+          quantity: made.quantity,
+          expiryDate: made.expiryDate,
+          cost: made.costPerUnit,
+        }
+      }),
+    [catalogStock, batchUnbatched]
+  )
   const { data: options } = useGetIssueOptionsQuery()
   const { data: operators } = useGetOperatorsQuery()
   const { data: orderPage } = useGetProductionOrdersQuery({
@@ -264,7 +306,6 @@ function IssueEntry({
   const [postByMaterial] = usePostMaterialIssueByMaterialMutation()
   const [fetchPlan] = useLazyGetMaterialIssuePlanQuery()
 
-  const storeRef = useRef<EntryStore<IssueRow, IssueHeader> | null>(null)
   const [lines, setLines] = useState<RequirementLine[]>(edit?.lines || [])
   const [editIssue] = useEditMaterialIssueMutation()
   const locked = !!edit?.locked.length
@@ -294,9 +335,33 @@ function IssueEntry({
   const [posted, setPosted] = useState<MaterialIssue[] | null>(null)
 
   const orders = useMemo(() => orderPage?.results || [], [orderPage])
+  // Editing a posted voucher: its own batch quantities are available again (as on the
+  // server), on every product the grid sees — rows re-link to these after a refresh.
+  const editCredit = useMemo(() => {
+    const byKey = new Map<
+      string,
+      Map<string, { batchNumber: string; quantity: number }>
+    >()
+    edit?.issue.lines.forEach((l) => {
+      if (!l.batchId) return
+      const key = `${l.materialLineId}:${l.isAlternative ? l.productId : ''}`
+      const m = byKey.get(key) || new Map()
+      const b = m.get(l.batchId)
+      m.set(l.batchId, {
+        batchNumber: l.batchNumber || '',
+        quantity: roundQty((b?.quantity || 0) + l.quantity),
+      })
+      byKey.set(key, m)
+    })
+    return byKey
+  }, [edit])
   const products = useMemo(
-    () => orderMaterialProducts(lines, catalog),
-    [lines, catalog]
+    () =>
+      orderMaterialProducts(lines, catalog).map((p) => {
+        const credit = editCredit.get(p.key)
+        return credit ? withBatchCredit(p, credit) : p
+      }),
+    [lines, catalog, editCredit]
   )
   // Before a finished good is chosen, row 1's list offers the finished goods themselves
   // (invoice-style): picking one fills the header and asks for the quantity.
@@ -1378,8 +1443,7 @@ function IssueEntry({
           string,
           {
             quantity: number
-            batches: Set<string>
-            batchNumber?: string
+            batches: Map<string, { batchNumber: string; quantity: number }>
             serials: string[]
           }
         >()
@@ -1387,21 +1451,28 @@ function IssueEntry({
           const key = `${l.materialLineId}:${l.isAlternative ? l.productId : ''}`
           const g = groups.get(key) || {
             quantity: 0,
-            batches: new Set(),
-            serials: [],
+            batches: new Map<
+              string,
+              { batchNumber: string; quantity: number }
+            >(),
+            serials: [] as string[],
           }
           g.quantity = roundQty(g.quantity + l.quantity)
           if (l.batchId) {
-            g.batches.add(l.batchId)
-            g.batchNumber = l.batchNumber
+            const b = g.batches.get(l.batchId)
+            g.batches.set(l.batchId, {
+              batchNumber: l.batchNumber || '',
+              quantity: roundQty((b?.quantity || 0) + l.quantity),
+            })
           }
           ;(l.serialNumbers || []).forEach((sn) => g.serials.push(sn))
           groups.set(key, g)
         })
         const rows: Omit<IssueRow, 'id'>[] = []
         groups.forEach((g, key) => {
-          const product = productsNow.find((p) => p.key === key)
-          if (!product) return
+          const found = productsNow.find((p) => p.key === key)
+          if (!found) return
+          const product = withBatchCredit(found, g.batches)
           const { id: _id, ...row } = rowFromProduct(
             { ...blankIssueRow(), id: '' } as IssueRow,
             product,
@@ -1409,9 +1480,10 @@ function IssueEntry({
           )
           rows.push({
             ...row,
-            // One batch: keep it; several (FEFO split): let FEFO pick again.
-            batchId: g.batches.size === 1 ? [...g.batches][0] : null,
-            batchNumber: g.batches.size === 1 ? g.batchNumber || null : null,
+            // The batches it was posted from, batch for batch.
+            ...allocationFields(
+              [...g.batches].map(([batchId, b]) => ({ batchId, ...b }))
+            ),
             serials: g.serials,
           })
         })

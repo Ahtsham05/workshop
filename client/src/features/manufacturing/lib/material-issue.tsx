@@ -15,6 +15,14 @@ import type {
   StockSource,
   TransactionConfig,
 } from '@/components/transaction-engine'
+import {
+  allocationFields,
+  allocationTotal,
+  isExpiredBatch,
+  planFefo,
+  refitAllocations,
+  sameAllocations,
+} from '@/components/transaction-engine'
 import { fmtQty } from './constants'
 
 /*
@@ -114,6 +122,33 @@ export const batchesOf = (p: EntryProduct | null | undefined): EntryBatch[] =>
       cost: b.costPerUnit ?? null,
     }))
 
+/**
+ * Editing a posted voucher: its own batch quantities count as available again (the
+ * server checks the edit the same way), including batches it emptied.
+ */
+export function withBatchCredit(
+  product: EntryProduct,
+  credit: Map<string, { batchNumber: string; quantity: number }>
+): EntryProduct {
+  const ref = refOf(product)
+  if (!ref || !credit.size) return product
+  const list = [...(ref.catalog?.batches || [])]
+  credit.forEach((c, id) => {
+    const at = list.findIndex((b) => b.id === id)
+    if (at >= 0)
+      list[at] = { ...list[at], quantity: list[at].quantity + c.quantity }
+    else if (product.trackBatch)
+      list.push({ id, batchNumber: c.batchNumber, quantity: c.quantity })
+  })
+  return {
+    ...product,
+    raw: {
+      ...ref,
+      catalog: { ...(ref.catalog || {}), batches: list },
+    },
+  } as EntryProduct
+}
+
 /** Suggested issue: what's still needed, capped at what's on hand ("Issue Available"). */
 export const suggestedQty = (
   row: Pick<IssueRow, 'remaining' | 'available' | 'ratio'>
@@ -127,6 +162,7 @@ export const blankIssueRow = (): Omit<IssueRow, 'id'> => ({
   unit: undefined,
   batchId: null,
   batchNumber: null,
+  batches: null,
   serials: [],
   materialLineId: null,
   alternativeProductId: null,
@@ -246,9 +282,55 @@ export function orderMaterialSource(products: EntryProduct[]): ProductSource {
   }
 }
 
-/** Batches / serials: from the catalog record behind each material. */
-export function orderStockSource(base: StockSource): StockSource {
-  return { ...base, getBatches: (product) => batchesOf(product) }
+/**
+ * Batches / serials: from the catalog record behind each material. `assignUnbatched`
+ * lets the batch picker put stock that has no batch into one.
+ */
+export function orderStockSource(
+  base: StockSource,
+  assignUnbatched?: StockSource['assignUnbatched']
+): StockSource {
+  return {
+    ...base,
+    getBatches: (product) => batchesOf(product),
+    ...(assignUnbatched ? { assignUnbatched } : {}),
+  }
+}
+
+/**
+ * How a batch-tracked row's quantity is covered: the picked split (`row.batches`), or
+ * what FEFO would take. `short` = quantity no batch covers; `expiredOnly` = FEFO is short
+ * on unexpired batches but expired ones would cover it (the server asks to confirm).
+ */
+export function batchCoverage(row: IssueRow) {
+  const qty = row.quantity || 0
+  const batches = batchesOf(row.product)
+  const cap = (id: string) => batches.find((b) => b.id === id)?.quantity ?? 0
+  if (row.batches?.length) {
+    return {
+      manual: true,
+      allocations: row.batches,
+      short: Math.max(0, qty - allocationTotal(row.batches)),
+      over: row.batches.filter((a) => a.quantity > cap(a.batchId) + 1e-9),
+      expired: row.batches.some((a) => {
+        const b = batches.find((x) => x.id === a.batchId)
+        return !!b && isExpiredBatch(b)
+      }),
+      expiredOnly: false,
+      unbatched: 0,
+    }
+  }
+  const plan = planFefo(batches, qty)
+  const all = batches.reduce((s, b) => s + b.quantity, 0)
+  return {
+    manual: false,
+    allocations: plan.allocations,
+    short: plan.short,
+    over: [] as typeof plan.allocations,
+    expired: false,
+    expiredOnly: plan.short > 1e-9 && all >= qty - 1e-9,
+    unbatched: Math.max(0, (Number(row.product?.stock) || 0) - all),
+  }
 }
 
 /** A material product → a filled row (quantities from the order's requirement line). */
@@ -279,6 +361,7 @@ export function rowFromProduct<T extends IssueRow>(
     isOptional: !!line.isOptional,
     batchId: null,
     batchNumber: null,
+    batches: null,
     serials: [],
   }
   const q =
@@ -346,6 +429,7 @@ export function rowFromPending<T extends IssueRow>(
     isOptional: false,
     batchId: null,
     batchNumber: null,
+    batches: null,
     serials: [],
     quantity:
       Math.max(0, round(Math.min(material.outstanding, material.available))) ||
@@ -395,11 +479,11 @@ export function rowStatus(row: IssueRow): RowStatus {
     return row.remaining > 0 && row.available <= 0
       ? { tone: 'error', text: 'Out of stock' }
       : { tone: 'muted', text: 'Not issued' }
-  const batch = row.batchId
-    ? batchesOf(row.product).find((b) => b.id === row.batchId)
-    : null
-  if (batch && batch.quantity < qty)
-    return { tone: 'error', text: `Batch has ${fmtQty(batch.quantity)}` }
+  const cover = row.product.trackBatch ? batchCoverage(row) : null
+  if (cover?.over.length)
+    return { tone: 'error', text: `${cover.over[0].batchNumber} too low` }
+  if (cover && cover.short > 1e-9 && !cover.expiredOnly)
+    return { tone: 'error', text: `Batch short ${fmtQty(cover.short)}` }
   if (qty > row.available + 1e-9)
     return { tone: 'error', text: `Short ${fmtQty(qty - row.available)}` }
   // Capped at what's on hand while more is needed: postable, but the floor will be short.
@@ -413,7 +497,7 @@ export function rowStatus(row: IssueRow): RowStatus {
       tone: 'warn',
       text: `Stock short ${fmtQty(needed - row.available)}`,
     }
-  if (batch && isExpiredDate(batch.expiryDate))
+  if (cover && (cover.expired || cover.expiredOnly))
     return { tone: 'warn', text: 'Expired batch' }
   const credited = qty / (row.ratio || 1)
   if (credited > remainingOf(row) + 1e-9)
@@ -421,8 +505,12 @@ export function rowStatus(row: IssueRow): RowStatus {
       tone: 'warn',
       text: `Over by ${fmtQty(credited - remainingOf(row))}`,
     }
-  if (row.product.trackBatch && !row.batchId)
-    return { tone: 'ok', text: 'FEFO' }
+  if (cover && cover.allocations.length > 1)
+    return {
+      tone: 'ok',
+      text: `${cover.manual ? 'Split' : 'FEFO'} ×${cover.allocations.length}`,
+    }
+  if (cover && !cover.manual) return { tone: 'ok', text: 'FEFO' }
   return { tone: 'ok', text: 'OK' }
 }
 
@@ -601,10 +689,26 @@ export function createIssueConfig(opts: {
         ? rowFromPending(row, product, pending)
         : rowFromProduct(row, product)
     },
-    computeRow: (row) =>
-      row.product?.trackSerial
-        ? { ...row, quantity: row.serials?.length || null }
-        : row,
+    computeRow: (row) => {
+      if (row.product?.trackSerial)
+        return { ...row, quantity: row.serials?.length || null }
+      // A picked batch split follows the quantity: same batches first, each up to what it
+      // holds, topped up from the next batches by expiry.
+      if (
+        row.product?.trackBatch &&
+        row.batches?.length &&
+        (row.quantity || 0) > 0
+      ) {
+        const { allocations } = refitAllocations(
+          row.batches,
+          batchesOf(row.product),
+          row.quantity || 0
+        )
+        if (!sameAllocations(allocations, row.batches))
+          return { ...row, ...allocationFields(allocations) }
+      }
+      return row
+    },
     validateRow: (row) => {
       const errors: Record<string, string> = {}
       if (!row.product) {
@@ -615,11 +719,21 @@ export function createIssueConfig(opts: {
         errors.product = 'Not a material of this order'
       if (row.quantity !== null && row.quantity < 0)
         errors.quantity = 'Quantity cannot be negative'
-      const batch = row.batchId
-        ? batchesOf(row.product).find((b) => b.id === row.batchId)
-        : null
-      if (batch && (row.quantity || 0) > batch.quantity)
-        errors.batchId = `Batch ${batch.batchNumber} has only ${fmtQty(batch.quantity)}`
+      if (row.product.trackBatch && (row.quantity || 0) > 0) {
+        const c = batchCoverage(row)
+        const qty = row.quantity || 0
+        if (c.over.length) {
+          const b = batchesOf(row.product).find(
+            (x) => x.id === c.over[0].batchId
+          )
+          errors.batchId = `Batch ${c.over[0].batchNumber} has only ${fmtQty(b?.quantity ?? 0)}`
+        } else if (c.short > 1e-9 && !c.expiredOnly)
+          errors.batchId = c.manual
+            ? `Batches cover ${fmtQty(qty - c.short)} of ${fmtQty(qty)} — add a batch`
+            : c.unbatched > 1e-9
+              ? `Batches hold ${fmtQty(qty - c.short)} — ${fmtQty(c.unbatched)} in stock have no batch`
+              : `Batches hold only ${fmtQty(qty - c.short)} — ${fmtQty(c.short)} short`
+      }
       return errors
     },
     validateHeader: (h) => ({
@@ -696,7 +810,10 @@ export const rowToLine = (row: IssueRow): IssueVoucherLine => ({
   productId: refOf(row.product)?.line.productId ?? null,
   alternativeProductId: row.alternativeProductId,
   quantity: row.product?.trackSerial ? row.serials?.length || 0 : row.quantity,
-  batchId: row.batchId || null,
+  batchId: row.batches?.length ? null : row.batchId || null,
+  batches: row.batches?.length
+    ? row.batches.map((b) => ({ batchId: b.batchId, quantity: b.quantity }))
+    : undefined,
   serialNumbers: row.serials?.length ? row.serials : undefined,
 })
 

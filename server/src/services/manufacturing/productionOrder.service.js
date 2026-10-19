@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { ProductionOrder, Product, ProductVariant, Bom, User } = require('../../models');
+const { ProductionOrder, ProductionReceipt, Product, ProductVariant, Bom, User } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const {
   transitionsFor,
@@ -14,6 +14,11 @@ const executionService = require('./execution.service');
 const operationsService = require('./operations.service');
 const wip = require('./wip');
 const { roundQty, requireBranch, scopeFilter, escapeRegex, parseDateRange } = require('./common');
+
+const cleanBatchNumber = (v) =>
+  String(v || '')
+    .trim()
+    .slice(0, 60);
 
 const findOrderOrThrow = async ({ organizationId, branchId }, orderId) => {
   const order = await ProductionOrder.findOne({ _id: orderId, ...scopeFilter({ organizationId, branchId }) });
@@ -162,6 +167,8 @@ const buildOrderDoc = async ({ organizationId, branchId, createdBy }, body, sett
     bomId: bom ? bom._id : null,
     bomNumber: bom ? bom.bomNumber : undefined,
     bomVersion: bom ? bom.version : undefined,
+    // Blank = numbered on create (assignNumbers).
+    batchNumber: cleanBatchNumber(body.batchNumber),
     plannedQuantity,
     plannedStartDate: body.plannedStartDate || null,
     plannedCompletionDate: body.plannedCompletionDate || null,
@@ -183,12 +190,47 @@ const buildOrderDoc = async ({ organizationId, branchId, createdBy }, body, sett
 
 const numberKeyOf = (doc) => (doc.orderType === 'assembly' ? 'assemblyOrder' : 'productionOrder');
 
+/** Refuses a batch number that another live order of the same product already uses. */
+const assertBatchFree = async ({ organizationId, branchId }, { productId, batchNumber, exceptId }, session) => {
+  if (!batchNumber) return;
+  const clash = await ProductionOrder.findOne({
+    organizationId,
+    branchId,
+    productId,
+    batchNumber,
+    status: { $ne: 'cancelled' },
+    ...(exceptId ? { _id: { $ne: exceptId } } : {}),
+  })
+    .select('orderNumber')
+    .session(session || null)
+    .lean();
+  if (clash) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Batch ${batchNumber} is already used by ${clash.orderNumber} for this product`
+    );
+  }
+};
+
+/**
+ * The order number and finished-goods batch number of a new order: a typed batch number
+ * is kept (if no other order of the product has it), a blank one comes from the batch
+ * sequence (settings batchNumbering). Inside the caller's transaction when given one.
+ */
+const assignNumbers = async (ctx, doc, { session } = {}) => {
+  const orderNumber = await settingsService.nextDocumentNumber(ctx.organizationId, numberKeyOf(doc), { session });
+  if (doc.batchNumber) {
+    await assertBatchFree(ctx, { productId: doc.productId, batchNumber: doc.batchNumber }, session);
+    return { orderNumber, batchNumber: doc.batchNumber };
+  }
+  return { orderNumber, batchNumber: await settingsService.nextBatchNumber(ctx.organizationId, orderNumber, { session }) };
+};
+
 const createOrder = async (ctx, body) => {
   requireBranch(ctx.branchId);
   const settings = await settingsService.getSettings(ctx.organizationId);
   const doc = await buildOrderDoc(ctx, body, settings);
-  const orderNumber = await settingsService.nextDocumentNumber(ctx.organizationId, numberKeyOf(doc));
-  return ProductionOrder.create({ ...doc, orderNumber });
+  return ProductionOrder.create({ ...doc, ...(await assignNumbers(ctx, doc)) });
 };
 
 const queryOrders = async ({ organizationId, branchId }, filter, options) => {
@@ -210,7 +252,7 @@ const queryOrders = async ({ organizationId, branchId }, filter, options) => {
   Object.assign(query, parseDateRange(filter.dateFrom, filter.dateTo, 'plannedStartDate'));
   if (filter.search) {
     const re = new RegExp(escapeRegex(filter.search), 'i');
-    query.$or = [{ orderNumber: re }, { productName: re }, { sku: re }, { bomNumber: re }];
+    query.$or = [{ orderNumber: re }, { batchNumber: re }, { productName: re }, { sku: re }, { bomNumber: re }];
   }
   return ProductionOrder.paginate(query, { sortBy: 'createdAt:desc', ...options });
 };
@@ -277,6 +319,18 @@ const updateOrder = async ({ organizationId, branchId, createdBy }, orderId, bod
   HEADER_FIELDS.forEach((field) => {
     if (body[field] !== undefined) order[field] = body[field];
   });
+  if (body.batchNumber !== undefined) {
+    const batchNumber = cleanBatchNumber(body.batchNumber);
+    if (batchNumber !== (order.batchNumber || '')) {
+      // Units already received carry the old number into stock — it can't move under them.
+      if (order.completedQuantity > 0 || (await ProductionReceipt.exists({ productionOrderId: order._id }))) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'The batch number is fixed once finished goods have been received');
+      }
+      if (!batchNumber) throw new ApiError(httpStatus.BAD_REQUEST, 'Enter a batch number');
+      await assertBatchFree({ organizationId, branchId }, { productId: order.productId, batchNumber, exceptId: order._id });
+      order.batchNumber = batchNumber;
+    }
+  }
   order.updatedBy = createdBy;
   await order.save();
   return order;
@@ -682,6 +736,7 @@ module.exports = {
   getOrderTree,
   buildOrderDoc,
   numberKeyOf,
+  assignNumbers,
   RESERVING_STATUSES,
   isAheadOf,
   createOrder,

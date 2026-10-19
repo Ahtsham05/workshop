@@ -41,7 +41,7 @@ const rowBody = (header, line) => {
   HEADER_DEFAULTS.forEach((key) => {
     if (header[key] !== undefined && header[key] !== '' && header[key] !== null) body[key] = header[key];
   });
-  ['productId', 'variantId', 'bomId', 'plannedQuantity'].forEach((key) => {
+  ['productId', 'variantId', 'bomId', 'plannedQuantity', 'batchNumber'].forEach((key) => {
     if (line[key] !== undefined && line[key] !== '') body[key] = line[key];
   });
   ['priority', 'plannedStartDate', 'plannedCompletionDate'].forEach((key) => {
@@ -180,15 +180,9 @@ const createBatch = async (ctx, body) => {
     // eslint-disable-next-line no-restricted-syntax
     for (const doc of check.docs) {
       // eslint-disable-next-line no-await-in-loop
-      const orderNumber = await settingsService.nextDocumentNumber(
-        ctx.organizationId,
-        productionOrderService.numberKeyOf(doc),
-        {
-          session,
-        }
-      );
+      const numbers = await productionOrderService.assignNumbers(ctx, doc, { session });
       // eslint-disable-next-line no-await-in-loop
-      const [order] = await ProductionOrder.create([{ ...doc, orderNumber }], { session });
+      const [order] = await ProductionOrder.create([{ ...doc, ...numbers }], { session });
       created.push(order);
     }
     return created;

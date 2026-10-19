@@ -19,7 +19,9 @@ import {
   useSetBomActiveMutation,
   useSetDefaultBomMutation,
   type Bom,
+  type BomTrackingInfo,
   type BomTreeNode,
+  type ProductBatchTracking,
 } from '@/stores/manufacturing.api'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { cn } from '@/lib/utils'
@@ -39,6 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useConfirm } from '../lib/confirm'
 import { fmtDate, fmtQty } from '../lib/constants'
+import { BatchBadge } from './badges'
 import { BomEditorDialog, type BomEditorMode } from './bom-editor-dialog'
 
 export function BomStateBadges({
@@ -138,6 +141,18 @@ export function BomDetailSheet({
                   ` · ${t('from')} ${fmtDate(bom.effectiveFrom)}`}
                 {bom.effectiveTo && ` ${t('to')} ${fmtDate(bom.effectiveTo)}`}
               </SheetDescription>
+              {(bom.tracking?.[bom.productId]?.trackBatch ||
+                bom.tracking?.[bom.productId]?.trackExpiry) && (
+                <div className='flex flex-wrap items-center gap-1.5 text-xs'>
+                  <TrackingTag info={bom.tracking?.[bom.productId]} />
+                  <span className='text-muted-foreground'>
+                    {t('Each production order makes its own batch')}
+                    {bom.productShelfLifeDays
+                      ? ` · ${t('shelf life')} ${bom.productShelfLifeDays} ${t('days')}`
+                      : ''}
+                  </span>
+                </div>
+              )}
               {canManage && (
                 <div className='flex flex-wrap gap-2 pt-2'>
                   {!bom.isLocked && (
@@ -277,10 +292,11 @@ function StructureTab({
   bom,
   onSelect,
 }: {
-  bom: Bom
+  bom: Bom & BomTrackingInfo
   onSelect: (id: string) => void
 }) {
   const { t } = useLanguage()
+  const tracking = bom.tracking
   const [qty, setQty] = useState(String(bom.quantity))
   const quantity = Number(qty) > 0 ? Number(qty) : bom.quantity
   const { data, isFetching } = useExplodeBomQuery({ bomId: bom.id, quantity })
@@ -316,6 +332,7 @@ function StructureTab({
             node={node}
             depth={0}
             onSelect={onSelect}
+            tracking={tracking}
           />
         ))}
         {!data && <Skeleton className='m-3 h-24' />}
@@ -333,8 +350,10 @@ function TreeRow({
   node,
   depth,
   onSelect,
+  tracking,
 }: {
   node: BomTreeNode
+  tracking?: BomTrackingInfo['tracking']
   depth: number
   onSelect: (id: string) => void
 }) {
@@ -372,6 +391,7 @@ function TreeRow({
             </span>
           )}
           <span className='truncate'>{node.productName}</span>
+          <TrackingTag info={tracking?.[node.productId]} />
           {node.isOptional && (
             <Badge
               variant='outline'
@@ -414,6 +434,7 @@ function TreeRow({
             node={child}
             depth={depth + 1}
             onSelect={onSelect}
+            tracking={tracking}
           />
         ))}
     </>
@@ -562,5 +583,22 @@ function RoutingTab({ bom }: { bom: Bom }) {
         </li>
       ))}
     </ol>
+  )
+}
+
+/** "Batch" / "Batch · Exp" tag for a batch- or expiry-tracked product line. */
+function TrackingTag({ info }: { info?: ProductBatchTracking }) {
+  const { t } = useLanguage()
+  if (!info || (!info.trackBatch && !info.trackExpiry)) return null
+  return (
+    <BatchBadge
+      size='sm'
+      mono={false}
+      batchNumber={
+        info.trackExpiry ? `${t('Batch')} · ${t('Exp')}` : t('Batch')
+      }
+      title={t('Issued and received by batch')}
+      className='shrink-0'
+    />
   )
 }

@@ -1,3 +1,4 @@
+import { Layers } from 'lucide-react'
 import type {
   ProductType,
   ProductionPriority,
@@ -103,5 +104,53 @@ export function ProgressBar({
         style={{ width: `${pct}%` }}
       />
     </div>
+  )
+}
+
+/**
+ * A batch (lot) number in the invoice's batch-pill look. `tone="danger"` for an expired
+ * or short batch; `size="sm"` inside tables.
+ */
+export function BatchBadge({
+  batchNumber,
+  tone = 'default',
+  size = 'md',
+  title,
+  className,
+  children,
+  mono = true,
+}: {
+  batchNumber: string
+  /** Batch numbers read best monospaced; counts / labels don't. */
+  mono?: boolean
+  tone?: 'default' | 'danger' | 'muted'
+  size?: 'sm' | 'md'
+  title?: string
+  className?: string
+  children?: React.ReactNode
+}) {
+  return (
+    <span
+      title={title}
+      className={cn(
+        'inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border font-medium',
+        size === 'sm' ? 'px-1.5 py-0 text-[11px]' : 'px-2 py-0.5 text-xs',
+        tone === 'danger'
+          ? 'border-destructive bg-destructive/10 text-destructive'
+          : tone === 'muted'
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-blue-600 bg-blue-100 text-blue-800 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200',
+        className
+      )}
+    >
+      <Layers
+        className={cn('shrink-0', size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3')}
+        aria-hidden
+      />
+      <span className={cn('truncate', mono && 'font-mono')}>
+        {batchNumber}
+      </span>
+      {children}
+    </span>
   )
 }

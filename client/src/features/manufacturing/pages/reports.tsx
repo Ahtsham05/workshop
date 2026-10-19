@@ -10,6 +10,8 @@ import {
   FileText,
   Factory,
   FileSpreadsheet,
+  GitBranch,
+  Layers,
   PackageMinus,
   Printer,
   RefreshCw,
@@ -22,8 +24,12 @@ import { toast } from 'sonner'
 import type { RootState } from '@/stores/store'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
-import { useGetManufacturingReportQuery } from '@/stores/manufacturing.api'
+import {
+  useGetManufacturingReportQuery,
+  useSearchManufacturingBatchesQuery,
+} from '@/stores/manufacturing.api'
 import { useCurrencyMeta } from '@/lib/format-money'
+import { formatAppDate } from '@/lib/date-format'
 import { cn } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useLanguage } from '@/context/language-context'
@@ -49,7 +55,7 @@ import { fmtQty, orderPath, statusLabel } from '../lib/constants'
 import { buildReportDoc } from '../lib/report-doc'
 import { exportReportToExcel } from '../lib/report-excel'
 import { generateReportHTML } from '../lib/report-print'
-import type { ReportKey } from '../lib/report-types'
+import type { ReportKey, ReportParams } from '../lib/report-types'
 
 type MenuKey = Exclude<ReportKey, 'stock-register'>
 
@@ -63,10 +69,12 @@ const REPORTS: { key: MenuKey; label: string; hint: string; icon: LucideIcon }[]
   { key: 'raw-materials', label: 'Raw Materials', hint: 'Purchased, issued, balance', icon: Factory },
   { key: 'in-process', label: 'In-Process Batches', hint: 'What is on the floor now', icon: Workflow },
   { key: 'scrap', label: 'Scrap & Rejection', hint: 'Losses by stage and reason', icon: Trash2 },
+  { key: 'batch-stock', label: 'Batch Stock & Expiry', hint: 'Every lot, its age and expiry', icon: Layers },
+  { key: 'batch-trace', label: 'Batch Traceability', hint: 'One lot: in, out, made from, sold to', icon: GitBranch },
 ]
 
 const PERIOD_KEY = 'mfg-report-period'
-const DATELESS: ReportKey[] = ['in-process']
+const DATELESS: ReportKey[] = ['in-process', 'batch-stock', 'batch-trace']
 const IDLE_LABEL: Partial<Record<ReportKey, string>> = {
   'finished-goods': 'Hide products with no stock and no movement',
   'raw-materials': 'Hide products with no stock and no movement',
@@ -80,12 +88,15 @@ export default function ManufacturingReportsPage({
   report = 'production',
   productId,
   orderId,
+  batchId,
   from,
 }: {
   report?: ReportKey
   productId?: string
   /** The batch (production order) of the batch report. */
   orderId?: string
+  /** The stock batch (lot) of the batch traceability report. */
+  batchId?: string
   /** Report a stock register or batch report was opened from (for the back link). */
   from?: MenuKey
 }) {
@@ -101,10 +112,15 @@ export default function ManufacturingReportsPage({
   const [status, setStatus] = useState<'all' | 'open' | 'completed'>('all')
   const [search, setSearch] = useState('')
   const [hideIdle, setHideIdle] = useState(true)
+  const [batchKind, setBatchKind] = useState<NonNullable<ReportParams['kind']>>('all')
+  const [expiry, setExpiry] = useState<NonNullable<ReportParams['expiry']>>('all')
+  const [withEmpty, setWithEmpty] = useState(false)
   const debouncedSearch = useDebouncedValue(search, 300)
 
   const isRegister = report === 'stock-register'
   const isBatch = report === 'batch'
+  const isBatchStock = report === 'batch-stock'
+  const isTrace = report === 'batch-trace'
   const active: MenuKey = isRegister ? from || 'finished-goods' : (report as MenuKey)
 
   const changePeriod = (next: LedgerPeriod) => {
@@ -126,8 +142,28 @@ export default function ManufacturingReportsPage({
     ...(IDLE_LABEL[report] ? { hideIdle } : {}),
     ...(isRegister && productId ? { productId } : {}),
     ...(isBatch && orderId ? { productionOrderId: orderId } : {}),
+    ...(isBatchStock
+      ? {
+          kind: batchKind,
+          expiry,
+          stock: withEmpty ? ('all' as const) : ('in' as const),
+          search: debouncedSearch.trim() || undefined,
+        }
+      : {}),
+    ...(isTrace && batchId ? { batchId } : {}),
   }
-  const skip = (isRegister && !productId) || (isBatch && !orderId)
+  const skip = (isRegister && !productId) || (isBatch && !orderId) || (isTrace && !batchId)
+  // The traceability picker: the branch's most recent batches.
+  const { data: batchHits, isFetching: loadingLots } = useSearchManufacturingBatchesQuery('', { skip: !isTrace })
+  const lotOptions = useMemo(
+    () =>
+      (batchHits || []).map((b) => ({
+        value: b.id,
+        label: `${b.batchNumber} — ${b.productName}`,
+        sublabel: `${fmtQty(b.quantity)} ${b.unit}${b.expiryDate ? ` · ${t('exp')} ${formatAppDate(new Date(b.expiryDate))}` : ''}`,
+      })),
+    [batchHits, t]
+  )
   // The batch picker lists the batches worked in the chosen period.
   const { data: batchList, isFetching: loadingBatches } = useGetManufacturingReportQuery(
     { report: 'production', startDate: period.startDate, endDate: period.endDate },
@@ -150,6 +186,10 @@ export default function ManufacturingReportsPage({
   })
   // A previous report's data can linger while the next one loads — only draw a match.
   const current = data && data.report === report ? data : undefined
+  const tracedOptions =
+    current?.report === 'batch-trace' && !lotOptions.some((o) => o.value === current.batch.id)
+      ? [{ value: current.batch.id, label: `${current.batch.batchNumber} — ${current.batch.productName}` }, ...lotOptions]
+      : lotOptions
   const pickerOptions =
     current?.report === 'batch' && !batchOptions.some((o) => o.value === current.order.id)
       ? [{ value: current.order.id, label: `${current.order.orderNumber} — ${current.order.productName}` }, ...batchOptions]
@@ -260,7 +300,7 @@ export default function ManufacturingReportsPage({
       </nav>
 
       <div className='bg-card space-y-3 rounded-xl border px-4 py-3'>
-        {(isRegister || (isBatch && from)) && (
+        {(isRegister || ((isBatch || isTrace) && from)) && (
           <Button
             variant='ghost'
             size='sm'
@@ -273,7 +313,11 @@ export default function ManufacturingReportsPage({
         )}
         {DATELESS.includes(report) ? (
           <p className='text-muted-foreground text-sm'>
-            {t('Shows the position right now — every batch released, running, paused or waiting for QC.')}
+            {isBatchStock
+              ? t('Every batch (lot) held right now — where it came from, when it was made and when it expires.')
+              : isTrace
+                ? t('Follow one batch: every quantity in and out, the material batches it was made from, the orders it went into and the customers who bought it.')
+                : t('Shows the position right now — every batch released, running, paused or waiting for QC.')}
           </p>
         ) : (
           <div className='flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between'>
@@ -338,6 +382,59 @@ export default function ManufacturingReportsPage({
             )}
           </div>
         )}
+        {isBatchStock && (
+          <div className='flex flex-col gap-3 border-t pt-3'>
+            <div className='flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between'>
+              <FilterChips
+                label={t('Products')}
+                value={batchKind}
+                onChange={(v) => setBatchKind(v as typeof batchKind)}
+                options={[
+                  { value: 'all', label: t('All products') },
+                  { value: 'finished', label: t('Finished goods') },
+                  { value: 'materials', label: t('Raw & packing') },
+                ]}
+              />
+              <FilterChips
+                label={t('Expiry')}
+                value={expiry}
+                onChange={(v) => setExpiry(v as typeof expiry)}
+                options={[
+                  { value: 'all', label: t('Any expiry') },
+                  { value: 'expired', label: t('Expired') },
+                  { value: '30', label: t('≤ 30 days') },
+                  { value: '60', label: t('≤ 60 days') },
+                  { value: '90', label: t('≤ 90 days') },
+                ]}
+              />
+            </div>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <SearchField value={search} onChange={setSearch} placeholder={t('Search batch no., product or SKU')} />
+              <label className='flex items-center gap-2 text-sm'>
+                <Switch checked={withEmpty} onCheckedChange={setWithEmpty} />
+                {t('Include used-up batches')}
+              </label>
+            </div>
+          </div>
+        )}
+        {isTrace && (
+          <div className='flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-end'>
+            <div className='min-w-0 flex-1 space-y-1 sm:max-w-md'>
+              <Label className='text-muted-foreground text-xs'>
+                {t('Batch (lot)')}
+                {loadingLots ? ' …' : ` (${lotOptions.length} ${t('recent')})`}
+              </Label>
+              <SearchableSelect
+                options={tracedOptions}
+                value={batchId || ''}
+                onValueChange={(id) => id && go({ report: 'batch-trace', batchId: id, from })}
+                placeholder={t('Choose a batch')}
+                searchPlaceholder={t('Search batch no. or product')}
+                emptyText={t('No batch found — open Batch Stock & Expiry to find older batches.')}
+              />
+            </div>
+          </div>
+        )}
         {(WITH_STATUS.includes(report) || STATEMENTS.includes(report) || IDLE_LABEL[report]) && (
           <div className='flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between'>
             {WITH_STATUS.includes(report) && (
@@ -366,7 +463,13 @@ export default function ManufacturingReportsPage({
       </div>
 
       {skip ? (
-        isBatch ? (
+        isTrace ? (
+          <EmptyState
+            icon={GitBranch}
+            title={t('Choose a batch')}
+            description={t('Pick a batch above, or click any batch in Batch Stock & Expiry.')}
+          />
+        ) : isBatch ? (
           <EmptyState
             icon={FileText}
             title={t('Choose a batch')}
@@ -396,11 +499,15 @@ export default function ManufacturingReportsPage({
         </div>
       ) : (
         <div className={cn('transition-opacity', isFetching && 'opacity-60')} aria-busy={isFetching}>
-          {(STATEMENTS.includes(report) || DRILLS_TO_BATCH.includes(report)) && (
+          {(STATEMENTS.includes(report) || DRILLS_TO_BATCH.includes(report) || isBatchStock || isTrace) && (
             <p className='text-muted-foreground mb-2 text-xs'>
               {STATEMENTS.includes(report)
                 ? t('Click a product to open its day-by-day stock register.')
-                : t('Click a batch to open its full batch report.')}
+                : isBatchStock
+                  ? t('Click a batch to trace it.')
+                  : isTrace
+                    ? t('Click a production order to open its batch report, or a material batch to trace it further back.')
+                    : t('Click a batch to open its full batch report.')}
             </p>
           )}
           <ReportView
@@ -410,7 +517,9 @@ export default function ManufacturingReportsPage({
             onDrill={(drill) =>
               'productId' in drill
                 ? go({ report: 'stock-register', productId: drill.productId, from: report })
-                : go({ report: 'batch', orderId: drill.orderId, from: isBatch ? from : (report as MenuKey) })
+                : 'batchId' in drill
+                  ? go({ report: 'batch-trace', batchId: drill.batchId, from: isTrace ? from : (report as MenuKey) })
+                  : go({ report: 'batch', orderId: drill.orderId, from: isBatch ? from : (report as MenuKey) })
             }
           />
         </div>

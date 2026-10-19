@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Eye,
   FileStack,
+  Layers,
   MoreHorizontal,
   Package,
   Pencil,
@@ -19,6 +20,7 @@ import { toast } from 'sonner'
 import {
   manufacturingApi,
   useBulkClassifyProductsMutation,
+  useBulkProductTrackingMutation,
   useGetManufacturingProductStatsQuery,
   useGetManufacturingProductsQuery,
   useGetProductTypeSummaryQuery,
@@ -57,7 +59,7 @@ import {
 import { ImageGalleryViewer } from '@/components/image-gallery-viewer'
 import { ProductSummaryChip } from '@/features/products/components/product-summary-chip'
 import { UsersActionDialog } from '@/features/products/components/users-action-dialog'
-import { ProductTypeBadge } from '../components/badges'
+import { BatchBadge, ProductTypeBadge } from '../components/badges'
 import { DataTable, type Column } from '../components/data-table'
 import {
   FilterChips,
@@ -67,6 +69,7 @@ import {
 import { EmptyState } from '../components/page'
 import { Pager } from '../components/pager'
 import { ProductAttributesSheet } from '../components/product-attributes-sheet'
+import { ProductBatchesSheet } from '../components/product-batches-sheet'
 import {
   PROCUREMENT_LABELS,
   PRODUCT_TYPES,
@@ -76,6 +79,20 @@ import {
 
 const NONE = '__none__'
 const ANY = 'any'
+
+/** Whole calendar days from today to `date` (negative = expired). */
+const daysFromToday = (date: string) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.floor((new Date(date).getTime() - today.getTime()) / 86400000)
+}
+
+const batchCountLabel = (n: number, t: (s: string) => string) =>
+  n === 0
+    ? t('No batches')
+    : n === 1
+      ? t('1 batch')
+      : t('{{n}} batches').replace('{{n}}', String(n))
 type Sort = 'name' | 'newest' | 'stock' | 'stockLow' | 'cost'
 
 /**
@@ -124,6 +141,10 @@ export default function ManufacturingProducts({
   const [procurement, setProcurement] = useState<string>(ANY)
   const [bom, setBom] = useState<string>(ANY)
   const [stock, setStock] = useState<string>(ANY)
+  const [tracking, setTracking] = useState<string>(ANY)
+  const [batchesOf, setBatchesOf] = useState<ManufacturingProduct | null>(
+    null
+  )
   const [sort, setSort] = useState<Sort>('name')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string[]>([])
@@ -147,6 +168,7 @@ export default function ManufacturingProducts({
         : (procurement as ProcurementType | 'none'),
     hasBom: bom === ANY ? undefined : bom === 'yes',
     stock: stock === ANY ? undefined : (stock as 'in' | 'out'),
+    tracking: tracking === ANY ? undefined : (tracking as 'batch' | 'none'),
   }
   const { data: summary } = useGetProductTypeSummaryQuery()
   const { data: stats, isFetching: statsLoading } =
@@ -159,6 +181,8 @@ export default function ManufacturingProducts({
   })
   const [bulkClassify, { isLoading: bulkBusy }] =
     useBulkClassifyProductsMutation()
+  const [bulkTracking, { isLoading: trackingBusy }] =
+    useBulkProductTrackingMutation()
   const { data: productForEdit } = useGetProductQuery(editingId as string, {
     skip: !editingId,
   })
@@ -169,7 +193,11 @@ export default function ManufacturingProducts({
   const someOnPage = rows.some((r) => selected.includes(r.id))
   const total = summary ? Object.values(summary).reduce((s, n) => s + n, 0) : 0
   const filtered =
-    !!debounced || procurement !== ANY || bom !== ANY || stock !== ANY
+    !!debounced ||
+    procurement !== ANY ||
+    bom !== ANY ||
+    stock !== ANY ||
+    tracking !== ANY
   const resetPage = () => {
     setPage(1)
     setSelected([])
@@ -210,6 +238,31 @@ export default function ManufacturingProducts({
       setBulkType('')
     } catch (err) {
       toast.error(getErrorMessage(err, t('Failed to classify products')))
+    }
+  }
+
+  /** Batch tracking on / off for the selected products (each on its own). */
+  const applyTracking = async (flags: {
+    trackBatch: boolean
+    trackExpiry?: boolean
+  }) => {
+    if (!selected.length) return
+    try {
+      const res = await bulkTracking({
+        productIds: selected,
+        ...flags,
+      }).unwrap()
+      if (res.updated)
+        toast.success(
+          t('Batch tracking updated for {{count}} product(s)').replace(
+            '{{count}}',
+            String(res.updated)
+          )
+        )
+      res.failed.forEach((f) => toast.error(`${f.name}: ${f.message}`))
+      if (!res.failed.length) setSelected([])
+    } catch (err) {
+      toast.error(getErrorMessage(err, t('Failed to update batch tracking')))
     }
   }
 
@@ -353,6 +406,55 @@ export default function ManufacturingProducts({
       ),
     },
     {
+      id: 'batches',
+      header: t('Batches'),
+      hideBelow: 'md',
+      cell: (p) => {
+        const tr = p.tracking
+        if (!tr?.trackBatch && !tr?.trackExpiry)
+          return <span className='text-muted-foreground'>—</span>
+        const days = tr.nearestExpiry ? daysFromToday(tr.nearestExpiry) : null
+        return (
+          <button
+            type='button'
+            onClick={(e) => {
+              e.stopPropagation()
+              setBatchesOf(p)
+            }}
+            className='group text-left'
+            title={t('Show batches')}
+          >
+            <BatchBadge
+              size='sm'
+              tone={tr.expiredQuantity > 0 ? 'danger' : tr.batchCount ? 'default' : 'muted'}
+              mono={false}
+              batchNumber={batchCountLabel(tr.batchCount, t)}
+              className='group-hover:underline'
+            />
+            {days !== null && (
+              <div
+                className={cn(
+                  'mt-0.5 text-[11px] tabular-nums',
+                  days < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : days <= 30
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-muted-foreground'
+                )}
+              >
+                {days < 0 ? t('Expired stock') : `${t('exp')} ${t('{{n}}d').replace('{{n}}', String(days))}`}
+              </div>
+            )}
+            {(tr.unbatchedQuantity || 0) > 0 && (
+              <div className='mt-0.5 text-[11px] font-medium text-amber-600 tabular-nums dark:text-amber-400'>
+                {fmtQty(tr.unbatchedQuantity || 0)} {t('without batch')}
+              </div>
+            )}
+          </button>
+        )
+      },
+    },
+    {
       id: 'bom',
       header: t('BOM'),
       hideBelow: 'lg',
@@ -420,6 +522,12 @@ export default function ManufacturingProducts({
               <DropdownMenuItem onClick={() => setAttributes(p)}>
                 <Settings2 className='mr-2 h-4 w-4' />
                 {t('Manufacturing settings')}
+              </DropdownMenuItem>
+            )}
+            {(p.tracking?.trackBatch || p.tracking?.trackExpiry) && (
+              <DropdownMenuItem onClick={() => setBatchesOf(p)}>
+                <Layers className='mr-2 h-4 w-4' />
+                {t('Batches')}
               </DropdownMenuItem>
             )}
             {hasPermission('manageBoms') && (
@@ -590,6 +698,41 @@ export default function ManufacturingProducts({
               <Tags className='mr-1.5 h-3.5 w-3.5' />
               {t('Apply')}
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  className='h-9'
+                  disabled={trackingBusy}
+                >
+                  <Layers className='mr-1.5 h-3.5 w-3.5' />
+                  {t('Batch tracking')}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end' className='w-56'>
+                <DropdownMenuItem
+                  onClick={() => applyTracking({ trackBatch: true })}
+                >
+                  {t('Track batches')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    applyTracking({ trackBatch: true, trackExpiry: true })
+                  }
+                >
+                  {t('Track batches + expiry')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() =>
+                    applyTracking({ trackBatch: false, trackExpiry: false })
+                  }
+                >
+                  {t('Turn tracking off')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               size='sm'
               variant='ghost'
@@ -652,6 +795,19 @@ export default function ManufacturingProducts({
                 [ANY, t('All stock')],
                 ['in', t('In stock')],
                 ['out', t('Out of stock')],
+              ]}
+            />
+            <FilterSelect
+              label={t('Batch tracking')}
+              value={tracking}
+              onChange={(v) => {
+                setTracking(v)
+                resetPage()
+              }}
+              options={[
+                [ANY, t('Any tracking')],
+                ['batch', t('Batch tracked')],
+                ['none', t('Not batch tracked')],
               ]}
             />
             <FilterSelect
@@ -726,6 +882,11 @@ export default function ManufacturingProducts({
                   {fmtQty(p.stockQuantity)} {getUnitLabel(p.unit)}
                 </span>
                 <span>{formatMoney(p.cost)}</span>
+                {p.tracking?.trackBatch && (
+                  <span className='text-blue-700 dark:text-blue-300'>
+                    {batchCountLabel(p.tracking.batchCount, t)}
+                  </span>
+                )}
                 {p.bomCount > 0 && (
                   <span>
                     {t('{{count}} BOM').replace(
@@ -744,6 +905,15 @@ export default function ManufacturingProducts({
           ) : undefined
         }
       />
+
+      {batchesOf && (
+        <ProductBatchesSheet
+          productId={batchesOf.id}
+          productName={batchesOf.name}
+          unit={batchesOf.unit}
+          onClose={() => setBatchesOf(null)}
+        />
+      )}
 
       {attributes && (
         <ProductAttributesSheet

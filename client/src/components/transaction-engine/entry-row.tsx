@@ -18,6 +18,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { BatchCell } from './cells/batch-cell'
 import type { CellProps } from './cells/cell-props'
 import { ComputedCell } from './cells/computed-cell'
 import { NumberCell } from './cells/number-cell'
@@ -56,8 +57,9 @@ function EntryCell(props: CellProps) {
     case 'unit':
     case 'select':
     case 'warehouse':
-    case 'batch':
       return <SelectCell {...props} />
+    case 'batch':
+      return <BatchCell {...props} />
     case 'serial':
       return <SerialCell {...props} />
     case 'computed':

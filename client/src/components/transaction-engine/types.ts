@@ -41,6 +41,13 @@ export interface EntryBatch {
   cost?: number | null
 }
 
+/** How much of a row comes out of one batch (a row may split over several). */
+export interface EntryBatchAllocation {
+  batchId: string
+  batchNumber: string
+  quantity: number
+}
+
 export interface EntrySerial {
   id: string
   serial: string
@@ -84,6 +91,11 @@ export interface StockSource {
     opts: { batchId?: string | null; search?: string }
   ) => Promise<EntrySerial[]>
   warehouses?: EntryWarehouse[]
+  /**
+   * Puts a product's stock that no batch accounts for into a new batch (so it can be
+   * picked). Offered by the batch picker when batches hold less than the stock.
+   */
+  assignUnbatched?: (product: EntryProduct) => Promise<EntryBatch | null>
 }
 
 /** Every row carries these; configs extend it with their own fields. */
@@ -96,6 +108,12 @@ export interface EntryRowBase {
   rate?: number | null
   batchId?: string | null
   batchNumber?: string | null
+  /**
+   * Batches picked for the row, in the order they are drawn from; their quantities add
+   * up to the row's. Empty / null = automatic (earliest expiry first). `batchId` mirrors a
+   * single pick.
+   */
+  batches?: EntryBatchAllocation[] | null
   serials?: string[]
   warehouseId?: string | null
 }

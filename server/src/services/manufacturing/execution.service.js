@@ -621,7 +621,11 @@ const receiveGood = async (
     );
   } else if (item.batchTracked) {
     await stockService.ensureLedgerAnchor(item, session);
-    const batchNumber = String(fg.batchNumber || order.orderNumber).trim();
+    const batchNumber = String(fg.batchNumber || order.batchNumber || order.orderNumber).trim();
+    const manufactureDate = fg.manufactureDate ? new Date(fg.manufactureDate) : new Date();
+    // No expiry given: the product's shelf life from the manufacture date, if it has one.
+    const shelfLife = Number(item.product.shelfLifeDays) || 0;
+    const expiryDate = fg.expiryDate || (shelfLife > 0 ? new Date(manufactureDate.getTime() + shelfLife * 86400000) : null);
     batch = await Batch.findOneAndUpdate(
       { organizationId, inventoryId: item.inventory._id, batchNumber },
       {
@@ -629,13 +633,21 @@ const receiveGood = async (
           quantity: 0,
           costPerUnit: unitCost,
           productionOrderId: order._id,
-          manufactureDate: fg.manufactureDate || new Date(),
-          expiryDate: fg.expiryDate || null,
+          manufactureDate,
+          expiryDate,
         },
         $set: { status: 'active' },
       },
       { upsert: true, new: true, session }
     );
+    // A later receipt into the same batch: its unit cost becomes the weighted average.
+    if (batch.quantity > EPS && Math.abs((batch.costPerUnit || 0) - unitCost) > 1e-9) {
+      const costPerUnit = roundMoney(
+        (batch.quantity * (batch.costPerUnit || 0) + quantity * unitCost) / (batch.quantity + quantity)
+      );
+      await Batch.updateOne({ _id: batch._id }, { $set: { costPerUnit } }, { session });
+      batch.costPerUnit = costPerUnit;
+    }
   }
 
   const balanceAfter = await stockService.applyAvailableDelta(item, quantity, {

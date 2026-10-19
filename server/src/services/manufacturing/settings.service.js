@@ -1,5 +1,6 @@
 const { ManufacturingSettings } = require('../../models');
 const { COUNTER_KEYS } = require('../../config/manufacturing');
+const { toBusinessCalendarDate } = require('../../utils/businessTimezone');
 
 /** Returns the org's manufacturing settings, creating the defaults on first use. */
 const getSettings = async (organizationId) =>
@@ -22,6 +23,7 @@ const UPDATABLE_FIELDS = [
   'requireQualityCheck',
   'defaultRejectDisposition',
   'autoCompleteOrders',
+  'batchNumbering',
 ];
 
 const updateSettings = async (organizationId, body, updatedBy) => {
@@ -61,4 +63,25 @@ const nextDocumentNumber = async (organizationId, key, { session } = {}) => {
   return `${prefix}-${String(seq).padStart(settings.numberPadding || 5, '0')}`;
 };
 
-module.exports = { getSettings, updateSettings, nextDocumentNumber };
+/**
+ * The finished-goods batch (lot) number for a new production order: the org's dated
+ * sequence — prefix + production day (business timezone) + running number, e.g.
+ * B261019-007 — or, with batchNumbering 'order', the order number itself. Same session
+ * rules as nextDocumentNumber.
+ */
+const nextBatchNumber = async (organizationId, orderNumber, { session, date = new Date() } = {}) => {
+  const current = await (session
+    ? ManufacturingSettings.findOne({ organizationId }).session(session)
+    : getSettings(organizationId));
+  if (current && current.batchNumbering === 'order') return orderNumber;
+  const settings = await ManufacturingSettings.findOneAndUpdate(
+    { organizationId },
+    { $inc: { 'counters.batch': 1 } },
+    { new: true, session }
+  );
+  const day = toBusinessCalendarDate(date).replace(/-/g, '').slice(2); // YYMMDD
+  const prefix = (settings.prefixes && settings.prefixes.batch) || 'B';
+  return `${prefix}${day}-${String(settings.counters.batch).padStart(3, '0')}`;
+};
+
+module.exports = { getSettings, updateSettings, nextDocumentNumber, nextBatchNumber };

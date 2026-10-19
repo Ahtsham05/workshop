@@ -31,6 +31,7 @@ const { SOLD_INVOICE_MATCH } = require('../productAnalytics.service');
 const wip = require('./wip');
 const { lineUsage } = require('./materialUsage.service');
 const { roundQty, roundMoney, aggregateScope, escapeRegex } = require('./common');
+const { batchStockReport, batchTraceReport } = require('./batchReports.service');
 
 /*
  * Manufacturing reports — read-only statements built from the documents the module (and
@@ -104,7 +105,7 @@ const productionReport = async (ctx, q) => {
   const match = workedOrdersMatch(ctx, range, q);
   const orders = await ProductionOrder.find(match)
     .select(
-      'orderNumber orderType status priority productId productName sku unit plannedQuantity producedQuantity completedQuantity rejectedQuantity qcPendingQuantity reworkPendingQuantity scrappedQuantity materialCost finishedGoodsValue plannedStartDate plannedCompletionDate actualStartDate actualCompletionDate createdAt bomNumber operatorName'
+      'orderNumber batchNumber orderType status priority productId productName sku unit plannedQuantity producedQuantity completedQuantity rejectedQuantity qcPendingQuantity reworkPendingQuantity scrappedQuantity materialCost finishedGoodsValue plannedStartDate plannedCompletionDate actualStartDate actualCompletionDate createdAt bomNumber operatorName'
     )
     .sort({ createdAt: 1 })
     .limit(MAX_ROWS)
@@ -152,6 +153,7 @@ const productionReport = async (ctx, q) => {
     return {
       id,
       orderNumber: o.orderNumber,
+      batchNumber: o.batchNumber || o.orderNumber,
       orderType: o.orderType || 'production',
       status: o.status,
       productId: String(o.productId),
@@ -1352,6 +1354,7 @@ const batchReport = async (ctx, q) => {
     order: {
       id: String(order._id),
       orderNumber: order.orderNumber,
+      batchNumber: order.batchNumber || order.orderNumber,
       orderType: order.orderType || 'production',
       status: order.status,
       priority: order.priority,
@@ -1449,6 +1452,8 @@ const REPORTS = {
   scrap: scrapReport,
   daily: dailyReport,
   batch: batchReport,
+  'batch-stock': batchStockReport,
+  'batch-trace': batchTraceReport,
 };
 
 const REPORT_KEYS = Object.keys(REPORTS);

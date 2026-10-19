@@ -13,6 +13,8 @@ export type ReportKey =
   | 'scrap'
   | 'daily'
   | 'batch'
+  | 'batch-stock'
+  | 'batch-trace'
 
 export interface ReportParams {
   report: ReportKey
@@ -23,6 +25,10 @@ export interface ReportParams {
   productionOrderId?: string
   search?: string
   hideIdle?: boolean
+  batchId?: string
+  kind?: 'all' | 'finished' | 'materials'
+  expiry?: 'all' | 'expired' | '30' | '60' | '90'
+  stock?: 'in' | 'all'
 }
 
 interface Period {
@@ -33,6 +39,7 @@ interface Period {
 export interface ProductionReportOrder {
   id: string
   orderNumber: string
+  batchNumber?: string
   orderType: OrderType
   status: ProductionStatus
   productId: string
@@ -412,6 +419,7 @@ export interface BatchReport {
   order: {
     id: string
     orderNumber: string
+    batchNumber?: string
     orderType: OrderType
     status: ProductionStatus
     priority: string
@@ -518,7 +526,146 @@ export interface BatchReport {
   }[]
 }
 
+export type BatchState = 'ok' | 'expiring' | 'expired' | 'no_expiry' | 'depleted' | 'written_off'
+
+export interface BatchSource {
+  kind: 'production' | 'purchase' | 'opening' | 'other'
+  id: string | null
+  /** Order number, or the purchase invoice number. */
+  label: string
+  /** Supplier name for purchased batches. */
+  party: string
+}
+
+export interface BatchStockReport {
+  report: 'batch-stock'
+  asOf: string
+  soonDays: number
+  rows: {
+    id: string
+    productId: string
+    productName: string
+    sku: string
+    productType: string | null
+    unit: string
+    batchNumber: string
+    source: BatchSource
+    manufactureDate: string | null
+    receivedDate: string
+    expiryDate: string | null
+    daysToExpiry: number | null
+    ageDays: number | null
+    quantity: number
+    unitCost: number
+    value: number
+    state: BatchState
+  }[]
+  byProduct: {
+    productId: string
+    productName: string
+    sku: string
+    unit: string
+    batches: number
+    quantity: number
+    value: number
+    expiredQuantity: number
+    nearestExpiry: string | null
+  }[]
+  totals: {
+    batches: number
+    products: number
+    value: number
+    expiredCount: number
+    expiredValue: number
+    expiringCount: number
+    expiringValue: number
+  }
+  truncated: boolean
+}
+
+export interface BatchTraceReport {
+  report: 'batch-trace'
+  batch: {
+    id: string
+    batchNumber: string
+    productId: string
+    productName: string
+    sku: string
+    unit: string
+    productType: string | null
+    quantity: number
+    unitCost: number
+    value: number
+    manufactureDate: string | null
+    receivedDate: string
+    expiryDate: string | null
+    daysToExpiry: number | null
+    state: BatchState
+    source: BatchSource
+  }
+  summary: {
+    received: number
+    issuedToProduction: number
+    sold: number
+    scrapped: number
+    other: number
+    balance: number
+  }
+  movements: {
+    date: string
+    type: string
+    label: string
+    number: string
+    party: string
+    refType?: string
+    refId?: string | null
+    orderId?: string | null
+    quantityIn: number
+    quantityOut: number
+    balance: number
+  }[]
+  madeFrom: {
+    orderId: string
+    orderNumber: string
+    productName: string
+    unit: string
+    plannedQuantity: number
+    completedQuantity: number
+    receivedIntoBatch: number
+    status: ProductionStatus
+    materials: {
+      productId: string
+      productName: string
+      unit: string
+      quantity: number
+      batchId: string | null
+      batchNumber: string
+      expiryDate: string | null
+      sources: { kind: 'production' | 'purchase' | 'untracked'; label: string; orderId?: string | null }[]
+    }[]
+  }[]
+  usedIn: {
+    orderId: string
+    orderNumber: string
+    productName: string
+    status: ProductionStatus
+    quantityUsed: number
+    unit: string
+    produced: {
+      receiptNumber: string
+      quantity: number
+      unit: string
+      date: string
+      batchId: string | null
+      batchNumber: string
+    }[]
+  }[]
+  soldTo: { invoiceId: string; number: string; customer: string; date: string; quantity: number }[]
+}
+
 export type ManufacturingReport =
+  | BatchStockReport
+  | BatchTraceReport
   | DailyReport
   | BatchReport
   | ProductionReport

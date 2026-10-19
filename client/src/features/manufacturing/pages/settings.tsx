@@ -7,6 +7,7 @@ import {
   type ProductionPriority,
   type RejectDisposition,
 } from '@/stores/manufacturing.api'
+import { getBusinessToday } from '@/lib/business-timezone'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -127,6 +128,7 @@ export default function ManufacturingSettingsPage() {
         requireQualityCheck: form.requireQualityCheck,
         defaultRejectDisposition: form.defaultRejectDisposition,
         autoCompleteOrders: form.autoCompleteOrders,
+        batchNumbering: form.batchNumbering,
       }).unwrap()
       toast.success(t('Manufacturing settings saved'))
     } catch (err) {
@@ -201,6 +203,72 @@ export default function ManufacturingSettingsPage() {
               }
             />
           </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title={t('Batch numbers')}
+        description={t(
+          'Every production order makes its own finished-goods batch. Its number is printed on the job card, carried into stock and shown on sales, issues and reports.'
+        )}
+      >
+        <div className='divide-y'>
+          <div className='grid grid-cols-[minmax(0,1fr)_minmax(0,16rem)] items-center gap-3 px-5 py-2.5 max-sm:grid-cols-1 max-sm:px-4'>
+            <Label className='font-normal'>{t('New batch numbers')}</Label>
+            <Select
+              value={form.batchNumbering || 'sequence'}
+              onValueChange={(v) =>
+                set(
+                  'batchNumbering',
+                  v as ManufacturingSettings['batchNumbering']
+                )
+              }
+              disabled={!canEdit}
+            >
+              <SelectTrigger className='h-9'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='sequence'>
+                  {t('Own sequence with date')}
+                </SelectItem>
+                <SelectItem value='order'>
+                  {t('Same as the order number')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {(form.batchNumbering || 'sequence') === 'sequence' && (
+            <div className='grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem] items-center gap-3 px-5 py-2.5 max-sm:grid-cols-[minmax(0,1fr)_5.5rem] max-sm:px-4'>
+              <Label htmlFor='prefix-batch' className='font-normal'>
+                {t('Batch prefix')}
+              </Label>
+              <Input
+                id='prefix-batch'
+                value={form.prefixes.batch ?? 'B'}
+                disabled={!canEdit}
+                maxLength={10}
+                showVoiceInput={false}
+                className='h-9 font-mono uppercase'
+                onChange={(e) =>
+                  set('prefixes', {
+                    ...form.prefixes,
+                    batch: e.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, ''),
+                  })
+                }
+              />
+              <span className='text-muted-foreground font-mono text-xs max-sm:hidden'>
+                {`${form.prefixes.batch ?? 'B'}${getBusinessToday().replace(/-/g, '').slice(2)}-001`}
+              </span>
+            </div>
+          )}
+          <p className='text-muted-foreground px-5 py-2.5 text-xs max-sm:px-4'>
+            {t(
+              'A batch number can also be typed on the order itself (until finished goods are received). Turn batch tracking on per product under Products.'
+            )}
+          </p>
         </div>
       </SettingsSection>
 

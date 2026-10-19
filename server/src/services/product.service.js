@@ -208,6 +208,31 @@ const syncDefaultVariantTracking = async (product, updateFields, session, { isNe
       { $set: { batchId: openingBatch._id } },
       { session },
     );
+  } else if (!wasTracked && Number(inventory.quantity) > 0) {
+    // The inventory row already holds the stock (dual-write orgs, or a product that had a
+    // default variant before): it still needs a batch to account for it, or it is stranded —
+    // counted in stock but impossible to issue or sell by batch. Only the Batch document is
+    // created; Inventory.quantity already includes this stock.
+    const batched = await Batch.aggregate([
+      { $match: { inventoryId: inventory._id, status: 'active' } },
+      { $group: { _id: null, quantity: { $sum: '$quantity' } } },
+    ]).session(session);
+    const gap = Number(inventory.quantity) - ((batched[0] && batched[0].quantity) || 0);
+    if (gap > 1e-9) {
+      await Batch.create(
+        [{
+          organizationId: variant.organizationId,
+          inventoryId: inventory._id,
+          batchNumber: updateFields.batchNumber || `OPENING-${Date.now()}`,
+          quantity: gap,
+          costPerUnit: Number(inventory.averageCost ?? product.cost) || 0,
+          sellingPrice: Number(product.price) || undefined,
+          expiryDate: updateFields.expiryDate || undefined,
+          status: 'active',
+        }],
+        { session },
+      );
+    }
   }
 };
 
@@ -1927,6 +1952,7 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
 };
 
 module.exports = {
+  syncDefaultVariantTracking,
   findSameNameProduct,
   getProductNameIndex,
   ensureProductIndexes,

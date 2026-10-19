@@ -51,7 +51,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { StatusBadge } from '../../components/badges'
+import { BatchBadge, StatusBadge } from '../../components/badges'
 import {
   CompleteOrderDialog,
   InspectOutputDialog,
@@ -358,6 +358,10 @@ export default function ProductionOrderDetail({
               <span className='font-mono text-sm font-semibold tracking-tight'>
                 {order.orderNumber}
               </span>
+              <BatchBadge
+                batchNumber={order.batchNumber || order.orderNumber}
+                title={t('Finished-goods batch')}
+              />
               {isAssembly && (
                 <Badge variant='outline' className='gap-1 font-normal'>
                   <Layers className='h-3 w-3' />

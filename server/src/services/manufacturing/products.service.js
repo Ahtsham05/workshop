@@ -1,13 +1,29 @@
 const mongoose = require('mongoose');
 const httpStatus = require('http-status');
-const { Product, Bom, ProductionOrder } = require('../../models');
+const {
+  Product,
+  Bom,
+  ProductionOrder,
+  ProductVariant,
+  Inventory,
+  Batch,
+  Supplier,
+  InventoryTransaction,
+} = require('../../models');
+const { toBusinessCalendarDate } = require('../../utils/businessTimezone');
 const ApiError = require('../../utils/ApiError');
 const { PRODUCT_TYPES } = require('../../config/manufacturing');
 const bomService = require('./bom.service');
-const { requireBranch, scopeFilter, aggregateScope, escapeRegex } = require('./common');
+
+// Lazy: product.service pulls in a large dependency graph (and manufacturing through it).
+// eslint-disable-next-line global-require
+const productService = () => require('../product.service');
+// eslint-disable-next-line global-require
+const stockService = () => require('./stock.service');
+const { requireBranch, scopeFilter, aggregateScope, escapeRegex, startOfBusinessToday, daysUntil } = require('./common');
 
 const PRODUCT_FIELDS =
-  'name nameUrdu sku barcode unit cost price stockQuantity hasVariants isActive image categories productType procurementType defaultBomId manufacturingLeadTimeDays branchId createdAt';
+  'name nameUrdu sku barcode unit cost price stockQuantity hasVariants isActive image categories productType procurementType defaultBomId manufacturingLeadTimeDays shelfLifeDays trackImei trackSerial branchId createdAt';
 
 const bomCountsFor = async (ctx, productIds) => {
   if (!productIds.length) return new Map();
@@ -23,6 +39,100 @@ const bomCountsFor = async (ctx, productIds) => {
   return new Map(rows.map((r) => [String(r._id), { total: r.total, active: r.active }]));
 };
 
+const oid = (v) => new mongoose.Types.ObjectId(String(v));
+
+/**
+ * Batch / expiry tracking per product (flags live on its variants, the simple product's
+ * hidden default one included) and its live batches: how many hold stock, the nearest
+ * expiry and how much has already expired.
+ */
+const trackingFor = async (productIds) => {
+  if (!productIds.length) return new Map();
+  const ids = productIds.map(oid);
+  const [flags, inventories, trackedVariants] = await Promise.all([
+    ProductVariant.aggregate([
+      { $match: { productId: { $in: ids } } },
+      { $group: { _id: '$productId', trackBatch: { $max: '$trackBatch' }, trackExpiry: { $max: '$trackExpiry' } } },
+    ]),
+    Inventory.find({ productId: { $in: ids } })
+      .select('_id productId variantId quantity')
+      .lean(),
+    ProductVariant.find({ productId: { $in: ids }, $or: [{ trackBatch: true }, { trackExpiry: true }] })
+      .select('_id')
+      .lean(),
+  ]);
+  const tracked = new Set(trackedVariants.map((v) => String(v._id)));
+  const productOfInventory = new Map(inventories.map((i) => [String(i._id), String(i.productId)]));
+  const now = new Date(startOfBusinessToday());
+  const lots = inventories.length
+    ? await Batch.aggregate([
+        { $match: { inventoryId: { $in: inventories.map((i) => i._id) }, quantity: { $gt: 0 }, status: 'active' } },
+        {
+          $group: {
+            _id: '$inventoryId',
+            count: { $sum: 1 },
+            quantity: { $sum: '$quantity' },
+            nearestExpiry: { $min: '$expiryDate' },
+            expiredQuantity: {
+              $sum: { $cond: [{ $and: [{ $ne: ['$expiryDate', null] }, { $lt: ['$expiryDate', now] }] }, '$quantity', 0] },
+            },
+          },
+        },
+      ])
+    : [];
+  const out = new Map();
+  flags.forEach((f) => {
+    out.set(String(f._id), {
+      trackBatch: !!f.trackBatch,
+      trackExpiry: !!f.trackExpiry,
+      batchCount: 0,
+      nearestExpiry: null,
+      expiredQuantity: 0,
+      unbatchedQuantity: 0,
+    });
+  });
+  // Stock a tracked variant holds that no batch accounts for — it can't be issued or sold
+  // by batch until it is put into one (batchUnbatchedStock).
+  const batchedByInventory = new Map(lots.map((l) => [String(l._id), l.quantity]));
+  inventories.forEach((inv) => {
+    if (!tracked.has(String(inv.variantId))) return;
+    const gap = (Number(inv.quantity) || 0) - (batchedByInventory.get(String(inv._id)) || 0);
+    const t = out.get(String(inv.productId));
+    if (t && gap > 1e-9) t.unbatchedQuantity = Math.round((t.unbatchedQuantity + gap) * 1000) / 1000;
+  });
+  lots.forEach((l) => {
+    const pid = productOfInventory.get(String(l._id));
+    const t = out.get(pid) || {
+      trackBatch: false,
+      trackExpiry: false,
+      batchCount: 0,
+      nearestExpiry: null,
+      expiredQuantity: 0,
+      unbatchedQuantity: 0,
+    };
+    t.unbatchedQuantity = t.unbatchedQuantity || 0;
+    t.batchCount += l.count;
+    if (l.nearestExpiry && (!t.nearestExpiry || l.nearestExpiry < t.nearestExpiry)) t.nearestExpiry = l.nearestExpiry;
+    t.expiredQuantity = Math.round((t.expiredQuantity + l.expiredQuantity) * 1000) / 1000;
+    out.set(pid, t);
+  });
+  return out;
+};
+
+/** Products in scope whose variants track batches / expiry. */
+const trackedProductIds = async (ctx) =>
+  ProductVariant.distinct('productId', {
+    organizationId: ctx.organizationId,
+    ...(ctx.branchId ? { branchId: ctx.branchId } : {}),
+    $or: [{ trackBatch: true }, { trackExpiry: true }],
+  });
+
+/** Resolves the async parts of a filter (batch tracking) into plain query values. */
+const resolveFilter = async (ctx, filter = {}) =>
+  filter.tracking === 'batch' || filter.tracking === 'none'
+    ? { ...filter, trackedIds: await trackedProductIds(ctx) }
+    : filter;
+
 /**
  * The existing product catalog seen through manufacturing eyes — same Product documents,
  * filtered/annotated by productType and BOM coverage. Never a separate product list.
@@ -33,9 +143,12 @@ const buildProductQuery = (ctx, filter = {}) => {
   if (filter.productType === 'unclassified') query.productType = null;
   else if (filter.productType) {
     // A list may include 'unclassified' (no type yet), e.g. "everything except finished goods".
-    query.productType = { $in: String(filter.productType).split(',').map((v) => (v === 'unclassified' ? null : v)) };
-  }
-  else if (filter.classifiedOnly === true || filter.classifiedOnly === 'true') query.productType = { $ne: null };
+    query.productType = {
+      $in: String(filter.productType)
+        .split(',')
+        .map((v) => (v === 'unclassified' ? null : v)),
+    };
+  } else if (filter.classifiedOnly === true || filter.classifiedOnly === 'true') query.productType = { $ne: null };
   if (filter.hasBom === true || filter.hasBom === 'true') query.defaultBomId = { $ne: null };
   if (filter.hasBom === false || filter.hasBom === 'false') query.defaultBomId = null;
   if (filter.procurementType) query.procurementType = filter.procurementType === 'none' ? null : filter.procurementType;
@@ -45,6 +158,7 @@ const buildProductQuery = (ctx, filter = {}) => {
     const re = new RegExp(escapeRegex(filter.search), 'i');
     query.$or = [{ name: re }, { sku: re }, { barcode: re }];
   }
+  if (filter.trackedIds) query._id = filter.tracking === 'batch' ? { $in: filter.trackedIds } : { $nin: filter.trackedIds };
   return query;
 };
 
@@ -56,7 +170,8 @@ const SORTS = {
   cost: { cost: -1, name: 1 },
 };
 
-const queryProducts = async (ctx, filter, options) => {
+const queryProducts = async (ctx, rawFilter, options) => {
+  const filter = await resolveFilter(ctx, rawFilter);
   const query = buildProductQuery(ctx, filter);
   const limit = Math.min(parseInt(options.limit, 10) || 20, 100);
   const page = Math.max(parseInt(options.page, 10) || 1, 1);
@@ -69,16 +184,27 @@ const queryProducts = async (ctx, filter, options) => {
       .lean(),
     Product.countDocuments(query),
   ]);
-  const counts = await bomCountsFor(
-    ctx,
-    results.map((p) => p._id)
-  );
+  const [counts, tracking] = await Promise.all([
+    bomCountsFor(
+      ctx,
+      results.map((p) => p._id)
+    ),
+    trackingFor(results.map((p) => p._id)),
+  ]);
   return {
     results: results.map(({ _id, ...product }) => ({
       ...product,
       id: String(_id),
       bomCount: (counts.get(String(_id)) || {}).total || 0,
       activeBomCount: (counts.get(String(_id)) || {}).active || 0,
+      tracking: tracking.get(String(_id)) || {
+        trackBatch: false,
+        trackExpiry: false,
+        batchCount: 0,
+        nearestExpiry: null,
+        expiredQuantity: 0,
+        unbatchedQuantity: 0,
+      },
     })),
     page,
     limit,
@@ -102,16 +228,57 @@ const getTypeSummary = async (ctx) => {
   return summary;
 };
 
+/**
+ * Turns batch / expiry tracking on or off through the catalog's own path (the hidden
+ * default variant), so purchases, sales, issues and receipts all follow it. Stock already
+ * on hand becomes one opening batch the first time tracking is turned on.
+ */
+const setTracking = async (product, body) => {
+  if (product.trackImei || product.trackSerial) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `"${product.name}" is tracked by serial number — batches don't apply`);
+  }
+  if (product.hasVariants) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `"${product.name}" has variants — turn batch tracking on per variant`);
+  }
+  const flags = {};
+  if (body.trackBatch !== undefined) flags.trackBatch = !!body.trackBatch;
+  if (body.trackExpiry !== undefined) flags.trackExpiry = !!body.trackExpiry;
+  // Turning tracking off with live batches would hide their stock from batch-aware screens.
+  if (!flags.trackBatch && !flags.trackExpiry) {
+    const tracked = (await trackingFor([product._id])).get(String(product._id));
+    const stillOn = { ...tracked, ...flags };
+    if (!stillOn.trackBatch && !stillOn.trackExpiry && tracked && tracked.batchCount > 0) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `"${product.name}" still has stock in ${tracked.batchCount} batch(es) — use or adjust it before turning tracking off`
+      );
+    }
+  }
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(() =>
+      productService().syncDefaultVariantTracking(
+        product,
+        { ...flags, batchNumber: body.openingBatchNumber || undefined },
+        session
+      )
+    );
+  } finally {
+    await session.endSession();
+  }
+};
+
 const updateAttributes = async ({ organizationId, branchId }, productId, body) => {
   requireBranch(branchId);
   const product = await Product.findOne({ _id: productId, organizationId, branchId });
   if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found in this branch');
 
   const $set = {};
-  ['productType', 'procurementType', 'manufacturingLeadTimeDays'].forEach((field) => {
+  ['productType', 'procurementType', 'manufacturingLeadTimeDays', 'shelfLifeDays'].forEach((field) => {
     if (body[field] !== undefined) $set[field] = body[field];
   });
   if (Object.keys($set).length) await Product.updateOne({ _id: product._id }, { $set });
+  if (body.trackBatch !== undefined || body.trackExpiry !== undefined) await setTracking(product, body);
 
   if (body.defaultBomId !== undefined) {
     if (body.defaultBomId) {
@@ -126,6 +293,88 @@ const updateAttributes = async ({ organizationId, branchId }, productId, body) =
     }
   }
   return Product.findById(product._id).select(PRODUCT_FIELDS);
+};
+
+/**
+ * Puts the stock a batch-tracked product holds outside any batch into one batch, so it
+ * can be issued and sold by batch again. Only a Batch document is written (plus a
+ * zero-quantity ledger line for the audit trail) — the stock total doesn't change.
+ */
+const batchUnbatchedStock = async (ctx, productId, body = {}) => {
+  requireBranch(ctx.branchId);
+  const item = await stockService().resolveItem({
+    organizationId: ctx.organizationId,
+    branchId: ctx.branchId,
+    productId,
+    variantId: body.variantId || null,
+  });
+  if (!item.batchTracked || !item.inventory) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `"${item.name}" is not tracked by batch`);
+  }
+  const batched = await Batch.aggregate([
+    { $match: { inventoryId: item.inventory._id, status: 'active' } },
+    { $group: { _id: null, quantity: { $sum: '$quantity' } } },
+  ]);
+  const gap = Math.round(((Number(item.inventory.quantity) || 0) - ((batched[0] && batched[0].quantity) || 0)) * 1e6) / 1e6;
+  if (!(gap > 1e-9)) throw new ApiError(httpStatus.BAD_REQUEST, `All stock of "${item.name}" is already in batches`);
+
+  const base = String(body.batchNumber || '').trim() || `OPENING-${toBusinessCalendarDate(new Date()).replace(/-/g, '')}`;
+  let batchNumber = base;
+  // eslint-disable-next-line no-await-in-loop
+  for (let i = 2; await Batch.exists({ inventoryId: item.inventory._id, batchNumber }); i += 1) {
+    if (body.batchNumber) throw new ApiError(httpStatus.BAD_REQUEST, `Batch ${base} already exists for "${item.name}"`);
+    batchNumber = `${base}-${i}`;
+  }
+  const batch = await Batch.create({
+    organizationId: ctx.organizationId,
+    inventoryId: item.inventory._id,
+    batchNumber,
+    quantity: gap,
+    costPerUnit: item.unitCost || 0,
+    expiryDate: body.expiryDate || undefined,
+    status: 'active',
+  });
+  await InventoryTransaction.create({
+    organizationId: ctx.organizationId,
+    branchId: ctx.branchId,
+    inventoryId: item.inventory._id,
+    variantId: item.variant ? item.variant._id : undefined,
+    productId: item.product._id,
+    type: 'adjustment',
+    quantityDelta: 0,
+    balanceAfter: item.inventory.quantity,
+    unitCost: item.unitCost || 0,
+    refType: 'Batch',
+    refId: batch._id,
+    batchId: batch._id,
+    createdBy: ctx.createdBy,
+  });
+  return {
+    id: String(batch._id),
+    batchNumber: batch.batchNumber,
+    quantity: gap,
+    expiryDate: batch.expiryDate || null,
+    costPerUnit: batch.costPerUnit,
+  };
+};
+
+/** Batch tracking for several products at once — each one on its own (one bad product doesn't block the rest). */
+const bulkTracking = async ({ organizationId, branchId }, { productIds, trackBatch, trackExpiry }) => {
+  requireBranch(branchId);
+  const products = await Product.find({ _id: { $in: productIds }, organizationId, branchId });
+  const failed = [];
+  let updated = 0;
+  // eslint-disable-next-line no-restricted-syntax
+  for (const product of products) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await setTracking(product, { trackBatch, trackExpiry });
+      updated += 1;
+    } catch (err) {
+      failed.push({ id: String(product._id), name: product.name, message: err.message });
+    }
+  }
+  return { updated, failed };
 };
 
 const bulkClassify = async ({ organizationId, branchId }, { productIds, productType, procurementType }) => {
@@ -191,7 +440,8 @@ const getAssemblies = async (ctx) => {
 };
 
 /** Summary chips for the current filter: products, units on hand, stock value, avg cost. */
-const getProductStats = async (ctx, filter) => {
+const getProductStats = async (ctx, rawFilter) => {
+  const filter = await resolveFilter(ctx, rawFilter);
   // aggregate() doesn't cast like find(): swap in the ObjectId scope.
   const match = { ...buildProductQuery(ctx, filter), ...aggregateScope(ctx) };
   const [row] = await Product.aggregate([
@@ -223,6 +473,68 @@ const getProductStats = async (ctx, filter) => {
 };
 
 const OPEN_ORDER_STATUSES = ['draft', 'planned', 'released', 'in_production', 'paused', 'qc_pending'];
+
+/**
+ * A product's batches, FEFO order (soonest expiry first, then oldest): stock left, cost,
+ * dates, and where each came from — the production order that made it or the supplier.
+ */
+const sourceOf = (b, order, supplier) => {
+  if (order) return { kind: 'production', id: String(order._id), label: order.orderNumber };
+  if (supplier || b.purchaseId) {
+    return {
+      kind: 'purchase',
+      id: b.purchaseId ? String(b.purchaseId) : null,
+      label: supplier ? supplier.name : 'Purchase',
+    };
+  }
+  return { kind: /^OPENING/i.test(b.batchNumber) ? 'opening' : 'other', id: null, label: '' };
+};
+
+const productBatches = async (productId, { includeEmpty = false, limit = 100 } = {}) => {
+  const inventories = await Inventory.find({ productId }).select('_id').lean();
+  if (!inventories.length) return [];
+  const batches = await Batch.find({
+    inventoryId: { $in: inventories.map((i) => i._id) },
+    ...(includeEmpty ? {} : { quantity: { $gt: 0 } }),
+  })
+    .select(
+      'batchNumber quantity costPerUnit manufactureDate expiryDate status productionOrderId supplierId purchaseId createdAt'
+    )
+    .lean();
+  batches.sort(
+    (a, b) =>
+      (a.expiryDate ? a.expiryDate.getTime() : Infinity) - (b.expiryDate ? b.expiryDate.getTime() : Infinity) ||
+      a.createdAt - b.createdAt
+  );
+  const shown = batches.slice(0, limit);
+  const [orders, suppliers] = await Promise.all([
+    ProductionOrder.find({ _id: { $in: shown.map((b) => b.productionOrderId).filter(Boolean) } })
+      .select('orderNumber')
+      .lean(),
+    Supplier.find({ _id: { $in: shown.map((b) => b.supplierId).filter(Boolean) } })
+      .select('name')
+      .lean(),
+  ]);
+  const orderById = new Map(orders.map((o) => [String(o._id), o]));
+  const supplierById = new Map(suppliers.map((x) => [String(x._id), x]));
+  const today = startOfBusinessToday();
+  return shown.map((b) => {
+    const order = b.productionOrderId && orderById.get(String(b.productionOrderId));
+    const supplier = b.supplierId && supplierById.get(String(b.supplierId));
+    return {
+      id: String(b._id),
+      batchNumber: b.batchNumber,
+      quantity: Math.round(b.quantity * 1000) / 1000,
+      costPerUnit: b.costPerUnit || 0,
+      value: Math.round(b.quantity * (b.costPerUnit || 0) * 100) / 100,
+      manufactureDate: b.manufactureDate || null,
+      expiryDate: b.expiryDate || null,
+      daysToExpiry: daysUntil(b.expiryDate, today),
+      status: b.status,
+      source: sourceOf(b, order, supplier),
+    };
+  });
+};
 
 /**
  * The manufacturing side of one product for its details page: classification, BOM
@@ -276,8 +588,18 @@ const getProductOverview = async (ctx, productId) => {
     };
   });
   const making = makingOrders.map(({ _id, ...o }) => ({ id: String(_id), ...o, orderType: o.orderType || 'production' }));
+  const [tracking, batches] = await Promise.all([trackingFor([product._id]), productBatches(product._id)]);
   return {
     product: { ...product, id, _id: undefined },
+    tracking: tracking.get(id) || {
+      trackBatch: false,
+      trackExpiry: false,
+      batchCount: 0,
+      nearestExpiry: null,
+      expiredQuantity: 0,
+      unbatchedQuantity: 0,
+    },
+    batches,
     boms: boms.map(({ _id, components, operations, ...b }) => ({
       id: String(_id),
       ...b,
@@ -305,4 +627,8 @@ module.exports = {
   getAssemblies,
   getProductStats,
   getProductOverview,
+  bulkTracking,
+  batchUnbatchedStock,
+  productBatches,
+  trackingFor,
 };

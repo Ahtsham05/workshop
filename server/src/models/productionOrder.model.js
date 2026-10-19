@@ -164,6 +164,11 @@ const ProductionOrderSchema = new mongoose.Schema(
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true, index: true },
     orderNumber: { type: String, required: true, trim: true },
+    // The finished-goods batch (lot) this order produces into: receipts default to it, so
+    // every unit made on the order carries it into stock, sales and traceability. Set on
+    // create (settings batchNumbering); orders created before it existed fall back to the
+    // order number, which is what their receipts used.
+    batchNumber: { type: String, trim: true, default: '' },
     // 'assembly' orders build (sub-)assemblies — same engine, own numbering and lifecycle.
     orderType: { type: String, enum: ORDER_TYPES, default: 'production', index: true },
     // Nesting: the order (and its material line) this one was created to supply. The

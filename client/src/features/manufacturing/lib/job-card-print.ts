@@ -24,6 +24,7 @@ export function printJobCard(
   const header: [string, string][] = [
     [t('Product'), `${order.productName}${order.sku ? ` (${order.sku})` : ''}`],
     [t('Quantity'), `${fmtQty(order.plannedQuantity)} ${order.unit}`],
+    [t('Batch No.'), order.batchNumber || order.orderNumber],
     [
       t('BOM'),
       order.bomNumber ? `${order.bomNumber} v${order.bomVersion}` : '—',

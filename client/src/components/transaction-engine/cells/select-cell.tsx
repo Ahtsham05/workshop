@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { formatAppDate } from '@/lib/date-format'
 import { getAllUnits } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useEngine } from '../engine-context'
-import type { EntryBatch } from '../types'
 import { NATIVE_SELECT_CLASS, type CellProps } from './cell-props'
+import { useBatches } from './use-batches'
 import { useCell } from './use-cell'
 
 const ALL_UNITS = getAllUnits()
@@ -99,26 +99,4 @@ export function SelectCell({ row, column, error, label, disabled }: CellProps) {
       ))}
     </select>
   )
-}
-
-/** A product's batches from the stock source (sync or async), refetched per product. */
-function useBatches(product: CellProps['row']['product']) {
-  const { stock } = useEngine()
-  const [batches, setBatches] = useState<EntryBatch[] | null>(null)
-  useEffect(() => {
-    if (!product || !stock.getBatches) {
-      setBatches(null)
-      return
-    }
-    let live = true
-    Promise.resolve(stock.getBatches(product)).then((list) => {
-      if (live) setBatches(list)
-    })
-    return () => {
-      live = false
-    }
-    // The product object only changes when it's picked or re-linked to the live catalog,
-    // never on other row edits — so this doesn't refetch on every keystroke.
-  }, [product, stock])
-  return batches
 }

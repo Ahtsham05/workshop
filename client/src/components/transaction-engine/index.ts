@@ -21,6 +21,18 @@ export {
   rankProducts,
 } from './search'
 export type * from './types'
+export {
+  allocationFields,
+  allocationTotal,
+  daysToExpiry,
+  fefoOrder,
+  isExpiredBatch,
+  planFefo,
+  planFrom,
+  refitAllocations,
+  sameAllocations,
+  type BatchPlan,
+} from './batch-allocation'
 
 /**
  * Server errors shaped `{ errorCode: 'ROW_ERRORS', details: { rows: [{ line, field, message }] } }`

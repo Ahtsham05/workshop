@@ -121,10 +121,54 @@ export interface ManufacturingProduct {
   procurementType: ProcurementType | null
   defaultBomId: string | null
   manufacturingLeadTimeDays: number | null
+  /** Days a batch stays good after it is made — FG receipt expiry defaults from it. */
+  shelfLifeDays?: number | null
+  trackImei?: boolean
+  trackSerial?: boolean
   bomCount: number
   activeBomCount: number
+  /** Batch / expiry tracking and the product's live batches (list + overview). */
+  tracking?: ProductBatchTracking
   categories?: { _id: string; name: string }[]
   createdAt?: string
+}
+
+export interface ProductBatchTracking {
+  trackBatch: boolean
+  trackExpiry: boolean
+  /** Batches with stock left. */
+  batchCount: number
+  nearestExpiry: string | null
+  expiredQuantity: number
+  /** Stock the product holds that no batch accounts for (can't be issued or sold by batch). */
+  unbatchedQuantity?: number
+}
+
+export interface ProductBatch {
+  id: string
+  batchNumber: string
+  quantity: number
+  costPerUnit: number
+  value: number
+  manufactureDate: string | null
+  expiryDate: string | null
+  daysToExpiry: number | null
+  status: 'active' | 'depleted' | 'expired' | 'written_off'
+  source: {
+    kind: 'production' | 'purchase' | 'opening' | 'other'
+    id: string | null
+    label: string
+  }
+}
+
+/** A batch found by the report picker (GET /manufacturing/batches/search). */
+export interface BatchSearchResult {
+  id: string
+  batchNumber: string
+  productName: string
+  unit: string
+  quantity: number
+  expiryDate: string | null
 }
 
 export interface ManufacturingProductFilters {
@@ -133,6 +177,7 @@ export interface ManufacturingProductFilters {
   hasBom?: boolean
   procurementType?: ProcurementType | 'none'
   stock?: 'in' | 'out'
+  tracking?: 'batch' | 'none'
   search?: string
 }
 
@@ -188,6 +233,9 @@ export interface ManufacturingProductOverview {
     inWip: number
   }[]
   totals: { inProduction: number; requiredByOpenOrders: number; inWip: number }
+  tracking: ProductBatchTracking
+  /** Batches with stock, soonest expiry first. */
+  batches: ProductBatch[]
 }
 
 export interface BomAlternative {
@@ -195,6 +243,12 @@ export interface BomAlternative {
   variantId?: string | null
   productName?: string
   ratio: number
+}
+
+/** Extra on GET /boms/:id — batch tracking per product id (the BOM's product + components). */
+export interface BomTrackingInfo {
+  tracking?: Record<string, ProductBatchTracking>
+  productShelfLifeDays?: number | null
 }
 
 export interface BomComponent {
@@ -400,6 +454,8 @@ export interface OrderDocument {
 export interface ProductionOrder {
   id: string
   orderNumber: string
+  /** Finished-goods batch (lot) this order produces into; empty on orders made before batches. */
+  batchNumber?: string
   /** 'assembly' orders build (sub-)assemblies with the same engine and their own lifecycle. */
   orderType: OrderType
   parentOrderId?: string | null
@@ -547,6 +603,8 @@ export interface ProductionOrderInput {
   teamMemberIds?: string[]
   parentOrderId?: string | null
   parentMaterialLineId?: string | null
+  /** Finished-goods batch number; blank on create = auto-numbered. */
+  batchNumber?: string
 }
 
 export interface RequirementLine {
@@ -806,6 +864,7 @@ export interface OrderBatchLine {
   plannedStartDate?: string | null
   plannedCompletionDate?: string | null
   notes?: string
+  batchNumber?: string | null
 }
 
 export interface OrderBatchShortage {
@@ -843,6 +902,8 @@ export interface IssueVoucherLine {
   alternativeProductId?: string | null
   quantity: number | null
   batchId?: string | null
+  /** The line split over several batches; quantities add up to `quantity`. */
+  batches?: { batchId: string; quantity: number }[]
   serialNumbers?: string[]
 }
 
@@ -1168,12 +1229,14 @@ export interface StockDetail {
   unit: string
   available: number
   unitCost: number
-  tracking: { batch: boolean; serial: boolean }
+  tracking: { batch: boolean; expiry?: boolean; serial: boolean }
+  shelfLifeDays?: number | null
   batches: {
     id: string
     batchNumber: string
     quantity: number
     expiryDate?: string | null
+    manufactureDate?: string | null
     costPerUnit: number
   }[]
   serials: {
@@ -1186,6 +1249,7 @@ export interface StockDetail {
 
 export interface FinishedGoodsInput {
   batchNumber?: string
+  manufactureDate?: string | null
   expiryDate?: string | null
   serialNumbers?: string[]
   location?: string
@@ -1598,7 +1662,11 @@ export interface ManufacturingSettings {
     productionReceipt: string
     rawMaterialReceipt: string
     scrap: string
+    /** Finished-goods batch numbers: B261019-007. */
+    batch: string
   }
+  /** New orders' batch number: own dated sequence, or the order number. */
+  batchNumbering: 'sequence' | 'order'
   numberPadding: number
   defaultSourceLocation: string
   defaultWipLocation: string
@@ -1790,6 +1858,9 @@ export const manufacturingApi = createApi({
         productType?: ProductType | null
         procurementType?: ProcurementType | null
         manufacturingLeadTimeDays?: number | null
+        shelfLifeDays?: number | null
+        trackBatch?: boolean
+        trackExpiry?: boolean
         defaultBomId?: string | null
       }
     >({
@@ -1799,14 +1870,48 @@ export const manufacturingApi = createApi({
         body,
       }),
       invalidatesTags: ['MfgProduct', 'MfgBom', 'MfgDashboard'],
-      onQueryStarted: async (_arg, { dispatch, queryFulfilled }) => {
-        try {
-          await queryFulfilled
-          dispatch(productApi.util.invalidateTags(['Product']))
-        } catch {
-          // ignore
-        }
+      // Tracking changes what the purchase / sale / issue screens ask for.
+      onQueryStarted: invalidateStockCaches,
+    }),
+    bulkProductTracking: builder.mutation<
+      { updated: number; failed: { id: string; name: string; message: string }[] },
+      { productIds: string[]; trackBatch?: boolean; trackExpiry?: boolean }
+    >({
+      query: (body) => ({
+        url: '/manufacturing/products/bulk-tracking',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgProduct', 'MfgBom'],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    /** Stock of a batch-tracked product that no batch accounts for → one new batch. */
+    batchUnbatchedStock: builder.mutation<
+      {
+        id: string
+        batchNumber: string
+        quantity: number
+        expiryDate: string | null
+        costPerUnit: number
       },
+      {
+        productId: string
+        variantId?: string | null
+        batchNumber?: string
+        expiryDate?: string | null
+      }
+    >({
+      query: ({ productId, ...body }) => ({
+        url: `/manufacturing/products/${productId}/batch-unbatched`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgProduct'],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    searchManufacturingBatches: builder.query<BatchSearchResult[], string>({
+      query: (search) => ({ url: '/manufacturing/batches/search', params: { search } }),
+      providesTags: [...EXECUTION_TAGS],
     }),
     bulkClassifyProducts: builder.mutation<
       { matched: number; modified: number },
@@ -1845,7 +1950,7 @@ export const manufacturingApi = createApi({
       query: (params) => ({ url: '/manufacturing/boms', params }),
       providesTags: ['MfgBom'],
     }),
-    getBom: builder.query<Bom, string>({
+    getBom: builder.query<Bom & BomTrackingInfo, string>({
       query: (id) => `/manufacturing/boms/${id}`,
       providesTags: (_r, _e, id) => [{ type: 'MfgBom', id }],
     }),
@@ -2709,6 +2814,9 @@ export const {
   useGetProductTypeSummaryQuery,
   useUpdateManufacturingProductMutation,
   useBulkClassifyProductsMutation,
+  useBulkProductTrackingMutation,
+  useBatchUnbatchedStockMutation,
+  useSearchManufacturingBatchesQuery,
   useGetWhereUsedQuery,
   useGetAssembliesQuery,
   useGetBomsQuery,

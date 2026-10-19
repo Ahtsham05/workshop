@@ -115,6 +115,7 @@ const createBatch = async (variantId, body) => {
       unitCost: body.costPerUnit,
       refType: 'Batch',
       refId: batch._id,
+      batchId: batch._id,
       createdBy: body.createdBy,
     }],
     { session },
@@ -170,6 +171,7 @@ const adjustBatchQuantity = async (variantId, { batchNumber, quantityDelta, crea
     balanceAfter: updatedInventory.quantity,
     refType: 'Batch',
     refId: batch?._id,
+    batchId: batch?._id,
     createdBy,
   });
 
@@ -247,6 +249,7 @@ const writeOffBatch = async (batchId, { reason, userId } = {}) => {
     unitCost: batch.costPerUnit,
     refType: 'Batch',
     refId: batch._id,
+    batchId: batch._id,
     createdBy: userId,
   });
 
@@ -299,6 +302,7 @@ const sellFromBatch = async (batchId, quantity, { userId, refType, refId } = {})
     unitCost: batch.costPerUnit,
     refType: refType || 'Invoice',
     refId,
+    batchId: batch._id,
     createdBy: userId,
   });
 
@@ -339,6 +343,7 @@ const restoreToBatch = async (batchId, quantity, { userId, refType, refId } = {}
     unitCost: batch.costPerUnit,
     refType: refType || 'Invoice',
     refId,
+    batchId: batch._id,
     createdBy: userId,
   });
 

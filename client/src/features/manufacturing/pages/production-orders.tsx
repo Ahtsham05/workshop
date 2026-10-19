@@ -34,7 +34,12 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
-import { PriorityText, ProgressBar, StatusBadge } from '../components/badges'
+import {
+  BatchBadge,
+  PriorityText,
+  ProgressBar,
+  StatusBadge,
+} from '../components/badges'
 import { BulkUpdateDialog } from '../components/bulk-update-dialog'
 import { DataTable, type Column } from '../components/data-table'
 import { OrderFiltersToolbar } from '../components/order-filters-toolbar'
@@ -350,6 +355,15 @@ export default function ProductionOrdersPage({
         >
           {o.orderNumber}
         </Link>
+        {view !== 'compact' && (
+          <div className='mt-0.5'>
+            <BatchBadge
+              size='sm'
+              batchNumber={o.batchNumber || o.orderNumber}
+              title={t('Finished-goods batch')}
+            />
+          </div>
+        )}
         {o.bomNumber && view !== 'compact' && (
           <div className='text-muted-foreground text-[11px]'>
             {o.bomNumber} v{o.bomVersion}
@@ -533,8 +547,12 @@ export default function ProductionOrdersPage({
         <div className='flex items-start justify-between gap-3'>
           <div className='min-w-0'>
             <div className='truncate font-medium'>{o.productName}</div>
-            <div className='text-muted-foreground font-mono text-xs'>
+            <div className='text-muted-foreground flex flex-wrap items-center gap-1.5 font-mono text-xs'>
               {o.orderNumber}
+              <BatchBadge
+                size='sm'
+                batchNumber={o.batchNumber || o.orderNumber}
+              />
             </div>
           </div>
           <StatusBadge status={o.status} orderType={o.orderType} />

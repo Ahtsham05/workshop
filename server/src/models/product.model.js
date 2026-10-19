@@ -198,6 +198,9 @@ const ProductSchema = new mongoose.Schema({
     // name one, and when this product appears as a sub-assembly inside another BOM.
     defaultBomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bom', default: null },
     manufacturingLeadTimeDays: { type: Number, min: 0, default: null },
+    // How long a batch of this product stays good after it is made — a production
+    // receipt's expiry date defaults to manufacture date + this many days.
+    shelfLifeDays: { type: Number, min: 0, default: null },
 },{
     timestamps: true,
     keepTimestampsInJSON: true,

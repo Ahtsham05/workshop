@@ -11,6 +11,7 @@ const counterDefaults = () => ({
   productionReceipt: 0,
   scrap: 0,
   rawMaterialReceipt: 0,
+  batch: 0,
 });
 
 /**
@@ -37,8 +38,13 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
       productionReceipt: { type: String, trim: true, default: 'FG' },
       scrap: { type: String, trim: true, default: 'SCR' },
       rawMaterialReceipt: { type: String, trim: true, default: 'RMV' },
+      // Finished-goods batch (lot) numbers: B261019-007 — prefix, production date, sequence.
+      batch: { type: String, trim: true, default: 'B' },
     },
     numberPadding: { type: Number, min: 3, max: 10, default: 5 },
+    // How a new production order's finished-goods batch number is made: its own dated
+    // sequence ('sequence', e.g. B261019-007) or the order number itself ('order').
+    batchNumbering: { type: String, enum: ['sequence', 'order'], default: 'sequence' },
     // Default location labels (bins/areas inside a branch) pre-filled on new production
     // orders. Stock itself is held per branch — see productionOrder.model.js.
     defaultSourceLocation: { type: String, trim: true, default: 'Raw Material Store' },
@@ -73,6 +79,7 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
           productionReceipt: { type: Number, default: 0 },
           scrap: { type: Number, default: 0 },
           rawMaterialReceipt: { type: Number, default: 0 },
+          batch: { type: Number, default: 0 },
         },
         { _id: false }
       ),

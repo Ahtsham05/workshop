@@ -98,6 +98,9 @@ export function ProductionOrderDialog({
     order?.finishedGoodsLocation ?? ''
   )
   const [notes, setNotes] = useState(order?.notes || '')
+  // Blank on a new order = numbered by the batch sequence (Settings).
+  const [batchNumber, setBatchNumber] = useState(order?.batchNumber || '')
+  const batchLocked = !!order && order.completedQuantity > 0
 
   // New orders start from the org's default locations/priority.
   useEffect(() => {
@@ -134,6 +137,14 @@ export function ProductionOrderDialog({
       wipLocation,
       finishedGoodsLocation: fgLocation,
       notes,
+      ...(batchLocked
+        ? {}
+        : order
+          ? batchNumber.trim() &&
+            batchNumber.trim() !== (order.batchNumber || '')
+            ? { batchNumber: batchNumber.trim() }
+            : {}
+          : { batchNumber: batchNumber.trim() }),
       operatorId: operatorId === NONE ? null : operatorId,
       teamMemberIds: teamIds.filter((id) => id !== operatorId),
     }
@@ -277,7 +288,30 @@ export function ProductionOrderDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className='grid gap-1.5 md:col-span-6'>
+          <div className='grid gap-1.5 md:col-span-2'>
+            <Label htmlFor='order-batch-no'>{t('Batch No.')}</Label>
+            <Input
+              id='order-batch-no'
+              showVoiceInput={false}
+              className='font-mono'
+              value={batchNumber}
+              disabled={batchLocked}
+              placeholder={
+                order
+                  ? order.batchNumber || order.orderNumber
+                  : settings?.batchNumbering === 'order'
+                    ? t('Same as order No.')
+                    : t('Auto')
+              }
+              title={
+                batchLocked
+                  ? t('Fixed once finished goods have been received')
+                  : undefined
+              }
+              onChange={(e) => setBatchNumber(e.target.value)}
+            />
+          </div>
+          <div className='grid gap-1.5 md:col-span-4'>
             <Label>{t('Operator')}</Label>
             <Select value={operatorId} onValueChange={setOperatorId}>
               <SelectTrigger>

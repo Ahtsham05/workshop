@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Layers, ScanLine } from 'lucide-react'
+import { ScanLine } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   useChangeProductionStatusMutation,
@@ -36,6 +36,7 @@ import { fmtDate, fmtQty } from '../lib/constants'
 import { lineWip } from '../lib/material-math'
 import { announceAutoCompletion } from '../lib/order-completion'
 import { cleanFg } from '../lib/output-math'
+import { FgBatchFields } from './fg-batch-fields'
 import { QualityDecision, type QualityValue } from './quality-decision'
 
 const EPS = 1e-6
@@ -171,31 +172,13 @@ export function FinishedGoodsFields({
   }
   if (data.tracking.batch) {
     return (
-      <div className='grid grid-cols-2 gap-3'>
-        <div className='grid gap-1.5'>
-          <Label className='flex items-center gap-1.5'>
-            <Layers className='h-3.5 w-3.5' />
-            {t('Batch number')}
-          </Label>
-          <Input
-            value={value.batchNumber ?? ''}
-            placeholder={order.orderNumber}
-            onChange={(e) =>
-              onChange({ ...value, batchNumber: e.target.value })
-            }
-          />
-        </div>
-        <div className='grid gap-1.5'>
-          <Label>{t('Expiry date')}</Label>
-          <Input
-            type='date'
-            value={value.expiryDate ?? ''}
-            onChange={(e) =>
-              onChange({ ...value, expiryDate: e.target.value || null })
-            }
-          />
-        </div>
-      </div>
+      <FgBatchFields
+        order={order}
+        detail={data}
+        quantity={quantity}
+        value={value}
+        onChange={onChange}
+      />
     )
   }
   return null

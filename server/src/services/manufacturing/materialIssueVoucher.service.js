@@ -119,6 +119,23 @@ const loadPerson = async (organizationId, userId) => {
 };
 
 /**
+ * A line's batch split: `batches` [{ batchId, quantity }] (one batch picked, or several
+ * when one batch can't cover the line), the older single `batchId`, or null = FEFO.
+ * Repeated batches are merged; zero quantities dropped.
+ */
+const lineBatches = (input) => {
+  if (Array.isArray(input.batches) && input.batches.length) {
+    const merged = new Map();
+    input.batches.forEach((b) => {
+      const q = Number(b.quantity) || 0;
+      if (b.batchId && q > 0) merged.set(String(b.batchId), roundQty((merged.get(String(b.batchId)) || 0) + q));
+    });
+    return merged.size ? [...merged].map(([batchId, quantity]) => ({ batchId, quantity })) : null;
+  }
+  return input.batchId ? [{ batchId: String(input.batchId), quantity: Number(input.quantity) }] : null;
+};
+
+/**
  * Everything wrong with a voucher, without changing anything.
  * Returns { order, header: {field: message}, rows: [{line, field, message}],
  *           warnings: [{line, field, code, message}], notes: [{line, field, message}], people }.
@@ -131,6 +148,8 @@ const checkVoucher = async (ctx, body, { giveBack = null } = {}) => {
   const lineCredit = new Map();
   const itemCredit = new Map();
   const batchCredit = new Map();
+  // What earlier lines of this same voucher already take from each batch.
+  const batchTaken = new Map();
   const ownSerials = new Set();
   (giveBack ? giveBack.lines : []).forEach((l) => {
     const line = String(l.materialLineId);
@@ -284,14 +303,40 @@ const checkVoucher = async (ctx, body, { giveBack = null } = {}) => {
     } else if (item.batchTracked) {
       // (Read-only: no Inventory row yet simply means no batches.)
       const inventoryId = item.inventory ? item.inventory._id : null;
-      if (input.batchId) {
-        // eslint-disable-next-line no-await-in-loop
-        const batch = inventoryId ? await Batch.findOne({ _id: input.batchId, inventoryId }).lean() : null;
-        if (!batch) errors.add(n, 'batchId', 'Batch not found for this product');
-        else {
-          const batchQty = roundQty(batch.quantity + (batchCredit.get(String(batch._id)) || 0));
-          if (batchQty + 1e-9 < quantity) {
-            errors.add(n, 'batchId', `Batch ${batch.batchNumber} has only ${fmt(batchQty)} ${item.unit}`);
+      const freeIn = (b) =>
+        roundQty(b.quantity + (batchCredit.get(String(b._id)) || 0) - (batchTaken.get(String(b._id)) || 0));
+      const take = (b, q) => batchTaken.set(String(b._id), roundQty((batchTaken.get(String(b._id)) || 0) + q));
+      const allocations = lineBatches({ ...input, quantity });
+      if (allocations) {
+        const total = roundQty(allocations.reduce((s, a) => s + a.quantity, 0));
+        if (Math.abs(total - quantity) > 1e-6) {
+          errors.add(
+            n,
+            'batchId',
+            `Batch quantities add up to ${fmt(total)} ${item.unit} — the line issues ${fmt(quantity)}. Re-split the batches.`
+          );
+        }
+        const found = inventoryId
+          ? // eslint-disable-next-line no-await-in-loop
+            await Batch.find({ _id: { $in: allocations.map((a) => a.batchId) }, inventoryId }).lean()
+          : [];
+        const byId = new Map(found.map((b) => [String(b._id), b]));
+        allocations.forEach((a) => {
+          const batch = byId.get(String(a.batchId));
+          if (!batch) {
+            errors.add(n, 'batchId', 'Batch not found for this product');
+            return;
+          }
+          const free = freeIn(batch);
+          if (free + 1e-9 < a.quantity) {
+            const taken = batchTaken.get(String(batch._id)) || 0;
+            errors.add(
+              n,
+              'batchId',
+              `Batch ${batch.batchNumber} has only ${fmt(Math.max(0, free))} ${item.unit}${
+                taken > 0 ? ` left after the lines above` : ''
+              }, ${fmt(a.quantity)} asked`
+            );
           }
           if (stockService.isExpired(batch, today)) {
             warnings.push({
@@ -301,29 +346,54 @@ const checkVoucher = async (ctx, body, { giveBack = null } = {}) => {
               message: `Batch ${batch.batchNumber} expired on ${dateText(batch.expiryDate)}`,
             });
           }
+          take(batch, a.quantity);
+        });
+        if (allocations.length > 1) {
+          notes.push({
+            line: n,
+            field: 'batchId',
+            message: `Split over ${allocations.length} batches: ${allocations
+              .map((a) => `${(byId.get(String(a.batchId)) || {}).batchNumber || '?'} × ${fmt(a.quantity)}`)
+              .join(', ')}`,
+          });
         }
       } else {
         // No batch chosen: FEFO picks — say which, and never expired ones silently.
         const batches = inventoryId
           ? // eslint-disable-next-line no-await-in-loop
-            await Batch.find({ inventoryId, status: 'active', quantity: { $gt: 0 } })
+            await Batch.find({
+              inventoryId,
+              // An edited voucher's own batches count even if it emptied them.
+              $or: [{ status: 'active', quantity: { $gt: 0 } }, { _id: { $in: [...batchCredit.keys()] } }],
+            })
               .sort({ expiryDate: 1, createdAt: 1 })
               .lean()
           : [];
         const fresh = batches.filter((b) => !stockService.isExpired(b, today));
-        const freshTotal = roundQty(fresh.reduce((s, b) => s + b.quantity, 0) + credit);
-        const allTotal = roundQty(batches.reduce((s, b) => s + b.quantity, 0) + credit);
-        if (freshTotal + 1e-9 >= quantity) {
+        const freshTotal = roundQty(fresh.reduce((s, b) => s + Math.max(0, freeIn(b)), 0));
+        const allTotal = roundQty(batches.reduce((s, b) => s + Math.max(0, freeIn(b)), 0));
+        const pick = (list) => {
           let left = quantity;
           const picks = [];
-          fresh.forEach((b) => {
-            if (left <= 1e-9) return;
-            const take = roundQty(Math.min(left, b.quantity));
-            picks.push(`${b.batchNumber} × ${fmt(take)}`);
-            left = roundQty(left - take);
+          list.forEach((b) => {
+            const free = Math.max(0, freeIn(b));
+            if (left <= 1e-9 || free <= 1e-9) return;
+            const q = roundQty(Math.min(left, free));
+            picks.push(`${b.batchNumber} × ${fmt(q)}`);
+            take(b, q);
+            left = roundQty(left - q);
           });
-          notes.push({ line: n, field: 'batchId', message: `No batch chosen — FEFO will take ${picks.join(', ')}` });
+          return picks;
+        };
+        if (freshTotal + 1e-9 >= quantity) {
+          const picks = pick(fresh);
+          notes.push({
+            line: n,
+            field: 'batchId',
+            message: `No batch chosen — FEFO will take ${picks.join(', ')}`,
+          });
         } else if (allTotal + 1e-9 >= quantity) {
+          pick(batches);
           warnings.push({
             line: n,
             field: 'batchId',
@@ -331,10 +401,15 @@ const checkVoucher = async (ctx, body, { giveBack = null } = {}) => {
             message: `Only ${fmt(freshTotal)} ${item.unit} in unexpired batches — the rest would come from expired ones`,
           });
         } else {
+          // Stock the product holds that no batch accounts for (tracking turned on with
+          // stock already there, or a purchase saved without a batch) can't be issued by batch.
+          const unbatched = roundQty(item.available - batches.reduce((s, b) => s + b.quantity, 0));
           errors.add(
             n,
             'batchId',
-            `Missing batch stock — only ${fmt(allTotal)} ${item.unit} across all batches, ${fmt(quantity)} needed`
+            `Missing batch stock — batches hold only ${fmt(allTotal)} ${item.unit}, ${fmt(quantity)} needed${
+              unbatched > 1e-9 ? `. ${fmt(unbatched)} ${item.unit} in stock have no batch — put them into a batch first` : ''
+            }`
           );
         }
       }
@@ -436,7 +511,7 @@ const issuePayload = (check, body, inputLines, overrides) => {
     materialLineId: l.materialLineId,
     alternativeProductId: l.alternativeProductId || null,
     quantity: l.serialNumbers && l.serialNumbers.length ? l.serialNumbers.length : Number(l.quantity),
-    batches: l.batchId ? [{ batchId: l.batchId, quantity: Number(l.quantity) }] : undefined,
+    batches: lineBatches(l) || undefined,
     serialNumbers: l.serialNumbers && l.serialNumbers.length ? l.serialNumbers : undefined,
   }));
 
@@ -469,12 +544,8 @@ const postVoucher = async (ctx, body, permissions = {}) => {
   let issue;
   try {
     await session.withTransaction(async () => {
-      const orderNumber = await settingsService.nextDocumentNumber(
-        ctx.organizationId,
-        productionOrderService.numberKeyOf(order),
-        { session }
-      );
-      await ProductionOrder.create([{ ...order, orderNumber }], { session });
+      const numbers = await productionOrderService.assignNumbers(ctx, order, { session });
+      await ProductionOrder.create([{ ...order, ...numbers }], { session });
       // Released against this BOM version — later edits go into a new version.
       await Bom.updateOne(
         { _id: order.bomId, organizationId: ctx.organizationId },
@@ -612,6 +683,7 @@ const planForProduct = async (ctx, { productId, variantId, bomId, quantity }) =>
 };
 
 module.exports = {
+  lineBatches,
   checkVoucher,
   describeCheck,
   rowErrorsError,

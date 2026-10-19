@@ -7,6 +7,10 @@ import {
 } from './constants'
 import type {
   BatchReport,
+  BatchSource,
+  BatchState,
+  BatchStockReport,
+  BatchTraceReport,
   ConsumptionLine,
   DailyReport,
   ConsumptionReport,
@@ -57,7 +61,7 @@ export interface DocCell {
 export type CellInput = DocCell | string | null | undefined
 
 /** Screen only: open a product's stock register or a batch's production report. */
-export type ReportDrill = { productId: string } | { orderId: string }
+export type ReportDrill = { productId: string } | { orderId: string } | { batchId: string }
 
 export interface DocRow {
   kind?: 'line' | 'group' | 'subtotal' | 'total' | 'opening' | 'closing'
@@ -152,7 +156,14 @@ function productionDoc(data: ProductionReport, ctx: DocContext): ReportDoc {
   const orderRows: DocRow[] = data.orders.map((o) => ({
     drill: { orderId: o.id },
     cells: {
-      order: { text: o.orderNumber, sub: o.bomNumber || undefined, strong: true },
+      order: {
+        text: o.orderNumber,
+        sub:
+          [o.batchNumber && o.batchNumber !== o.orderNumber ? `${t('Batch')} ${o.batchNumber}` : '', o.bomNumber]
+            .filter(Boolean)
+            .join(' · ') || undefined,
+        strong: true,
+      },
       product: { text: o.productName, sub: o.sku || undefined },
       start: day(o.startDate),
       due: { text: day(o.dueDate), tone: o.isLate ? 'danger' : undefined },
@@ -1306,7 +1317,8 @@ function batchDoc(data: BatchReport, ctx: DocContext): ReportDoc {
     subtitle: `${o.orderNumber} — ${o.productName}`,
     orientation: 'landscape',
     info: [
-      { label: t('Batch / Order'), value: o.orderNumber },
+      { label: t('Batch No.'), value: o.batchNumber || o.orderNumber },
+      { label: t('Order No.'), value: o.orderNumber },
       { label: t('Product'), value: o.sku ? `${o.productName} (${o.sku})` : o.productName },
       { label: t('BOM'), value: o.bomNumber ? `${o.bomNumber}${o.bomVersion ? ` v${o.bomVersion}` : ''}` : '—' },
       { label: t('Status'), value: statusLabel(o.status, o.orderType) },
@@ -1327,6 +1339,307 @@ function batchDoc(data: BatchReport, ctx: DocContext): ReportDoc {
     ],
     sections,
     footnotes: footnotes.length ? footnotes : undefined,
+  }
+}
+
+/* ── Batches: stock & expiry, traceability ───────────────────────────────────── */
+
+const BATCH_STATE: Record<BatchState, { label: string; tone?: DocCell['tone'] }> = {
+  ok: { label: 'Good' },
+  expiring: { label: 'Expiring soon', tone: 'danger' },
+  expired: { label: 'Expired', tone: 'danger' },
+  no_expiry: { label: 'No expiry', tone: 'muted' },
+  depleted: { label: 'Used up', tone: 'muted' },
+  written_off: { label: 'Written off', tone: 'muted' },
+}
+
+const sourceCell = (s: BatchSource, t: DocContext['t']): DocCell =>
+  s.kind === 'production'
+    ? { text: `${t('Produced')} — ${s.label}` }
+    : s.kind === 'purchase'
+      ? { text: s.party || t('Purchase'), sub: s.label ? `${t('Purchase')} ${s.label}` : undefined }
+      : { text: s.kind === 'opening' ? t('Opening stock') : '—', tone: 'muted' }
+
+const daysCell = (days: number | null, t: DocContext['t']): DocCell =>
+  days === null
+    ? { text: '' }
+    : { text: days < 0 ? `${-days} ${t('ago')}` : String(days), value: days, tone: days < 0 ? 'danger' : undefined }
+
+function batchStockDoc(data: BatchStockReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const columns: DocColumn[] = [
+    { key: 'batch', label: t('Batch No.'), width: '13%', nowrap: true },
+    { key: 'source', label: t('Source'), width: '17%' },
+    { key: 'mfg', label: t('Mfg. date'), width: '8%', nowrap: true },
+    { key: 'expiry', label: t('Expiry'), width: '8%', nowrap: true },
+    { key: 'days', label: t('Days left'), align: 'right', width: '6%' },
+    { key: 'qty', label: t('Qty'), align: 'right' },
+    { key: 'unit', label: t('Unit'), width: '5%' },
+    { key: 'rate', label: withCur(ctx, 'Rate'), align: 'right' },
+    { key: 'value', label: withCur(ctx, 'Value'), align: 'right' },
+    { key: 'status', label: t('Status'), width: '9%' },
+  ]
+  const rows: DocRow[] = []
+  data.byProduct.forEach((p) => {
+    const lines = data.rows.filter((r) => r.productId === p.productId)
+    rows.push({ kind: 'group', label: p.productName, labelSub: p.sku || undefined, labelSpan: columns.length, cells: {} })
+    lines.forEach((r) => {
+      const state = BATCH_STATE[r.state]
+      rows.push({
+        drill: { batchId: r.id },
+        cells: {
+          batch: { text: r.batchNumber, strong: true },
+          source: sourceCell(r.source, t),
+          mfg: day(r.manufactureDate || r.receivedDate),
+          expiry: { text: r.expiryDate ? day(r.expiryDate) : '—', tone: state.tone === 'danger' ? 'danger' : undefined },
+          days: daysCell(r.daysToExpiry, t),
+          qty: qty(r.quantity, { blank: false, strong: true }),
+          unit: r.unit,
+          rate: cash(ctx, r.unitCost),
+          value: cash(ctx, r.value, { blank: false }),
+          status: { text: t(state.label), tone: state.tone },
+        },
+      })
+    })
+    if (lines.length > 1) {
+      rows.push({
+        kind: 'subtotal',
+        label: `${t('Total')} ${p.productName} — ${lines.length} ${t('batches')}`,
+        labelSpan: 5,
+        cells: {
+          qty: qty(p.quantity, { blank: false, strong: true }),
+          unit: p.unit,
+          value: cash(ctx, p.value, { blank: false, strong: true }),
+        },
+      })
+    }
+  })
+  if (data.rows.length) {
+    rows.push({
+      kind: 'total',
+      label: `${t('Grand total')} — ${data.totals.batches} ${t('batches')}, ${data.totals.products} ${t('products')}`,
+      labelSpan: 8,
+      cells: { value: cash(ctx, data.totals.value, { blank: false, strong: true }) },
+    })
+  }
+  return {
+    key: 'batch-stock',
+    title: t('Batch Stock & Expiry'),
+    asOf: data.asOf,
+    orientation: 'landscape',
+    summary: [
+      { label: t('Batches in stock'), value: String(data.totals.batches), hint: `${data.totals.products} ${t('products')}` },
+      { label: withCur(ctx, 'Stock value'), value: ctx.figure(data.totals.value), emphasis: true },
+      {
+        label: t('Expired'),
+        value: String(data.totals.expiredCount),
+        hint: data.totals.expiredCount ? `${withCur(ctx, 'Value')} ${ctx.figure(data.totals.expiredValue)}` : undefined,
+      },
+      {
+        label: `${t('Expiring within')} ${data.soonDays} ${t('days')}`,
+        value: String(data.totals.expiringCount),
+        hint: data.totals.expiringCount ? `${withCur(ctx, 'Value')} ${ctx.figure(data.totals.expiringValue)}` : undefined,
+      },
+    ],
+    sections: [
+      {
+        id: 'batches',
+        title: t('Batch-wise stock'),
+        note: t('Soonest expiry first within each product — the order FEFO issues and sells them in.'),
+        columns,
+        rows,
+        empty: t('No batch matches — batch tracking may be off for these products.'),
+      },
+    ],
+    footnotes: data.truncated ? [t('Only the first 5,000 batches are shown — narrow the filters.')] : undefined,
+  }
+}
+
+function batchTraceDoc(data: BatchTraceReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  const b = data.batch
+  const u = b.unit
+  const state = BATCH_STATE[b.state]
+  const sections: DocSection[] = []
+
+  const ledgerRows: DocRow[] = data.movements.map((m) => ({
+    kind: m.type === 'opening' ? 'opening' : 'line',
+    drill: m.orderId ? { orderId: m.orderId } : undefined,
+    cells: {
+      date: day(m.date),
+      particulars: { text: t(m.label), sub: m.party || undefined, strong: m.type !== 'opening' },
+      voucher: m.number,
+      in: qty(m.quantityIn),
+      out: qty(m.quantityOut),
+      balance: qty(m.balance, { blank: false, strong: true }),
+    },
+  }))
+  ledgerRows.push({
+    kind: 'closing',
+    label: t('Closing balance'),
+    labelSpan: 3,
+    cells: {
+      in: qty(data.movements.reduce((s, m) => s + m.quantityIn, 0), { strong: true }),
+      out: qty(data.movements.reduce((s, m) => s + m.quantityOut, 0), { strong: true }),
+      balance: qty(b.quantity, { blank: false, strong: true }),
+    },
+  })
+  sections.push({
+    id: 'ledger',
+    title: `${t('Batch ledger')} (${u})`,
+    note: t('Every quantity in and out of this batch, oldest first, with the running balance.'),
+    columns: [
+      { key: 'date', label: t('Date'), width: '9%', nowrap: true },
+      { key: 'particulars', label: t('Particulars'), width: '30%' },
+      { key: 'voucher', label: t('Voucher'), width: '14%', nowrap: true },
+      { key: 'in', label: t('In'), align: 'right' },
+      { key: 'out', label: t('Out'), align: 'right' },
+      { key: 'balance', label: t('Balance'), align: 'right' },
+    ],
+    rows: ledgerRows,
+  })
+
+  if (data.madeFrom.length) {
+    const rows: DocRow[] = []
+    data.madeFrom.forEach((o) => {
+      rows.push({
+        kind: 'group',
+        drill: { orderId: o.orderId },
+        label: `${o.orderNumber} — ${o.productName}`,
+        labelSub: `${fmtQty(o.receivedIntoBatch)} ${o.unit} ${t('into this batch')} · ${fmtQty(o.completedQuantity)} / ${fmtQty(o.plannedQuantity)} ${t('completed')} · ${statusLabel(o.status)}`,
+        labelSpan: 5,
+        cells: {},
+      })
+      o.materials.forEach((m) => {
+        rows.push({
+          drill: m.batchId ? { batchId: m.batchId } : undefined,
+          cells: {
+            material: { text: m.productName, strong: true },
+            qty: { text: `${fmtQty(m.quantity)} ${m.unit}`, value: m.quantity },
+            batch: m.batchNumber
+              ? { text: m.batchNumber, sub: m.expiryDate ? `${t('exp')} ${day(m.expiryDate)}` : undefined, strong: true }
+              : { text: t('Not batch-tracked'), tone: 'muted' },
+            source: m.sources.map((x) => (x.kind === 'production' ? `${t('Made on')} ${x.label}` : x.label)).filter(Boolean).join(', ') || '—',
+            kind: m.sources.some((x) => x.kind === 'production') ? t('In-house') : m.sources.some((x) => x.kind === 'purchase') ? t('Purchased') : '',
+          },
+        })
+      })
+      if (!o.materials.length) {
+        rows.push({ label: t('No material was issued to this order.'), labelSpan: 5, cells: {} })
+      }
+    })
+    sections.push({
+      id: 'made-from',
+      title: t('Made from — materials and their batches'),
+      note: t('Net material issued to the order(s) that produced this batch. Click a material batch to trace it further back.'),
+      columns: [
+        { key: 'material', label: t('Material'), width: '28%' },
+        { key: 'qty', label: t('Qty issued'), align: 'right', width: '12%' },
+        { key: 'batch', label: t('Material batch'), width: '18%', nowrap: true },
+        { key: 'source', label: t('Supplier / made on'), width: '28%' },
+        { key: 'kind', label: t('Source'), width: '12%' },
+      ],
+      rows,
+    })
+  }
+
+  if (data.usedIn.length) {
+    sections.push({
+      id: 'used-in',
+      title: t('Used in production'),
+      note: t('Production orders that drew this batch, and the finished batches they made.'),
+      columns: [
+        { key: 'order', label: t('Order No.'), width: '12%', nowrap: true },
+        { key: 'product', label: t('Product made'), width: '26%' },
+        { key: 'used', label: `${t('Qty used')} (${u})`, align: 'right', width: '10%' },
+        { key: 'output', label: t('Finished batches'), width: '36%' },
+        { key: 'status', label: t('Status'), width: '12%' },
+      ],
+      rows: data.usedIn.map((o) => ({
+        drill: { orderId: o.orderId },
+        cells: {
+          order: { text: o.orderNumber, strong: true },
+          product: o.productName,
+          used: qty(o.quantityUsed, { blank: false, strong: true }),
+          output: o.produced.length
+            ? o.produced
+                .map((r) => `${r.batchNumber || r.receiptNumber} × ${fmtQty(r.quantity)} ${r.unit}`)
+                .join(', ')
+            : { text: t('Nothing received yet'), tone: 'muted' },
+          status: statusLabel(o.status),
+        },
+      })),
+    })
+  }
+
+  if (data.soldTo.length) {
+    const sold = data.soldTo.reduce((s, x) => s + x.quantity, 0)
+    sections.push({
+      id: 'sold-to',
+      title: t('Sold to'),
+      columns: [
+        { key: 'date', label: t('Date'), width: '12%', nowrap: true },
+        { key: 'invoice', label: t('Invoice'), width: '16%', nowrap: true },
+        { key: 'customer', label: t('Customer'), width: '50%' },
+        { key: 'qty', label: `${t('Qty')} (${u})`, align: 'right' },
+      ],
+      rows: [
+        ...data.soldTo.map((x) => ({
+          cells: {
+            date: day(x.date),
+            invoice: { text: x.number, strong: true },
+            customer: x.customer || { text: t('Walk-in'), tone: 'muted' as const },
+            qty: qty(x.quantity, { blank: false }),
+          },
+        })),
+        {
+          kind: 'total' as const,
+          label: `${t('Total')} — ${data.soldTo.length} ${t('invoices')}`,
+          labelSpan: 3,
+          cells: { qty: qty(sold, { blank: false, strong: true }) },
+        },
+      ],
+    })
+  }
+
+  const sm = data.summary
+  return {
+    key: 'batch-trace',
+    title: t('Batch Traceability'),
+    subtitle: `${b.batchNumber} — ${b.productName}`,
+    orientation: 'landscape',
+    info: [
+      { label: t('Batch No.'), value: b.batchNumber },
+      { label: t('Product'), value: b.sku ? `${b.productName} (${b.sku})` : b.productName },
+      { label: t('Source'), value: [sourceCell(b.source, t).text, sourceCell(b.source, t).sub].filter(Boolean).join(' · ') },
+      { label: t('Mfg. date'), value: day(b.manufactureDate || b.receivedDate) },
+      {
+        label: t('Expiry'),
+        value: b.expiryDate
+          ? `${day(b.expiryDate)} (${b.daysToExpiry! < 0 ? `${t('expired')} ${-b.daysToExpiry!} ${t('days ago')}` : `${b.daysToExpiry} ${t('days left')}`})`
+          : t('No expiry'),
+      },
+      { label: t('Status'), value: t(state.label) },
+      { label: withCur(ctx, 'Unit cost'), value: ctx.figure(b.unitCost) },
+    ],
+    summary: [
+      { label: `${t('Received')} (${u})`, value: fmtQty(sm.received) },
+      { label: `${t('Issued to production')} (${u})`, value: fmtQty(sm.issuedToProduction) },
+      {
+        label: `${t('Sold')} (${u})`,
+        value: fmtQty(sm.sold),
+        hint: sm.scrapped || sm.other
+          ? [sm.scrapped ? `${t('Scrapped')} ${fmtQty(sm.scrapped)}` : '', sm.other ? `${t('Other')} ${fmtQty(sm.other)}` : '']
+              .filter(Boolean)
+              .join(' · ')
+          : undefined,
+      },
+      { label: `${t('Balance')} (${u})`, value: fmtQty(sm.balance), hint: `${withCur(ctx, 'Value')} ${ctx.figure(b.value)}`, emphasis: true },
+    ],
+    sections,
+    footnotes: data.movements.some((m) => m.type === 'opening')
+      ? [t('“Opening / not itemised” is stock this batch held before its movements were linked to it, or moved by documents that don’t name the batch.')]
+      : undefined,
   }
 }
 
@@ -1351,6 +1664,10 @@ export function buildReportDoc(data: ManufacturingReport, ctx: DocContext): Repo
       return dailyDoc(data, ctx)
     case 'batch':
       return batchDoc(data, ctx)
+    case 'batch-stock':
+      return batchStockDoc(data, ctx)
+    case 'batch-trace':
+      return batchTraceDoc(data, ctx)
   }
 }
 

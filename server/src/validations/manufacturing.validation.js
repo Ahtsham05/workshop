@@ -47,7 +47,9 @@ const updateSettings = {
         productionReceipt: prefix(),
         scrap: prefix(),
         rawMaterialReceipt: prefix(),
+        batch: prefix(),
       }),
+      batchNumbering: Joi.string().valid('sequence', 'order'),
       numberPadding: Joi.number().integer().min(3).max(10),
       defaultSourceLocation: Joi.string().allow('').trim().max(100),
       defaultWipLocation: Joi.string().allow('').trim().max(100),
@@ -71,6 +73,7 @@ const productListFilters = {
   hasBom: Joi.boolean(),
   procurementType: Joi.string().valid(...PROCUREMENT_TYPES, 'none'),
   stock: Joi.string().valid('in', 'out'),
+  tracking: Joi.string().valid('batch', 'none'),
   search: Joi.string().allow(''),
 };
 
@@ -95,9 +98,32 @@ const updateProductAttributes = {
         .valid(...PROCUREMENT_TYPES)
         .allow(null),
       manufacturingLeadTimeDays: Joi.number().min(0).max(3650).allow(null),
+      shelfLifeDays: Joi.number().integer().min(0).max(36500).allow(null),
+      trackBatch: Joi.boolean(),
+      trackExpiry: Joi.boolean(),
+      openingBatchNumber: Joi.string().trim().max(60).allow(''),
       defaultBomId: id().allow(null),
     })
     .min(1),
+};
+
+const batchUnbatchedStock = {
+  params: Joi.object().keys({ productId: id().required() }),
+  body: Joi.object().keys({
+    variantId: id().allow(null, ''),
+    batchNumber: Joi.string().trim().max(60).allow(''),
+    expiryDate: Joi.date().allow(null, ''),
+  }),
+};
+
+const bulkProductTracking = {
+  body: Joi.object()
+    .keys({
+      productIds: Joi.array().items(id()).min(1).max(500).required(),
+      trackBatch: Joi.boolean(),
+      trackExpiry: Joi.boolean(),
+    })
+    .or('trackBatch', 'trackExpiry'),
 };
 
 const bulkClassifyProducts = {
@@ -221,6 +247,8 @@ const orderBody = {
   notes: Joi.string().allow('').max(2000),
   operatorId: id().allow(null, ''),
   teamMemberIds: Joi.array().items(id()).max(MAX_TEAM_MEMBERS),
+  // Finished-goods batch number; blank = auto-numbered (create only).
+  batchNumber: Joi.string().trim().max(60).allow(''),
 };
 
 const createProductionOrder = {
@@ -262,6 +290,7 @@ const productionOrderBatch = {
           variantId: id().allow(null, ''),
           bomId: id().allow(null, ''),
           plannedQuantity: Joi.number().allow(null),
+          batchNumber: Joi.string().trim().max(60).allow('', null),
           priority: Joi.string()
             .valid(...PRODUCTION_PRIORITIES)
             .allow('', null),
@@ -486,6 +515,11 @@ const getRequirements = {
 };
 
 // ── Execution ─────────────────────────────────────────────────────────────────────
+const lineBatchSplit = () =>
+  Joi.array()
+    .items(Joi.object().keys({ batchId: id().required(), quantity: Joi.number().min(0).required() }))
+    .max(100)
+    .allow(null);
 const serialList = () => Joi.array().items(Joi.string().trim()).max(5000);
 
 const finishedGoods = Joi.object().keys({
@@ -563,6 +597,8 @@ const materialIssueVoucher = {
             // Range problems are reported per row by the service, not as a request error.
             quantity: Joi.number().allow(null),
             batchId: id().allow(null, ''),
+            // Several batches for one line (one batch short): their quantities add up to the line's.
+            batches: lineBatchSplit(),
             serialNumbers: serialList(),
           })
         )
@@ -595,6 +631,7 @@ const editMaterialIssue = {
           alternativeProductId: id().allow(null, ''),
           quantity: Joi.number().allow(null),
           batchId: id().allow(null, ''),
+          batches: lineBatchSplit(),
           serialNumbers: serialList(),
         })
       )
@@ -668,7 +705,9 @@ const report = {
         'in-process',
         'scrap',
         'daily',
-        'batch'
+        'batch',
+        'batch-stock',
+        'batch-trace'
       )
       .required(),
   }),
@@ -680,8 +719,15 @@ const report = {
     productionOrderId: id(),
     search: Joi.string().allow(''),
     hideIdle: Joi.boolean(),
+    // Batch reports
+    batchId: id(),
+    kind: Joi.string().valid('all', 'finished', 'materials'),
+    expiry: Joi.string().valid('all', 'expired', '30', '60', '90'),
+    stock: Joi.string().valid('in', 'all'),
   }),
 };
+
+const searchBatches = { query: Joi.object().keys({ search: Joi.string().allow('').max(100) }) };
 
 const materialUsage = {
   query: Joi.object().keys({
@@ -855,11 +901,14 @@ module.exports = {
   bulkUpdateProductionOrders,
   getAnalytics,
   report,
+  searchBatches,
   getOrderStatusCounts,
   updateSettings,
   getProducts,
   updateProductAttributes,
   bulkClassifyProducts,
+  bulkProductTracking,
+  batchUnbatchedStock,
   productIdParam,
   createBom,
   getBoms,

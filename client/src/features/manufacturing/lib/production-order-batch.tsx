@@ -26,6 +26,8 @@ export type BatchRow = EntryRowBase & {
   plannedStartDate: string | null
   plannedCompletionDate: string | null
   notes: string
+  /** Finished-goods batch number; blank = auto. */
+  batchNumber: string
 }
 
 export type BatchHeader = {
@@ -52,6 +54,7 @@ export const blankBatchRow = (): Omit<BatchRow, 'id'> => ({
   plannedStartDate: null,
   plannedCompletionDate: null,
   notes: '',
+  batchNumber: '',
 })
 
 /** Manufacturing products → engine products (searched in memory). */
@@ -185,6 +188,15 @@ export function createBatchConfig(opts: {
         stepper: true,
       },
       {
+        // Finished-goods batch number; blank = numbered on save (Settings → batch).
+        key: 'batchNumber',
+        label: 'Batch No.',
+        kind: 'text',
+        width: '8.5rem',
+        placeholder: 'Auto',
+        skipOnEnter: true,
+      },
+      {
         key: 'stock',
         label: 'In stock',
         kind: 'computed',
@@ -269,4 +281,5 @@ export const rowToBatchLine = (row: BatchRow): OrderBatchLine => ({
   plannedStartDate: row.plannedStartDate || null,
   plannedCompletionDate: row.plannedCompletionDate || null,
   notes: row.notes || undefined,
+  batchNumber: row.batchNumber?.trim() || undefined,
 })

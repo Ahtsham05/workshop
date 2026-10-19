@@ -376,7 +376,7 @@ const getStockDetail = async ({ organizationId, branchId, productId, variantId }
     item.batchTracked && item.inventory
       ? Batch.find({ inventoryId: item.inventory._id, status: 'active', quantity: { $gt: 0 } })
           .sort({ expiryDate: 1, createdAt: 1 })
-          .select('batchNumber quantity expiryDate costPerUnit')
+          .select('batchNumber quantity expiryDate manufactureDate costPerUnit')
           .lean()
       : [],
     item.serial
@@ -394,12 +394,18 @@ const getStockDetail = async ({ organizationId, branchId, productId, variantId }
     unit: item.unit,
     available: roundQty(item.available),
     unitCost: roundMoney(item.unitCost),
-    tracking: { batch: item.batchTracked && !item.serial, serial: item.serial },
+    tracking: {
+      batch: item.batchTracked && !item.serial,
+      expiry: !!(item.variant && item.variant.trackExpiry) && !item.serial,
+      serial: item.serial,
+    },
+    shelfLifeDays: item.product.shelfLifeDays || null,
     batches: batches.map((b) => ({
       id: String(b._id),
       batchNumber: b.batchNumber,
       quantity: b.quantity,
       expiryDate: b.expiryDate,
+      manufactureDate: b.manufactureDate || null,
       costPerUnit: b.costPerUnit,
     })),
     serials: serials.map((s) => ({

@@ -85,11 +85,23 @@ router.post(
   validate(v.bulkClassifyProducts),
   c.bulkClassifyProducts
 );
+router.post(
+  '/products/bulk-tracking',
+  auth('manageBoms', 'editProducts'),
+  validate(v.bulkProductTracking),
+  c.bulkProductTracking
+);
 router.patch(
   '/products/:productId',
   auth('manageBoms', 'editProducts'),
   validate(v.updateProductAttributes),
   c.updateProductAttributes
+);
+router.post(
+  '/products/:productId/batch-unbatched',
+  auth('manageBoms', 'editProducts', 'executeProduction'),
+  validate(v.batchUnbatchedStock),
+  c.batchUnbatchedStock
 );
 router.get('/products/:productId/where-used', auth(VIEW), validate(v.productIdParam), c.getWhereUsed);
 router.get('/products/:productId/overview', auth(VIEW), validate(v.productIdParam), c.getProductOverview);
@@ -217,6 +229,7 @@ router.post(
 // Where issued material went: used in output, wastage, returned, still in the factory.
 router.get('/material-usage', auth(VIEW), validate(v.materialUsage), c.getMaterialUsage);
 router.get('/reports/:report', auth(VIEW), validate(v.report), c.getReport);
+router.get('/batches/search', auth(VIEW), validate(v.searchBatches), c.searchBatches);
 router.post('/material-issues/check', auth('executeProduction'), validate(v.materialIssueVoucher), c.checkMaterialIssue);
 router.post('/material-issues', auth('executeProduction'), validate(v.materialIssueVoucher), c.postMaterialIssue);
 router.get('/material-issues', auth(VIEW), validate(v.listTransactions), c.getMaterialIssues);

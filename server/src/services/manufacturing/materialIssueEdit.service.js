@@ -274,9 +274,9 @@ const groupsOf = (issue) => {
   const map = new Map();
   issue.lines.forEach((l) => {
     const key = groupKey(l.materialLineId, l.isAlternative ? l.productId : null);
-    const g = map.get(key) || { quantity: 0, batches: new Set(), serials: [], productName: l.productName, unit: l.unit };
+    const g = map.get(key) || { quantity: 0, batches: new Map(), serials: [], productName: l.productName, unit: l.unit };
     g.quantity = roundQty(g.quantity + l.quantity);
-    if (l.batchId) g.batches.add(String(l.batchId));
+    if (l.batchId) g.batches.set(String(l.batchId), roundQty((g.batches.get(String(l.batchId)) || 0) + l.quantity));
     (l.serialNumbers || []).forEach((s) => g.serials.push(s));
     map.set(key, g);
   });
@@ -299,7 +299,15 @@ const linesChanged = (issue, lines) => {
   for (const [key, g] of old) {
     const n = fresh.get(key);
     if (!n || Math.abs(n.quantity - g.quantity) > wip.EPS) return true;
-    if (n.batchId && !(g.batches.size === 1 && g.batches.has(String(n.batchId)))) return true;
+    // A named batch split must match what was posted, batch for batch.
+    const split = voucherService.lineBatches(n);
+    if (
+      split &&
+      (split.length !== g.batches.size ||
+        split.some((a) => Math.abs((g.batches.get(String(a.batchId)) || 0) - a.quantity) > wip.EPS))
+    ) {
+      return true;
+    }
     if (g.serials.length && !sameSet(g.serials, n.serials)) return true;
   }
   return false;

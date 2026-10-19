@@ -80,7 +80,7 @@ const buildOrderMatch = async (ctx, filter = {}, { now = new Date(), omit = [] }
   if (f.orderType) and.push({ orderType: f.orderType === 'production' ? { $ne: 'assembly' } : f.orderType });
   if (f.search) {
     const re = new RegExp(escapeRegex(f.search), 'i');
-    and.push({ $or: [{ orderNumber: re }, { productName: re }, { sku: re }, { bomNumber: re }] });
+    and.push({ $or: [{ orderNumber: re }, { batchNumber: re }, { productName: re }, { sku: re }, { bomNumber: re }] });
   }
   if (f.orderNumber) and.push({ orderNumber: new RegExp(escapeRegex(f.orderNumber), 'i') });
   if (f.product) {
@@ -397,6 +397,7 @@ const exportOrders = async (ctx, filter = {}, options = {}, now = new Date()) =>
     results: rows.map((o) => ({
       id: o.id,
       orderNumber: o.orderNumber,
+      batchNumber: o.batchNumber || o.orderNumber,
       orderType: o.orderType || 'production',
       productName: o.productName,
       sku: o.sku || '',

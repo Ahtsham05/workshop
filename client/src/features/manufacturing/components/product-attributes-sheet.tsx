@@ -27,6 +27,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
 import {
   PROCUREMENT_LABELS,
   PRODUCT_TYPES,
@@ -58,6 +59,16 @@ export function ProductAttributesSheet({
   const [defaultBomId, setDefaultBomId] = useState<string>(
     product.defaultBomId || NONE
   )
+  const [trackBatch, setTrackBatch] = useState(!!product.tracking?.trackBatch)
+  const [trackExpiry, setTrackExpiry] = useState(
+    !!product.tracking?.trackExpiry
+  )
+  const [shelfLife, setShelfLife] = useState<string>(
+    product.shelfLifeDays?.toString() ?? ''
+  )
+  const serialTracked = !!(product.trackImei || product.trackSerial)
+  const trackingBlocked = serialTracked || product.hasVariants
+  const liveBatches = product.tracking?.batchCount || 0
   const { data: boms } = useGetBomsQuery({
     productId: product.id,
     isActive: true,
@@ -73,6 +84,13 @@ export function ProductAttributesSheet({
         procurementType:
           procurement === NONE ? null : (procurement as ProcurementType),
         manufacturingLeadTimeDays: leadTime === '' ? null : Number(leadTime),
+        shelfLifeDays: shelfLife === '' ? null : Math.round(Number(shelfLife)),
+        ...(trackBatch !== !!product.tracking?.trackBatch
+          ? { trackBatch }
+          : {}),
+        ...(trackExpiry !== !!product.tracking?.trackExpiry
+          ? { trackExpiry }
+          : {}),
         ...(defaultBomId !== (product.defaultBomId || NONE)
           ? { defaultBomId: defaultBomId === NONE ? null : defaultBomId }
           : {}),
@@ -148,6 +166,71 @@ export function ProductAttributesSheet({
               />
             </div>
           </div>
+          <section className='space-y-3 rounded-lg border p-3'>
+            <div>
+              <div className='text-sm font-medium'>{t('Batch tracking')}</div>
+              <p className='text-muted-foreground text-xs'>
+                {serialTracked
+                  ? t(
+                      'This product is tracked by serial number — batches don’t apply.'
+                    )
+                  : product.hasVariants
+                    ? t(
+                        'This product has variants — turn batch tracking on per variant in the catalog.'
+                      )
+                    : t(
+                        'Every purchase, issue, receipt and sale of this product names its batch. Stock on hand becomes one opening batch.'
+                      )}
+              </p>
+            </div>
+            <label className='flex items-center justify-between gap-3'>
+              <span className='text-sm'>
+                {t('Track batches (lot numbers)')}
+              </span>
+              <Switch
+                checked={trackBatch}
+                disabled={trackingBlocked}
+                onCheckedChange={(v) => {
+                  setTrackBatch(v)
+                  if (!v) setTrackExpiry(false)
+                }}
+              />
+            </label>
+            <label className='flex items-center justify-between gap-3'>
+              <span className='text-sm'>{t('Track expiry dates')}</span>
+              <Switch
+                checked={trackExpiry}
+                disabled={trackingBlocked}
+                onCheckedChange={(v) => {
+                  setTrackExpiry(v)
+                  if (v) setTrackBatch(true)
+                }}
+              />
+            </label>
+            <div className='grid gap-1.5'>
+              <Label htmlFor='attr-shelf-life'>{t('Shelf life (days)')}</Label>
+              <Input
+                id='attr-shelf-life'
+                type='number'
+                min={0}
+                placeholder={t('e.g. 180')}
+                value={shelfLife}
+                onChange={(e) => setShelfLife(e.target.value)}
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t(
+                  'A production receipt’s expiry date fills itself: manufacture date + shelf life.'
+                )}
+              </p>
+            </div>
+            {!trackBatch && !trackExpiry && liveBatches > 0 && (
+              <p className='text-xs text-amber-700 dark:text-amber-400'>
+                {t(
+                  '{{n}} batch(es) still hold stock — use or adjust them before turning tracking off.'
+                ).replace('{{n}}', String(liveBatches))}
+              </p>
+            )}
+          </section>
           <div className='grid gap-1.5'>
             <Label>{t('Default BOM')}</Label>
             <Select

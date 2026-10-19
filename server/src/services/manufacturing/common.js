@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const httpStatus = require('http-status');
 const ApiError = require('../../utils/ApiError');
+const { startOfBusinessDay, toBusinessCalendarDate } = require('../../utils/businessTimezone');
 
 /** Quantities keep 6 decimals (fractional units like kg/m are normal in manufacturing). */
 const roundQty = (value) => Math.round((Number(value) || 0) * 1e6) / 1e6;
@@ -67,7 +68,18 @@ class RowErrors {
   }
 }
 
+const DAY_MS = 86400000;
+
+/** 00:00 today in the business timezone (ms) — a batch whose expiry is before it has expired. */
+const startOfBusinessToday = () => startOfBusinessDay(toBusinessCalendarDate(new Date())).getTime();
+
+/** Whole calendar days from today to `date` (0 = expires today, negative = expired), or null. */
+const daysUntil = (date, today = startOfBusinessToday()) =>
+  date ? Math.floor((new Date(date).getTime() - today) / DAY_MS) : null;
+
 module.exports = {
+  startOfBusinessToday,
+  daysUntil,
   roundQty,
   roundMoney,
   requireBranch,

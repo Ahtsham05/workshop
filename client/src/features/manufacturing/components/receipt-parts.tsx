@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fmtQty } from '../lib/constants'
 import type { consumptionFor } from '../lib/output-math'
+import { BatchBadge } from './badges'
 
 const EPS = 1e-6
 
@@ -50,6 +51,11 @@ export function OrderStrip({ order }: { order: ProductionOrder }) {
         <span className='text-muted-foreground text-xs'>
           {getUnitLabel(order.unit)}
         </span>
+        <BatchBadge
+          size='sm'
+          batchNumber={order.batchNumber || order.orderNumber}
+          title={t('Finished-goods batch')}
+        />
       </div>
       {facts.map(([label, value, tone]) => (
         <div key={label}>

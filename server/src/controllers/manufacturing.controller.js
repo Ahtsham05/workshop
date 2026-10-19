@@ -5,7 +5,8 @@ const { manufacturingService, auditLogService } = require('../services');
 const { getBranchContext, resolveWriteBranchId } = require('../utils/branchFilter');
 
 const stockService = require('../services/manufacturing/stock.service');
-const { User } = require('../models');
+const batchReportsService = require('../services/manufacturing/batchReports.service');
+const { User, Product } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 const {
@@ -109,7 +110,7 @@ const removeDemoData = catchAsync(async (req, res) => {
 });
 
 // ── Products ─────────────────────────────────────────────────────────────────────
-const PRODUCT_LIST_FILTERS = ['productType', 'classifiedOnly', 'hasBom', 'procurementType', 'stock', 'search'];
+const PRODUCT_LIST_FILTERS = ['productType', 'classifiedOnly', 'hasBom', 'procurementType', 'stock', 'tracking', 'search'];
 
 const getProducts = catchAsync(async (req, res) => {
   const filter = pick(req.query, [...PRODUCT_LIST_FILTERS, 'sort']);
@@ -136,6 +137,30 @@ const updateProductAttributes = catchAsync(async (req, res) => {
 const bulkClassifyProducts = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
   res.send(await productsService.bulkClassify(ctx, req.body));
+});
+
+const batchUnbatchedStock = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const batch = await productsService.batchUnbatchedStock(ctx, req.params.productId, req.body);
+  await audit(req, {
+    action: 'update',
+    module: 'Product',
+    entityName: `Batch ${batch.batchNumber}`,
+    metadata: { manufacturing: { unbatchedToBatch: { productId: req.params.productId, ...batch } } },
+  });
+  res.status(httpStatus.CREATED).send(batch);
+});
+
+const bulkProductTracking = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const result = await productsService.bulkTracking(ctx, req.body);
+  await audit(req, {
+    action: 'update',
+    module: 'Product',
+    entityName: `${result.updated} product(s)`,
+    metadata: { manufacturing: { bulkTracking: req.body } },
+  });
+  res.send(result);
 });
 
 const getProductStats = catchAsync(async (req, res) => {
@@ -173,7 +198,22 @@ const getBoms = catchAsync(async (req, res) => {
 });
 
 const getBom = catchAsync(async (req, res) => {
-  res.send(await bomService.getBom(readCtx(req), req.params.bomId));
+  const bom = await bomService.getBom(readCtx(req), req.params.bomId);
+  // Batch / expiry tracking of the product and every component (and alternative), so the
+  // recipe shows which lines are issued by batch.
+  const ids = [
+    bom.productId,
+    ...bom.components.flatMap((c) => [c.productId, ...(c.alternatives || []).map((a) => a.productId)]),
+  ].filter(Boolean);
+  const [tracking, product] = await Promise.all([
+    productsService.trackingFor([...new Set(ids.map(String))]),
+    Product.findById(bom.productId).select('shelfLifeDays').lean(),
+  ]);
+  res.send({
+    ...bom.toJSON(),
+    tracking: Object.fromEntries(tracking),
+    productShelfLifeDays: (product && product.shelfLifeDays) || null,
+  });
 });
 
 const updateBom = catchAsync(async (req, res) => {
@@ -1011,6 +1051,10 @@ const traceLookup = catchAsync(async (req, res) => {
   res.send(await traceabilityService.lookup(readCtx(req), req.query.q));
 });
 
+const searchBatches = catchAsync(async (req, res) => {
+  res.send(await batchReportsService.searchBatches(readCtx(req), req.query));
+});
+
 const getReport = catchAsync(async (req, res) => {
   res.send(await reportsService.getReport(readCtx(req), req.params.report, req.query));
 });
@@ -1021,6 +1065,7 @@ const getWip = catchAsync(async (req, res) => {
 
 module.exports = {
   getReport,
+  searchBatches,
   getProductionOrderFilterOptions,
   exportProductionOrders,
   bulkUpdateProductionOrders,
@@ -1036,6 +1081,8 @@ module.exports = {
   getProductTypeSummary,
   updateProductAttributes,
   bulkClassifyProducts,
+  bulkProductTracking,
+  batchUnbatchedStock,
   getAssemblies,
   getWhereUsed,
   getProductStats,
