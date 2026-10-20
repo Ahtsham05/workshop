@@ -24,6 +24,7 @@ import { useDispatch } from 'react-redux'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BUSINESS_TYPE_OPTIONS, normalizeBusinessType } from '@/lib/business-types'
 
+import { useNativeLanguage } from '@/lib/native-language'
 const formSchema = z.object({
   name: z.string().min(2, 'Business name must be at least 2 characters'),
   nameUrdu: z.string().optional(),
@@ -42,6 +43,7 @@ type FormValues = z.infer<typeof formSchema>
 
 export default function BusinessProfileSettings() {
   const { data: org, isLoading } = useGetMyOrganizationQuery()
+  const nativeLanguage = useNativeLanguage()
   const { data: countries } = useGetCountriesQuery()
   const [fetchCountryDefaults, { data: countryDefaults }] = useLazyGetCountryDefaultsQuery()
   const [updateOrganization, { isLoading: saving }] = useUpdateOrganizationMutation()
@@ -166,19 +168,21 @@ export default function BusinessProfileSettings() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name='nameUrdu'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Business Name (Urdu)</FormLabel>
-                    <FormControl>
-                      <Input dir='rtl' className='text-right' {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {nativeLanguage && (
+                <FormField
+                  control={form.control}
+                  name='nameUrdu'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Business Name ({nativeLanguage.label})</FormLabel>
+                      <FormControl>
+                        <Input dir={nativeLanguage.dir} placeholder={nativeLanguage.placeholder} className='text-start' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
             <FormItem>
               <FormLabel>Business type</FormLabel>

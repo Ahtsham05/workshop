@@ -93,6 +93,7 @@ import type { TaxLine } from '@/stores/taxCalculator.api'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 interface InvoiceListProps {
   onBack?: () => void
   onCreateNew?: () => void
@@ -156,6 +157,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
   initialTypeFilter,
 }: InvoiceListProps) {
   const { t } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
   const { hasExplicitPermission } = usePermissions()
@@ -605,33 +607,35 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex h-8 items-center gap-1.5">
-          <Label htmlFor="invoice-print-urdu" className="text-sm text-muted-foreground">{t('urdu_print')}</Label>
-          <Switch
-            id="invoice-print-urdu"
-            checked={printInUrdu}
-            onCheckedChange={(v) => {
-              setPrintInUrdu(v)
-              setInvoicePrintInUrdu(v)
-            }}
-          />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="rounded-full text-muted-foreground outline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={t('urdu_print_hint')}
-              >
-                <Info className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              {t('urdu_print_hint')}
-            </TooltipContent>
-          </Tooltip>
+      {nativeLanguageName && (
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex h-8 items-center gap-1.5">
+            <Label htmlFor="invoice-print-urdu" className="text-sm text-muted-foreground">{t('urdu_print', { lang: nativeLanguageName })}</Label>
+            <Switch
+              id="invoice-print-urdu"
+              checked={printInUrdu}
+              onCheckedChange={(v) => {
+                setPrintInUrdu(v)
+                setInvoicePrintInUrdu(v)
+              }}
+            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="rounded-full text-muted-foreground outline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={t('urdu_print_hint', { lang: nativeLanguageName })}
+                >
+                  <Info className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                {t('urdu_print_hint', { lang: nativeLanguageName })}
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
-      </div>
+      )}
 
       {twoUpMode && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-4 py-3">

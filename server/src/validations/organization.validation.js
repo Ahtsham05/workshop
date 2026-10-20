@@ -2,6 +2,7 @@ const Joi = require('joi');
 const { objectId } = require('./custom.validation');
 const { CURRENCY_CODES } = require('../config/currencies');
 const { COUNTRY_CODES, TAX_SYSTEMS } = require('../config/countries');
+const { NATIVE_LANGUAGE_SETTINGS } = require('../config/nativeLanguages');
 
 // One section (invoice/purchase/quotation) of the documentNumbering config — see
 // organization.model.js's buildNumberingSectionSchema and documentNumbering.service.js's
@@ -74,6 +75,7 @@ const updateOrganization = {
       defaultTaxCategoryId: Joi.string().custom(objectId).allow(null, ''),
       locale: Joi.string().allow(''),
       dateFormat: Joi.string().valid('DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'),
+      nativeLanguage: Joi.string().valid(...NATIVE_LANGUAGE_SETTINGS),
       documentNumbering: documentNumberingSection,
       // Handled directly by the controller/service, not by this schema — kept permissive
       // (Joi.any()) so the existing logo upload/remove flow via multipart form data is

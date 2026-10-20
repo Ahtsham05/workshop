@@ -6,6 +6,7 @@ import { buildInvoicePdfDownloadFilename } from './invoice-print-whatsapp'
 import { generateA4InvoiceHTML, type PrintInvoiceData } from './print-utils'
 import type { InvoiceTemplate } from './invoice-template'
 
+import { isNativePrintOn } from '@/lib/native-language'
 async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer()
   const bytes = new Uint8Array(buffer)
@@ -73,7 +74,7 @@ export async function sendInvoiceReceiptWhatsApp(params: {
   const pdfBase64 = await blobToBase64(blob)
   const filename = buildInvoicePdfDownloadFilename(params.printData)
   const companyName =
-    (params.printData.printInUrdu
+    (isNativePrintOn(params.printData.printInUrdu)
       ? params.printData.companyNameUrdu || params.printData.companyName
       : params.printData.companyName || params.printData.companyNameUrdu) || ''
   // Falls back to the invoice_pdf template's own greeting when no name is known — Meta

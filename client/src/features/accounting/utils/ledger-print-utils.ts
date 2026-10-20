@@ -3,7 +3,16 @@ import { escapeHtml } from '@/lib/escape-html'
 import { PAPER_FORMATS, type SheetSize } from '@/features/invoice/utils/paper-format'
 import { formatAppDate } from '@/lib/date-format'
 
-export type LedgerStatementLanguage = 'en' | 'ur'
+import {
+  isRtlPrintLanguage,
+  printDirection,
+  printLocale,
+  printScriptFontFamilies,
+  type PrintLanguage,
+} from '@/lib/native-language'
+import { toPrintLanguage } from '@/features/invoice/utils/language'
+/** English or a native print language (Urdu, Arabic, Hindi — lib/native-language.ts). */
+export type LedgerStatementLanguage = PrintLanguage
 
 export interface LedgerStatementItem {
   name: string
@@ -146,6 +155,92 @@ const statementLabels = {
     type_opening_balance: 'ابتدائی بیلنس',
     type_refund: 'رقم واپسی',
   },
+  ar: {
+    statement_title: 'كشف حساب العميل',
+    generated: 'تاريخ الإصدار',
+    customer: 'العميل',
+    statement_period: 'فترة الكشف',
+    opening_balance: 'الرصيد الافتتاحي',
+    total_debit: 'إجمالي المبلغ',
+    total_credit: 'المدفوعات المستلمة',
+    closing_balance: 'إجمالي الرصيد',
+    col_number: '#',
+    col_date: 'التاريخ',
+    col_ref: 'رقم الفاتورة',
+    col_product: 'الصنف',
+    col_qty: 'الكمية',
+    col_rate: 'السعر',
+    col_amount: 'المبلغ',
+    balance_brought_forward: 'الرصيد المرحّل',
+    invoice_total: 'إجمالي الفاتورة',
+    previous_balance: 'الرصيد السابق',
+    total_debit_period: 'إجمالي المبلغ',
+    total_credit_period: 'المدفوعات المستلمة',
+    total_remaining: 'إجمالي الرصيد',
+    receivable: 'مستحق لنا',
+    payable: 'مستحق علينا',
+    ref_prefix: 'مرجع',
+    footer_note: 'هذا كشف حساب صادر إلكترونيًا.',
+    print_options: 'خيارات الطباعة',
+    print_statement: 'طباعة الكشف',
+    close: 'إغلاق',
+    cash: 'نقدًا',
+    credit: 'آجل',
+    pending: 'معلّق',
+    type_sale: 'بيع',
+    type_sale_manual: 'نقد مدفوع',
+    type_payment_received: 'دفعة مستلمة',
+    type_payment_received_manual: 'نقد مستلم',
+    type_sales_return: 'مرتجع مبيعات',
+    type_credit_note: 'إشعار دائن',
+    type_debit_note: 'إشعار مدين',
+    type_adjustment: 'تسوية',
+    type_opening_balance: 'الرصيد الافتتاحي',
+    type_refund: 'استرداد',
+  },
+  hi: {
+    statement_title: 'ग्राहक खाता विवरण',
+    generated: 'तैयार किया गया',
+    customer: 'ग्राहक',
+    statement_period: 'विवरण अवधि',
+    opening_balance: 'प्रारंभिक शेष',
+    total_debit: 'कुल राशि',
+    total_credit: 'प्राप्त भुगतान',
+    closing_balance: 'कुल शेष',
+    col_number: '#',
+    col_date: 'दिनांक',
+    col_ref: 'बिल संख्या',
+    col_product: 'उत्पाद',
+    col_qty: 'मात्रा',
+    col_rate: 'दर',
+    col_amount: 'राशि',
+    balance_brought_forward: 'पिछला शेष आगे लाया गया',
+    invoice_total: 'बिल कुल',
+    previous_balance: 'पिछला शेष',
+    total_debit_period: 'कुल राशि',
+    total_credit_period: 'प्राप्त भुगतान',
+    total_remaining: 'कुल शेष',
+    receivable: 'प्राप्य',
+    payable: 'देय',
+    ref_prefix: 'संदर्भ',
+    footer_note: 'यह कंप्यूटर द्वारा तैयार ग्राहक खाता विवरण है।',
+    print_options: 'प्रिंट विकल्प',
+    print_statement: 'विवरण प्रिंट करें',
+    close: 'बंद करें',
+    cash: 'नकद',
+    credit: 'उधार',
+    pending: 'लंबित',
+    type_sale: 'बिक्री',
+    type_sale_manual: 'नकद भुगतान',
+    type_payment_received: 'भुगतान प्राप्त',
+    type_payment_received_manual: 'नकद प्राप्त',
+    type_sales_return: 'बिक्री वापसी',
+    type_credit_note: 'क्रेडिट नोट',
+    type_debit_note: 'डेबिट नोट',
+    type_adjustment: 'समायोजन',
+    type_opening_balance: 'प्रारंभिक शेष',
+    type_refund: 'धनवापसी',
+  },
 } as const
 
 type StatementLabels = { [K in keyof typeof statementLabels.en]: string }
@@ -196,15 +291,17 @@ export function generateCustomerLedgerStatementHTML(
     isTrial,
   } = data
 
-  const language: LedgerStatementLanguage = data.language === 'ur' ? 'ur' : 'en'
+  const language: LedgerStatementLanguage = toPrintLanguage(data.language)
+  const native = language !== 'en'
+  const rtl = isRtlPrintLanguage(language)
   const showInvoiceNumbers = data.showInvoiceNumbers !== false
   const labels = statementLabels[language]
-  const dir = language === 'ur' ? 'rtl' : 'ltr'
-  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
-  const startAlign = language === 'ur' ? 'right' : 'left'
+  const dir = printDirection(language)
+  const locale = printLocale(language)
+  const startAlign = rtl ? 'right' : 'left'
 
-  const businessName = (language === 'ur' && companyNameUrdu?.trim()) || companyName?.trim() || 'Business'
-  const displayCustomerName = (language === 'ur' && customerNameUrdu?.trim()) || customerName
+  const businessName = (native && companyNameUrdu?.trim()) || companyName?.trim() || 'Business'
+  const displayCustomerName = (native && customerNameUrdu?.trim()) || customerName
   const now = new Date()
 
   const bodyRows: string[] = []
@@ -217,7 +314,7 @@ export function generateCustomerLedgerStatementHTML(
 
     items.forEach((item, j) => {
       itemIdx += 1
-      const itemName = (language === 'ur' && item.nameUrdu?.trim()) || item.name
+      const itemName = (native && item.nameUrdu?.trim()) || item.name
       const rowClass = j === 0 ? 'item-row invoice-start' : 'item-row'
       bodyRows.push(`
         <tr class="${rowClass}">
@@ -254,7 +351,7 @@ export function generateCustomerLedgerStatementHTML(
     }
 
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', ${printScriptFontFamilies()}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: ${format.baseFontPx}px;
       line-height: 1.4;
       margin: 0;
@@ -278,7 +375,7 @@ export function generateCustomerLedgerStatementHTML(
     .company-name { font-size: 22px; font-weight: bold; color: #007bff; margin-bottom: 4px; }
     .company-details { font-size: 11px; color: #000; line-height: 1.3; }
 
-    .statement-title-block { text-align: ${language === 'ur' ? 'left' : 'right'}; }
+    .statement-title-block { text-align: ${rtl ? 'left' : 'right'}; }
     .statement-title { font-size: 20px; font-weight: bold; color: #333; margin-bottom: 8px; }
     .statement-meta { font-size: 11px; color: #555; }
 
@@ -311,7 +408,7 @@ export function generateCustomerLedgerStatementHTML(
       border: 1px solid #ccc;
       padding: 6px 5px;
       font-size: 10px;
-      text-transform: ${language === 'ur' ? 'none' : 'uppercase'};
+      text-transform: ${rtl ? 'none' : 'uppercase'};
       letter-spacing: 0.02em;
     }
     table.statement-table td {
@@ -323,7 +420,7 @@ export function generateCustomerLedgerStatementHTML(
     table.statement-table tr { page-break-inside: avoid; }
     .text-center { text-align: center; }
     .text-left { text-align: ${startAlign}; }
-    .text-right { text-align: ${language === 'ur' ? 'left' : 'right'}; }
+    .text-right { text-align: ${rtl ? 'left' : 'right'}; }
     .item-row td { color: #333; }
     .item-row.invoice-start td { border-top: 2px solid #999; }
 
@@ -332,13 +429,13 @@ export function generateCustomerLedgerStatementHTML(
 
     .closing-summary {
       display: flex;
-      justify-content: ${language === 'ur' ? 'flex-start' : 'flex-end'};
+      justify-content: ${rtl ? 'flex-start' : 'flex-end'};
       margin-bottom: 18px;
     }
     table.totals-table { width: 320px; border-collapse: collapse; }
     table.totals-table td { padding: 6px 10px; font-size: 12px; }
     table.totals-table .total-label { color: #555; }
-    table.totals-table .total-amount { text-align: ${language === 'ur' ? 'left' : 'right'}; font-weight: 600; }
+    table.totals-table .total-amount { text-align: ${rtl ? 'left' : 'right'}; font-weight: 600; }
     table.totals-table .grand-total td { border-top: 2px solid #000; font-size: 15px; font-weight: bold; padding-top: 10px; }
 
     .footer { margin-top: 24px; text-align: center; color: #666; font-size: 11px; border-top: 1px solid #ddd; padding-top: 10px; }

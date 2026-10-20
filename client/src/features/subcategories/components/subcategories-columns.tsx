@@ -83,7 +83,7 @@ export function useSubCategoryColumns(): ColumnDef<SubCategory>[] {
           <div className="flex min-w-0 flex-1 flex-row flex-wrap items-center gap-x-2 gap-y-0.5">
             <span className={getTextClasses(subCategory.name || 'Unnamed sub-category', 'shrink-0 font-medium')}>{subCategory.name || 'Unnamed sub-category'}</span>
             {urdu ? (
-              <span dir='rtl' className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(urdu))}>
+              <span dir='auto' className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(urdu))}>
                 {urdu}
               </span>
             ) : null}

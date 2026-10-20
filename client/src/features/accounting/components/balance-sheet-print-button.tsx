@@ -14,6 +14,7 @@ import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useCurrencyMeta } from '@/lib/format-money';
 import { resolveBranchCompanyName } from '@/utils/branch-company-name';
 import { openPrintWindowForFormat } from '@/features/invoice/utils/print-utils';
+import { nativePrintLanguage, useNativeLanguage } from '@/lib/native-language';
 import {
   generateBalanceSheetHTML,
   type BalanceSheetLanguage,
@@ -23,11 +24,14 @@ import {
 
 const PRINT_LANGUAGE_KEY = 'party-balance-sheet-language';
 
-function getStoredPrintLanguage(): BalanceSheetLanguage {
+/** 'native' = the business's native language (Urdu, Arabic, …), the sheet's default. */
+type SheetLanguageChoice = 'en' | 'native';
+
+function getStoredPrintLanguage(): SheetLanguageChoice {
   try {
-    return localStorage.getItem(PRINT_LANGUAGE_KEY) === 'en' ? 'en' : 'ur';
+    return localStorage.getItem(PRINT_LANGUAGE_KEY) === 'en' ? 'en' : 'native';
   } catch {
-    return 'ur';
+    return 'native';
   }
 }
 
@@ -61,7 +65,11 @@ interface BalanceSheetPrintButtonProps {
 export function BalanceSheetPrintButton({ party, rows, disabled }: BalanceSheetPrintButtonProps) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
-  const [language, setLanguage] = useState<BalanceSheetLanguage>(getStoredPrintLanguage);
+  const nativeLanguage = useNativeLanguage();
+  const [storedLanguage, setLanguage] = useState<SheetLanguageChoice>(getStoredPrintLanguage);
+  // English-only businesses have no native option, whatever was remembered.
+  const language: SheetLanguageChoice = nativeLanguage ? storedLanguage : 'en';
+  const printLanguage: BalanceSheetLanguage = language === 'native' ? nativePrintLanguage() : 'en';
   const [hideSettled, setHideSettled] = useState(false);
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId);
   const { data: branchData } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId });
@@ -82,7 +90,7 @@ export function BalanceSheetPrintButton({ party, rows, disabled }: BalanceSheetP
       const html = generateBalanceSheetHTML({
         party,
         rows,
-        language,
+        language: printLanguage,
         hideSettled,
         companyName: resolveBranchCompanyName(orgData?.name, branchData?.name),
         companyNameUrdu: branchData?.nameUrdu?.trim() || orgData?.nameUrdu?.trim(),
@@ -124,16 +132,18 @@ export function BalanceSheetPrintButton({ party, rows, disabled }: BalanceSheetP
               <Label>{t('Print language')}</Label>
               <RadioGroup
                 value={language}
-                onValueChange={(v) => setLanguage(v === 'en' ? 'en' : 'ur')}
+                onValueChange={(v) => setLanguage(v === 'en' ? 'en' : 'native')}
                 className="grid grid-cols-2 gap-2"
               >
-                <Label
-                  htmlFor={`${party}-balance-sheet-ur`}
-                  className="flex cursor-pointer items-center gap-2 rounded-md border p-3 has-[[data-state=checked]]:border-primary"
-                >
-                  <RadioGroupItem id={`${party}-balance-sheet-ur`} value="ur" />
-                  <span>اردو</span>
-                </Label>
+                {nativeLanguage && (
+                  <Label
+                    htmlFor={`${party}-balance-sheet-ur`}
+                    className="flex cursor-pointer items-center gap-2 rounded-md border p-3 has-[[data-state=checked]]:border-primary"
+                  >
+                    <RadioGroupItem id={`${party}-balance-sheet-ur`} value="native" />
+                    <span dir="auto">{nativeLanguage.nativeLabel}</span>
+                  </Label>
+                )}
                 <Label
                   htmlFor={`${party}-balance-sheet-en`}
                   className="flex cursor-pointer items-center gap-2 rounded-md border p-3 has-[[data-state=checked]]:border-primary"

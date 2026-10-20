@@ -41,6 +41,8 @@ import summery from '@/utils/summery'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { nativeTextDir } from '@/lib/native-language'
 const categoryFormSchema = z.object({
   name: z.string().min(1, 'Category name is required'),
   nameUrdu: z.string().optional(),
@@ -65,6 +67,7 @@ export function CategoriesActionDialog({ setFetch, defaultName, onCreated }: Cat
   const { state, dispatch: contextDispatch } = useCategories()
   const reduxDispatch = useDispatch<AppDispatch>()
   const { t } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -294,15 +297,15 @@ export function CategoriesActionDialog({ setFetch, defaultName, onCreated }: Cat
                     name="nameUrdu"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-base">{t('name_in_urdu')}</FormLabel>
+                        <FormLabel className="text-base">{t('name_in_urdu', { lang: nativeLanguageName })}</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Input
-                              dir="rtl"
-                              placeholder={t('name_in_urdu_placeholder')}
+                              dir={nativeTextDir()}
+                              placeholder={t('name_in_urdu_placeholder', { lang: nativeLanguageName })}
                               autoComplete="off"
                               showVoiceInput={false}
-                              className="pl-9 text-right"
+                              className="pl-9 text-start"
                               {...field}
                             />
                             <div className="absolute left-2 top-1/2 -translate-y-1/2">

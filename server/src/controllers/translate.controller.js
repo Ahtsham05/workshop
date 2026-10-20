@@ -10,14 +10,27 @@ const translateNameToUrdu = catchAsync(async (req, res) => {
 });
 
 /**
- * Proxies Urdu → English romanization for display names.
+ * Proxies English → the business's native language (Urdu, Arabic, Hindi, …).
+ */
+const translateNameToNative = catchAsync(async (req, res) => {
+  const translated = await nameTranslateService.translateEnglishToNative(req.body.text, req.body.target);
+  res.send({ translated });
+});
+
+/**
+ * Proxies native-language → English romanization for display names (Urdu when `source` is omitted).
  */
 const translateNameToEnglish = catchAsync(async (req, res) => {
-  const translated = await nameTranslateService.translateUrduToEnglish(req.body.text);
+  const { text, source } = req.body;
+  const translated =
+    source && source !== 'ur'
+      ? await nameTranslateService.translateNativeToEnglish(text, source)
+      : await nameTranslateService.translateUrduToEnglish(text);
   res.send({ translated });
 });
 
 module.exports = {
   translateNameToUrdu,
+  translateNameToNative,
   translateNameToEnglish,
 };

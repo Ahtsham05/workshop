@@ -101,7 +101,7 @@ function CategoryPickerFieldInner({ categories, value, onValueChange, disabled }
                   </span>
                   {selected.nameUrdu?.trim() ? (
                     <span
-                      dir="rtl"
+                      dir='auto'
                       className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(selected.nameUrdu))}
                     >
                       {selected.nameUrdu.trim()}
@@ -156,7 +156,7 @@ function CategoryPickerFieldInner({ categories, value, onValueChange, disabled }
                             {category.name}
                           </span>
                           {urdu ? (
-                            <span dir="rtl" className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(urdu))}>
+                            <span dir='auto' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(urdu))}>
                               {urdu}
                             </span>
                           ) : null}

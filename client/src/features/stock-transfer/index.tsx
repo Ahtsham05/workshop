@@ -46,6 +46,7 @@ import {
 import { useFormatMoney } from '@/lib/format-money'
 
 
+import { toPrintLanguage } from '@/features/invoice/utils/language'
 const formatTime = (value?: string) => (value ? format(new Date(value), 'h:mm a') : '')
 
 function branchName(ref: GroupedTransferRow['fromBranchId']): string {
@@ -119,7 +120,7 @@ export default function StockTransfer() {
         companyAddress: [orgData?.address, orgData?.city].filter(Boolean).join(', '),
         companyPhone: orgData?.phone,
         companyLogo: orgData?.logo?.url,
-        language: language === 'ur' ? 'ur' : 'en',
+        language: toPrintLanguage(language),
       })
       openTransferPrintWindow(generateTransferHTML(printData))
     } catch (err) {

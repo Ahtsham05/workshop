@@ -7,6 +7,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Label } from '@/components/ui/label'
+import { nativeFieldLabel } from '@/lib/native-language'
 import {
   Select,
   SelectContent,
@@ -71,7 +72,7 @@ const CUSTOMER_FIELDS: ImportFieldSpec[] = [
     width: 28,
     aliases: ['Customer', 'Client', 'Client Name', 'Buyer', 'گاہک'],
   }),
-  withCommonAliases({ key: 'nameUrdu', label: 'Name (Urdu)', width: 24 }),
+  withCommonAliases({ key: 'nameUrdu', label: nativeFieldLabel('Name'), width: 24 }),
   withCommonAliases({ key: 'phone', label: 'Phone', type: 'code', width: 18 }),
   withCommonAliases({ key: 'whatsapp', label: 'WhatsApp', type: 'code', width: 18 }),
   withCommonAliases({ key: 'email', label: 'Email', width: 28 }),
@@ -246,7 +247,7 @@ export function CustomerImportDialog({ open, onOpenChange, onImport }: CustomerI
             {customer.nameUrdu && (
               <span className='font-normal text-muted-foreground'>
                 {' · '}
-                <span dir='rtl'>{customer.nameUrdu}</span>
+                <span dir='auto'>{customer.nameUrdu}</span>
               </span>
             )}
           </div>

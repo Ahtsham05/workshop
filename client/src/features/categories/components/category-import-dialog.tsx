@@ -10,6 +10,7 @@ import { AppDispatch } from '@/stores/store'
 import { bulkAddCategories } from '@/stores/category.slice'
 import { useLanguage } from '@/context/language-context'
 import { useCategories } from '../context/categories-context'
+import { nativeFieldLabel } from '@/lib/native-language'
 import {
   ExcelImportDialog,
   type BuiltRow,
@@ -45,7 +46,7 @@ const CATEGORY_FIELDS: ImportFieldSpec[] = [
     width: 30,
     aliases: ['Category', 'Group', 'Department', 'کیٹیگری'],
   }),
-  withCommonAliases({ key: 'nameUrdu', label: 'Name (Urdu)', width: 25 }),
+  withCommonAliases({ key: 'nameUrdu', label: nativeFieldLabel('Name'), width: 25 }),
 ]
 
 const SAMPLE_ROWS = [
@@ -110,7 +111,7 @@ export function CategoryImportDialog({ setFetch }: CategoryImportDialogProps) {
           {category.nameUrdu && (
             <span className='font-normal text-muted-foreground'>
               {' · '}
-              <span dir='rtl'>{category.nameUrdu}</span>
+              <span dir='auto'>{category.nameUrdu}</span>
             </span>
           )}
         </div>

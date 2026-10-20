@@ -155,7 +155,7 @@ export function ContactMediaNameCell({
                     compact ? 'text-xs' : '',
                     getUrduSecondaryNameClasses(nameUrdu),
                   )}
-                  dir='rtl'
+                  dir='auto'
                 >
                   {nameUrdu}
                 </span>

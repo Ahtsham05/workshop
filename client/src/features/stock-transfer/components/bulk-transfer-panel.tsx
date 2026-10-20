@@ -47,6 +47,7 @@ import { BilingualName } from '@/components/bilingual-name'
 import { SerialPickDialog } from '@/components/serial-pick-dialog'
 import { formatAppDate } from '@/lib/date-format'
 
+import { toPrintLanguage } from '@/features/invoice/utils/language'
 type LangFn = (key: string, vars?: Record<string, string | number>) => string
 
 interface BulkTransferLine {
@@ -68,6 +69,9 @@ function createEmptyRow(): BulkTransferLine {
 
 const INITIAL_ROWS = 3
 const MAX_VISIBLE_RESULTS = 50
+/** Out-of-stock matches shown (disabled) under a search, so a product that exists but has
+ * nothing here to send reads as "out of stock" instead of looking missing. */
+const MAX_OUT_OF_STOCK_RESULTS = 10
 
 function lineNeedsSerials(item: PurchaseCatalogItem) {
   return !!(item.trackImei || item.trackSerial)
@@ -161,6 +165,7 @@ function ProductPicker({
   catalogLoading,
   visibleCatalog,
   filteredCatalog,
+  outOfStockMatches,
   onSelect,
   t,
   triggerClassName,
@@ -172,6 +177,7 @@ function ProductPicker({
   catalogLoading: boolean
   visibleCatalog: PurchaseCatalogItem[]
   filteredCatalog: PurchaseCatalogItem[]
+  outOfStockMatches: PurchaseCatalogItem[]
   onSelect: (item: PurchaseCatalogItem) => void
   t: LangFn
   triggerClassName: string
@@ -201,9 +207,9 @@ function ProductPicker({
                 <Loader2 className='h-6 w-6 animate-spin' aria-hidden />
                 {t('Loading products...')}
               </div>
-            ) : visibleCatalog.length === 0 ? (
+            ) : visibleCatalog.length === 0 && outOfStockMatches.length === 0 ? (
               <p className='py-6 text-center text-sm text-muted-foreground'>{t('No more in-stock products found')}</p>
-            ) : (
+            ) : visibleCatalog.length === 0 ? null : (
               <CommandGroup>
                 {visibleCatalog.map((item) => (
                   <CommandItem
@@ -244,6 +250,31 @@ function ProductPicker({
               <div className='border-t px-3 py-2 text-center text-xs text-muted-foreground'>
                 {t('Showing {{shown}} of {{total}} — keep typing to narrow', { shown: String(visibleCatalog.length), total: String(filteredCatalog.length) })}
               </div>
+            ) : null}
+            {!catalogLoading && outOfStockMatches.length > 0 ? (
+              <CommandGroup heading={t('Out of stock in this branch — cannot be transferred')} className={cn(visibleCatalog.length > 0 && 'border-t')}>
+                {outOfStockMatches.map((item) => (
+                  <CommandItem
+                    key={item.id}
+                    value={`oos-${item.id}-${item.name}`}
+                    disabled
+                    className='flex items-center gap-3 p-3'
+                  >
+                    {item.image?.url ? (
+                      <img src={item.image.url} alt={item.name} className='h-8 w-8 shrink-0 rounded-lg object-cover grayscale' />
+                    ) : (
+                      <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
+                        <Package className='h-4 w-4 text-muted-foreground' />
+                      </div>
+                    )}
+                    <div className='flex min-w-0 flex-1 flex-row flex-wrap items-baseline gap-x-2 gap-y-0.5'>
+                      <BilingualName primary={item.name} secondary={item.nameUrdu} primaryClassName='text-sm font-medium' truncate />
+                      <span className={cn('shrink-0 text-xs', stockToneClass(item.stockQuantity))}>· {t('Stock')}: {item.stockQuantity}</span>
+                    </div>
+                    <Badge variant='outline' className='shrink-0 border-red-300 px-1.5 py-0 text-[10px] text-red-600'>{t('Out of stock')}</Badge>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
             ) : null}
           </CommandList>
         </Command>
@@ -543,6 +574,15 @@ export function BulkTransferPanel({
     [transferableCatalog, addedIds, productSearchQuery]
   )
   const visibleCatalog = filteredCatalog.slice(0, MAX_VISIBLE_RESULTS)
+  // Only under a search: with an empty box these would bury the products that can be sent.
+  const outOfStockMatches = useMemo(() => {
+    if (!productSearchQuery.trim()) return []
+    return filterAndRankBySearch(
+      catalog.filter((c) => c.stockQuantity <= 0),
+      productSearchQuery,
+      (c) => [c.name, c.nameUrdu, c.barcode, c.brand?.name],
+    ).slice(0, MAX_OUT_OF_STOCK_RESULTS)
+  }, [catalog, productSearchQuery])
 
   const filledLines = lines.filter((l): l is BulkTransferLine & { item: PurchaseCatalogItem } => l.item !== null)
   const totalQuantity = filledLines.reduce((sum, l) => sum + (lineNeedsSerials(l.item) ? l.imeis.length : l.quantity), 0)
@@ -666,7 +706,7 @@ export function BulkTransferPanel({
                 companyAddress: [orgData?.address, orgData?.city].filter(Boolean).join(', '),
                 companyPhone: orgData?.phone,
                 companyLogo: orgData?.logo?.url,
-                language: language === 'ur' ? 'ur' : 'en',
+                language: toPrintLanguage(language),
               })
             )
           )
@@ -834,6 +874,7 @@ export function BulkTransferPanel({
                               catalogLoading={catalogLoading}
                               visibleCatalog={visibleCatalog}
                               filteredCatalog={filteredCatalog}
+                              outOfStockMatches={outOfStockMatches}
                               onSelect={(item) => selectProductForRow(line.rowId, item)}
                               t={t}
                               triggerClassName='h-10 w-full justify-between border-dashed text-sm font-normal text-muted-foreground'
@@ -918,6 +959,7 @@ export function BulkTransferPanel({
                                     catalogLoading={catalogLoading}
                                     visibleCatalog={visibleCatalog}
                                     filteredCatalog={filteredCatalog}
+                                    outOfStockMatches={outOfStockMatches}
                                     onSelect={(item) => selectProductForRow(line.rowId, item)}
                                     t={t}
                                     triggerClassName='h-9 w-full min-w-[220px] justify-between border-dashed text-sm font-normal text-muted-foreground'

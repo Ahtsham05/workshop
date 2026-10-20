@@ -4,7 +4,16 @@ import { escapeHtml } from '@/lib/escape-html'
 import { formatAppDate } from '@/lib/date-format'
 import type { CurrencyOption } from '@/stores/localization.api'
 
-export type BankStatementLanguage = 'en' | 'ur'
+import {
+  isRtlPrintLanguage,
+  printDirection,
+  printScriptFontFamilies,
+  printScriptFontParams,
+  type PrintLanguage,
+} from '@/lib/native-language'
+import { toPrintLanguage } from '@/features/invoice/utils/language'
+/** English or a native print language (Urdu, Arabic, Hindi — lib/native-language.ts). */
+export type BankStatementLanguage = PrintLanguage
 export type BankStatementParty = 'customer' | 'supplier'
 
 export interface BankStatementRow {
@@ -243,11 +252,180 @@ const labels = {
       refund: 'رقم واپسی',
     } as Record<string, string>,
   },
+  ar: {
+    title: 'كشف حساب',
+    title_products: 'كشف حساب — حسب الصنف',
+    item_product: 'الصنف',
+    item_qty: 'الكمية',
+    item_rate: 'السعر',
+    item_amount: 'المبلغ',
+    col_type: 'النوع',
+    col_invoice: 'رقم الفاتورة',
+    col_product: 'الصنف / التفاصيل',
+    col_qty: 'الكمية',
+    col_price: 'السعر',
+    bill_adjustment: 'تسوية الفاتورة (خصم / ضريبة / رسوم)',
+    codes_title: '',
+    short_types: {
+      sale: 'بيع',
+      sale_manual: 'مدفوع',
+      payment_received: 'مستلم',
+      payment_received_manual: 'مستلم',
+      sales_return: 'مرتجع',
+      purchase: 'شراء',
+      payment_made: 'مدفوع',
+      payment: 'مدفوع',
+      purchase_return: 'مرتجع',
+      credit_note: 'إشعار دائن',
+      debit_note: 'إشعار مدين',
+      adjustment: 'تسوية',
+      opening_balance: 'افتتاحي',
+      refund: 'استرداد',
+    } as Record<string, string>,
+    code_meanings: {} as Record<string, string>,
+    account_holder: 'صاحب الحساب',
+    account_type: 'نوع الحساب',
+    customer_account: 'حساب عميل',
+    supplier_account: 'حساب مورد',
+    period: 'فترة الكشف',
+    beginning: 'من البداية',
+    issued: 'تاريخ الكشف',
+    phone: 'الهاتف',
+    address: 'العنوان',
+    summary: 'ملخص الحساب',
+    opening: 'الرصيد الافتتاحي',
+    total_debit: 'إجمالي المدين',
+    total_credit: 'إجمالي الدائن',
+    closing: 'الرصيد الختامي',
+    entries: 'قيود',
+    entries_label: 'القيود',
+    col_date: 'التاريخ',
+    col_details: 'تفاصيل الحركة',
+    col_ref: 'المرجع',
+    ref_prefix: 'مرجع',
+    col_debit: 'مدين',
+    col_credit: 'دائن',
+    col_balance: 'الرصيد',
+    brought_forward: 'الرصيد الافتتاحي المرحّل',
+    carried_forward: 'الرصيد الختامي',
+    no_activity: 'لا توجد حركات في هذه الفترة.',
+    dr: 'مدين',
+    cr: 'دائن',
+    customer_note: 'مدين = مبلغ مستحق عليكم · دائن = مبلغ مستحق لكم',
+    supplier_note: 'دائن = مبلغ مستحق لكم · مدين = مبلغ مستحق عليكم',
+    footer: 'هذا كشف صادر إلكترونيًا ولا يحتاج إلى توقيع. يرجى إبلاغنا فورًا بأي اختلاف.',
+    print: 'طباعة',
+    close: 'إغلاق',
+    cash: 'نقدًا',
+    credit: 'آجل',
+    pending: 'معلّق',
+    types: {
+      sale: 'بيع',
+      sale_manual: 'نقد مدفوع',
+      payment_received: 'دفعة مستلمة',
+      payment_received_manual: 'نقد مستلم',
+      sales_return: 'مرتجع مبيعات',
+      purchase: 'شراء',
+      payment_made: 'دفعة مسددة',
+      payment: 'دفعة',
+      purchase_return: 'مرتجع مشتريات',
+      credit_note: 'إشعار دائن',
+      debit_note: 'إشعار مدين',
+      adjustment: 'تسوية',
+      opening_balance: 'الرصيد الافتتاحي',
+      refund: 'استرداد',
+    } as Record<string, string>,
+  },
+  hi: {
+    title: 'खाता विवरण',
+    title_products: 'खाता विवरण — उत्पाद अनुसार',
+    item_product: 'उत्पाद',
+    item_qty: 'मात्रा',
+    item_rate: 'दर',
+    item_amount: 'राशि',
+    col_type: 'प्रकार',
+    col_invoice: 'बिल संख्या',
+    col_product: 'उत्पाद / विवरण',
+    col_qty: 'मात्रा',
+    col_price: 'मूल्य',
+    bill_adjustment: 'बिल समायोजन (छूट / कर / शुल्क)',
+    codes_title: '',
+    short_types: {
+      sale: 'बिक्री',
+      sale_manual: 'भुगतान',
+      payment_received: 'प्राप्त',
+      payment_received_manual: 'प्राप्त',
+      sales_return: 'वापसी',
+      purchase: 'खरीद',
+      payment_made: 'भुगतान',
+      payment: 'भुगतान',
+      purchase_return: 'वापसी',
+      credit_note: 'क्रेडिट नोट',
+      debit_note: 'डेबिट नोट',
+      adjustment: 'समायोजन',
+      opening_balance: 'प्रारंभिक',
+      refund: 'धनवापसी',
+    } as Record<string, string>,
+    code_meanings: {} as Record<string, string>,
+    account_holder: 'खाताधारक',
+    account_type: 'खाते का प्रकार',
+    customer_account: 'ग्राहक खाता',
+    supplier_account: 'आपूर्तिकर्ता खाता',
+    period: 'विवरण अवधि',
+    beginning: 'शुरुआत से',
+    issued: 'विवरण दिनांक',
+    phone: 'फ़ोन',
+    address: 'पता',
+    summary: 'खाता सारांश',
+    opening: 'प्रारंभिक शेष',
+    total_debit: 'कुल डेबिट',
+    total_credit: 'कुल क्रेडिट',
+    closing: 'अंतिम शेष',
+    entries: 'प्रविष्टियाँ',
+    entries_label: 'प्रविष्टियाँ',
+    col_date: 'दिनांक',
+    col_details: 'लेन-देन विवरण',
+    col_ref: 'संदर्भ',
+    ref_prefix: 'संदर्भ',
+    col_debit: 'डेबिट',
+    col_credit: 'क्रेडिट',
+    col_balance: 'शेष',
+    brought_forward: 'प्रारंभिक शेष आगे लाया गया',
+    carried_forward: 'अंतिम शेष',
+    no_activity: 'इस अवधि में कोई लेन-देन नहीं।',
+    dr: 'डे.',
+    cr: 'क्रे.',
+    customer_note: 'डे. = आपकी ओर बकाया राशि · क्रे. = हमारी ओर बकाया राशि',
+    supplier_note: 'क्रे. = हमारी ओर बकाया राशि · डे. = आपकी ओर बकाया राशि',
+    footer: 'यह कंप्यूटर द्वारा तैयार विवरण है और इस पर हस्ताक्षर आवश्यक नहीं। किसी भी अंतर की तुरंत सूचना दें।',
+    print: 'प्रिंट करें',
+    close: 'बंद करें',
+    cash: 'नकद',
+    credit: 'उधार',
+    pending: 'लंबित',
+    types: {
+      sale: 'बिक्री',
+      sale_manual: 'नकद भुगतान',
+      payment_received: 'भुगतान प्राप्त',
+      payment_received_manual: 'नकद प्राप्त',
+      sales_return: 'बिक्री वापसी',
+      purchase: 'खरीद',
+      payment_made: 'भुगतान किया',
+      payment: 'भुगतान',
+      purchase_return: 'खरीद वापसी',
+      credit_note: 'क्रेडिट नोट',
+      debit_note: 'डेबिट नोट',
+      adjustment: 'समायोजन',
+      opening_balance: 'प्रारंभिक शेष',
+      refund: 'धनवापसी',
+    } as Record<string, string>,
+  },
 }
 
-const FONT_STACK = `'Inter', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif`
-const GOOGLE_FONTS_HREF =
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap'
+const fontStack = () =>
+  `'Inter', ${printScriptFontFamilies()}, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif`
+const googleFontsHref = () =>
+  `https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700${printScriptFontParams()}&display=swap`
 
 const isZero = (n: number) => Math.abs(n) < 0.005
 
@@ -268,12 +446,14 @@ const humanize = (type: string) =>
  */
 export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSize: SheetSize = 'a4'): string {
   const format = PAPER_FORMATS[sheetSize]
-  const language: BankStatementLanguage = data.language === 'ur' ? 'ur' : 'en'
+  const language: BankStatementLanguage = toPrintLanguage(data.language)
   const L = labels[language]
-  const isUrdu = language === 'ur'
-  const dir = isUrdu ? 'rtl' : 'ltr'
-  const start = isUrdu ? 'right' : 'left'
-  const end = isUrdu ? 'left' : 'right'
+  // Native (Urdu, Arabic, Hindi): native names, no uppercase/letter-spacing (they break joined scripts).
+  const native = language !== 'en'
+  const rtl = isRtlPrintLanguage(language)
+  const dir = printDirection(language)
+  const start = rtl ? 'right' : 'left'
+  const end = rtl ? 'left' : 'right'
   const showRefs = data.showReferences !== false
   const products = data.layout === 'products'
   const money = (n: number) => formatCurrency(Math.abs(n), data.currencyMeta)
@@ -297,8 +477,8 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
   const creditCount = rows.filter((r) => Number(r.credit) > 0).length
   const closingBalance = rows.length ? Number(rows[rows.length - 1].balance) || 0 : data.openingBalance
 
-  const businessName = (isUrdu && data.companyNameUrdu?.trim()) || data.companyName?.trim() || 'Business'
-  const accountName = (isUrdu && data.accountNameUrdu?.trim()) || data.accountName
+  const businessName = (native && data.companyNameUrdu?.trim()) || data.companyName?.trim() || 'Business'
+  const accountName = (native && data.accountNameUrdu?.trim()) || data.accountName
   const periodText = `${data.allTime ? L.beginning : formatAppDate(keyToDate(data.periodStart))} — ${formatAppDate(keyToDate(data.periodEnd))}`
   const now = new Date()
 
@@ -383,7 +563,7 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
       if (items.length) {
         let itemsTotal = 0
         items.forEach((item) => {
-          const name = (isUrdu && item.nameUrdu?.trim()) || item.name
+          const name = (native && item.nameUrdu?.trim()) || item.name
           const subtotal = Number(item.subtotal) || 0
           itemsTotal += subtotal
           lines.push({
@@ -428,7 +608,7 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
     })
     .join('')
 
-  const codesLegend = !isUrdu && products
+  const codesLegend = !native && products
     ? [...usedCodes]
         .filter((c) => L.code_meanings[c])
         .map((c) => `<strong>${escapeHtml(c)}</strong> = ${L.code_meanings[c]}`)
@@ -508,7 +688,7 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
   <title>${L.title} — ${escapeHtml(data.accountName)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="${GOOGLE_FONTS_HREF}" rel="stylesheet">
+  <link href="${googleFontsHref()}" rel="stylesheet">
   <style>
     @page {
       size: ${format.pageCss};
@@ -518,8 +698,8 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: #fff; color: #000; }
     body {
-      font-family: ${FONT_STACK};
-      font-size: ${(sheetSize.startsWith('a5') ? 11 : 12) + (isUrdu ? 1 : 0)}px;
+      font-family: ${fontStack()};
+      font-size: ${(sheetSize.startsWith('a5') ? 11 : 12) + (native ? 1 : 0)}px;
       font-weight: 500;
       line-height: 1.5;
       direction: ${dir};
@@ -538,14 +718,14 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
     .brand-name { font-size: 1.75em; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
     .brand-sub { color: #222; font-size: 0.92em; margin-top: 2px; }
     .doc { text-align: ${end}; flex-shrink: 0; }
-    .doc-title { font-size: 1.35em; font-weight: 700; text-transform: ${isUrdu ? 'none' : 'uppercase'}; letter-spacing: ${isUrdu ? '0' : '0.06em'}; }
+    .doc-title { font-size: 1.35em; font-weight: 700; text-transform: ${native ? 'none' : 'uppercase'}; letter-spacing: ${native ? '0' : '0.06em'}; }
     .doc-date { color: #222; font-size: 0.92em; margin-top: 2px; }
     .rule { border-top: 3px solid #000; margin-bottom: 2px; }
     .rule-thin { border-top: 1px solid #000; margin-bottom: 14px; }
 
     .panels { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; margin-bottom: 12px; }
     .panel { border: 1px solid #000; border-radius: 4px; overflow: hidden; }
-    .panel-h { padding: 5px 10px; font-weight: 700; font-size: 0.9em; color: #000; text-transform: ${isUrdu ? 'none' : 'uppercase'}; letter-spacing: ${isUrdu ? '0' : '0.05em'}; border-bottom: 1px solid #000; }
+    .panel-h { padding: 5px 10px; font-weight: 700; font-size: 0.9em; color: #000; text-transform: ${native ? 'none' : 'uppercase'}; letter-spacing: ${native ? '0' : '0.05em'}; border-bottom: 1px solid #000; }
     .panel-b { padding: 8px 10px; }
     .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
     .kv .k { color: #333; font-weight: 500; white-space: nowrap; }
@@ -566,7 +746,7 @@ export function generateLedgerBankStatementHTML(data: BankStatementData, sheetSi
     table.register th {
       color: #000; font-weight: 700; font-size: 0.92em; border-top: 2px solid #000; border-bottom: 1.5px solid #000;
       padding: 7px 8px; text-align: ${start};
-      text-transform: ${isUrdu ? 'none' : 'uppercase'}; letter-spacing: ${isUrdu ? '0' : '0.04em'};
+      text-transform: ${native ? 'none' : 'uppercase'}; letter-spacing: ${native ? '0' : '0.04em'};
     }
     /* Ruled grid: every cell boxed, like a printed ledger. */
     table.register th, table.register td { border: 1px solid #555; }

@@ -280,7 +280,7 @@ export function ProductCatalog({
                           'w-full truncate text-center text-xs rtl',
                           getUrduSecondaryNameClasses(category.nameUrdu),
                         )}
-                        dir='rtl'
+                        dir='auto'
                         title={category.nameUrdu.trim()}
                       >
                         {category.nameUrdu.trim()}
@@ -320,7 +320,7 @@ export function ProductCatalog({
                     {showUrdu && category.nameUrdu?.trim() ? (
                       <span
                         className={cn('text-sm rtl', getUrduSecondaryNameClasses(category.nameUrdu))}
-                        dir='rtl'
+                        dir='auto'
                         title={category.nameUrdu.trim()}
                       >
                         {category.nameUrdu.trim()}
@@ -424,7 +424,7 @@ export function ProductCatalog({
                             </span>
                             {showUrdu && product.nameUrdu?.trim() ? (
                               <p
-                                dir="rtl"
+                                dir='auto'
                                 className={cn(
                                   'w-full min-w-0 max-w-full text-xs leading-snug line-clamp-2 break-words',
                                   getUrduSecondaryNameClasses(product.nameUrdu),

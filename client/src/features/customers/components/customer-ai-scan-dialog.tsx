@@ -38,6 +38,8 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { nativeTextDir } from '@/lib/native-language'
 interface CustomerAiScanDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -142,6 +144,7 @@ export function CustomerAiScanDialog({
   onImport,
 }: CustomerAiScanDialogProps) {
   const { t } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const translateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -529,7 +532,7 @@ export function CustomerAiScanDialog({
                           {t('customer_name')} (English) *
                         </TableHead>
                         <TableHead className="min-w-[150px] whitespace-nowrap px-2 py-2">
-                          {t('name_in_urdu')}
+                          {t('name_in_urdu', { lang: nativeLanguageName })}
                         </TableHead>
                         <TableHead className="min-w-[88px] whitespace-nowrap px-2 py-2">
                           {t('balance')}
@@ -575,9 +578,9 @@ export function CustomerAiScanDialog({
                                   updateRow(row.id, 'nameUrdu', e.target.value)
                                 }
                                 onKeyDown={(e) => handleCellKeyDown(e, rowIndex, 'nameUrdu')}
-                                placeholder={t('name_in_urdu_placeholder')}
-                                dir="rtl"
-                                className={cn('h-8 text-right text-sm font-medium')}
+                                placeholder={t('name_in_urdu_placeholder', { lang: nativeLanguageName })}
+                                dir={nativeTextDir()}
+                                className={cn('h-8 text-start text-sm font-medium')}
                               />
                               {translatingRowId === row.id && (
                                 <Loader2 className="absolute left-1.5 top-2 h-3.5 w-3.5 animate-spin text-muted-foreground" />

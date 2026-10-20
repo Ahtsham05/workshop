@@ -2,7 +2,15 @@ import { escapeHtml } from '@/lib/escape-html'
 import { formatAppDate } from '@/lib/date-format'
 import { PAPER_FORMATS, type SheetSize } from '@/features/invoice/utils/paper-format'
 
-export type ReceiptLanguage = 'en' | 'ur'
+import {
+  printDirection,
+  printScriptFontFamilies,
+  printScriptFontParams,
+  type PrintLanguage,
+} from '@/lib/native-language'
+import { toPrintLanguage } from '@/features/invoice/utils/language'
+/** English or a native print language (Urdu, Arabic, Hindi — lib/native-language.ts). */
+export type ReceiptLanguage = PrintLanguage
 export type ReceiptParty = 'customer' | 'supplier'
 /** 'full' = a whole A4/A5 page; 'half' = one half of a landscape A4 sheet. */
 export type ReceiptFit = 'full' | 'half'
@@ -105,22 +113,99 @@ const labels = {
     close: 'بند کریں',
     only: '',
   },
+  ar: {
+    title_customer: 'سند قبض',
+    title_supplier: 'سند صرف',
+    copy: 'نسخة العميل',
+    copy_supplier: 'نسخة المورد',
+    receipt_no: 'رقم السند',
+    voucher_no: 'رقم السند',
+    date: 'التاريخ',
+    time: 'الوقت',
+    amount_received: 'المبلغ المستلم',
+    amount_paid: 'المبلغ المدفوع',
+    in_words: 'المبلغ كتابةً',
+    received_from: 'استلمنا من',
+    paid_to: 'صُرف إلى',
+    phone: 'الهاتف',
+    address: 'العنوان',
+    method: 'طريقة الدفع',
+    reference: 'المرجع',
+    narration: 'البيان',
+    account: 'موقف الحساب',
+    previous: 'الرصيد السابق',
+    this_payment_in: 'يُخصم: هذه الدفعة',
+    this_payment_out: 'يُخصم: هذه الدفعة',
+    remaining: 'الرصيد بعد الدفع',
+    receivable: 'مستحق لنا',
+    payable: 'مستحق علينا',
+    settled: 'مسدّد',
+    stamp_in: 'تم الاستلام',
+    stamp_out: 'تم الصرف',
+    sign_cashier: 'أمين الصندوق / التوقيع المعتمد',
+    sign_customer: 'توقيع العميل',
+    sign_supplier: 'توقيع المورد',
+    footer: 'سند صادر إلكترونيًا. يرجى الاحتفاظ به لسجلاتكم.',
+    thanks: 'شكرًا على سدادكم.',
+    print: 'طباعة',
+    close: 'إغلاق',
+    only: 'فقط',
+  },
+  hi: {
+    title_customer: 'भुगतान रसीद',
+    title_supplier: 'भुगतान वाउचर',
+    copy: 'ग्राहक प्रति',
+    copy_supplier: 'आपूर्तिकर्ता प्रति',
+    receipt_no: 'रसीद संख्या',
+    voucher_no: 'वाउचर संख्या',
+    date: 'दिनांक',
+    time: 'समय',
+    amount_received: 'प्राप्त राशि',
+    amount_paid: 'भुगतान की गई राशि',
+    in_words: 'राशि शब्दों में',
+    received_from: 'प्राप्त किया',
+    paid_to: 'भुगतान किया',
+    phone: 'फ़ोन',
+    address: 'पता',
+    method: 'भुगतान का तरीका',
+    reference: 'संदर्भ',
+    narration: 'विवरण',
+    account: 'खाते की स्थिति',
+    previous: 'पिछला शेष',
+    this_payment_in: 'घटाएँ: यह भुगतान',
+    this_payment_out: 'घटाएँ: यह भुगतान',
+    remaining: 'भुगतान के बाद शेष',
+    receivable: 'प्राप्य',
+    payable: 'देय',
+    settled: 'चुकता',
+    stamp_in: 'प्राप्त',
+    stamp_out: 'भुगतान किया',
+    sign_cashier: 'कैशियर / अधिकृत हस्ताक्षर',
+    sign_customer: 'ग्राहक हस्ताक्षर',
+    sign_supplier: 'आपूर्तिकर्ता हस्ताक्षर',
+    footer: 'कंप्यूटर द्वारा तैयार रसीद। कृपया इसे अपने रिकॉर्ड के लिए रखें।',
+    thanks: 'भुगतान के लिए धन्यवाद।',
+    print: 'प्रिंट करें',
+    close: 'बंद करें',
+    only: 'मात्र',
+  },
 }
 
-const METHOD_LABELS: Record<string, { en: string; ur: string }> = {
-  cash: { en: 'Cash', ur: 'نقد' },
-  bank: { en: 'Bank Transfer', ur: 'بینک ٹرانسفر' },
-  bank_transfer: { en: 'Bank Transfer', ur: 'بینک ٹرانسفر' },
-  cheque: { en: 'Cheque', ur: 'چیک' },
-  check: { en: 'Cheque', ur: 'چیک' },
-  card: { en: 'Card', ur: 'کارڈ' },
-  online: { en: 'Online', ur: 'آن لائن' },
-  wallet: { en: 'Mobile Wallet', ur: 'موبائل والیٹ' },
+const METHOD_LABELS: Record<string, Record<ReceiptLanguage, string>> = {
+  cash: { en: 'Cash', ur: 'نقد', ar: 'نقدًا', hi: 'नकद' },
+  bank: { en: 'Bank Transfer', ur: 'بینک ٹرانسفر', ar: 'تحويل بنكي', hi: 'बैंक ट्रांसफर' },
+  bank_transfer: { en: 'Bank Transfer', ur: 'بینک ٹرانسفر', ar: 'تحويل بنكي', hi: 'बैंक ट्रांसफर' },
+  cheque: { en: 'Cheque', ur: 'چیک', ar: 'شيك', hi: 'चेक' },
+  check: { en: 'Cheque', ur: 'چیک', ar: 'شيك', hi: 'चेक' },
+  card: { en: 'Card', ur: 'کارڈ', ar: 'بطاقة', hi: 'कार्ड' },
+  online: { en: 'Online', ur: 'آن لائن', ar: 'دفع إلكتروني', hi: 'ऑनलाइन' },
+  wallet: { en: 'Mobile Wallet', ur: 'موبائل والیٹ', ar: 'محفظة إلكترونية', hi: 'मोबाइल वॉलेट' },
 }
 
-const FONT_STACK = `'Inter', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif`
-const GOOGLE_FONTS_HREF =
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap'
+const fontStack = () =>
+  `'Inter', ${printScriptFontFamilies()}, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif`
+const googleFontsHref = () =>
+  `https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800${printScriptFontParams()}&display=swap`
 
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven',
   'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
@@ -161,8 +246,10 @@ export function amountToWords(amount: number): string {
  * and signature lines. All sizes are in `em`, so one layout scales to every sheet.
  */
 export function generatePaymentReceiptBodyHTML(data: ReceiptPrintData, fit: ReceiptFit, sheetSize: SheetSize = 'a4'): string {
-  const L = labels[data.language]
-  const isUrdu = data.language === 'ur'
+  const language = toPrintLanguage(data.language)
+  const L = labels[language]
+  // Amount-in-words is English only, so native receipts leave it out (as Urdu always did).
+  const native = language !== 'en'
   const isSupplier = data.party === 'supplier'
   const money = (n: number) => `<span class="num">${data.formatMoney(Math.abs(n))}</span>`
 
@@ -171,7 +258,7 @@ export function generatePaymentReceiptBodyHTML(data: ReceiptPrintData, fit: Rece
   const statusLabel = settled ? L.settled : owedByUs ? L.payable : L.receivable
 
   const methodKey = (data.paymentMethod || '').trim().toLowerCase().replace(/\s+/g, '_')
-  const method = METHOD_LABELS[methodKey]?.[data.language] || data.paymentMethod?.trim() || ''
+  const method = METHOD_LABELS[methodKey]?.[language] || data.paymentMethod?.trim() || ''
   const paymentDate = new Date(data.date)
   const dateText = Number.isNaN(paymentDate.getTime()) ? data.date : formatAppDate(paymentDate)
   const timeText = Number.isNaN(paymentDate.getTime())
@@ -179,12 +266,13 @@ export function generatePaymentReceiptBodyHTML(data: ReceiptPrintData, fit: Rece
     : paymentDate.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
 
   const cents = Math.round((Math.abs(data.amount) % 1) * 100)
-  const words = isUrdu
+  const words = native
     ? ''
     : `${amountToWords(data.amount)}${cents ? ` and ${String(cents).padStart(2, '0')}/100` : ''} ${L.only}`.trim()
   const contact = [data.company.phone, data.company.email]
     .filter((v): v is string => Boolean(v?.trim()))
-    .map((v) => escapeHtml(v.trim()))
+    // <bdi dir="ltr">: "+971 4 123 4567" must not reorder on right-to-left receipts.
+    .map((v) => `<bdi dir="ltr">${escapeHtml(v.trim())}</bdi>`)
     .join(' &nbsp;·&nbsp; ')
 
   const particular = (label: string, value?: string, ltr = false) =>
@@ -192,7 +280,7 @@ export function generatePaymentReceiptBodyHTML(data: ReceiptPrintData, fit: Rece
       ? `<tr><th>${label}</th><td>${ltr ? `<span class="ltr">${escapeHtml(value.trim())}</span>` : escapeHtml(value.trim())}</td></tr>`
       : ''
 
-  const fontPx = (fit === 'half' ? 12 : sheetSize.startsWith('a5') ? 12.5 : 14) + (isUrdu ? 1 : 0)
+  const fontPx = (fit === 'half' ? 12 : sheetSize.startsWith('a5') ? 12.5 : 14) + (native ? 1 : 0)
 
   return `
   <div class="rcpt rcpt-${fit}" style="font-size:${fontPx}px">
@@ -263,7 +351,7 @@ function receiptCss(dir: 'rtl' | 'ltr'): string {
   return `
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: #fff; color: #000; }
-    body { font-family: ${FONT_STACK}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: ${fontStack()}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     @media print { .no-print { display: none !important; } }
     .ltr, .num { direction: ltr; unicode-bidi: isolate; display: inline-block; }
     .num { font-variant-numeric: tabular-nums; }
@@ -320,7 +408,7 @@ function receiptCss(dir: 'rtl' | 'ltr'): string {
 
 function documentHead(data: ReceiptPrintData, pageCss: string, pageMargin: string, extraCss = ''): string {
   const L = labels[data.language]
-  const dir = data.language === 'ur' ? 'rtl' : 'ltr'
+  const dir = printDirection(data.language)
   return `<!DOCTYPE html>
 <html dir="${dir}" lang="${data.language}" translate="no" class="notranslate">
 <head>
@@ -329,7 +417,7 @@ function documentHead(data: ReceiptPrintData, pageCss: string, pageMargin: strin
   <title>${data.party === 'supplier' ? L.title_supplier : L.title_customer} ${escapeHtml(data.receiptNumber)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="${GOOGLE_FONTS_HREF}" rel="stylesheet">
+  <link href="${googleFontsHref()}" rel="stylesheet">
   <style>
     @page { size: ${pageCss}; margin: ${pageMargin}; }
     ${receiptCss(dir)}
@@ -364,7 +452,7 @@ export function generatePaymentReceiptPageHTML(data: ReceiptPrintData, sheetSize
  * Halves are physical positions, so the split is laid out LTR even for an Urdu receipt.
  */
 export function generatePaymentReceiptHalfSheetHTML(data: ReceiptPrintData, half: 'left' | 'right'): string {
-  const dir = data.language === 'ur' ? 'rtl' : 'ltr'
+  const dir = printDirection(data.language)
   const body = generatePaymentReceiptBodyHTML(data, 'half')
   const extraCss = `
     .sheet { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }

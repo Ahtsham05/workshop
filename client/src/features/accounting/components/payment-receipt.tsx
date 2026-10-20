@@ -10,18 +10,28 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useFormatMoney } from '@/lib/format-money';
 import { formatAppDate } from '@/lib/date-format'
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { useUrduDisplay } from '@/context/urdu-display-context';
+import {
+  isRtlPrintLanguage,
+  nativePrintLanguage,
+  printDirection,
+  printLocale,
+  printScriptFontFamilies,
+  printScriptFontParams,
+} from '@/lib/native-language';
 import {
   generatePaymentReceiptHalfSheetHTML,
   generatePaymentReceiptPageHTML,
   type ReceiptPrintData,
 } from '../utils/payment-receipt-print';
 
-function resolveReceiptPartyName(lang: InvoiceLanguage, name: string, nameUrdu?: string): string {
-  return lang === 'ur' && nameUrdu?.trim() ? nameUrdu.trim() : name;
+function resolveReceiptPartyName(native: boolean, name: string, nameUrdu?: string): string {
+  return native && nameUrdu?.trim() ? nameUrdu.trim() : name;
 }
 
 function resolveReceiptCompany(
-  lang: InvoiceLanguage,
+  native: boolean,
   company:
     | {
         name?: string;
@@ -36,9 +46,9 @@ function resolveReceiptCompany(
 ): { name: string; address: string; phone?: string; email?: string; logo?: string } {
   const c = company;
   const fallbackName = c?.name?.trim() || 'Logix Plus Solutions';
-  const name = lang === 'ur' && c?.nameUrdu?.trim() ? c.nameUrdu.trim() : fallbackName;
+  const name = native && c?.nameUrdu?.trim() ? c.nameUrdu.trim() : fallbackName;
   const address =
-    lang === 'ur' ? (c?.addressUrdu?.trim() || c?.address?.trim() || '') : (c?.address?.trim() || '');
+    native ? (c?.addressUrdu?.trim() || c?.address?.trim() || '') : (c?.address?.trim() || '');
   return {
     name,
     address,
@@ -48,11 +58,12 @@ function resolveReceiptCompany(
   };
 }
 
-/** Clean Urdu + Latin stack — no Nastaliq / Jameel (aligned with sales & purchase prints). */
-const RECEIPT_FONT_STACK = `'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`;
+/** Clean native-script + Latin stack — Naskh, no Nastaliq / Jameel (aligned with sales & purchase prints). */
+const receiptFontStack = () =>
+  `'Inter', 'Manrope', ${printScriptFontFamilies()}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`;
 
-const RECEIPT_GOOGLE_FONTS_HREF =
-  'https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap';
+const receiptGoogleFontsHref = () =>
+  `https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800${printScriptFontParams()}&display=swap`;
 
 interface PaymentReceiptProps {
   customer: {
@@ -124,15 +135,19 @@ export function PaymentReceipt({
   footerExtra,
 }: PaymentReceiptProps) {
   const { t: tUi } = useLanguage();
-  // Urdu Print toggle is shared with invoice printing (`invoicePrintInUrdu` in localStorage) —
-  // turning it on there also forces this receipt's preview + print into Urdu.
+  const nativeLanguageName = useNativeLanguageName()
+  // The native-language print toggle (Urdu, Arabic, …) is shared with invoice printing
+  // (`invoicePrintInUrdu` in localStorage) — turning it on there also prints this receipt natively.
+  const { nativeLanguage } = useUrduDisplay();
   const [printInUrdu, setPrintInUrdu] = useState(() => getInvoicePrintInUrdu());
-  const language = printInUrdu ? 'ur' : resolveInvoiceLanguage({ userPreferredLanguage });
+  const printNative = printInUrdu && nativeLanguage !== null;
+  const language = printNative ? nativePrintLanguage() : resolveInvoiceLanguage({ userPreferredLanguage });
+  const nativeNames = printNative || language !== 'en';
   const labels = paymentReceiptLabels[language];
-  const isUrdu = language === 'ur';
-  const dir = isUrdu ? 'rtl' : 'ltr';
-  const startAlign = isUrdu ? 'right' : 'left';
-  const locale = isUrdu ? 'ur-PK' : 'en-PK';
+  const rtl = isRtlPrintLanguage(language);
+  const dir = printDirection(language);
+  const startAlign = rtl ? 'right' : 'left';
+  const locale = printLocale(language);
   const isSupplier = partyType === 'supplier';
   const partyLabel = isSupplier ? labels.paid_to : labels.received_from;
   const amountLabel = isSupplier ? labels.payment_made : labels.payment_received;
@@ -142,8 +157,8 @@ export function PaymentReceipt({
   const getStatusLabel = (status: BalanceStatus) =>
     status === 'settled' ? labels.settled : status === 'payable' ? labels.payable : labels.receivable;
 
-  const resolvedCompany = resolveReceiptCompany(language, company);
-  const displayCustomerName = resolveReceiptPartyName(language, customer.name, customer.nameUrdu);
+  const resolvedCompany = resolveReceiptCompany(nativeNames, company);
+  const displayCustomerName = resolveReceiptPartyName(nativeNames, customer.name, customer.nameUrdu);
   const defaultPaperSize = useBranchPaperSize();
   const printOrientation = useBranchPrintOrientation();
 
@@ -177,11 +192,11 @@ export function PaymentReceipt({
       email: '',
       logo: '',
     };
-    const printCompany = resolveReceiptCompany(language, company);
+    const printCompany = resolveReceiptCompany(nativeNames, company);
     const printData = {
       customer: {
         ...customer,
-        name: resolveReceiptPartyName(language, customer.name, customer.nameUrdu),
+        name: resolveReceiptPartyName(nativeNames, customer.name, customer.nameUrdu),
       },
       payment,
       balance,
@@ -255,7 +270,7 @@ export function PaymentReceipt({
     }
 
     body {
-      font-family: ${RECEIPT_FONT_STACK};
+      font-family: ${receiptFontStack()};
       font-size: ${paperFormat.baseFontPx}px;
       line-height: 1.45;
       margin: 0;
@@ -510,7 +525,7 @@ export function PaymentReceipt({
       }
     }
   </style>
-  <link href="${RECEIPT_GOOGLE_FONTS_HREF}" rel="stylesheet">
+  <link href="${receiptGoogleFontsHref()}" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-accent-bar"></div>
@@ -634,7 +649,7 @@ export function PaymentReceipt({
       <style>
         {`
         .receipt-content {
-          font-family: ${RECEIPT_FONT_STACK};
+          font-family: ${receiptFontStack()};
           color: #111827;
           background: #fff;
           font-size: 14px;
@@ -963,19 +978,23 @@ export function PaymentReceipt({
 
       <div className="no-print flex shrink-0 flex-col gap-3 border-t px-4 pt-4 pb-5 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="receipt-print-urdu" className="text-sm font-normal whitespace-nowrap">
-              {tUi('urdu_print')}
-            </Label>
-            <Switch
-              id="receipt-print-urdu"
-              checked={printInUrdu}
-              onCheckedChange={(v) => {
-                setPrintInUrdu(v);
-                setInvoicePrintInUrdu(v);
-              }}
-            />
-          </div>
+          {nativeLanguage ? (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="receipt-print-urdu" className="text-sm font-normal whitespace-nowrap">
+                {tUi('urdu_print', { lang: nativeLanguageName })}
+              </Label>
+              <Switch
+                id="receipt-print-urdu"
+                checked={printInUrdu}
+                onCheckedChange={(v) => {
+                  setPrintInUrdu(v);
+                  setInvoicePrintInUrdu(v);
+                }}
+              />
+            </div>
+          ) : (
+            <span />
+          )}
           <PrintFormatButton
             label={labels.print_receipt}
             defaultPaperSize={defaultPaperSize}

@@ -10,6 +10,8 @@ import { useUrduDisplay } from '@/context/urdu-display-context'
 import { fetchUrduNameSuggestion } from '@/hooks/use-auto-urdu-name-from-english'
 import type { SubCategoryFormValues } from './subcategories-action-dialog'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { nativeTextDir } from '@/lib/native-language'
 interface SubCategoryNameRowProps {
   form: UseFormReturn<SubCategoryFormValues>
   index: number
@@ -30,6 +32,7 @@ export function SubCategoryNameRow({
   inputRef,
 }: SubCategoryNameRowProps) {
   const { t } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
   // Once the user types into Urdu directly, their edit is final — auto-suggest
   // stops overwriting it until they clear the field back to empty.
@@ -93,11 +96,11 @@ export function SubCategoryNameRow({
                 <FormControl>
                   <Input
                     {...field}
-                    dir="rtl"
-                    placeholder={t('name_in_urdu_placeholder')}
+                    dir={nativeTextDir()}
+                    placeholder={t('name_in_urdu_placeholder', { lang: nativeLanguageName })}
                     autoComplete="off"
                     showVoiceInput={false}
-                    className="h-11 text-base text-right"
+                    className="h-11 text-base text-start"
                     onChange={(event) => {
                       manuallyEditedUrduRef.current = event.target.value.trim().length > 0
                       field.onChange(event)

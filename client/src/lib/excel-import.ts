@@ -136,7 +136,13 @@ function buildAliasIndex(fields: ImportFieldSpec[]): Map<string, string> {
  */
 export const COMMON_ALIASES: Record<string, string[]> = {
   name: ['Name', 'Full Name', 'Title', 'Party Name', 'Account Name', 'Naam', 'نام'],
-  nameUrdu: ['Name Urdu', 'Urdu Name', 'Urdu', 'اردو نام', 'نام اردو'],
+  // nameUrdu holds the business's native language (Urdu, Arabic, Hindi, …), see lib/native-language.ts.
+  nameUrdu: [
+    'Name Urdu', 'Urdu Name', 'Urdu', 'اردو نام', 'نام اردو',
+    'Name (Arabic)', 'Name Arabic', 'Arabic Name', 'Arabic', 'الاسم بالعربية', 'الاسم العربي', 'الاسم',
+    'Name (Hindi)', 'Hindi Name', 'Hindi', 'हिन्दी नाम',
+    'Native Name', 'Name (Native)', 'Local Name', 'Second Language Name',
+  ],
   email: ['Email', 'E-mail', 'Email Address', 'Mail', 'ای میل'],
   phone: ['Phone', 'Phone No', 'Phone Number', 'Mobile', 'Mobile No', 'Mobile Number', 'Contact', 'Contact No', 'Cell', 'Cell No', 'Tel', 'Telephone', 'Number', 'فون', 'موبائل'],
   whatsapp: ['WhatsApp', 'Whatsapp No', 'WhatsApp Number', 'WA', 'واٹس ایپ'],

@@ -51,7 +51,7 @@ export function BilingualName({
             getUrduSecondaryNameClasses(u),
             secondaryClassName,
           )}
-          dir='rtl'
+          dir='auto'
           title={u}
         >
           {u}

@@ -38,6 +38,8 @@ import { cn } from '@/lib/utils'
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { nativeTextDir } from '@/lib/native-language'
 const subCategoryFormSchema = z.object({
   category: z.string().min(1, 'Please select a main category'),
   items: z
@@ -66,6 +68,7 @@ export function SubCategoriesActionDialog({ setFetch, categories }: SubCategorie
   const { state, dispatch: contextDispatch } = useSubCategories()
   const reduxDispatch = useDispatch<AppDispatch>()
   const { t } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const rowRefs = useRef<Array<HTMLInputElement | null>>([])
@@ -324,14 +327,14 @@ export function SubCategoriesActionDialog({ setFetch, categories }: SubCategorie
                       name="nameUrdu"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-base">{t('name_in_urdu')}</FormLabel>
+                          <FormLabel className="text-base">{t('name_in_urdu', { lang: nativeLanguageName })}</FormLabel>
                           <FormControl>
                             <Input
-                              dir="rtl"
-                              placeholder={t('name_in_urdu_placeholder')}
+                              dir={nativeTextDir()}
+                              placeholder={t('name_in_urdu_placeholder', { lang: nativeLanguageName })}
                               autoComplete="off"
                               showVoiceInput={false}
-                              className="h-11 text-base text-right"
+                              className="h-11 text-base text-start"
                               {...field}
                             />
                           </FormControl>

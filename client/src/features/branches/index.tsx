@@ -82,7 +82,7 @@ const branchDialogSchema = z.object({
 type BranchDialogValues = z.infer<typeof branchDialogSchema>
 
 export default function BranchesPage() {
-  const { showUrduInput } = useUrduDisplay()
+  const { showUrduInput, nativeLanguage } = useUrduDisplay()
   const { hasExplicitPermission } = usePermissions()
   const canManageBranches = hasExplicitPermission('manageBranches')
   const [page] = useState(1)
@@ -424,8 +424,8 @@ export default function BranchesPage() {
                         <span className="shrink-0">{branch.name}</span>
                         {branch.nameUrdu?.trim() ? (
                           <span
-                            className={cn('min-w-0 truncate text-sm rtl', getUrduSecondaryNameClasses(branch.nameUrdu))}
-                            dir="rtl"
+                            className={cn('min-w-0 truncate text-sm', getUrduSecondaryNameClasses(branch.nameUrdu))}
+                            dir="auto"
                             title={branch.nameUrdu.trim()}
                           >
                             {branch.nameUrdu.trim()}
@@ -516,9 +516,9 @@ export default function BranchesPage() {
                   name="nameUrdu"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Branch Name (Urdu)</FormLabel>
+                      <FormLabel>Branch Name ({nativeLanguage?.label})</FormLabel>
                       <FormControl>
-                        <Input placeholder="اردو میں نام" dir="rtl" className="text-right" {...field} />
+                        <Input placeholder={nativeLanguage?.placeholder} dir={nativeLanguage?.dir} className="text-start" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -541,7 +541,7 @@ export default function BranchesPage() {
                     </FormControl>
                     {showUrduInput && (
                       <p className="text-xs text-muted-foreground">
-                        Urdu is suggested automatically when you type English (you can edit it below).
+                        {nativeLanguage?.label} is suggested automatically when you type English (you can edit it below).
                       </p>
                     )}
                     <FormMessage />
@@ -554,13 +554,12 @@ export default function BranchesPage() {
                   name="location.addressUrdu"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Address (Urdu)</FormLabel>
+                      <FormLabel>Address ({nativeLanguage?.label})</FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="اردو میں پتہ"
                           rows={2}
-                          dir="rtl"
-                          className="resize-y min-h-[72px] text-right"
+                          dir={nativeLanguage?.dir}
+                          className="resize-y min-h-[72px] text-start"
                           {...field}
                         />
                       </FormControl>

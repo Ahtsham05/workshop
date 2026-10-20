@@ -76,6 +76,7 @@ import { useBranchName } from '@/hooks/use-branch-name'
 import { buildCustomerBalanceMessage, getCustomerBalanceTemplate } from '@/utils/sms-messages'
 import { formatAppDate } from '@/lib/date-format'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 interface ConvertedItem {
   id: string
   productId: string
@@ -96,6 +97,7 @@ interface PendingInvoiceConverterProps {
 
 export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceConverterProps) {
   const { t } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const formatMoney = useFormatMoney()
   const currencyMeta = useCurrencyMeta()
   const { showUrdu } = useUrduDisplay()
@@ -662,16 +664,18 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={printReceiptInUrdu}
-                    onCheckedChange={(v) => {
-                      setPrintReceiptInUrdu(v)
-                      setInvoicePrintInUrdu(v)
-                    }}
-                  />
-                  <Label className="text-sm whitespace-nowrap">{t('urdu_print')}</Label>
-                </div>
+                {nativeLanguageName && (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={printReceiptInUrdu}
+                      onCheckedChange={(v) => {
+                        setPrintReceiptInUrdu(v)
+                        setInvoicePrintInUrdu(v)
+                      }}
+                    />
+                    <Label className="text-sm whitespace-nowrap">{t('urdu_print', { lang: nativeLanguageName })}</Label>
+                  </div>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -755,7 +759,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                                           'min-w-0 truncate text-sm rtl',
                                           getUrduSecondaryNameClasses(row.nameUrdu),
                                         )}
-                                        dir="rtl"
+                                        dir='auto'
                                         title={row.nameUrdu.trim()}
                                       >
                                         {row.nameUrdu.trim()}
@@ -866,7 +870,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
                       {showUrdu && selectedCustomer?.nameUrdu?.trim() ? (
                         <span
                           className={cn('truncate text-sm text-muted-foreground rtl', getUrduSecondaryNameClasses(selectedCustomer.nameUrdu))}
-                          dir="rtl"
+                          dir='auto'
                         >
                           {selectedCustomer.nameUrdu.trim()}
                         </span>

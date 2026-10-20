@@ -7,6 +7,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useLanguage } from '@/context/language-context'
 import { Label } from '@/components/ui/label'
+import { nativeFieldLabel } from '@/lib/native-language'
 import {
   Select,
   SelectContent,
@@ -68,7 +69,7 @@ const SUPPLIER_FIELDS: ImportFieldSpec[] = [
     width: 28,
     aliases: ['Supplier', 'Vendor', 'Vendor Name', 'Company', 'Company Name', 'Party', 'سپلائر'],
   }),
-  withCommonAliases({ key: 'nameUrdu', label: 'Name (Urdu)', width: 24 }),
+  withCommonAliases({ key: 'nameUrdu', label: nativeFieldLabel('Name'), width: 24 }),
   withCommonAliases({ key: 'phone', label: 'Phone', type: 'code', width: 18 }),
   withCommonAliases({ key: 'whatsapp', label: 'WhatsApp', type: 'code', width: 18 }),
   withCommonAliases({ key: 'email', label: 'Email', width: 28 }),

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Globe, Calendar } from 'lucide-react'
+import { Loader2, Globe, Calendar, Languages } from 'lucide-react'
 import { toast } from 'sonner'
 import ContentSection from '../components/content-section'
 import { EntityFormSection } from '@/components/entity-form-section'
@@ -8,6 +8,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  NATIVE_LANGUAGES,
+  NATIVE_LANGUAGE_INFO,
+  PRINT_LANGUAGES,
+  countryNativeLanguage,
+  resolveNativeLanguage,
+  type NativeLanguageSetting,
+} from '@/lib/native-language'
 import { useSettingsSaveShortcut } from '@/lib/settings-form-keyboard'
 import {
   useGetMyOrganizationQuery,
@@ -42,6 +51,7 @@ export default function LocalizationSettings() {
   const [taxInclusive, setTaxInclusive] = useState(false)
   const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
   const [locale, setLocale] = useState('en-US')
+  const [nativeLanguage, setNativeLanguage] = useState<NativeLanguageSetting>('auto')
   const [defaultsAppliedNote, setDefaultsAppliedNote] = useState(false)
 
   useEffect(() => {
@@ -51,6 +61,7 @@ export default function LocalizationSettings() {
     setTaxInclusive(!!org.taxInclusivePricingDefault)
     setDateFormat(org.dateFormat || 'DD/MM/YYYY')
     setLocale(org.locale || 'en-US')
+    setNativeLanguage(org.nativeLanguage || 'auto')
   }, [org])
 
   const countryOptions = (countries || []).map((c) => ({ value: c.code, label: c.name }))
@@ -72,14 +83,15 @@ export default function LocalizationSettings() {
     taxSystem !== (org?.taxSystem || 'NONE') ||
     taxInclusive !== !!org?.taxInclusivePricingDefault ||
     dateFormat !== (org?.dateFormat || 'DD/MM/YYYY') ||
-    locale !== (org?.locale || 'en-US')
+    locale !== (org?.locale || 'en-US') ||
+    nativeLanguage !== (org?.nativeLanguage || 'auto')
 
   const handleSave = async () => {
     if (!org) return
     try {
       await updateSettings({
         orgId: org.id,
-        body: { countryCode, taxSystem, taxInclusivePricingDefault: taxInclusive, dateFormat, locale },
+        body: { countryCode, taxSystem, taxInclusivePricingDefault: taxInclusive, dateFormat, locale, nativeLanguage },
       }).unwrap()
       toast.success('Localization settings updated')
       setDefaultsAppliedNote(false)
@@ -89,6 +101,16 @@ export default function LocalizationSettings() {
   }
 
   useSettingsSaveShortcut(handleSave, saving)
+
+  const countryName = countries?.find((c) => c.code === countryCode)?.name
+  const autoLanguage = countryCode ? countryNativeLanguage(countryCode) : 'ur'
+  const autoLabel = autoLanguage
+    ? `Automatic — ${NATIVE_LANGUAGE_INFO[autoLanguage].label}${countryName ? ` (from ${countryName})` : ''}`
+    : `Automatic — English only${countryName ? ` (from ${countryName})` : ''}`
+  const effectiveLanguage = resolveNativeLanguage(nativeLanguage, countryCode)
+  const effectiveInfo = effectiveLanguage ? NATIVE_LANGUAGE_INFO[effectiveLanguage] : null
+  const effectiveHasPrintHeadings =
+    !!effectiveLanguage && (PRINT_LANGUAGES as readonly string[]).includes(effectiveLanguage)
 
   if (isLoading || !org) {
     return (
@@ -119,6 +141,44 @@ export default function LocalizationSettings() {
               ✓ Defaults applied for this country — you can still override any setting below before saving.
             </p>
           )}
+        </EntityFormSection>
+
+        <EntityFormSection
+          title='Native Language'
+          description='The second language shown next to English: the "Name (…)" fields on forms, the names under English in lists, and native-language invoices, receipts and statements.'
+          icon={<Languages />}
+        >
+          <Select value={nativeLanguage} onValueChange={(v) => setNativeLanguage(v as NativeLanguageSetting)}>
+            <SelectTrigger className='w-full sm:max-w-md' aria-label='Native language'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='auto'>{autoLabel}</SelectItem>
+              <SelectItem value='none'>None — English only</SelectItem>
+              <SelectSeparator />
+              {NATIVE_LANGUAGES.map((code) => (
+                <SelectItem key={code} value={code}>
+                  <span>{NATIVE_LANGUAGE_INFO[code].label}</span>
+                  <span className='text-muted-foreground' dir='auto'>
+                    {NATIVE_LANGUAGE_INFO[code].nativeLabel}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className='text-xs text-muted-foreground'>
+            {effectiveInfo ? (
+              <>
+                New names auto-translate into <span className='font-medium text-foreground'>{effectiveInfo.label}</span>
+                {effectiveHasPrintHeadings
+                  ? `, and the ${effectiveInfo.label} print option prints headings and names in ${effectiveInfo.label}.`
+                  : `. ${effectiveInfo.label} prints keep English headings and print names in ${effectiveInfo.label}.`}{' '}
+                Names you have already saved stay as they are.
+              </>
+            ) : (
+              'No second language: forms, lists and prints use English only.'
+            )}
+          </p>
         </EntityFormSection>
 
         <EntityFormSection title='Tax System' description='Which tax framework this organization operates under.'>

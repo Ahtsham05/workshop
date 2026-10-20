@@ -101,6 +101,8 @@ import {
 } from './similar-products-panel'
 import type { ProductNameIndexEntry } from '@/stores/product.api'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { nativeTextDir } from '@/lib/native-language'
 const formSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }),
   nameUrdu: z.string().optional(),
@@ -331,6 +333,7 @@ export function UsersActionDialog({
   const newProductType = showProductType ? (defaultProductType === undefined ? 'finished_good' : defaultProductType) : undefined
   const blankValues = () => ({ ...newProductValues(), productType: newProductType })
   const { t, isRTL } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
   const [categoriesOpen, setCategoriesOpen] = useState(false)
   const [categorySearchQuery, setCategorySearchQuery] = useState('')
@@ -1330,13 +1333,13 @@ export function UsersActionDialog({
                   name='nameUrdu'
                   render={({ field }) => (
                     <FormItem className='gap-1.5'>
-                      <FormLabel className={isRTL ? 'text-right' : ''}>{t('name_in_urdu')}</FormLabel>
+                      <FormLabel className={isRTL ? 'text-start' : ''}>{t('name_in_urdu', { lang: nativeLanguageName })}</FormLabel>
                       <FormControl>
                         <Input
-                          dir='rtl'
-                          placeholder={t('name_in_urdu_placeholder')}
+                          dir={nativeTextDir()}
+                          placeholder={t('name_in_urdu_placeholder', { lang: nativeLanguageName })}
                           autoComplete='off'
-                          className='text-right'
+                          className='text-start'
                           {...field}
                         />
                       </FormControl>

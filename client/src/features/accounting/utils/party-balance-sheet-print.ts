@@ -3,7 +3,17 @@ import { escapeHtml } from '@/lib/escape-html'
 import { formatAppDate } from '@/lib/date-format'
 import type { CurrencyOption } from '@/stores/localization.api'
 
-export type BalanceSheetLanguage = 'en' | 'ur'
+import {
+  isRtlPrintLanguage,
+  nativePrintLanguage,
+  printDirection,
+  printScriptFontFamilies,
+  printScriptFontParams,
+  type PrintLanguage,
+} from '@/lib/native-language'
+import { toPrintLanguage } from '@/features/invoice/utils/language'
+/** English or a native print language (Urdu, Arabic, Hindi — lib/native-language.ts). */
+export type BalanceSheetLanguage = PrintLanguage
 
 export type BalanceSheetParty = 'customer' | 'supplier'
 
@@ -52,6 +62,28 @@ const sharedLabels = {
     print: 'پرنٹ کریں',
     close: 'بند کریں',
   },
+  ar: {
+    printed_on: 'تاريخ الطباعة',
+    col_number: '#',
+    col_phone: 'الهاتف',
+    col_balance: 'الرصيد',
+    grand_total: 'الإجمالي',
+    prepared_by: 'أعدّه',
+    checked_by: 'راجعه',
+    print: 'طباعة',
+    close: 'إغلاق',
+  },
+  hi: {
+    printed_on: 'प्रिंट दिनांक',
+    col_number: 'क्र.',
+    col_phone: 'फ़ोन',
+    col_balance: 'शेष',
+    grand_total: 'कुल',
+    prepared_by: 'तैयारकर्ता',
+    checked_by: 'जाँचकर्ता',
+    print: 'प्रिंट करें',
+    close: 'बंद करें',
+  },
 } as const
 
 /**
@@ -86,6 +118,32 @@ const partyLabels = {
       settled_by: 'وصول کنندہ',
       empty: 'پرنٹ کرنے کے لیے کوئی کسٹمر نہیں۔',
     },
+    ar: {
+      title: 'أرصدة العملاء',
+      subtitle: 'كشف التحصيل',
+      total_parties: 'العملاء',
+      total_owed: 'إجمالي المستحق لنا',
+      total_advance: 'إجمالي المستحق علينا',
+      total_settled: 'إجمالي المحصّل',
+      col_name: 'اسم العميل',
+      col_settled: 'المحصّل',
+      advance_tag: 'مستحق علينا',
+      settled_by: 'المحصّل',
+      empty: 'لا يوجد عملاء للطباعة.',
+    },
+    hi: {
+      title: 'ग्राहक शेष',
+      subtitle: 'वसूली शीट',
+      total_parties: 'ग्राहक',
+      total_owed: 'कुल प्राप्य',
+      total_advance: 'कुल देय',
+      total_settled: 'कुल प्राप्त',
+      col_name: 'ग्राहक का नाम',
+      col_settled: 'प्राप्त',
+      advance_tag: 'देय',
+      settled_by: 'वसूलकर्ता',
+      empty: 'प्रिंट करने के लिए कोई ग्राहक नहीं।',
+    },
   },
   supplier: {
     en: {
@@ -114,12 +172,39 @@ const partyLabels = {
       settled_by: 'ادا کنندہ',
       empty: 'پرنٹ کرنے کے لیے کوئی سپلائر نہیں۔',
     },
+    ar: {
+      title: 'أرصدة الموردين',
+      subtitle: 'كشف السداد',
+      total_parties: 'الموردون',
+      total_owed: 'إجمالي المستحق علينا',
+      total_advance: 'إجمالي المستحق لنا',
+      total_settled: 'إجمالي المدفوع',
+      col_name: 'اسم المورد',
+      col_settled: 'المدفوع',
+      advance_tag: 'مستحق لنا',
+      settled_by: 'الدافع',
+      empty: 'لا يوجد موردون للطباعة.',
+    },
+    hi: {
+      title: 'आपूर्तिकर्ता शेष',
+      subtitle: 'भुगतान शीट',
+      total_parties: 'आपूर्तिकर्ता',
+      total_owed: 'कुल देय',
+      total_advance: 'कुल प्राप्य',
+      total_settled: 'कुल भुगतान',
+      col_name: 'आपूर्तिकर्ता का नाम',
+      col_settled: 'भुगतान',
+      advance_tag: 'प्राप्य',
+      settled_by: 'भुगतानकर्ता',
+      empty: 'प्रिंट करने के लिए कोई आपूर्तिकर्ता नहीं।',
+    },
   },
 } as const
 
-const FONT_STACK = `'Inter', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif`
-const GOOGLE_FONTS_HREF =
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap'
+const fontStack = () =>
+  `'Inter', ${printScriptFontFamilies()}, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif`
+const googleFontsHref = () =>
+  `https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700${printScriptFontParams()}&display=swap`
 
 const isZero = (n: number) => Math.abs(n) < 0.005
 
@@ -137,12 +222,14 @@ export function sortForBalanceSheet<T extends BalanceSheetRow>(rows: T[]): T[] {
  * Prints right-to-left in Urdu (Latin digits and phone numbers kept left-to-right).
  */
 export function generateBalanceSheetHTML(data: BalanceSheetData): string {
-  const language: BalanceSheetLanguage = data.language === 'en' ? 'en' : 'ur'
+  // No language = the native one (this sheet always defaulted to Urdu).
+  const language: BalanceSheetLanguage = data.language === 'en' ? 'en' : toPrintLanguage(data.language ?? nativePrintLanguage())
   const L = { ...sharedLabels[language], ...partyLabels[data.party][language] }
-  const isUrdu = language === 'ur'
-  const dir = isUrdu ? 'rtl' : 'ltr'
-  const start = isUrdu ? 'right' : 'left'
-  const end = isUrdu ? 'left' : 'right'
+  const native = language !== 'en'
+  const rtl = isRtlPrintLanguage(language)
+  const dir = printDirection(language)
+  const start = rtl ? 'right' : 'left'
+  const end = rtl ? 'left' : 'right'
   const money = (n: number) => formatCurrency(n, data.currencyMeta)
 
   const rows = sortForBalanceSheet(
@@ -153,14 +240,14 @@ export function generateBalanceSheetHTML(data: BalanceSheetData): string {
   const totalAdvance = rows.reduce((s, c) => s + Math.max(0, -(Number(c.balance) || 0)), 0)
 
   const businessName =
-    (isUrdu && data.companyNameUrdu?.trim()) || data.companyName?.trim() || 'Business'
+    (native && data.companyNameUrdu?.trim()) || data.companyName?.trim() || 'Business'
   const now = new Date()
 
   const bodyRows = rows.length
     ? rows
         .map((c, i) => {
           const balance = Number(c.balance) || 0
-          const name = (isUrdu && c.nameUrdu?.trim()) || c.name
+          const name = (native && c.nameUrdu?.trim()) || c.name
           const balanceCell = isZero(balance)
             ? `<span class="ltr muted">${money(0)}</span>`
             : balance > 0
@@ -191,7 +278,7 @@ export function generateBalanceSheetHTML(data: BalanceSheetData): string {
   <title>${L.title} — ${escapeHtml(businessName)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="${GOOGLE_FONTS_HREF}" rel="stylesheet">
+  <link href="${googleFontsHref()}" rel="stylesheet">
   <style>
     @page {
       size: A4 portrait;
@@ -201,8 +288,8 @@ export function generateBalanceSheetHTML(data: BalanceSheetData): string {
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: #fff; color: #000; }
     body {
-      font-family: ${FONT_STACK};
-      font-size: ${isUrdu ? 13.5 : 12.5}px;
+      font-family: ${fontStack()};
+      font-size: ${native ? 13.5 : 12.5}px;
       font-weight: 500;
       line-height: 1.5;
       direction: ${dir};

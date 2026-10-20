@@ -25,6 +25,15 @@ import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
 import type { TaxLine } from '@/stores/taxCalculator.api'
 import { formatAppDate } from '@/lib/date-format'
+import {
+  isNativePrintOn,
+  isRtlPrintLanguage,
+  nativePrintLanguage,
+  printDirection,
+  printLocale,
+  printScriptFontFamilies,
+  printScriptFontParams,
+} from '@/lib/native-language'
 
 export type { PrintWindowContact }
 export type { PaperSize }
@@ -137,26 +146,39 @@ function resolvePrintDocumentDate(data: PrintInvoiceData): Date {
   return new Date()
 }
 
+/**
+ * Heading language. `printInUrdu: true` is the "print in native language" switch: it prints
+ * in the business's native language (Urdu, Arabic, Hindi, … — see lib/native-language.ts).
+ */
 function resolvePrintLanguage(data: PrintInvoiceData): InvoiceLanguage {
-  if (data.printInUrdu === true) return 'ur'
-  if (data.printInUrdu === false) return 'en'
+  if (isNativePrintOn(data.printInUrdu)) return nativePrintLanguage()
+  if (data.printInUrdu !== undefined) return 'en'
   return resolveInvoiceLanguage(data)
 }
 
-/** Receipt/A4 header line: Urdu branch/org name when printing in Urdu, else English. */
-function resolveHeaderBusinessName(data: PrintInvoiceData, lang: InvoiceLanguage): string {
+/**
+ * Whether names (items, customer, business) print in the native script. Follows the native
+ * switch even when that language has no print headings of its own (e.g. Chinese: English
+ * headings, Chinese names).
+ */
+function resolvePrintNativeNames(data: PrintInvoiceData, lang: InvoiceLanguage): boolean {
+  return isNativePrintOn(data.printInUrdu) || lang !== 'en'
+}
+
+/** Receipt/A4 header line: the native-language branch/org name on native prints, else English. */
+function resolveHeaderBusinessName(data: PrintInvoiceData, native: boolean): string {
   const en = (data.companyName ?? '').trim()
   const ur = (data.companyNameUrdu ?? '').trim()
-  if (lang === 'ur') return ur || en
+  if (native) return ur || en
   return en || ur
 }
 
-/** Branch street address under company name — English or Urdu per print language. */
-function formatPrintHeaderAddress(data: PrintInvoiceData, lang: InvoiceLanguage): string {
+/** Branch street address under company name — English or native per print language. */
+function formatPrintHeaderAddress(data: PrintInvoiceData, native: boolean): string {
   const en = (data.invoiceAddress ?? '').trim()
   const ur = (data.invoiceAddressUrdu ?? '').trim()
   if (!en && !ur) return ''
-  const text = lang === 'ur' ? ur || en : en || ur
+  const text = native ? ur || en : en || ur
   return escapeHtml(text)
 }
 
@@ -164,7 +186,8 @@ function formatPrintHeaderAddress(data: PrintInvoiceData, lang: InvoiceLanguage)
 function formatPrintContactLine(phone: string | undefined, contactLabel: string): string {
   const num = (phone ?? '').trim()
   if (!num) return ''
-  return `<span class="contact-label">${escapeHtml(contactLabel)}:</span> ${escapeHtml(num)}`
+  // <bdi dir="ltr">: on right-to-left prints "+971 4 123 4567" would otherwise reorder to "4567 123 4 971+".
+  return `<span class="contact-label">${escapeHtml(contactLabel)}:</span> <bdi dir="ltr">${escapeHtml(num)}</bdi>`
 }
 
 export const generateBarcodeText = (text: string): string => {
@@ -183,12 +206,12 @@ export const formatCurrency = (amount: number, currencyMeta?: CurrencyOption): s
   return formatMoneyWithMeta(amount, currencyMeta ?? FALLBACK_CURRENCY)
 }
 
-/** Single-line product title: Urdu script when `lang === 'ur'` (fallback EN). Appends IMEI(s) sold, if any. */
+/** Single-line product title: native script on native prints (fallback EN). Appends IMEI(s) sold, if any. */
 function formatPrintItemCell(
   item: { name: string; nameUrdu?: string | null; imeis?: ImeiEntryInput[] },
-  lang: InvoiceLanguage,
+  native: boolean,
 ): string {
-  const text = lang === 'ur' ? item.nameUrdu?.trim() || item.name : item.name
+  const text = native ? item.nameUrdu?.trim() || item.name : item.name
   let html = escapeHtml(text)
   if (item.imeis && item.imeis.length > 0) {
     html += `<br><span style="font-size:10px;color:#666;">IMEI/Serial: ${escapeHtml(formatImeiEntries(item.imeis))}</span>`
@@ -204,14 +227,14 @@ function formatPrintCustomerCell(
   customerNameUrdu: string | undefined,
   walkInFallback: string,
   naFallback: string,
-  lang: InvoiceLanguage,
+  native: boolean,
 ): string {
   if (customerId === 'walk-in') {
     return escapeHtml(walkInCustomerName?.trim() || walkInFallback)
   }
   const en = customerName?.trim() || naFallback
   const ur = customerNameUrdu?.trim()
-  return escapeHtml(lang === 'ur' ? ur || en : en)
+  return escapeHtml(native ? ur || en : en)
 }
 
 export const generateInvoiceHTML = (
@@ -246,9 +269,11 @@ export const generateInvoiceHTML = (
   const quotationPrint = isQuotationPrint(data)
   const language = resolvePrintLanguage(data)
   const labels = receiptLabels[language]
-  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
-  const dir = language === 'ur' ? 'rtl' : 'ltr'
-  const startAlign = language === 'ur' ? 'right' : 'left'
+  const nativeNames = resolvePrintNativeNames(data, language)
+  const rtl = isRtlPrintLanguage(language)
+  const locale = printLocale(language)
+  const dir = printDirection(language)
+  const startAlign = rtl ? 'right' : 'left'
 
   // Resolve balances - prefer explicit fields from `data` when provided
   const previousBalance = (data.previousBalance !== undefined && data.previousBalance !== null)
@@ -263,8 +288,8 @@ export const generateInvoiceHTML = (
   //   ? data.netBalance
   //   : totalWithPrev - paid
 
-  const headerBusinessName = resolveHeaderBusinessName(data, language)
-  const headerAddressLine = formatPrintHeaderAddress(data, language)
+  const headerBusinessName = resolveHeaderBusinessName(data, nativeNames)
+  const headerAddressLine = formatPrintHeaderAddress(data, nativeNames)
 
   const contactLine = formatPrintContactLine(companyPhone, labels.contact_label)
 
@@ -296,7 +321,7 @@ export const generateInvoiceHTML = (
     customerNameUrdu,
     urduTexts.walk_in_customer,
     urduTexts.not_available,
-    language,
+    nativeNames,
   )
 
   const printActions = buildPrintWindowActionsBlock(
@@ -328,7 +353,7 @@ export const generateInvoiceHTML = (
     }
 
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', ${printScriptFontFamilies()}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: ${format.baseFontPx}px;
       line-height: 1.4;
       margin: 0;
@@ -358,7 +383,7 @@ export const generateInvoiceHTML = (
       font-size: 16px;
       font-weight: bold;
       margin-bottom: 4px;
-      text-transform: ${language === 'ur' ? 'none' : 'uppercase'};
+      text-transform: ${rtl ? 'none' : 'uppercase'};
     }
     
     .business-info {
@@ -458,7 +483,7 @@ export const generateInvoiceHTML = (
     
     .items-table th:last-child {
       width: 58px;
-      text-align: ${language === 'ur' ? 'left' : 'right'};
+      text-align: ${rtl ? 'left' : 'right'};
     }
     
     .items-table td {
@@ -481,7 +506,7 @@ export const generateInvoiceHTML = (
     }
     
     .items-table td:last-child {
-      text-align: ${language === 'ur' ? 'left' : 'right'};
+      text-align: ${rtl ? 'left' : 'right'};
       font-weight: bold;
       white-space: nowrap;
     }
@@ -656,7 +681,7 @@ export const generateInvoiceHTML = (
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39${printScriptFontParams()}&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="invoice-print-root">
@@ -702,7 +727,7 @@ export const generateInvoiceHTML = (
         ${items.map((item, index) => `
         <tr>
           <td>${index + 1}</td>
-          <td>${formatPrintItemCell(item, language)}</td>
+          <td>${formatPrintItemCell(item, nativeNames)}</td>
           <td>${item.unitPrice.toFixed(2)}</td>
           <td>${item.quantity}</td>
           <td>
@@ -737,8 +762,8 @@ export const generateInvoiceHTML = (
       <span>${urduTexts.subtotal}:</span>
       <span>${fmt(subtotal)}</span>
     </div>
-    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span>-${fmt(itemDiscountTotal)}</span></div>` : ''}
-    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${fmt(discount)}</span></div>` : ''}
+    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span><bdi dir="ltr">-${fmt(itemDiscountTotal)}</bdi></span></div>` : ''}
+    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span><bdi dir="ltr">-${fmt(discount)}</bdi></span></div>` : ''}
     ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${fmt(deliveryCharge)}</span></div>` : ''}
     ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${fmt(serviceCharge)}</span></div>` : ''}
     ${taxRowsHtml}
@@ -759,8 +784,8 @@ export const generateInvoiceHTML = (
     if (hasExtraCharges) {
       return `
   <div class="totals-section">
-    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span>-${fmt(itemDiscountTotal)}</span></div>` : ''}
-    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span>-${fmt(discount)}</span></div>` : ''}
+    ${itemDiscountTotal > 0 ? `<div class="total-row"><span>${urduTexts.item_discounts}:</span><span><bdi dir="ltr">-${fmt(itemDiscountTotal)}</bdi></span></div>` : ''}
+    ${discount > 0 ? `<div class="total-row"><span>${urduTexts.discount}:</span><span><bdi dir="ltr">-${fmt(discount)}</bdi></span></div>` : ''}
     ${deliveryCharge > 0 ? `<div class="total-row"><span>${urduTexts.delivery_charge}:</span><span>${fmt(deliveryCharge)}</span></div>` : ''}
     ${serviceCharge > 0 ? `<div class="total-row"><span>${urduTexts.service_charge}:</span><span>${fmt(serviceCharge)}</span></div>` : ''}
     ${taxRowsHtml}
@@ -816,7 +841,7 @@ export const generateInvoiceHTML = (
   ${termsHtml ? `
     <div class="notes-section">
       <div style="font-weight: bold; margin-bottom: 3px;">${urduTexts.terms_and_conditions}:</div>
-      <div class="notes-content">${termsHtml}</div>
+      <div class="notes-content" dir="auto">${termsHtml}</div>
     </div>
   ` : ''}
 
@@ -875,13 +900,15 @@ export const generateA4InvoiceHTML = (
   const quotationPrint = isQuotationPrint(data)
   const language = resolvePrintLanguage(data)
   const labels = a4Labels[language]
-  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
-  const dir = language === 'ur' ? 'rtl' : 'ltr'
-  const startAlign = language === 'ur' ? 'right' : 'left'
-  const endAlign = language === 'ur' ? 'left' : 'right'
+  const nativeNames = resolvePrintNativeNames(data, language)
+  const rtl = isRtlPrintLanguage(language)
+  const locale = printLocale(language)
+  const dir = printDirection(language)
+  const startAlign = rtl ? 'right' : 'left'
+  const endAlign = rtl ? 'left' : 'right'
 
-  const headerBusinessName = resolveHeaderBusinessName(data, language)
-  const headerAddressLine = formatPrintHeaderAddress(data, language)
+  const headerBusinessName = resolveHeaderBusinessName(data, nativeNames)
+  const headerAddressLine = formatPrintHeaderAddress(data, nativeNames)
 
   const contactLine = formatPrintContactLine(companyPhone, labels.contact_label)
 
@@ -907,7 +934,7 @@ export const generateA4InvoiceHTML = (
     customerNameUrdu,
     urduTexts.walk_in_customer,
     urduTexts.not_available,
-    language,
+    nativeNames,
   )
 
   const printNumber = resolvePrintDocumentNumber(invoiceNumber, isQuotationPrint(data))
@@ -1019,13 +1046,13 @@ export const generateA4InvoiceHTML = (
       ${itemDiscountTotal > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.item_discounts}:</td>
-        <td class="total-amount">-${fmt(itemDiscountTotal)}</td>
+        <td class="total-amount"><bdi dir="ltr">-${fmt(itemDiscountTotal)}</bdi></td>
       </tr>
       ` : ''}
       ${discount > 0 ? `
       <tr>
         <td class="total-label">${urduTexts.discount}:</td>
-        <td class="total-amount">-${fmt(discount)}</td>
+        <td class="total-amount"><bdi dir="ltr">-${fmt(discount)}</bdi></td>
       </tr>
       ` : ''}
       ${deliveryCharge > 0 ? `
@@ -1068,7 +1095,7 @@ ${itemizedTotalsTable}
       <tr>
         <td class="total-label" style="background: #f5f5f5;">${urduTexts.previous_balance}:</td>
         <td class="total-amount" style="background: #f5f5f5; color: #000; font-size: 16px;">
-          ${fmt(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}
+          <bdi dir="ltr">${fmt(Math.abs(previousBalance))} ${previousBalance > 0 ? '(Dr)' : previousBalance < 0 ? '(Cr)' : ''}</bdi>
         </td>
       </tr>
       <tr>
@@ -1094,7 +1121,7 @@ ${itemizedTotalsTable}
   ${termsHtml ? `
     <div class="notes-section">
       <div class="terms-heading">${urduTexts.terms_and_conditions}:</div>
-      <div class="notes-content">${termsHtml}</div>
+      <div class="notes-content" dir="auto">${termsHtml}</div>
     </div>
   ` : ''}
 
@@ -1143,7 +1170,7 @@ ${itemizedTotalsTable}
                 return `
         <tr data-sub="${Number(item.subtotal) || 0}">
           <td class="text-center"><strong>${index + 1}</strong></td>
-          <td class="text-left"><strong>${formatPrintItemCell(item, language)}</strong></td>
+          <td class="text-left"><strong>${formatPrintItemCell(item, nativeNames)}</strong></td>
           <td class="text-center"><strong>${item.quantity}</strong></td>
           <td class="text-right"><strong>${fmt(item.unitPrice)}</strong></td>
           <td class="text-right">
@@ -1211,7 +1238,7 @@ ${itemizedTotalsTable}
     }
 
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', ${printScriptFontFamilies()}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: ${format.baseFontPx}px;
       line-height: 1.4;
       margin: 0;
@@ -1787,7 +1814,7 @@ ${itemizedTotalsTable}
     ${printDesignCss(sheetKindOf(sheetSize))}
   </style>
   ${printDesignHeadHtml()}
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39${printScriptFontParams()}&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="invoice-print-root" data-paging="${pagingConfigAttr}">

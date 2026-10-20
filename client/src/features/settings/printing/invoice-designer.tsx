@@ -569,7 +569,7 @@ export function InvoiceDesigner({ open, onOpenChange, initial, saving, onSave }:
               )}
 
               {tab === 'wording' && (
-                <Group title='Your own wording (sales invoices)' hint='Leave a box empty to keep the normal text, which also switches to Urdu on Urdu prints.'>
+                <Group title='Your own wording (sales invoices)' hint='Leave a box empty to keep the normal text, which also switches to the native language (Urdu, Arabic, …) on native-language prints.'>
                   {(
                     [
                       { key: 'title', label: 'Document title', placeholder: 'Invoice — e.g. Tax Invoice, Sales Invoice, Bill', max: 60 },

@@ -88,7 +88,7 @@ export function useCategoryColumns(
             <div className="flex flex-row flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className={getTextClasses(category.name || 'Unnamed category', 'shrink-0 font-medium')}>{category.name || 'Unnamed category'}</span>
               {urdu ? (
-                <span dir='rtl' className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(urdu))}>
+                <span dir='auto' className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(urdu))}>
                   {urdu}
                 </span>
               ) : null}

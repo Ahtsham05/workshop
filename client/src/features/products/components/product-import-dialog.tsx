@@ -12,6 +12,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useFormatMoney } from '@/lib/format-money'
 import { useLanguage } from '@/context/language-context'
 import { Label } from '@/components/ui/label'
+import { nativeFieldLabel } from '@/lib/native-language'
 import {
   Select,
   SelectContent,
@@ -89,7 +90,7 @@ const PRODUCT_FIELDS: ImportFieldSpec[] = [
     width: 30,
     aliases: ['Item', 'Item Name', 'Product', 'Products', 'Item Description', 'Maal', 'Maal ka Naam', 'Naam', 'پروڈکٹ', 'مال'],
   }),
-  withCommonAliases({ key: 'nameUrdu', label: 'Name (Urdu)', width: 25 }),
+  withCommonAliases({ key: 'nameUrdu', label: nativeFieldLabel('Name'), width: 25 }),
   {
     key: 'barcode',
     label: 'Barcode',
@@ -339,7 +340,7 @@ export function ProductImportDialog({ open, onOpenChange, onImport }: ProductImp
             {product.nameUrdu && (
               <span className='font-normal text-muted-foreground'>
                 {' · '}
-                <span dir='rtl'>{product.nameUrdu}</span>
+                <span dir='auto'>{product.nameUrdu}</span>
               </span>
             )}
           </div>

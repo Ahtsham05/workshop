@@ -5,6 +5,7 @@ import { resolveCustomerIdString } from './invoice-print-contact-bridge'
 import { buildInvoiceSmsMessage } from '@/utils/sms-messages'
 import { FALLBACK_CURRENCY } from '@/lib/format-money'
 
+import { isNativePrintOn } from '@/lib/native-language'
 /** Balance / amount due shown on the printed invoice (for PDF filename). */
 export function resolvePrintBalanceAmount(data: PrintInvoiceData): number {
   if (data.newBalance != null && !Number.isNaN(Number(data.newBalance))) {
@@ -23,7 +24,7 @@ export function resolvePrintCustomerLabel(data: PrintInvoiceData): string {
   if (data.customerId === 'walk-in') {
     return (data.walkInCustomerName || 'Walk-in').trim()
   }
-  if (data.printInUrdu) {
+  if (isNativePrintOn(data.printInUrdu)) {
     return (data.customerNameUrdu || data.customerName || 'Customer').trim()
   }
   return (data.customerName || data.customerNameUrdu || 'Customer').trim()
@@ -212,7 +213,7 @@ export function buildPrintWindowActionsBlock(
   labels: PrintActionsLabels,
 ): string {
   const companyName =
-    (data.printInUrdu ? data.companyNameUrdu || data.companyName : data.companyName || data.companyNameUrdu) ||
+    (isNativePrintOn(data.printInUrdu) ? data.companyNameUrdu || data.companyName : data.companyName || data.companyNameUrdu) ||
     ''
   const customerIdStr = resolveCustomerIdString(data.customerId) || ''
   const pdfFilename = buildInvoicePdfDownloadFilename(data)

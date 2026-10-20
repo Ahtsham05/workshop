@@ -131,7 +131,8 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response | nul
   }
 }
 
-type NameLang = 'en' | 'ur'
+/** 'en' or a native language's provider code (ur, ar, hi, zh-CN, … — see lib/native-language.ts). */
+type NameLang = string
 
 /** Google Translate (unofficial, public endpoint). Very high rate limits. */
 async function fetchFromGoogle(
@@ -214,7 +215,7 @@ async function translateExternal(text: string, target: Lang): Promise<string | n
   )
 }
 
-/** Immediate EN↔UR translation for product/customer names (browser cascade). */
+/** Immediate EN ↔ native-language translation for product/customer names (browser cascade). */
 export async function translateNamePair(
   text: string,
   from: NameLang,

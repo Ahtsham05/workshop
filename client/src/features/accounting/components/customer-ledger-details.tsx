@@ -91,6 +91,7 @@ import { printMobileShopReceipt } from '@/features/mobile-shop/utils/mobile-shop
 import { generateLedgerBankStatementHTML } from '@/features/accounting/utils/ledger-bank-statement-print';
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
+import { nativeLanguageDisplayName, nativePrintLanguage, useNativeLanguage, type PrintLanguage } from '@/lib/native-language';
 interface LedgerEntry {
   _id?: string;
   id?: string;  // Backend returns 'id' not '_id'
@@ -825,7 +826,10 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
   const [printingRowId, setPrintingRowId] = useState<string | null>(null);
   const [printingStatement, setPrintingStatement] = useState(false);
   const [statementDialogOpen, setStatementDialogOpen] = useState(false);
-  const [statementLanguage, setStatementLanguage] = useState<'en' | 'ur'>(preferredLanguage === 'ur' ? 'ur' : 'en');
+  // 'native' = the business's native language (Urdu, Arabic, …).
+  const nativeLanguage = useNativeLanguage();
+  const [statementLanguageChoice, setStatementLanguage] = useState<'en' | 'native'>(preferredLanguage !== 'en' ? 'native' : 'en');
+  const statementLanguage = nativeLanguage ? statementLanguageChoice : 'en';
   const [statementShowInvoiceNumbers, setStatementShowInvoiceNumbers] = useState(true);
   const [statementLayout, setStatementLayoutState] = useState<StatementLayout>(getStoredStatementLayout);
   const setStatementLayout = (layout: StatementLayout) => {
@@ -1353,7 +1357,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
     Boolean(entry.referenceId);
 
   const handlePrintStatement = async (options: {
-    language: 'en' | 'ur';
+    language: PrintLanguage;
     showInvoiceNumbers: boolean;
     paperSize?: PaperSize;
     layout?: StatementLayout;
@@ -1595,17 +1599,19 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
               <Label>{t('Language')}</Label>
               <RadioGroup
                 value={statementLanguage}
-                onValueChange={(value) => setStatementLanguage(value as 'en' | 'ur')}
+                onValueChange={(value) => setStatementLanguage(value as 'en' | 'native')}
                 className="flex gap-6"
               >
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="en" id="statement-lang-en" />
                   <Label htmlFor="statement-lang-en" className="font-normal">{t('English')}</Label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="ur" id="statement-lang-ur" />
-                  <Label htmlFor="statement-lang-ur" className="font-normal">{t('Urdu')}</Label>
-                </div>
+                {nativeLanguage && (
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="native" id="statement-lang-ur" />
+                    <Label htmlFor="statement-lang-ur" className="font-normal">{nativeLanguageDisplayName(nativeLanguage.code, preferredLanguage)}</Label>
+                  </div>
+                )}
               </RadioGroup>
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
@@ -1633,7 +1639,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
                 disabled={printingStatement}
                 onPrint={(paperSize) =>
                   handlePrintStatement({
-                    language: statementLanguage,
+                    language: statementLanguage === 'native' ? nativePrintLanguage() : 'en',
                     showInvoiceNumbers: statementShowInvoiceNumbers,
                     paperSize,
                     layout: statementLayout,

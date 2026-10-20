@@ -48,6 +48,8 @@ import {
 import { useFormDraft } from '@/hooks/use-form-draft'
 import { FormDraftNotice } from '@/components/form-draft-notice'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { nativeTextDir } from '@/lib/native-language'
 const imageRefSchema = z
   .object({
     url: z.string(),
@@ -83,6 +85,7 @@ interface Props {
 
 export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch, onCreated, defaultName }: Props) {
   const { t, isRTL } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
   const isEdit = !!currentRow
 
@@ -214,7 +217,7 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                 tone='sky'
                 className='p-3 sm:p-4'
                 title={isEdit ? t('supplier_dialog_section_primary_edit') : t('supplier_dialog_section_primary_new')}
-                description={t('supplier_dialog_section_primary_desc')}
+                description={t('supplier_dialog_section_primary_desc', { lang: nativeLanguageName })}
               >
               <div className={showUrduInput ? 'grid gap-4 sm:grid-cols-2' : ''}>
                 <FormField
@@ -246,13 +249,13 @@ export function SuppliersActionDialog({ currentRow, open, onOpenChange, setFetch
                     name='nameUrdu'
                     render={({ field }) => (
                       <FormItem className='gap-1.5'>
-                        <FormLabel className={isRTL ? 'text-right' : ''}>{t('name_in_urdu')}</FormLabel>
+                        <FormLabel className={isRTL ? 'text-start' : ''}>{t('name_in_urdu', { lang: nativeLanguageName })}</FormLabel>
                         <FormControl>
                           <Input
-                            dir='rtl'
-                            placeholder={t('name_in_urdu_placeholder')}
+                            dir={nativeTextDir()}
+                            placeholder={t('name_in_urdu_placeholder', { lang: nativeLanguageName })}
                             autoComplete='off'
-                            className='text-right'
+                            className='text-start'
                             {...field}
                           />
                         </FormControl>

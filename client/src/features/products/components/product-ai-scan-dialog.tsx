@@ -40,6 +40,8 @@ import { cn } from '@/lib/utils'
 import { ProductAiScanRowTracking } from './product-ai-scan-row-tracking'
 import type { ImeiEntry } from '@/stores/masterProduct.api'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { nativeTextDir } from '@/lib/native-language'
 interface BulkImportResult {
   insertedCount?: number
   errors?: Array<{ index: number; error?: string; name?: string; barcode?: string | null }>
@@ -215,6 +217,7 @@ export function ProductAiScanDialog({
   onImport,
 }: ProductAiScanDialogProps) {
   const { t } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const { showUrduInput } = useUrduDisplay()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const translateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -685,7 +688,7 @@ export function ProductAiScanDialog({
                           {t('product_name')} (English) *
                         </TableHead>
                         <TableHead className="min-w-[130px] whitespace-nowrap px-2 py-2">
-                          {t('name_in_urdu')}
+                          {t('name_in_urdu', { lang: nativeLanguageName })}
                         </TableHead>
                         <TableHead className="min-w-[80px] whitespace-nowrap px-2 py-2">
                           {t('sale_price')}
@@ -751,9 +754,9 @@ export function ProductAiScanDialog({
                                 data-scan-field="nameUrdu"
                                 onChange={(e) => updateRow(row.id, 'nameUrdu', e.target.value)}
                                 onKeyDown={(e) => handleCellKeyDown(e, rowIndex, 'nameUrdu')}
-                                placeholder={t('name_in_urdu_placeholder')}
-                                dir="rtl"
-                                className="h-8 text-right text-sm font-medium"
+                                placeholder={t('name_in_urdu_placeholder', { lang: nativeLanguageName })}
+                                dir={nativeTextDir()}
+                                className="h-8 text-start text-sm font-medium"
                               />
                               {translatingRowId === row.id && (
                                 <Loader2 className="absolute left-1.5 top-2 h-3.5 w-3.5 animate-spin text-muted-foreground" />

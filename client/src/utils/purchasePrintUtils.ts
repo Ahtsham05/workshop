@@ -10,20 +10,30 @@ import { printDesignCss, printDesignHeadHtml, sheetKindOf } from '@/lib/print-de
 import type { CurrencyOption } from '@/stores/localization.api'
 import { buildTaxBreakdownHtml } from '@/lib/tax-print-rows'
 import { formatAppDate } from '@/lib/date-format'
+import {
+  isNativePrintOn,
+  isRtlPrintLanguage,
+  nativePrintLanguage,
+  printDirection,
+  printLocale,
+  printScriptFontFamilies,
+  printScriptFontParams,
+} from '@/lib/native-language'
 
 export type { PaperSize }
 export type { InvoiceTemplate }
 
-/** Match sales invoice thermal/A4: Naskh Arabic stack — no Nastaliq / Jameel Noori. */
-const PURCHASE_PRINT_FONT_STACK = `'Inter', 'Manrope', 'Noto Naskh Arabic', 'Noto Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
+/** Match sales invoice thermal/A4: Naskh for the Arabic script (no Nastaliq / Jameel Noori), plus the native script. */
+const purchasePrintFontStack = () =>
+  `'Inter', 'Manrope', ${printScriptFontFamilies()}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`
 
-const PURCHASE_PRINT_GOOGLE_FONTS =
-  'https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap'
+const purchasePrintGoogleFonts = () =>
+  `https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39${printScriptFontParams()}&display=swap`
 
 type BranchPrintDetails = {
   /** English header title (org or branch) */
   name?: string
-  /** Urdu header when print language is Urdu */
+  /** Native-language (Urdu, Arabic, …) header on native prints */
   nameUrdu?: string
   address?: string
   phone?: string
@@ -40,13 +50,30 @@ function resolvePurchasePrintLanguage(
   languageOverride?: InvoiceLanguage,
   printInUrdu?: boolean,
 ): InvoiceLanguage {
-  if (printInUrdu === true) return 'ur'
-  if (printInUrdu === false) return 'en'
+  // printInUrdu = the "print in native language" switch (Urdu, Arabic, … — lib/native-language.ts).
+  if (isNativePrintOn(printInUrdu)) return nativePrintLanguage()
+  if (printInUrdu !== undefined) return 'en'
   return resolveInvoiceLanguage({
     language: languageOverride ?? purchase?.language,
     isUrduOnly: purchase?.isUrduOnly,
     userPreferredLanguage: purchase?.userPreferredLanguage,
   })
+}
+
+/** The product's native-language (Urdu, Arabic, …) name for native prints, else the usual display name. */
+function purchaseItemPrintName(item: any, nativeNames: boolean): string {
+  if (nativeNames) {
+    const native = String((typeof item.product === 'object' && item.product?.nameUrdu) || item.nameUrdu || '').trim()
+    if (native) return native
+  }
+  return getPurchaseItemDisplayName(item)
+}
+
+/** "Cash" / "Credit" in the print language; other values pass through. */
+function purchasePaymentTypeLabel(paymentType: string, labels: { cash: string; credit: string; pending: string }): string {
+  const key = String(paymentType || '').toLowerCase()
+  if (key === 'cash' || key === 'credit' || key === 'pending') return labels[key]
+  return paymentType
 }
 
 const resolveUnitPrice = (item: any): number =>
@@ -113,9 +140,11 @@ export function generatePurchaseInvoiceHTML(
 
   const language = resolvePurchasePrintLanguage(purchase, languageOverride, printInUrdu)
   const labels = purchaseReceiptLabels[language]
-  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
-  const dir = language === 'ur' ? 'rtl' : 'ltr'
-  const startAlign = language === 'ur' ? 'right' : 'left'
+  const rtl = isRtlPrintLanguage(language)
+  const nativeNames = isNativePrintOn(printInUrdu) || language !== 'en'
+  const locale = printLocale(language)
+  const dir = printDirection(language)
+  const startAlign = rtl ? 'right' : 'left'
   const taxRowsHtml = buildTaxBreakdownHtml(
     purchase?.taxLines,
     tax,
@@ -125,7 +154,7 @@ export function generatePurchaseInvoiceHTML(
 
   const englishTitle = (branchDetails?.name ?? '').trim() || labels.not_available
   const urduTitle = (branchDetails?.nameUrdu ?? '').trim()
-  const companyName = language === 'ur' ? urduTitle || englishTitle : englishTitle
+  const companyName = nativeNames ? urduTitle || englishTitle : englishTitle
   const companyAddress = branchDetails?.address || ''
   const companyPhone = branchDetails?.phone || ''
   const companyEmail = branchDetails?.email || ''
@@ -133,7 +162,7 @@ export function generatePurchaseInvoiceHTML(
   const itemsHTML = items.map((item: any, index: number) => `
     <tr>
       <td>${index + 1}</td>
-      <td>${getPurchaseItemDisplayName(item)}${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${formatAppDate(new Date(item.expiryDate))}` : ''}</small>` : ''}</td>
+      <td>${purchaseItemPrintName(item, nativeNames)}${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${formatAppDate(new Date(item.expiryDate))}` : ''}</small>` : ''}</td>
       <td>${resolveUnitPrice(item).toFixed(2)}</td>
       <td>${item.quantity}</td>
       <td>${resolveLineTotal(item).toFixed(2)}</td>
@@ -153,13 +182,13 @@ export function generatePurchaseInvoiceHTML(
       .no-print { display: none !important; }
     }
     body {
-      font-family: ${PURCHASE_PRINT_FONT_STACK};
+      font-family: ${purchasePrintFontStack()};
       font-size: ${format.baseFontPx}px; line-height: 1.4; margin: 0; padding: 8px; width: ${format.bodyWidthPx}px;
       background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
     }
     .receipt-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
     .company-logo { max-width: 120px; height: auto; margin: 0 auto 8px; display: block; }
-    .business-name { font-size: 16px; font-weight: bold; margin-bottom: 4px; text-transform: ${language === 'ur' ? 'none' : 'uppercase'}; }
+    .business-name { font-size: 16px; font-weight: bold; margin-bottom: 4px; text-transform: ${rtl ? 'none' : 'uppercase'}; }
     .business-info { font-size: 10px; margin-bottom: 1px; }
     .invoice-info { margin-bottom: 12px; border-bottom: 1px dashed #000; padding-bottom: 8px; }
     .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px; }
@@ -171,11 +200,11 @@ export function generatePurchaseInvoiceHTML(
     .items-table th:first-child { width: 18px; text-align: center; }
     .items-table th:nth-child(3) { width: 50px; text-align: center; }
     .items-table th:nth-child(4) { width: 32px; text-align: center; }
-    .items-table th:last-child { width: 58px; text-align: ${language === 'ur' ? 'left' : 'right'}; }
+    .items-table th:last-child { width: 58px; text-align: ${rtl ? 'left' : 'right'}; }
     .items-table td { padding: 3px 2px; vertical-align: top; border-bottom: 1px dotted #ddd; font-size: 11px; word-wrap: break-word; overflow-wrap: break-word; }
     .items-table td:first-child { text-align: center; }
     .items-table td:nth-child(3), .items-table td:nth-child(4) { text-align: center; white-space: nowrap; }
-    .items-table td:last-child { text-align: ${language === 'ur' ? 'left' : 'right'}; font-weight: bold; white-space: nowrap; }
+    .items-table td:last-child { text-align: ${rtl ? 'left' : 'right'}; font-weight: bold; white-space: nowrap; }
     .items-table .total-row-table td { border-top: 1px dashed #000; border-bottom: none; font-weight: bold; padding-top: 4px; }
     .totals-section { border-top: 2px solid #000; padding-top: 8px; margin-bottom: 12px; }
     .total-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 13px; }
@@ -195,14 +224,14 @@ export function generatePurchaseInvoiceHTML(
     .highlight { background: #ffffcc; padding: 1px 2px; }
     @media screen { body { max-width: ${(format.bodyWidthPx ?? 300) + 50}px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 20px; border-radius: 8px; } }
   </style>
-  <link href="${PURCHASE_PRINT_GOOGLE_FONTS}" rel="stylesheet">
+  <link href="${purchasePrintGoogleFonts()}" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
     ${branchDetails?.logo ? `<img src="${branchDetails.logo}" alt="${companyName}" class="company-logo" />` : branchDetails?.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus Solutions" class="company-logo" />` : ''}
     <div class="business-name">${companyName}</div>
     ${companyAddress ? `<div class="business-info">${companyAddress}</div>` : ''}
-    ${companyPhone || companyEmail ? `<div class="business-info">${[companyPhone, companyEmail].filter(Boolean).join(' | ')}</div>` : ''}
+    ${companyPhone || companyEmail ? `<div class="business-info">${[companyPhone, companyEmail].filter(Boolean).map((v) => `<bdi dir="ltr">${v}</bdi>`).join(' | ')}</div>` : ''}
     <div style="font-size: 13px; font-weight: bold; margin-top: 6px; border: 1px solid #000; display: inline-block; padding: 2px 10px;">${labels.purchase_invoice}</div>
   </div>
 
@@ -211,7 +240,7 @@ export function generatePurchaseInvoiceHTML(
     ${purchase.vendorBillNumber ? `<div class="info-row"><span class="info-label">${labels.vendor_bill_number}:</span><span>${purchase.vendorBillNumber}</span></div>` : ''}
     <div class="info-row"><span class="info-label">${labels.date}:</span><span>${purchase.purchaseDate ? formatAppDate(new Date(purchase.purchaseDate)) : formatAppDate(new Date())} ${new Date().toLocaleTimeString(locale)}</span></div>
     <div class="info-row"><span class="info-label">${labels.supplier}:</span><span>${supplierName}</span></div>
-    <div class="info-row"><span class="info-label">${labels.payment_type}:</span><span>${paymentType}</span></div>
+    <div class="info-row"><span class="info-label">${labels.payment_type}:</span><span>${purchasePaymentTypeLabel(paymentType, labels)}</span></div>
   </div>
 
   <div class="items-section">
@@ -298,10 +327,12 @@ export function generatePurchaseInvoiceA4HTML(
 
   const language = resolvePurchasePrintLanguage(purchase, languageOverride, printInUrdu)
   const labels = purchaseReceiptLabels[language]
-  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
-  const dir = language === 'ur' ? 'rtl' : 'ltr'
-  const startAlign = language === 'ur' ? 'right' : 'left'
-  const endAlign = language === 'ur' ? 'left' : 'right'
+  const rtl = isRtlPrintLanguage(language)
+  const nativeNames = isNativePrintOn(printInUrdu) || language !== 'en'
+  const locale = printLocale(language)
+  const dir = printDirection(language)
+  const startAlign = rtl ? 'right' : 'left'
+  const endAlign = rtl ? 'left' : 'right'
   const taxRowsHtml = buildTaxBreakdownHtml(
     purchase?.taxLines,
     tax,
@@ -311,7 +342,7 @@ export function generatePurchaseInvoiceA4HTML(
 
   const englishTitle = (branchDetails?.name ?? '').trim() || labels.not_available
   const urduTitle = (branchDetails?.nameUrdu ?? '').trim()
-  const companyName = language === 'ur' ? urduTitle || englishTitle : englishTitle
+  const companyName = nativeNames ? urduTitle || englishTitle : englishTitle
   const companyAddress = branchDetails?.address || ''
   const companyPhone = branchDetails?.phone || ''
   const companyEmail = branchDetails?.email || ''
@@ -319,8 +350,8 @@ export function generatePurchaseInvoiceA4HTML(
   const itemsHTML = items.map((item: any, index: number) => `
     <tr>
       <td class="text-center"><strong>${index + 1}</strong></td>
-      <td class="text-left"><strong>${getPurchaseItemDisplayName(item)}</strong>${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${formatAppDate(new Date(item.expiryDate))}` : ''}</small>` : ''}</td>
-      <td class="text-center"><strong>${item.quantity} ${item.unit || 'pcs'}</strong></td>
+      <td class="text-left"><strong>${purchaseItemPrintName(item, nativeNames)}</strong>${item.batchNumber ? `<br/><small>Batch: ${item.batchNumber}${item.expiryDate ? ` · Exp: ${formatAppDate(new Date(item.expiryDate))}` : ''}</small>` : ''}</td>
+      <td class="text-center"><strong><bdi dir="ltr">${item.quantity} ${item.unit || 'pcs'}</bdi></strong></td>
       <td class="text-right"><strong>${fmt(resolveUnitPrice(item))}</strong></td>
       <td class="text-right"><strong>${fmt(resolveLineTotal(item))}</strong></td>
     </tr>
@@ -335,7 +366,7 @@ export function generatePurchaseInvoiceA4HTML(
   <style>
     @media print { @page { margin: ${format.pageMargin}; size: ${format.pageCss}; } body { margin: 0; padding: 0; font-size: ${format.baseFontPx - 2}px; } .no-print { display: none !important; } }
     body {
-      font-family: ${PURCHASE_PRINT_FONT_STACK};
+      font-family: ${purchasePrintFontStack()};
       font-size: ${format.baseFontPx}px; line-height: 1.4; margin: 0; padding: 20px; background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
     }
     .invoice-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid black; padding-bottom: 20px; }
@@ -389,7 +420,7 @@ export function generatePurchaseInvoiceA4HTML(
     ${printDesignCss(sheetKindOf(sheetSize))}
   </style>
   ${printDesignHeadHtml()}
-  <link href="${PURCHASE_PRINT_GOOGLE_FONTS}" rel="stylesheet">
+  <link href="${purchasePrintGoogleFonts()}" rel="stylesheet">
 </head>
 <body>
   <div class="invoice-header">
@@ -398,7 +429,7 @@ export function generatePurchaseInvoiceA4HTML(
       <div class="company-name">${companyName}</div>
       <div class="company-details">
         ${companyAddress ? `<span class="company-address">${companyAddress}</span><br>` : ''}
-        ${companyPhone ? `<span class="company-contact-line">${companyPhone}</span><br>` : ''}
+        ${companyPhone ? `<span class="company-contact-line"><bdi dir="ltr">${companyPhone}</bdi></span><br>` : ''}
         ${companyEmail || ''}
       </div>
     </div>
@@ -418,7 +449,7 @@ export function generatePurchaseInvoiceA4HTML(
       <div class="info-title">${labels.supplier}:</div>
       <div class="info-row">
         <span><strong>${supplierName}</strong></span>
-        <span class="status-badge status-${paymentType.toLowerCase()}">${paymentType}</span>
+        <span class="status-badge status-${paymentType.toLowerCase()}">${purchasePaymentTypeLabel(paymentType, labels)}</span>
       </div>
     </div>
     <div class="info-section">
@@ -460,7 +491,7 @@ export function generatePurchaseInvoiceA4HTML(
     <div class="barcode-text">${purchase.invoiceNumber || ''}</div>
   </div>
 
-  ${purchase.notes ? `<div class="notes-section"><div class="terms-heading">${labels.notes}:</div><div class="notes-content">${purchase.notes}</div></div>` : ''}
+  ${purchase.notes ? `<div class="notes-section"><div class="terms-heading">${labels.notes}:</div><div class="notes-content" dir="auto">${purchase.notes}</div></div>` : ''}
 
   ${branchDetails?.invoiceNote?.trim() ? `<div class="invoice-branch-note">${invoiceNoteToSafeHtml(branchDetails.invoiceNote)}</div>` : ''}
 

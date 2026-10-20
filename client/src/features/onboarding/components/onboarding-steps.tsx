@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils'
 import { ONBOARDING_BUSINESS_TYPES } from '@/lib/business-types'
 import type { CurrencyOption } from '@/stores/localization.api'
 
+import { useNativeLanguage } from '@/lib/native-language'
 /** One card per module set, in the order most accounts want them. */
 const BUSINESS_TYPE_ICONS: Record<string, typeof Store> = {
   retail: Store,
@@ -149,6 +150,8 @@ export function BusinessStep({
   form: OnboardingForm
   showUrduInput: boolean
 }) {
+  // Follows the country picked on the next step's defaults (see handleCountryChange).
+  const nativeLanguage = useNativeLanguage()
   return (
     <div className='grid gap-5'>
       <FormField
@@ -168,15 +171,15 @@ export function BusinessStep({
         )}
       />
 
-      {showUrduInput && (
+      {showUrduInput && nativeLanguage && (
         <FormField
           control={form.control}
           name='nameUrdu'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Business name (Urdu)</FormLabel>
+              <FormLabel>Business name ({nativeLanguage.label})</FormLabel>
               <FormControl>
-                <Input placeholder='اردو میں نام' dir='rtl' className='h-11 text-right' {...field} />
+                <Input placeholder={nativeLanguage.placeholder} dir={nativeLanguage.dir} className='h-11 text-start' {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

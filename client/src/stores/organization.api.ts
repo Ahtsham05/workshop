@@ -1,5 +1,6 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQuery } from './base-query';
+import type { NativeLanguageSetting } from '@/lib/native-language';
 
 export interface SubscriptionLimits {
   maxBranches: number;
@@ -84,6 +85,8 @@ export interface Organization {
   locale?: string;
   dateFormat?: DateFormat;
   documentNumbering?: DocumentNumberingConfig;
+  /** 'auto' (follow countryCode), 'none', or a language code — see lib/native-language.ts. */
+  nativeLanguage?: NativeLanguageSetting;
 }
 
 export interface UpdateOrganizationSettingsRequest {
@@ -96,6 +99,7 @@ export interface UpdateOrganizationSettingsRequest {
   locale?: string;
   dateFormat?: DateFormat;
   documentNumbering?: DocumentNumberingConfig;
+  nativeLanguage?: NativeLanguageSetting;
 }
 
 export interface SetupOrganizationRequest {

@@ -242,7 +242,7 @@ export function CreateAdjustmentDialog({ open, onOpenChange, prefill }: CreateAd
                                   {item.name}
                                 </span>
                                 {item.nameUrdu?.trim() ? (
-                                  <span dir='rtl' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(item.nameUrdu))}>
+                                  <span dir='auto' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(item.nameUrdu))}>
                                     {item.nameUrdu.trim()}
                                   </span>
                                 ) : null}

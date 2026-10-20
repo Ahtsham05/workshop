@@ -121,7 +121,7 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit, parent }: P
                   <FlagBadge flag={product.flag} />
                 </div>
                 {product.nameUrdu ? (
-                  <p dir='rtl' className='mt-0.5 w-fit text-base text-muted-foreground'>
+                  <p dir='auto' className='mt-0.5 w-fit text-base text-muted-foreground'>
                     {product.nameUrdu}
                   </p>
                 ) : null}

@@ -81,7 +81,7 @@ export function CatalogProductPicker({ value, onChange, placeholder, disabled, c
               {label}
             </span>
             {showUrdu && value?.nameUrdu?.trim() ? (
-              <span dir='rtl' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(value.nameUrdu))}>
+              <span dir='auto' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(value.nameUrdu))}>
                 {value.nameUrdu.trim()}
               </span>
             ) : null}
@@ -132,7 +132,7 @@ export function CatalogProductPicker({ value, onChange, placeholder, disabled, c
                             {item.name}
                           </span>
                           {showUrdu && item.nameUrdu?.trim() ? (
-                            <span dir='rtl' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(item.nameUrdu))} title={item.nameUrdu.trim()}>
+                            <span dir='auto' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(item.nameUrdu))} title={item.nameUrdu.trim()}>
                               {item.nameUrdu.trim()}
                             </span>
                           ) : null}

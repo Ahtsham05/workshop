@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { toJSON, paginate } = require('./plugins');
 const { BUSINESS_TYPES, normalizeBusinessType } = require('../config/businessTypes');
 const { TAX_SYSTEMS } = require('../config/countries');
+const { NATIVE_LANGUAGE_SETTINGS } = require('../config/nativeLanguages');
 
 // One section (Invoice/Purchase/Quotation) of the documentNumbering config below.
 // `dateSegment` and `resetPeriod` must stay consistent — see documentNumbering.service.js's
@@ -75,6 +76,14 @@ const organizationSchema = mongoose.Schema(
     taxNumber: {
       type: String,
       trim: true,
+    },
+    // The second language every `nameUrdu` field holds and native-language prints use:
+    // 'auto' follows countryCode (Pakistan → Urdu, UAE → Arabic, …), 'none' turns it off.
+    // See config/nativeLanguages.js.
+    nativeLanguage: {
+      type: String,
+      enum: NATIVE_LANGUAGE_SETTINGS,
+      default: 'auto',
     },
     // Localization / Currency / Tax settings — all optional/defaulted so existing
     // organizations keep working unchanged until they configure these explicitly (e.g. via

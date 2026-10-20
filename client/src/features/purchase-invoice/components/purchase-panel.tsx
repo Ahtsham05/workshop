@@ -1536,7 +1536,7 @@ export default function PurchasePanel({
                                               <div className="font-medium text-sm truncate shrink-0">{catalogItem.name}</div>
                                               {showUrdu && catalogItem.nameUrdu?.trim() ? (
                                                 <span
-                                                  dir="rtl"
+                                                  dir='auto'
                                                   className={cn(
                                                     'min-w-0 truncate text-xs',
                                                     getUrduSecondaryNameClasses(catalogItem.nameUrdu),
@@ -2218,7 +2218,7 @@ export default function PurchasePanel({
                             </span>
                             {showUrdu && purchase.supplier.nameUrdu?.trim() ? (
                               <span
-                                dir="rtl"
+                                dir='auto'
                                 className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(purchase.supplier.nameUrdu))}
                               >
                                 {purchase.supplier.nameUrdu.trim()}
@@ -2296,7 +2296,7 @@ export default function PurchasePanel({
                                   </span>
                                   {showUrdu && supplier.nameUrdu?.trim() ? (
                                     <span
-                                      dir="rtl"
+                                      dir='auto'
                                       className={cn('min-w-0 truncate text-sm', getUrduSecondaryNameClasses(supplier.nameUrdu))}
                                       title={supplier.nameUrdu.trim()}
                                     >

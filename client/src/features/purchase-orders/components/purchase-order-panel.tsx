@@ -1057,7 +1057,7 @@ export default function PurchaseOrderPanel({
                                               <div className='shrink-0 truncate text-sm font-medium'>{catalogItem.name}</div>
                                               {showUrdu && catalogItem.nameUrdu?.trim() ? (
                                                 <span
-                                                  dir='rtl'
+                                                  dir='auto'
                                                   className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
                                                 >
                                                   {catalogItem.nameUrdu.trim()}

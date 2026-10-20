@@ -10,6 +10,7 @@ import { AppDispatch } from '@/stores/store'
 import { bulkImportSubCategories } from '@/stores/subCategory.slice'
 import { useLanguage } from '@/context/language-context'
 import { useSubCategories } from '../context/subcategories-context'
+import { nativeFieldLabel } from '@/lib/native-language'
 import {
   ExcelImportDialog,
   type BuiltRow,
@@ -46,7 +47,7 @@ const SUBCATEGORY_FIELDS: ImportFieldSpec[] = [
     width: 30,
     aliases: ['Sub Category', 'Subcategory', 'Sub Group', 'Sub Type'],
   }),
-  withCommonAliases({ key: 'nameUrdu', label: 'Name (Urdu)', width: 25 }),
+  withCommonAliases({ key: 'nameUrdu', label: nativeFieldLabel('Name'), width: 25 }),
   {
     key: 'category',
     label: 'Category',

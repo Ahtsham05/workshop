@@ -16,6 +16,13 @@ router
   );
 
 router
+  .route('/name')
+  .post(
+    validate(translateValidation.translateNameToNative),
+    translateController.translateNameToNative,
+  );
+
+router
   .route('/name-to-english')
   .post(
     validate(translateValidation.translateNameToEnglish),

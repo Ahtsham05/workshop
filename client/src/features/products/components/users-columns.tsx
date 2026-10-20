@@ -161,7 +161,7 @@ export const useProductColumns = (
             <FlagBadge flag={product.flag} />
             {urdu ? (
               <span
-                dir='rtl'
+                dir='auto'
                 className={cn(
                   getUrduSecondaryNameClasses(urdu),
                   'min-w-0 max-w-[min(12rem,100%)] truncate sm:max-w-[14rem]',

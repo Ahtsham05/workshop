@@ -338,7 +338,7 @@ export function RankingsTable({ range, filters, onFiltersChange }: Props) {
                             </p>
                             <p className='truncate text-xs text-muted-foreground'>
                               {showUrdu && row.nameUrdu ? (
-                                <span dir='rtl' className='mr-1.5'>
+                                <span dir='auto' className='mr-1.5'>
                                   {row.nameUrdu}
                                 </span>
                               ) : null}

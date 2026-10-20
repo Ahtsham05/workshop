@@ -3,7 +3,17 @@ import { transferDateOf, type InventoryTransfer, type TransferStatus } from '@/s
 import { formatAppDate } from '@/lib/date-format'
 import { isBackDated } from '../lib/transfer-date'
 
-export type TransferPrintLanguage = 'en' | 'ur'
+import {
+  isRtlPrintLanguage,
+  printDirection,
+  printLocale,
+  printScriptFontFamilies,
+  printScriptFontParams,
+  type PrintLanguage,
+} from '@/lib/native-language'
+import { toPrintLanguage } from '@/features/invoice/utils/language'
+/** English or a native print language (Urdu, Arabic, Hindi — lib/native-language.ts). */
+export type TransferPrintLanguage = PrintLanguage
 
 // A grouped bulk transfer whose line items span more than one real status (e.g. 2 of 3
 // products already received) prints as 'partial' — display-only, never stored as such.
@@ -115,6 +125,82 @@ const labels = {
     status_cancelled: 'منسوخ شدہ',
     status_partial: 'جزوی طور پر موصول',
   },
+  ar: {
+    doc_title: 'إذن تحويل مخزون',
+    transfer_no: 'رقم التحويل',
+    date: 'التاريخ',
+    status: 'الحالة',
+    from_branch: 'من',
+    to_branch: 'إلى',
+    completed_on: 'تاريخ الإكمال',
+    entered_on: 'تاريخ الإدخال',
+    items_header: 'تفاصيل الأصناف',
+    item: 'الصنف',
+    imei_serial: 'IMEI / الرقم التسلسلي',
+    batch: 'الدفعة',
+    qty: 'الكمية',
+    reason: 'السبب',
+    notes: 'ملاحظات',
+    total_products: 'إجمالي الأصناف',
+    total_qty: 'إجمالي الكمية',
+    branch_authorization: 'اعتماد الفرع',
+    stamp_here: 'الختم',
+    authorized_signature: 'التوقيع المعتمد',
+    received_by: 'المستلم',
+    receiver_name: 'الاسم',
+    receiver_contact: 'للتواصل',
+    receiver_signature: 'التوقيع',
+    received_date: 'التاريخ',
+    computer_generated: 'هذا مستند صادر إلكترونيًا. التوقيعات أعلاه تؤكد التسليم الفعلي للمخزون المذكور.',
+    print_options: 'خيارات الطباعة',
+    print_document: 'طباعة',
+    close: 'إغلاق',
+    powered_by: 'Logix Plus Software Solutions',
+    status_suggested: 'مقترح',
+    status_approved: 'معتمد',
+    status_in_transit: 'قيد النقل',
+    status_completed: 'مكتمل',
+    status_cancelled: 'ملغى',
+    status_partial: 'مستلم جزئيًا',
+  },
+  hi: {
+    doc_title: 'स्टॉक ट्रांसफर नोट',
+    transfer_no: 'ट्रांसफर संख्या',
+    date: 'दिनांक',
+    status: 'स्थिति',
+    from_branch: 'भेजने वाली शाखा',
+    to_branch: 'प्राप्त करने वाली शाखा',
+    completed_on: 'पूर्ण होने की तिथि',
+    entered_on: 'दर्ज करने की तिथि',
+    items_header: 'उत्पाद विवरण',
+    item: 'वस्तु',
+    imei_serial: 'IMEI / सीरियल',
+    batch: 'बैच',
+    qty: 'मात्रा',
+    reason: 'कारण',
+    notes: 'टिप्पणी',
+    total_products: 'कुल उत्पाद',
+    total_qty: 'कुल मात्रा',
+    branch_authorization: 'शाखा अनुमोदन',
+    stamp_here: 'मुहर',
+    authorized_signature: 'अधिकृत हस्ताक्षर',
+    received_by: 'प्राप्तकर्ता',
+    receiver_name: 'नाम',
+    receiver_contact: 'संपर्क',
+    receiver_signature: 'हस्ताक्षर',
+    received_date: 'दिनांक',
+    computer_generated: 'यह कंप्यूटर द्वारा तैयार दस्तावेज़ है। ऊपर के हस्ताक्षर सूचीबद्ध स्टॉक के हस्तांतरण की पुष्टि करते हैं।',
+    print_options: 'प्रिंट विकल्प',
+    print_document: 'प्रिंट करें',
+    close: 'बंद करें',
+    powered_by: 'Logix Plus Software Solutions',
+    status_suggested: 'सुझाया गया',
+    status_approved: 'स्वीकृत',
+    status_in_transit: 'रास्ते में',
+    status_completed: 'पूर्ण',
+    status_cancelled: 'रद्द',
+    status_partial: 'आंशिक रूप से प्राप्त',
+  },
 } as const
 
 const statusLabelKey: Record<PrintTransferStatus, keyof (typeof labels)['en']> = {
@@ -177,11 +263,12 @@ export function buildTransferPrintData(
 }
 
 export const generateTransferHTML = (data: PrintTransferData): string => {
-  const language: TransferPrintLanguage = data.language === 'ur' ? 'ur' : 'en'
+  const language: TransferPrintLanguage = toPrintLanguage(data.language)
+  const rtl = isRtlPrintLanguage(language)
   const texts = labels[language]
-  const dir = language === 'ur' ? 'rtl' : 'ltr'
-  const startAlign = language === 'ur' ? 'right' : 'left'
-  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
+  const dir = printDirection(language)
+  const startAlign = rtl ? 'right' : 'left'
+  const locale = printLocale(language)
 
   const statusText = texts[statusLabelKey[data.status]]
   const transferRef = data.transferNumber || `TRF-${data.transferId.slice(-8).toUpperCase()}`
@@ -246,7 +333,7 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
       .no-print { display: none !important; }
     }
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', ${printScriptFontFamilies()}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 13px; line-height: 1.4; margin: 0; padding: 8px; width: 300px;
       background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
     }
@@ -294,14 +381,14 @@ export const generateTransferHTML = (data: PrintTransferData): string => {
     .highlight { background: #ffffcc; padding: 1px 2px; }
     @media screen { body { max-width: 350px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 20px; border-radius: 8px; } }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800${printScriptFontParams()}&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
     ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${companyName}" class="company-logo" />` : ''}
     <div class="business-name">${companyName}</div>
     ${data.companyAddress ? `<div class="business-info">${escapeHtml(data.companyAddress)}</div>` : ''}
-    ${data.companyPhone ? `<div class="business-info">${escapeHtml(data.companyPhone)}</div>` : ''}
+    ${data.companyPhone ? `<div class="business-info"><bdi dir="ltr">${escapeHtml(data.companyPhone)}</bdi></div>` : ''}
     <div class="doc-badge">${texts.doc_title}</div>
   </div>
 

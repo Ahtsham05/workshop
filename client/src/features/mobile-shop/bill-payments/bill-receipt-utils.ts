@@ -5,6 +5,7 @@ import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import type { CurrencyOption } from '@/stores/localization.api'
 import { formatAppDate } from '@/lib/date-format'
 
+import { isRtlPrintLanguage, printDirection, printLocale, printScriptFontFamilies, printScriptFontParams } from '@/lib/native-language'
 interface BillReceiptOptions {
   orgName?: string
   branchDetails?: {
@@ -24,9 +25,9 @@ interface BillReceiptOptions {
 export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: BillReceiptOptions = {}): string {
   const language = resolveInvoiceLanguage({ userPreferredLanguage: options.userPreferredLanguage })
   const labels = billReceiptLabels[language]
-  const dir = language === 'ur' ? 'rtl' : 'ltr'
-  const startAlign = language === 'ur' ? 'right' : 'left'
-  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
+  const locale = printLocale(language)
+  const dir = printDirection(language)
+  const startAlign = isRtlPrintLanguage(language) ? 'right' : 'left'
 
   const companyName = options.branchDetails?.name || options.orgName || 'Mobile Shop'
   const fmt = (n: number) => formatMoneyWithMeta(n, options.currencyMeta ?? FALLBACK_CURRENCY)
@@ -58,7 +59,7 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
     }
     
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', ${printScriptFontFamilies()}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 13px;
       line-height: 1.4;
       margin: 0;
@@ -205,7 +206,7 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
       }
     }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800${printScriptFontParams()}&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
@@ -214,9 +215,9 @@ export function generateBillReceiptHTML(receipt: BillPaymentReceipt, options: Bi
     ${options.branchDetails?.address ? `<div class="business-info">${options.branchDetails.address}</div>` : ''}
     ${options.branchDetails?.phone || options.branchDetails?.email ? `
       <div class="business-info">
-        ${options.branchDetails.phone || ''}
+        ${options.branchDetails.phone ? `<bdi dir="ltr">${options.branchDetails.phone}</bdi>` : ''}
         ${options.branchDetails.phone && options.branchDetails.email ? ' | ' : ''}
-        ${options.branchDetails.email || ''}
+        ${options.branchDetails.email ? `<bdi dir="ltr">${options.branchDetails.email}</bdi>` : ''}
       </div>
     ` : ''}
     <div class="receipt-title">${labels.bill_receipt}</div>

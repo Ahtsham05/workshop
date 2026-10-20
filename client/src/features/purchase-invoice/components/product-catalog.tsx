@@ -316,7 +316,7 @@ export function ProductCatalog({
                             </p>
                             {product.nameUrdu?.trim() ? (
                               <p
-                                dir="rtl"
+                                dir='auto'
                                 className={cn(
                                   'w-full min-w-0 max-w-full text-xs leading-snug line-clamp-2 break-words',
                                   getUrduSecondaryNameClasses(product.nameUrdu),

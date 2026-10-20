@@ -3,6 +3,7 @@ import { useGetBranchQuery, type InvoiceTemplate } from '@/stores/branch.api'
 import { RootState } from '@/stores/store'
 import { DOC_EXTRAS_BASE, getActivePrintDesign } from '@/lib/print-design'
 
+import type { PrintLanguage } from '@/lib/native-language'
 export type { InvoiceTemplate }
 
 export const INVOICE_TEMPLATE_OPTIONS: Array<{ value: InvoiceTemplate; label: string; description: string }> = [
@@ -188,13 +189,13 @@ const LEDGER_A4_CSS = `
 
 /* ── Bank / big-company designs ─────────────────────────────────────────────
  * Same shared HTML as every other template. Two helpers keep them honest:
- *  - letter-spacing breaks Urdu's joined script, so every design that spaces its
- *    capitals resets it for right-to-left prints (RTL_RESET);
+ *  - letter-spacing breaks joined scripts (Urdu, Arabic, Hindi's Devanagari), so every
+ *    design that spaces its capitals resets it for those prints (RTL_RESET);
  *  - the "amount payable" highlight goes on the last row of the LAST totals table
  *    only (an itemised table above it can end in a tax row, which must not glow).
  */
 
-const RTL_RESET = `html[dir="rtl"] * { letter-spacing: 0 !important; }`
+const RTL_RESET = `html[dir="rtl"] *, html[lang="hi"] * { letter-spacing: 0 !important; }`
 const LAST_TOTAL_ROW = `.totals-wrapper:not(:has(~ .totals-wrapper)) .totals-table tr:last-child td`
 const NUMERIC = `font-variant-numeric: tabular-nums;`
 
@@ -391,10 +392,24 @@ const DOC_EXTRAS_LABELS = {
     supplier: 'سپلائر کے دستخط',
     note: 'یہ کمپیوٹر سے تیار کردہ دستاویز ہے۔',
   },
+  ar: {
+    prepared_by: 'أعدّه',
+    authorised: 'المفوض بالتوقيع',
+    customer: 'توقيع العميل',
+    supplier: 'توقيع المورد',
+    note: 'هذا مستند صادر إلكترونيًا.',
+  },
+  hi: {
+    prepared_by: 'तैयारकर्ता',
+    authorised: 'अधिकृत हस्ताक्षरकर्ता',
+    customer: 'ग्राहक हस्ताक्षर',
+    supplier: 'आपूर्तिकर्ता हस्ताक्षर',
+    note: 'यह कंप्यूटर द्वारा तैयार दस्तावेज़ है।',
+  },
 } as const
 
 /** Signature strip for the formal templates; '' for every other template. */
-export function invoiceTemplateExtrasHtml(template: InvoiceTemplate, language: 'en' | 'ur', party: 'customer' | 'supplier'): string {
+export function invoiceTemplateExtrasHtml(template: InvoiceTemplate, language: PrintLanguage, party: 'customer' | 'supplier'): string {
   // The invoice designer can force the strip on (any template) or off (even a formal one).
   const choice = getActivePrintDesign().signatures
   if (choice === 'hide') return ''

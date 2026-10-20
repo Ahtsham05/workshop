@@ -160,6 +160,7 @@ import { FlagBadge, FlagPickerPopover } from '@/components/flag-badge'
 import { useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
 import { formatAppDate } from '@/lib/date-format'
 
+import { useNativeLanguageName } from '@/hooks/use-native-language-name'
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
 
@@ -226,6 +227,7 @@ export function InvoicePanel({
   onBarcodeSearch,
 }: InvoicePanelProps) {
   const { t, isRTL } = useLanguage()
+  const nativeLanguageName = useNativeLanguageName()
   const { showUrdu } = useUrduDisplay()
   // Rows from the settlement-aware invoice list come through Mongoose's toJSON transform,
   // which replaces `_id` with `id` — so `editingInvoice._id` alone is undefined for any
@@ -2212,7 +2214,7 @@ export function InvoicePanel({
                                       {showUrdu && item.nameUrdu?.trim() ? (
                                         <span
                                           className={cn('min-w-0 truncate rtl text-xs shrink', getUrduSecondaryNameClasses(item.nameUrdu))}
-                                          dir='rtl'
+                                          dir='auto'
                                           title={item.nameUrdu.trim()}
                                         >
                                           {item.nameUrdu.trim()}
@@ -2290,7 +2292,7 @@ export function InvoicePanel({
                                                 </span>
                                                 {showUrdu && catalogItem.nameUrdu?.trim() ? (
                                                   <span
-                                                    dir="rtl"
+                                                    dir='auto'
                                                     className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(catalogItem.nameUrdu))}
                                                     title={catalogItem.nameUrdu.trim()}
                                                   >
@@ -2963,19 +2965,21 @@ export function InvoicePanel({
               {t('invoice_details')}
             </CardTitle>
 
-            <div className='flex items-center gap-2'>
-              <Label htmlFor='invoice-print-urdu-header' className='text-xs font-normal text-muted-foreground whitespace-nowrap'>
-                {t('urdu_print')}
-              </Label>
-              <Switch
-                id='invoice-print-urdu-header'
-                checked={printReceiptInUrdu}
-                onCheckedChange={(v) => {
-                  setPrintReceiptInUrdu(v)
-                  setInvoicePrintInUrdu(v)
-                }}
-              />
-            </div>
+            {nativeLanguageName && (
+              <div className='flex items-center gap-2'>
+                <Label htmlFor='invoice-print-urdu-header' className='text-xs font-normal text-muted-foreground whitespace-nowrap'>
+                  {t('urdu_print', { lang: nativeLanguageName })}
+                </Label>
+                <Switch
+                  id='invoice-print-urdu-header'
+                  checked={printReceiptInUrdu}
+                  onCheckedChange={(v) => {
+                    setPrintReceiptInUrdu(v)
+                    setInvoicePrintInUrdu(v)
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Invoice number — real (read-only) once saved; before that, a live preview of
@@ -3127,7 +3131,7 @@ export function InvoicePanel({
                                         <Truck className="h-3 w-3 shrink-0 text-muted-foreground" aria-label={t('Supplier')} />
                                       ) : null}
                                       {urdu ? (
-                                        <span dir="rtl" className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(urdu))} title={urdu}>
+                                        <span dir='auto' className={cn('min-w-0 truncate text-xs', getUrduSecondaryNameClasses(urdu))} title={urdu}>
                                           {urdu}
                                         </span>
                                       ) : null}
@@ -3284,7 +3288,7 @@ export function InvoicePanel({
                                     ) : null}
                                     {showUrdu && customer.nameUrdu?.trim() ? (
                                       <span
-                                        dir="rtl"
+                                        dir='auto'
                                         className={cn('min-w-0 truncate', getUrduSecondaryNameClasses(customer.nameUrdu))}
                                         title={customer.nameUrdu.trim()}
                                       >

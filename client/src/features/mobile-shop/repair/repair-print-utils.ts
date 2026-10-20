@@ -5,6 +5,7 @@ import { BUSINESS_TIMEZONE } from '@/lib/business-timezone'
 import { formatMoneyWithMeta, FALLBACK_CURRENCY } from '@/lib/format-money'
 import type { CurrencyOption } from '@/stores/localization.api'
 
+import { isRtlPrintLanguage, printDirection, printLocale, printScriptFontFamilies, printScriptFontParams } from '@/lib/native-language'
 export interface RepairReceiptData {
   customerName: string
   phone?: string
@@ -43,9 +44,9 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
 
   const language = resolveInvoiceLanguage(data)
   const labels = repairReceiptLabels[language]
-  const locale = language === 'ur' ? 'ur-PK' : 'en-PK'
-  const dir = language === 'ur' ? 'rtl' : 'ltr'
-  const startAlign = language === 'ur' ? 'right' : 'left'
+  const locale = printLocale(language)
+  const dir = printDirection(language)
+  const startAlign = isRtlPrintLanguage(language) ? 'right' : 'left'
 
   const balance = charges - advanceAmount
 
@@ -81,7 +82,7 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
       .no-print { display: none !important; }
     }
     body {
-      font-family: 'Inter', 'Manrope', 'Noto Nastaliq Urdu', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', 'Manrope', ${printScriptFontFamilies()}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 13px; line-height: 1.4; margin: 0; padding: 8px; width: 300px;
       background: white; color: #000; direction: ${dir}; text-align: ${startAlign};
     }
@@ -109,14 +110,14 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
     .highlight { background: #ffffcc; padding: 1px 2px; }
     @media screen { body { max-width: 350px; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 20px; border-radius: 8px; } }
   </style>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Manrope:wght@200..800&family=Libre+Barcode+39${printScriptFontParams()}&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="receipt-header">
     ${data.companyLogo ? `<img src="${data.companyLogo}" alt="${companyName}" class="company-logo" />` : data.isTrial ? `<img src="/images/logo-light.png" alt="Logix Plus Solutions" class="company-logo" />` : ''}
     <div class="business-name">${companyName}</div>
     ${companyAddress ? `<div class="business-info">${companyAddress}</div>` : ''}
-    ${companyPhone || companyEmail ? `<div class="business-info">${[companyPhone, companyEmail].filter(Boolean).join(' | ')}</div>` : ''}
+    ${companyPhone || companyEmail ? `<div class="business-info">${[companyPhone, companyEmail].filter(Boolean).map((v) => `<bdi dir="ltr">${v}</bdi>`).join(' | ')}</div>` : ''}
     <div style="font-size: 13px; font-weight: bold; margin-top: 6px; border: 1px solid #000; display: inline-block; padding: 2px 10px;">${labels.repair_job_card}</div>
   </div>
 
@@ -165,7 +166,7 @@ export function generateRepairReceiptHTML(data: RepairReceiptData): string {
   <div class="footer">
     <div class="footer-line"><strong>${labels.thank_you}</strong></div>
     <div class="footer-line">${labels.keep_receipt}</div>
-    ${companyPhone ? `<div class="footer-line">${labels.contact}: ${companyPhone}</div>` : ''}
+    ${companyPhone ? `<div class="footer-line">${labels.contact}: <bdi dir="ltr">${companyPhone}</bdi></div>` : ''}
     <div style="margin-top: 8px; font-size: 10px; color: #000; font-weight: bold; text-align: center; line-height: 1.2;">${labels.powered_by}</div>
   </div>
 

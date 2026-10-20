@@ -3,40 +3,49 @@ import type { FieldValues, Path, PathValue, UseFormReturn } from 'react-hook-for
 import Axios from '@/utils/Axios'
 import { translateNamePair } from '@/i18n/auto-translate'
 import { useUrduDisplay } from '@/context/urdu-display-context'
+import { getNativeLanguage } from '@/lib/native-language'
 
-async function translateViaServer(
-  path: '/translate/name-to-urdu' | '/translate/name-to-english',
-  text: string,
-): Promise<string> {
+async function translateViaServer(path: string, body: Record<string, string>): Promise<string> {
   try {
-    const res = await Axios.post(path, { text })
+    const res = await Axios.post(path, body)
     return String(res.data?.translated ?? '').trim()
   } catch {
     return ''
   }
 }
 
-/** EN→UR / UR→EN with browser cascade first, server proxy as fallback. */
+/**
+ * Native-language name → English, browser cascade first, server proxy as fallback. The
+ * native language is the business's (Urdu, Arabic, … — see lib/native-language.ts).
+ */
 export async function fetchEnglishNameSuggestion(text: string): Promise<string> {
+  const native = getNativeLanguage()
   const trimmed = String(text ?? '').trim()
-  if (trimmed.length < 2 || !/[\u0600-\u06FF]/.test(trimmed)) return ''
-  const local = await translateNamePair(trimmed, 'ur', 'en')
-  if (local && /[A-Za-z]/.test(local)) return local
-  return translateViaServer('/translate/name-to-english', trimmed)
+  if (!native || trimmed.length < 2) return ''
+  if (native.script ? !native.script.test(trimmed) : !/[A-Za-z]/.test(trimmed)) return ''
+  const local = await translateNamePair(trimmed, native.providerCode, 'en')
+  if (local && /[A-Za-z]/.test(local) && local.toLowerCase() !== trimmed.toLowerCase()) return local
+  return translateViaServer('/translate/name-to-english', { text: trimmed, source: native.code })
 }
 
+/** English name → the business's native language (kept under its old name for its many callers). */
 export async function fetchUrduNameSuggestion(text: string): Promise<string> {
+  const native = getNativeLanguage()
   const trimmed = String(text ?? '').trim()
-  if (trimmed.length < 2 || !/[A-Za-z]/.test(trimmed)) return ''
-  const local = await translateNamePair(trimmed, 'en', 'ur')
+  if (!native || trimmed.length < 2 || !/[A-Za-z]/.test(trimmed)) return ''
+  const local = await translateNamePair(trimmed, 'en', native.providerCode)
   if (local && local.toLowerCase() !== trimmed.toLowerCase()) return local
-  return translateViaServer('/translate/name-to-urdu', trimmed)
+  return native.code === 'ur'
+    ? translateViaServer('/translate/name-to-urdu', { text: trimmed })
+    : translateViaServer('/translate/name', { text: trimmed, target: native.code })
 }
+
+export const fetchNativeNameSuggestion = fetchUrduNameSuggestion
 
 /**
- * Debounced EN→Urdu suggestion while typing a Latin-script name.
- * - Keeps saved Urdu when the English name is unchanged (e.g. editing price only).
- * - Fills Urdu when it is empty.
+ * Debounced English → native-language (Urdu, Arabic, …) suggestion while typing a Latin-script name.
+ * - Keeps the saved native name when the English name is unchanged (e.g. editing price only).
+ * - Fills the native name when it is empty.
  * - Re-translates when the user edits the English name.
  *
  * Pass `sessionKey` (e.g. dialog open + entity id) so baseline English resets when the form loads another row.

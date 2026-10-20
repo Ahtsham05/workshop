@@ -22,6 +22,7 @@ import { transferDateOf } from '@/stores/inventoryTransfer.api'
 import { isBackDated } from '../lib/transfer-date'
 import { useFormatMoney } from '@/lib/format-money'
 
+import { toPrintLanguage } from '@/features/invoice/utils/language'
 interface TransferDetailsDialogProps {
   groupId: string | null
   onClose: () => void
@@ -96,7 +97,7 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
         companyAddress: [orgData?.address, orgData?.city].filter(Boolean).join(', '),
         companyPhone: orgData?.phone,
         companyLogo: orgData?.logo?.url,
-        language: language === 'ur' ? 'ur' : 'en',
+        language: toPrintLanguage(language),
       })
       openTransferPrintWindow(generateTransferHTML(printData))
     } catch (err) {

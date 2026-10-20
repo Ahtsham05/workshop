@@ -80,7 +80,7 @@ export function LeaderboardCard({ title, icon, tabs, loading }: Props) {
                     <p className='truncate text-sm font-medium' title={row.name}>
                       {row.name}
                       {showUrdu && row.nameUrdu ? (
-                        <span dir='rtl' className='ml-1.5 text-xs font-normal text-muted-foreground'>
+                        <span dir='auto' className='ml-1.5 text-xs font-normal text-muted-foreground'>
                           {row.nameUrdu}
                         </span>
                       ) : null}

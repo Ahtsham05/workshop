@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { ONBOARDING_BUSINESS_TYPES } from '@/lib/business-types'
 import { countryFlagEmoji } from '@/lib/country-flag'
 import { OnboardingShell, type OnboardingStep } from './components/onboarding-shell'
+import { countryNativeLanguage, setNativeLanguageCode } from '@/lib/native-language'
 import {
   BrandStep,
   BusinessStep,
@@ -60,7 +61,7 @@ const STEPS: OnboardingStep[] = [
 ]
 
 /**
- * Keeps the Urdu business name in step with the English one. Lives in its own component
+ * Keeps the native-language (Urdu, Arabic, …) business name in step with the English one. Lives in its own component
  * so the hook (and the translation request it makes) only runs for accounts that asked
  * for Urdu input — a hook cannot be called conditionally, a component can be rendered
  * conditionally.
@@ -207,6 +208,9 @@ export default function OnboardingPage() {
     const selected = countries?.find((c) => c.code === code)
     form.setValue('countryCode', code, { shouldDirty: true })
     form.setValue('country', selected?.name || '', { shouldDirty: true })
+    // A new organization's native language follows its country ('auto'), so the business
+    // name box and its auto-translation switch to it now (Arabic for the UAE, …).
+    setNativeLanguageCode(countryNativeLanguage(code))
     try {
       const defaults = await fetchCountryDefaults(code).unwrap()
       if (defaults.defaultCurrency) {
