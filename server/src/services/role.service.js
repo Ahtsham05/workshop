@@ -5,6 +5,7 @@ const {
   sanitizePermissions,
   buildAdminPermissions,
   buildPermissionsPayload,
+  PERMISSION_REQUIRES,
 } = require('../config/permission-registry');
 
 /**
@@ -406,8 +407,27 @@ const backfillSplitPermissions = () =>
     )
   );
 
+/**
+ * Roles saved before PERMISSION_REQUIRES existed can hold a task without the key it needs
+ * (e.g. Issue materials without View manufacturing → the Manufacturing menu never shows).
+ * Turns the needed key on for them; saves enforce the same rule from now on.
+ */
+const repairRequiredPermissions = () =>
+  Promise.all(
+    Object.entries(PERMISSION_REQUIRES).map(([required, dependents]) =>
+      Role.updateMany(
+        {
+          [`permissions.${required}`]: { $ne: true },
+          $or: dependents.map((key) => ({ [`permissions.${key}`]: true })),
+        },
+        { $set: { [`permissions.${required}`]: true } }
+      )
+    )
+  );
+
 module.exports = {
   backfillSplitPermissions,
+  repairRequiredPermissions,
   createRole,
   queryRoles,
   getRoleById,

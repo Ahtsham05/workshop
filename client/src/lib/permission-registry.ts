@@ -358,9 +358,42 @@ export function buildPermissionsState(input: Permission = {}): Permission {
   ) as Permission;
 }
 
+/**
+ * Keys that are a doorway for other keys: every Manufacturing task lives behind the
+ * Manufacturing menu, pages and read API, which all need viewManufacturing.
+ * { required: [keys that need it] }. Mirrors server/src/config/permission-registry.js.
+ */
+export const PERMISSION_REQUIRES: Partial<Record<PermissionKey, PermissionKey[]>> = {
+  viewManufacturing: PERMISSION_GROUPS.find((g) => g.id === 'manufacturing')!.permissions.filter(
+    (key) => key !== 'viewManufacturing',
+  ),
+};
+
+/** The key a permission needs before it can do anything (e.g. viewManufacturing), if any. */
+export function requiredPermissionOf(key: PermissionKey): PermissionKey | undefined {
+  return (Object.keys(PERMISSION_REQUIRES) as PermissionKey[]).find((req) => PERMISSION_REQUIRES[req]!.includes(key));
+}
+
+/**
+ * Applies a checkbox change the way an admin expects: granting a task also grants the key
+ * it needs; taking that key away takes its tasks away too (they could not work without it).
+ */
+export function applyPermissionChange(prev: Permission, changes: Partial<Record<PermissionKey, boolean>>): Permission {
+  const next: Permission = { ...prev, ...changes };
+  (Object.entries(PERMISSION_REQUIRES) as [PermissionKey, PermissionKey[]][]).forEach(([required, dependents]) => {
+    if (dependents.some((k) => changes[k] === true)) next[required] = true;
+    else if (changes[required] === false) dependents.forEach((k) => (next[k] = false));
+  });
+  return next;
+}
+
 /** Payload for save — every registry key sent so unchecked permissions persist as false. */
 export function buildPermissionsPayload(input: Permission = {}): Permission {
-  return buildPermissionsState(input);
+  const payload = buildPermissionsState(input);
+  (Object.entries(PERMISSION_REQUIRES) as [PermissionKey, PermissionKey[]][]).forEach(([required, dependents]) => {
+    if (dependents.some((k) => payload[k] === true)) payload[required] = true;
+  });
+  return payload;
 }
 
 export function buildAllPermissionsTrue(): Permission {
@@ -398,7 +431,7 @@ export const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
 
 /** One line under the checkbox saying what the permission actually allows. */
 export const PERMISSION_HINTS: Partial<Record<PermissionKey, string>> = {
-  viewManufacturing: 'Open the manufacturing pages, orders, stock and reports',
+  viewManufacturing: 'Open the manufacturing pages — needed for every task below',
   manageBoms: 'Recipes, routing steps and BOM versions',
   manageProductionOrders: 'Create, schedule, release, complete and cancel orders',
   issueMaterials: 'Issue vouchers — move materials to the floor, return unused',

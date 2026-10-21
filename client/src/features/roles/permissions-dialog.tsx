@@ -41,6 +41,7 @@ import {
   getPermissionCategories,
   buildPermissionsState,
   buildPermissionsPayload,
+  applyPermissionChange,
   formatPermissionLabel,
   PERMISSION_HINTS,
   type PermissionCategoryId,
@@ -173,13 +174,10 @@ export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: Permi
 
   const setMany = (keys: PermissionKey[], value: boolean | ((k: PermissionKey) => boolean)) => {
     if (readOnly) return;
-    setPermissions((prev) => {
-      const next = { ...prev };
-      keys.forEach((k) => {
-        next[k] = typeof value === 'function' ? value(k) : value;
-      });
-      return next;
-    });
+    // Granting a task also grants the key it needs (e.g. View manufacturing) — see PERMISSION_REQUIRES.
+    setPermissions((prev) =>
+      applyPermissionChange(prev, Object.fromEntries(keys.map((k) => [k, typeof value === 'function' ? value(k) : value]))),
+    );
   };
 
   const enabledCount = countOn(visibleKeys);

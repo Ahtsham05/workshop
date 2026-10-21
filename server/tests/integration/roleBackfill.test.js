@@ -68,3 +68,26 @@ describe('backfillSplitPermissions', () => {
     expect(await permsOf(id)).toEqual(once);
   });
 });
+
+describe('manufacturing tasks need View manufacturing', () => {
+  const { buildPermissionsPayload, sanitizePermissions } = require('../../src/config/permission-registry');
+
+  test('a saved role with tasks but no View manufacturing is repaired at boot', async () => {
+    // Exactly the role from the field: BOMs + Issue materials + over-issue, view left unticked.
+    const id = await legacyRole({ viewManufacturing: false, manageBoms: true, issueMaterials: true, overIssueMaterials: true });
+    await roleService.repairRequiredPermissions();
+    expect(await permsOf(id)).toMatchObject({ viewManufacturing: true, manageBoms: true, issueMaterials: true });
+  });
+
+  test('a role with no manufacturing task is left alone', async () => {
+    const id = await legacyRole({ viewManufacturing: false, viewInvoices: true });
+    await roleService.repairRequiredPermissions();
+    expect((await permsOf(id)).viewManufacturing).toBe(false);
+  });
+
+  test('saving a task turns View manufacturing on; saving neither keeps it off', () => {
+    expect(buildPermissionsPayload({ recordScrap: true }).viewManufacturing).toBe(true);
+    expect(sanitizePermissions({ issueMaterials: true }).viewManufacturing).toBe(true);
+    expect(buildPermissionsPayload({ viewInvoices: true }).viewManufacturing).toBe(false);
+  });
+});

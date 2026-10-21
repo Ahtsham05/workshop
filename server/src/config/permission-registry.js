@@ -465,6 +465,26 @@ const PERMISSION_TAB_GROUPS = {
   administration: ['users', 'roles', 'branches', 'staff', 'settings', 'tax_currency_settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
 };
 
+/**
+ * Keys that are a doorway for other keys: every Manufacturing task (issue materials, BOMs,
+ * scrap…) lives behind the Manufacturing menu, pages and read API, which all need
+ * viewManufacturing — a role with a task but not the view would see nothing at all.
+ * { required: [keys that need it] }. Mirrored in client/src/lib/permission-registry.ts.
+ */
+const PERMISSION_REQUIRES = {
+  viewManufacturing: PERMISSION_GROUPS.find((g) => g.id === 'manufacturing').permissions.filter(
+    (key) => key !== 'viewManufacturing'
+  ),
+};
+
+/** Turns on every key a granted key needs (never turns anything off). */
+const applyPermissionRequirements = (permissions) => {
+  Object.entries(PERMISSION_REQUIRES).forEach(([required, dependents]) => {
+    if (dependents.some((key) => permissions[key] === true)) permissions[required] = true;
+  });
+  return permissions;
+};
+
 const sanitizePermissions = (input = {}) => {
   const sanitized = {};
   for (const key of PERMISSION_KEYS) {
@@ -472,12 +492,12 @@ const sanitizePermissions = (input = {}) => {
       sanitized[key] = Boolean(input[key]);
     }
   }
-  return sanitized;
+  return applyPermissionRequirements(sanitized);
 };
 
 /** Full permission map — every key explicit (used when saving role permissions). */
 const buildPermissionsPayload = (input = {}) =>
-  Object.fromEntries(PERMISSION_KEYS.map((key) => [key, input[key] === true]));
+  applyPermissionRequirements(Object.fromEntries(PERMISSION_KEYS.map((key) => [key, input[key] === true])));
 
 const buildPermissionsState = buildPermissionsPayload;
 
@@ -490,6 +510,8 @@ module.exports = {
   PERMISSION_GROUPS,
   PERMISSION_KEYS,
   PERMISSION_TAB_GROUPS,
+  PERMISSION_REQUIRES,
+  applyPermissionRequirements,
   sanitizePermissions,
   buildPermissionsPayload,
   buildPermissionsState,

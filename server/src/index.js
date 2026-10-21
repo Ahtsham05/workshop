@@ -158,6 +158,8 @@ async function startApplication() {
     const { roleService } = require('./services');
     await roleService.createDefaultRoles();
     await roleService.backfillSplitPermissions();
+    // After the backfill, which can grant manufacturing tasks.
+    await roleService.repairRequiredPermissions();
     logger.info('Default roles initialized');
   } catch (error) {
     logger.error('Failed to initialize default roles:', error.message);
