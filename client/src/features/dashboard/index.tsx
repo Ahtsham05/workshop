@@ -742,30 +742,74 @@ export default function Dashboard() {
     <>
         <Card className='mb-6 border bg-card/80 p-4 shadow-sm backdrop-blur-sm'>
           <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
-            <div className='min-w-0'>
-              <h1 className='text-3xl font-bold tracking-tight'>{t('dashboard')}</h1>
-              <p className='mt-1 text-muted-foreground'>{t('Overview of your business performance')}</p>
+            <div className='flex items-start justify-between gap-3'>
+              <div className='min-w-0'>
+                <h1 className='text-2xl font-bold tracking-tight sm:text-3xl'>{t('dashboard')}</h1>
+                <p className='mt-1 text-sm text-muted-foreground sm:text-base'>{t('Overview of your business performance')}</p>
+              </div>
+              {/* Phones: Refresh + Arrange as compact icon buttons beside the title, so the
+                  period tabs below get the full width and nothing wraps onto stray rows. */}
+              <div className='flex shrink-0 items-center gap-1.5 sm:hidden'>
+                {arranging ? (
+                  <>
+                    {dashboardLayout.isCustomised && (
+                      <Button variant='outline' size='icon' onClick={dashboardLayout.reset} className='size-9' aria-label={t('Reset layout')} title={t('Reset layout')}>
+                        <RotateCcw className='size-4' />
+                      </Button>
+                    )}
+                    <Button size='sm' onClick={() => setArranging(false)} className='h-9 gap-1.5'>
+                      <Check className='size-4' /> {t('Done')}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant='outline'
+                      size='icon'
+                      onClick={refreshDashboard}
+                      disabled={statsLoading || statsRefreshing}
+                      className='size-9 shadow-sm'
+                      aria-label={t('Refresh')}
+                      title={t('Refresh')}
+                    >
+                      <RefreshCcw className={cn('size-4', (statsLoading || statsRefreshing) && 'animate-spin')} />
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='icon'
+                      onClick={() => setArranging(true)}
+                      className='size-9 shadow-sm'
+                      aria-label={t('Arrange')}
+                      title={t('Drag cards, quick links and sections into your own order')}
+                    >
+                      <LayoutDashboard className='size-4' />
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
-            <div className='flex flex-wrap items-center gap-2 lg:shrink-0'>
+            <div className='flex flex-wrap items-center gap-2 max-sm:w-full lg:shrink-0'>
               <DashboardDateFilter
                 value={dateRange}
                 onChange={setDateRange}
                 onRefresh={refreshDashboard}
                 isRefreshing={statsLoading || statsRefreshing}
+                className='max-sm:w-full'
+                refreshClassName='max-sm:hidden'
               />
               {arranging ? (
                 <>
                   {dashboardLayout.isCustomised && (
-                    <Button variant='ghost' size='sm' onClick={dashboardLayout.reset} className='gap-1.5'>
+                    <Button variant='ghost' size='sm' onClick={dashboardLayout.reset} className='h-9 gap-1.5 max-sm:hidden'>
                       <RotateCcw className='size-4' /> {t('Reset layout')}
                     </Button>
                   )}
-                  <Button size='sm' onClick={() => setArranging(false)} className='gap-1.5'>
+                  <Button size='sm' onClick={() => setArranging(false)} className='h-9 gap-1.5 max-sm:hidden'>
                     <Check className='size-4' /> {t('Done')}
                   </Button>
                 </>
               ) : (
-                <Button variant='outline' size='sm' onClick={() => setArranging(true)} className='gap-1.5' title={t('Drag cards, quick links and sections into your own order')}>
+                <Button variant='outline' size='sm' onClick={() => setArranging(true)} className='h-9 gap-1.5 shadow-sm max-sm:hidden' title={t('Drag cards, quick links and sections into your own order')}>
                   <LayoutDashboard className='size-4' /> {t('Arrange')}
                 </Button>
               )}

@@ -15,6 +15,7 @@ const createCashWithdrawal = {
     customerCNIC: Joi.string().trim().allow(''),
     customerAccountType: Joi.string().trim().allow('', null),
     commissionRate: Joi.number().min(0).max(100).default(0),
+    gstRate: Joi.number().min(0).max(100).default(0),
     extraCharge: Joi.number().min(0).default(0),
     notes: Joi.string().allow(''),
     date: Joi.date().default(() => new Date()),
@@ -49,6 +50,7 @@ const updateCashWithdrawal = {
     customerCNIC: Joi.string().trim().allow(''),
     customerAccountType: Joi.string().trim().allow('', null),
     commissionRate: Joi.number().min(0).max(100),
+    gstRate: Joi.number().min(0).max(100),
     extraCharge: Joi.number().min(0),
     notes: Joi.string().allow(''),
     date: Joi.date(),
@@ -73,6 +75,8 @@ const createCashWithdrawalsBatch = {
     walletType: Joi.string().trim().required(),
     transactionType: Joi.string().valid('withdrawal', 'deposit').default('withdrawal'),
     commissionRate: Joi.number().min(0).max(100).default(0),
+    // GST % on the commission, applied to every row of the batch.
+    gstRate: Joi.number().min(0).max(100).default(0),
     date: Joi.date().default(() => new Date()),
     entries: Joi.array()
       .items(

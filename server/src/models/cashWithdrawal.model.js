@@ -75,6 +75,20 @@ const cashWithdrawalSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // GST % charged on our commission (snapshot of the account's rate at entry time).
+    gstRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    // GST deducted from the commission — gstRate % of (amount × commissionRate %).
+    gstAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Net profit: commission + extra charge + settlement margin − gstAmount.
     profit: {
       type: Number,
       required: true,

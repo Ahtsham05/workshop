@@ -49,6 +49,9 @@ const createOrUpdateWallet = async ({
   commissionRate = 0,
   withdrawalCommissionRate = 0,
   depositCommissionRate = 0,
+  // Left undefined by callers that have no GST field (Bank & Cash tab, migrations) so an
+  // edit there never silently zeroes the rate.
+  gstRate,
   accountType,
   bankName,
   accountNumber,
@@ -105,6 +108,7 @@ const createOrUpdateWallet = async ({
     wallet.commissionRate = commissionRate;
     wallet.withdrawalCommissionRate = withdrawalCommissionRate;
     wallet.depositCommissionRate = depositCommissionRate;
+    if (gstRate !== undefined) wallet.gstRate = gstRate;
     wallet.accountType = normalizedAccountType;
     wallet.bankName = bankName || undefined;
     wallet.accountNumber = accountNumber || undefined;
@@ -119,6 +123,7 @@ const createOrUpdateWallet = async ({
       wallet.commissionRate = commissionRate;
       wallet.withdrawalCommissionRate = withdrawalCommissionRate;
       wallet.depositCommissionRate = depositCommissionRate;
+      if (gstRate !== undefined) wallet.gstRate = gstRate;
       wallet.accountType = normalizedAccountType;
       wallet.bankName = bankName || undefined;
       wallet.accountNumber = accountNumber || undefined;
@@ -135,6 +140,7 @@ const createOrUpdateWallet = async ({
         commissionRate,
         withdrawalCommissionRate,
         depositCommissionRate,
+        gstRate: gstRate ?? 0,
         accountType: normalizedAccountType,
         bankName: bankName || undefined,
         accountNumber: accountNumber || undefined,

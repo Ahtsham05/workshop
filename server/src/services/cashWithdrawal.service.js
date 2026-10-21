@@ -51,15 +51,68 @@ const calculateSettlementProfit = ({ amount, cashAmount, transactionType }) => {
   return Math.max(0, settledAmount - totalAmount);
 };
 
-const calculateWithdrawalProfit = ({ amount, cashAmount, transactionType = 'withdrawal', commissionRate = 0, extraCharge = 0 }) => {
+const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+/**
+ * Profit split for one cash Received/Send entry. GST is charged on our commission only
+ * (not on extra charges or the settlement margin) and comes out of it, so `profit` — what
+ * every report and the dashboard sum — is net of GST.
+ */
+const calculateWithdrawalBreakdown = ({
+  amount,
+  cashAmount,
+  transactionType = 'withdrawal',
+  commissionRate = 0,
+  extraCharge = 0,
+  gstRate = 0,
+}) => {
   const commissionProfit = (Number(amount || 0) * Number(commissionRate || 0)) / 100;
   const settlementProfit = calculateSettlementProfit({ amount, cashAmount, transactionType });
-  return commissionProfit + Number(extraCharge || 0) + settlementProfit;
+  const grossProfit = commissionProfit + Number(extraCharge || 0) + settlementProfit;
+  const gstAmount = Math.min(grossProfit, roundMoney((commissionProfit * Number(gstRate || 0)) / 100));
+  return { grossProfit, gstAmount, profit: Math.max(0, grossProfit - gstAmount) };
 };
+
+const calculateWithdrawalProfit = (input) => calculateWithdrawalBreakdown(input).profit;
 
 /** Cash book “commission/profit” line only when user entered commission % or extra charges */
 const hasExplicitCommissionOrExtra = ({ commissionRate, extraCharge }) =>
   Number(commissionRate || 0) > 0 || Number(extraCharge || 0) > 0;
+
+/**
+ * Cash Book lines for what we earn on the entry: the full commission collected from the
+ * customer as income, then the GST on it as a separate expense so the deduction stays
+ * visible (and totals up for tax filing) instead of disappearing into a smaller figure.
+ */
+const postCommissionCashBookLines = async (withdrawal, { grossProfit, gstAmount, customerLabel }) => {
+  // Omit when commission and extra are both zero — no phantom profit line.
+  if (!hasExplicitCommissionOrExtra(withdrawal) || grossProfit <= 0) return;
+  const label = withdrawal.transactionType === 'withdrawal' ? 'Withdrawal' : 'Deposit';
+  const base = {
+    organizationId: withdrawal.organizationId,
+    branchId: withdrawal.branchId,
+    source: 'other',
+    paymentMethod: 'cash',
+    referenceId: withdrawal._id,
+    referenceModel: 'CashWithdrawal',
+    date: withdrawal.date,
+    createdBy: withdrawal.createdBy,
+  };
+  await cashBookService.createEntry({
+    ...base,
+    type: 'income',
+    amount: grossProfit,
+    description: `${label} commission from ${customerLabel}`,
+  });
+  if (gstAmount > 0) {
+    await cashBookService.createEntry({
+      ...base,
+      type: 'expense',
+      amount: gstAmount,
+      description: `GST ${Number(withdrawal.gstRate || 0)}% on ${label.toLowerCase()} commission — ${customerLabel}`,
+    });
+  }
+};
 
 const syncCustomerLedgerForCashWithdrawal = async (withdrawal) => {
   await customerLedgerService.deleteLedgerEntriesByReference(withdrawal._id);
@@ -157,12 +210,13 @@ const createCashWithdrawal = async (body) => {
   if (cashAmount > Number(body.amount || 0)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cash paid/received must be less than or equal to amount');
   }
-  const profit = calculateWithdrawalProfit({ ...body, cashAmount });
+  const { grossProfit, gstAmount, profit } = calculateWithdrawalBreakdown({ ...body, cashAmount });
   const withdrawal = await CashWithdrawal.create({
     ...body,
     customerId: linkedCustomer ? linkedCustomer._id : undefined,
     customerName: linkedCustomer ? linkedCustomer.name : (body.customerName || ''),
     cashAmount,
+    gstAmount,
     profit,
   });
 
@@ -247,22 +301,7 @@ const createCashWithdrawal = async (body) => {
     }
   }
 
-  // Commission / extra-charge profit as cash income (omit when both are zero — no phantom profit line)
-  if (hasExplicitCommissionOrExtra(withdrawal) && profit > 0) {
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId,
-      branchId: withdrawal.branchId,
-      type: 'income',
-      source: 'other',
-      amount: profit,
-      paymentMethod: 'cash',
-      referenceId: withdrawal._id,
-      referenceModel: 'CashWithdrawal',
-      description: `${isWithdrawal ? 'Withdrawal' : 'Deposit'} commission from ${customerLabel}`,
-      date: withdrawal.date,
-      createdBy: withdrawal.createdBy,
-    });
-  }
+  await postCommissionCashBookLines(withdrawal, { grossProfit, gstAmount, customerLabel });
 
   await syncCustomerLedgerForCashWithdrawal(withdrawal);
 
@@ -333,7 +372,9 @@ const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
   if (Number(withdrawal.cashAmount || 0) > Number(withdrawal.amount || 0)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cash paid/received must be less than or equal to amount');
   }
-  withdrawal.profit = calculateWithdrawalProfit(withdrawal);
+  const { grossProfit, gstAmount, profit } = calculateWithdrawalBreakdown(withdrawal);
+  withdrawal.gstAmount = gstAmount;
+  withdrawal.profit = profit;
   await withdrawal.save();
 
   const isWithdrawal = withdrawal.transactionType === 'withdrawal';
@@ -388,15 +429,7 @@ const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
     }
   }
 
-  if (hasExplicitCommissionOrExtra(withdrawal) && withdrawal.profit > 0) {
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
-      type: 'income', source: 'other', amount: withdrawal.profit, paymentMethod: 'cash',
-      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
-      description: `${isWithdrawal ? 'Withdrawal' : 'Deposit'} commission from ${customerLabel}`,
-      date: withdrawal.date, createdBy: withdrawal.createdBy,
-    });
-  }
+  await postCommissionCashBookLines(withdrawal, { grossProfit, gstAmount, customerLabel });
 
   await syncCustomerLedgerForCashWithdrawal(withdrawal);
 
@@ -446,7 +479,7 @@ const assertBatchWalletBalance = async ({ organizationId, branchId, walletType, 
 };
 
 const createCashWithdrawalsBatch = async (body) => {
-  const { walletId, walletType, transactionType, commissionRate, date, entries, organizationId, branchId, createdBy } = body;
+  const { walletId, walletType, transactionType, commissionRate, gstRate, date, entries, organizationId, branchId, createdBy } = body;
 
   await assertBatchWalletBalance({
     organizationId,
@@ -470,6 +503,7 @@ const createCashWithdrawalsBatch = async (body) => {
         // A row's own rate wins over the batch-shared rate — lets one negotiated
         // customer rate be entered without changing the rate for the rest of the batch.
         commissionRate: Number(entry.commissionRate ?? commissionRate ?? 0),
+        gstRate: Number(gstRate || 0),
         amount: Number(entry.amount),
         customerId: entry.customerId || undefined,
         cashAmount: Number(entry.cashAmount ?? entry.amount),
@@ -511,6 +545,7 @@ const deleteCashWithdrawalsBatch = async (ids) => {
 };
 
 module.exports = {
+  calculateWithdrawalBreakdown,
   calculateWithdrawalProfit,
   createCashWithdrawal,
   createCashWithdrawalsBatch,

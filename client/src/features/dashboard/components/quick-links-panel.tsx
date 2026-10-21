@@ -190,19 +190,30 @@ export function QuickLinksPanel({ arranging = false }: { arranging?: boolean } =
     <>
       <Card>
         <CardContent className='flex flex-col gap-4'>
-          <div className='flex flex-wrap items-center justify-between gap-3'>
-            <div className='flex items-center gap-3'>
+          {/* One row at every width: the subtitle is dropped on phones (it wrapped to two
+              lines and pushed Customize onto its own row), and the button stays beside the title. */}
+          <div className='flex items-center justify-between gap-3'>
+            <div className='flex min-w-0 items-center gap-3'>
               <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm'>
                 <Zap className='h-4 w-4' />
               </span>
-              <div>
-                <h2 className='text-sm font-semibold leading-tight'>{t('Quick Links')}</h2>
-                <p className='text-xs text-muted-foreground'>{t('One-tap shortcuts to your most-used actions')}</p>
+              <div className='min-w-0'>
+                <h2 className='whitespace-nowrap text-base font-semibold leading-tight'>{t('Quick Links')}</h2>
+                <p className='hidden truncate text-xs text-muted-foreground sm:block'>{t('One-tap shortcuts to your most-used actions')}</p>
               </div>
             </div>
-            <Button type='button' variant='outline' size='sm' onClick={openEditor} className='shrink-0 gap-1.5'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={openEditor}
+              className='h-8 shrink-0 gap-1.5 shadow-sm'
+              aria-label={t('Customize')}
+              title={t('Customize Quick Links')}
+            >
               <Pencil className='h-3.5 w-3.5' />
-              {t('Customize')}
+              {/* Under 360px the label would push "Quick Links" onto two lines — pencil only there. */}
+              <span className='max-[359px]:hidden'>{t('Customize')}</span>
             </Button>
           </div>
 

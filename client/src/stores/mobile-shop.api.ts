@@ -49,6 +49,8 @@ export interface WalletRecord {
   commissionRate: number
   withdrawalCommissionRate: number
   depositCommissionRate: number
+  /** GST % charged on cash Received/Send commission. */
+  gstRate?: number
   accountType?: BankAccountType
   bankName?: string
   accountNumber?: string
@@ -125,6 +127,9 @@ export interface CashWithdrawalRecord {
   customerCNIC?: string
   customerAccountType?: string
   commissionRate: number
+  gstRate?: number
+  /** GST deducted from the commission; `profit` is already net of it. */
+  gstAmount?: number
   extraCharge: number
   profit: number
   notes?: string
@@ -143,6 +148,7 @@ export interface CreateCashWithdrawalInput {
   customerCNIC?: string
   customerAccountType?: string
   commissionRate: number
+  gstRate?: number
   extraCharge: number
   notes?: string
   date: string
@@ -184,6 +190,7 @@ export interface CreateCashWithdrawalsBatchInput {
   walletType: string
   transactionType: 'withdrawal' | 'deposit'
   commissionRate: number
+  gstRate?: number
   date: string
   entries: CashWithdrawalBatchEntry[]
 }
@@ -695,7 +702,7 @@ export const mobileShopApi = createApi({
       }),
       providesTags: ['Wallets'],
     }),
-    upsertWallet: builder.mutation<WalletRecord, { type: string; balance: number; commissionRate?: number; withdrawalCommissionRate?: number; depositCommissionRate?: number; accountType?: BankAccountType | ''; bankName?: string; accountNumber?: string; branchName?: string; id?: string }>({
+    upsertWallet: builder.mutation<WalletRecord, { type: string; balance: number; commissionRate?: number; withdrawalCommissionRate?: number; depositCommissionRate?: number; gstRate?: number; accountType?: BankAccountType | ''; bankName?: string; accountNumber?: string; branchName?: string; id?: string }>({
       query: (body) => ({
         url: '/wallets',
         method: 'POST',

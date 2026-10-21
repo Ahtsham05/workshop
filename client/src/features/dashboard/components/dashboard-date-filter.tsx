@@ -27,6 +27,8 @@ type Props = {
   onRefresh?: () => void
   isRefreshing?: boolean
   className?: string
+  /** Extra classes for the Refresh button — the dashboard hides it on phones, where a compact icon button sits in its title row instead. */
+  refreshClassName?: string
 }
 
 // `shortKey` is what phones show — "This Week"/"This Month" don't fit four-across in a
@@ -45,6 +47,7 @@ export function DashboardDateFilter({
   onRefresh,
   isRefreshing = false,
   className,
+  refreshClassName,
 }: Props) {
   const { t } = useLanguage()
 
@@ -151,7 +154,7 @@ export function DashboardDateFilter({
           disabled={isRefreshing}
           variant='outline'
           size='sm'
-          className='h-9 shrink-0 gap-2 shadow-sm'
+          className={cn('h-9 shrink-0 gap-2 shadow-sm', refreshClassName)}
         >
           <RefreshCcw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} aria-hidden />
           {t('Refresh')}
