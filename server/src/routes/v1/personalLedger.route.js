@@ -10,21 +10,21 @@ router.use(auth(), branchScope());
 
 router
   .route('/')
-  .post(validate(personalLedgerValidation.createEntry), personalLedgerController.createEntry)
-  .get(validate(personalLedgerValidation.getEntries), personalLedgerController.getEntries);
+  .post(auth('managePersonalWallet'), validate(personalLedgerValidation.createEntry), personalLedgerController.createEntry)
+  .get(auth('managePersonalWallet', 'viewAccounting'), validate(personalLedgerValidation.getEntries), personalLedgerController.getEntries);
 
 router
   .route('/balance')
-  .get(personalLedgerController.getBalance);
+  .get(auth('managePersonalWallet', 'viewAccounting'), personalLedgerController.getBalance);
 
 router
   .route('/summary')
-  .get(personalLedgerController.getSummary);
+  .get(auth('managePersonalWallet', 'viewAccounting'), personalLedgerController.getSummary);
 
 router
   .route('/:entryId')
-  .get(validate(personalLedgerValidation.getEntry), personalLedgerController.getEntry)
-  .patch(validate(personalLedgerValidation.updateEntry), personalLedgerController.updateEntry)
-  .delete(validate(personalLedgerValidation.deleteEntry), personalLedgerController.deleteEntry);
+  .get(auth('managePersonalWallet', 'viewAccounting'), validate(personalLedgerValidation.getEntry), personalLedgerController.getEntry)
+  .patch(auth('managePersonalWallet'), validate(personalLedgerValidation.updateEntry), personalLedgerController.updateEntry)
+  .delete(auth('managePersonalWallet'), validate(personalLedgerValidation.deleteEntry), personalLedgerController.deleteEntry);
 
 module.exports = router;

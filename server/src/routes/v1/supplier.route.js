@@ -1,4 +1,5 @@
 const express = require('express');
+const { SUPPLIER_PICKERS } = require('../../config/permissionSets');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
@@ -11,7 +12,7 @@ router.use(auth(), branchScope());
 
 router
   .route('/upload-image')
-  .post(upload.single('image'), supplierController.uploadSupplierImage);
+  .post(auth('createSuppliers', 'editSuppliers'), upload.single('image'), supplierController.uploadSupplierImage);
 
 router
   .route('/scan-image')
@@ -20,11 +21,12 @@ router
 router
   .route('/')
   .post(auth('createSuppliers'), validate(supplierValidation.createSupplier), supplierController.createSupplier)
-  .get(auth('viewSuppliers'), validate(supplierValidation.getSuppliers), supplierController.getSuppliers);
+  .get(auth(...SUPPLIER_PICKERS), validate(supplierValidation.getSuppliers), supplierController.getSuppliers);
 
 router
   .route('/all')
-  .get(auth('viewSuppliers'), validate(supplierValidation.getAllSuppliers), supplierController.getAllSuppliers);
+  // The picker list for every screen that buys or pays a supplier — see config/permissionSets.
+  .get(auth(...SUPPLIER_PICKERS), validate(supplierValidation.getAllSuppliers), supplierController.getAllSuppliers);
 
 router
   .route('/stats')

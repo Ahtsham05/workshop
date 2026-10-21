@@ -12,34 +12,34 @@ const router = express.Router();
 router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeatureAccess('bill_payment'));
 
 // Report endpoint
-router.get('/report', validate(billPaymentValidation.getBillPaymentReport), billPaymentController.getBillPaymentReport);
+router.get('/report', auth('viewBillPayments'), validate(billPaymentValidation.getBillPaymentReport), billPaymentController.getBillPaymentReport);
 
 // Due date range summary
-router.get('/due-summary', validate(billPaymentValidation.getBillDueSummary), billPaymentController.getBillDueSummary);
+router.get('/due-summary', auth('viewBillPayments'), validate(billPaymentValidation.getBillDueSummary), billPaymentController.getBillDueSummary);
 
 // Due today & overdue
-router.get('/due-today', billPaymentController.getBillsDueToday);
-router.get('/overdue', billPaymentController.getOverdueBills);
+router.get('/due-today', auth('viewBillPayments'), billPaymentController.getBillsDueToday);
+router.get('/overdue', auth('viewBillPayments'), billPaymentController.getOverdueBills);
 
 // Batch create
-router.post('/batch', validate(billPaymentValidation.createBillPaymentsBatch), billPaymentController.createBillPaymentsBatch);
+router.post('/batch', auth('manageBillPayments'), validate(billPaymentValidation.createBillPaymentsBatch), billPaymentController.createBillPaymentsBatch);
 
 // Create a new bill and settle an older unpaid one on the same Ref # as a single net cash event
-router.post('/settle-combined', validate(billPaymentValidation.settleCombinedBill), billPaymentController.settleCombinedBill);
+router.post('/settle-combined', auth('manageBillPayments'), validate(billPaymentValidation.settleCombinedBill), billPaymentController.settleCombinedBill);
 
 // CRUD
 router
   .route('/')
-  .post(validate(billPaymentValidation.createBillPayment), billPaymentController.createBillPayment)
-  .get(validate(billPaymentValidation.getBillPayments), billPaymentController.getBillPayments);
+  .post(auth('manageBillPayments'), validate(billPaymentValidation.createBillPayment), billPaymentController.createBillPayment)
+  .get(auth('viewBillPayments'), validate(billPaymentValidation.getBillPayments), billPaymentController.getBillPayments);
 
 // Receipt – must come before /:billPaymentId to avoid conflict
-router.get('/:billPaymentId/receipt', validate(billPaymentValidation.getBillPaymentById), billPaymentController.getBillPaymentReceipt);
+router.get('/:billPaymentId/receipt', auth('viewBillPayments'), validate(billPaymentValidation.getBillPaymentById), billPaymentController.getBillPaymentReceipt);
 
 router
   .route('/:billPaymentId')
-  .get(validate(billPaymentValidation.getBillPaymentById), billPaymentController.getBillPayment)
-  .patch(validate(billPaymentValidation.updateBillPayment), billPaymentController.updateBillPayment)
-  .delete(validate(billPaymentValidation.deleteBillPayment), billPaymentController.deleteBillPayment);
+  .get(auth('viewBillPayments'), validate(billPaymentValidation.getBillPaymentById), billPaymentController.getBillPayment)
+  .patch(auth('manageBillPayments'), validate(billPaymentValidation.updateBillPayment), billPaymentController.updateBillPayment)
+  .delete(auth('manageBillPayments'), validate(billPaymentValidation.deleteBillPayment), billPaymentController.deleteBillPayment);
 
 module.exports = router;

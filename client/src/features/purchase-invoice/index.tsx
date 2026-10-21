@@ -215,8 +215,11 @@ const PurchaseInvoicePage = () => {
   // Default landing view is the fast-entry create form — but only for users who can
   // actually create a purchase; a view-only user should land on the list instead of a
   // create form they can't submit (this was previously an unconditional 'create' default).
+  // Without viewPurchases the list, history and navigator stay hidden: create-only roles
+  // just get the entry form.
+  const canViewList = hasExplicitPermission('viewPurchases');
   const [currentView, setCurrentView] = useState<ViewType>(() =>
-    hasExplicitPermission('createPurchases') ? 'create' : 'list'
+    hasExplicitPermission('createPurchases') || !canViewList ? 'create' : 'list'
   );
   const [purchase, setPurchase] = useState<Purchase>({
     invoiceNumber: '',
@@ -838,7 +841,7 @@ const PurchaseInvoicePage = () => {
   // Switch to list view
   const handleBackToList = useCallback(() => {
     clearPurchaseWorkspace();
-    setCurrentView('list');
+    setCurrentView(canViewList ? 'list' : 'create');
     setIsEditing(false);
     setEditingPurchase(null);
     setPurchase({
@@ -861,7 +864,7 @@ const PurchaseInvoicePage = () => {
       notes: '',
       date: new Date().toISOString(),
     });
-  }, [showProductCatalog]);
+  }, [canViewList, showProductCatalog]);
 
   // Switch to create view
   const handleCreateNew = useCallback(() => {
@@ -1112,28 +1115,32 @@ const PurchaseInvoicePage = () => {
               with empty space beside them. */}
           <div className={cn('flex flex-wrap items-center gap-2', showProductCatalog ? 'justify-end' : 'justify-between')}>
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2 shadow-sm"
-                onClick={() => setCurrentView('list')}
-              >
-                <History className="h-4 w-4 shrink-0" aria-hidden />
-                Purchase history
-              </Button>
-              <TransactionHistoryButton
-                mode="purchase"
-                currentParty={
-                  purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null
-                }
-              />
-              <RecordNavigatorButton
-                mode="purchase"
-                currentParty={
-                  purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null
-                }
-              />
+              {canViewList && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 shadow-sm"
+                    onClick={() => setCurrentView('list')}
+                  >
+                    <History className="h-4 w-4 shrink-0" aria-hidden />
+                    Purchase history
+                  </Button>
+                  <TransactionHistoryButton
+                    mode="purchase"
+                    currentParty={
+                      purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null
+                    }
+                  />
+                  <RecordNavigatorButton
+                    mode="purchase"
+                    currentParty={
+                      purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null
+                    }
+                  />
+                </>
+              )}
               <Button
                 type="button"
                 variant="outline"

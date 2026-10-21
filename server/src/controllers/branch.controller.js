@@ -44,11 +44,14 @@ const getMyBranches = catchAsync(async (req, res) => {
   res.send(branches);
 });
 
+/** Platform admins work across organizations; everyone else only inside their own. */
+const orgScope = (req) => (req.user.systemRole === 'system_admin' ? null : req.user.organizationId);
+
 /**
  * GET /v1/branches/:branchId
  */
 const getBranch = catchAsync(async (req, res) => {
-  const branch = await branchService.getBranchById(req.params.branchId);
+  const branch = await branchService.getBranchById(req.params.branchId, orgScope(req));
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Branch not found');
   }
@@ -59,7 +62,7 @@ const getBranch = catchAsync(async (req, res) => {
  * PATCH /v1/branches/:branchId
  */
 const updateBranch = catchAsync(async (req, res) => {
-  const branch = await branchService.updateBranch(req.params.branchId, req.body);
+  const branch = await branchService.updateBranch(req.params.branchId, req.body, orgScope(req));
   res.send(branch);
 });
 
@@ -67,7 +70,7 @@ const updateBranch = catchAsync(async (req, res) => {
  * DELETE /v1/branches/:branchId
  */
 const deleteBranch = catchAsync(async (req, res) => {
-  await branchService.deleteBranch(req.params.branchId);
+  await branchService.deleteBranch(req.params.branchId, orgScope(req));
   res.status(httpStatus.NO_CONTENT).send();
 });
 

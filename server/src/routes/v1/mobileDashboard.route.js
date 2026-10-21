@@ -8,6 +8,6 @@ const router = express.Router();
 
 router.use(auth(), branchScope(), checkBusinessType('mobile_shop'));
 
-router.get('/summary', mobileDashboardController.getSummary);
+router.get('/summary', auth('viewDashboard'), mobileDashboardController.getSummary);
 
 module.exports = router;

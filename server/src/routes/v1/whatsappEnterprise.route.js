@@ -20,34 +20,37 @@ router.get('/events/stream', sseAuth(), sseBranchScope(), whatsappInboxControlle
 // request via its own signed `state` param instead of a session/JWT.
 router.use(/^(?!\/connection\/callback).*/, auth(), branchScope());
 
-router.get('/conversations/unread-count', whatsappInboxController.getUnreadCount);
-router.get('/conversations', whatsappInboxController.listConversations);
-router.get('/messages', whatsappInboxController.listAllMessages);
-router.get('/conversations/:id', whatsappInboxController.getConversation);
-router.get('/conversations/:id/messages', whatsappInboxController.getMessages);
+router.get('/conversations/unread-count', auth('viewWhatsapp', 'manageWhatsapp'), whatsappInboxController.getUnreadCount);
+router.get('/conversations', auth('viewWhatsapp', 'manageWhatsapp'), whatsappInboxController.listConversations);
+router.get('/messages', auth('viewWhatsapp', 'manageWhatsapp'), whatsappInboxController.listAllMessages);
+router.get('/conversations/:id', auth('viewWhatsapp', 'manageWhatsapp'), whatsappInboxController.getConversation);
+router.get('/conversations/:id/messages', auth('viewWhatsapp', 'manageWhatsapp'), whatsappInboxController.getMessages);
 router.patch(
   '/conversations/:id',
+  auth('manageWhatsapp'),
   validate(whatsappCloudValidation.updateConversation),
   whatsappInboxController.updateConversation,
 );
-router.post('/conversations/:id/read', whatsappInboxController.markRead);
+router.post('/conversations/:id/read', auth('viewWhatsapp', 'manageWhatsapp'), whatsappInboxController.markRead);
 router.post(
   '/messages/send',
+  auth('manageWhatsapp'),
   whatsappSendLimiter,
   validate(whatsappCloudValidation.sendMessage),
   whatsappInboxController.sendMessage,
 );
 router.post(
   '/messages/send-media',
+  auth('manageWhatsapp'),
   whatsappSendLimiter,
   whatsappMediaUpload.single('file'),
   whatsappInboxController.sendMediaMessage,
 );
-router.post('/messages/:id/resend', whatsappSendLimiter, whatsappInboxController.resendMessage);
-router.delete('/messages/:id', whatsappInboxController.deleteMessage);
+router.post('/messages/:id/resend', auth('manageWhatsapp'), whatsappSendLimiter, whatsappInboxController.resendMessage);
+router.delete('/messages/:id', auth('manageWhatsapp'), whatsappInboxController.deleteMessage);
 
-router.get('/templates', whatsappEnterpriseController.listTemplates);
-router.get('/templates/suggestions', whatsappEnterpriseController.getSuggestedTemplates);
+router.get('/templates', auth('viewWhatsapp', 'manageWhatsapp', 'editSettings'), whatsappEnterpriseController.listTemplates);
+router.get('/templates/suggestions', auth('viewWhatsapp', 'manageWhatsapp', 'editSettings'), whatsappEnterpriseController.getSuggestedTemplates);
 router.post('/templates/sync', auth('editSettings', 'manageSchool'), whatsappEnterpriseController.syncTemplates);
 router.post(
   '/templates',
@@ -55,14 +58,14 @@ router.post(
   validate(whatsappCloudValidation.createTemplate),
   whatsappEnterpriseController.createTemplate,
 );
-router.get('/templates/:id', whatsappEnterpriseController.getTemplate);
+router.get('/templates/:id', auth('viewWhatsapp', 'manageWhatsapp', 'editSettings'), whatsappEnterpriseController.getTemplate);
 router.post(
   '/templates/:id/check-status',
   auth('editSettings', 'manageSchool'),
   whatsappEnterpriseController.checkTemplateStatus,
 );
 
-router.get('/campaigns', whatsappEnterpriseController.listCampaigns);
+router.get('/campaigns', auth('viewWhatsapp', 'manageWhatsapp'), whatsappEnterpriseController.listCampaigns);
 router.post(
   '/campaigns',
   auth('manageSchool', 'editSettings'),
@@ -70,13 +73,13 @@ router.post(
   whatsappEnterpriseController.createCampaign,
 );
 router.post('/campaigns/:id/run', auth('manageSchool', 'editSettings'), whatsappEnterpriseController.runCampaign);
-router.get('/campaigns/:id/report', whatsappEnterpriseController.getCampaignReport);
+router.get('/campaigns/:id/report', auth('viewWhatsapp', 'manageWhatsapp'), whatsappEnterpriseController.getCampaignReport);
 
-router.get('/analytics/overview', whatsappEnterpriseController.getAnalyticsOverview);
-router.get('/analytics/messages', whatsappEnterpriseController.getAnalyticsTimeSeries);
-router.get('/analytics/funnel-stats', whatsappEnterpriseController.getFunnelStats);
-router.get('/analytics/activity-feed', whatsappEnterpriseController.getActivityFeed);
-router.get('/analytics/expiring-windows', whatsappEnterpriseController.getExpiringWindows);
+router.get('/analytics/overview', auth('viewWhatsapp', 'manageWhatsapp'), whatsappEnterpriseController.getAnalyticsOverview);
+router.get('/analytics/messages', auth('viewWhatsapp', 'manageWhatsapp'), whatsappEnterpriseController.getAnalyticsTimeSeries);
+router.get('/analytics/funnel-stats', auth('viewWhatsapp', 'manageWhatsapp'), whatsappEnterpriseController.getFunnelStats);
+router.get('/analytics/activity-feed', auth('viewWhatsapp', 'manageWhatsapp'), whatsappEnterpriseController.getActivityFeed);
+router.get('/analytics/expiring-windows', auth('viewWhatsapp', 'manageWhatsapp'), whatsappEnterpriseController.getExpiringWindows);
 
 router.post(
   '/pos/send-invoice',

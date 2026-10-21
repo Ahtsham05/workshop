@@ -215,6 +215,8 @@ const createDefaultRoles = async () => {
       description: 'Can manage products, invoices, purchases, and view reports',
       permissions: {
         viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true,
+        viewStockTransfers: true, manageStockTransfers: true,
+        viewStockAdjustments: true, manageStockAdjustments: true,
         viewInvoices: true, createInvoices: true, editInvoices: true, printInvoices: true,
         viewPurchases: true, createPurchases: true, editPurchases: true,
         viewPurchaseOrders: true, createPurchaseOrders: true, editPurchaseOrders: true, receivePurchaseOrders: true,
@@ -280,6 +282,8 @@ const createDefaultRoles = async () => {
       permissions: {
         viewProducts: true,
         viewInvoices: true, createInvoices: true, printInvoices: true,
+        // Returns were part of createInvoices before they had their own permissions.
+        viewSalesReturns: true, createSalesReturns: true,
         viewCustomers: true, createCustomers: true,
         viewDashboard: true,
       },
@@ -291,6 +295,7 @@ const createDefaultRoles = async () => {
       description: 'Read-only access to view data',
       permissions: {
         viewProducts: true, viewInvoices: true, viewPurchases: true,
+        viewStockTransfers: true, viewStockAdjustments: true,
         viewPurchaseOrders: true, viewSalesReturns: true, viewPurchaseReturns: true,
         viewCustomers: true, viewSuppliers: true, viewCategories: true, viewBrands: true,
         viewAccounting: true, viewCashBook: true, viewCashRegister: true, viewAccountsSystem: true,
@@ -346,7 +351,31 @@ const createDefaultRoles = async () => {
   }
 };
 
+/**
+ * Permissions that were split out of an older, broader one. A role saved before the split
+ * has no value for the new key at all, so it inherits the old key's value once — nobody
+ * gains or loses access on upgrade. Roles saved since already store every key explicitly
+ * (buildPermissionsPayload), so they are never touched.
+ */
+const SPLIT_PERMISSIONS = [
+  ['viewStockTransfers', 'viewProducts'],
+  ['manageStockTransfers', 'editProducts'],
+  ['viewStockAdjustments', 'viewProducts'],
+  ['manageStockAdjustments', 'editProducts'],
+];
+
+const backfillSplitPermissions = () =>
+  Promise.all(
+    SPLIT_PERMISSIONS.map(([newKey, oldKey]) =>
+      Role.updateMany(
+        { isSystemRole: { $ne: true }, [`permissions.${newKey}`]: { $exists: false }, [`permissions.${oldKey}`]: true },
+        { $set: { [`permissions.${newKey}`]: true } }
+      )
+    )
+  );
+
 module.exports = {
+  backfillSplitPermissions,
   createRole,
   queryRoles,
   getRoleById,

@@ -12,13 +12,13 @@ router.use(auth(), branchScope(), checkBusinessType('mobile_shop'));
 
 router
   .route('/')
-  .post(validate(simSaleValidation.createSimSale), simSaleController.createSimSale)
-  .get(validate(simSaleValidation.getSimSales), simSaleController.getSimSales);
+  .post(auth('manageSimSales'), validate(simSaleValidation.createSimSale), simSaleController.createSimSale)
+  .get(auth('viewSimSales'), validate(simSaleValidation.getSimSales), simSaleController.getSimSales);
 
 router
   .route('/:saleId')
-  .get(validate(simSaleValidation.getSimSale), simSaleController.getSimSale)
-  .patch(validate(simSaleValidation.updateSimSale), simSaleController.updateSimSale)
-  .delete(validate(simSaleValidation.deleteSimSale), simSaleController.deleteSimSale);
+  .get(auth('viewSimSales'), validate(simSaleValidation.getSimSale), simSaleController.getSimSale)
+  .patch(auth('manageSimSales'), validate(simSaleValidation.updateSimSale), simSaleController.updateSimSale)
+  .delete(auth('manageSimSales'), validate(simSaleValidation.deleteSimSale), simSaleController.deleteSimSale);
 
 module.exports = router;

@@ -1,5 +1,7 @@
 export type PermissionKey =
   | 'viewProducts' | 'createProducts' | 'editProducts' | 'deleteProducts'
+  | 'viewStockTransfers' | 'manageStockTransfers'
+  | 'viewStockAdjustments' | 'manageStockAdjustments'
   | 'viewInvoices' | 'createInvoices' | 'editInvoices' | 'deleteInvoices' | 'printInvoices'
   | 'viewPurchases' | 'createPurchases' | 'editPurchases' | 'deletePurchases'
   | 'viewPurchaseOrders' | 'createPurchaseOrders' | 'editPurchaseOrders' | 'deletePurchaseOrders' | 'receivePurchaseOrders'
@@ -27,7 +29,7 @@ export type PermissionKey =
   | 'viewPriceChecker' | 'managePriceCheckerSources'
   | 'viewPriceUpdates' | 'managePriceUpdates'
   | 'viewUsedPhones' | 'buyUsedPhones' | 'editUsedPhones' | 'sellUsedPhones' | 'deleteUsedPhones'
-  | 'viewNewPhones' | 'buyNewPhones' | 'editNewPhones' | 'sellNewPhones' | 'deleteNewPhones'
+  | 'viewNewPhones' | 'buyNewPhones' | 'sellNewPhones' | 'deleteNewPhones'
   | 'viewReports' | 'viewSalesReports' | 'viewPurchaseReports' | 'viewInventoryReports'
   | 'viewCustomerReports' | 'viewSupplierReports' | 'viewProductReports'
   | 'viewExpenseReports' | 'viewSimSaleReports' | 'viewProfitLossReports'
@@ -39,7 +41,6 @@ export type PermissionKey =
   | 'getAttendance' | 'createAttendance' | 'manageAttendance' | 'deleteAttendance'
   | 'getLeaves' | 'createLeaves' | 'manageLeaves' | 'approveLeaves' | 'rejectLeaves' | 'deleteLeaves'
   | 'getPayroll' | 'createPayroll' | 'managePayroll' | 'processPayroll' | 'deletePayroll'
-  | 'getPerformanceReviews' | 'createPerformanceReviews' | 'managePerformanceReviews' | 'deletePerformanceReviews'
   | 'viewFeeAccounting' | 'manageFeeAccounting'
   | 'viewUsers' | 'createUsers' | 'editUsers' | 'deleteUsers'
   | 'viewRoles' | 'createRoles' | 'editRoles' | 'deleteRoles'
@@ -85,6 +86,8 @@ export interface PermissionGroupDef {
 
 export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'products', label: 'Products', permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'] },
+  { id: 'stock_transfers', label: 'Stock Transfers', permissions: ['viewStockTransfers', 'manageStockTransfers'] },
+  { id: 'stock_adjustments', label: 'Stock Adjustments', permissions: ['viewStockAdjustments', 'manageStockAdjustments'] },
   { id: 'stock_counts', label: 'Stock Counts', permissions: ['countStock', 'approveStockCounts'] },
   { id: 'imei_tracking', label: 'IMEI / Serial Tracking', permissions: ['viewImeiTracking', 'manageImeiTracking'] },
   { id: 'warranty_claims', label: 'Warranty Claims', permissions: ['viewWarrantyClaims', 'manageWarrantyClaims'] },
@@ -107,16 +110,16 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'communication_log', label: 'Communication Log', permissions: ['viewCommunicationLog', 'createCommunicationLog', 'editCommunicationLog', 'deleteCommunicationLog'] },
   { id: 'reminders', label: 'Tasks & Reminders', permissions: ['viewReminders', 'createReminders', 'editReminders', 'deleteReminders'] },
   { id: 'leads', label: 'CRM Leads', permissions: ['viewLeads', 'viewAllLeads', 'createLeads', 'editLeads', 'deleteLeads', 'convertLeads'] },
-  { id: 'wallet', label: 'Mobile Shop — Wallet', permissions: ['viewWallet', 'manageWallet'] },
-  { id: 'load', label: 'Mobile Shop — Load Management', permissions: ['viewLoadManagement', 'manageLoadManagement'] },
-  { id: 'sim_sales', label: 'Mobile Shop — Sim Sale', permissions: ['viewSimSales', 'manageSimSales'] },
-  { id: 'cash_management', label: 'Mobile Shop — Cash Management', permissions: ['viewCashManagement', 'manageCashManagement'] },
-  { id: 'repair', label: 'Mobile Shop — Repair', permissions: ['viewRepairs', 'manageRepairs'] },
-  { id: 'services', label: 'Mobile Shop — Services', permissions: ['viewServices', 'manageServices'] },
-  { id: 'bill_payments', label: 'Mobile Shop — Bill Payments', permissions: ['viewBillPayments', 'manageBillPayments'] },
-  { id: 'installments', label: 'Mobile Shop — Installments', permissions: ['viewInstallments', 'manageInstallments'] },
-  { id: 'used_phones', label: 'Mobile Shop — Used Phones', permissions: ['viewUsedPhones', 'buyUsedPhones', 'editUsedPhones', 'sellUsedPhones', 'deleteUsedPhones'] },
-  { id: 'new_phones', label: 'Mobile Shop — New Phones', permissions: ['viewNewPhones', 'buyNewPhones', 'editNewPhones', 'sellNewPhones', 'deleteNewPhones'] },
+  { id: 'wallet', label: 'Bank Accounts', permissions: ['viewWallet', 'manageWallet'] },
+  { id: 'load', label: 'Load Management', permissions: ['viewLoadManagement', 'manageLoadManagement'] },
+  { id: 'sim_sales', label: 'SIM Sales', permissions: ['viewSimSales', 'manageSimSales'] },
+  { id: 'cash_management', label: 'Cash Management', permissions: ['viewCashManagement', 'manageCashManagement'] },
+  { id: 'repair', label: 'Repairs', permissions: ['viewRepairs', 'manageRepairs'] },
+  { id: 'services', label: 'Services', permissions: ['viewServices', 'manageServices'] },
+  { id: 'bill_payments', label: 'Bill Payments', permissions: ['viewBillPayments', 'manageBillPayments'] },
+  { id: 'installments', label: 'Installments', permissions: ['viewInstallments', 'manageInstallments'] },
+  { id: 'used_phones', label: 'Used Phones', permissions: ['viewUsedPhones', 'buyUsedPhones', 'editUsedPhones', 'sellUsedPhones', 'deleteUsedPhones'] },
+  { id: 'new_phones', label: 'New Phones', permissions: ['viewNewPhones', 'buyNewPhones', 'sellNewPhones', 'deleteNewPhones'] },
   {
     id: 'reports',
     label: 'Reports',
@@ -128,14 +131,13 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
       'viewWalletReports', 'viewInstallmentReports', 'exportReports',
     ],
   },
-  { id: 'hr_employees', label: 'HR — Employees', permissions: ['getEmployees', 'createEmployees', 'manageEmployees', 'deleteEmployees'] },
-  { id: 'hr_departments', label: 'HR — Departments', permissions: ['getDepartments', 'createDepartments', 'manageDepartments', 'deleteDepartments'] },
-  { id: 'hr_designations', label: 'HR — Designations', permissions: ['getDesignations', 'createDesignations', 'manageDesignations', 'deleteDesignations'] },
-  { id: 'hr_attendance', label: 'HR — Attendance', permissions: ['getAttendance', 'createAttendance', 'manageAttendance', 'deleteAttendance'] },
-  { id: 'hr_leaves', label: 'HR — Leave Management', permissions: ['getLeaves', 'createLeaves', 'manageLeaves', 'approveLeaves', 'rejectLeaves', 'deleteLeaves'] },
-  { id: 'hr_payroll', label: 'HR — Payroll', permissions: ['getPayroll', 'createPayroll', 'managePayroll', 'processPayroll', 'deletePayroll'] },
-  { id: 'hr_performance', label: 'HR — Performance Reviews', permissions: ['getPerformanceReviews', 'createPerformanceReviews', 'managePerformanceReviews', 'deletePerformanceReviews'] },
-  { id: 'school_fees', label: 'School — Fee Accounting', permissions: ['viewFeeAccounting', 'manageFeeAccounting'] },
+  { id: 'hr_employees', label: 'Employees', permissions: ['getEmployees', 'createEmployees', 'manageEmployees', 'deleteEmployees'] },
+  { id: 'hr_departments', label: 'Departments', permissions: ['getDepartments', 'createDepartments', 'manageDepartments', 'deleteDepartments'] },
+  { id: 'hr_designations', label: 'Designations', permissions: ['getDesignations', 'createDesignations', 'manageDesignations', 'deleteDesignations'] },
+  { id: 'hr_attendance', label: 'Attendance', permissions: ['getAttendance', 'createAttendance', 'manageAttendance', 'deleteAttendance'] },
+  { id: 'hr_leaves', label: 'Leave Management', permissions: ['getLeaves', 'createLeaves', 'manageLeaves', 'approveLeaves', 'rejectLeaves', 'deleteLeaves'] },
+  { id: 'hr_payroll', label: 'Payroll', permissions: ['getPayroll', 'createPayroll', 'managePayroll', 'processPayroll', 'deletePayroll'] },
+  { id: 'school_fees', label: 'Fee Accounting', permissions: ['viewFeeAccounting', 'manageFeeAccounting'] },
   { id: 'users', label: 'User Management', permissions: ['viewUsers', 'createUsers', 'editUsers', 'deleteUsers'] },
   { id: 'roles', label: 'Role Management', permissions: ['viewRoles', 'createRoles', 'editRoles', 'deleteRoles'] },
   { id: 'branches', label: 'Branch Management', permissions: ['viewBranches', 'manageBranches'] },
@@ -187,23 +189,144 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
 
 export const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissions))] as PermissionKey[];
 
-export const PERMISSION_TAB_GROUPS = {
-  business: [
-    'products', 'stock_counts', 'imei_tracking', 'warranty_claims', 'price_checker', 'price_updates', 'invoices', 'purchases', 'purchase_orders', 'sales_returns', 'purchase_returns',
-    'customers', 'suppliers', 'categories', 'brands', 'accounting', 'cash', 'payment_vouchers', 'bank_reconciliation', 'accounts_system', 'leads',
-    'communication_log', 'reminders', 'whatsapp', 'sms', 'website_connections', 'ai_assistant', 'insights', 'purchase_suggestions', 'barcode',
-    'manufacturing',
-  ],
-  mobile_shop: [
-    'wallet', 'load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones',
-  ],
-  reports_hr: [
-    'reports', 'hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees',
-  ],
-  administration: ['users', 'roles', 'branches', 'staff', 'settings', 'tax_currency_settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
-} as const;
+/**
+ * Business types each group applies to — mirrors the sidebar gating in
+ * components/layout/data/sidebar-data.ts, so the roles screen only offers modules the
+ * business can actually open. Groups not listed here apply to every business type.
+ * Values are normalized business types (see lib/business-types.ts).
+ */
+const NOT_SCHOOL_OR_RESTAURANT = { excludeBusinessTypes: ['school', 'restaurant'] };
+const NOT_SCHOOL = { excludeBusinessTypes: ['school'] };
+const MOBILE_SHOP_ONLY = { businessTypes: ['mobile_shop'] };
 
-export type PermissionTabId = keyof typeof PERMISSION_TAB_GROUPS;
+export const PERMISSION_GROUP_AVAILABILITY: Record<string, { businessTypes?: string[]; excludeBusinessTypes?: string[] }> = {
+  products: NOT_SCHOOL_OR_RESTAURANT,
+  stock_transfers: NOT_SCHOOL_OR_RESTAURANT,
+  stock_adjustments: NOT_SCHOOL_OR_RESTAURANT,
+  stock_counts: NOT_SCHOOL_OR_RESTAURANT,
+  imei_tracking: NOT_SCHOOL_OR_RESTAURANT,
+  warranty_claims: NOT_SCHOOL_OR_RESTAURANT,
+  price_checker: NOT_SCHOOL_OR_RESTAURANT,
+  price_updates: NOT_SCHOOL_OR_RESTAURANT,
+  categories: NOT_SCHOOL_OR_RESTAURANT,
+  brands: NOT_SCHOOL_OR_RESTAURANT,
+  barcode: NOT_SCHOOL_OR_RESTAURANT,
+  invoices: NOT_SCHOOL_OR_RESTAURANT,
+  sales_returns: NOT_SCHOOL_OR_RESTAURANT,
+  customers: NOT_SCHOOL_OR_RESTAURANT,
+  leads: NOT_SCHOOL_OR_RESTAURANT,
+  communication_log: NOT_SCHOOL_OR_RESTAURANT,
+  reminders: NOT_SCHOOL_OR_RESTAURANT,
+  purchases: NOT_SCHOOL,
+  purchase_orders: NOT_SCHOOL,
+  suppliers: NOT_SCHOOL,
+  purchase_returns: NOT_SCHOOL_OR_RESTAURANT,
+  accounting: NOT_SCHOOL_OR_RESTAURANT,
+  cash: NOT_SCHOOL_OR_RESTAURANT,
+  wallet: NOT_SCHOOL_OR_RESTAURANT,
+  payment_vouchers: NOT_SCHOOL_OR_RESTAURANT,
+  bank_reconciliation: NOT_SCHOOL_OR_RESTAURANT,
+  accounts_system: NOT_SCHOOL_OR_RESTAURANT,
+  payments: NOT_SCHOOL_OR_RESTAURANT,
+  load: MOBILE_SHOP_ONLY,
+  sim_sales: MOBILE_SHOP_ONLY,
+  cash_management: MOBILE_SHOP_ONLY,
+  repair: MOBILE_SHOP_ONLY,
+  services: MOBILE_SHOP_ONLY,
+  bill_payments: MOBILE_SHOP_ONLY,
+  installments: MOBILE_SHOP_ONLY,
+  used_phones: MOBILE_SHOP_ONLY,
+  new_phones: MOBILE_SHOP_ONLY,
+  manufacturing: { businessTypes: ['factory'] },
+  school_fees: { businessTypes: ['school'] },
+  reports: NOT_SCHOOL_OR_RESTAURANT,
+  hr_employees: NOT_SCHOOL,
+  hr_departments: NOT_SCHOOL,
+  hr_designations: NOT_SCHOOL,
+  hr_attendance: NOT_SCHOOL,
+  hr_leaves: NOT_SCHOOL,
+  hr_payroll: NOT_SCHOOL,
+  website_connections: NOT_SCHOOL_OR_RESTAURANT,
+  ai_assistant: NOT_SCHOOL,
+  insights: NOT_SCHOOL_OR_RESTAURANT,
+  purchase_suggestions: NOT_SCHOOL_OR_RESTAURANT,
+  dashboard: NOT_SCHOOL_OR_RESTAURANT,
+  salesmen: NOT_SCHOOL,
+  commission_rules: NOT_SCHOOL,
+  commission_ledger: NOT_SCHOOL,
+  partners: NOT_SCHOOL,
+  partner_profit_share_rules: NOT_SCHOOL,
+  partner_profit_share_ledger: NOT_SCHOOL,
+};
+
+/** Single permissions inside a shared group that only one business type uses. */
+export const PERMISSION_KEY_BUSINESS_TYPES: Partial<Record<PermissionKey, string[]>> = {
+  viewLoadReports: ['mobile_shop'],
+  viewSimSaleReports: ['mobile_shop'],
+  viewRepairReports: ['mobile_shop'],
+  viewServiceReports: ['mobile_shop'],
+  viewInstallmentReports: ['mobile_shop'],
+};
+
+export type PermissionCategoryId =
+  | 'sales' | 'purchasing' | 'inventory' | 'finance' | 'mobile_shop' | 'manufacturing'
+  | 'school' | 'reports' | 'hr' | 'communication' | 'team' | 'administration';
+
+export interface PermissionCategoryDef {
+  id: PermissionCategoryId;
+  label: string;
+  description: string;
+  groups: string[];
+}
+
+/** How the roles screen arranges the groups — every group belongs to exactly one category. */
+export const PERMISSION_CATEGORIES: PermissionCategoryDef[] = [
+  { id: 'sales', label: 'Sales & Customers', description: 'Invoices, returns, customers and follow-ups', groups: ['invoices', 'sales_returns', 'customers', 'leads', 'communication_log', 'reminders'] },
+  { id: 'purchasing', label: 'Purchasing', description: 'Purchases, orders, returns and suppliers', groups: ['purchases', 'purchase_orders', 'purchase_returns', 'suppliers', 'price_updates', 'purchase_suggestions'] },
+  { id: 'inventory', label: 'Inventory', description: 'Products, stock, serials and warranty', groups: ['products', 'categories', 'brands', 'stock_transfers', 'stock_adjustments', 'stock_counts', 'imei_tracking', 'warranty_claims', 'price_checker', 'barcode'] },
+  { id: 'finance', label: 'Finance & Accounts', description: 'Expenses, cash, banks and ledgers', groups: ['accounting', 'cash', 'wallet', 'payment_vouchers', 'payments', 'bank_reconciliation', 'accounts_system'] },
+  { id: 'mobile_shop', label: 'Mobile Shop', description: 'Load, SIMs, repairs, phones and installments', groups: ['load', 'sim_sales', 'cash_management', 'repair', 'services', 'bill_payments', 'installments', 'used_phones', 'new_phones'] },
+  { id: 'manufacturing', label: 'Manufacturing', description: 'BOMs, production orders and quality', groups: ['manufacturing'] },
+  { id: 'school', label: 'School', description: 'Fee vouchers, collections and fee accounts', groups: ['school_fees'] },
+  { id: 'reports', label: 'Reports', description: 'Business reports and exports', groups: ['reports'] },
+  { id: 'hr', label: 'Human Resources', description: 'Employees, attendance, leave and payroll', groups: ['hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll'] },
+  { id: 'communication', label: 'Messaging & AI', description: 'WhatsApp, SMS, website and AI tools', groups: ['whatsapp', 'sms', 'website_connections', 'ai_assistant', 'insights'] },
+  { id: 'team', label: 'Salesmen & Partners', description: 'Commissions and partner profit share', groups: ['salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'] },
+  { id: 'administration', label: 'Administration', description: 'Users, roles, branches and settings', groups: ['dashboard', 'users', 'roles', 'staff', 'branches', 'settings', 'tax_currency_settings', 'audit_logs'] },
+];
+
+function availableFor(rule: { businessTypes?: string[]; excludeBusinessTypes?: string[] } | undefined, businessType: string) {
+  if (!rule) return true;
+  if (rule.businessTypes && !rule.businessTypes.includes(businessType)) return false;
+  if (rule.excludeBusinessTypes && rule.excludeBusinessTypes.includes(businessType)) return false;
+  return true;
+}
+
+/**
+ * The categories (and the groups/permissions inside them) a business of this type uses.
+ * `businessType` must already be normalized; pass null to get everything.
+ * `extraGroups` force groups on regardless of type (e.g. manufacturing for a tester login).
+ */
+export function getPermissionCategories(
+  businessType: string | null,
+  extraGroups: string[] = [],
+): (PermissionCategoryDef & { groupDefs: PermissionGroupDef[] })[] {
+  const byId = new Map(PERMISSION_GROUPS.map((g) => [g.id, g]));
+  return PERMISSION_CATEGORIES.map((category) => ({
+    ...category,
+    groupDefs: category.groups
+      .map((id) => byId.get(id))
+      .filter((g): g is PermissionGroupDef => !!g)
+      .filter((g) => businessType === null || extraGroups.includes(g.id) || availableFor(PERMISSION_GROUP_AVAILABILITY[g.id], businessType))
+      .map((g) => ({
+        ...g,
+        permissions: businessType === null
+          ? g.permissions
+          : g.permissions.filter((key) => availableFor({ businessTypes: PERMISSION_KEY_BUSINESS_TYPES[key] }, businessType)),
+      }))
+      .filter((g) => g.permissions.length > 0),
+  })).filter((category) => category.groupDefs.length > 0);
+}
 
 export function sanitizePermissions(input: Permission = {}): Permission {
   const sanitized: Permission = {};
@@ -229,11 +352,6 @@ export function buildPermissionsPayload(input: Permission = {}): Permission {
 
 export function buildAllPermissionsTrue(): Permission {
   return Object.fromEntries(PERMISSION_KEYS.map((key) => [key, true])) as Permission;
-}
-
-export function getGroupsForTab(tab: PermissionTabId): PermissionGroupDef[] {
-  const ids = PERMISSION_TAB_GROUPS[tab];
-  return PERMISSION_GROUPS.filter((group) => (ids as readonly string[]).includes(group.id));
 }
 
 export function formatPermissionLabel(key: PermissionKey, t: (key: string) => string): string {

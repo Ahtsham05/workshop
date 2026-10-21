@@ -12,7 +12,8 @@ router.use(auth(), branchScope(), checkFeatureAccess('hr_management'));
 router
   .route('/')
   .post(auth('createLeaves'), validate(leaveValidation.createLeave), leaveController.createLeave)
-  .get(auth('getLeaves'), validate(leaveValidation.getLeaves), leaveController.getLeaves);
+  // Attendance marks employees who are on approved leave.
+  .get(auth('getLeaves', 'getAttendance'), validate(leaveValidation.getLeaves), leaveController.getLeaves);
 
 router
   .route('/:leaveId/approve')

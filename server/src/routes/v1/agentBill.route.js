@@ -7,9 +7,12 @@ const router = express.Router();
 
 router.use(auth(), branchScope());
 
-router.route('/batch').post(agentBillController.createAgentBillsBatch);
-router.route('/report').get(agentBillController.getAgentBillReport);
-router.route('/').get(agentBillController.getAgentBills);
-router.route('/:id').patch(agentBillController.updateAgentBill).delete(agentBillController.deleteAgentBill);
+router.route('/batch').post(auth('manageBillPayments'), agentBillController.createAgentBillsBatch);
+router.route('/report').get(auth('viewBillPayments', 'viewReports'), agentBillController.getAgentBillReport);
+router.route('/').get(auth('viewBillPayments', 'viewReports'), agentBillController.getAgentBills);
+router
+  .route('/:id')
+  .patch(auth('manageBillPayments'), agentBillController.updateAgentBill)
+  .delete(auth('manageBillPayments'), agentBillController.deleteAgentBill);
 
 module.exports = router;

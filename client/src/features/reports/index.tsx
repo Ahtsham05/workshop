@@ -185,10 +185,12 @@ export default function ReportsPage() {
             <RefreshCw className='mr-2 h-4 w-4' />
             {t('refresh')}
           </Button>
-          <Button variant='outline' size='sm' onClick={handleExport}>
-            <Download className='mr-2 h-4 w-4' />
-            {t('export')}
-          </Button>
+          {hasPermission('exportReports') && (
+            <Button variant='outline' size='sm' onClick={handleExport}>
+              <Download className='mr-2 h-4 w-4' />
+              {t('export')}
+            </Button>
+          )}
         </div>
       </div>
 

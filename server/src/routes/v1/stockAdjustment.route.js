@@ -11,29 +11,37 @@ router.use(auth(), branchScope());
 router
   .route('/')
   .post(
-    auth('editProducts'),
+    auth('manageStockAdjustments'),
     validate(stockAdjustmentValidation.createAdjustment),
     stockAdjustmentController.createAdjustment
   )
-  .get(auth('viewProducts'), validate(stockAdjustmentValidation.getAdjustments), stockAdjustmentController.getAdjustments);
+  .get(
+    auth('viewStockAdjustments', 'manageStockAdjustments'),
+    validate(stockAdjustmentValidation.getAdjustments),
+    stockAdjustmentController.getAdjustments
+  );
 
 // Must be registered before '/:adjustmentId' so 'stats' isn't parsed as an id.
 router
   .route('/stats')
   .get(
-    auth('viewProducts'),
+    auth('viewStockAdjustments', 'manageStockAdjustments'),
     validate(stockAdjustmentValidation.getAdjustmentStats),
     stockAdjustmentController.getAdjustmentStats
   );
 
 router
   .route('/:adjustmentId')
-  .get(auth('viewProducts'), validate(stockAdjustmentValidation.getAdjustment), stockAdjustmentController.getAdjustment);
+  .get(
+    auth('viewStockAdjustments', 'manageStockAdjustments'),
+    validate(stockAdjustmentValidation.getAdjustment),
+    stockAdjustmentController.getAdjustment
+  );
 
 router
   .route('/:adjustmentId/reverse')
   .post(
-    auth('editProducts'),
+    auth('manageStockAdjustments'),
     validate(stockAdjustmentValidation.reverseAdjustment),
     stockAdjustmentController.reverseAdjustment
   );

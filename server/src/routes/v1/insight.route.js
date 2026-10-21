@@ -10,17 +10,19 @@ const router = express.Router();
 router.use(auth(), branchScope());
 
 // Fixed, dashboard-card-shaped views — checked before the generic '/:insightId' route.
-router.get('/today', insightController.getTodayInsights);
-router.get('/alerts', insightController.getAlerts);
-router.get('/sales', insightController.getSalesInsights);
-router.get('/inventory', insightController.getInventoryInsights);
-router.get('/profit', insightController.getProfitInsights);
-router.get('/customers', insightController.getCustomerInsights);
-router.get('/branches', insightController.getBranchInsights);
-router.post('/run', insightController.runInsightsNow);
+router.get('/today', auth('viewInsights'), insightController.getTodayInsights);
+router.get('/alerts', auth('viewInsights'), insightController.getAlerts);
+router.get('/sales', auth('viewInsights'), insightController.getSalesInsights);
+router.get('/inventory', auth('viewInsights'), insightController.getInventoryInsights);
+router.get('/profit', auth('viewInsights'), insightController.getProfitInsights);
+router.get('/customers', auth('viewInsights'), insightController.getCustomerInsights);
+router.get('/branches', auth('viewInsights'), insightController.getBranchInsights);
+router.post('/run', auth('viewInsights'), insightController.runInsightsNow);
 
-router.route('/').get(validate(insightValidation.getInsights), insightController.getInsights);
+router.route('/').get(auth('viewInsights'), validate(insightValidation.getInsights), insightController.getInsights);
 
-router.route('/:insightId').patch(validate(insightValidation.updateInsight), insightController.updateInsight);
+router
+  .route('/:insightId')
+  .patch(auth('viewInsights'), validate(insightValidation.updateInsight), insightController.updateInsight);
 
 module.exports = router;

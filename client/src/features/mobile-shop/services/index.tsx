@@ -56,6 +56,7 @@ import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { filterAndRankBySearch, matchesBilingualSearch } from '@/utils/urdu-text-utils'
 import { formatAppDateTime } from '@/lib/date-format'
+import { usePermissions } from '@/context/permission-context'
 
 type CatalogForm = {
   serviceName: string
@@ -163,6 +164,7 @@ export default function ServicesPage({
     [customers],
   )
 
+  const canManage = usePermissions().hasExplicitPermission('manageServices')
   const [createService, { isLoading: isCreatingCatalog }] = useCreateServiceMutation()
   const [updateService] = useUpdateServiceMutation()
   const [deleteService] = useDeleteServiceMutation()
@@ -487,47 +489,49 @@ export default function ServicesPage({
 
         {activeTab === 'catalog' && (
           <div className='space-y-4'>
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Service Catalog Item</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form className='space-y-3' onSubmit={handleCreateCatalog}>
-                  <div className='grid gap-3 md:grid-cols-2'>
-                    <div className='space-y-1.5'>
-                      <Label>Service Name</Label>
-                      <Input
-                        value={catalogForm.serviceName}
-                        onChange={(e) => setCatalogField('serviceName', e.target.value)}
-                        placeholder='Screen replacement'
-                      />
+            {canManage && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Create Service Catalog Item</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form className='space-y-3' onSubmit={handleCreateCatalog}>
+                    <div className='grid gap-3 md:grid-cols-2'>
+                      <div className='space-y-1.5'>
+                        <Label>Service Name</Label>
+                        <Input
+                          value={catalogForm.serviceName}
+                          onChange={(e) => setCatalogField('serviceName', e.target.value)}
+                          placeholder='Screen replacement'
+                        />
+                      </div>
+                      <div className='space-y-1.5'>
+                        <Label>Price</Label>
+                        <Input
+                          type='number'
+                          min={0}
+                          value={catalogForm.price}
+                          onChange={(e) => setCatalogField('price', e.target.value)}
+                          placeholder='0'
+                        />
+                      </div>
                     </div>
                     <div className='space-y-1.5'>
-                      <Label>Price</Label>
-                      <Input
-                        type='number'
-                        min={0}
-                        value={catalogForm.price}
-                        onChange={(e) => setCatalogField('price', e.target.value)}
-                        placeholder='0'
+                      <Label>Details</Label>
+                      <Textarea
+                        rows={2}
+                        value={catalogForm.details}
+                        onChange={(e) => setCatalogField('details', e.target.value)}
+                        placeholder='Optional notes for this service'
                       />
                     </div>
-                  </div>
-                  <div className='space-y-1.5'>
-                    <Label>Details</Label>
-                    <Textarea
-                      rows={2}
-                      value={catalogForm.details}
-                      onChange={(e) => setCatalogField('details', e.target.value)}
-                      placeholder='Optional notes for this service'
-                    />
-                  </div>
-                  <Button type='submit' disabled={isCreatingCatalog}>
-                    {isCreatingCatalog ? 'Saving...' : 'Save Service'}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+                    <Button type='submit' disabled={isCreatingCatalog}>
+                      {isCreatingCatalog ? 'Saving...' : 'Save Service'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
@@ -566,12 +570,16 @@ export default function ServicesPage({
                           </TableCell>
                           <TableCell className='text-right'>
                             <div className='flex justify-end gap-2'>
-                              <Button variant='outline' size='sm' onClick={() => handleToggleService(service)}>
-                                {service.isActive ? 'Deactivate' : 'Activate'}
-                              </Button>
-                              <Button variant='destructive' size='sm' onClick={() => handleDeleteService(service)}>
-                                Delete
-                              </Button>
+                              {canManage && (
+                                <>
+                                  <Button variant='outline' size='sm' onClick={() => handleToggleService(service)}>
+                                    {service.isActive ? 'Deactivate' : 'Activate'}
+                                  </Button>
+                                  <Button variant='destructive' size='sm' onClick={() => handleDeleteService(service)}>
+                                    Delete
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -598,252 +606,256 @@ export default function ServicesPage({
 
         {activeTab === 'invoices' && (
           <div className='space-y-4'>
-            {/* Invoice Header Form */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{editingInvoiceId ? 'Edit Service Invoice' : 'Create Service Invoice'}</CardTitle>
-              </CardHeader>
-              <CardContent className='space-y-4'>
-                <div className='grid gap-3 md:grid-cols-2'>
-                  <div className='space-y-1.5 md:col-span-2 md:max-w-md'>
-                    <Label>Customer A/C</Label>
-                    <SearchableSelect
-                      options={customerSelectOptions}
-                      value={invoiceForm.customerId}
-                      onValueChange={handleInvoiceCustomerChange}
-                      placeholder='Nothing selected'
-                      searchPlaceholder='Search customers...'
-                      clearLabel='Nothing selected'
-                      emptyText='No customers found.'
-                    />
-                    <p className='text-xs text-muted-foreground'>
-                      Select a saved customer to post this invoice to the customer ledger.
-                    </p>
+            {canManage && (
+              <>
+              {/* Invoice Header Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>{editingInvoiceId ? 'Edit Service Invoice' : 'Create Service Invoice'}</CardTitle>
+                </CardHeader>
+                <CardContent className='space-y-4'>
+                  <div className='grid gap-3 md:grid-cols-2'>
+                    <div className='space-y-1.5 md:col-span-2 md:max-w-md'>
+                      <Label>Customer A/C</Label>
+                      <SearchableSelect
+                        options={customerSelectOptions}
+                        value={invoiceForm.customerId}
+                        onValueChange={handleInvoiceCustomerChange}
+                        placeholder='Nothing selected'
+                        searchPlaceholder='Search customers...'
+                        clearLabel='Nothing selected'
+                        emptyText='No customers found.'
+                      />
+                      <p className='text-xs text-muted-foreground'>
+                        Select a saved customer to post this invoice to the customer ledger.
+                      </p>
+                    </div>
+                    <div className='space-y-1.5'>
+                      <Label>Customer Name</Label>
+                      <Input
+                        value={invoiceForm.customerName}
+                        onChange={(e) =>
+                          setInvoiceForm((prev) => ({
+                            ...prev,
+                            customerName: e.target.value,
+                            customerId: '',
+                          }))
+                        }
+                        placeholder='Full name'
+                      />
+                    </div>
+                    <div className='space-y-1.5'>
+                      <Label>Customer Phone</Label>
+                      <CustomerPhoneAutocomplete
+                        value={invoiceForm.customerPhone}
+                        onChange={(e) =>
+                          setInvoiceForm((prev) => ({
+                            ...prev,
+                            customerPhone: e.target.value,
+                            customerId: '',
+                          }))
+                        }
+                        placeholder='03xxxxxxxxx'
+                        searchServiceRecords
+                        searchSimSaleRecords
+                        searchRepairRecords
+                        searchInstallmentRecords
+                        searchLoadSaleRecords
+                        onCustomerSelect={(c) =>
+                          setInvoiceForm((prev) => ({
+                            ...prev,
+                            customerPhone: c.phone || prev.customerPhone,
+                            customerName: c.name || prev.customerName,
+                            customerId: '',
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className='space-y-1.5'>
+                      <Label>Date</Label>
+                      <Input type='datetime-local' value={invoiceForm.date} onChange={(e) => setInvoiceForm({ ...invoiceForm, date: e.target.value })} />
+                    </div>
                   </div>
-                  <div className='space-y-1.5'>
-                    <Label>Customer Name</Label>
-                    <Input
-                      value={invoiceForm.customerName}
-                      onChange={(e) =>
-                        setInvoiceForm((prev) => ({
-                          ...prev,
-                          customerName: e.target.value,
-                          customerId: '',
-                        }))
-                      }
-                      placeholder='Full name'
-                    />
-                  </div>
-                  <div className='space-y-1.5'>
-                    <Label>Customer Phone</Label>
-                    <CustomerPhoneAutocomplete
-                      value={invoiceForm.customerPhone}
-                      onChange={(e) =>
-                        setInvoiceForm((prev) => ({
-                          ...prev,
-                          customerPhone: e.target.value,
-                          customerId: '',
-                        }))
-                      }
-                      placeholder='03xxxxxxxxx'
-                      searchServiceRecords
-                      searchSimSaleRecords
-                      searchRepairRecords
-                      searchInstallmentRecords
-                      searchLoadSaleRecords
-                      onCustomerSelect={(c) =>
-                        setInvoiceForm((prev) => ({
-                          ...prev,
-                          customerPhone: c.phone || prev.customerPhone,
-                          customerName: c.name || prev.customerName,
-                          customerId: '',
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className='space-y-1.5'>
-                    <Label>Date</Label>
-                    <Input type='datetime-local' value={invoiceForm.date} onChange={(e) => setInvoiceForm({ ...invoiceForm, date: e.target.value })} />
-                  </div>
-                </div>
 
-                <div className='space-y-1.5'>
-                  <SalesmanField
-                    value={invoiceForm.salesmanId}
-                    onValueChange={(v) => setInvoiceForm({ ...invoiceForm, salesmanId: v })}
-                    id='service-salesman'
-                  />
-                </div>
+                  <div className='space-y-1.5'>
+                    <SalesmanField
+                      value={invoiceForm.salesmanId}
+                      onValueChange={(v) => setInvoiceForm({ ...invoiceForm, salesmanId: v })}
+                      id='service-salesman'
+                    />
+                  </div>
 
-                <div className='space-y-1.5'>
-                  <Label>Notes</Label>
-                  <Textarea rows={2} value={invoiceForm.notes} onChange={(e) => setInvoiceForm({ ...invoiceForm, notes: e.target.value })} />
-                </div>
-              </CardContent>
-            </Card>
+                  <div className='space-y-1.5'>
+                    <Label>Notes</Label>
+                    <Textarea rows={2} value={invoiceForm.notes} onChange={(e) => setInvoiceForm({ ...invoiceForm, notes: e.target.value })} />
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Main Invoice Builder with Services Grid */}
-            <div className='grid gap-4 lg:grid-cols-3'>
-              {/* Invoice Items Column */}
-              <div className='lg:col-span-2 space-y-4'>
-                {/* Invoice Items Table */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Invoice Items</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='rounded-md border overflow-x-auto'>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Service</TableHead>
-                            <TableHead className='text-right'>Price</TableHead>
-                            <TableHead className='text-center'>Qty</TableHead>
-                            <TableHead className='text-right'>Total</TableHead>
-                            <TableHead className='text-right'>Action</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {invoiceLines.length === 0 && (
+              {/* Main Invoice Builder with Services Grid */}
+              <div className='grid gap-4 lg:grid-cols-3'>
+                {/* Invoice Items Column */}
+                <div className='lg:col-span-2 space-y-4'>
+                  {/* Invoice Items Table */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Invoice Items</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className='rounded-md border overflow-x-auto'>
+                        <Table>
+                          <TableHeader>
                             <TableRow>
-                              <TableCell colSpan={5} className='text-center py-8 text-muted-foreground'>
-                                Select services from the catalog
-                              </TableCell>
+                              <TableHead>Service</TableHead>
+                              <TableHead className='text-right'>Price</TableHead>
+                              <TableHead className='text-center'>Qty</TableHead>
+                              <TableHead className='text-right'>Total</TableHead>
+                              <TableHead className='text-right'>Action</TableHead>
                             </TableRow>
-                          )}
-                          {invoiceLines.map((line) => (
-                            <TableRow key={line.serviceId}>
-                              <TableCell className='font-medium'>{line.serviceName}</TableCell>
-                              <TableCell className='text-right'>
-                                <Input
-                                  type='number'
-                                  min={0}
-                                  step='0.01'
-                                  value={line.unitPrice}
-                                  onChange={(e) => handleInvoiceLinePriceChange(line.serviceId, e.target.value)}
-                                  className='h-8 w-28 ml-auto text-right'
-                                />
-                              </TableCell>
-                              <TableCell className='text-center'>
-                                <div className='flex items-center justify-center gap-2'>
-                                  <Button
-                                    variant='outline'
-                                    size='sm'
-                                    className='h-6 w-6 p-0'
-                                    onClick={() =>
-                                      setInvoiceLines((prev) =>
-                                        prev.map((l) =>
-                                          l.serviceId === line.serviceId && l.quantity > 1
-                                            ? { ...l, quantity: l.quantity - 1, total: l.unitPrice * (l.quantity - 1) }
-                                            : l
+                          </TableHeader>
+                          <TableBody>
+                            {invoiceLines.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={5} className='text-center py-8 text-muted-foreground'>
+                                  Select services from the catalog
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            {invoiceLines.map((line) => (
+                              <TableRow key={line.serviceId}>
+                                <TableCell className='font-medium'>{line.serviceName}</TableCell>
+                                <TableCell className='text-right'>
+                                  <Input
+                                    type='number'
+                                    min={0}
+                                    step='0.01'
+                                    value={line.unitPrice}
+                                    onChange={(e) => handleInvoiceLinePriceChange(line.serviceId, e.target.value)}
+                                    className='h-8 w-28 ml-auto text-right'
+                                  />
+                                </TableCell>
+                                <TableCell className='text-center'>
+                                  <div className='flex items-center justify-center gap-2'>
+                                    <Button
+                                      variant='outline'
+                                      size='sm'
+                                      className='h-6 w-6 p-0'
+                                      onClick={() =>
+                                        setInvoiceLines((prev) =>
+                                          prev.map((l) =>
+                                            l.serviceId === line.serviceId && l.quantity > 1
+                                              ? { ...l, quantity: l.quantity - 1, total: l.unitPrice * (l.quantity - 1) }
+                                              : l
+                                          )
                                         )
-                                      )
-                                    }
-                                  >
-                                    −
-                                  </Button>
-                                  <span className='w-8 text-center font-medium'>{line.quantity}</span>
-                                  <Button
-                                    variant='outline'
-                                    size='sm'
-                                    className='h-6 w-6 p-0'
-                                    onClick={() =>
-                                      setInvoiceLines((prev) =>
-                                        prev.map((l) =>
-                                          l.serviceId === line.serviceId
-                                            ? { ...l, quantity: l.quantity + 1, total: l.unitPrice * (l.quantity + 1) }
-                                            : l
+                                      }
+                                    >
+                                      −
+                                    </Button>
+                                    <span className='w-8 text-center font-medium'>{line.quantity}</span>
+                                    <Button
+                                      variant='outline'
+                                      size='sm'
+                                      className='h-6 w-6 p-0'
+                                      onClick={() =>
+                                        setInvoiceLines((prev) =>
+                                          prev.map((l) =>
+                                            l.serviceId === line.serviceId
+                                              ? { ...l, quantity: l.quantity + 1, total: l.unitPrice * (l.quantity + 1) }
+                                              : l
+                                          )
                                         )
-                                      )
-                                    }
+                                      }
+                                    >
+                                      +
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                                <TableCell className='text-right font-semibold'>{fmtAmt(line.total)}</TableCell>
+                                <TableCell className='text-right'>
+                                  <Button
+                                    type='button'
+                                    variant='destructive'
+                                    size='sm'
+                                    onClick={() => removeInvoiceLine(line.serviceId)}
                                   >
-                                    +
+                                    Remove
                                   </Button>
-                                </div>
-                              </TableCell>
-                              <TableCell className='text-right font-semibold'>{fmtAmt(line.total)}</TableCell>
-                              <TableCell className='text-right'>
-                                <Button
-                                  type='button'
-                                  variant='destructive'
-                                  size='sm'
-                                  onClick={() => removeInvoiceLine(line.serviceId)}
-                                >
-                                  Remove
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    <div className='mt-4 flex items-center justify-between rounded-md border p-3 bg-green-50'>
-                      <p className='font-semibold'>Invoice Total</p>
-                      <p className='text-2xl font-bold text-green-600'>{fmtAmt(invoiceTotal)}</p>
-                    </div>
-
-                    <Button
-                      onClick={saveInvoice}
-                      disabled={isCreatingInvoice || isUpdatingInvoice || invoiceLines.length === 0}
-                      className='w-full mt-4'
-                      size='lg'
-                    >
-                      {isCreatingInvoice || isUpdatingInvoice
-                        ? (editingInvoiceId ? 'Updating Invoice...' : 'Saving Invoice...')
-                        : (editingInvoiceId ? 'Update Service Invoice' : 'Save Service Invoice')}
-                    </Button>
-                    {editingInvoiceId && (
-                      <Button
-                        type='button'
-                        variant='outline'
-                        onClick={cancelEditInvoice}
-                        className='w-full mt-2'
-                      >
-                        Cancel Edit
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Services Catalog Column */}
-              <div className='space-y-3'>
-                <Card className='sticky top-4'>
-                  <CardHeader className='pb-3'>
-                    <CardTitle className='text-base'>Services</CardTitle>
-                  </CardHeader>
-                  <CardContent className='space-y-3'>
-                    <Input
-                      placeholder='Search services...'
-                      value={serviceSearch}
-                      onChange={(e) => setServiceSearch(e.target.value)}
-                      className='w-full'
-                    />
-
-                    {filteredServices.length === 0 && (
-                      <div className='text-center py-8 text-muted-foreground'>
-                        <p className='text-sm'>No services found</p>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
-                    )}
 
-                    <div className='space-y-2 max-h-96 overflow-y-auto'>
-                      {filteredServices.map((service) => (
-                        <button
-                          key={service.id}
-                          onClick={() => addInvoiceLine(service)}
-                          className='w-full p-3 text-left border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors'
+                      <div className='mt-4 flex items-center justify-between rounded-md border p-3 bg-green-50'>
+                        <p className='font-semibold'>Invoice Total</p>
+                        <p className='text-2xl font-bold text-green-600'>{fmtAmt(invoiceTotal)}</p>
+                      </div>
+
+                      <Button
+                        onClick={saveInvoice}
+                        disabled={isCreatingInvoice || isUpdatingInvoice || invoiceLines.length === 0}
+                        className='w-full mt-4'
+                        size='lg'
+                      >
+                        {isCreatingInvoice || isUpdatingInvoice
+                          ? (editingInvoiceId ? 'Updating Invoice...' : 'Saving Invoice...')
+                          : (editingInvoiceId ? 'Update Service Invoice' : 'Save Service Invoice')}
+                      </Button>
+                      {editingInvoiceId && (
+                        <Button
+                          type='button'
+                          variant='outline'
+                          onClick={cancelEditInvoice}
+                          className='w-full mt-2'
                         >
-                          <p className='font-medium text-sm'>{service.serviceName}</p>
-                          <p className='text-xs text-muted-foreground line-clamp-1'>{service.details}</p>
-                          <p className='text-sm font-semibold text-blue-600 mt-1'>{fmtAmt(service.price)}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                          Cancel Edit
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Services Catalog Column */}
+                <div className='space-y-3'>
+                  <Card className='sticky top-4'>
+                    <CardHeader className='pb-3'>
+                      <CardTitle className='text-base'>Services</CardTitle>
+                    </CardHeader>
+                    <CardContent className='space-y-3'>
+                      <Input
+                        placeholder='Search services...'
+                        value={serviceSearch}
+                        onChange={(e) => setServiceSearch(e.target.value)}
+                        className='w-full'
+                      />
+
+                      {filteredServices.length === 0 && (
+                        <div className='text-center py-8 text-muted-foreground'>
+                          <p className='text-sm'>No services found</p>
+                        </div>
+                      )}
+
+                      <div className='space-y-2 max-h-96 overflow-y-auto'>
+                        {filteredServices.map((service) => (
+                          <button
+                            key={service.id}
+                            onClick={() => addInvoiceLine(service)}
+                            className='w-full p-3 text-left border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors'
+                          >
+                            <p className='font-medium text-sm'>{service.serviceName}</p>
+                            <p className='text-xs text-muted-foreground line-clamp-1'>{service.details}</p>
+                            <p className='text-sm font-semibold text-blue-600 mt-1'>{fmtAmt(service.price)}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
-            </div>
+              </>
+            )}
 
             {/* Invoices History */}
             <Card>
@@ -927,12 +939,16 @@ export default function ServicesPage({
                                   ],
                                 })}
                               />
-                              <Button variant='outline' size='sm' onClick={() => handleEditInvoice(invoice)}>
-                                Edit
-                              </Button>
-                              <Button variant='destructive' size='sm' onClick={() => handleDeleteInvoice(invoice.id)}>
-                                Delete
-                              </Button>
+                              {canManage && (
+                                <>
+                                  <Button variant='outline' size='sm' onClick={() => handleEditInvoice(invoice)}>
+                                    Edit
+                                  </Button>
+                                  <Button variant='destructive' size='sm' onClick={() => handleDeleteInvoice(invoice.id)}>
+                                    Delete
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

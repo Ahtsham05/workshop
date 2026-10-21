@@ -12,7 +12,8 @@ router.use(auth(), branchScope(true), checkFeatureAccess('hr_management'));
 router
   .route('/')
   .post(auth('createEmployees'), validate(employeeValidation.createEmployee), employeeController.createEmployee)
-  .get(auth('getEmployees'), validate(employeeValidation.getEmployees), employeeController.getEmployees);
+  // Attendance, leave and payroll screens pick the employee from this list.
+  .get(auth('getEmployees', 'getAttendance', 'createAttendance', 'getLeaves', 'createLeaves', 'getPayroll', 'createPayroll'), validate(employeeValidation.getEmployees), employeeController.getEmployees);
 
 router
   .route('/:employeeId')

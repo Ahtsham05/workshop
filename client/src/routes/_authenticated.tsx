@@ -20,6 +20,7 @@ import { LocalDatabaseSetupBanner } from '@/features/settings/local-database/loc
 import { setActiveOrganizationBusinessType } from '@/lib/organization-context'
 import { setAppDateFormat } from '@/lib/date-format'
 import { PushNotificationPrompt } from '@/components/push-notification-prompt'
+import { RolePermissionsSync } from '@/components/role-permissions-sync'
 import { useReminderWatchdog } from '@/hooks/use-reminder-watchdog'
 import { ReminderAlarmSplash } from '@/components/reminder-alarm-splash'
 import { QuickLinksVoiceWidget } from '@/components/quick-links-voice-widget'
@@ -96,6 +97,7 @@ function AuthenticatedLayout() {
 
   return (
     <TrialExpirationBoundary>
+      <RolePermissionsSync />
       <PermissionWrapper>
         <WhatsAppProvider>
           {/* Mounted around the shell, not inside a page: the notepad has to stay

@@ -13,12 +13,12 @@ router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeature
 
 router
   .route('/')
-  .post(validate(repairJobValidation.createRepairJob), repairJobController.createRepairJob)
-  .get(validate(repairJobValidation.getRepairJobs), repairJobController.getRepairJobs);
+  .post(auth('manageRepairs'), validate(repairJobValidation.createRepairJob), repairJobController.createRepairJob)
+  .get(auth('viewRepairs'), validate(repairJobValidation.getRepairJobs), repairJobController.getRepairJobs);
 
 router
   .route('/:repairJobId')
-  .patch(validate(repairJobValidation.updateRepairJob), repairJobController.updateRepairJob)
-  .delete(validate(repairJobValidation.deleteRepairJob), repairJobController.deleteRepairJob);
+  .patch(auth('manageRepairs'), validate(repairJobValidation.updateRepairJob), repairJobController.updateRepairJob)
+  .delete(auth('manageRepairs'), validate(repairJobValidation.deleteRepairJob), repairJobController.deleteRepairJob);
 
 module.exports = router;

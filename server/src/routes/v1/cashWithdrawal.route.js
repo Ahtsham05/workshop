@@ -12,18 +12,18 @@ router.use(auth(), branchScope(), checkBusinessType('mobile_shop'));
 
 router
   .route('/')
-  .post(validate(cashWithdrawalValidation.createCashWithdrawal), cashWithdrawalController.createCashWithdrawal)
-  .get(validate(cashWithdrawalValidation.getCashWithdrawals), cashWithdrawalController.getCashWithdrawals);
+  .post(auth('manageLoadManagement', 'manageCashManagement'), validate(cashWithdrawalValidation.createCashWithdrawal), cashWithdrawalController.createCashWithdrawal)
+  .get(auth('viewLoadManagement', 'viewCashManagement', 'viewAccounting'), validate(cashWithdrawalValidation.getCashWithdrawals), cashWithdrawalController.getCashWithdrawals);
 
 router
   .route('/batch')
-  .post(validate(cashWithdrawalValidation.createCashWithdrawalsBatch), cashWithdrawalController.createCashWithdrawalsBatch)
-  .delete(validate(cashWithdrawalValidation.deleteCashWithdrawalsBatch), cashWithdrawalController.deleteCashWithdrawalsBatch);
+  .post(auth('manageLoadManagement', 'manageCashManagement'), validate(cashWithdrawalValidation.createCashWithdrawalsBatch), cashWithdrawalController.createCashWithdrawalsBatch)
+  .delete(auth('manageLoadManagement', 'manageCashManagement'), validate(cashWithdrawalValidation.deleteCashWithdrawalsBatch), cashWithdrawalController.deleteCashWithdrawalsBatch);
 
 router
   .route('/:withdrawalId')
-  .get(validate(cashWithdrawalValidation.getCashWithdrawal), cashWithdrawalController.getCashWithdrawal)
-  .patch(validate(cashWithdrawalValidation.updateCashWithdrawal), cashWithdrawalController.updateCashWithdrawal)
-  .delete(validate(cashWithdrawalValidation.deleteCashWithdrawal), cashWithdrawalController.deleteCashWithdrawal);
+  .get(auth('viewLoadManagement', 'viewCashManagement', 'viewAccounting'), validate(cashWithdrawalValidation.getCashWithdrawal), cashWithdrawalController.getCashWithdrawal)
+  .patch(auth('manageLoadManagement', 'manageCashManagement'), validate(cashWithdrawalValidation.updateCashWithdrawal), cashWithdrawalController.updateCashWithdrawal)
+  .delete(auth('manageLoadManagement', 'manageCashManagement'), validate(cashWithdrawalValidation.deleteCashWithdrawal), cashWithdrawalController.deleteCashWithdrawal);
 
 module.exports = router;

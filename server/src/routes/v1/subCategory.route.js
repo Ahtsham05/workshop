@@ -1,4 +1,5 @@
 const express = require('express');
+const { CATALOG_TAXONOMY_READERS } = require('../../config/permissionSets');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
@@ -29,7 +30,7 @@ router
 
 router
   .route('/all')
-  .get(auth('viewCategories'), validate(subCategoryValidation.getAllSubCategories), subCategoryController.getAllSubCategories);
+  .get(auth('viewCategories', ...CATALOG_TAXONOMY_READERS), validate(subCategoryValidation.getAllSubCategories), subCategoryController.getAllSubCategories);
 
 // Image upload routes
 router

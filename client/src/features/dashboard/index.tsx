@@ -157,7 +157,8 @@ export default function Dashboard() {
 
   // Leads & Reminders cards — independent of the big dashboard-stats query, so their
   // own loading state is tracked separately from `statsLoading`.
-  const { data: leadStats, isLoading: leadStatsLoading } = useGetLeadStatsQuery()
+  const canViewLeads = hasExplicitPermission('viewLeads')
+  const { data: leadStats, isLoading: leadStatsLoading } = useGetLeadStatsQuery(undefined, { skip: !canViewLeads })
   const openPipelineValue = useMemo(
     () => (leadStats?.byStage || [])
       .filter((s) => s.stage !== 'won' && s.stage !== 'lost')
@@ -439,20 +440,22 @@ export default function Dashboard() {
             tone='rose'
             link={{ to: '/accounting', search: { tab: 'wallet' } }}
           />
-          <StatCard
-            cardId='leads'
-            title={t('Leads')}
-            value={leadStats?.totalCount || 0}
-            icon={<Target className='h-4 w-4' />}
-            description={
-              openPipelineValue > 0
-                ? `${formatMoney(openPipelineValue)} ${t('open pipeline')} · ${leadStats?.conversionRate ?? 0}% ${t('conversion')}`
-                : t('Track and convert leads through your sales pipeline')
-            }
-            isLoading={leadStatsLoading}
-            tone='violet'
-            link={{ to: '/leads' }}
-          />
+          {canViewLeads && (
+            <StatCard
+              cardId='leads'
+              title={t('Leads')}
+              value={leadStats?.totalCount || 0}
+              icon={<Target className='h-4 w-4' />}
+              description={
+                openPipelineValue > 0
+                  ? `${formatMoney(openPipelineValue)} ${t('open pipeline')} · ${leadStats?.conversionRate ?? 0}% ${t('conversion')}`
+                  : t('Track and convert leads through your sales pipeline')
+              }
+              isLoading={leadStatsLoading}
+              tone='violet'
+              link={{ to: '/leads' }}
+            />
+          )}
           {remindersEnabled && (
             <StatCard
               cardId='tasks-due-today'

@@ -14,7 +14,8 @@ const jwtVerify = async (payload, done) => {
       throw new Error('Invalid token type');
     }
     const user = await User.findById(payload.sub).populate('role');
-    if (!user) {
+    // A deactivated account loses access on its very next request, not when its token expires.
+    if (!user || user.isActive === false) {
       return done(null, false);
     }
     done(null, user);

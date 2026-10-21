@@ -15,12 +15,28 @@ router.use(auth(), branchScope(), checkFeatureAccess('wallet'));
 
 router
   .route('/')
-  .post(validate(walletTransferValidation.createWalletTransfer), walletTransferController.createWalletTransfer)
-  .get(validate(walletTransferValidation.getWalletTransfers), walletTransferController.getWalletTransfers);
+  .post(
+    auth('manageWallet', 'managePersonalWallet', 'manageLoadManagement', 'manageCashManagement'),
+    validate(walletTransferValidation.createWalletTransfer),
+    walletTransferController.createWalletTransfer
+  )
+  .get(
+    auth('viewWallet', 'managePersonalWallet', 'viewLoadManagement', 'viewCashManagement'),
+    validate(walletTransferValidation.getWalletTransfers),
+    walletTransferController.getWalletTransfers
+  );
 
 router
   .route('/:transferId')
-  .get(validate(walletTransferValidation.getWalletTransfer), walletTransferController.getWalletTransfer)
-  .delete(validate(walletTransferValidation.deleteWalletTransfer), walletTransferController.deleteWalletTransfer);
+  .get(
+    auth('viewWallet', 'managePersonalWallet', 'viewLoadManagement', 'viewCashManagement'),
+    validate(walletTransferValidation.getWalletTransfer),
+    walletTransferController.getWalletTransfer
+  )
+  .delete(
+    auth('manageWallet', 'managePersonalWallet', 'manageLoadManagement', 'manageCashManagement'),
+    validate(walletTransferValidation.deleteWalletTransfer),
+    walletTransferController.deleteWalletTransfer
+  );
 
 module.exports = router;

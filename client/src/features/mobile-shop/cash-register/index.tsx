@@ -45,6 +45,7 @@ import { SimplePagination } from '@/components/ui/simple-pagination'
 import { StatCard } from '@/features/dashboard/components/stat-card'
 import { MobilePageShell } from '../components/mobile-page-shell'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import {
   computeTotalFromCounts,
   denominationKey,
@@ -89,6 +90,7 @@ export default function CashRegisterPage() {
   const currencyPrefix = useCurrencySymbolPrefix()
   const { data, isLoading, refetch } = useGetCashRegisterQuery()
   const [saveRegister, { isLoading: saving }] = useSaveCashRegisterMutation()
+  const canManage = usePermissions().hasExplicitPermission('manageCashRegister')
   const [clearRegister, { isLoading: clearing }] = useClearCashRegisterMutation()
   const [deleteHistoryEntry, { isLoading: deleting }] = useDeleteCashRegisterHistoryMutation()
   const [historyPage, setHistoryPage] = useState(1)
@@ -126,13 +128,14 @@ export default function CashRegisterPage() {
   }, [])
 
   const handleSave = useCallback(async () => {
+    if (!canManage) return
     try {
       await saveRegister({ counts: normalizeCounts(counts), notes: notes.trim() }).unwrap()
       toast.success(t('Cash count saved'))
     } catch (err: any) {
       toast.error(err?.data?.message || t('Failed to save cash count'))
     }
-  }, [saveRegister, counts, notes, t])
+  }, [canManage, saveRegister, counts, notes, t])
 
   const fieldOrder = useMemo(() => {
     const noteDenoms = PKR_DENOMINATIONS.filter((d) => d.kind === 'note')
@@ -356,14 +359,18 @@ export default function CashRegisterPage() {
               <RefreshCw className={cn('mr-2 h-4 w-4', isLoading && 'animate-spin')} />
               {t('Refresh')}
             </Button>
-            <Button type='button' variant='outline' size='sm' onClick={handleClear} disabled={clearing} className='max-sm:px-1.5'>
-              {clearing ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : null}
-              {t('Clear All')}
-            </Button>
-            <Button ref={saveBtnRef} type='button' size='sm' onClick={handleSave} disabled={saving} className='max-sm:px-1.5'>
-              {saving ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Save className='mr-2 h-4 w-4' />}
-              {t('Save Count')}
-            </Button>
+            {canManage && (
+              <>
+                <Button type='button' variant='outline' size='sm' onClick={handleClear} disabled={clearing} className='max-sm:px-1.5'>
+                  {clearing ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : null}
+                  {t('Clear All')}
+                </Button>
+                <Button ref={saveBtnRef} type='button' size='sm' onClick={handleSave} disabled={saving} className='max-sm:px-1.5'>
+                  {saving ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Save className='mr-2 h-4 w-4' />}
+                  {t('Save Count')}
+                </Button>
+              </>
+            )}
           </div>
         </CardHeader>
         <CardContent className='space-y-6'>
@@ -547,16 +554,18 @@ export default function CashRegisterPage() {
                         <Eye className='h-4 w-4' />
                         {t('view')}
                       </Button>
-                      <Button
-                        type='button'
-                        variant='outline'
-                        size='sm'
-                        className='gap-1.5 text-red-600 hover:bg-red-50 hover:text-red-700'
-                        onClick={() => setDeleteSnapshot(snap)}
-                      >
-                        <Trash2 className='h-4 w-4' />
-                        {t('delete')}
-                      </Button>
+                      {canManage && (
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          className='gap-1.5 text-red-600 hover:bg-red-50 hover:text-red-700'
+                          onClick={() => setDeleteSnapshot(snap)}
+                        >
+                          <Trash2 className='h-4 w-4' />
+                          {t('delete')}
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

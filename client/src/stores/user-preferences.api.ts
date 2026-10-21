@@ -28,7 +28,7 @@ export interface MyProfile {
   organizationId?: string | null
   preferredLanguage?: InvoiceLanguage
   photo?: UserPhoto
-  role?: { id: string; name: string } | string | null
+  role?: { id: string; name: string; permissions?: Record<string, boolean>; isSystemRole?: boolean } | string | null
   createdAt?: string
 }
 

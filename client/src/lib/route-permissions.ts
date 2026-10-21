@@ -32,6 +32,12 @@ export interface RouteRule {
 export const ROUTE_RULES: RouteRule[] = [
   // Platform admin
   { prefix: '/admin', systemRoles: ['system_admin'] },
+  // Starter-template demo pages (sample data only)
+  { prefix: '/users', systemRoles: ['system_admin'] },
+  { prefix: '/tasks', systemRoles: ['system_admin'] },
+  { prefix: '/apps', systemRoles: ['system_admin'] },
+  { prefix: '/barcode-demo', systemRoles: ['system_admin'] },
+  { prefix: '/voice-demo', systemRoles: ['system_admin'] },
 
   // School role portals (most specific first)
   { prefix: '/school/portals/teacher', businessTypes: ['school'], schoolRoles: ['teacher', 'schoolAdmin'] },
@@ -73,8 +79,10 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/cash-book', anyPermission: ['viewCashBook'] },
 
   // HR
+  { prefix: '/hr/employees/create', anyPermission: ['createEmployees'] },
   { prefix: '/hr/employees', anyPermission: ['getEmployees'] },
   { prefix: '/hr/departments', anyPermission: ['getDepartments'] },
+  { prefix: '/hr/designations', anyPermission: ['getDesignations'] },
   { prefix: '/hr/attendance', anyPermission: ['getAttendance'] },
   { prefix: '/hr/leaves', anyPermission: ['getLeaves'] },
   { prefix: '/hr/payroll', anyPermission: ['getPayroll'] },
@@ -91,14 +99,15 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/sms/log', anyPermission: ['viewSmsLog'] },
 
   // Administration
-  { prefix: '/users-management', anyPermission: ['viewUsers'] },
+  { prefix: '/users-management', anyPermission: ['viewUsers', 'viewStaff'] },
   { prefix: '/roles', anyPermission: ['viewRoles'] },
   { prefix: '/branches', anyPermission: ['viewBranches'] },
   { prefix: '/branch-overview', systemRoles: ['superAdmin', 'system_admin'] },
-  { prefix: '/staff', anyPermission: ['viewStaff'] },
-  { prefix: '/salesmen', anyPermission: ['viewSalesmen'] },
-  { prefix: '/partners', anyPermission: ['viewPartners'] },
+  { prefix: '/staff', anyPermission: ['viewStaff', 'viewUsers'] },
+  { prefix: '/salesmen', anyPermission: ['viewSalesmen'], excludeBusinessTypes: ['school'] },
+  { prefix: '/partners', anyPermission: ['viewPartners'], excludeBusinessTypes: ['school'] },
   { prefix: '/payment-vouchers', anyPermission: ['viewPaymentVouchers'] },
+  { prefix: '/payment-collections', anyPermission: ['viewPayments', 'viewAccounting', 'manageLedgers'] },
   { prefix: '/bank-account-statement', anyPermission: ['viewWallet'] },
   { prefix: '/bank-reconciliation', anyPermission: ['viewBankReconciliation'] },
   { prefix: '/audit-logs', anyPermission: ['viewAuditLogs'] },
@@ -138,8 +147,8 @@ export const ROUTE_RULES: RouteRule[] = [
   // Business modules
   { prefix: '/products/bulk-edit', anyPermission: ['editProducts'] },
   { prefix: '/products', anyPermission: ['viewProducts'] },
-  { prefix: '/stock-transfer', anyPermission: ['viewProducts'] },
-  { prefix: '/stock-adjustments', anyPermission: ['viewProducts'] },
+  { prefix: '/stock-transfer', anyPermission: ['viewStockTransfers', 'manageStockTransfers'] },
+  { prefix: '/stock-adjustments', anyPermission: ['viewStockAdjustments', 'manageStockAdjustments'] },
   { prefix: '/stock-counts', anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
   { prefix: '/warranty-claims', anyPermission: ['viewWarrantyClaims', 'manageWarrantyClaims', 'viewImeiTracking', 'viewProducts'] },
   { prefix: '/sub-categories', anyPermission: ['viewCategories'] },
@@ -147,12 +156,14 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/brands', anyPermission: ['viewBrands'] },
   { prefix: '/customers', anyPermission: ['viewCustomers'] },
   { prefix: '/suppliers', anyPermission: ['viewSuppliers'] },
-  { prefix: '/purchase-orders', anyPermission: ['viewPurchaseOrders', 'viewPurchases'] },
-  { prefix: '/purchase-invoice', anyPermission: ['viewPurchases'] },
-  { prefix: '/purchase-returns', anyPermission: ['viewPurchaseReturns', 'viewPurchases'] },
-  { prefix: '/fast-billing', anyPermission: ['viewInvoices'] },
-  { prefix: '/invoice', anyPermission: ['viewInvoices'] },
-  { prefix: '/sales-returns', anyPermission: ['viewSalesReturns', 'viewInvoices'] },
+  // A role may hold only the create permission: the page then opens straight on the new
+  // document and hides the list (see each page's canView).
+  { prefix: '/purchase-orders', anyPermission: ['viewPurchaseOrders', 'createPurchaseOrders'] },
+  { prefix: '/purchase-invoice', anyPermission: ['viewPurchases', 'createPurchases'] },
+  { prefix: '/purchase-returns', anyPermission: ['viewPurchaseReturns', 'createPurchaseReturns'] },
+  { prefix: '/fast-billing', anyPermission: ['createInvoices'] },
+  { prefix: '/invoice', anyPermission: ['viewInvoices', 'createInvoices'] },
+  { prefix: '/sales-returns', anyPermission: ['viewSalesReturns', 'createSalesReturns'] },
   { prefix: '/barcode-generator', anyPermission: ['viewBarcodeGenerator'] },
   { prefix: '/manufacturing/settings', anyPermission: ['manageManufacturingSettings'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/manufacturing', anyPermission: ['viewManufacturing'], excludeBusinessTypes: ['school', 'restaurant'] },

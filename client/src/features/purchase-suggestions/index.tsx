@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useGetBranchesQuery } from '@/stores/branch.api'
 import { useGetDashboardStatsQuery } from '@/stores/dashboard.api'
+import { usePermissions } from '@/context/permission-context'
 import {
   useGetPurchaseSuggestionsQuery,
   useGetStockoutPredictionsQuery,
@@ -188,7 +189,9 @@ export default function PurchaseSuggestionsPage() {
 
   const monthStart = useMemo(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(), [])
   const today = useMemo(() => new Date().toISOString(), [])
-  const dashboardStats = useGetDashboardStatsQuery({ period: 'month', startDate: monthStart, endDate: today })
+  // Inventory value comes from the dashboard stats — only for roles that may see the dashboard.
+  const canViewDashboard = usePermissions().hasExplicitPermission('viewDashboard')
+  const dashboardStats = useGetDashboardStatsQuery({ period: 'month', startDate: monthStart, endDate: today }, { skip: !canViewDashboard })
 
   const [runNow, { isLoading: isRunning }] = useRunPurchaseSuggestionsNowMutation()
 

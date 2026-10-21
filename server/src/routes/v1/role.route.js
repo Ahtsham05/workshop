@@ -22,7 +22,9 @@ router
   )
   .get(
     auth(),
-    checkPermission('viewRoles'),
+    // Whoever may create or edit users must be able to see the roles they can hand out —
+    // with viewRoles alone required, the Add User role picker came up empty for them.
+    checkPermission('viewRoles', 'viewUsers', 'viewStaff', 'createUsers', 'editUsers', 'manageStaff'),
     validate(roleValidation.getRoles),
     roleController.getRoles
   );

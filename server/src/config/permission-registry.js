@@ -10,6 +10,20 @@ const PERMISSION_GROUPS = [
     permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'],
   },
   {
+    // Stock transfers between branches (routes/v1/inventoryTransfer.route.js). Split out of
+    // view/editProducts; roles created before the split were backfilled from those keys
+    // (role.service.js backfillSplitPermissions).
+    id: 'stock_transfers',
+    label: 'Stock Transfers',
+    permissions: ['viewStockTransfers', 'manageStockTransfers'],
+  },
+  {
+    // Stock adjustments (routes/v1/stockAdjustment.route.js) — same split and backfill.
+    id: 'stock_adjustments',
+    label: 'Stock Adjustments',
+    permissions: ['viewStockAdjustments', 'manageStockAdjustments'],
+  },
+  {
     // Initial counts, A/B/C cycle counts, surprise audits (routes/v1/stockCount.route.js).
     // Roles with editProducts can already count and approve; these split the two duties.
     id: 'stock_counts',
@@ -177,7 +191,7 @@ const PERMISSION_GROUPS = [
   {
     id: 'new_phones',
     label: 'Mobile Shop — New Phones',
-    permissions: ['viewNewPhones', 'buyNewPhones', 'editNewPhones', 'sellNewPhones', 'deleteNewPhones'],
+    permissions: ['viewNewPhones', 'buyNewPhones', 'sellNewPhones', 'deleteNewPhones'],
   },
   {
     id: 'reports',
@@ -230,16 +244,6 @@ const PERMISSION_GROUPS = [
     id: 'hr_payroll',
     label: 'HR — Payroll',
     permissions: ['getPayroll', 'createPayroll', 'managePayroll', 'processPayroll', 'deletePayroll'],
-  },
-  {
-    id: 'hr_performance',
-    label: 'HR — Performance Reviews',
-    permissions: [
-      'getPerformanceReviews',
-      'createPerformanceReviews',
-      'managePerformanceReviews',
-      'deletePerformanceReviews',
-    ],
   },
   {
     id: 'school_fees',
@@ -388,6 +392,8 @@ const PERMISSION_KEYS = [...new Set(PERMISSION_GROUPS.flatMap((g) => g.permissio
 const PERMISSION_TAB_GROUPS = {
   business: [
     'products',
+    'stock_transfers',
+    'stock_adjustments',
     'stock_counts',
     'imei_tracking',
     'warranty_claims',
@@ -430,7 +436,7 @@ const PERMISSION_TAB_GROUPS = {
     'used_phones',
     'new_phones',
   ],
-  reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'hr_performance', 'school_fees'],
+  reports_hr: ['reports', 'hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll', 'school_fees'],
   administration: ['users', 'roles', 'branches', 'staff', 'settings', 'tax_currency_settings', 'dashboard', 'payments', 'audit_logs', 'salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'],
 };
 

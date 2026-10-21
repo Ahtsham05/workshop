@@ -12,12 +12,28 @@ router.use(auth(), branchScope(), checkBusinessType('mobile_shop'));
 
 router
   .route('/')
-  .post(validate(utilityCompanyValidation.createUtilityCompany), utilityCompanyController.createUtilityCompany)
-  .get(validate(utilityCompanyValidation.getUtilityCompanies), utilityCompanyController.getUtilityCompanies);
+  .post(
+    auth('manageBillPayments'),
+    validate(utilityCompanyValidation.createUtilityCompany),
+    utilityCompanyController.createUtilityCompany
+  )
+  .get(
+    auth('viewBillPayments', 'manageBillPayments', 'viewReports'),
+    validate(utilityCompanyValidation.getUtilityCompanies),
+    utilityCompanyController.getUtilityCompanies
+  );
 
 router
   .route('/:companyId')
-  .patch(validate(utilityCompanyValidation.updateUtilityCompany), utilityCompanyController.updateUtilityCompany)
-  .delete(validate(utilityCompanyValidation.deleteUtilityCompany), utilityCompanyController.deleteUtilityCompany);
+  .patch(
+    auth('manageBillPayments'),
+    validate(utilityCompanyValidation.updateUtilityCompany),
+    utilityCompanyController.updateUtilityCompany
+  )
+  .delete(
+    auth('manageBillPayments'),
+    validate(utilityCompanyValidation.deleteUtilityCompany),
+    utilityCompanyController.deleteUtilityCompany
+  );
 
 module.exports = router;

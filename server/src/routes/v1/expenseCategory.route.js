@@ -7,11 +7,11 @@ const router = express.Router();
 router.use(auth(), branchScope());
 
 router.route('/')
-  .get(expenseCategoryController.getCategories)
-  .post(expenseCategoryController.createCategory);
+  .get(auth('viewAccounting', 'manageExpenses', 'viewPayments', 'createPayments'), expenseCategoryController.getCategories)
+  .post(auth('manageExpenses'), expenseCategoryController.createCategory);
 
 router.route('/:id')
-  .patch(expenseCategoryController.updateCategory)
-  .delete(expenseCategoryController.deleteCategory);
+  .patch(auth('manageExpenses'), expenseCategoryController.updateCategory)
+  .delete(auth('manageExpenses'), expenseCategoryController.deleteCategory);
 
 module.exports = router;

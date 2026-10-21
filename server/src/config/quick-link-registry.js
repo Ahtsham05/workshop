@@ -1167,12 +1167,13 @@ const QUICK_LINK_ACTIONS = [
   // ---- Administration ----
   {
     actionKey: 'users_management',
-    label: 'Users Management',
+    label: 'Users & Staff',
     iconKey: 'IconUsers',
     route: '/users-management',
     category: 'Administration',
     color: 'bg-blue-600 hover:bg-blue-700',
-    permission: 'viewUsers',
+    anyPermission: ['viewUsers', 'viewStaff'],
+    synonyms: ['staff', 'staff management', 'team', 'employees login'],
     excludedSchoolRoles: ['teacher'],
   },
   {
@@ -1203,16 +1204,6 @@ const QUICK_LINK_ACTIONS = [
     category: 'Administration',
     color: 'bg-purple-600 hover:bg-purple-700',
     systemRole: ['superAdmin', 'system_admin'],
-    excludedSchoolRoles: ['teacher'],
-  },
-  {
-    actionKey: 'staff_management',
-    label: 'Staff Management',
-    iconKey: 'IconUsersGroup',
-    route: '/staff',
-    category: 'Administration',
-    color: 'bg-cyan-600 hover:bg-cyan-700',
-    permission: 'viewStaff',
     excludedSchoolRoles: ['teacher'],
   },
   {

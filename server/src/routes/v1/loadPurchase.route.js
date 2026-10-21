@@ -12,13 +12,33 @@ router.use(auth(), branchScope(), checkBusinessType('mobile_shop'));
 
 router
   .route('/')
-  .post(validate(loadPurchaseValidation.createLoadPurchase), loadPurchaseController.createLoadPurchase)
-  .get(validate(loadPurchaseValidation.getLoadPurchases), loadPurchaseController.getLoadPurchases);
+  .post(
+    auth('manageLoadManagement', 'manageCashManagement'),
+    validate(loadPurchaseValidation.createLoadPurchase),
+    loadPurchaseController.createLoadPurchase
+  )
+  .get(
+    auth('viewLoadManagement', 'viewCashManagement'),
+    validate(loadPurchaseValidation.getLoadPurchases),
+    loadPurchaseController.getLoadPurchases
+  );
 
 router
   .route('/:purchaseId')
-  .get(validate(loadPurchaseValidation.getLoadPurchase), loadPurchaseController.getLoadPurchase)
-  .patch(validate(loadPurchaseValidation.updateLoadPurchase), loadPurchaseController.updateLoadPurchase)
-  .delete(validate(loadPurchaseValidation.deleteLoadPurchase), loadPurchaseController.deleteLoadPurchase);
+  .get(
+    auth('viewLoadManagement', 'viewCashManagement'),
+    validate(loadPurchaseValidation.getLoadPurchase),
+    loadPurchaseController.getLoadPurchase
+  )
+  .patch(
+    auth('manageLoadManagement', 'manageCashManagement'),
+    validate(loadPurchaseValidation.updateLoadPurchase),
+    loadPurchaseController.updateLoadPurchase
+  )
+  .delete(
+    auth('manageLoadManagement', 'manageCashManagement'),
+    validate(loadPurchaseValidation.deleteLoadPurchase),
+    loadPurchaseController.deleteLoadPurchase
+  );
 
 module.exports = router;

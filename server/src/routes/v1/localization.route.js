@@ -10,9 +10,10 @@ router.use(auth(), branchScope());
 // localization.service.js), so these are plain GETs with no Joi validation beyond the
 // path param, which is a free string safely passed through to getCountryDefaults (an
 // unknown code just falls back to its own defaults rather than erroring).
-router.route('/countries').get(auth('viewLocalizationSettings'), localizationController.getCountries);
+// Every screen formats money and dates with these, so any signed-in user may read them.
+router.route('/countries').get(localizationController.getCountries);
 
-router.route('/currencies').get(auth('viewLocalizationSettings'), localizationController.getCurrencies);
+router.route('/currencies').get(localizationController.getCurrencies);
 
 router
   .route('/countries/:code/defaults')

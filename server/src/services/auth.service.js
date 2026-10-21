@@ -33,6 +33,10 @@ const loginUserWithEmailAndPassword = async (emailOrUserId, password) => {
   if (!user || !(await user.isPasswordMatch(effectivePassword))) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
   }
+  // Checked only after the password matched, so it never reveals which emails exist.
+  if (user.isActive === false) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'This account has been deactivated. Please contact your administrator.');
+  }
 
   // Populate role with permissions
   if (user.role) {
@@ -64,7 +68,7 @@ const refreshAuth = async (refreshToken) => {
   try {
     const refreshTokenDoc = await tokenService.verifyToken(refreshToken, tokenTypes.REFRESH);
     const user = await userService.getUserById(refreshTokenDoc.user);
-    if (!user) {
+    if (!user || user.isActive === false) {
       throw new Error();
     }
     // Populate role with permissions

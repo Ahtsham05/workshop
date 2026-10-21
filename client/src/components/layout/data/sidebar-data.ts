@@ -105,14 +105,14 @@ export const sidebarData: SidebarData = {
         {
           title: 'Catalog & Inventory',
           icon: IconPackages,
-          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'countStock', 'approveStockCounts', 'viewImeiTracking', 'viewWarrantyClaims', 'manageWarrantyClaims', 'viewPriceChecker', 'viewPriceUpdates', 'managePriceUpdates'],
+          anyPermission: ['viewCategories', 'viewBrands', 'viewProducts', 'viewStockTransfers', 'manageStockTransfers', 'viewStockAdjustments', 'manageStockAdjustments', 'countStock', 'approveStockCounts', 'viewImeiTracking', 'viewWarrantyClaims', 'manageWarrantyClaims', 'viewPriceChecker', 'viewPriceUpdates', 'managePriceUpdates'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
             { title: 'Categories', url: '/categories', icon: IconCategory, permission: 'viewCategories' },
             { title: 'Brands', url: '/brands', icon: IconTag, permission: 'viewBrands' },
             { title: 'Products', url: '/products', icon: IconPackages, permission: 'viewProducts' },
-            { title: 'Stock Transfer', url: '/stock-transfer', icon: IconTransfer, permission: 'viewProducts' },
-            { title: 'Stock Adjustments', url: '/stock-adjustments', icon: ClipboardEdit, permission: 'viewProducts' },
+            { title: 'Stock Transfer', url: '/stock-transfer', icon: IconTransfer, anyPermission: ['viewStockTransfers', 'manageStockTransfers'] },
+            { title: 'Stock Adjustments', url: '/stock-adjustments', icon: ClipboardEdit, anyPermission: ['viewStockAdjustments', 'manageStockAdjustments'] },
             { title: 'Stock Counts', url: '/stock-counts', icon: ClipboardCheck, anyPermission: ['viewProducts', 'countStock', 'approveStockCounts'] },
             { title: 'IMEI / Serial Tracking', url: '/mobile-shop/imei-tracking', icon: ShieldCheck, permission: 'viewImeiTracking' },
             { title: 'Warranty Claims', url: '/warranty-claims', icon: ShieldCheck, anyPermission: ['viewWarrantyClaims', 'manageWarrantyClaims', 'viewImeiTracking', 'viewProducts'] },
@@ -142,29 +142,29 @@ export const sidebarData: SidebarData = {
         {
           title: 'Purchasing',
           icon: ClipboardList,
-          anyPermission: ['viewPurchases', 'viewPurchaseReturns'],
+          anyPermission: ['viewPurchases', 'createPurchases', 'viewPurchaseOrders', 'createPurchaseOrders', 'viewPurchaseReturns', 'createPurchaseReturns'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
-            { title: 'Purchase Orders', url: '/purchase-orders', icon: ClipboardList, permission: 'viewPurchases' },
-            { title: 'Purchases', url: '/purchase-invoice', icon: IconPackages, permission: 'viewPurchases' },
-            { title: 'Purchase Returns', url: '/purchase-returns', icon: IconRefresh, permission: 'viewPurchaseReturns' },
+            { title: 'Purchase Orders', url: '/purchase-orders', icon: ClipboardList, anyPermission: ['viewPurchaseOrders', 'createPurchaseOrders'] },
+            { title: 'Purchases', url: '/purchase-invoice', icon: IconPackages, anyPermission: ['viewPurchases', 'createPurchases'] },
+            { title: 'Purchase Returns', url: '/purchase-returns', icon: IconRefresh, anyPermission: ['viewPurchaseReturns', 'createPurchaseReturns'] },
           ],
         },
         {
           title: 'Sales',
           icon: Receipt,
-          anyPermission: ['viewInvoices', 'viewSalesReturns'],
+          anyPermission: ['viewInvoices', 'createInvoices', 'viewSalesReturns', 'createSalesReturns'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
-            { title: 'Invoices', url: '/invoice', icon: IconPackages, permission: 'viewInvoices' },
-            { title: 'Fast Billing', url: '/fast-billing', icon: IconBarcode, permission: 'viewInvoices' },
-            { title: 'Sales Returns', url: '/sales-returns', icon: IconRefresh, permission: 'viewSalesReturns' },
+            { title: 'Invoices', url: '/invoice', icon: IconPackages, anyPermission: ['viewInvoices', 'createInvoices'] },
+            { title: 'Fast Billing', url: '/fast-billing', icon: IconBarcode, permission: 'createInvoices' },
+            { title: 'Sales Returns', url: '/sales-returns', icon: IconRefresh, anyPermission: ['viewSalesReturns', 'createSalesReturns'] },
           ],
         },
         {
           title: 'Communications',
           icon: MessageCircle,
-          permission: 'editSettings',
+          anyPermission: ['viewWhatsapp', 'viewSmsLog'],
           items: [
             { title: 'WhatsApp Inbox', url: '/whatsapp', icon: MessageCircle, permission: 'viewWhatsapp' },
             { title: 'WhatsApp Analytics', url: '/whatsapp/analytics', icon: IconChartBar, permission: 'viewWhatsapp' },
@@ -384,10 +384,11 @@ export const sidebarData: SidebarData = {
       title: 'Administration',
       items: [
         {
-          title: 'Users Management',
+          // One page for logins, roles and branch access (Staff Management was merged in).
+          title: 'Users & Staff',
           url: '/users-management',
           icon: IconUsers,
-          permission: 'viewUsers',
+          anyPermission: ['viewUsers', 'viewStaff'],
           excludedSchoolRoles: ['teacher'],
         },
         {
@@ -412,18 +413,12 @@ export const sidebarData: SidebarData = {
           excludedSchoolRoles: ['teacher'],
         },
         {
-          title: 'Staff Management',
-          url: '/staff',
-          icon: IconUsersGroup,
-          permission: 'viewStaff',
-          excludedSchoolRoles: ['teacher'],
-        },
-        {
           title: 'Salesmen',
           url: '/salesmen',
           icon: Handshake,
           permission: 'viewSalesmen',
           excludedSchoolRoles: ['teacher'],
+          excludeBusinessTypes: ['school'],
         },
         {
           title: 'Partners & Investors',
@@ -431,6 +426,7 @@ export const sidebarData: SidebarData = {
           icon: HandCoins,
           permission: 'viewPartners',
           excludedSchoolRoles: ['teacher'],
+          excludeBusinessTypes: ['school'],
         },
         {
           title: 'Audit Logs',

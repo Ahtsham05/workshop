@@ -16,6 +16,7 @@ import {
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import type { TransferSuggestion } from '@/stores/purchaseSuggestions.api'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow } from './utils/print-utils'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -63,6 +64,8 @@ export default function StockTransfer() {
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
   const user = useSelector((s: RootState) => s.auth.data?.user)
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
+  const { hasExplicitPermission } = usePermissions()
+  const canManage = hasExplicitPermission('manageStockTransfers')
 
   const [view, setView] = useState<'list' | 'bulk'>('list')
   const [statusFilter, setStatusFilter] = useState<TransferStatus | 'all'>('all')
@@ -166,24 +169,28 @@ export default function StockTransfer() {
             </p>
           </div>
         </div>
-        <div className='flex gap-2 max-sm:w-full max-sm:flex-wrap'>
-          <Button variant='outline' onClick={() => setView('bulk')} className='max-sm:flex-1'>
-            <Layers className='mr-2 h-4 w-4' />
-            {t('Bulk Transfer')}
-          </Button>
-          <Button onClick={openCreateDialog} className='max-sm:flex-1'>
-            <Plus className='mr-2 h-4 w-4' />
-            {t('New Transfer')}
-          </Button>
-        </div>
+        {canManage && (
+          <div className='flex gap-2 max-sm:w-full max-sm:flex-wrap'>
+            <Button variant='outline' onClick={() => setView('bulk')} className='max-sm:flex-1'>
+              <Layers className='mr-2 h-4 w-4' />
+              {t('Bulk Transfer')}
+            </Button>
+            <Button onClick={openCreateDialog} className='max-sm:flex-1'>
+              <Plus className='mr-2 h-4 w-4' />
+              {t('New Transfer')}
+            </Button>
+          </div>
+        )}
       </div>
 
-      <SuggestedTransfersPanel
-        onTransferSelected={(toBranchId, suggestions) => {
-          setBulkSeed({ toBranchId, suggestions })
-          setView('bulk')
-        }}
-      />
+      {canManage && (
+        <SuggestedTransfersPanel
+          onTransferSelected={(toBranchId, suggestions) => {
+            setBulkSeed({ toBranchId, suggestions })
+            setView('bulk')
+          }}
+        />
+      )}
 
       <Card>
         {/* Phones: less side padding, and the two filters share one row instead of stacking. */}
@@ -370,7 +377,7 @@ export default function StockTransfer() {
                             <Printer className='h-3.5 w-3.5 2xl:mr-1' />
                             <span className='hidden 2xl:inline'>{t('Print')}</span>
                           </Button>
-                          {isSingle && tr.status === 'in_transit' && isDest && (
+                          {canManage && isSingle && tr.status === 'in_transit' && isDest && (
                             <Button
                               size='sm'
                               disabled={busy}
@@ -380,7 +387,7 @@ export default function StockTransfer() {
                               {t('Receive')}
                             </Button>
                           )}
-                          {isSingle && tr.status === 'in_transit' && (isSource || isDest) && (
+                          {canManage && isSingle && tr.status === 'in_transit' && (isSource || isDest) && (
                             <Button
                               size='sm'
                               variant='ghost'

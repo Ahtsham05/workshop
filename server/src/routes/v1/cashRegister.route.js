@@ -9,16 +9,19 @@ const router = express.Router();
 
 router.use(auth(), branchScope());
 
-router.route('/').get(cashRegisterController.getRegister).put(validate(cashRegisterValidation.saveRegister), cashRegisterController.saveRegister);
+router
+  .route('/')
+  .get(auth('viewCashRegister'), cashRegisterController.getRegister)
+  .put(auth('manageCashRegister'), validate(cashRegisterValidation.saveRegister), cashRegisterController.saveRegister);
 
-router.route('/clear').post(cashRegisterController.clearRegister);
+router.route('/clear').post(auth('manageCashRegister'), cashRegisterController.clearRegister);
 
-router.route('/movements').get(validate(cashRegisterValidation.getMovements), cashRegisterController.getMovements);
+router.route('/movements').get(auth('viewCashRegister'), validate(cashRegisterValidation.getMovements), cashRegisterController.getMovements);
 
-router.route('/history').get(validate(cashRegisterValidation.getHistory), cashRegisterController.getHistory);
+router.route('/history').get(auth('viewCashRegister'), validate(cashRegisterValidation.getHistory), cashRegisterController.getHistory);
 
 router
   .route('/history/:id')
-  .delete(validate(cashRegisterValidation.deleteHistoryEntry), cashRegisterController.deleteHistoryEntry);
+  .delete(auth('manageCashRegister'), validate(cashRegisterValidation.deleteHistoryEntry), cashRegisterController.deleteHistoryEntry);
 
 module.exports = router;

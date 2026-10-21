@@ -11,22 +11,22 @@ router.use(auth(), branchScope());
 
 router
   .route('/')
-  .post(validate(serviceValidation.createService), serviceController.createService)
-  .get(validate(serviceValidation.getServices), serviceController.getServices);
+  .post(auth('manageServices'), validate(serviceValidation.createService), serviceController.createService)
+  .get(auth('viewServices'), validate(serviceValidation.getServices), serviceController.getServices);
 
 router
   .route('/:serviceId')
-  .patch(validate(serviceValidation.updateService), serviceController.updateService)
-  .delete(validate(serviceValidation.deleteService), serviceController.deleteService);
+  .patch(auth('manageServices'), validate(serviceValidation.updateService), serviceController.updateService)
+  .delete(auth('manageServices'), validate(serviceValidation.deleteService), serviceController.deleteService);
 
 router
   .route('/invoices')
-  .post(validate(serviceValidation.createServiceInvoice), serviceController.createServiceInvoice)
-  .get(validate(serviceValidation.getServiceInvoices), serviceController.getServiceInvoices);
+  .post(auth('manageServices'), validate(serviceValidation.createServiceInvoice), serviceController.createServiceInvoice)
+  .get(auth('viewServices'), validate(serviceValidation.getServiceInvoices), serviceController.getServiceInvoices);
 
 router
   .route('/invoices/:invoiceId')
-  .patch(validate(serviceValidation.updateServiceInvoice), serviceController.updateServiceInvoice)
-  .delete(validate(serviceValidation.deleteServiceInvoice), serviceController.deleteServiceInvoice);
+  .patch(auth('manageServices'), validate(serviceValidation.updateServiceInvoice), serviceController.updateServiceInvoice)
+  .delete(auth('manageServices'), validate(serviceValidation.deleteServiceInvoice), serviceController.deleteServiceInvoice);
 
 module.exports = router;

@@ -1137,7 +1137,10 @@ const ur: Record<string, string> = {
     "managePayments": "ادائیگیوں کا انتظام کریں",
     
     // Users Management
-    "users_management": "صارفین کا انتظام",
+    "users_management": "صارفین اور عملہ",
+    "add_user": "صارف شامل کریں",
+    "password": "پاس ورڈ",
+    "role": "رول",
     "users_management_description": "صارفین کا انتظام کریں اور رولز تفویض کریں",
     "all_users": "تمام صارفین",
     "users_list_description": "تمام سسٹم صارفین دیکھیں اور ان کا انتظام کریں",

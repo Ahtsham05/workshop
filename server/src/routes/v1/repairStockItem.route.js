@@ -11,14 +11,14 @@ const router = express.Router();
 router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeatureAccess('repair'));
 
 // Named sub-routes BEFORE /:itemId
-router.get('/summary', c.getLedgerSummary);
-router.post('/use', validate(v.createUsage), c.createUsage);
+router.get('/summary', auth('viewRepairs'), c.getLedgerSummary);
+router.post('/use', auth('manageRepairs'), validate(v.createUsage), c.createUsage);
 
 router.route('/')
-  .get(validate(v.getLedger), c.getLedger)
-  .post(validate(v.createPurchase), c.createPurchase);
+  .get(auth('viewRepairs'), validate(v.getLedger), c.getLedger)
+  .post(auth('manageRepairs'), validate(v.createPurchase), c.createPurchase);
 
 router.route('/:itemId')
-  .delete(validate(v.deleteEntry), c.deleteEntry);
+  .delete(auth('manageRepairs'), validate(v.deleteEntry), c.deleteEntry);
 
 module.exports = router;

@@ -10,13 +10,13 @@ const router = express.Router();
 
 router.use(auth(), branchScope());
 
-router.route('/').get(validate(cashBookValidation.getCashBookEntries), cashBookController.getCashBookEntries);
+router.route('/').get(auth('viewCashBook'), validate(cashBookValidation.getCashBookEntries), cashBookController.getCashBookEntries);
 
-router.route('/summary').get(validate(cashBookValidation.getCashBookSummary), cashBookController.getCashBookSummary);
+router.route('/summary').get(auth('viewCashBook'), validate(cashBookValidation.getCashBookSummary), cashBookController.getCashBookSummary);
 
 router
   .route('/opening-balance')
-  .get(cashBookController.getOpeningBalance)
-  .post(validate(cashBookValidation.setOpeningBalance), cashBookController.setOpeningBalance);
+  .get(auth('viewCashBook'), cashBookController.getOpeningBalance)
+  .post(auth('manageCashBook'), validate(cashBookValidation.setOpeningBalance), cashBookController.setOpeningBalance);
 
 module.exports = router;

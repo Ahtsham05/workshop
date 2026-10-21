@@ -1,4 +1,5 @@
 const express = require('express');
+const { CATALOG_TAXONOMY_READERS } = require('../../config/permissionSets');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
@@ -17,11 +18,11 @@ router
     validate(brandValidation.createBrand),
     brandController.createBrand
   )
-  .get(auth('viewBrands'), validate(brandValidation.getBrands), brandController.getBrands);
+  .get(auth('viewBrands', ...CATALOG_TAXONOMY_READERS), validate(brandValidation.getBrands), brandController.getBrands);
 
 router
   .route('/all')
-  .get(auth('viewBrands'), validate(brandValidation.getAllBrands), brandController.getAllBrands);
+  .get(auth('viewBrands', ...CATALOG_TAXONOMY_READERS), validate(brandValidation.getAllBrands), brandController.getAllBrands);
 
 router
   .route('/upload-image')

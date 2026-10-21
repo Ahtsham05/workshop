@@ -10,6 +10,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { matchesBilingualSearch } from '@/utils/urdu-text-utils'
+import { usePermissions } from '@/context/permission-context'
 
 export interface CustomerSuggestion {
   _id?: string
@@ -69,6 +70,14 @@ export function CustomerPhoneAutocomplete({
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // Each extra source is another module's records: search it only for roles that may see it.
+  const { hasPermission } = usePermissions()
+  const repairsOn = !!searchRepairRecords && hasPermission('viewRepairs')
+  const simSalesOn = !!searchSimSaleRecords && hasPermission('viewSimSales')
+  const installmentsOn = !!searchInstallmentRecords && hasPermission('viewInstallments')
+  const servicesOn = !!searchServiceRecords && hasPermission('viewServices')
+  const loadSalesOn = !!searchLoadSaleRecords && (hasPermission('viewLoadManagement') || hasPermission('viewCashManagement'))
+
   // Debounce the search term so we don't fire a request on every keystroke
   const [debouncedValue, setDebouncedValue] = useState(value)
   useEffect(() => {
@@ -78,12 +87,12 @@ export function CustomerPhoneAutocomplete({
 
   // Only search sim-sales server-side when user has typed enough — avoids bulk fetch
   const simSaleSearchTerm =
-    searchSimSaleRecords && debouncedValue && debouncedValue.length >= 2 ? debouncedValue.trim() : ''
+    simSalesOn && debouncedValue && debouncedValue.length >= 2 ? debouncedValue.trim() : ''
 
   const { data: allCustomersRaw } = useGetAllCustomersQuery(undefined)
   const { data: repairData } = useGetRepairJobsQuery(
     { page: 1, limit: ALL_RECORDS_LIMIT },
-    { skip: !searchRepairRecords },
+    { skip: !repairsOn },
   )
   const { data: simSaleData } = useGetSimSalesQuery(
     { page: 1, limit: 20, search: simSaleSearchTerm },
@@ -91,15 +100,15 @@ export function CustomerPhoneAutocomplete({
   )
   const { data: installmentData } = useGetInstallmentPlansQuery(
     { page: 1, limit: ALL_RECORDS_LIMIT },
-    { skip: !searchInstallmentRecords },
+    { skip: !installmentsOn },
   )
   const { data: serviceData } = useGetServiceInvoicesQuery(
     { page: 1, limit: ALL_RECORDS_LIMIT },
-    { skip: !searchServiceRecords },
+    { skip: !servicesOn },
   )
   const { data: loadSaleData } = useGetLoadTransactionsQuery(
     { page: 1, limit: ALL_RECORDS_LIMIT },
-    { skip: !searchLoadSaleRecords },
+    { skip: !loadSalesOn },
   )
 
   // Merge all data sources into a deduplicated CustomerSuggestion list.

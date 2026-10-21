@@ -293,10 +293,17 @@ export default function InvoicePage() {
   const preferredLanguage = useSelector((state: RootState) => state.auth.data?.user?.preferredLanguage || 'en')
   const search = useSearch({ from: '/_authenticated/invoice/' })
 
+  // A role may create invoices without seeing the list (or the other way round): the
+  // list, history and pending-conversion tools only appear with viewInvoices.
+  const canViewList = hasExplicitPermission('viewInvoices')
+  const canConvertPending = canViewList && hasExplicitPermission('editInvoices')
+  const canCreate = hasExplicitPermission('createInvoices')
+  const canPrint = hasExplicitPermission('printInvoices')
+
   const initialView =
-    search.view === 'list' || search.view === 'convert-pending'
+    (search.view === 'list' && canViewList) || (search.view === 'convert-pending' && canConvertPending)
       ? search.view
-      : hasExplicitPermission('createInvoices')
+      : canCreate || !canViewList
         ? 'create'
         : 'list'
   
@@ -1663,7 +1670,7 @@ export default function InvoicePage() {
     // Refresh products to ensure we have the latest stock data from server
     refreshProducts()
     
-    setCurrentView('list')
+    setCurrentView(canViewList ? 'list' : 'create')
     setEditingInvoice(null)
   }
 
@@ -1800,54 +1807,60 @@ export default function InvoicePage() {
               flush left with empty space beside them. */}
           <div className={cn('flex flex-wrap items-center gap-2', showProductCatalog ? 'justify-end' : 'justify-between')}>
             <div className='flex flex-wrap items-center gap-2'>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                className='gap-2 shadow-sm'
-                onClick={() => setCurrentView('list')}
-              >
-                <History className='h-4 w-4 shrink-0' aria-hidden />
-                {t('invoice_history')}
-              </Button>
-              <TransactionHistoryButton
-                mode='sale'
-                currentParty={
-                  invoice.customerId && invoice.customerId !== 'walk-in'
-                    ? {
-                        id: invoice.customerId,
-                        name:
-                          invoice.customerName ||
-                          customers.find((c) => c._id === invoice.customerId)?.name ||
-                          t('customer'),
-                      }
-                    : null
-                }
-              />
-              <RecordNavigatorButton
-                mode='sale'
-                currentParty={
-                  invoice.customerId && invoice.customerId !== 'walk-in'
-                    ? {
-                        id: invoice.customerId,
-                        name:
-                          invoice.customerName ||
-                          customers.find((c) => c._id === invoice.customerId)?.name ||
-                          t('customer'),
-                      }
-                    : null
-                }
-              />
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                className='gap-2 shadow-sm'
-                onClick={handleConvertPending}
-              >
-                <Clock className='h-4 w-4 shrink-0' aria-hidden />
-                {t('convert_pending_invoices')}
-              </Button>
+              {canViewList && (
+                <>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    className='gap-2 shadow-sm'
+                    onClick={() => setCurrentView('list')}
+                  >
+                    <History className='h-4 w-4 shrink-0' aria-hidden />
+                    {t('invoice_history')}
+                  </Button>
+                  <TransactionHistoryButton
+                    mode='sale'
+                    currentParty={
+                      invoice.customerId && invoice.customerId !== 'walk-in'
+                        ? {
+                            id: invoice.customerId,
+                            name:
+                              invoice.customerName ||
+                              customers.find((c) => c._id === invoice.customerId)?.name ||
+                              t('customer'),
+                          }
+                        : null
+                    }
+                  />
+                  <RecordNavigatorButton
+                    mode='sale'
+                    currentParty={
+                      invoice.customerId && invoice.customerId !== 'walk-in'
+                        ? {
+                            id: invoice.customerId,
+                            name:
+                              invoice.customerName ||
+                              customers.find((c) => c._id === invoice.customerId)?.name ||
+                              t('customer'),
+                          }
+                        : null
+                    }
+                  />
+                </>
+              )}
+              {canConvertPending && (
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='gap-2 shadow-sm'
+                  onClick={handleConvertPending}
+                >
+                  <Clock className='h-4 w-4 shrink-0' aria-hidden />
+                  {t('convert_pending_invoices')}
+                </Button>
+              )}
               <Button
                 type='button'
                 variant='outline'
@@ -2017,9 +2030,13 @@ export default function InvoicePage() {
           <span className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-emerald-700 dark:text-emerald-400'>
             <kbd className='rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950'>Ctrl+D</kbd>
             {t('save_invoice')}
-            <span className='opacity-50'>·</span>
-            <kbd className='rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950'>Ctrl+Enter</kbd>
-            {t('save_and_print_receipt')}
+            {canPrint && (
+              <>
+                <span className='opacity-50'>·</span>
+                <kbd className='rounded border border-emerald-300 bg-white px-1 font-mono dark:border-emerald-700 dark:bg-emerald-950'>Ctrl+Enter</kbd>
+                {t('save_and_print_receipt')}
+              </>
+            )}
           </span>
         </div>
         </div>

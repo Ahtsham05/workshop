@@ -1,4 +1,5 @@
 const express = require('express');
+const { CUSTOMER_PICKERS } = require('../../config/permissionSets');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
@@ -11,7 +12,7 @@ router.use(auth(), branchScope());
 
 router
   .route('/upload-image')
-  .post(auth('createCustomers'), upload.single('image'), customerController.uploadCustomerImage);
+  .post(auth('createCustomers', 'editCustomers'), upload.single('image'), customerController.uploadCustomerImage);
 
 router
   .route('/scan-image')
@@ -20,11 +21,12 @@ router
 router
   .route('/')
   .post(auth('createCustomers'), validate(customerValidation.createCustomer), customerController.createCustomer)
-  .get(auth('viewCustomers'), validate(customerValidation.getCustomers), customerController.getCustomers);
+  .get(auth(...CUSTOMER_PICKERS), validate(customerValidation.getCustomers), customerController.getCustomers);
 
 router
   .route('/all')
-  .get(auth('viewCustomers'), customerController.getAllCustomers);
+  // The picker list for every screen that records a sale or payment — see config/permissionSets.
+  .get(auth(...CUSTOMER_PICKERS), customerController.getAllCustomers);
 
 router
   .route('/stats')

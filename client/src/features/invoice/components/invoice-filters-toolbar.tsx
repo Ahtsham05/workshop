@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useGetUsersQuery } from '@/stores/users.api'
+import { useCanViewCreatedBy } from '@/components/created-by-cell'
 import { useGetMyBranchesQuery } from '@/stores/branch.api'
 import { useGetAllCustomersQuery } from '@/stores/customer.api'
 import { useLanguage } from '@/context/language-context'
@@ -181,7 +182,9 @@ export function InvoiceFiltersToolbar({
   const [viewName, setViewName] = useState('')
   const [saveViewOpen, setSaveViewOpen] = useState(false)
 
-  const { data: usersData } = useGetUsersQuery({ limit: 200 })
+  // The Created By filter is for roles that may see who created a record.
+  const canFilterByCreator = useCanViewCreatedBy()
+  const { data: usersData } = useGetUsersQuery({ limit: 200 }, { skip: !canFilterByCreator })
   const { data: branches } = useGetMyBranchesQuery()
   // The picker only needs the customer list once the panel is actually opened — filters are
   // a secondary action, so fetching every customer on every list render would be waste.
@@ -554,13 +557,15 @@ export function InvoiceFiltersToolbar({
                 </div>
               </div>
 
-              <MultiSelectFilter
-                label={t('Created By')}
-                placeholder={t('Anyone')}
-                options={userOptions}
-                selected={draft.createdBy}
-                onChange={(values) => onPatchDraft({ createdBy: values })}
-              />
+              {canFilterByCreator && (
+                <MultiSelectFilter
+                  label={t('Created By')}
+                  placeholder={t('Anyone')}
+                  options={userOptions}
+                  selected={draft.createdBy}
+                  onChange={(values) => onPatchDraft({ createdBy: values })}
+                />
+              )}
 
               <div className='space-y-1.5'>
                 <Label className='text-xs font-medium text-muted-foreground'>{t('Warehouse')}</Label>

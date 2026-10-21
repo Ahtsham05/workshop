@@ -12,6 +12,13 @@ export interface User {
   } | null;
   isEmailVerified: boolean;
   isActive: boolean;
+  /** Branches this person can work in (from their branch memberships). */
+  branches?: { id: string; name: string }[];
+  /** The business owner (superAdmin): every branch, every permission, cannot be removed. */
+  isOwner?: boolean;
+  systemRole?: string;
+  photo?: { url?: string };
+  lastSeenAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,6 +29,8 @@ export interface CreateUserRequest {
   password: string;
   role: string;
   isActive?: boolean;
+  /** Branch access granted in the same request as the account. */
+  branchIds?: string[];
 }
 
 export interface UpdateUserRequest {
@@ -30,6 +39,8 @@ export interface UpdateUserRequest {
   password?: string;
   role?: string;
   isActive?: boolean;
+  /** Replaces the user's branch access with exactly these branches. */
+  branchIds?: string[];
 }
 
 export interface UsersResponse {

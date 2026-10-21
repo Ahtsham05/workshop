@@ -91,6 +91,11 @@ export function BatchCell({ row, column, error, label, disabled }: CellProps) {
           ],
     [loaded, extra]
   )
+  // Drag & drop works too — PNG, JPG, WebP, GIF up to 5MB.Drag & drop works too — PNG, JPG, WebP, GIF up to 5MB.
+
+
+
+
 
   const qty = Number(row.quantity) || 0
   const unit = row.unit || row.product?.unit || ''

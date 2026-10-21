@@ -1,4 +1,5 @@
 const express = require('express');
+const { WALLET_READERS } = require('../../config/permissionSets');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
@@ -14,9 +15,12 @@ router.use(auth(), branchScope(), checkFeatureAccess('wallet'));
 
 router
   .route('/')
-  .post(validate(walletValidation.upsertWallet), walletController.upsertWallet)
-  .get(validate(walletValidation.getWallets), walletController.getWallets);
+  .post(auth('manageWallet'), validate(walletValidation.upsertWallet), walletController.upsertWallet)
+  // Every screen that takes or pays money lists the accounts — see config/permissionSets.
+  .get(auth(...WALLET_READERS), validate(walletValidation.getWallets), walletController.getWallets);
 
-router.route('/:walletId').delete(validate(walletValidation.deleteWallet), walletController.deleteWallet);
+router
+  .route('/:walletId')
+  .delete(auth('manageWallet'), validate(walletValidation.deleteWallet), walletController.deleteWallet);
 
 module.exports = router;

@@ -56,7 +56,7 @@ export function QuickTransferProvider({ children }: { children: ReactNode }) {
   const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
   const { data: branches, isError: branchesFailed, refetch: refetchBranches } = useGetMyBranchesQuery()
   // Creating a transfer needs editProducts on the server (inventoryTransfer.route.js).
-  const canTransfer = hasPermission('editProducts') && (branches ?? []).some((b) => b.id !== activeBranchId)
+  const canTransfer = hasPermission('manageStockTransfers') && (branches ?? []).some((b) => b.id !== activeBranchId)
   // Until the branch list and permissions have arrived, "can't transfer" only means "don't know yet".
   const stillLoading = !canTransfer && (!permissions || !activeBranchId || branches === undefined)
 
@@ -109,7 +109,7 @@ export function QuickTransferProvider({ children }: { children: ReactNode }) {
         return
       }
       toast.info(
-        hasPermission('editProducts')
+        hasPermission('manageStockTransfers')
           ? 'Stock transfer needs another branch to send to.'
           : "Your role doesn't allow stock transfers (needs Edit Products).",
         { id: 'quick-transfer' }

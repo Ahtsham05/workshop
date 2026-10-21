@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Membership, Branch } = require('../models');
+const { Membership, Branch, User } = require('../models');
 const ApiError = require('../utils/ApiError');
 const entitlementService = require('./entitlement.service');
 
@@ -19,6 +19,11 @@ const addMember = async (organizationId, branchId, userId, role = 'staff') => {
   const branch = await Branch.findOne({ _id: branchId, organizationId });
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Branch not found in this organization');
+  }
+  // Only people already in this business can be given one of its branches.
+  const user = await User.findOne({ _id: userId, organizationId }).select('_id');
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found in this organization');
   }
 
   // Check if membership already exists
@@ -42,8 +47,8 @@ const addMember = async (organizationId, branchId, userId, role = 'staff') => {
  * @param {ObjectId} membershipId
  * @returns {Promise<void>}
  */
-const removeMember = async (membershipId) => {
-  const membership = await Membership.findById(membershipId);
+const removeMember = async (membershipId, organizationId) => {
+  const membership = await Membership.findOne({ _id: membershipId, organizationId });
   if (!membership) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Membership not found');
   }
@@ -58,8 +63,8 @@ const removeMember = async (membershipId) => {
  * @param {ObjectId} branchId
  * @returns {Promise<Membership[]>}
  */
-const getMembersByBranch = async (branchId) => {
-  return Membership.find({ branchId, isActive: true })
+const getMembersByBranch = async (branchId, organizationId) => {
+  return Membership.find({ branchId, organizationId, isActive: true })
     .populate('userId', 'name email systemRole isActive')
     .populate('branchId', 'name');
 };
@@ -92,8 +97,8 @@ const getUserMemberships = async (userId) => {
  * @param {string} role
  * @returns {Promise<Membership>}
  */
-const updateMemberRole = async (membershipId, role) => {
-  const membership = await Membership.findById(membershipId);
+const updateMemberRole = async (membershipId, role, organizationId) => {
+  const membership = await Membership.findOne({ _id: membershipId, organizationId });
   if (!membership) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Membership not found');
   }
@@ -117,18 +122,17 @@ const createAndInviteStaff = async (organizationId, branchId, userData, assigned
   const { User: UserModel } = require('../models');
   const { roleService } = require('./index');
 
-  if (await UserModel.isEmailTaken(userData.email)) {
-    // User exists — just add membership
-    const existingUser = await UserModel.findOne({ email: userData.email });
-    const membership = await addMember(organizationId, branchId, existingUser._id, assignedRole);
-    // Update user's organizationId if not set
-    if (!existingUser.organizationId) {
-      await UserModel.findByIdAndUpdate(existingUser._id, {
-        organizationId,
-        systemRole: assignedRole,
-        onboardingComplete: true,
-      });
+  const email = String(userData.email || '')
+    .trim()
+    .toLowerCase();
+  const existingUser = await UserModel.findOne({ email });
+  if (existingUser) {
+    // Someone already in this business — just give them the branch. An account that
+    // belongs to another business (or to nobody yet) is never pulled in by email.
+    if (String(existingUser.organizationId) !== String(organizationId)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
     }
+    const membership = await addMember(organizationId, branchId, existingUser._id, assignedRole);
     return { user: existingUser, membership };
   }
 
@@ -144,14 +148,22 @@ const createAndInviteStaff = async (organizationId, branchId, userData, assigned
   }
 
   const newUser = await UserModel.create({
-    ...userData,
+    name: userData.name,
+    email,
+    password: userData.password,
     organizationId,
     systemRole: assignedRole,
     onboardingComplete: true,
     role: roleDoc ? roleDoc._id : undefined,
   });
 
-  const membership = await addMember(organizationId, branchId, newUser._id, assignedRole);
+  let membership;
+  try {
+    membership = await addMember(organizationId, branchId, newUser._id, assignedRole);
+  } catch (error) {
+    await newUser.deleteOne(); // a login with no branch is a wasted seat nobody can use
+    throw error;
+  }
   return { user: newUser, membership };
 };
 

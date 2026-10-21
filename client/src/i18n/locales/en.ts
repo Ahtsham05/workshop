@@ -1483,7 +1483,10 @@ const en: Record<string, string> = {
     "managePayments": "Manage Payments",
     
     // Users Management
-    "users_management": "Users Management",
+    "users_management": "Users & Staff",
+    "add_user": "Add User",
+    "password": "Password",
+    "role": "Role",
     "users_management_description": "Manage users and assign roles",
     "all_users": "All Users",
     "users_list_description": "View and manage all system users",

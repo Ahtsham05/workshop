@@ -7,7 +7,7 @@ const aiAssistantValidation = require('../../validations/aiAssistant.validation'
 const aiAssistantController = require('../../controllers/aiAssistant.controller');
 
 const router = express.Router();
-router.use(auth('viewDashboard'), branchScope());
+router.use(auth('viewAiAssistant'), branchScope());
 
 router
   .route('/conversations')

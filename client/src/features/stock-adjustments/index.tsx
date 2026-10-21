@@ -22,6 +22,7 @@ import {
   type StockAdjustment,
 } from '@/stores/stockAdjustment.api'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -68,8 +69,10 @@ export default function StockAdjustments() {
   const [prefill, setPrefill] = useState<AdjustmentPrefill | null>(null)
   const [reversing, setReversing] = useState<StockAdjustment | null>(null)
 
+  const canManage = usePermissions().hasExplicitPermission('manageStockAdjustments')
+
   useEffect(() => {
-    if (search?.productId) {
+    if (search?.productId && canManage) {
       setPrefill({ productId: search.productId, productName: search.productName })
       setDialogOpen(true)
     }
@@ -121,10 +124,12 @@ export default function StockAdjustments() {
             </p>
           </div>
         </div>
-        <Button onClick={openCreateDialog} className='max-sm:w-full'>
-          <Plus className='mr-2 h-4 w-4' />
-          {t('New Adjustment')}
-        </Button>
+        {canManage && (
+          <Button onClick={openCreateDialog} className='max-sm:w-full'>
+            <Plus className='mr-2 h-4 w-4' />
+            {t('New Adjustment')}
+          </Button>
+        )}
       </div>
 
       {/* Phones: two cards per row like the dashboard; the odd fifth card spans the full width. */}
@@ -297,7 +302,7 @@ export default function StockAdjustments() {
                       )}
                     </TableCell>
                     <TableCell className='text-right'>
-                      {adj.status === 'completed' && !adj.reversalOf && (
+                      {canManage && adj.status === 'completed' && !adj.reversalOf && (
                         <Button size='sm' variant='ghost' onClick={() => setReversing(adj)} disabled={reversingBusy}>
                           <Undo2 className='mr-1 h-3.5 w-3.5' />
                           {t('Reverse')}

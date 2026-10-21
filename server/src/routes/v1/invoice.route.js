@@ -11,7 +11,8 @@ router.use(auth(), branchScope());
 router
   .route('/')
   .post(auth('createInvoices'), validate(invoiceValidation.createInvoice), invoiceController.createInvoice)
-  .get(auth('viewInvoices'), validate(invoiceValidation.getInvoices), invoiceController.getInvoices);
+  // Sales returns pick the invoice being returned from this list.
+  .get(auth('viewInvoices', 'createSalesReturns'), validate(invoiceValidation.getInvoices), invoiceController.getInvoices);
 
 // Settlement-aware invoice list + stat-card totals + CSV/PDF export for the Invoice
 // Management page. Registered ahead of the /:invoiceId catch-all below.
@@ -42,11 +43,11 @@ router
 
 router
   .route('/generate-bill-number')
-  .get(auth('viewInvoices'), invoiceController.generateBillNumber);
+  .get(auth('viewInvoices', 'createInvoices', 'editInvoices'), invoiceController.generateBillNumber);
 
 router
   .route('/next-number')
-  .get(auth('viewInvoices'), invoiceController.getNextInvoiceNumber);
+  .get(auth('viewInvoices', 'createInvoices', 'editInvoices'), invoiceController.getNextInvoiceNumber);
 
 router
   .route('/statistics')

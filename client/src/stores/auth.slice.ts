@@ -149,6 +149,13 @@ const authSlice = createSlice({
         patchStoredUser({ photo: action.payload })
       }
     },
+    /** Fresh role (incl. permissions) from GET /users/me — an admin edited it since login. */
+    setUserRole(state, action: PayloadAction<Record<string, unknown>>) {
+      if (state.data?.user) {
+        state.data.user.role = action.payload
+        patchStoredUser({ role: action.payload })
+      }
+    },
     setUiPreferences(state, action: PayloadAction<object>) {
       if (state.data?.user) {
         const merged = { ...(state.data.user.uiPreferences ?? {}), ...action.payload }
@@ -206,7 +213,7 @@ const authSlice = createSlice({
   },
 });
 
-export const { setUser, setPreferredLanguage, setActiveBranch, setUserPhoto, setUiPreferences } =
+export const { setUser, setPreferredLanguage, setActiveBranch, setUserPhoto, setUiPreferences, setUserRole } =
   authSlice.actions;
 
 export default authSlice.reducer;

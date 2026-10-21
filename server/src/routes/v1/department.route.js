@@ -12,7 +12,8 @@ router.use(auth(), branchScope(), checkFeatureAccess('hr_management'));
 router
   .route('/')
   .post(auth('createDepartments'), validate(departmentValidation.createDepartment), departmentController.createDepartment)
-  .get(auth('getDepartments'), validate(departmentValidation.getDepartments), departmentController.getDepartments);
+  // Designations are grouped by department.
+  .get(auth('getDepartments', 'getDesignations'), validate(departmentValidation.getDepartments), departmentController.getDepartments);
 
 router
   .route('/:departmentId')

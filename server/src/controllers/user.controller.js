@@ -10,9 +10,8 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../middlewares/upl
 const TRACKED_USER_FIELDS = ['name', 'email', 'role', 'systemRole', 'isActive'];
 
 const createUser = catchAsync(async (req, res) => {
-  // Inherit the organization of the authenticated user
-  const organizationId = req.user.organizationId;
-  const user = await userService.createUser({ ...req.body, organizationId });
+  // Role + branch access in one call, inside the requester's own organization.
+  const user = await userService.createTeamUser(req.body, req.user);
   await auditLogService.recordAuditLog({
     req,
     action: 'create',
@@ -21,36 +20,40 @@ const createUser = catchAsync(async (req, res) => {
     entityName: user.name,
     after: user.toObject ? user.toObject() : user,
     fields: TRACKED_USER_FIELDS,
+    metadata: req.body.branchIds ? { branchIds: req.body.branchIds } : undefined,
   });
-  res.status(httpStatus.CREATED).send(user);
+  const [withBranches] = await userService.withBranches([user]);
+  res.status(httpStatus.CREATED).send(withBranches);
 });
 
 const getUsers = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'role']);
-  // Scope to the requesting user's organization only
+  // Scope to the requesting user's organization only. Someone with no organization (a
+  // half-onboarded signup) sees nobody — never the whole platform's user table.
   if (req.user.organizationId) {
     filter.organizationId = req.user.organizationId;
+  } else if (req.user.systemRole !== 'system_admin') {
+    return res.send({ results: [], page: 1, limit: 0, totalPages: 0, totalResults: 0 });
   }
   // Portal-only logins (students & parents) are not "team members" — hide them
   // from the Users Management list.
   filter.schoolRole = { $nin: ['student', 'parent'] };
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await userService.queryUsers(filter, options);
+  result.results = await userService.withBranches(result.results);
   res.send(result);
 });
 
 const getUser = catchAsync(async (req, res) => {
-  const user = await userService.getUserById(req.params.userId);
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
-  }
-  res.send(user);
+  const user = await userService.getTeamUserById(req.params.userId, req.user);
+  const [withBranches] = await userService.withBranches([user]);
+  res.send(withBranches);
 });
 
 const updateUser = catchAsync(async (req, res) => {
-  const before = await userService.getUserById(req.params.userId);
+  const before = await userService.getTeamUserById(req.params.userId, req.user);
   const beforeSnapshot = before && before.toObject ? before.toObject() : before;
-  const user = await userService.updateUserById(req.params.userId, req.body);
+  const user = await userService.updateTeamUser(req.params.userId, req.body, req.user);
   await auditLogService.recordAuditLog({
     req,
     action: 'update',
@@ -60,20 +63,24 @@ const updateUser = catchAsync(async (req, res) => {
     before: beforeSnapshot,
     after: user.toObject ? user.toObject() : user,
     fields: TRACKED_USER_FIELDS,
+    metadata: {
+      ...(req.body.password ? { change: 'password' } : {}),
+      ...(req.body.branchIds ? { branchIds: req.body.branchIds } : {}),
+    },
   });
-  res.send(user);
+  const [withBranches] = await userService.withBranches([user]);
+  res.send(withBranches);
 });
 
 const deleteUser = catchAsync(async (req, res) => {
-  const user = await userService.getUserById(req.params.userId);
-  await userService.deleteUserById(req.params.userId);
+  const user = await userService.deleteTeamUser(req.params.userId, req.user);
   await auditLogService.recordAuditLog({
     req,
     action: 'delete',
     module: 'User',
     entityId: req.params.userId,
-    entityName: user?.name,
-    metadata: { email: user?.email, role: user?.role },
+    entityName: user.name,
+    metadata: { email: user.email, role: user.role && (user.role._id || user.role) },
   });
   res.status(httpStatus.NO_CONTENT).send();
 });
@@ -146,7 +153,8 @@ const deleteMyPhoto = catchAsync(async (req, res) => {
  * is exactly what a profile page is for).
  */
 const getMe = catchAsync(async (req, res) => {
-  const user = await User.findById(req.user.id).populate('role', 'name');
+  // Role permissions are included so the app can pick up a role change without a re-login.
+  const user = await User.findById(req.user.id).populate('role', 'name permissions isSystemRole');
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }

@@ -14,6 +14,7 @@ import {
 } from '@/stores/inventoryTransfer.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useLanguage } from '@/context/language-context'
+import { usePermissions } from '@/context/permission-context'
 import type { RootState } from '@/stores/store'
 import { TransferStatusBadge } from './transfer-status-badge'
 import { buildTransferPrintData, generateTransferHTML, openTransferPrintWindow } from '../utils/print-utils'
@@ -58,14 +59,16 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
   const [completeTransfer, { isLoading: completing }] = useCompleteTransferMutation()
   const [cancelTransfer, { isLoading: cancelling }] = useCancelTransferMutation()
   const busy = completing || cancelling
+  const canManage = usePermissions().hasExplicitPermission('manageStockTransfers')
 
   if (!groupId) return null
 
   const formatDate = (value?: string | null) => formatAppDateTime(value)
 
   const first = items?.[0]
-  const isSource = first ? branchIdOf(first.fromBranchId) === activeBranchId : false
-  const isDest = first ? branchIdOf(first.toBranchId) === activeBranchId : false
+  // Receive / cancel only for roles that manage transfers.
+  const isSource = canManage && first ? branchIdOf(first.fromBranchId) === activeBranchId : false
+  const isDest = canManage && first ? branchIdOf(first.toBranchId) === activeBranchId : false
   const totalQuantity = items?.reduce((sum, i) => sum + i.quantity, 0) || 0
   const totalAmount = items?.reduce((sum, i) => sum + i.quantity * (i.unitCost || 0), 0) || 0
   const receivableIds = items?.filter((i) => i.status === 'in_transit' && isDest).map((i) => i.id) || []

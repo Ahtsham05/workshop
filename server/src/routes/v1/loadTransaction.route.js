@@ -13,13 +13,33 @@ router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeature
 
 router
   .route('/')
-  .post(validate(loadTransactionValidation.createLoadTransaction), loadTransactionController.createLoadTransaction)
-  .get(validate(loadTransactionValidation.getLoadTransactions), loadTransactionController.getLoadTransactions);
+  .post(
+    auth('manageLoadManagement', 'manageCashManagement'),
+    validate(loadTransactionValidation.createLoadTransaction),
+    loadTransactionController.createLoadTransaction
+  )
+  .get(
+    auth('viewLoadManagement', 'viewCashManagement'),
+    validate(loadTransactionValidation.getLoadTransactions),
+    loadTransactionController.getLoadTransactions
+  );
 
 router
   .route('/:transactionId')
-  .get(validate(loadTransactionValidation.getLoadTransaction), loadTransactionController.getLoadTransaction)
-  .patch(validate(loadTransactionValidation.updateLoadTransaction), loadTransactionController.updateLoadTransaction)
-  .delete(validate(loadTransactionValidation.deleteLoadTransaction), loadTransactionController.deleteLoadTransaction);
+  .get(
+    auth('viewLoadManagement', 'viewCashManagement'),
+    validate(loadTransactionValidation.getLoadTransaction),
+    loadTransactionController.getLoadTransaction
+  )
+  .patch(
+    auth('manageLoadManagement', 'manageCashManagement'),
+    validate(loadTransactionValidation.updateLoadTransaction),
+    loadTransactionController.updateLoadTransaction
+  )
+  .delete(
+    auth('manageLoadManagement', 'manageCashManagement'),
+    validate(loadTransactionValidation.deleteLoadTransaction),
+    loadTransactionController.deleteLoadTransaction
+  );
 
 module.exports = router;

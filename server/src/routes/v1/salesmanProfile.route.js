@@ -1,4 +1,5 @@
 const express = require('express');
+const { SALESMAN_PICKERS } = require('../../config/permissionSets');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const branchScope = require('../../middlewares/branchScope');
@@ -15,7 +16,8 @@ router
 
 router
   .route('/all')
-  .get(auth('viewSalesmen'), salesmanProfileController.getAllSalesmanProfiles);
+  // Salesman picker on invoices and mobile-shop jobs — see config/permissionSets.
+  .get(auth(...SALESMAN_PICKERS), salesmanProfileController.getAllSalesmanProfiles);
 
 router
   .route('/:salesmanProfileId')

@@ -35,7 +35,7 @@ const addMember = catchAsync(async (req, res) => {
  * DELETE /v1/memberships/:membershipId
  */
 const removeMember = catchAsync(async (req, res) => {
-  await membershipService.removeMember(req.params.membershipId);
+  await membershipService.removeMember(req.params.membershipId, req.user.organizationId);
   res.status(httpStatus.NO_CONTENT).send();
 });
 
@@ -43,7 +43,7 @@ const removeMember = catchAsync(async (req, res) => {
  * GET /v1/memberships/branch/:branchId
  */
 const getMembersByBranch = catchAsync(async (req, res) => {
-  const members = await membershipService.getMembersByBranch(req.params.branchId);
+  const members = await membershipService.getMembersByBranch(req.params.branchId, req.user.organizationId);
   res.send(members);
 });
 
@@ -73,7 +73,11 @@ const getMyMemberships = catchAsync(async (req, res) => {
  * PATCH /v1/memberships/:membershipId/role
  */
 const updateMemberRole = catchAsync(async (req, res) => {
-  const membership = await membershipService.updateMemberRole(req.params.membershipId, req.body.role);
+  const membership = await membershipService.updateMemberRole(
+    req.params.membershipId,
+    req.body.role,
+    req.user.organizationId
+  );
   res.send(membership);
 });
 

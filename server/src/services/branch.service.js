@@ -59,8 +59,11 @@ const getUserBranches = async (userId, organizationId) => {
  * @param {ObjectId} branchId
  * @returns {Promise<Branch>}
  */
-const getBranchById = async (branchId) => {
-  return Branch.findById(branchId).populate('manager', 'name email');
+/** `{ _id }`, narrowed to one organization when `organizationId` is given. */
+const branchFilter = (branchId, organizationId) => (organizationId ? { _id: branchId, organizationId } : { _id: branchId });
+
+const getBranchById = async (branchId, organizationId = null) => {
+  return Branch.findOne(branchFilter(branchId, organizationId)).populate('manager', 'name email');
 };
 
 /**
@@ -69,8 +72,8 @@ const getBranchById = async (branchId) => {
  * @param {Object} updateBody
  * @returns {Promise<Branch>}
  */
-const updateBranch = async (branchId, updateBody) => {
-  const branch = await Branch.findById(branchId);
+const updateBranch = async (branchId, updateBody, organizationId = null) => {
+  const branch = await Branch.findOne(branchFilter(branchId, organizationId));
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Branch not found');
   }
@@ -78,7 +81,10 @@ const updateBranch = async (branchId, updateBody) => {
   if (design != null && (typeof design !== 'object' || JSON.stringify(design).length > 8000)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Invoice design settings are not valid');
   }
-  Object.assign(branch, updateBody);
+  // A branch never moves between organizations, and its id is not editable.
+  const changes = { ...updateBody };
+  ['organizationId', '_id', 'id'].forEach((key) => delete changes[key]);
+  Object.assign(branch, changes);
   await branch.save();
   return branch;
 };
@@ -88,8 +94,8 @@ const updateBranch = async (branchId, updateBody) => {
  * @param {ObjectId} branchId
  * @returns {Promise<Branch>}
  */
-const deleteBranch = async (branchId) => {
-  const branch = await Branch.findById(branchId);
+const deleteBranch = async (branchId, organizationId = null) => {
+  const branch = await Branch.findOne(branchFilter(branchId, organizationId));
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Branch not found');
   }

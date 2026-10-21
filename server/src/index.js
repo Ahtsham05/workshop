@@ -157,6 +157,7 @@ async function startApplication() {
   try {
     const { roleService } = require('./services');
     await roleService.createDefaultRoles();
+    await roleService.backfillSplitPermissions();
     logger.info('Default roles initialized');
   } catch (error) {
     logger.error('Failed to initialize default roles:', error.message);

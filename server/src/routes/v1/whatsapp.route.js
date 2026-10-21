@@ -7,6 +7,7 @@ const { requireSchoolAdmin } = require('../../middlewares/schoolAccess');
 const { whatsappSendLimiter } = require('../../middlewares/whatsappRateLimit');
 const whatsappValidation = require('../../validations/whatsapp.validation');
 const { whatsappController } = require('../../controllers');
+const { WHATSAPP_SENDERS } = require('../../config/permissionSets');
 
 const router = express.Router();
 
@@ -20,15 +21,17 @@ router.post('/disconnect', manageConnection, whatsappController.disconnectWhatsA
 router.post('/clear-session', manageConnection, whatsappController.clearSession);
 router.post('/test', manageConnection, whatsappController.sendTest);
 
-router.post('/send', whatsappSendLimiter, whatsappController.sendMessage);
+router.post('/send', auth(...WHATSAPP_SENDERS), whatsappSendLimiter, whatsappController.sendMessage);
 router.post(
   '/send-document',
+  auth(...WHATSAPP_SENDERS),
   whatsappSendLimiter,
   validate(whatsappValidation.sendDocument),
   whatsappController.sendDocument,
 );
 router.post(
   '/send-invoice-pdf',
+  auth(...WHATSAPP_SENDERS),
   whatsappSendLimiter,
   validate(whatsappValidation.sendInvoicePdf),
   whatsappController.sendInvoicePdf,

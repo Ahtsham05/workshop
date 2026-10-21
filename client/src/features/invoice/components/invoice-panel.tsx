@@ -260,6 +260,8 @@ export function InvoicePanel({
   const { hasPermission } = usePermissions()
   const canCreateCustomer = hasPermission('createCustomers' as never)
   const canCreateProduct = hasPermission('createProducts' as never)
+  // Without printInvoices the Save & Print buttons are hidden and Ctrl+Enter just saves.
+  const canPrint = hasPermission('printInvoices' as never)
   const { data: walletsData } = useGetWalletsQuery(undefined, { skip: !SHOW_INVOICE_PAYMENT_METHOD_UI })
   const wallets = walletsData?.results?.filter(w => w.isActive) ?? []
   // Sale invoices receive cash — never show wallet balances in the dropdown (money-in form).
@@ -1482,7 +1484,8 @@ export function InvoicePanel({
     }))
   }, [setInvoice])
 
-  const handleSaveInvoice = useCallback(async (printType: 'none' | PaperSize = 'none') => {
+  const handleSaveInvoice = useCallback(async (requestedPrint: 'none' | PaperSize = 'none') => {
+    const printType: 'none' | PaperSize = canPrint ? requestedPrint : 'none'
     // Validate required fields
     if (!invoice.customerId) {
       toast.error('Please select a customer')
@@ -1927,7 +1930,7 @@ export function InvoicePanel({
     } finally {
       setSavingType(null)
     }
-  }, [invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate, confirmNotDuplicate])
+  }, [canPrint, invoice, createInvoice, updateInvoice, isEditing, editingInvoice, editingInvoiceId, t, printInvoice, printA4Invoice, customers, onSaveSuccess, customerBalance, isElectron, online, orgData, branchData, sendMethod, printOrientation, sendSms, sendWhatsAppMessage, invoiceTemplate, confirmNotDuplicate])
 
   useInvoiceSaveShortcuts(
     () => handleSaveInvoice('none'),
@@ -2897,27 +2900,29 @@ export function InvoicePanel({
           )}
           <span className='truncate'>{isEditing ? t('update_invoice') : t('Save Invoice')}</span>
         </Button>
-        <PrintFormatButton
-          onPrint={(paperSize) => handleSaveInvoice(paperSize)}
-          defaultPaperSize={defaultPaperSize}
-          allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
-          size='lg'
-          variant='default'
-          fullWidth
-          disabled={mobileSaveDisabled}
-          className='min-w-0 flex-[1.3]'
-          mainButtonClassName='h-10 min-w-0 bg-emerald-600 hover:bg-emerald-700'
-          mainButtonContent={
-            savingType !== null && savingType !== 'none' ? (
-              <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
-            ) : (
-              <>
-                <Printer className='h-4 w-4 shrink-0' />
-                <span className='ml-1.5 truncate'>{isEditing ? t('update_and_print_receipt') : t('Save & Print Invoice')}</span>
-              </>
-            )
-          }
-        />
+        {canPrint && (
+          <PrintFormatButton
+            onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+            defaultPaperSize={defaultPaperSize}
+            allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+            size='lg'
+            variant='default'
+            fullWidth
+            disabled={mobileSaveDisabled}
+            className='min-w-0 flex-[1.3]'
+            mainButtonClassName='h-10 min-w-0 bg-emerald-600 hover:bg-emerald-700'
+            mainButtonContent={
+              savingType !== null && savingType !== 'none' ? (
+                <Loader2 className='h-4 w-4 shrink-0 animate-spin' />
+              ) : (
+                <>
+                  <Printer className='h-4 w-4 shrink-0' />
+                  <span className='ml-1.5 truncate'>{isEditing ? t('update_and_print_receipt') : t('Save & Print Invoice')}</span>
+                </>
+              )
+            }
+          />
+        )}
       </div>
     </div>
   )
@@ -4201,31 +4206,33 @@ export function InvoicePanel({
                   )}
                 </Button>
 
-                <PrintFormatButton
-                  onPrint={(paperSize) => handleSaveInvoice(paperSize)}
-                  defaultPaperSize={defaultPaperSize}
-                  allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
-                  size="lg"
-                  variant="default"
-                  fullWidth
-                  disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
-                  mainButtonContent={
-                    savingType !== null && savingType !== 'none' ? (
-                      <>
-                        <Loader2 className='h-4 w-4 mr-2 animate-spin' />
-                        {t('saving')}...
-                      </>
-                    ) : (
-                      <>
-                        <Printer className='h-4 w-4 mr-2' />
-                        {isEditing
-                          ? `${t('update_and_print_receipt')} (Ctrl+Enter)`
-                          : `${t('save_and_print_receipt')} (Ctrl+Enter)`
-                        }
-                      </>
-                    )
-                  }
-                />
+                {canPrint && (
+                  <PrintFormatButton
+                    onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+                    defaultPaperSize={defaultPaperSize}
+                    allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+                    size="lg"
+                    variant="default"
+                    fullWidth
+                    disabled={!invoice.customerId || invoice.items.length === 0 || savingType !== null}
+                    mainButtonContent={
+                      savingType !== null && savingType !== 'none' ? (
+                        <>
+                          <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                          {t('saving')}...
+                        </>
+                      ) : (
+                        <>
+                          <Printer className='h-4 w-4 mr-2' />
+                          {isEditing
+                            ? `${t('update_and_print_receipt')} (Ctrl+Enter)`
+                            : `${t('save_and_print_receipt')} (Ctrl+Enter)`
+                          }
+                        </>
+                      )
+                    }
+                  />
+                )}
               </div>
             )}
 
@@ -4352,25 +4359,27 @@ export function InvoicePanel({
               )}
               {isEditing ? t('update_invoice') : t('Save Invoice')}
             </Button>
-            <PrintFormatButton
-              onPrint={(paperSize) => handleSaveInvoice(paperSize)}
-              defaultPaperSize={defaultPaperSize}
-              allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
-              size='sm'
-              variant='default'
-              disabled={disabled}
-              mainButtonClassName='bg-emerald-600 hover:bg-emerald-700'
-              mainButtonContent={
-                savingType !== null && savingType !== 'none' ? (
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                ) : (
-                  <>
-                    <Printer className='h-4 w-4' />
-                    <span className='ml-1.5'>{isEditing ? t('update_and_print_receipt') : t('Save & Print Invoice')}</span>
-                  </>
-                )
-              }
-            />
+            {canPrint && (
+              <PrintFormatButton
+                onPrint={(paperSize) => handleSaveInvoice(paperSize)}
+                defaultPaperSize={defaultPaperSize}
+                allowedFormats={['thermal80', 'thermal58', 'a4', 'a5', 'a4-half-left', 'a4-half-right']}
+                size='sm'
+                variant='default'
+                disabled={disabled}
+                mainButtonClassName='bg-emerald-600 hover:bg-emerald-700'
+                mainButtonContent={
+                  savingType !== null && savingType !== 'none' ? (
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                  ) : (
+                    <>
+                      <Printer className='h-4 w-4' />
+                      <span className='ml-1.5'>{isEditing ? t('update_and_print_receipt') : t('Save & Print Invoice')}</span>
+                    </>
+                  )
+                }
+              />
+            )}
           </div>
         )
         if (stickyActionsContainer) return createPortal(bar, stickyActionsContainer)

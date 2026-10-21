@@ -45,6 +45,7 @@ export function DataTableRowActions({ row, lowStockThreshold, criticalStockThres
   const quickTransfer = useQuickTransfer()
 
   const canEdit = hasPermission('editProducts' as any)
+  const canAdjust = hasPermission('manageStockAdjustments')
   const canDelete = hasPermission('deleteProducts' as any)
   const canCheckPrice = hasPermission('viewPriceChecker')
 
@@ -171,7 +172,7 @@ export function DataTableRowActions({ row, lowStockThreshold, criticalStockThres
               </DropdownMenuShortcut>
             </DropdownMenuItem>
           )}
-          {canEdit && (
+          {canAdjust && (
             <DropdownMenuItem
               onClick={() => {
                 navigate({

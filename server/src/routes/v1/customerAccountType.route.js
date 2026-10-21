@@ -8,12 +8,12 @@ router.use(auth(), branchScope());
 
 router
   .route('/')
-  .get(customerAccountTypeController.getAccountTypes)
-  .post(customerAccountTypeController.createAccountType);
+  .get(auth('viewLoadManagement', 'manageLoadManagement', 'viewCashManagement', 'manageCashManagement', 'viewCustomers', 'createCustomers', 'editCustomers'), customerAccountTypeController.getAccountTypes)
+  .post(auth('manageLoadManagement', 'manageCashManagement', 'editCustomers'), customerAccountTypeController.createAccountType);
 
 router
   .route('/:id')
-  .patch(customerAccountTypeController.updateAccountType)
-  .delete(customerAccountTypeController.deleteAccountType);
+  .patch(auth('manageLoadManagement', 'manageCashManagement', 'editCustomers'), customerAccountTypeController.updateAccountType)
+  .delete(auth('manageLoadManagement', 'manageCashManagement', 'editCustomers'), customerAccountTypeController.deleteAccountType);
 
 module.exports = router;

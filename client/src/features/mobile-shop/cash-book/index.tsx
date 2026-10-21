@@ -28,6 +28,7 @@ import {
   shiftBusinessCalendarDate,
 } from '@/lib/business-timezone'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
+import { usePermissions } from '@/context/permission-context'
 
 export default function CashBookPage() {
   const formatMoney = useFormatMoney()
@@ -57,6 +58,7 @@ export default function CashBookPage() {
   const { data: entries } = useGetCashBookEntriesQuery(queryParams)
   const { data: openingBalanceData } = useGetOpeningBalanceQuery()
   const [setOpeningBalance, { isLoading: savingOpeningBalance }] = useSetOpeningBalanceMutation()
+  const canManage = usePermissions().hasExplicitPermission('manageCashBook')
 
   const [editingOpeningBalance, setEditingOpeningBalance] = useState(false)
   const [openingBalanceInput, setOpeningBalanceInput] = useState('')
@@ -117,7 +119,7 @@ export default function CashBookPage() {
               <BookOpen className='h-4 w-4' />
               Manual Opening Balance
             </span>
-            {!editingOpeningBalance && (
+            {canManage && !editingOpeningBalance && (
               <Button variant='ghost' size='sm' onClick={handleEditOpeningBalance}>
                 <Pencil className='h-3.5 w-3.5 mr-1' /> Edit
               </Button>

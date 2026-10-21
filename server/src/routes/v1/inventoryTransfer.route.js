@@ -11,16 +11,20 @@ router.use(auth(), branchScope());
 router
   .route('/')
   .post(
-    auth('editProducts'),
+    auth('manageStockTransfers'),
     validate(inventoryTransferValidation.createTransfer),
     inventoryTransferController.createTransfer
   )
-  .get(auth('viewProducts'), validate(inventoryTransferValidation.getTransfers), inventoryTransferController.getTransfers);
+  .get(
+    auth('viewStockTransfers', 'manageStockTransfers'),
+    validate(inventoryTransferValidation.getTransfers),
+    inventoryTransferController.getTransfers
+  );
 
 router
   .route('/bulk')
   .post(
-    auth('editProducts'),
+    auth('manageStockTransfers'),
     validate(inventoryTransferValidation.createBulkTransfer),
     inventoryTransferController.createBulkTransfer
   );
@@ -28,19 +32,23 @@ router
 router
   .route('/groups/:groupId')
   .get(
-    auth('viewProducts'),
+    auth('viewStockTransfers', 'manageStockTransfers'),
     validate(inventoryTransferValidation.getTransferGroup),
     inventoryTransferController.getTransferGroup
   );
 
 router
   .route('/:transferId')
-  .get(auth('viewProducts'), validate(inventoryTransferValidation.getTransfer), inventoryTransferController.getTransfer);
+  .get(
+    auth('viewStockTransfers', 'manageStockTransfers'),
+    validate(inventoryTransferValidation.getTransfer),
+    inventoryTransferController.getTransfer
+  );
 
 router
   .route('/:transferId/approve')
   .post(
-    auth('editProducts'),
+    auth('manageStockTransfers'),
     validate(inventoryTransferValidation.approveTransfer),
     inventoryTransferController.approveTransfer
   );
@@ -48,7 +56,7 @@ router
 router
   .route('/:transferId/complete')
   .post(
-    auth('editProducts'),
+    auth('manageStockTransfers'),
     validate(inventoryTransferValidation.completeTransfer),
     inventoryTransferController.completeTransfer
   );
@@ -56,7 +64,7 @@ router
 router
   .route('/:transferId/cancel')
   .post(
-    auth('editProducts'),
+    auth('manageStockTransfers'),
     validate(inventoryTransferValidation.cancelTransfer),
     inventoryTransferController.cancelTransfer
   );

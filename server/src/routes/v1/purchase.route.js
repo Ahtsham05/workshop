@@ -25,7 +25,8 @@ router
 router
   .route('/')
   .post(auth('createPurchases'), validate(purchaseValidation.createPurchase), purchaseController.createPurchase)
-  .get(auth('viewPurchases'), validate(purchaseValidation.getPurchases), purchaseController.getPurchases);
+  // Purchase returns pick the purchase being returned from this list.
+  .get(auth('viewPurchases', 'createPurchaseReturns'), validate(purchaseValidation.getPurchases), purchaseController.getPurchases);
 
 // Stat-card totals + CSV/PDF export for whatever the list is currently filtered to.
 // Registered ahead of the /:purchaseId catch-all below.
@@ -56,7 +57,7 @@ router
 
 router
   .route('/next-number')
-  .get(auth('viewPurchases'), purchaseController.getNextPurchaseInvoiceNumber);
+  .get(auth('viewPurchases', 'createPurchases', 'editPurchases'), purchaseController.getNextPurchaseInvoiceNumber);
 
 // Purchase price intelligence — bulk "last purchase price" lookup for the New Purchase
 // form's price-change indicator. Registered ahead of the /:purchaseId catch-all below.

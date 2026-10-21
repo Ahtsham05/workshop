@@ -10,8 +10,15 @@ const router = express.Router();
 
 router
   .route('/')
-  .post(auth(), checkPermission('createUsers'), validate(userValidation.createUser), userController.createUser)
-  .get(auth(), checkPermission('viewUsers'), validate(userValidation.getUsers), userController.getUsers);
+  // manageStaff/viewStaff kept as alternatives: they used to drive the separate Staff page.
+  .post(
+    auth(),
+    checkPermission('createUsers', 'manageStaff'),
+    validate(userValidation.createUser),
+    userController.createUser
+  )
+  // Also the staff picker for the Created By filter and for assigning leads.
+  .get(auth(), checkPermission('viewUsers', 'viewStaff', 'viewCreatedBy', 'viewAllLeads', 'createLeads', 'editLeads'), validate(userValidation.getUsers), userController.getUsers);
 
 router
   .route('/language')
@@ -43,8 +50,8 @@ router
 
 router
   .route('/:userId')
-  .get(auth(), checkPermission('viewUsers'), validate(userValidation.getUser), userController.getUser)
-  .patch(auth(), checkPermission('editUsers'), validate(userValidation.updateUser), userController.updateUser)
+  .get(auth(), checkPermission('viewUsers', 'viewStaff'), validate(userValidation.getUser), userController.getUser)
+  .patch(auth(), checkPermission('editUsers', 'manageStaff'), validate(userValidation.updateUser), userController.updateUser)
   .delete(auth(), checkPermission('deleteUsers'), validate(userValidation.deleteUser), userController.deleteUser);
 
 module.exports = router;

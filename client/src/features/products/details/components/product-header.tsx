@@ -70,6 +70,7 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit, parent }: P
   const { product, metrics, lastPurchase, lastSale } = data
 
   const canEdit = hasPermission('editProducts')
+  const canAdjust = hasPermission('manageStockAdjustments')
   const canPurchase = hasPermission('createPurchases') && !product.hasVariants
   const canCheckPrice = hasPermission('viewPriceChecker')
   const reorderQty = suggestReorderQuantity(metrics)
@@ -212,7 +213,7 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit, parent }: P
                 {t('Check Price')}
               </Button>
             ) : null}
-            {canEdit ? (
+            {canAdjust ? (
               <Button
                 variant='outline'
                 className={cn('h-9 w-full gap-2 md:w-auto', !canPurchase && !canCheckPrice && 'col-span-2 md:col-span-1')}

@@ -4,6 +4,7 @@ import type { AppDispatch, RootState } from '@/stores/store'
 import { fetchSuppliers } from '@/stores/supplier.slice'
 import { fetchCategories } from '@/stores/category.slice'
 import { useGetUsersQuery } from '@/stores/users.api'
+import { useCanViewCreatedBy } from '@/components/created-by-cell'
 import { useGetMyBranchesQuery } from '@/stores/branch.api'
 import { useLanguage } from '@/context/language-context'
 import { cn } from '@/lib/utils'
@@ -186,7 +187,9 @@ export function PurchaseFiltersToolbar({
 
   const suppliersRaw = useSelector((state: RootState) => state.supplier.data)
   const categories = useSelector((state: RootState) => state.category.categories)
-  const { data: usersData } = useGetUsersQuery({ limit: 200 })
+  // The Created By filter is for roles that may see who created a record.
+  const canFilterByCreator = useCanViewCreatedBy()
+  const { data: usersData } = useGetUsersQuery({ limit: 200 }, { skip: !canFilterByCreator })
   const { data: branches } = useGetMyBranchesQuery()
 
   // The pickers only need their lists once the panel is actually opened — filters are a
@@ -567,13 +570,15 @@ export function PurchaseFiltersToolbar({
                 </div>
               </div>
 
-              <MultiSelectFilter
-                label={t('Created By')}
-                placeholder={t('Anyone')}
-                options={userOptions}
-                selected={draft.createdBy}
-                onChange={(values) => onPatchDraft({ createdBy: values })}
-              />
+              {canFilterByCreator && (
+                <MultiSelectFilter
+                  label={t('Created By')}
+                  placeholder={t('Anyone')}
+                  options={userOptions}
+                  selected={draft.createdBy}
+                  onChange={(values) => onPatchDraft({ createdBy: values })}
+                />
+              )}
 
               <div className='space-y-1.5'>
                 <Label className='text-xs font-medium text-muted-foreground'>{t('Category')}</Label>

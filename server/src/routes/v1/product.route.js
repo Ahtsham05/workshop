@@ -23,6 +23,14 @@ const CATALOG_READ_PERMISSIONS = [
   'viewInvoices', 'createInvoices', 'editInvoices',
   'viewPurchases', 'createPurchases', 'editPurchases',
   'viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders',
+  'createSalesReturns', 'createPurchaseReturns',
+  'viewStockTransfers', 'manageStockTransfers', 'viewStockAdjustments', 'manageStockAdjustments',
+  'countStock', 'approveStockCounts',
+  'viewWarrantyClaims', 'manageWarrantyClaims', 'viewImeiTracking', 'manageImeiTracking',
+  'viewSimSales', 'manageSimSales', 'viewInstallments', 'manageInstallments',
+  'viewRepairs', 'manageRepairs',
+  'viewNewPhones', 'buyNewPhones', 'sellNewPhones', 'viewUsedPhones', 'sellUsedPhones',
+  'viewBarcodeGenerator',
 ];
 
 router
@@ -33,7 +41,8 @@ router
     validate(productValidation.createProduct),
     productController.createProduct
   )
-  .get(auth('viewProducts'), validate(productValidation.getProducts), productController.getProducts);
+  // The Barcode Generator pages through products to print labels.
+  .get(auth('viewProducts', 'viewBarcodeGenerator'), validate(productValidation.getProducts), productController.getProducts);
 
 router
   .route('/all')
