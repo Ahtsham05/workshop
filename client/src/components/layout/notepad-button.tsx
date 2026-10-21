@@ -2,6 +2,7 @@ import { StickyNote } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useOptionalNotepad } from '@/features/notepad/context/notepad-context'
+import { usePermissions } from '@/context/permission-context'
 
 /**
  * Header entry point for the global Notes window. Rendered next to the other header
@@ -10,7 +11,8 @@ import { useOptionalNotepad } from '@/features/notepad/context/notepad-context'
  */
 export function NotepadButton({ className }: { className?: string }) {
   const notepad = useOptionalNotepad()
-  if (!notepad) return null
+  const canUseNotes = usePermissions().hasExplicitPermission('useNotes')
+  if (!notepad || !canUseNotes) return null
 
   return (
     <Button

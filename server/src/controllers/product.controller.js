@@ -13,6 +13,7 @@ const { auditLogService } = require('../services');
 const { userHasAnyPermission } = require('../middlewares/permission');
 const { toDuplicateKeyApiError } = require('../utils/duplicateKeyError');
 const { addedTodayFilter } = require('../utils/addedToday');
+const { stripCostFromBody } = require('../middlewares/costVisibility');
 
 const TRACKED_PRODUCT_FIELDS = ['name', 'price', 'cost', 'stockQuantity', 'lowStockThreshold', 'criticalStockThreshold', 'barcode'];
 
@@ -21,11 +22,9 @@ const TRACKED_PRODUCT_FIELDS = ['name', 'price', 'cost', 'stockQuantity', 'lowSt
 // able to read what the shop paid for stock. Used to redact cost at the API boundary
 // (not just in the UI) so it's never in the response for a role that isn't allowed to
 // see it — see getAllProducts and getPurchasableCatalog.
-const COST_VIEW_PERMISSIONS = [
-  'viewProducts',
-  'viewPurchases', 'createPurchases', 'editPurchases',
-  'viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders',
-];
+// Since viewCostPrices exists this is that one checkbox (roles saved before it were
+// backfilled from the product/purchasing keys that used to imply it).
+const COST_VIEW_PERMISSIONS = ['viewCostPrices'];
 
 /** Strips cost/costPerUnit from a product-ish item (plain object or Mongoose doc). */
 const stripCostFields = (item) => {
@@ -46,6 +45,7 @@ const stripCostFields = (item) => {
 };
 
 const createProduct = catchAsync(async (req, res) => {
+  stripCostFromBody(req); // roles without viewCostPrices can't set (or blank) a cost
   let productData = req.body;
   
   // Handle image upload if file is provided
@@ -237,6 +237,7 @@ const getProduct = catchAsync(async (req, res) => {
 });
 
 const updateProduct = catchAsync(async (req, res) => {
+  stripCostFromBody(req); // roles without viewCostPrices can't set (or blank) a cost
   let productData = req.body;
   
   // Handle image upload if file is provided
@@ -482,6 +483,7 @@ const getProductBranchAvailability = catchAsync(async (req, res) => {
 });
 
 const bulkUpdateProducts = catchAsync(async (req, res) => {
+  stripCostFromBody(req); // roles without viewCostPrices can't set (or blank) a cost
   const { products } = req.body;
   
   try {

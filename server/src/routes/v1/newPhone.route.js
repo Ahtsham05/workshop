@@ -13,7 +13,7 @@ const router = express.Router();
 
 router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeatureAccess('new_phones'));
 
-router.get('/stats', auth('viewNewPhones'), validate(newPhoneValidation.getStats), newPhoneController.getStats);
+router.get('/stats', auth('viewNewPhones', 'viewMobilePhoneReports', 'viewReports'), validate(newPhoneValidation.getStats), newPhoneController.getStats);
 
 // Thin, permission-scoped wrappers around the generic Purchase/Invoice flow — see
 // newPhone.service.js for why these exist instead of calling /purchases and /invoices

@@ -6,7 +6,7 @@ import {
   useGetProductionOrderQuery,
   type ProductionOutput,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -119,6 +119,7 @@ export default function QualityPage() {
     {
       id: 'value',
       header: t('Value'),
+      money: true,
       align: 'right',
       hideBelow: 'lg',
       cell: (o) => (

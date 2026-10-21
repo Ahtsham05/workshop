@@ -22,7 +22,8 @@ import {
   type ScrapReason,
   type ScrapStage,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -190,6 +191,9 @@ function EventRow({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  // " · ₨…" after a summary, left off for roles without viewManufacturingCosts.
+  const canSeeCosts = useCanViewManufacturingCosts()
+  const costSuffix = (n: number) => (canSeeCosts ? ` · ${formatMoney(n)}` : '')
   const { icon: Icon, className } = ICON[e.type]
   const d = e.data
   const unit = order.unit
@@ -222,13 +226,13 @@ function EventRow({
       break
     case 'issue':
       title = `${t('Material issued')} · ${d.number}`
-      detail = `${d.lines} ${t('line(s)')} · ${formatMoney(d.totalCost)}${
+      detail = `${d.lines} ${t('line(s)')}${costSuffix(d.totalCost)}${
         d.isOverIssue ? ` · ${t('over-issue')}` : ''
       }${d.notes ? ` — ${d.notes}` : ''}`
       break
     case 'return':
       title = `${t('Material returned to stock')} · ${d.number}`
-      detail = `${d.lines} ${t('line(s)')} · ${formatMoney(d.totalCost)}${d.notes ? ` — ${d.notes}` : ''}`
+      detail = `${d.lines} ${t('line(s)')}${costSuffix(d.totalCost)}${d.notes ? ` — ${d.notes}` : ''}`
       break
     case 'output':
       title = `${fmtQty(d.quantity)} ${unit} ${t('reported off the line')}`
@@ -259,13 +263,13 @@ function EventRow({
       title = `${fmtQty(d.quantity)} ${unit} ${t('received into finished goods')}`
       detail = `${d.number}${d.source === 'rework' ? ` · ${t('from rework')}` : ''}${
         d.batchNumber ? ` · ${d.batchNumber}` : ''
-      } · ${formatMoney(d.totalCost)}`
+      }${costSuffix(d.totalCost)}`
       break
     case 'scrap':
       title = `${t('Scrap')} · ${fmtQty(d.quantity)} ${d.unit} ${d.productName}`
       detail = `${d.number} · ${t(SCRAP_STAGE_LABELS[d.stage as ScrapStage])} · ${t(
         SCRAP_REASON_LABELS[d.reason as ScrapReason]
-      )} · ${formatMoney(d.totalCost)}`
+      )}${costSuffix(d.totalCost)}`
       break
     case 'operation_started':
       title = `${d.name} ${t('started')}`

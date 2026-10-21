@@ -14,7 +14,8 @@ import {
   type ProductionOrder,
   type ProductionOutput,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
@@ -72,6 +73,7 @@ export function OverviewTab({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { data: pendingOutputs } = useGetOutputsQuery({
     productionOrderId: order.id,
     status: 'pending_qc',
@@ -231,13 +233,17 @@ export function OverviewTab({
             <FlowStage
               icon={Warehouse}
               title={t('Material issued')}
-              value={formatMoney(order.materialCost)}
+              value={
+                canSeeCosts
+                  ? formatMoney(order.materialCost)
+                  : `${order.materials.filter((m) => m.issuedQuantity > EPS).length}/${order.materials.length} ${t('line(s)')}`
+              }
               sub={`${order.materials.filter((m) => !m.isOptional && lineRemaining(m) > EPS).length} ${t('line(s) still to issue')}`}
             />
             <FlowStage
               icon={Factory}
               title={t('In WIP')}
-              value={formatMoney(wipValue)}
+              value={canSeeCosts ? formatMoney(wipValue) : `${order.wipLots.length} ${t('lot(s)')}`}
               sub={order.wipLocation || t('production floor')}
             />
             <FlowStage
@@ -254,7 +260,7 @@ export function OverviewTab({
               icon={PackageCheck}
               title={t('Finished goods')}
               value={`${fmtQty(order.completedQuantity)} ${order.unit}`}
-              sub={formatMoney(order.finishedGoodsValue)}
+              sub={canSeeCosts ? formatMoney(order.finishedGoodsValue) : t('received into stock')}
             />
           </CardContent>
         </Card>

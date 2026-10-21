@@ -170,7 +170,9 @@ export default function ProductionOrderDetail({
 
   // The open tab lives in the URL (?tab=…) so it survives reloads and can be linked.
   const search = useSearch({ strict: false }) as { tab?: string }
-  const tab: DetailTab = isDetailTab(search.tab) ? search.tab : 'overview'
+  // Costs is its own tab only for roles that may see manufacturing costs.
+  const canSeeCosts = hasPermission('viewManufacturingCosts')
+  const tab: DetailTab = isDetailTab(search.tab) && (search.tab !== 'costs' || canSeeCosts) ? search.tab : 'overview'
   const setTab = (next: string) =>
     navigate({
       to: '.' as never,
@@ -702,7 +704,7 @@ export default function ProductionOrderDetail({
       <Tabs value={tab} onValueChange={setTab} className='min-w-0'>
         <div className='-mx-1 overflow-x-auto px-1 [scrollbar-width:none]'>
           <TabsList className='w-max'>
-            {(Object.keys(TAB_LABELS) as DetailTab[]).map((key) => (
+            {(Object.keys(TAB_LABELS) as DetailTab[]).filter((key) => key !== 'costs' || canSeeCosts).map((key) => (
               <TabsTrigger key={key} value={key}>
                 {t(TAB_LABELS[key])}
                 {tabBadge[key]}
@@ -770,9 +772,11 @@ export default function ProductionOrderDetail({
             onRecord={() => setDialog('scrap')}
           />
         </TabsContent>
-        <TabsContent value='costs' className='mt-3'>
-          <CostsTab order={order} />
-        </TabsContent>
+        {canSeeCosts && (
+          <TabsContent value='costs' className='mt-3'>
+            <CostsTab order={order} />
+          </TabsContent>
+        )}
         <TabsContent value='documents' className='mt-3'>
           <DocumentsTab
             order={order}

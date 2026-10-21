@@ -7,9 +7,8 @@ const { userHasAnyPermission } = require('../middlewares/permission');
 const { STOCK_COUNT_PERMISSIONS } = require('../config/stockCountPermissions');
 
 const canApprove = (req) => userHasAnyPermission(req.user, STOCK_COUNT_PERMISSIONS.approve);
-// Same rule as the product catalog: cost belongs to roles that manage products or purchasing.
-const canViewCost = (req) =>
-  userHasAnyPermission(req.user, ['viewProducts', 'approveStockCounts', 'editProducts', 'viewPurchases', 'createPurchases']);
+// Same rule as the product catalog: the viewCostPrices checkbox.
+const canViewCost = (req) => userHasAnyPermission(req.user, ['viewCostPrices']);
 
 const context = async (req) => {
   await resolveWriteBranchId(req);

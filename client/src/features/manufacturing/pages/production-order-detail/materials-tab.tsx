@@ -7,7 +7,8 @@ import {
   type ProductionOrder,
   type RequirementLine,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
@@ -42,6 +43,7 @@ export function MaterialsTab({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const byLine = new Map(
     (requirements?.lines || []).map((l) => [l.materialLineId, l])
   )
@@ -73,11 +75,13 @@ export function MaterialsTab({
           active={shortLines > 0}
           hint={t('after earlier orders’ reservations')}
         />
-        <Stat
-          label={t('Issued value')}
-          value={formatMoney(order.materialCost)}
-          hint={t('net of returns')}
-        />
+        {canSeeCosts && (
+          <Stat
+            label={t('Issued value')}
+            value={formatMoney(order.materialCost)}
+            hint={t('net of returns')}
+          />
+        )}
       </StatGrid>
 
       <Panel
@@ -348,6 +352,7 @@ function ShortageCell({
 function IssueHistory({ orderId }: { orderId: string }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { data } = useGetMaterialIssuesQuery({
     productionOrderId: orderId,
     limit: 50,
@@ -405,9 +410,11 @@ function IssueHistory({ orderId }: { orderId: string }) {
                 <span className='text-muted-foreground'>
                   {fmtDate(issue.issueDate)}
                 </span>
-                <span className='ml-auto font-medium tabular-nums'>
-                  {formatMoney(issue.totalCost)}
-                </span>
+                {canSeeCosts && (
+                  <span className='ml-auto font-medium tabular-nums'>
+                    {formatMoney(issue.totalCost)}
+                  </span>
+                )}
               </div>
               <ul className='mt-1.5 space-y-0.5 text-sm'>
                 {issue.lines.map((line, i) => (

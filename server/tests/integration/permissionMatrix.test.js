@@ -97,8 +97,6 @@ const OUT_OF_SCOPE =
  */
 const SELF_SERVICE = [
   /^\/users\/(me|language)/,
-  /^\/notes/,
-  /^\/chat/,
   /^\/push\//,
   /^\/quick-links/,
   /^\/translate\//,
@@ -111,8 +109,6 @@ const SELF_SERVICE = [
   // Branch names/print header inside your own organization (writes need manageBranches).
   /^\/branches\/?$/,
   /^\/branches\/:branchId$/,
-  // Owner-only, checked in the controller (not a delegable permission).
-  /^\/branch-overview\//,
   /^\/memberships\/me$/,
   /^\/manufacturing\/access$/,
   /^\/company/,

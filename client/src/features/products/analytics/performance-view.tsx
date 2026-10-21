@@ -14,6 +14,7 @@ import { AbcBreakdownCard } from './components/abc-breakdown-card'
 import { MovementBreakdownCard } from './components/movement-breakdown-card'
 import { LeaderboardCard } from './components/leaderboard-card'
 import { RankingsTable, type RankingFilters } from './components/rankings-table'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 /**
  * Products → Performance: how the catalog is actually selling. Every number comes from the
@@ -23,6 +24,7 @@ import { RankingsTable, type RankingFilters } from './components/rankings-table'
 export function PerformanceView() {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canViewCost = useCanViewCostPrices()
   const { preset, range, setPreset, setCustomRange } = useAnalyticsPeriod()
   const [filters, setFilters] = useState<RankingFilters>({ abcClass: '', movement: '', categoryId: '' })
   const rankingsRef = useRef<HTMLDivElement>(null)
@@ -78,15 +80,17 @@ export function PerformanceView() {
           hint={overview ? t('was {{amount}}', { amount: formatMoney(overview.previous.netRevenue) }) : null}
           loading={isLoading}
         />
-        <KpiTile
-          label={t('Gross profit')}
-          value={formatMoney(overview?.totals.netProfit ?? 0)}
-          icon={TrendingUp}
-          tone='success'
-          growth={overview?.growth.profit ?? null}
-          hint={overview ? t('{{margin}} margin', { margin: formatPct(overview.totals.margin) }) : null}
-          loading={isLoading}
-        />
+        {canViewCost && (
+          <KpiTile
+            label={t('Gross profit')}
+            value={formatMoney(overview?.totals.netProfit ?? 0)}
+            icon={TrendingUp}
+            tone='success'
+            growth={overview?.growth.profit ?? null}
+            hint={overview ? t('{{margin}} margin', { margin: formatPct(overview.totals.margin) }) : null}
+            loading={isLoading}
+          />
+        )}
         <KpiTile
           label={t('Units sold')}
           value={formatQty(overview?.totals.netUnits ?? 0)}

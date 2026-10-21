@@ -25,9 +25,11 @@ import { ClassBadge, CountStatusBadge } from './count-badges'
 import { NewCountDialog } from './new-count-dialog'
 import { usePersistedPageSize } from '@/hooks/use-persisted-page-size'
 import { formatAppDateTime } from '@/lib/date-format'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 
 export function CountsTab() {
+  const canViewCost = useCanViewCostPrices()
   const [limit, setLimit] = usePersistedPageSize('stock-counts', 15)
   const { t } = useLanguage()
   const navigate = useNavigate()
@@ -149,7 +151,7 @@ export function CountsTab() {
                     <Plus className='size-3.5' />
                     {t(meta.label)}
                   </div>
-                  <p className='mt-0.5 text-xs text-muted-foreground'>{t(meta.description)}</p>
+                  <p className='mt-0.5 text-xs text-muted-foreground'>{t(meta.description)}{canViewCost && meta.costNote ? ` ${t(meta.costNote)}` : ''}</p>
                 </div>
               </button>
             )

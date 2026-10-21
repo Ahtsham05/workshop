@@ -13,7 +13,8 @@ router.use(auth(), branchScope());
 
 const manageConnection = auth('editSettings', 'manageSchool', 'manageInvoices');
 
-router.get('/connection', manageConnection, whatsappCloudController.getConnection);
+// Reading whether WhatsApp is connected is also what the inbox shows its viewers.
+router.get('/connection', auth('editSettings', 'manageSchool', 'manageInvoices', 'viewWhatsapp', 'manageWhatsapp'), whatsappCloudController.getConnection);
 router.post('/connection/embedded-signup/start', manageConnection, whatsappCloudController.startEmbeddedSignup);
 router.post('/connection/reconnect', manageConnection, whatsappCloudController.reconnect);
 router.post('/connection/disconnect', manageConnection, whatsappCloudController.disconnect);

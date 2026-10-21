@@ -15,7 +15,8 @@ import {
   useGetMaterialIssuesQuery,
   type MaterialIssue,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -152,6 +153,7 @@ export default function MaterialIssuesPage({
 function IssueVouchers() {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search, 300)
   const [kind, setKind] = useState<'all' | 'issue' | 'return' | 'cancelled'>(
@@ -241,6 +243,7 @@ function IssueVouchers() {
     {
       id: 'value',
       header: t('Value'),
+      money: true,
       align: 'right',
       cell: (issue) => (
         <span
@@ -401,9 +404,11 @@ function IssueVouchers() {
                 </span>
                 <KindBadge issue={issue} />
               </div>
-              <span className='text-sm tabular-nums'>
-                {formatMoney(issue.totalCost)}
-              </span>
+              {canSeeCosts && (
+                <span className='text-sm tabular-nums'>
+                  {formatMoney(issue.totalCost)}
+                </span>
+              )}
             </div>
             <div className='text-muted-foreground truncate text-xs'>
               {issue.orderNumber} · {fmtDate(issue.issueDate)} ·{' '}
@@ -465,7 +470,7 @@ function IssueVouchers() {
           <dl className='grid grid-cols-2 gap-4'>
             <Field label={t('Date')}>{fmtDate(open.issueDate)}</Field>
             <Field label={t('Order')}>{open.orderNumber}</Field>
-            <Field label={t('Value')}>{formatMoney(open.totalCost)}</Field>
+            {canSeeCosts && <Field label={t('Value')}>{formatMoney(open.totalCost)}</Field>}
             <Field label={t('Recorded by')}>
               {refName(open.createdBy) || '—'}
             </Field>
@@ -497,9 +502,9 @@ function IssueVouchers() {
                           {t('Batch')} {l.batchNumber} ·{' '}
                         </>
                       )}
-                      {formatMoney(l.unitCost)} / {l.unit}
+                      {canSeeCosts && `${formatMoney(l.unitCost)} / ${l.unit}`}
                     </span>
-                    <span>{formatMoney(l.totalCost)}</span>
+                    {canSeeCosts && <span>{formatMoney(l.totalCost)}</span>}
                   </div>
                   {!!l.serialNumbers?.length && (
                     <div className='text-muted-foreground font-mono text-[11px]'>

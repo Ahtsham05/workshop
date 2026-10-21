@@ -8,10 +8,10 @@ const chatValidation = require('../../validations/chat.validation');
 const chatController = require('../../controllers/chat.controller');
 
 const router = express.Router();
-// No permission gate: every staff member of the organization can talk to every other one,
-// the same way everyone gets Notes. Who sees which conversation is decided per thread in
+// Team chat is the useTeamChat permission (every role had it before it existed — see the
+// backfill in role.service.js). Who sees which conversation is decided per thread in
 // chat.service.js (branch channels by Membership, direct/group threads by participant).
-router.use(auth(), branchScope());
+router.use(auth('useTeamChat'), branchScope());
 
 const uploadChatFile = (req, res, next) =>
   attachmentUpload.single('file')(req, res, (err) => {

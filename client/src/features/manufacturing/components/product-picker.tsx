@@ -9,7 +9,7 @@ import {
 } from '@/stores/manufacturing.api'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import type { AppDispatch } from '@/stores/store'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { afterPaint } from '@/lib/invoice-form-keyboard'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'

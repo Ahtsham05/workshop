@@ -1,6 +1,7 @@
 import { Undo2 } from 'lucide-react'
 import type { ProductionOrder } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,7 @@ export function WipTab({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const lots = order.wipLots.filter((l) => l.quantity > EPS)
   const value = lots.reduce((s, l) => s + l.quantity * (l.unitCost || 0), 0)
   const oldest = lots.reduce<string | null>(
@@ -39,7 +41,7 @@ export function WipTab({
   return (
     <div className='space-y-4'>
       <StatGrid className='md:grid-cols-4'>
-        <Stat label={t('WIP value')} value={formatMoney(value)} />
+        {canSeeCosts && <Stat label={t('WIP value')} value={formatMoney(value)} />}
         <Stat label={t('Lots on the floor')} value={lots.length} />
         <Stat
           label={t('Location')}
@@ -77,9 +79,11 @@ export function WipTab({
                     {t('Batch / serials')}
                   </TableHead>
                   <TableHead className='text-right'>{t('Quantity')}</TableHead>
-                  <TableHead className='text-right max-sm:hidden'>
-                    {t('Value')}
-                  </TableHead>
+                  {canSeeCosts && (
+                    <TableHead className='text-right max-sm:hidden'>
+                      {t('Value')}
+                    </TableHead>
+                  )}
                   <TableHead className='max-lg:hidden'>{t('Issued')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -123,9 +127,11 @@ export function WipTab({
                         {l.unit}
                       </span>
                     </TableCell>
-                    <TableCell className='text-right tabular-nums max-sm:hidden'>
-                      {formatMoney(l.quantity * (l.unitCost || 0))}
-                    </TableCell>
+                    {canSeeCosts && (
+                      <TableCell className='text-right tabular-nums max-sm:hidden'>
+                        {formatMoney(l.quantity * (l.unitCost || 0))}
+                      </TableCell>
+                    )}
                     <TableCell className='text-muted-foreground text-xs max-lg:hidden'>
                       {fmtDate(l.issuedAt)}
                     </TableCell>

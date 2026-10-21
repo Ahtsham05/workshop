@@ -16,7 +16,8 @@ import type {
   ManufacturingAnalytics,
   ProductionStatus,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { useLanguage } from '@/context/language-context'
 import { useIsPhone } from '@/hooks/use-mobile'
 import { fmtQty, statusLabel } from '../../lib/constants'
@@ -672,12 +673,13 @@ export function MaterialConsumptionChart({ data, fetching }: ChartProps) {
 export function ProductionByProductChart({ data, fetching }: ChartProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { rows, other } = data.productionByProduct
   const ranked: RankRow[] = rows.map((r) => ({
     label: r.productName,
     value: r.quantity,
     display: `${fmtQty(r.quantity)} ${r.unit}`,
-    detail: `${formatMoney(r.value)} ${t('at cost')}`,
+    detail: canSeeCosts ? `${formatMoney(r.value)} ${t('at cost')}` : undefined,
   }))
   return (
     <ChartPanel
@@ -695,11 +697,11 @@ export function ProductionByProductChart({ data, fetching }: ChartProps) {
       height={rankHeight(ranked.length)}
       table={
         <MiniTable
-          head={[t('Product'), t('Units'), t('Value')]}
+          head={canSeeCosts ? [t('Product'), t('Units'), t('Value')] : [t('Product'), t('Units')]}
           rows={rows.map((r) => [
             r.productName,
             `${fmtQty(r.quantity)} ${r.unit}`,
-            formatMoney(r.value),
+            ...(canSeeCosts ? [formatMoney(r.value)] : []),
           ])}
         />
       }
@@ -713,12 +715,13 @@ export function ProductionByProductChart({ data, fetching }: ChartProps) {
 export function ProductionByWorkCenterChart({ data, fetching }: ChartProps) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const rows = data.productionByWorkCenter
   const ranked: RankRow[] = rows.map((r) => ({
     label: r.workCenter || t('Unassigned'),
     value: r.quantity,
     display: compact(r.quantity),
-    detail: `${t('Scrap rate')} ${r.scrapRate}% · ${formatMoney(r.value)} ${t('at cost')}`,
+    detail: canSeeCosts ? `${t('Scrap rate')} ${r.scrapRate}% · ${formatMoney(r.value)} ${t('at cost')}` : `${t('Scrap rate')} ${r.scrapRate}%`,
   }))
   return (
     <ChartPanel
@@ -730,11 +733,11 @@ export function ProductionByWorkCenterChart({ data, fetching }: ChartProps) {
       height={rankHeight(ranked.length)}
       table={
         <MiniTable
-          head={[t('Work center'), t('Units'), t('Value'), t('Scrap rate')]}
+          head={canSeeCosts ? [t('Work center'), t('Units'), t('Value'), t('Scrap rate')] : [t('Work center'), t('Units'), t('Scrap rate')]}
           rows={rows.map((r) => [
             r.workCenter || t('Unassigned'),
             fmtQty(r.quantity),
-            formatMoney(r.value),
+            ...(canSeeCosts ? [formatMoney(r.value)] : []),
             `${r.scrapRate}%`,
           ])}
         />

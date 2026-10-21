@@ -56,6 +56,7 @@ import { buildReportDoc } from '../lib/report-doc'
 import { exportReportToExcel } from '../lib/report-excel'
 import { generateReportHTML } from '../lib/report-print'
 import type { ReportKey, ReportParams } from '../lib/report-types'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 
 type MenuKey = Exclude<ReportKey, 'stock-register'>
 
@@ -196,12 +197,15 @@ export default function ManufacturingReportsPage({
       : batchOptions
 
   const decimals = currency.decimalPlaces ?? 2
+  const canSeeCosts = useCanViewManufacturingCosts()
   const doc = useMemo(
     () =>
       current
         ? buildReportDoc(current, {
             t,
-            currency: currency.symbol?.trim() || currency.code || '',
+            hideMoney: !canSeeCosts,
+            // Money headers are recognised by this suffix, so it may never be empty.
+            currency: currency.symbol?.trim() || currency.code || '¤',
             figure: (n) =>
               `${n < 0 ? '−' : ''}${Math.abs(n).toLocaleString('en-US', {
                 minimumFractionDigits: decimals,
@@ -209,7 +213,7 @@ export default function ManufacturingReportsPage({
               })}`,
           })
         : null,
-    [current, t, currency.symbol, currency.code, decimals]
+    [current, t, currency.symbol, currency.code, decimals, canSeeCosts]
   )
 
   const companyName = resolveBranchCompanyName(org?.name, branch?.name) || org?.name

@@ -1,7 +1,7 @@
 import { CalendarCheck, ClipboardList, PackageOpen, ShieldQuestion } from 'lucide-react'
 import type { AbcClass, StockCountStatus, StockCountType, VarianceReason } from '@/stores/stockCount.api'
 
-export const COUNT_TYPE_META: Record<StockCountType, { label: string; icon: typeof CalendarCheck; description: string }> = {
+export const COUNT_TYPE_META: Record<StockCountType, { label: string; icon: typeof CalendarCheck; description: string; costNote?: string }> = {
   cycle: {
     label: 'Cycle count',
     icon: CalendarCheck,
@@ -15,7 +15,9 @@ export const COUNT_TYPE_META: Record<StockCountType, { label: string; icon: type
   initial: {
     label: 'Initial count',
     icon: PackageOpen,
-    description: 'Count everything once to set the opening stock. Can fill in missing costs.',
+    description: 'Count everything once to set the opening stock.',
+    /** Shown only to roles that may see cost (viewCostPrices). */
+    costNote: 'Can fill in missing costs.',
   },
   custom: {
     label: 'Custom count',

@@ -8,8 +8,8 @@ const router = express.Router();
 router.use(auth(), branchScope());
 
 router.route('/batch').post(auth('manageBillPayments'), agentBillController.createAgentBillsBatch);
-router.route('/report').get(auth('viewBillPayments', 'viewReports'), agentBillController.getAgentBillReport);
-router.route('/').get(auth('viewBillPayments', 'viewReports'), agentBillController.getAgentBills);
+router.route('/report').get(auth('viewBillPayments', 'viewReports', 'viewBillPaymentReports'), agentBillController.getAgentBillReport);
+router.route('/').get(auth('viewBillPayments', 'viewReports', 'viewBillPaymentReports'), agentBillController.getAgentBills);
 router
   .route('/:id')
   .patch(auth('manageBillPayments'), agentBillController.updateAgentBill)

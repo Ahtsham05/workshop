@@ -36,27 +36,27 @@ router
 
 router
   .route('/products-by-category')
-  .get(auth('viewDashboard'), dashboardController.getProductsByCategory);
+  .get(auth('viewDashboard', 'viewProductReports'), dashboardController.getProductsByCategory);
 
 router
   .route('/products-by-brand')
-  .get(auth('viewDashboard'), dashboardController.getProductsByBrand);
+  .get(auth('viewDashboard', 'viewProductReports'), dashboardController.getProductsByBrand);
 
 router
   .route('/category-products/:categoryId')
-  .get(auth('viewDashboard'), dashboardController.getCategoryProducts);
+  .get(auth('viewDashboard', 'viewProductReports'), dashboardController.getCategoryProducts);
 
 router
   .route('/brand-products/:brandId')
-  .get(auth('viewDashboard'), dashboardController.getBrandProducts);
+  .get(auth('viewDashboard', 'viewProductReports'), dashboardController.getBrandProducts);
 
 router
   .route('/products-by-subcategory')
-  .get(auth('viewDashboard'), dashboardController.getProductsBySubCategory);
+  .get(auth('viewDashboard', 'viewProductReports'), dashboardController.getProductsBySubCategory);
 
 router
   .route('/subcategory-products/:subCategoryId')
-  .get(auth('viewDashboard'), dashboardController.getSubCategoryProducts);
+  .get(auth('viewDashboard', 'viewProductReports'), dashboardController.getSubCategoryProducts);
 
 module.exports = router;
 

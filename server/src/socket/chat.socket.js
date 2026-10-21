@@ -7,6 +7,7 @@ const { User } = require('../models');
 const ChatConversation = require('../models/chatConversation.model');
 const chatService = require('../services/chat.service');
 const chatBus = require('./chatBus');
+const { userHasAnyPermission } = require('../middlewares/permission');
 
 /**
  * Live layer for team chat. Sockets RECEIVE pushes (new message, edit, delivery/read
@@ -99,6 +100,8 @@ async function authenticate(token) {
   const user = await User.findById(payload.sub);
   if (!user || user.isActive === false) throw new Error('Not a staff account');
   await chatService.assertChatUser(user);
+  // Same gate as the REST routes: no live messages for a role without Team Chat.
+  if (!(await userHasAnyPermission(user, ['useTeamChat']))) throw new Error('No team chat permission');
   return user;
 }
 

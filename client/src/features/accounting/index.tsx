@@ -36,11 +36,11 @@ export default function AccountingPage() {
   // the full viewAccounting — everything else on this page (Dashboard, Expenses,
   // Recurring, My Account) stays viewAccounting-only.
   const canDashboard = hasPermission('viewAccounting');
-  const canExpenses = hasPermission('viewAccounting');
+  const canExpenses = hasPermission('viewAccounting') || hasPermission('manageExpenses');
   const canCustomers = hasPermission('viewAccounting') || hasPermission('viewCustomers');
   const canSuppliers = hasPermission('viewAccounting') || hasPermission('viewSuppliers');
-  const canRecurring = hasPermission('viewAccounting');
-  const canWallet = hasPermission('viewAccounting');
+  const canRecurring = hasPermission('viewAccounting') || hasPermission('manageExpenses');
+  const canWallet = hasPermission('viewAccounting') || hasPermission('managePersonalWallet');
   const defaultTab = canDashboard ? 'dashboard' : canCustomers ? 'customers' : canSuppliers ? 'suppliers' : 'dashboard';
 
   // Determine active tab from search params or default to the first tab this role can see

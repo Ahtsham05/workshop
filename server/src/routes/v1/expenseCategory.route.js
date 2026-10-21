@@ -7,7 +7,7 @@ const router = express.Router();
 router.use(auth(), branchScope());
 
 router.route('/')
-  .get(auth('viewAccounting', 'manageExpenses', 'viewPayments', 'createPayments'), expenseCategoryController.getCategories)
+  .get(auth('viewAccounting', 'manageExpenses', 'viewPayments', 'createPayments', 'managePersonalWallet'), expenseCategoryController.getCategories)
   .post(auth('manageExpenses'), expenseCategoryController.createCategory);
 
 router.route('/:id')

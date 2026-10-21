@@ -12,7 +12,7 @@ const router = express.Router();
 router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeatureAccess('bill_payment'));
 
 // Report endpoint
-router.get('/report', auth('viewBillPayments'), validate(billPaymentValidation.getBillPaymentReport), billPaymentController.getBillPaymentReport);
+router.get('/report', auth('viewBillPayments', 'viewBillPaymentReports', 'viewReports'), validate(billPaymentValidation.getBillPaymentReport), billPaymentController.getBillPaymentReport);
 
 // Due date range summary
 router.get('/due-summary', auth('viewBillPayments'), validate(billPaymentValidation.getBillDueSummary), billPaymentController.getBillDueSummary);

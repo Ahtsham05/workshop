@@ -29,6 +29,8 @@ import { ProductSuppliersTab } from './components/product-suppliers-tab'
 import { ProductVariantsTab } from './components/product-variants-tab'
 import { useManufacturingAccess } from '@/hooks/use-manufacturing-access'
 import { ProductManufacturingPanel } from '@/features/manufacturing/components/product-manufacturing-panel'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
+import { cn } from '@/lib/utils'
 
 function LoadingState() {
   return (
@@ -58,6 +60,7 @@ export default function ProductDetailsPage({
   initialTab?: string
   from?: 'manufacturing'
 }) {
+  const canViewCost = useCanViewCostPrices()
   const { t } = useLanguage()
   // Manufacturing business type + rollout list + the user's role (useManufacturingAccess).
   const { enabled: showManufacturing } = useManufacturingAccess()
@@ -153,9 +156,10 @@ export default function ProductDetailsPage({
         <ProductInsights insights={analytics.insights} />
       </div>
 
-      <div className='grid grid-cols-1 gap-4 lg:grid-cols-2'>
+      {/* Selling price vs cost is a cost chart (viewCostPrices). */}
+      <div className={cn('grid grid-cols-1 gap-4', canViewCost && 'lg:grid-cols-2')}>
         <StockFlowChart data={analytics} refreshing={refreshing} />
-        <PriceHistoryChart data={analytics} refreshing={refreshing} />
+        {canViewCost && <PriceHistoryChart data={analytics} refreshing={refreshing} />}
       </div>
 
       <Card>

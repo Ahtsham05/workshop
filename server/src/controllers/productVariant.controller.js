@@ -2,8 +2,10 @@ const httpStatus = require('http-status');
 const catchAsync = require('../utils/catchAsync');
 const productVariantService = require('../services/productVariant.service');
 const { toDuplicateKeyApiError } = require('../utils/duplicateKeyError');
+const { stripCostFromBody } = require('../middlewares/costVisibility');
 
 const createProductVariant = catchAsync(async (req, res) => {
+  stripCostFromBody(req); // roles without viewCostPrices can't set (or blank) a cost
   try {
     const variant = await productVariantService.createProductVariant(req.params.productId, req.body);
     res.status(httpStatus.CREATED).send(variant);
@@ -24,6 +26,7 @@ const getProductVariant = catchAsync(async (req, res) => {
 });
 
 const updateProductVariant = catchAsync(async (req, res) => {
+  stripCostFromBody(req); // roles without viewCostPrices can't set (or blank) a cost
   try {
     const variant = await productVariantService.updateProductVariantById(req.params.variantId, req.body);
     res.send(variant);

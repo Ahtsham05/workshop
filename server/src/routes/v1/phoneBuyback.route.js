@@ -13,7 +13,7 @@ const router = express.Router();
 
 router.use(auth(), branchScope(), checkBusinessType('mobile_shop'), checkFeatureAccess('used_phones'));
 
-router.get('/stats', auth('viewUsedPhones'), validate(phoneBuybackValidation.getStats), phoneBuybackController.getStats);
+router.get('/stats', auth('viewUsedPhones', 'viewMobilePhoneReports', 'viewReports'), validate(phoneBuybackValidation.getStats), phoneBuybackController.getStats);
 
 // Thin, permission-scoped wrapper around the generic Invoice flow — see
 // phoneBuyback.service.js#createUsedPhoneSale for why this exists instead of calling
@@ -27,7 +27,7 @@ router
 router
   .route('/')
   .post(auth('buyUsedPhones'), validate(phoneBuybackValidation.createBuyback), phoneBuybackController.createBuyback)
-  .get(auth('viewUsedPhones'), validate(phoneBuybackValidation.getBuybacks), phoneBuybackController.getBuybacks);
+  .get(auth('viewUsedPhones', 'viewMobilePhoneReports', 'viewReports'), validate(phoneBuybackValidation.getBuybacks), phoneBuybackController.getBuybacks);
 
 router
   .route('/:buybackId')

@@ -21,6 +21,7 @@ import {
 import { apiError, COUNT_TYPE_META } from '../lib/labels'
 import { CategoryPicker } from './category-picker'
 import { ClassBadge } from './count-badges'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 interface NewCountDialogProps {
   type: StockCountType | null
@@ -30,6 +31,7 @@ interface NewCountDialogProps {
 
 /** Starts a surprise audit, an initial (opening) count or a custom count. */
 export function NewCountDialog({ type, onOpenChange, policy }: NewCountDialogProps) {
+  const canViewCost = useCanViewCostPrices()
   const { t } = useLanguage()
   const navigate = useNavigate()
   const [createCount, { isLoading }] = useCreateStockCountMutation()
@@ -92,7 +94,7 @@ export function NewCountDialog({ type, onOpenChange, policy }: NewCountDialogPro
             <Icon className='size-4 text-primary' />
             {t(meta.label)}
           </DialogTitle>
-          <DialogDescription>{t(meta.description)}</DialogDescription>
+          <DialogDescription>{t(meta.description)}{canViewCost && meta.costNote ? ` ${t(meta.costNote)}` : ''}</DialogDescription>
         </DialogHeader>
 
         <div className='min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4'>

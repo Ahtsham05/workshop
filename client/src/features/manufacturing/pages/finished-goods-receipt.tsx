@@ -15,7 +15,7 @@ import {
   type ProductionOrder,
   type ProductionOutput,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { getUnitLabel } from '@/lib/units'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'

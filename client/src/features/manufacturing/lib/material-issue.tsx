@@ -535,6 +535,8 @@ export function createIssueConfig(opts: {
   defaultSourceLocation: string
   defaultWipLocation: string
   formatMoney: (n: number) => string
+  /** No estimated cost in the summary (role without viewManufacturingCosts). */
+  hideMoney?: boolean
   renderStatus: (row: IssueRow) => ReactNode
   /** The product cell's prompt and empty-list message (they depend on the mode). */
   productPlaceholder?: string
@@ -782,12 +784,16 @@ export function createIssueConfig(opts: {
             </span>
           ),
         },
-        {
-          key: 'cost',
-          label: 'Est. cost',
-          value: opts.formatMoney(cost),
-          emphasis: true,
-        },
+        ...(opts.hideMoney
+          ? []
+          : [
+              {
+                key: 'cost',
+                label: 'Est. cost',
+                value: opts.formatMoney(cost),
+                emphasis: true,
+              },
+            ]),
       ]
     },
     scan: { behavior: 'increment' },

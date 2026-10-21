@@ -9,6 +9,6 @@ export function useStockCountAccess() {
   return {
     canCount: hasAnyPermission('countStock', 'approveStockCounts', 'editProducts'),
     canApprove: hasAnyPermission('approveStockCounts', 'editProducts'),
-    canViewCost: hasAnyPermission('viewProducts', 'approveStockCounts', 'editProducts', 'viewPurchases', 'createPurchases'),
+    canViewCost: hasAnyPermission('viewCostPrices'),
   }
 }

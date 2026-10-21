@@ -10,7 +10,8 @@ import {
   type ProductionOrder,
   type ProductionOutput,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
@@ -65,6 +66,7 @@ export function QualityTab({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { data } = useGetOutputsQuery({
     productionOrderId: order.id,
     limit: 100,
@@ -213,9 +215,11 @@ export function QualityTab({
                   <TableHead className='text-right'>{t('Produced')}</TableHead>
                   <TableHead className='text-right'>{t('Good')}</TableHead>
                   <TableHead className='text-right'>{t('Rejected')}</TableHead>
-                  <TableHead className='text-right max-md:hidden'>
-                    {t('Unit cost')}
-                  </TableHead>
+                  {canSeeCosts && (
+                    <TableHead className='text-right max-md:hidden'>
+                      {t('Unit cost')}
+                    </TableHead>
+                  )}
                   <TableHead>{t('QC')}</TableHead>
                   {canReverse && <TableHead className='w-10' />}
                 </TableRow>
@@ -275,9 +279,11 @@ export function QualityTab({
                         '—'
                       )}
                     </TableCell>
-                    <TableCell className='num text-right tabular-nums max-md:hidden'>
-                      {formatMoney(o.unitCost)}
-                    </TableCell>
+                    {canSeeCosts && (
+                      <TableCell className='num text-right tabular-nums max-md:hidden'>
+                        {formatMoney(o.unitCost)}
+                      </TableCell>
+                    )}
                     <TableCell>
                       {o.status === 'reversed' ? (
                         <span className='text-xs text-rose-700 dark:text-rose-400'>

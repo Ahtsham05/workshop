@@ -3,8 +3,10 @@ const catchAsync = require('../utils/catchAsync');
 const pick = require('../utils/pick');
 const { stockAdjustmentService, auditLogService } = require('../services');
 const { getBranchContext } = require('../utils/branchFilter');
+const { stripCostFromBody } = require('../middlewares/costVisibility');
 
 const createAdjustment = catchAsync(async (req, res) => {
+  stripCostFromBody(req); // roles without viewCostPrices can't set (or blank) a cost
   const { organizationId, branchId, createdBy } = getBranchContext(req);
   const adjustment = await stockAdjustmentService.createAdjustment({
     organizationId,

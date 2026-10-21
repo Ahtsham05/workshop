@@ -107,6 +107,12 @@ export interface DocContext {
   figure: (n: number) => string
   /** Currency symbol for headers, e.g. "Rs". */
   currency: string
+  /**
+   * The viewer may not see manufacturing costs (viewManufacturingCosts): every money
+   * column and summary figure is dropped, leaving the quantity report. Money is
+   * recognised by its header — all money headers go through withCur().
+   */
+  hideMoney?: boolean
 }
 
 const EPS = 1e-9
@@ -1050,7 +1056,9 @@ function dailyDoc(data: DailyReport, ctx: DocContext): ReportDoc {
       {
         id: 'days',
         title: t('Day-wise issue, production and remaining'),
-        note: t('Opening + issued − returned − used in production − scrapped = remaining on the floor (WIP), valued at issue cost. Output quantities add all products together.'),
+        note: ctx.hideMoney
+          ? t('Output quantities add all products together.')
+          : t('Opening + issued − returned − used in production − scrapped = remaining on the floor (WIP), valued at issue cost. Output quantities add all products together.'),
         columns: cols,
         rows,
         empty: t('No days in this period.'),
@@ -1644,6 +1652,36 @@ function batchTraceDoc(data: BatchTraceReport, ctx: DocContext): ReportDoc {
 }
 
 export function buildReportDoc(data: ManufacturingReport, ctx: DocContext): ReportDoc {
+  const doc = buildFullDoc(data, ctx)
+  return ctx.hideMoney ? withoutMoney(doc, ctx) : doc
+}
+
+/** The quantity-only version of a report (see DocContext.hideMoney). */
+function withoutMoney(doc: ReportDoc, ctx: DocContext): ReportDoc {
+  const suffix = ` (${ctx.currency})`
+  const isMoney = (label?: string) => !!label && label.includes(suffix)
+  return {
+    ...doc,
+    info: doc.info?.filter((i) => !isMoney(i.label)),
+    summary: doc.summary.filter((s) => !isMoney(s.label)),
+    sections: doc.sections
+      .map((section) => {
+        const keep = section.columns.map((c) => !isMoney(c.label) && !isMoney(c.group))
+        const columns = section.columns.filter((_, i) => keep[i])
+        const rows = section.rows.map((row) => {
+          const cells = Object.fromEntries(Object.entries(row.cells).filter(([key]) => columns.some((c) => c.key === key)))
+          // A label spanning the first N columns now spans only those still shown.
+          const labelSpan = row.labelSpan ? keep.slice(0, row.labelSpan).filter(Boolean).length || 1 : row.labelSpan
+          return { ...row, cells, labelSpan }
+        })
+        return { ...section, columns, rows }
+      })
+      // A section that only listed money (nothing but labels left) goes entirely.
+      .filter((section) => section.columns.some((c) => c.align === 'right' || c.align === 'center')),
+  }
+}
+
+function buildFullDoc(data: ManufacturingReport, ctx: DocContext): ReportDoc {
   switch (data.report) {
     case 'production':
       return productionDoc(data, ctx)

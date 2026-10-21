@@ -6,10 +6,12 @@ import { cn } from '@/lib/utils'
 import type { ProductAnalyticsResponse } from '@/stores/productAnalytics.api'
 import { KpiTile } from '../../analytics/components/kpi-tile'
 import { formatDays, formatPct, formatQty } from '../../analytics/lib/analytics-format'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 export function ProductKpis({ data, refreshing }: { data: ProductAnalyticsResponse; refreshing: boolean }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canViewCost = useCanViewCostPrices()
   const { metrics, product, rankedCounts, totalProducts } = data
   const unit = getUnitLabel(product.unit)
 
@@ -26,15 +28,17 @@ export function ProductKpis({ data, refreshing }: { data: ProductAnalyticsRespon
         isNew={metrics.isNew}
         hint={t('{{count}} invoices · was {{amount}}', { count: metrics.invoiceCount, amount: formatMoney(metrics.previous.netRevenue) })}
       />
-      <KpiTile
-        label={t('Gross profit')}
-        value={formatMoney(metrics.netProfit)}
-        icon={TrendingUp}
-        tone={metrics.netProfit < 0 ? 'danger' : 'success'}
-        growth={metrics.profitGrowth}
-        isNew={metrics.isNew}
-        hint={t('{{margin}} margin', { margin: formatPct(metrics.margin) })}
-      />
+      {canViewCost && (
+        <KpiTile
+          label={t('Gross profit')}
+          value={formatMoney(metrics.netProfit)}
+          icon={TrendingUp}
+          tone={metrics.netProfit < 0 ? 'danger' : 'success'}
+          growth={metrics.profitGrowth}
+          isNew={metrics.isNew}
+          hint={t('{{margin}} margin', { margin: formatPct(metrics.margin) })}
+        />
+      )}
       <KpiTile
         label={t('Units sold')}
         value={`${formatQty(metrics.netUnits)} ${unit}`}
@@ -54,9 +58,13 @@ export function ProductKpis({ data, refreshing }: { data: ProductAnalyticsRespon
         icon={Package}
         tone={metrics.currentStock <= 0 ? 'danger' : metrics.daysOfCover !== null && metrics.daysOfCover <= 14 ? 'warning' : 'default'}
         hint={
-          metrics.daysOfCover !== null
-            ? t('{{days}} left · {{value}}', { days: formatDays(metrics.daysOfCover, t), value: formatMoney(metrics.stockValue) })
-            : t('Worth {{value}}', { value: formatMoney(metrics.stockValue) })
+          !canViewCost
+            ? metrics.daysOfCover !== null
+              ? t('{{days}} left', { days: formatDays(metrics.daysOfCover, t) })
+              : undefined
+            : metrics.daysOfCover !== null
+              ? t('{{days}} left · {{value}}', { days: formatDays(metrics.daysOfCover, t), value: formatMoney(metrics.stockValue) })
+              : t('Worth {{value}}', { value: formatMoney(metrics.stockValue) })
         }
       />
       <KpiTile
@@ -69,7 +77,7 @@ export function ProductKpis({ data, refreshing }: { data: ProductAnalyticsRespon
                 pct: `${priceGap > 0 ? '+' : '−'}${Math.abs(priceGap).toFixed(1)}%`,
                 price: formatMoney(listPrice || 0),
               })
-            : metrics.avgPurchaseCost !== null
+            : canViewCost && metrics.avgPurchaseCost !== null
               ? t('Bought at {{cost}} on average', { cost: formatMoney(metrics.avgPurchaseCost) })
               : t('At list price')
         }

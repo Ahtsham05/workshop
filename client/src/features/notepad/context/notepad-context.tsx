@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { NoteRelatedType } from '@/stores/note.api'
+import { usePermissions } from '@/context/permission-context'
 
 export interface NotepadOpenOptions {
   /** Jump straight to a specific note. */
@@ -62,6 +63,8 @@ const isTypingTarget = (target: EventTarget | null): boolean => {
  * Windows Notepad".
  */
 export function NotepadProvider({ children }: { children: ReactNode }) {
+  // Without the useNotes permission the notepad never opens (button, shortcut or links).
+  const canUseNotes = usePermissions().hasExplicitPermission('useNotes')
   const [isOpen, setIsOpen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
   const [openSeq, setOpenSeq] = useState(0)
@@ -70,11 +73,12 @@ export function NotepadProvider({ children }: { children: ReactNode }) {
   const pendingRef = useRef<NotepadOpenOptions | null>(null)
 
   const openNotepad = useCallback((options?: NotepadOpenOptions) => {
+    if (!canUseNotes) return
     pendingRef.current = options ?? null
     setIsMinimized(false)
     setIsOpen(true)
     setOpenSeq((seq) => seq + 1)
-  }, [])
+  }, [canUseNotes])
 
   const closeNotepad = useCallback(() => {
     setIsOpen(false)

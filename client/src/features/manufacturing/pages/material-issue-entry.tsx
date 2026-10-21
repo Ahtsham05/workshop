@@ -47,7 +47,8 @@ import {
 } from '@/stores/manufacturing.api'
 import type { AppDispatch } from '@/stores/store'
 import { toBusinessCalendarDate } from '@/lib/business-timezone'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'
@@ -247,6 +248,8 @@ function IssueEntry({
   const { t } = useLanguage()
   const navigate = useNavigate()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
+  const costSuffix = useCallback((n: number) => (canSeeCosts ? ` · ${formatMoney(n)}` : ''), [canSeeCosts, formatMoney])
   const branchName = useBranchName()
   const dispatch = useDispatch<AppDispatch>()
   const confirm = useConfirm()
@@ -1119,6 +1122,7 @@ function IssueEntry({
       defaultSourceLocation: options?.defaultSourceLocation || '',
       defaultWipLocation: options?.defaultWipLocation || '',
       formatMoney,
+      hideMoney: !canSeeCosts,
       productPlaceholder:
         mode === 'material'
           ? t('Search materials open orders still need')
@@ -1156,7 +1160,7 @@ function IssueEntry({
     })
     // A voucher whose material was already used: its rows can't change (header can).
     return locked ? lockRows(base) : base
-  }, [headerFields, options, formatMoney, mode, lines.length, locked, t])
+  }, [headerFields, options, formatMoney, canSeeCosts, mode, lines.length, locked, t])
 
   /** Bulk quantity actions over every material row. */
   const setQuantities = (how: 'all' | 'available' | 'clear') => {
@@ -1340,12 +1344,12 @@ function IssueEntry({
         toast.success(
           `${saved.issueNumber} ${t('updated')}${
             last?.kind === 'lines'
-              ? ` — ${t('stock re-posted')} · ${formatMoney(saved.totalCost)}`
+              ? ` — ${t('stock re-posted')}${costSuffix(saved.totalCost)}`
               : ` — ${t('no stock moved')}`
           }`
         )
         if (saveMode === 'save-print') {
-          if (!printMaterialIssue(saved, { branchName, formatMoney, t }))
+          if (!printMaterialIssue(saved, { branchName, formatMoney, t, hideMoney: !canSeeCosts }))
             toast.error(t('Allow pop-ups for this site to print'))
         }
         navigate({ to: `${LIST}/${saved.id}` as never, replace: true })
@@ -1353,7 +1357,7 @@ function IssueEntry({
       }
       if (saveMode === 'save-print') {
         const blocked = savedAll.some(
-          (v) => !printMaterialIssue(v, { branchName, formatMoney, t })
+          (v) => !printMaterialIssue(v, { branchName, formatMoney, t, hideMoney: !canSeeCosts })
         )
         if (blocked) toast.error(t('Allow pop-ups for this site to print'))
       }
@@ -1382,8 +1386,8 @@ function IssueEntry({
 
       toast.success(
         forProduct
-          ? `${saved.issueNumber} ${t('posted')} · ${t('production order')} ${saved.orderNumber} ${t('created for')} ${fmtQty(Number(header.produceQuantity))} ${header.productName} · ${formatMoney(saved.totalCost)}`
-          : `${saved.issueNumber} ${t('posted')} · ${saved.lines.length} ${t('line(s) moved to WIP')} · ${formatMoney(saved.totalCost)}`
+          ? `${saved.issueNumber} ${t('posted')} · ${t('production order')} ${saved.orderNumber} ${t('created for')} ${fmtQty(Number(header.produceQuantity))} ${header.productName}${costSuffix(saved.totalCost)}`
+          : `${saved.issueNumber} ${t('posted')} · ${saved.lines.length} ${t('line(s) moved to WIP')}${costSuffix(saved.totalCost)}`
       )
       if (saveMode === 'save-new') {
         setLines([])
@@ -1413,6 +1417,8 @@ function IssueEntry({
       navigate({ to: `${LIST}/${saved.id}` as never, replace: true })
     },
     [
+      canSeeCosts,
+      costSuffix,
       edit,
       editIssue,
       postByMaterial,
@@ -2049,6 +2055,8 @@ function OverrideDialog({
 function IssueView({ issueId }: { issueId: string }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
+  const costSuffix = (n: number) => (canSeeCosts ? ` · ${formatMoney(n)}` : '')
   const branchName = useBranchName()
   const { hasPermission } = usePermissions()
   const navigate = useNavigate()
@@ -2154,8 +2162,8 @@ function IssueView({ issueId }: { issueId: string }) {
         }
         description={
           cancelled
-            ? `${t('Reversed — its material went back to')} ${v.sourceLocation || t('stock')} · ${formatMoney(v.totalCost)}`
-            : `${t('Moved from')} ${v.sourceLocation || t('stock')} ${t('to')} ${v.wipLocation || t('WIP')} · ${formatMoney(v.totalCost)}`
+            ? `${t('Reversed — its material went back to')} ${v.sourceLocation || t('stock')}${costSuffix(v.totalCost)}`
+            : `${t('Moved from')} ${v.sourceLocation || t('stock')} ${t('to')} ${v.wipLocation || t('WIP')}${costSuffix(v.totalCost)}`
         }
         actions={
           <div className='flex flex-wrap gap-2'>
@@ -2183,7 +2191,7 @@ function IssueView({ issueId }: { issueId: string }) {
             <Button
               variant='outline'
               onClick={() => {
-                if (!printMaterialIssue(v, { branchName, formatMoney, t }))
+                if (!printMaterialIssue(v, { branchName, formatMoney, t, hideMoney: !canSeeCosts }))
                   toast.error(t('Allow pop-ups for this site to print'))
               }}
             >
@@ -2290,10 +2298,14 @@ function IssueView({ issueId }: { issueId: string }) {
                 {t('Batch / serials')}
               </th>
               <th className='px-3 py-2 text-right font-medium'>{t('Qty')}</th>
-              <th className='px-3 py-2 text-right font-medium'>
-                {t('Unit cost')}
-              </th>
-              <th className='px-3 py-2 text-right font-medium'>{t('Value')}</th>
+              {canSeeCosts && (
+                <>
+                  <th className='px-3 py-2 text-right font-medium'>
+                    {t('Unit cost')}
+                  </th>
+                  <th className='px-3 py-2 text-right font-medium'>{t('Value')}</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -2318,25 +2330,31 @@ function IssueView({ issueId }: { issueId: string }) {
                 <td className='px-3 py-2 text-right tabular-nums'>
                   {fmtQty(l.quantity)} {l.unit}
                 </td>
-                <td className='px-3 py-2 text-right tabular-nums'>
-                  {formatMoney(l.unitCost || 0)}
-                </td>
-                <td className='px-3 py-2 text-right font-medium tabular-nums'>
-                  {formatMoney(l.totalCost || 0)}
-                </td>
+                {canSeeCosts && (
+                  <>
+                    <td className='px-3 py-2 text-right tabular-nums'>
+                      {formatMoney(l.unitCost || 0)}
+                    </td>
+                    <td className='px-3 py-2 text-right font-medium tabular-nums'>
+                      {formatMoney(l.totalCost || 0)}
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
-          <tfoot>
-            <tr className='border-t font-semibold'>
-              <td colSpan={5} className='px-3 py-2 text-right'>
-                {t('Total value')}
-              </td>
-              <td className='px-3 py-2 text-right tabular-nums'>
-                {formatMoney(v.totalCost)}
-              </td>
-            </tr>
-          </tfoot>
+          {canSeeCosts && (
+            <tfoot>
+              <tr className='border-t font-semibold'>
+                <td colSpan={5} className='px-3 py-2 text-right'>
+                  {t('Total value')}
+                </td>
+                <td className='px-3 py-2 text-right tabular-nums'>
+                  {formatMoney(v.totalCost)}
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       {!!v.overrides?.length && (
@@ -2385,7 +2403,8 @@ function IssueView({ issueId }: { issueId: string }) {
                   {h.note && (
                     <span className='text-muted-foreground'> — “{h.note}”</span>
                   )}
-                  {h.kind === 'lines' &&
+                  {canSeeCosts &&
+                    h.kind === 'lines' &&
                     h.previousTotal !== undefined &&
                     h.newTotal !== undefined && (
                       <span className='text-muted-foreground block text-xs tabular-nums'>
@@ -2560,6 +2579,7 @@ function PostedDialog({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const branchName = useBranchName()
   const list = issues || []
   const total = list.reduce((s, v) => s + (v.totalCost || 0), 0)
@@ -2572,7 +2592,7 @@ function PostedDialog({
             {t('Issued to')} {list.length} {t('production orders')}
           </DialogTitle>
           <DialogDescription>
-            {t('One voucher per order, posted together.')} {formatMoney(total)}
+            {t('One voucher per order, posted together.')} {canSeeCosts && formatMoney(total)}
           </DialogDescription>
         </DialogHeader>
         <ul className='divide-y rounded-lg border'>
@@ -2593,9 +2613,11 @@ function PostedDialog({
                   → {v.orderNumber} · {v.lines.length} {t('line(s)')}
                 </span>
               </span>
-              <span className='shrink-0 tabular-nums'>
-                {formatMoney(v.totalCost)}
-              </span>
+              {canSeeCosts && (
+                <span className='shrink-0 tabular-nums'>
+                  {formatMoney(v.totalCost)}
+                </span>
+              )}
             </li>
           ))}
         </ul>
@@ -2604,7 +2626,7 @@ function PostedDialog({
             variant='outline'
             onClick={() => {
               const blocked = list.some(
-                (v) => !printMaterialIssue(v, { branchName, formatMoney, t })
+                (v) => !printMaterialIssue(v, { branchName, formatMoney, t, hideMoney: !canSeeCosts })
               )
               if (blocked)
                 toast.error(t('Allow pop-ups for this site to print'))

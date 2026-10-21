@@ -7,7 +7,7 @@ import {
   type MaterialUsageMaterial,
   type MaterialUsageOrder,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
@@ -289,6 +289,7 @@ export function MaterialUsageView({
       {
         id: 'value',
         header: t('Issued value'),
+        money: true,
         align: 'right',
         hideBelow: 'md',
         cell: (m) => (

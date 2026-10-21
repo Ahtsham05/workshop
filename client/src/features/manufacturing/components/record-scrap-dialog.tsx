@@ -15,7 +15,7 @@ import {
   type ScrapReason,
 } from '@/stores/manufacturing.api'
 import { getBusinessToday } from '@/lib/business-timezone'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'

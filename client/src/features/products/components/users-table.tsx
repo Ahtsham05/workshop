@@ -37,6 +37,7 @@ import { useFormatMoney } from '@/lib/format-money'
 import { onEnterAdvance, focusField } from '@/lib/invoice-form-keyboard'
 import { useUsers } from '../context/users-context'
 import type { ReactNode } from 'react'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 // Elements a double-click on the row itself shouldn't be hijacked from — the row's own
 // interactive controls (checkboxes, the Active switch, Flag/Stock-alert popovers, the
@@ -237,8 +238,11 @@ const ProductTableRow = React.memo(function ProductTableRow({
   )
 })
 
+/** Columns that show what stock cost — only for roles with viewCostPrices. */
+const COST_COLUMN_IDS = ['cost', 'stockValue', 'listProfit']
+
 export function ProductTable({
-  columns,
+  columns: allColumns,
   data,
   paggination,
   loading,
@@ -253,6 +257,11 @@ export function ProductTable({
   onSortingChange: onSortingChangeProp,
   manualSorting = false,
 }: DataTableProps) {
+  const canViewCost = useCanViewCostPrices()
+  const columns = React.useMemo(
+    () => (canViewCost ? allColumns : allColumns.filter((c) => !COST_COLUMN_IDS.includes(getColumnId(c)))),
+    [allColumns, canViewCost]
+  )
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(loadColumnVisibility)
   const [columnOrder, setColumnOrder] = usePersistedColumnOrder(

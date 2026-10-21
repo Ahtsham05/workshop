@@ -53,15 +53,18 @@ export function SortableCardGrid({
   arranging,
   onReorder,
   className,
+  isVisible,
 }: {
   children: ReactNode
   order: string[]
   arranging: boolean
   onReorder: (ids: string[]) => void
   className?: string
+  /** Leave out cards this viewer may not see (no empty slot in the grid). */
+  isVisible?: (cardId: string) => boolean
 }) {
   const sensors = useArrangeSensors()
-  const cards = flatten(children).filter((c) => c.props.cardId)
+  const cards = flatten(children).filter((c) => c.props.cardId && (!isVisible || isVisible(c.props.cardId)))
   const byId = new Map(cards.map((c) => [c.props.cardId!, c]))
   const defaultIds = cards.map((c) => c.props.cardId!)
   const rank = new Map(order.map((id, i) => [id, i]))

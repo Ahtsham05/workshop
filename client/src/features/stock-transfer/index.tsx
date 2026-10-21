@@ -66,6 +66,8 @@ export default function StockTransfer() {
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const { hasExplicitPermission } = usePermissions()
   const canManage = hasExplicitPermission('manageStockTransfers')
+  // Transfers are valued at cost — the cost/amount columns need viewCostPrices.
+  const canViewCost = hasExplicitPermission('viewCostPrices')
 
   const [view, setView] = useState<'list' | 'bulk'>('list')
   const [statusFilter, setStatusFilter] = useState<TransferStatus | 'all'>('all')
@@ -270,10 +272,12 @@ export default function StockTransfer() {
               <div className='text-xs text-muted-foreground'>{t('Total Quantity')}</div>
               <div className='text-lg font-semibold tabular-nums'>{(totals?.quantity ?? 0).toLocaleString()}</div>
             </div>
-            <div className='col-span-2 rounded-lg border bg-muted/30 px-3 py-2 sm:col-span-1'>
-              <div className='text-xs text-muted-foreground'>{t('Total Amount')} <span className='text-[10px]'>({t('at cost')})</span></div>
-              <div className='text-lg font-semibold tabular-nums'>{formatMoney(totals?.amount ?? 0)}</div>
-            </div>
+            {canViewCost && (
+              <div className='col-span-2 rounded-lg border bg-muted/30 px-3 py-2 sm:col-span-1'>
+                <div className='text-xs text-muted-foreground'>{t('Total Amount')} <span className='text-[10px]'>({t('at cost')})</span></div>
+                <div className='text-lg font-semibold tabular-nums'>{formatMoney(totals?.amount ?? 0)}</div>
+              </div>
+            )}
           </div>
           {period.preset !== 'all' && (dateFrom || dateTo) && (
             <p className='mb-2 text-xs text-muted-foreground'>
@@ -296,8 +300,12 @@ export default function StockTransfer() {
                   <TableHead>{t('From')}</TableHead>
                   <TableHead>{t('To')}</TableHead>
                   <TableHead className='text-right'>{t('Qty')}</TableHead>
-                  <TableHead className='text-right whitespace-nowrap'>{t('Cost Price')}</TableHead>
-                  <TableHead className='text-right'>{t('Amount')}</TableHead>
+                  {canViewCost && (
+                    <>
+                      <TableHead className='text-right whitespace-nowrap'>{t('Cost Price')}</TableHead>
+                      <TableHead className='text-right'>{t('Amount')}</TableHead>
+                    </>
+                  )}
                   <TableHead>{t('Status')}</TableHead>
                   <TableHead className='text-right'>{t('Actions')}</TableHead>
                 </TableRow>
@@ -346,13 +354,17 @@ export default function StockTransfer() {
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.fromBranchId)}</TableCell>
                       <TableCell className='text-sm text-muted-foreground'>{branchName(tr.toBranchId)}</TableCell>
                       <TableCell className='text-right tabular-nums'>{tr.totalQuantity}</TableCell>
-                      <TableCell className='text-right whitespace-nowrap tabular-nums'>
-                        {formatMoney(tr.unitCost || 0)}
-                        {tr.itemCount > 1 && (
-                          <div className='text-[10px] text-muted-foreground'>{t('avg')}</div>
-                        )}
-                      </TableCell>
-                      <TableCell className='text-right whitespace-nowrap font-medium tabular-nums'>{formatMoney(tr.totalAmount || 0)}</TableCell>
+                      {canViewCost && (
+                        <>
+                          <TableCell className='text-right whitespace-nowrap tabular-nums'>
+                            {formatMoney(tr.unitCost || 0)}
+                            {tr.itemCount > 1 && (
+                              <div className='text-[10px] text-muted-foreground'>{t('avg')}</div>
+                            )}
+                          </TableCell>
+                          <TableCell className='text-right whitespace-nowrap font-medium tabular-nums'>{formatMoney(tr.totalAmount || 0)}</TableCell>
+                        </>
+                      )}
                       <TableCell><TransferStatusBadge status={tr.status} /></TableCell>
                       <TableCell className='text-right'>
                         <div className='flex justify-end gap-1.5'>
@@ -406,7 +418,7 @@ export default function StockTransfer() {
                 })}
                 {transfers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className='text-center text-muted-foreground'>
+                    <TableCell colSpan={canViewCost ? 10 : 8} className='text-center text-muted-foreground'>
                       {t('No transfers found')}
                     </TableCell>
                   </TableRow>
@@ -424,8 +436,12 @@ export default function StockTransfer() {
                       )}
                     </TableCell>
                     <TableCell className='text-right tabular-nums'>{(totals?.quantity ?? 0).toLocaleString()}</TableCell>
-                    <TableCell />
-                    <TableCell className='text-right whitespace-nowrap tabular-nums'>{formatMoney(totals?.amount ?? 0)}</TableCell>
+                    {canViewCost && (
+                      <>
+                        <TableCell />
+                        <TableCell className='text-right whitespace-nowrap tabular-nums'>{formatMoney(totals?.amount ?? 0)}</TableCell>
+                      </>
+                    )}
                     <TableCell colSpan={2} />
                   </TableRow>
                 </TableFooter>

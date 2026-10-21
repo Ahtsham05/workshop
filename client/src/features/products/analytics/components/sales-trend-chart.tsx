@@ -8,6 +8,7 @@ import type { Granularity, SeriesPoint } from '@/stores/productAnalytics.api'
 import { formatBucketLabel, formatBucketTooltip, formatCompact, formatQty } from '../lib/analytics-format'
 import { ChartCard, ChartTooltipBox } from './chart-kit'
 import { AXIS_TICK, GRID_STROKE, SERIES_1 } from '../lib/chart-tokens'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 type Metric = 'revenue' | 'profit' | 'unitsSold'
 
@@ -33,6 +34,7 @@ interface Props {
 export function SalesTrendChart({ title, description, series, granularity = 'day', loading, refreshing }: Props) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canViewCost = useCanViewCostPrices()
   const [metric, setMetric] = useState<Metric>('revenue')
 
   const data = useMemo(
@@ -53,7 +55,7 @@ export function SalesTrendChart({ title, description, series, granularity = 'day
       actions={
         <Tabs value={metric} onValueChange={(value) => setMetric(value as Metric)}>
           <TabsList className='h-8'>
-            {(Object.keys(METRIC_LABELS) as Metric[]).map((key) => (
+            {(Object.keys(METRIC_LABELS) as Metric[]).filter((key) => key !== 'profit' || canViewCost).map((key) => (
               <TabsTrigger key={key} value={key} className='px-2.5 text-xs'>
                 {t(METRIC_LABELS[key])}
               </TabsTrigger>
@@ -100,7 +102,7 @@ export function SalesTrendChart({ title, description, series, granularity = 'day
             <TableRow>
               <TableHead>{t('Period')}</TableHead>
               <TableHead className='text-right'>{t('Net sales')}</TableHead>
-              <TableHead className='text-right'>{t('Gross profit')}</TableHead>
+              {canViewCost && <TableHead className='text-right'>{t('Gross profit')}</TableHead>}
               <TableHead className='text-right'>{t('Units sold')}</TableHead>
               <TableHead className='text-right'>{t('Invoices')}</TableHead>
             </TableRow>
@@ -110,7 +112,7 @@ export function SalesTrendChart({ title, description, series, granularity = 'day
               <TableRow key={point.bucket}>
                 <TableCell className='whitespace-nowrap'>{formatBucketTooltip(point.bucket, granularity)}</TableCell>
                 <TableCell className='text-right tabular-nums'>{formatMoney(point.revenue)}</TableCell>
-                <TableCell className='text-right tabular-nums'>{formatMoney(point.profit)}</TableCell>
+                {canViewCost && <TableCell className='text-right tabular-nums'>{formatMoney(point.profit)}</TableCell>}
                 <TableCell className='text-right tabular-nums'>{formatQty(point.unitsSold)}</TableCell>
                 <TableCell className='text-right tabular-nums'>{formatQty(point.invoiceCount)}</TableCell>
               </TableRow>

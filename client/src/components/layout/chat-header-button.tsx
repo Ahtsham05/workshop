@@ -3,10 +3,13 @@ import { MessagesSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useChatUnreadTotal } from '@/features/chats/hooks/use-chat-unread'
+import { usePermissions } from '@/context/permission-context'
 
 /** Header entry point for Team chat, with the live unread count (muted chats excluded). */
 export function ChatHeaderButton({ className }: { className?: string }) {
   const unread = useChatUnreadTotal()
+  const canUseChat = usePermissions().hasExplicitPermission('useTeamChat')
+  if (!canUseChat) return null
   return (
     <Button variant='ghost' size='icon' asChild className={cn('relative rounded-full', className)}>
       <Link to='/chats' title={unread ? `Team chat — ${unread} unread` : 'Team chat'} aria-label={unread ? `Team chat, ${unread} unread` : 'Team chat'}>

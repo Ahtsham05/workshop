@@ -28,6 +28,7 @@ import { AbcBadge, GrowthIndicator, MovementBadge } from './analytics-badges'
 import { MOVEMENT_META } from '../lib/analytics-classes'
 import { ProductThumb } from './product-thumb'
 import { CategoryFilter } from './category-filter'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 export interface RankingFilters {
   abcClass: string
@@ -40,6 +41,9 @@ interface Props {
   filters: RankingFilters
   onFiltersChange: (next: RankingFilters) => void
 }
+
+/** Sorting by these would reveal cost (viewCostPrices). */
+const COST_SORT_FIELDS: RankingSortField[] = ['netProfit', 'margin', 'stockValue']
 
 const SORT_OPTIONS: { value: RankingSortField; label: string }[] = [
   { value: 'netRevenue', label: 'Net sales' },
@@ -70,6 +74,7 @@ export function RankingsTable({ range, filters, onFiltersChange }: Props) {
   const { t } = useLanguage()
   const { showUrdu } = useUrduDisplay()
   const formatMoney = useFormatMoney()
+  const canViewCost = useCanViewCostPrices()
 
   const [searchInput, setSearchInput] = useState('')
   const search = useDebouncedValue(searchInput, 350)
@@ -131,14 +136,13 @@ export function RankingsTable({ range, filters, onFiltersChange }: Props) {
           'Units returned': row.unitsReturned,
           'Net units': row.netUnits,
           'Net sales': row.netRevenue,
-          'Gross profit': row.netProfit,
-          'Margin %': row.margin ?? '',
+          ...(canViewCost ? { 'Gross profit': row.netProfit, 'Margin %': row.margin ?? '' } : {}),
           'Share of sales %': row.revenueShare,
           'Previous period sales': row.previous.netRevenue,
           'Sales growth %': row.revenueGrowth ?? '',
           'Units per day': row.velocity,
           'Stock on hand': row.currentStock,
-          'Stock value': row.stockValue,
+          ...(canViewCost ? { 'Stock value': row.stockValue } : {}),
           'Days of stock left': row.daysOfCover ?? '',
           'Sell-through %': row.sellThrough ?? '',
           'Return rate %': row.returnRate ?? '',
@@ -210,7 +214,7 @@ export function RankingsTable({ range, filters, onFiltersChange }: Props) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {SORT_OPTIONS.map((option) => (
+              {SORT_OPTIONS.filter((o) => canViewCost || !COST_SORT_FIELDS.includes(o.value)).map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {t(option.label)}
                 </SelectItem>
@@ -277,9 +281,11 @@ export function RankingsTable({ range, filters, onFiltersChange }: Props) {
                 <TableHead className='text-right'>
                   <SortHeader field='netRevenue' label={t('Net sales')} />
                 </TableHead>
-                <TableHead className='text-right'>
-                  <SortHeader field='netProfit' label={t('Gross profit')} />
-                </TableHead>
+                {canViewCost && (
+                  <TableHead className='text-right'>
+                    <SortHeader field='netProfit' label={t('Gross profit')} />
+                  </TableHead>
+                )}
                 <TableHead className='text-right'>
                   <SortHeader field='netUnits' label={t('Units sold')} />
                 </TableHead>
@@ -361,14 +367,16 @@ export function RankingsTable({ range, filters, onFiltersChange }: Props) {
                           {row.revenueShare > 0 ? t('{{share}} of sales', { share: formatPct(row.revenueShare) }) : '—'}
                         </p>
                       </TableCell>
-                      <TableCell className='text-right'>
-                        <p className={cn('text-sm font-medium tabular-nums', row.netProfit < 0 && 'text-rose-600 dark:text-rose-400')}>
-                          {formatMoney(row.netProfit)}
-                        </p>
-                        <p className='text-xs text-muted-foreground tabular-nums'>
-                          {row.margin !== null ? t('{{margin}} margin', { margin: formatPct(row.margin) }) : '—'}
-                        </p>
-                      </TableCell>
+                      {canViewCost && (
+                        <TableCell className='text-right'>
+                          <p className={cn('text-sm font-medium tabular-nums', row.netProfit < 0 && 'text-rose-600 dark:text-rose-400')}>
+                            {formatMoney(row.netProfit)}
+                          </p>
+                          <p className='text-xs text-muted-foreground tabular-nums'>
+                            {row.margin !== null ? t('{{margin}} margin', { margin: formatPct(row.margin) }) : '—'}
+                          </p>
+                        </TableCell>
+                      )}
                       <TableCell className='text-right'>
                         <p className='text-sm tabular-nums'>
                           {formatQty(row.netUnits)} <span className='text-xs text-muted-foreground'>{unit}</span>
@@ -388,7 +396,7 @@ export function RankingsTable({ range, filters, onFiltersChange }: Props) {
                           {formatQty(row.currentStock)}
                         </p>
                         <p className='text-xs text-muted-foreground'>
-                          {row.daysOfCover !== null ? t('{{days}} left', { days: formatDays(row.daysOfCover, t) }) : formatMoney(row.stockValue)}
+                          {row.daysOfCover !== null ? t('{{days}} left', { days: formatDays(row.daysOfCover, t) }) : canViewCost ? formatMoney(row.stockValue) : '—'}
                         </p>
                       </TableCell>
                       <TableCell className='pr-6'>

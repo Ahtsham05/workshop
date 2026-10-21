@@ -32,6 +32,7 @@ import { MovementTile } from './movement-tile'
 import { ColorDot } from '@/components/color-swatch-picker'
 import { FlagBadge } from '@/components/flag-badge'
 import { useFormatMoney } from '@/lib/format-money'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 const STOCK_STATUS_STYLES: Record<string, string> = {
   'Out of Stock':
@@ -61,6 +62,8 @@ function StockStatusBadge({ status }: { status: string }) {
 const PAGE_SIZE = 50
 
 export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
+  // Cost per unit and stock value are for roles with viewCostPrices.
+  const canViewCost = useCanViewCostPrices()
   const { t, language } = useLanguage()
   const [status, setStatus] = useState<string>('all')
   const [page, setPage] = useState(1)
@@ -117,9 +120,9 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
           [t('barcode')]: product.barcode || 'N/A',
           [t('category')]: product.category,
           [t('stock')]: product.stockQuantity,
-          'Cost/unit': product.cost,
+          ...(canViewCost ? { 'Cost/unit': product.cost } : {}),
           'Sale Price': product.price,
-          [t('value')]: product.stockValue,
+          ...(canViewCost ? { [t('value')]: product.stockValue } : {}),
           'Potential Revenue': product.potentialRevenue,
           [t('status')]: product.status,
           Batches: product.batches?.length || 0,
@@ -135,7 +138,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
             [t('product')]: reportEntityName(language, product.name, product.nameUrdu),
             'Batch #': b.batchNumber,
             Quantity: b.quantity,
-            'Cost/unit': b.costPerUnit,
+            ...(canViewCost ? { 'Cost/unit': b.costPerUnit } : {}),
             'Selling price': b.sellingPrice ?? '',
             Expiry: b.expiryDate ? format(new Date(b.expiryDate), 'yyyy-MM-dd') : '',
           })),
@@ -168,7 +171,7 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
     <div className='space-y-6'>
       <div className='grid gap-3 grid-cols-2 lg:grid-cols-4'>
         <MovementTile icon={Boxes} tone='sky' label={t('total_products')} value={String(data?.summary?.totalProducts || 0)} />
-        <MovementTile icon={Wallet} tone='violet' label={t('stock_value')} value={formatCurrency(data?.summary?.totalStockValue || 0)} />
+        {canViewCost && <MovementTile icon={Wallet} tone='violet' label={t('stock_value')} value={formatCurrency(data?.summary?.totalStockValue || 0)} />}
         <MovementTile icon={AlertTriangle} tone='amber' label={t('low_stock')} value={String(data?.summary?.lowStockCount || 0)} />
         <MovementTile icon={PackageX} tone='rose' label={t('out_of_stock')} value={String(data?.summary?.outOfStockCount || 0)} />
       </div>
@@ -212,9 +215,9 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                 <TableHead className='min-w-[100px]'>{t('category')}</TableHead>
                 <TableHead className='min-w-[100px]'>Shelf</TableHead>
                 <TableHead className='text-right min-w-[80px]'>{t('stock')}</TableHead>
-                <TableHead className='text-right min-w-[100px]'>Cost/unit</TableHead>
+                {canViewCost && <TableHead className='text-right min-w-[100px]'>Cost/unit</TableHead>}
                 <TableHead className='text-right min-w-[100px]'>Sale Price</TableHead>
-                <TableHead className='text-right min-w-[100px]'>{t('value')}</TableHead>
+                {canViewCost && <TableHead className='text-right min-w-[100px]'>{t('value')}</TableHead>}
                 <TableHead className='min-w-[100px]'>{t('status')}</TableHead>
               </TableRow>
             </TableHeader>
@@ -285,9 +288,9 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                       <span className='font-semibold tabular-nums'>{product.stockQuantity}</span>{' '}
                       <span className='text-xs text-muted-foreground'>{product.unit || 'pcs'}</span>
                     </TableCell>
-                    <TableCell className='text-right text-sm text-muted-foreground tabular-nums'>{formatCurrency(product.cost)}</TableCell>
+                    {canViewCost && <TableCell className='text-right text-sm text-muted-foreground tabular-nums'>{formatCurrency(product.cost)}</TableCell>}
                     <TableCell className='text-right text-sm text-muted-foreground tabular-nums'>{formatCurrency(product.price)}</TableCell>
-                    <TableCell className='text-right font-semibold tabular-nums'>{formatCurrency(product.stockValue)}</TableCell>
+                    {canViewCost && <TableCell className='text-right font-semibold tabular-nums'>{formatCurrency(product.stockValue)}</TableCell>}
                     <TableCell>
                       <StockStatusBadge status={product.status} />
                     </TableCell>
@@ -309,9 +312,9 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                               <TableRow className='hover:bg-transparent'>
                                 <TableHead className='h-8 text-xs'>Batch #</TableHead>
                                 <TableHead className='h-8 text-right text-xs'>Qty</TableHead>
-                                <TableHead className='h-8 text-right text-xs'>Cost/unit</TableHead>
+                                {canViewCost && <TableHead className='h-8 text-right text-xs'>Cost/unit</TableHead>}
                                 <TableHead className='h-8 text-right text-xs'>Selling price</TableHead>
-                                <TableHead className='h-8 text-right text-xs'>Value</TableHead>
+                                {canViewCost && <TableHead className='h-8 text-right text-xs'>Value</TableHead>}
                                 <TableHead className='h-8 text-xs'>Expiry</TableHead>
                               </TableRow>
                             </TableHeader>
@@ -320,13 +323,15 @@ export const InventoryReport = forwardRef<{ exportToExcel: () => void }, {}>((_,
                                 <TableRow key={`${product._id}-batch-${idx}`}>
                                   <TableCell className='py-1.5 font-mono text-xs'>{b.batchNumber}</TableCell>
                                   <TableCell className='py-1.5 text-right text-xs tabular-nums'>{b.quantity}</TableCell>
-                                  <TableCell className='py-1.5 text-right text-xs tabular-nums'>{formatCurrency(b.costPerUnit)}</TableCell>
+                                  {canViewCost && <TableCell className='py-1.5 text-right text-xs tabular-nums'>{formatCurrency(b.costPerUnit)}</TableCell>}
                                   <TableCell className='py-1.5 text-right text-xs tabular-nums'>
                                     {b.sellingPrice != null ? formatCurrency(b.sellingPrice) : '—'}
                                   </TableCell>
-                                  <TableCell className='py-1.5 text-right text-xs font-medium tabular-nums'>
-                                    {formatCurrency(b.value)}
-                                  </TableCell>
+                                  {canViewCost && (
+                                    <TableCell className='py-1.5 text-right text-xs font-medium tabular-nums'>
+                                      {formatCurrency(b.value)}
+                                    </TableCell>
+                                  )}
                                   <TableCell className='py-1.5'>{expiryBadge(b.expiryDate)}</TableCell>
                                 </TableRow>
                               ))}

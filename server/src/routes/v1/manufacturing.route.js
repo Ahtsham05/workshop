@@ -10,6 +10,7 @@ const v = require('../../validations/manufacturing.validation');
 const c = require('../../controllers/manufacturing.controller');
 const documentStorage = require('../../services/manufacturing/documentStorage');
 const accessService = require('../../services/manufacturing/access.service');
+const { hideManufacturingCosts } = require('../../middlewares/costVisibility');
 
 const router = express.Router();
 router.use(auth(), branchScope());
@@ -45,6 +46,8 @@ router.get('/access', async (req, res, next) => {
 });
 // Every other manufacturing endpoint is behind it.
 router.use(accessService.requireManufacturingAccess);
+// Costs, values and prices only for roles with viewManufacturingCosts (see the middleware).
+router.use(hideManufacturingCosts());
 
 const documentUpload = multer({
   storage: multer.memoryStorage(),
@@ -297,7 +300,7 @@ router.post(
   validate(v.orderOperationAction),
   c.orderOperationAction
 );
-router.get('/production-orders/:orderId/costs', auth(VIEW), validate(v.orderIdParam), c.getOrderCosts);
+router.get('/production-orders/:orderId/costs', auth('viewManufacturingCosts'), validate(v.orderIdParam), c.getOrderCosts);
 router.get('/production-orders/:orderId/activity', auth(VIEW), validate(v.orderIdParam), c.getOrderActivity);
 router.post(
   '/production-orders/:orderId/documents/link',

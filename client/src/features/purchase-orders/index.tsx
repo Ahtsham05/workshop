@@ -25,7 +25,10 @@ export default function PurchaseOrdersPage() {
   // otherwise a user without create access could skip the list's gated Create button.
   const hasPrefill = Boolean(search.prefillItems && search.prefillItems.length > 0) && hasExplicitPermission('createPurchaseOrders')
 
-  const [view, setView] = useState<View>(hasPrefill ? 'form' : 'list')
+  // A role that may create orders but not see the list just gets the form.
+  const canViewList = hasExplicitPermission('viewPurchaseOrders') || hasExplicitPermission('viewPurchases')
+  const [view, setView] = useState<View>(hasPrefill || !canViewList ? 'form' : 'list')
+  const [formKey, setFormKey] = useState(0)
   const [editing, setEditing] = useState<PurchaseOrder | null>(null)
   const [receiving, setReceiving] = useState<PurchaseOrder | null>(null)
   const [viewing, setViewing] = useState<PurchaseOrder | null>(null)
@@ -44,7 +47,8 @@ export default function PurchaseOrdersPage() {
     setEditing(null)
     // Drop prefillItems from the URL once we leave the form so a refresh/back doesn't re-apply them.
     navigate({ to: '/purchase-orders', search: {}, replace: true })
-    setView('list')
+    if (canViewList) setView('list')
+    else setFormKey((k) => k + 1)
   }
 
   return (
@@ -58,6 +62,7 @@ export default function PurchaseOrdersPage() {
           />
         ) : (
           <PurchaseOrderForm
+            key={formKey}
             onBack={handleBackToList}
             onSaved={handleBackToList}
             editing={editing}

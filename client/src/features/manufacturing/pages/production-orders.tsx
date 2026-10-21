@@ -24,7 +24,8 @@ import {
   type ProductionOrderRow,
 } from '@/stores/manufacturing.api'
 import type { RootState } from '@/stores/store'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
@@ -156,6 +157,7 @@ export default function ProductionOrdersPage({
   const { t } = useLanguage()
   const navigate = useNavigate()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { hasPermission } = usePermissions()
   const canManage = hasPermission('manageProductionOrders')
   const user = useSelector((state: RootState) => state.auth.data?.user) as
@@ -277,7 +279,8 @@ export default function ProductionOrdersPage({
       if (kind === 'csv') {
         exportOrdersCsv(
           res.results,
-          isAssembly ? 'assembly-orders' : 'production-orders'
+          isAssembly ? 'assembly-orders' : 'production-orders',
+          !canSeeCosts
         )
         return
       }
@@ -285,6 +288,7 @@ export default function ProductionOrdersPage({
         title,
         filtersLine: filtersLine(),
         formatMoney,
+        hideMoney: !canSeeCosts,
         truncated: res.truncated,
         totalResults: res.totalResults,
       })
@@ -449,6 +453,7 @@ export default function ProductionOrdersPage({
     {
       id: 'cost',
       header: t('Cost'),
+      money: true,
       align: 'right',
       hideBelow: 'xl',
       cell: (o) => (
@@ -649,7 +654,7 @@ export default function ProductionOrdersPage({
             value={counts.completed}
             tone='success'
             active={counts.completed > 0}
-            hint={formatMoney(counts.materialCost)}
+            hint={canSeeCosts ? formatMoney(counts.materialCost) : undefined}
             onClick={() => cardFilter({ status: ['completed'] })}
             pressed={statusIs(['completed'])}
           />

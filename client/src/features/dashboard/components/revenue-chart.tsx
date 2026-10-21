@@ -11,6 +11,7 @@ import {
   type DashboardDateRange,
 } from '@/lib/dashboard-date-range'
 import { useFormatMoney } from '@/lib/format-money'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 type Props = {
   dateRange: DashboardDateRange
@@ -19,6 +20,7 @@ type Props = {
 export function RevenueChart({ dateRange }: Props) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canViewCost = useCanViewCostPrices()
   const { data: revenueData, showSkeleton, isRefreshing } = getWidgetQueryState(
     useGetRevenueDataQuery(dashboardRangeQueryParams(dateRange), DASHBOARD_QUERY_OPTIONS)
   )
@@ -46,7 +48,7 @@ export function RevenueChart({ dateRange }: Props) {
         <div>
           <CardTitle>{t('revenue_overview')}</CardTitle>
           <CardDescription>
-            {t('revenue_chart_description')} · {formatDashboardRangeLabel(dateRange, t)}
+            {canViewCost ? t('revenue_chart_description') : t('Track your revenue trends')} · {formatDashboardRangeLabel(dateRange, t)}
           </CardDescription>
         </div>
       </CardHeader>
@@ -79,12 +81,14 @@ export function RevenueChart({ dateRange }: Props) {
               radius={[8, 8, 0, 0]}
               name={t('Revenue')}
             />
-            <Bar 
-              dataKey='profit' 
-              fill='#10b981' 
-              radius={[8, 8, 0, 0]}
-              name={t('Profit')}
-            />
+            {canViewCost && (
+              <Bar
+                dataKey='profit'
+                fill='#10b981'
+                radius={[8, 8, 0, 0]}
+                name={t('Profit')}
+              />
+            )}
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

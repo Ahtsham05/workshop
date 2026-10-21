@@ -18,7 +18,7 @@ router
     utilityCompanyController.createUtilityCompany
   )
   .get(
-    auth('viewBillPayments', 'manageBillPayments', 'viewReports'),
+    auth('viewBillPayments', 'manageBillPayments', 'viewReports', 'viewBillPaymentReports'),
     validate(utilityCompanyValidation.getUtilityCompanies),
     utilityCompanyController.getUtilityCompanies
   );

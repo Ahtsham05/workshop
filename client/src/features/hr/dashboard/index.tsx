@@ -6,6 +6,7 @@ import { useNavigate } from '@tanstack/react-router';
 
 type NavigateOptions = Parameters<ReturnType<typeof useNavigate>>[0];
 import { useGetEmployeesQuery, useGetLeavesQuery, useGetAttendancesQuery, useGetPayrollsQuery } from '@/stores/hr.api';
+import { usePermissions } from '@/context/permission-context';
 
 const getLocalDateString = () => {
   const now = new Date();
@@ -19,19 +20,21 @@ export default function HRDashboard() {
   const today = getLocalDateString();
 
   // Fetch dashboard data
+  // Each widget loads only for a role that may see that part of HR.
+  const { hasExplicitPermission } = usePermissions();
   const { data: employeesData } = useGetEmployeesQuery({ limit: 1 });
-  const { data: leavesData } = useGetLeavesQuery({ status: 'Pending', limit: 10 });
+  const { data: leavesData } = useGetLeavesQuery({ status: 'Pending', limit: 10 }, { skip: !hasExplicitPermission('getLeaves') });
   const { data: attendanceData } = useGetAttendancesQuery({
     startDate: today,
     endDate: today,
     limit: 1000,
-  });
+  }, { skip: !hasExplicitPermission('getAttendance') });
   const { data: payrollData } = useGetPayrollsQuery({ 
     status: 'Pending',
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
     limit: 10
-  });
+  }, { skip: !hasExplicitPermission('getPayroll') });
 
   const totalEmployees = employeesData?.totalResults || 0;
   const pendingLeaves = leavesData?.totalResults || 0;

@@ -1,4 +1,5 @@
 const express = require('express');
+const { hideCostPrices } = require('../../middlewares/costVisibility');
 const authRoute = require('./auth.route');
 const userRoute = require('./user.route');
 const roleRoute = require('./role.route');
@@ -889,6 +890,34 @@ router.use((req, res, next) => {
     return readOnlyGate(req, res, next);
   }
   next();
+});
+
+// Cost / purchase price, stock value, margin and profit only for roles with viewCostPrices
+// (sale prices stay) — see middlewares/costVisibility.js. Profit-loss and ROI reports are
+// about profit by definition and keep their own viewProfitLossReports gate.
+const COST_HIDDEN_PATHS = [
+  '/products',
+  '/master-products',
+  '/product-variants',
+  '/inventory',
+  '/imeis',
+  '/product-lists',
+  '/warranty-claims',
+  '/dashboard',
+  '/mobile-dashboard',
+  '/invoices',
+  '/insights',
+  '/branch-overview',
+];
+COST_HIDDEN_PATHS.forEach((path) => router.use(path, hideCostPrices()));
+// Stock movements are valued at cost, so their value/amount columns are cost too.
+['/inventory-transfers', '/stock-adjustments', '/stock-counts', '/batches'].forEach((path) =>
+  router.use(path, hideCostPrices({ stockValued: true }))
+);
+router.use('/reports', (req, res, next) => {
+  if (/^\/(profit-loss|roi)/.test(req.path)) return next();
+  const stockValued = /^\/(inventory|batches|stock-adjustments|stock-transfers)/.test(req.path);
+  return hideCostPrices({ stockValued })(req, res, next);
 });
 
 defaultRoutes.forEach((route) => {

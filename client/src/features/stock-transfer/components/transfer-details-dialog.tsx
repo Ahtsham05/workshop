@@ -60,6 +60,7 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
   const [cancelTransfer, { isLoading: cancelling }] = useCancelTransferMutation()
   const busy = completing || cancelling
   const canManage = usePermissions().hasExplicitPermission('manageStockTransfers')
+  const canViewCost = usePermissions().hasExplicitPermission('viewCostPrices')
 
   if (!groupId) return null
 
@@ -131,7 +132,7 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
               <DetailField label={t('To')} value={branchLabel(first!.toBranchId)} />
               <DetailField label={t('Products')} value={items.length} />
               <DetailField label={t('Total Qty')} value={totalQuantity} />
-              <DetailField label={t('Total Amount')} value={formatMoney(totalAmount)} />
+              {canViewCost && <DetailField label={t('Total Amount')} value={formatMoney(totalAmount)} />}
               <DetailField
                 label={t('Transfer Date')}
                 value={isBackDated(first!) ? formatAppDate(transferDateOf(first!)) : formatDate(transferDateOf(first!))}
@@ -146,8 +147,12 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
                   <TableRow>
                     <TableHead>{t('Product')}</TableHead>
                     <TableHead className='text-right'>{t('Qty')}</TableHead>
-                    <TableHead className='text-right whitespace-nowrap'>{t('Cost Price')}</TableHead>
-                    <TableHead className='text-right'>{t('Amount')}</TableHead>
+                    {canViewCost && (
+                      <>
+                        <TableHead className='text-right whitespace-nowrap'>{t('Cost Price')}</TableHead>
+                        <TableHead className='text-right'>{t('Amount')}</TableHead>
+                      </>
+                    )}
                     <TableHead>{t('Status')}</TableHead>
                     <TableHead className='text-right'>{t('Actions')}</TableHead>
                   </TableRow>
@@ -167,8 +172,12 @@ export function TransferDetailsDialog({ groupId, onClose }: TransferDetailsDialo
                         )}
                       </TableCell>
                       <TableCell className='text-right'>{line.quantity}</TableCell>
-                      <TableCell className='text-right whitespace-nowrap'>{formatMoney(line.unitCost || 0)}</TableCell>
-                      <TableCell className='text-right whitespace-nowrap'>{formatMoney(line.quantity * (line.unitCost || 0))}</TableCell>
+                      {canViewCost && (
+                        <>
+                          <TableCell className='text-right whitespace-nowrap'>{formatMoney(line.unitCost || 0)}</TableCell>
+                          <TableCell className='text-right whitespace-nowrap'>{formatMoney(line.quantity * (line.unitCost || 0))}</TableCell>
+                        </>
+                      )}
                       <TableCell><TransferStatusBadge status={line.status} /></TableCell>
                       <TableCell className='text-right'>
                         <div className='flex justify-end gap-1.5'>

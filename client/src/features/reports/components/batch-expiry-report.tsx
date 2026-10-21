@@ -15,10 +15,13 @@ import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-
 import { expiryBadge } from '../utils/expiry-badge'
 import LongText from '@/components/long-text'
 import { useFormatMoney } from '@/lib/format-money'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 type ExpiryFilter = 'all' | '30' | '60' | '90' | 'expired'
 
 export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((_, ref) => {
+  // Cost per unit and batch value are for roles with viewCostPrices.
+  const canViewCost = useCanViewCostPrices()
   const { t, language } = useLanguage()
   const [filter, setFilter] = useState<ExpiryFilter>('all')
   // Server-side `days` only filters "expiring within N days" — "expired" and "all"
@@ -45,9 +48,9 @@ export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((
           Variant: r.variantLabel || '',
           'Batch #': r.batchNumber,
           Quantity: r.quantity,
-          'Cost/unit': r.costPerUnit,
+          ...(canViewCost ? { 'Cost/unit': r.costPerUnit } : {}),
           'Selling price': r.sellingPrice ?? '',
-          'Batch value': r.batchValue,
+          ...(canViewCost ? { 'Batch value': r.batchValue } : {}),
           Expiry: r.expiryDate ? format(new Date(r.expiryDate), 'yyyy-MM-dd') : '',
           'Days until expiry': r.daysUntilExpiry ?? '',
           Supplier: r.supplierName || '',
@@ -82,17 +85,19 @@ export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((
             <div className='text-2xl font-bold'>{data?.summary?.activeBatches || 0}</div>
           </CardContent>
         </Card>
-        <Card className={kpiCardClass('violet')}>
-          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-            <CardTitle className='text-sm'>Total Batch Value</CardTitle>
-            <div className={cn('shrink-0', toneIconWrapClass('violet'))}>
-              <Wallet className='h-4 w-4' />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalBatchValue || 0)}</div>
-          </CardContent>
-        </Card>
+        {canViewCost && (
+          <Card className={kpiCardClass('violet')}>
+            <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+              <CardTitle className='text-sm'>Total Batch Value</CardTitle>
+              <div className={cn('shrink-0', toneIconWrapClass('violet'))}>
+                <Wallet className='h-4 w-4' />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className='text-2xl font-bold'>{formatCurrency(data?.summary?.totalBatchValue || 0)}</div>
+            </CardContent>
+          </Card>
+        )}
         <Card className={kpiCardClass('amber')}>
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
             <CardTitle className='text-sm'>Expiring within 30 days</CardTitle>
@@ -143,9 +148,9 @@ export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((
                 <TableHead>Variant</TableHead>
                 <TableHead>Batch #</TableHead>
                 <TableHead className='text-right'>Qty</TableHead>
-                <TableHead className='text-right'>Cost/unit</TableHead>
+                {canViewCost && <TableHead className='text-right'>Cost/unit</TableHead>}
                 <TableHead className='text-right'>Selling price</TableHead>
-                <TableHead className='text-right'>Value</TableHead>
+                {canViewCost && <TableHead className='text-right'>Value</TableHead>}
                 <TableHead>Expiry</TableHead>
                 <TableHead>Supplier</TableHead>
               </TableRow>
@@ -168,11 +173,11 @@ export const BatchExpiryReport = forwardRef<{ exportToExcel: () => void }, {}>((
                       <TableCell className='text-muted-foreground text-sm'>{r.variantLabel || '—'}</TableCell>
                       <TableCell className='font-mono text-xs'>{r.batchNumber}</TableCell>
                       <TableCell className='text-right'>{r.quantity}</TableCell>
-                      <TableCell className='text-right'>{formatCurrency(r.costPerUnit)}</TableCell>
+                      {canViewCost && <TableCell className='text-right'>{formatCurrency(r.costPerUnit)}</TableCell>}
                       <TableCell className='text-right'>
                         {r.sellingPrice != null ? formatCurrency(r.sellingPrice) : '—'}
                       </TableCell>
-                      <TableCell className='text-right font-medium'>{formatCurrency(r.batchValue)}</TableCell>
+                      {canViewCost && <TableCell className='text-right font-medium'>{formatCurrency(r.batchValue)}</TableCell>}
                       <TableCell>{expiryBadge(r.expiryDate)}</TableCell>
                       <TableCell className='text-muted-foreground text-sm'>{r.supplierName || '—'}</TableCell>
                     </TableRow>

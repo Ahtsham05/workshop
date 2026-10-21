@@ -7,7 +7,9 @@ const PERMISSION_GROUPS = [
   {
     id: 'products',
     label: 'Products',
-    permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'],
+    // viewCostPrices: cost / purchase price, stock value, margin and profit wherever they
+    // appear outside purchasing documents (stripped from API responses without it).
+    permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts', 'viewCostPrices'],
   },
   {
     // Stock transfers between branches (routes/v1/inventoryTransfer.route.js). Split out of
@@ -212,6 +214,12 @@ const PERMISSION_GROUPS = [
       'viewServiceReports',
       'viewWalletReports',
       'viewInstallmentReports',
+      'viewActivityReports',
+      'viewSummaryReports',
+      'viewTaxReports',
+      'viewTeamReports',
+      'viewBillPaymentReports',
+      'viewMobilePhoneReports',
       'exportReports',
     ],
   },
@@ -263,7 +271,8 @@ const PERMISSION_GROUPS = [
   {
     id: 'branches',
     label: 'Branch Management',
-    permissions: ['viewBranches', 'manageBranches'],
+    // viewBranchPerformance: the org-wide Branch Performance page (was owner-only).
+    permissions: ['viewBranches', 'manageBranches', 'viewBranchPerformance'],
   },
   {
     id: 'staff',
@@ -355,6 +364,13 @@ const PERMISSION_GROUPS = [
     permissions: ['viewAiAssistant'],
   },
   {
+    // Personal notepad and inter-branch team chat (open to everyone before these keys;
+    // existing roles were backfilled with both — role.service.js SPLIT_PERMISSIONS).
+    id: 'workspace',
+    label: 'Notes & Team Chat',
+    permissions: ['useNotes', 'useTeamChat'],
+  },
+  {
     id: 'insights',
     label: 'Insights',
     permissions: ['viewInsights'],
@@ -383,6 +399,9 @@ const PERMISSION_GROUPS = [
       // Quality inspection of reported output, and rework results.
       'inspectProduction',
       'manageManufacturingSettings',
+      // Costs, values and prices inside Manufacturing — without it a role still runs
+      // BOMs, orders, issues and receipts by quantity (middlewares/manufacturingCosts.js).
+      'viewManufacturingCosts',
     ],
   },
 ];

@@ -37,6 +37,7 @@ import LongText from '@/components/long-text'
 import { formatImeiEntries, type ImeiEntryInput } from '@/stores/imei.api'
 import { useFormatMoney } from '@/lib/format-money'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 interface SalesReportProps {
   startDate: string
@@ -215,6 +216,8 @@ const moduleColors: Record<string, string> = {
 export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReportProps>(
   ({ startDate, endDate, isMobileShop = false }, ref) => {
     const { t, language } = useLanguage()
+    // Cost, profit and margin columns are for roles with viewCostPrices.
+    const canViewCost = useCanViewCostPrices()
     const { data, isFetching: isLoading } = useGetSalesReportQuery({ startDate, endDate, groupBy: 'day' })
     const { data: detailData, isFetching: detailLoading } = useGetSalesInvoiceDetailsQuery({ startDate, endDate })
 
@@ -379,11 +382,15 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 [t('date')]:     row._id,
                 [t('invoices')]: row.invoiceCount,
                 [t('sales')]:    row.totalSales,
-                [t('cost')]:     row.totalCost,
-                [t('profit')]:   row.totalProfit,
-                [t('margin')]:   row.totalSales > 0
-                  ? `${((row.totalProfit / row.totalSales) * 100).toFixed(2)}%`
-                  : '0%',
+                ...(canViewCost
+                  ? {
+                      [t('cost')]: row.totalCost,
+                      [t('profit')]: row.totalProfit,
+                      [t('margin')]: row.totalSales > 0
+                        ? `${((row.totalProfit / row.totalSales) * 100).toFixed(2)}%`
+                        : '0%',
+                    }
+                  : {}),
               })),
             )
             XLSX.utils.book_append_sheet(wb, summarySheet, 'Daily Summary')
@@ -459,7 +466,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
           toast.error(t('Failed to export data'))
         }
       },
-    }), [chartRows, mergedInvoices, mergedSummary, isMobileShop, t, language])
+    }), [canViewCost, chartRows, mergedInvoices, mergedSummary, isMobileShop, t, language])
 
     const formatCurrency = useFormatMoney()
 
@@ -493,7 +500,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
             </CardContent>
           </Card>
 
-          <Card className={kpiCardClass('emerald')}>
+          {canViewCost && <Card className={kpiCardClass('emerald')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
               <CardTitle className='text-sm font-medium'>{t('total_profit')}</CardTitle>
               <div className={cn('shrink-0', toneIconWrapClass('emerald'))}>
@@ -510,7 +517,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 %
               </p>
             </CardContent>
-          </Card>
+          </Card>}
 
           <Card className={kpiCardClass('sky')}>
             <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
@@ -543,7 +550,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
         <Card>
           <CardHeader>
             <CardTitle>{t('sales_trend')}</CardTitle>
-            <CardDescription>{t('daily_sales_and_profit')}</CardDescription>
+            <CardDescription>{(canViewCost ? t('daily_sales_and_profit') : t('Daily sales overview'))}</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width='100%' height={400}>
@@ -554,7 +561,7 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                 <Tooltip formatter={(value: number) => formatCurrency(value)} />
                 <Legend />
                 <Bar dataKey='totalSales' fill='var(--chart-theme-primary, #3b82f6)' name={t('sales')} />
-                <Bar dataKey='totalProfit' fill='#10b981' name={t('profit')} />
+                {canViewCost && <Bar dataKey='totalProfit' fill='#10b981' name={t('profit')} />}
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -572,9 +579,13 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                   <TableHead>{t('date')}</TableHead>
                   <TableHead className='text-right'>{t('invoices')}</TableHead>
                   <TableHead className='text-right'>{t('sales')}</TableHead>
-                  <TableHead className='text-right'>{t('cost')}</TableHead>
-                  <TableHead className='text-right'>{t('profit')}</TableHead>
-                  <TableHead className='text-right'>{t('margin')}</TableHead>
+                  {canViewCost && (
+                    <>
+                      <TableHead className='text-right'>{t('cost')}</TableHead>
+                      <TableHead className='text-right'>{t('profit')}</TableHead>
+                      <TableHead className='text-right'>{t('margin')}</TableHead>
+                    </>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -583,16 +594,20 @@ export const SalesReport = forwardRef<{ exportToExcel: () => void }, SalesReport
                     <TableCell>{row._id}</TableCell>
                     <TableCell className='text-right'>{row.invoiceCount}</TableCell>
                     <TableCell className='text-right'>{formatCurrency(row.totalSales)}</TableCell>
-                    <TableCell className='text-right'>{formatCurrency(row.totalCost)}</TableCell>
-                    <TableCell className='text-right text-green-600'>
-                      {formatCurrency(row.totalProfit)}
-                    </TableCell>
-                    <TableCell className='text-right'>
-                      {row.totalSales > 0
-                        ? ((row.totalProfit / row.totalSales) * 100).toFixed(2)
-                        : 0}
-                      %
-                    </TableCell>
+                    {canViewCost && (
+                      <>
+                        <TableCell className='text-right'>{formatCurrency(row.totalCost)}</TableCell>
+                        <TableCell className='text-right text-green-600'>
+                          {formatCurrency(row.totalProfit)}
+                        </TableCell>
+                        <TableCell className='text-right'>
+                          {row.totalSales > 0
+                            ? ((row.totalProfit / row.totalSales) * 100).toFixed(2)
+                            : 0}
+                          %
+                        </TableCell>
+                      </>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

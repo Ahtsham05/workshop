@@ -16,7 +16,7 @@ import {
   type ProductionOrder,
   type ProductionOutput,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'

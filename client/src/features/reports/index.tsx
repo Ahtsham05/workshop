@@ -59,7 +59,18 @@ import { formatAppDate } from '@/lib/date-format'
 // Maps a report tab to the granular RBAC permission that unlocks it. Tabs not
 // listed here (broad summaries that mix several report domains, e.g. Activities,
 // Final Report, Sale & Purchase) stay gated behind the general 'viewReports' key.
-const REPORT_TAB_PERMISSIONS: Partial<Record<string, PermissionKey>> = {
+// A tab opens with any of its keys; tabs not listed need the all-reports key (viewReports).
+const REPORT_TAB_PERMISSIONS: Partial<Record<string, PermissionKey | PermissionKey[]>> = {
+  activities: ['viewReports', 'viewActivityReports'],
+  summary: ['viewReports', 'viewSummaryReports'],
+  'daily-summary': ['viewReports', 'viewSummaryReports'],
+  ledger: ['viewReports', 'viewSummaryReports'],
+  tax: ['viewReports', 'viewTaxReports'],
+  'salesman-commission': ['viewReports', 'viewTeamReports'],
+  'partner-profit-share': ['viewReports', 'viewTeamReports'],
+  'bill-payments': ['viewReports', 'viewBillPaymentReports'],
+  'agent-bills': ['viewReports', 'viewBillPaymentReports'],
+  'mobile-phones': ['viewReports', 'viewMobilePhoneReports'],
   sales: 'viewSalesReports',
   'sales-returns': 'viewSalesReports',
   purchases: 'viewPurchaseReports',
@@ -116,7 +127,8 @@ export default function ReportsPage() {
   const isTabVisible = (tab: string): boolean => {
     if (MOBILE_SHOP_ONLY_TABS.has(tab) && !isMobileShop) return false
     if (tab === 'agent-bills' && user?.email !== AGENT_BILL_EMAIL) return false
-    return hasPermission(REPORT_TAB_PERMISSIONS[tab] ?? 'viewReports')
+    const keys = REPORT_TAB_PERMISSIONS[tab] ?? 'viewReports'
+    return (Array.isArray(keys) ? keys : [keys]).some((key) => hasPermission(key))
   }
 
   const defaultTab = TAB_ORDER.find(isTabVisible) ?? 'sales'

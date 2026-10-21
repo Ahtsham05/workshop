@@ -5,7 +5,8 @@ import {
   useGetProductionReceiptsQuery,
   type ProductionReceipt,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { useLanguage } from '@/context/language-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Badge } from '@/components/ui/badge'
@@ -42,6 +43,7 @@ function Tracking({ r }: { r: ProductionReceipt }) {
 export default function FinishedGoodsPage() {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search, 300)
   const [range, setRange] = useState<{ startDate?: string; endDate?: string }>(
@@ -103,6 +105,7 @@ export default function FinishedGoodsPage() {
     {
       id: 'unitcost',
       header: t('Unit cost'),
+      money: true,
       align: 'right',
       hideBelow: 'xl',
       cell: (r) => (
@@ -114,6 +117,7 @@ export default function FinishedGoodsPage() {
     {
       id: 'value',
       header: t('Value'),
+      money: true,
       align: 'right',
       hideBelow: 'md',
       cell: (r) => (
@@ -281,8 +285,12 @@ export default function FinishedGoodsPage() {
               {fmtQty(open.quantity)} {open.unit}
             </Field>
             <Field label={t('Date')}>{fmtDate(open.receiptDate)}</Field>
-            <Field label={t('Unit cost')}>{formatMoney(open.unitCost)}</Field>
-            <Field label={t('Value')}>{formatMoney(open.totalCost)}</Field>
+            {canSeeCosts && (
+              <>
+                <Field label={t('Unit cost')}>{formatMoney(open.unitCost)}</Field>
+                <Field label={t('Value')}>{formatMoney(open.totalCost)}</Field>
+              </>
+            )}
             <Field label={t('Order')}>{open.orderNumber}</Field>
             <Field label={t('Location')}>{open.location || '—'}</Field>
             <Field label={t('Received by')}>

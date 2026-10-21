@@ -16,6 +16,7 @@ import {
 import { useNotepadNotes } from '../lib/use-notepad-notes'
 import { NotepadWorkspace } from './notepad-workspace'
 import { useFloatingPosition } from '@/hooks/use-floating-position'
+import { usePermissions } from '@/context/permission-context'
 
 const MIN_WIDTH = 420
 const MIN_HEIGHT = 320
@@ -62,7 +63,13 @@ const clampToViewport = (state: NotepadWindowState): NotepadWindowState => {
  * it is blocked, the page keeps its own scroll position, and closing the
  * notepad leaves the work exactly where it was.
  */
+/** Mounted for every page; only roles with useNotes get the window (and its notes queries). */
 export function NotepadWindow() {
+  const canUseNotes = usePermissions().hasExplicitPermission('useNotes')
+  return canUseNotes ? <NotepadWindowBody /> : null
+}
+
+function NotepadWindowBody() {
   const { isOpen, isMinimized, openSeq, consumePendingOptions, closeNotepad, minimizeNotepad, restoreNotepad } =
     useNotepad()
   const isPhone = useIsPhone()

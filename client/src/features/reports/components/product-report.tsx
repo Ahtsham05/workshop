@@ -28,6 +28,7 @@ import { reportEntityName, reportEntityNameClass } from '../utils/report-entity-
 import LongText from '@/components/long-text'
 import { useFormatMoney } from '@/lib/format-money'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 interface ProductReportProps {
   startDate: string
@@ -37,6 +38,8 @@ interface ProductReportProps {
 export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductReportProps>(
   ({ startDate, endDate }, ref) => {
     const { t, language } = useLanguage()
+    // Cost, profit and margin are for roles with viewCostPrices.
+    const canViewCost = useCanViewCostPrices()
     const { data, isFetching: isLoading } = useGetProductReportQuery({ startDate, endDate })
     const { data: categoryData, isFetching: categoryLoading } = useGetProductsByCategoryQuery({
       period: 'custom',
@@ -177,6 +180,10 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
             return
           }
 
+          if (!canViewCost) {
+            const hidden = [t('cost'), t('profit'), t('margin')]
+            excelData = excelData.map((row) => Object.fromEntries(Object.entries(row).filter(([k]) => !hidden.includes(k))))
+          }
           const ws = XLSX.utils.json_to_sheet(excelData)
           const wb = XLSX.utils.book_new()
           XLSX.utils.book_append_sheet(wb, ws, sheetName)
@@ -266,26 +273,30 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                   <p className='text-xs text-muted-foreground mt-1'>{t('total_revenue_from_sales')}</p>
                 </CardContent>
               </Card>
-              <Card className={kpiCardClass('orange')}>
-                <CardHeader>
-                  <CardTitle className='text-sm'>{t('total_cost_of_goods_sold')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-orange-600'>{formatCurrency(totalSoldCost)}</div>
-                  <p className='text-xs text-muted-foreground mt-1'>{t('cost_of_sold_items')}</p>
-                </CardContent>
-              </Card>
-              <Card className={kpiCardClass('emerald')}>
-                <CardHeader>
-                  <CardTitle className='text-sm'>{t('total_profit')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalSoldProfit)}</div>
-                  <p className='text-xs text-muted-foreground mt-1'>
-                    {totalSoldRevenue > 0 ? `${((totalSoldProfit / totalSoldRevenue) * 100).toFixed(1)}% ${t('margin')}` : '—'}
-                  </p>
-                </CardContent>
-              </Card>
+              {canViewCost && (
+                <Card className={kpiCardClass('orange')}>
+                  <CardHeader>
+                    <CardTitle className='text-sm'>{t('total_cost_of_goods_sold')}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold text-orange-600'>{formatCurrency(totalSoldCost)}</div>
+                    <p className='text-xs text-muted-foreground mt-1'>{t('cost_of_sold_items')}</p>
+                  </CardContent>
+                </Card>
+              )}
+              {canViewCost && (
+                <Card className={kpiCardClass('emerald')}>
+                  <CardHeader>
+                    <CardTitle className='text-sm'>{t('total_profit')}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalSoldProfit)}</div>
+                    <p className='text-xs text-muted-foreground mt-1'>
+                      {totalSoldRevenue > 0 ? `${((totalSoldProfit / totalSoldRevenue) * 100).toFixed(1)}% ${t('margin')}` : '—'}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Inventory Summary */}
@@ -298,15 +309,17 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                   <div className='text-2xl font-bold'>{data?.stockSummary?.totalProducts || 0}</div>
                 </CardContent>
               </Card>
-              <Card className={kpiCardClass('violet')}>
-                <CardHeader>
-                  <CardTitle className='text-sm'>{t('stock_value')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>{formatCurrency(data?.stockSummary?.totalStockValue || 0)}</div>
-                  <p className='text-xs text-muted-foreground mt-1'>{t('current_inventory_value')}</p>
-                </CardContent>
-              </Card>
+              {canViewCost && (
+                <Card className={kpiCardClass('violet')}>
+                  <CardHeader>
+                    <CardTitle className='text-sm'>{t('stock_value')}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold'>{formatCurrency(data?.stockSummary?.totalStockValue || 0)}</div>
+                    <p className='text-xs text-muted-foreground mt-1'>{t('current_inventory_value')}</p>
+                  </CardContent>
+                </Card>
+              )}
               <Card className={kpiCardClass('amber')}>
                 <CardHeader>
                   <CardTitle className='text-sm'>{t('low_stock')}</CardTitle>
@@ -345,7 +358,9 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                       <TableHead>{t('product')}</TableHead>
                       <TableHead className='text-right'>{t('quantity_sold')}</TableHead>
                       <TableHead className='text-right'>{t('revenue')}</TableHead>
-                      <TableHead className='text-right'>{t('profit')}</TableHead>
+                      {canViewCost && (
+                        <TableHead className='text-right'>{t('profit')}</TableHead>
+                      )}
                       <TableHead className='text-right'>{t('current_stock')}</TableHead>
                       <TableHead className='text-right'>{t('actions')}</TableHead>
                     </TableRow>
@@ -367,7 +382,9 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className='text-right text-green-600'>{formatCurrency(product.totalProfit)}</TableCell>
+                        {canViewCost && (
+                          <TableCell className='text-right text-green-600'>{formatCurrency(product.totalProfit)}</TableCell>
+                        )}
                         <TableCell className='text-right'>
                           <Badge variant={product.currentStock === 0 ? 'destructive' : product.currentStock <= 10 ? 'secondary' : 'default'}>
                             {product.currentStock} {product.unit || 'pcs'}
@@ -422,24 +439,28 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                   <p className='text-xs text-muted-foreground mt-1'>{t('Across all categories')}</p>
                 </CardContent>
               </Card>
-              <Card className={kpiCardClass('emerald')}>
-                <CardHeader>
-                  <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalCategoryProfit)}</div>
-                  <p className='text-xs text-muted-foreground mt-1'>{t('Category profit')}</p>
-                </CardContent>
-              </Card>
-              <Card className={kpiCardClass('violet')}>
-                <CardHeader>
-                  <CardTitle className='text-sm'>{t('Avg Margin')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-violet-600'>{avgCategoryMargin.toFixed(1)}%</div>
-                  <p className='text-xs text-muted-foreground mt-1'>{t('Average profit margin')}</p>
-                </CardContent>
-              </Card>
+              {canViewCost && (
+                <Card className={kpiCardClass('emerald')}>
+                  <CardHeader>
+                    <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalCategoryProfit)}</div>
+                    <p className='text-xs text-muted-foreground mt-1'>{t('Category profit')}</p>
+                  </CardContent>
+                </Card>
+              )}
+              {canViewCost && (
+                <Card className={kpiCardClass('violet')}>
+                  <CardHeader>
+                    <CardTitle className='text-sm'>{t('Avg Margin')}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold text-violet-600'>{avgCategoryMargin.toFixed(1)}%</div>
+                    <p className='text-xs text-muted-foreground mt-1'>{t('Average profit margin')}</p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             <Card>
@@ -472,9 +493,15 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                         <TableHead className='text-right'>{t('Products')}</TableHead>
                         <TableHead className='text-right'>{t('Quantity Sold')}</TableHead>
                         <TableHead className='text-right'>{t('Revenue')}</TableHead>
-                        <TableHead className='text-right'>{t('Cost')}</TableHead>
-                        <TableHead className='text-right'>{t('Profit')}</TableHead>
-                        <TableHead className='text-right'>{t('Margin')}</TableHead>
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Cost')}</TableHead>
+                        )}
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Profit')}</TableHead>
+                        )}
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Margin')}</TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -504,26 +531,32 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                             <TableCell className='text-right font-semibold'>
                               {formatCurrency(category.totalRevenue)}
                             </TableCell>
-                            <TableCell className='text-right text-orange-600'>
-                              {formatCurrency(category.totalCost)}
-                            </TableCell>
-                            <TableCell className='text-right text-green-600 font-medium'>
-                              {formatCurrency(category.profit)}
-                            </TableCell>
-                            <TableCell className='text-right'>
-                              <Badge
-                                variant='outline'
-                                className={`${
-                                  category.margin > 30
-                                    ? 'bg-green-50 text-green-700'
-                                    : category.margin > 15
-                                    ? 'bg-blue-50 text-blue-700'
-                                    : 'bg-amber-50 text-amber-700'
-                                }`}
-                              >
-                                {category.margin.toFixed(1)}%
-                              </Badge>
-                            </TableCell>
+                            {canViewCost && (
+                              <TableCell className='text-right text-orange-600'>
+                                {formatCurrency(category.totalCost)}
+                              </TableCell>
+                            )}
+                            {canViewCost && (
+                              <TableCell className='text-right text-green-600 font-medium'>
+                                {formatCurrency(category.profit)}
+                              </TableCell>
+                            )}
+                            {canViewCost && (
+                              <TableCell className='text-right'>
+                                <Badge
+                                  variant='outline'
+                                  className={`${
+                                    category.margin > 30
+                                      ? 'bg-green-50 text-green-700'
+                                      : category.margin > 15
+                                      ? 'bg-blue-50 text-blue-700'
+                                      : 'bg-amber-50 text-amber-700'
+                                  }`}
+                                >
+                                  {category.margin.toFixed(1)}%
+                                </Badge>
+                              </TableCell>
+                            )}
                           </TableRow>
                           {isOpen && (
                             <TableRow className='bg-muted/20 hover:bg-muted/20'>
@@ -579,24 +612,28 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                   <p className='text-xs text-muted-foreground mt-1'>{t('Across all sub-categories')}</p>
                 </CardContent>
               </Card>
-              <Card className={kpiCardClass('emerald')}>
-                <CardHeader>
-                  <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalSubCategoryProfit)}</div>
-                  <p className='text-xs text-muted-foreground mt-1'>{t('Sub-category profit')}</p>
-                </CardContent>
-              </Card>
-              <Card className={kpiCardClass('violet')}>
-                <CardHeader>
-                  <CardTitle className='text-sm'>{t('Avg Margin')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-violet-600'>{avgSubCategoryMargin.toFixed(1)}%</div>
-                  <p className='text-xs text-muted-foreground mt-1'>{t('Average profit margin')}</p>
-                </CardContent>
-              </Card>
+              {canViewCost && (
+                <Card className={kpiCardClass('emerald')}>
+                  <CardHeader>
+                    <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalSubCategoryProfit)}</div>
+                    <p className='text-xs text-muted-foreground mt-1'>{t('Sub-category profit')}</p>
+                  </CardContent>
+                </Card>
+              )}
+              {canViewCost && (
+                <Card className={kpiCardClass('violet')}>
+                  <CardHeader>
+                    <CardTitle className='text-sm'>{t('Avg Margin')}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold text-violet-600'>{avgSubCategoryMargin.toFixed(1)}%</div>
+                    <p className='text-xs text-muted-foreground mt-1'>{t('Average profit margin')}</p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             <Card>
@@ -630,9 +667,15 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                         <TableHead className='text-right'>{t('Products')}</TableHead>
                         <TableHead className='text-right'>{t('Quantity Sold')}</TableHead>
                         <TableHead className='text-right'>{t('Revenue')}</TableHead>
-                        <TableHead className='text-right'>{t('Cost')}</TableHead>
-                        <TableHead className='text-right'>{t('Profit')}</TableHead>
-                        <TableHead className='text-right'>{t('Margin')}</TableHead>
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Cost')}</TableHead>
+                        )}
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Profit')}</TableHead>
+                        )}
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Margin')}</TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -667,26 +710,32 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                             <TableCell className='text-right font-semibold'>
                               {formatCurrency(sub.totalRevenue)}
                             </TableCell>
-                            <TableCell className='text-right text-orange-600'>
-                              {formatCurrency(sub.totalCost)}
-                            </TableCell>
-                            <TableCell className='text-right text-green-600 font-medium'>
-                              {formatCurrency(sub.profit)}
-                            </TableCell>
-                            <TableCell className='text-right'>
-                              <Badge
-                                variant='outline'
-                                className={`${
-                                  sub.margin > 30
-                                    ? 'bg-green-50 text-green-700'
-                                    : sub.margin > 15
-                                    ? 'bg-blue-50 text-blue-700'
-                                    : 'bg-amber-50 text-amber-700'
-                                }`}
-                              >
-                                {sub.margin.toFixed(1)}%
-                              </Badge>
-                            </TableCell>
+                            {canViewCost && (
+                              <TableCell className='text-right text-orange-600'>
+                                {formatCurrency(sub.totalCost)}
+                              </TableCell>
+                            )}
+                            {canViewCost && (
+                              <TableCell className='text-right text-green-600 font-medium'>
+                                {formatCurrency(sub.profit)}
+                              </TableCell>
+                            )}
+                            {canViewCost && (
+                              <TableCell className='text-right'>
+                                <Badge
+                                  variant='outline'
+                                  className={`${
+                                    sub.margin > 30
+                                      ? 'bg-green-50 text-green-700'
+                                      : sub.margin > 15
+                                      ? 'bg-blue-50 text-blue-700'
+                                      : 'bg-amber-50 text-amber-700'
+                                  }`}
+                                >
+                                  {sub.margin.toFixed(1)}%
+                                </Badge>
+                              </TableCell>
+                            )}
                           </TableRow>
                           {isOpen && (
                             <TableRow className='bg-muted/20 hover:bg-muted/20'>
@@ -742,15 +791,17 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                   <p className='text-xs text-muted-foreground mt-1'>{t('Across all brands')}</p>
                 </CardContent>
               </Card>
-              <Card className={kpiCardClass('emerald')}>
-                <CardHeader>
-                  <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalBrandProfit)}</div>
-                  <p className='text-xs text-muted-foreground mt-1'>{t('Brand profit')}</p>
-                </CardContent>
-              </Card>
+              {canViewCost && (
+                <Card className={kpiCardClass('emerald')}>
+                  <CardHeader>
+                    <CardTitle className='text-sm'>{t('Total Profit')}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold text-green-600'>{formatCurrency(totalBrandProfit)}</div>
+                    <p className='text-xs text-muted-foreground mt-1'>{t('Brand profit')}</p>
+                  </CardContent>
+                </Card>
+              )}
               <Card className={kpiCardClass('indigo')}>
                 <CardHeader>
                   <CardTitle className='text-sm'>{t('IMEI Brands')}</CardTitle>
@@ -793,9 +844,15 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                         <TableHead className='text-right'>{t('Products')}</TableHead>
                         <TableHead className='text-right'>{t('Quantity Sold')}</TableHead>
                         <TableHead className='text-right'>{t('Revenue')}</TableHead>
-                        <TableHead className='text-right'>{t('Cost')}</TableHead>
-                        <TableHead className='text-right'>{t('Profit')}</TableHead>
-                        <TableHead className='text-right'>{t('Margin')}</TableHead>
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Cost')}</TableHead>
+                        )}
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Profit')}</TableHead>
+                        )}
+                        {canViewCost && (
+                          <TableHead className='text-right'>{t('Margin')}</TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -844,26 +901,32 @@ export const ProductReport = forwardRef<{ exportToExcel: () => void }, ProductRe
                             <TableCell className='text-right font-semibold'>
                               {formatCurrency(brand.totalRevenue)}
                             </TableCell>
-                            <TableCell className='text-right text-orange-600'>
-                              {formatCurrency(brand.totalCost)}
-                            </TableCell>
-                            <TableCell className='text-right text-green-600 font-medium'>
-                              {formatCurrency(brand.profit)}
-                            </TableCell>
-                            <TableCell className='text-right'>
-                              <Badge
-                                variant='outline'
-                                className={`${
-                                  brand.margin > 30
-                                    ? 'bg-green-50 text-green-700'
-                                    : brand.margin > 15
-                                    ? 'bg-blue-50 text-blue-700'
-                                    : 'bg-amber-50 text-amber-700'
-                                }`}
-                              >
-                                {brand.margin.toFixed(1)}%
-                              </Badge>
-                            </TableCell>
+                            {canViewCost && (
+                              <TableCell className='text-right text-orange-600'>
+                                {formatCurrency(brand.totalCost)}
+                              </TableCell>
+                            )}
+                            {canViewCost && (
+                              <TableCell className='text-right text-green-600 font-medium'>
+                                {formatCurrency(brand.profit)}
+                              </TableCell>
+                            )}
+                            {canViewCost && (
+                              <TableCell className='text-right'>
+                                <Badge
+                                  variant='outline'
+                                  className={`${
+                                    brand.margin > 30
+                                      ? 'bg-green-50 text-green-700'
+                                      : brand.margin > 15
+                                      ? 'bg-blue-50 text-blue-700'
+                                      : 'bg-amber-50 text-amber-700'
+                                  }`}
+                                >
+                                  {brand.margin.toFixed(1)}%
+                                </Badge>
+                              </TableCell>
+                            )}
                           </TableRow>
                           {isOpen && brand.brandId && (
                             <TableRow className='bg-muted/20 hover:bg-muted/20'>
@@ -923,6 +986,7 @@ function ProductTransactionsTable({
   isLoading: boolean
   emptyLabel: string
 }) {
+  const canViewCost = useCanViewCostPrices()
   const { t } = useLanguage()
   const formatCurrency = useFormatMoney()
 
@@ -949,8 +1013,12 @@ function ProductTransactionsTable({
               <TableHead className='h-8 text-right text-xs'>{t('Qty')}</TableHead>
               <TableHead className='h-8 text-right text-xs'>{t('Price')}</TableHead>
               <TableHead className='h-8 text-right text-xs'>{t('Revenue')}</TableHead>
-              <TableHead className='h-8 text-right text-xs'>{t('Cost')}</TableHead>
-              <TableHead className='h-8 text-right text-xs'>{t('Profit')}</TableHead>
+              {canViewCost && (
+                <TableHead className='h-8 text-right text-xs'>{t('Cost')}</TableHead>
+              )}
+              {canViewCost && (
+                <TableHead className='h-8 text-right text-xs'>{t('Profit')}</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -987,12 +1055,16 @@ function ProductTransactionsTable({
                 <TableCell className='py-1.5 text-right text-xs font-semibold'>
                   {formatCurrency(item.revenue)}
                 </TableCell>
-                <TableCell className='py-1.5 text-right text-xs text-orange-600'>
-                  {formatCurrency(item.cost)}
-                </TableCell>
-                <TableCell className='py-1.5 text-right text-xs font-medium text-green-600'>
-                  {formatCurrency(item.profit)}
-                </TableCell>
+                {canViewCost && (
+                  <TableCell className='py-1.5 text-right text-xs text-orange-600'>
+                    {formatCurrency(item.cost)}
+                  </TableCell>
+                )}
+                {canViewCost && (
+                  <TableCell className='py-1.5 text-right text-xs font-medium text-green-600'>
+                    {formatCurrency(item.profit)}
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -1005,18 +1077,22 @@ function ProductTransactionsTable({
             <div className='text-sm font-bold'>{formatCurrency(totalRevenue)}</div>
           </CardContent>
         </Card>
-        <Card className={kpiCardClass('orange')}>
-          <CardContent className='py-2.5'>
-            <div className='text-[11px] text-muted-foreground'>{t('Total Cost')}</div>
-            <div className='text-sm font-bold text-orange-600'>{formatCurrency(totalCost)}</div>
-          </CardContent>
-        </Card>
-        <Card className={kpiCardClass('emerald')}>
-          <CardContent className='py-2.5'>
-            <div className='text-[11px] text-muted-foreground'>{t('Total Profit')}</div>
-            <div className='text-sm font-bold text-green-600'>{formatCurrency(totalProfit)}</div>
-          </CardContent>
-        </Card>
+        {canViewCost && (
+          <Card className={kpiCardClass('orange')}>
+            <CardContent className='py-2.5'>
+              <div className='text-[11px] text-muted-foreground'>{t('Total Cost')}</div>
+              <div className='text-sm font-bold text-orange-600'>{formatCurrency(totalCost)}</div>
+            </CardContent>
+          </Card>
+        )}
+        {canViewCost && (
+          <Card className={kpiCardClass('emerald')}>
+            <CardContent className='py-2.5'>
+              <div className='text-[11px] text-muted-foreground'>{t('Total Profit')}</div>
+              <div className='text-sm font-bold text-green-600'>{formatCurrency(totalProfit)}</div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

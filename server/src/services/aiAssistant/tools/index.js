@@ -11,6 +11,7 @@ const repairs = require('./repairs');
 const salesmen = require('./salesmen');
 const lookup = require('./lookup');
 const actions = require('./actions');
+const { deepStrip, isCostKey, isStockValueKey } = require('../../../middlewares/costVisibility');
 
 const ALL_TOOLS = [
   ...sales.declarations,
@@ -81,7 +82,21 @@ function buildToolset(ctx, businessContext = {}) {
 
   return {
     TOOL_DECLARATIONS: allowed.map(({ name, description, parameters }) => ({ name, description, parameters })),
-    TOOL_HANDLERS: Object.fromEntries(allowed.map((t) => [t.name, t.handler])),
+    // Without viewCostPrices, tool results lose cost / stock value (the profit summary is
+    // a profit report by definition and keeps its own viewProfitLossReports gate).
+    TOOL_HANDLERS: Object.fromEntries(
+      allowed.map((t) => {
+        if (isAdmin || permissions.viewCostPrices === true || t.permission === 'viewProfitLossReports')
+          return [t.name, t.handler];
+        // Inventory tools value stock at cost; elsewhere only cost/profit/margin fields go.
+        const strip = t.permission === 'viewProducts' ? isStockValueKey : isCostKey;
+        const handler = async (...args) => {
+          const result = await t.handler(...args);
+          return result === undefined ? result : deepStrip(JSON.parse(JSON.stringify(result)), strip);
+        };
+        return [t.name, handler];
+      })
+    ),
   };
 }
 

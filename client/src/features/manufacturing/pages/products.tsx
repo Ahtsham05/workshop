@@ -32,7 +32,8 @@ import {
 import { useGetProductQuery } from '@/stores/product.api'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import type { AppDispatch } from '@/stores/store'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'
@@ -128,6 +129,7 @@ export default function ManufacturingProducts({
   const navigate = useNavigate()
   const dispatch = useDispatch<AppDispatch>()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { hasAnyPermission, hasPermission } = usePermissions()
   const canEdit = hasAnyPermission('manageBoms', 'editProducts')
   const canCreate = hasPermission('createProducts')
@@ -377,6 +379,7 @@ export default function ManufacturingProducts({
     {
       id: 'cost',
       header: t('Purchase'),
+      money: true,
       align: 'right',
       hideBelow: 'md',
       cell: (p) => <span className='tabular-nums'>{formatMoney(p.cost)}</span>,
@@ -384,6 +387,7 @@ export default function ManufacturingProducts({
     {
       id: 'price',
       header: t('Sale Price'),
+      money: true,
       align: 'right',
       hideBelow: 'lg',
       cell: (p) => <span className='tabular-nums'>{formatMoney(p.price)}</span>,
@@ -636,20 +640,24 @@ export default function ManufacturingProducts({
               : (stats?.stockQuantity ?? 0).toLocaleString()
           }
         />
-        <ProductSummaryChip
-          icon={Wallet}
-          label={t('Total Value of Stock')}
-          value={
-            statsLoading && !stats ? '…' : formatMoney(stats?.stockValue ?? 0)
-          }
-        />
-        <ProductSummaryChip
-          icon={CircleDollarSign}
-          label={t('Avg Purchase Price')}
-          value={
-            statsLoading && !stats ? '…' : formatMoney(stats?.avgCost ?? 0)
-          }
-        />
+        {canSeeCosts && (
+          <>
+            <ProductSummaryChip
+              icon={Wallet}
+              label={t('Total Value of Stock')}
+              value={
+                statsLoading && !stats ? '…' : formatMoney(stats?.stockValue ?? 0)
+              }
+            />
+            <ProductSummaryChip
+              icon={CircleDollarSign}
+              label={t('Avg Purchase Price')}
+              value={
+                statsLoading && !stats ? '…' : formatMoney(stats?.avgCost ?? 0)
+              }
+            />
+          </>
+        )}
         <ProductSummaryChip
           icon={FileStack}
           label={t('With BOM')}
@@ -881,7 +889,7 @@ export default function ManufacturingProducts({
                 <span>
                   {fmtQty(p.stockQuantity)} {getUnitLabel(p.unit)}
                 </span>
-                <span>{formatMoney(p.cost)}</span>
+                {canSeeCosts && <span>{formatMoney(p.cost)}</span>}
                 {p.tracking?.trackBatch && (
                   <span className='text-blue-700 dark:text-blue-300'>
                     {batchCountLabel(p.tracking.batchCount, t)}

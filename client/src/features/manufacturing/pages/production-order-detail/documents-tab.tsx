@@ -26,7 +26,8 @@ import {
   type ProductionOrder,
 } from '@/stores/manufacturing.api'
 import type { RootState } from '@/stores/store'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
@@ -263,6 +264,9 @@ function ProductionRecords({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  // " · ₨…" after a summary, left off for roles without viewManufacturingCosts.
+  const canSeeCosts = useCanViewManufacturingCosts()
+  const costSuffix = (n: number) => (canSeeCosts ? ` · ${formatMoney(n)}` : '')
   const q = { productionOrderId: order.id, limit: 100 }
   const { data: issues } = useGetMaterialIssuesQuery(q)
   const { data: outputs } = useGetOutputsQuery(q)
@@ -282,7 +286,7 @@ function ProductionRecords({
       number: d.issueNumber,
       type: d.kind === 'return' ? t('Material return') : t('Material issue'),
       date: d.issueDate,
-      summary: `${d.lines.length} ${t('line(s)')} · ${formatMoney(d.totalCost)}`,
+      summary: `${d.lines.length} ${t('line(s)')}${costSuffix(d.totalCost)}`,
     })),
     ...(outputs?.results || []).map((d) => ({
       key: `o-${d.id}`,
@@ -299,14 +303,14 @@ function ProductionRecords({
       number: d.receiptNumber,
       type: t('Finished goods receipt'),
       date: d.receiptDate,
-      summary: `+${fmtQty(d.quantity)} ${d.unit} · ${formatMoney(d.totalCost)}`,
+      summary: `+${fmtQty(d.quantity)} ${d.unit}${costSuffix(d.totalCost)}`,
     })),
     ...(scrap?.results || []).map((d) => ({
       key: `s-${d.id}`,
       number: d.scrapNumber,
       type: t('Scrap note'),
       date: d.scrapDate,
-      summary: `${d.productName} · ${fmtQty(d.quantity)} ${d.unit} · ${formatMoney(d.totalCost)}`,
+      summary: `${d.productName} · ${fmtQty(d.quantity)} ${d.unit}${costSuffix(d.totalCost)}`,
     })),
   ].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
 

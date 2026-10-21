@@ -208,19 +208,30 @@ const syncProductDefault = async ({ organizationId, branchId, productId, bomId }
   await Product.updateOne({ _id: productId, organizationId, branchId }, { $set: { defaultBomId: bomId || null } });
 };
 
-/** Routing steps in the order given (sequence 10, 20, 30 … like a shop routing sheet). */
-const normalizeOperations = (operations) => {
+/**
+ * Routing steps in the order given (sequence 10, 20, 30 … like a shop routing sheet).
+ * A step sent without `costPerHour` keeps the rate of the step it replaces (same id, else
+ * same name) — a role that cannot see manufacturing costs has the field stripped from its
+ * request, and saving the routing must not wipe a rate it was never shown.
+ */
+const normalizeOperations = (operations, previous = []) => {
   if (!Array.isArray(operations)) return [];
   if (operations.length > MAX_OPERATIONS) {
     throw new ApiError(httpStatus.BAD_REQUEST, `A routing can have at most ${MAX_OPERATIONS} operations`);
   }
+  const previousRate = (op) => {
+    const match =
+      (op._id && previous.find((p) => p._id && String(p._id) === String(op._id))) ||
+      previous.find((p) => p.name === String(op.name || '').trim());
+    return match ? match.costPerHour || 0 : 0;
+  };
   return operations.map((op, index) => ({
     ...(op._id ? { _id: op._id } : {}),
     name: String(op.name || '').trim(),
     workCenter: String(op.workCenter || '').trim(),
     setupMinutes: Math.max(0, Number(op.setupMinutes) || 0),
     runMinutesPerUnit: Math.max(0, Number(op.runMinutesPerUnit) || 0),
-    costPerHour: Math.max(0, Number(op.costPerHour) || 0),
+    costPerHour: op.costPerHour === undefined ? previousRate(op) : Math.max(0, Number(op.costPerHour) || 0),
     instructions: String(op.instructions || '').trim(),
     sequence: (index + 1) * 10,
   }));
@@ -320,7 +331,7 @@ const updateBom = async ({ organizationId, branchId, createdBy }, bomId, body) =
     bom.components = components;
   }
   // Allowed on a locked version too: orders keep their own copy of the routing.
-  if (body.operations !== undefined) bom.operations = normalizeOperations(body.operations);
+  if (body.operations !== undefined) bom.operations = normalizeOperations(body.operations, bom.operations);
   bom.updatedBy = createdBy;
   await bom.save();
 
@@ -361,7 +372,8 @@ const createNewVersion = async ({ organizationId, branchId, createdBy }, bomId, 
     unit: body.unit || source.unit,
     components,
     operations: normalizeOperations(
-      body.operations !== undefined ? body.operations : plain.operations.map(({ _id, ...op }) => op)
+      body.operations !== undefined ? body.operations : plain.operations.map(({ _id, ...op }) => op),
+      plain.operations
     ),
     notes: body.notes ?? source.notes,
     isActive: true,
@@ -555,4 +567,5 @@ module.exports = {
   explodeBom,
   whereUsed,
   findBomOrThrow,
+  normalizeOperations,
 };

@@ -1,5 +1,5 @@
 export type PermissionKey =
-  | 'viewProducts' | 'createProducts' | 'editProducts' | 'deleteProducts'
+  | 'viewProducts' | 'createProducts' | 'editProducts' | 'deleteProducts' | 'viewCostPrices'
   | 'viewStockTransfers' | 'manageStockTransfers'
   | 'viewStockAdjustments' | 'manageStockAdjustments'
   | 'viewInvoices' | 'createInvoices' | 'editInvoices' | 'deleteInvoices' | 'printInvoices'
@@ -35,6 +35,7 @@ export type PermissionKey =
   | 'viewExpenseReports' | 'viewSimSaleReports' | 'viewProfitLossReports'
   | 'viewLoadReports' | 'viewRepairReports' | 'viewServiceReports'
   | 'viewWalletReports' | 'viewInstallmentReports' | 'exportReports'
+  | 'viewActivityReports' | 'viewSummaryReports' | 'viewTaxReports' | 'viewTeamReports' | 'viewBillPaymentReports' | 'viewMobilePhoneReports'
   | 'getEmployees' | 'createEmployees' | 'manageEmployees' | 'deleteEmployees'
   | 'getDepartments' | 'createDepartments' | 'manageDepartments' | 'deleteDepartments'
   | 'getDesignations' | 'createDesignations' | 'manageDesignations' | 'deleteDesignations'
@@ -44,7 +45,7 @@ export type PermissionKey =
   | 'viewFeeAccounting' | 'manageFeeAccounting'
   | 'viewUsers' | 'createUsers' | 'editUsers' | 'deleteUsers'
   | 'viewRoles' | 'createRoles' | 'editRoles' | 'deleteRoles'
-  | 'viewBranches' | 'manageBranches'
+  | 'viewBranches' | 'manageBranches' | 'viewBranchPerformance'
   | 'viewStaff' | 'manageStaff'
   | 'viewSettings' | 'editSettings'
   | 'viewBusinessProfile' | 'manageBusinessProfile'
@@ -71,10 +72,11 @@ export type PermissionKey =
   | 'manageWebsiteConnections'
   | 'countStock' | 'approveStockCounts'
   | 'viewAiAssistant'
+  | 'useNotes' | 'useTeamChat'
   | 'viewInsights'
   | 'viewPurchaseSuggestions'
   | 'viewBarcodeGenerator'
-  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'executeProduction' | 'overIssueMaterials' | 'inspectProduction' | 'manageManufacturingSettings';
+  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'executeProduction' | 'overIssueMaterials' | 'inspectProduction' | 'manageManufacturingSettings' | 'viewManufacturingCosts';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -85,7 +87,7 @@ export interface PermissionGroupDef {
 }
 
 export const PERMISSION_GROUPS: PermissionGroupDef[] = [
-  { id: 'products', label: 'Products', permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts'] },
+  { id: 'products', label: 'Products', permissions: ['viewProducts', 'createProducts', 'editProducts', 'deleteProducts', 'viewCostPrices'] },
   { id: 'stock_transfers', label: 'Stock Transfers', permissions: ['viewStockTransfers', 'manageStockTransfers'] },
   { id: 'stock_adjustments', label: 'Stock Adjustments', permissions: ['viewStockAdjustments', 'manageStockAdjustments'] },
   { id: 'stock_counts', label: 'Stock Counts', permissions: ['countStock', 'approveStockCounts'] },
@@ -128,7 +130,9 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
       'viewCustomerReports', 'viewSupplierReports', 'viewProductReports',
       'viewExpenseReports', 'viewSimSaleReports', 'viewProfitLossReports',
       'viewLoadReports', 'viewRepairReports', 'viewServiceReports',
-      'viewWalletReports', 'viewInstallmentReports', 'exportReports',
+      'viewWalletReports', 'viewInstallmentReports',
+      'viewActivityReports', 'viewSummaryReports', 'viewTaxReports', 'viewTeamReports', 'viewBillPaymentReports', 'viewMobilePhoneReports',
+      'exportReports',
     ],
   },
   { id: 'hr_employees', label: 'Employees', permissions: ['getEmployees', 'createEmployees', 'manageEmployees', 'deleteEmployees'] },
@@ -140,7 +144,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'school_fees', label: 'Fee Accounting', permissions: ['viewFeeAccounting', 'manageFeeAccounting'] },
   { id: 'users', label: 'User Management', permissions: ['viewUsers', 'createUsers', 'editUsers', 'deleteUsers'] },
   { id: 'roles', label: 'Role Management', permissions: ['viewRoles', 'createRoles', 'editRoles', 'deleteRoles'] },
-  { id: 'branches', label: 'Branch Management', permissions: ['viewBranches', 'manageBranches'] },
+  { id: 'branches', label: 'Branch Management', permissions: ['viewBranches', 'manageBranches', 'viewBranchPerformance'] },
   { id: 'staff', label: 'Staff Management', permissions: ['viewStaff', 'manageStaff'] },
   { id: 'settings', label: 'Settings', permissions: ['viewSettings', 'editSettings'] },
   {
@@ -169,6 +173,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'sms', label: 'SMS', permissions: ['viewSmsLog'] },
   { id: 'website_connections', label: 'Website Connections', permissions: ['manageWebsiteConnections'] },
   { id: 'ai_assistant', label: 'AI Assistant', permissions: ['viewAiAssistant'] },
+  { id: 'workspace', label: 'Notes & Team Chat', permissions: ['useNotes', 'useTeamChat'] },
   { id: 'insights', label: 'Insights', permissions: ['viewInsights'] },
   { id: 'purchase_suggestions', label: 'Purchase Suggestions', permissions: ['viewPurchaseSuggestions'] },
   { id: 'barcode', label: 'Barcode Generator', permissions: ['viewBarcodeGenerator'] },
@@ -183,6 +188,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
       'overIssueMaterials',
       'inspectProduction',
       'manageManufacturingSettings',
+      'viewManufacturingCosts',
     ],
   },
 ];
@@ -266,6 +272,8 @@ export const PERMISSION_KEY_BUSINESS_TYPES: Partial<Record<PermissionKey, string
   viewRepairReports: ['mobile_shop'],
   viewServiceReports: ['mobile_shop'],
   viewInstallmentReports: ['mobile_shop'],
+  viewBillPaymentReports: ['mobile_shop'],
+  viewMobilePhoneReports: ['mobile_shop'],
 };
 
 export type PermissionCategoryId =
@@ -290,7 +298,7 @@ export const PERMISSION_CATEGORIES: PermissionCategoryDef[] = [
   { id: 'school', label: 'School', description: 'Fee vouchers, collections and fee accounts', groups: ['school_fees'] },
   { id: 'reports', label: 'Reports', description: 'Business reports and exports', groups: ['reports'] },
   { id: 'hr', label: 'Human Resources', description: 'Employees, attendance, leave and payroll', groups: ['hr_employees', 'hr_departments', 'hr_designations', 'hr_attendance', 'hr_leaves', 'hr_payroll'] },
-  { id: 'communication', label: 'Messaging & AI', description: 'WhatsApp, SMS, website and AI tools', groups: ['whatsapp', 'sms', 'website_connections', 'ai_assistant', 'insights'] },
+  { id: 'communication', label: 'Messaging & AI', description: 'WhatsApp, SMS, website and AI tools', groups: ['workspace', 'whatsapp', 'sms', 'website_connections', 'ai_assistant', 'insights'] },
   { id: 'team', label: 'Salesmen & Partners', description: 'Commissions and partner profit share', groups: ['salesmen', 'commission_rules', 'commission_ledger', 'partners', 'partner_profit_share_rules', 'partner_profit_share_ledger'] },
   { id: 'administration', label: 'Administration', description: 'Users, roles, branches and settings', groups: ['dashboard', 'users', 'roles', 'staff', 'branches', 'settings', 'tax_currency_settings', 'audit_logs'] },
 ];

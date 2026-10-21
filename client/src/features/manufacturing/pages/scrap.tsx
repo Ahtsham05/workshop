@@ -7,7 +7,8 @@ import {
   type ScrapRecord,
   type ScrapStage,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
@@ -35,6 +36,7 @@ import {
 export default function ScrapPage() {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { hasPermission } = usePermissions()
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search, 300)
@@ -129,6 +131,7 @@ export default function ScrapPage() {
     {
       id: 'value',
       header: t('Value'),
+      money: true,
       align: 'right',
       cell: (s) => (
         <span className='text-rose-600 tabular-nums dark:text-rose-400'>
@@ -237,9 +240,11 @@ export default function ScrapPage() {
           <div className='space-y-1'>
             <div className='flex items-start justify-between gap-3'>
               <div className='truncate font-medium'>{s.productName}</div>
-              <span className='shrink-0 text-sm text-rose-600 tabular-nums dark:text-rose-400'>
-                {formatMoney(s.totalCost)}
-              </span>
+              {canSeeCosts && (
+                <span className='shrink-0 text-sm text-rose-600 tabular-nums dark:text-rose-400'>
+                  {formatMoney(s.totalCost)}
+                </span>
+              )}
             </div>
             <div className='text-muted-foreground text-xs'>
               {fmtQty(s.quantity)} {s.unit} · {t(SCRAP_STAGE_LABELS[s.stage])} ·{' '}

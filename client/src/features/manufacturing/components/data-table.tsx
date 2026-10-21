@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -19,6 +20,8 @@ export interface Column<T> {
   align?: 'right' | 'center'
   /** Drop the column below this breakpoint (tables stay readable on tablets). */
   hideBelow?: 'sm' | 'md' | 'lg' | 'xl'
+  /** A cost / value / price column — left out for roles without viewManufacturingCosts. */
+  money?: boolean
 }
 
 const HIDE: Record<NonNullable<Column<unknown>['hideBelow']>, string> = {
@@ -71,6 +74,8 @@ export function DataTable<T>({
   className?: string
 }) {
   const { t } = useLanguage()
+  const canSeeCosts = useCanViewManufacturingCosts()
+  columns = canSeeCosts ? columns : columns.filter((c) => !c.money)
   const list = rows || []
   const showEmpty = !loading && list.length === 0
   const colClass = (c: Column<T>) =>

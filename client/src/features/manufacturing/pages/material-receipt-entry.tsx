@@ -18,7 +18,7 @@ import {
 } from '@/stores/purchaseOrder.api'
 import type { AppDispatch, RootState } from '@/stores/store'
 import { fetchSuppliers } from '@/stores/supplier.slice'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { useLanguage } from '@/context/language-context'
 import { useBranchName } from '@/hooks/use-branch-name'

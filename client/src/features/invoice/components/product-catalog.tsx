@@ -57,7 +57,7 @@ export function ProductCatalog({
   const formatMoney = useFormatMoney()
   const { showUrdu } = useUrduDisplay()
   const { hasPermission } = usePermissions()
-  const canViewCost = hasPermission('viewProducts')
+  const canViewCost = hasPermission('viewCostPrices')
   const [filteredCategories, setFilteredCategories] = useState<Category[]>([])
   const [isBarcodeMode, setIsBarcodeMode] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')

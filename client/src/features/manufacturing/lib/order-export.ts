@@ -62,11 +62,14 @@ const csvCell = (value: string | number) => {
 
 export function exportOrdersCsv(
   rows: OrderExportRow[],
-  name = 'production-orders'
+  name = 'production-orders',
+  /** Leave out the cost column (role without viewManufacturingCosts). */
+  hideMoney = false
 ) {
+  const columns = hideMoney ? COLUMNS.filter((c) => c.header !== 'Material cost') : COLUMNS
   const csv = [
-    COLUMNS.map((c) => csvCell(c.header)).join(','),
-    ...rows.map((r) => COLUMNS.map((c) => csvCell(c.value(r))).join(',')),
+    columns.map((c) => csvCell(c.header)).join(','),
+    ...rows.map((r) => columns.map((c) => csvCell(c.value(r))).join(',')),
   ].join('\n')
   const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
@@ -95,8 +98,11 @@ export function printOrders(
     formatMoney: (n: number) => string
     truncated?: boolean
     totalResults?: number
+    /** Leave out the cost column (role without viewManufacturingCosts). */
+    hideMoney?: boolean
   }
 ) {
+  const money = (html: string) => (meta.hideMoney ? '' : html)
   const totals = rows.reduce(
     (acc, r) => ({
       planned: acc.planned + Number(r.plannedQuantity || 0),
@@ -118,7 +124,7 @@ export function printOrders(
         <td>${escapeHtml(day(r.plannedCompletionDate))}${r.isDelayed ? ' <b>late</b>' : ''}</td>
         <td>${escapeHtml(r.workCenter)}</td>
         <td>${escapeHtml(r.operator)}</td>
-        <td class="num">${escapeHtml(meta.formatMoney(Number(r.materialCost || 0)))}</td>
+        ${money(`<td class="num">${escapeHtml(meta.formatMoney(Number(r.materialCost || 0)))}</td>`)}
       </tr>`
     )
     .join('')
@@ -149,14 +155,14 @@ export function printOrders(
     <thead><tr>
       <th>Order</th><th>Product / BOM</th><th>Status</th><th>Priority</th>
       <th class="num">Good / planned</th><th class="num">Done</th>
-      <th>Production</th><th>Due</th><th>Work center</th><th>Operator</th><th class="num">Cost</th>
+      <th>Production</th><th>Due</th><th>Work center</th><th>Operator</th>${money('<th class="num">Cost</th>')}
     </tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr>
       <td colspan="4">Totals</td>
       <td class="num">${escapeHtml(totals.good)} / ${escapeHtml(totals.planned)}</td>
       <td colspan="5"></td>
-      <td class="num">${escapeHtml(meta.formatMoney(totals.cost))}</td>
+      ${money(`<td class="num">${escapeHtml(meta.formatMoney(totals.cost))}</td>`)}
     </tr></tfoot>
   </table>
 </body></html>`

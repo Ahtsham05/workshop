@@ -5,7 +5,8 @@ import {
   type ScrapReason,
   type ScrapStage,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,7 @@ export function ScrapTab({
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { data } = useGetScrapRecordsQuery({
     productionOrderId: order.id,
     limit: 100,
@@ -52,27 +54,32 @@ export function ScrapTab({
   return (
     <div className='space-y-4'>
       <StatGrid className='md:grid-cols-4'>
-        <Stat
-          label={t('Scrap value')}
-          value={formatMoney(total)}
-          tone='danger'
-          active={total > 0}
-        />
+        {canSeeCosts && (
+          <Stat
+            label={t('Scrap value')}
+            value={formatMoney(total)}
+            tone='danger'
+            active={total > 0}
+          />
+        )}
         <Stat label={t('Scrap records')} value={rows.length} />
-        <Stat
-          label={t('Scrap rate')}
-          value={`${rate}%`}
-          hint={t('of material value issued')}
-          tone='warning'
-          active={rate >= 5}
-        />
+        {/* The rate is value-based (scrap value ÷ material value issued). */}
+        {canSeeCosts && (
+          <Stat
+            label={t('Scrap rate')}
+            value={`${rate}%`}
+            hint={t('of material value issued')}
+            tone='warning'
+            active={rate >= 5}
+          />
+        )}
         <Stat
           label={t('Units rejected at QC')}
           value={`${fmtQty(order.rejectedQuantity)} ${order.unit}`}
         />
       </StatGrid>
 
-      {rows.length > 0 && (
+      {canSeeCosts && rows.length > 0 && (
         <div className='grid gap-4 md:grid-cols-2'>
           <Breakdown
             title={t('By stage')}
@@ -125,9 +132,11 @@ export function ScrapTab({
                 <span className='tabular-nums'>
                   {fmtQty(s.quantity)} {s.unit}
                 </span>
-                <span className='w-24 text-right font-medium tabular-nums'>
-                  {formatMoney(s.totalCost)}
-                </span>
+                {canSeeCosts && (
+                  <span className='w-24 text-right font-medium tabular-nums'>
+                    {formatMoney(s.totalCost)}
+                  </span>
+                )}
                 {s.notes && (
                   <p className='text-muted-foreground w-full text-xs'>
                     {s.notes}

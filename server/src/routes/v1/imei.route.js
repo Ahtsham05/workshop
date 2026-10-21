@@ -13,9 +13,9 @@ router.use(auth(), branchScope());
 router.get('/available', auth(...SERIAL_PICKERS), validate(imeiValidation.getAvailableImeis), imeiController.getAvailableImeis);
 router.get('/opening-stock', auth('viewProducts', 'createProducts', 'editProducts', 'viewImeiTracking'), validate(imeiValidation.getOpeningStockImeis), imeiController.getOpeningStockImeis);
 router.get('/in-stock', auth('viewProducts', 'createProducts', 'editProducts', 'viewImeiTracking'), validate(imeiValidation.getInStockImeis), imeiController.getInStockImeis);
-router.get('/stats', auth('viewImeiTracking', 'viewNewPhones', 'viewReports'), imeiController.getStats);
+router.get('/stats', auth('viewImeiTracking', 'viewNewPhones', 'viewReports', 'viewMobilePhoneReports'), imeiController.getStats);
 
-router.route('/').get(auth('viewImeiTracking', 'viewNewPhones', 'viewReports'), validate(imeiValidation.getImeis), imeiController.getImeis);
+router.route('/').get(auth('viewImeiTracking', 'viewNewPhones', 'viewReports', 'viewMobilePhoneReports'), validate(imeiValidation.getImeis), imeiController.getImeis);
 
 router
   .route('/:imeiId')

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { AlertTriangle, Workflow } from 'lucide-react'
 import { useGetWipQuery } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,6 +17,7 @@ import { fmtDate, fmtQty, orderPath } from '../lib/constants'
 export default function WipPage() {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { data, isLoading } = useGetWipQuery()
   const [view, setView] = useState('all')
   const [search, setSearch] = useState('')
@@ -37,9 +39,11 @@ export default function WipPage() {
     <div className='space-y-5'>
       <PageHeader
         title={t('Work in progress')}
-        description={t(
-          'Orders on the floor, the material lots in their WIP (valued at issue cost), and output waiting for QC or rework.'
-        )}
+        description={
+          canSeeCosts
+            ? t('Orders on the floor, the material lots in their WIP (valued at issue cost), and output waiting for QC or rework.')
+            : t('Orders on the floor, the material lots in their WIP, and output waiting for QC or rework.')
+        }
       />
       {isLoading ? (
         <Skeleton className='h-[88px] w-full rounded-xl' />
@@ -49,10 +53,12 @@ export default function WipPage() {
             label={t('Orders on floor')}
             value={data?.totals.orderCount ?? 0}
           />
-          <Stat
-            label={t('WIP value')}
-            value={formatMoney(data?.totals.wipValue ?? 0)}
-          />
+          {canSeeCosts && (
+            <Stat
+              label={t('WIP value')}
+              value={formatMoney(data?.totals.wipValue ?? 0)}
+            />
+          )}
           <Stat
             label={t('Awaiting QC / rework')}
             value={`${fmtQty(data?.totals.qcPendingQuantity ?? 0)} / ${fmtQty(data?.totals.reworkPendingQuantity ?? 0)}`}
@@ -245,12 +251,14 @@ export default function WipPage() {
                     )}
                     {t('Due')} {fmtDate(row.plannedCompletionDate)}
                   </span>
-                  <span>
-                    {t('WIP')}{' '}
-                    <span className='font-semibold tabular-nums'>
-                      {formatMoney(row.wipValue)}
+                  {canSeeCosts && (
+                    <span>
+                      {t('WIP')}{' '}
+                      <span className='font-semibold tabular-nums'>
+                        {formatMoney(row.wipValue)}
+                      </span>
                     </span>
-                  </span>
+                  )}
                 </div>
                 {row.wipLocation && (
                   <div className='text-muted-foreground text-[11px]'>

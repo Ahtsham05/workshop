@@ -18,6 +18,7 @@ import { MovementBadge, AbcBadge } from '../../analytics/components/analytics-ba
 import { ImageGalleryViewer } from '@/components/image-gallery-viewer'
 import { formatPct, formatQty } from '../../analytics/lib/analytics-format'
 import { suggestReorderQuantity } from '../lib/reorder'
+import { useCanViewCostPrices } from '@/lib/cost-visibility'
 
 interface Props {
   data: ProductAnalyticsResponse
@@ -64,6 +65,7 @@ function PriceFigure({ label, value, sub, tone }: { label: string; value: string
 export function ProductHeader({ data, refreshing, onRefresh, onEdit, parent }: Props) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canViewCost = useCanViewCostPrices()
   const { hasPermission } = usePermissions()
   const router = useRouter()
   const navigate = useNavigate()
@@ -234,23 +236,32 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit, parent }: P
 
         {/* Pricing + details */}
         <div className='grid border-t lg:grid-cols-[minmax(0,5fr)_minmax(0,8fr)]'>
-          <div className='grid grid-cols-3 divide-x border-b bg-muted/30 lg:border-r lg:border-b-0'>
+          <div
+            className={cn(
+              'grid divide-x border-b bg-muted/30 lg:border-r lg:border-b-0',
+              canViewCost ? 'grid-cols-3' : product.hasVariants ? 'grid-cols-2' : 'grid-cols-1'
+            )}
+          >
             {product.hasVariants && product.priceRange ? (
               <>
                 <PriceFigure label={t('Price range')} value={range(product.priceRange.minPrice, product.priceRange.maxPrice)} />
-                <PriceFigure label={t('Cost range')} value={range(product.priceRange.minCost, product.priceRange.maxCost)} />
+                {canViewCost && <PriceFigure label={t('Cost range')} value={range(product.priceRange.minCost, product.priceRange.maxCost)} />}
                 <PriceFigure label={t('Variants')} value={String(data.variants.length)} sub={t('priced separately')} />
               </>
             ) : (
               <>
                 <PriceFigure label={t('Selling price')} value={formatMoney(product.price)} />
-                <PriceFigure label={t('Cost')} value={formatMoney(product.cost)} />
-                <PriceFigure
-                  label={t('Margin / unit')}
-                  value={formatMoney(unitMargin)}
-                  sub={unitMarginPct !== null ? t('{{pct}} of price', { pct: formatPct(unitMarginPct) }) : undefined}
-                  tone={unitMargin < 0 ? 'danger' : unitMargin > 0 ? 'success' : undefined}
-                />
+                {canViewCost && (
+                  <>
+                    <PriceFigure label={t('Cost')} value={formatMoney(product.cost)} />
+                    <PriceFigure
+                      label={t('Margin / unit')}
+                      value={formatMoney(unitMargin)}
+                      sub={unitMarginPct !== null ? t('{{pct}} of price', { pct: formatPct(unitMarginPct) }) : undefined}
+                      tone={unitMargin < 0 ? 'danger' : unitMargin > 0 ? 'success' : undefined}
+                    />
+                  </>
+                )}
               </>
             )}
           </div>
@@ -273,7 +284,7 @@ export function ProductHeader({ data, refreshing, onRefresh, onEdit, parent }: P
             <Fact
               label={t('Last purchased')}
               value={lastPurchase ? formatBusinessDate(lastPurchase.date) : undefined}
-              sub={lastPurchase ? [lastPurchase.supplierName, lastPurchase.unitCost !== null ? formatMoney(lastPurchase.unitCost) : null].filter(Boolean).join(' · ') : undefined}
+              sub={lastPurchase ? [lastPurchase.supplierName, canViewCost && lastPurchase.unitCost !== null ? formatMoney(lastPurchase.unitCost) : null].filter(Boolean).join(' · ') : undefined}
             />
             <Fact
               label={t('Last sold')}

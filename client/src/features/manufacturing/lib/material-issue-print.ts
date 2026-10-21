@@ -12,12 +12,16 @@ export function printMaterialIssue(
     branchName,
     formatMoney,
     t,
+    hideMoney = false,
   }: {
     branchName?: string
     formatMoney: (n: number) => string
     t: (s: string) => string
+    /** Quantities only (role without viewManufacturingCosts). */
+    hideMoney?: boolean
   }
 ) {
+  const money = (html: string) => (hideMoney ? '' : html)
   const e = escapeHtml
   const head: [string, string][] = [
     [t('Voucher'), v.issueNumber],
@@ -40,8 +44,8 @@ export function printMaterialIssue(
           : ''
       }${l.serialNumbers?.length ? `<div class="sub mono">${e(l.serialNumbers.join(', '))}</div>` : ''}</td>
       <td class="num">${e(fmtQty(l.quantity))} ${e(l.unit || '')}</td>
-      <td class="num">${e(formatMoney(l.unitCost || 0))}</td>
-      <td class="num">${e(formatMoney(l.totalCost || 0))}</td>
+      ${money(`<td class="num">${e(formatMoney(l.unitCost || 0))}</td>
+      <td class="num">${e(formatMoney(l.totalCost || 0))}</td>`)}
     </tr>`
     )
     .join('')
@@ -80,9 +84,9 @@ export function printMaterialIssue(
   ${v.notes ? `<p><b>${e(t('Notes'))}:</b> ${e(v.notes)}</p>` : ''}
   <table><thead><tr>
     <th class="num">#</th><th>${e(t('Material'))}</th><th class="num">${e(t('Qty issued'))}</th>
-    <th class="num">${e(t('Unit cost'))}</th><th class="num">${e(t('Value'))}</th>
+    ${money(`<th class="num">${e(t('Unit cost'))}</th><th class="num">${e(t('Value'))}</th>`)}
   </tr></thead><tbody>${rows}</tbody></table>
-  <div class="total"><span>${e(t('Total value'))}</span><span>${e(formatMoney(v.totalCost || 0))}</span></div>
+  ${money(`<div class="total"><span>${e(t('Total value'))}</span><span>${e(formatMoney(v.totalCost || 0))}</span></div>`)}
   ${overrides ? `<div class="warn"><b>${e(t('Overridden warnings'))}</b><ul>${overrides}</ul></div>` : ''}
   <div class="sign"><div>${e(t('Requested by'))}</div><div>${e(t('Issued by (store)'))}</div><div>${e(t('Received by (production)'))}</div></div>
 </body></html>`

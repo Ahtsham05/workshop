@@ -51,7 +51,9 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/school/fees', businessTypes: ['school'], excludeSchoolRoles: ['teacher', 'parent', 'student'] },
 
   // School accounts system
-  { prefix: '/school/accounts', businessTypes: ['school'], anyPermission: ['viewAccountsSystem'], excludeSchoolRoles: ['teacher', 'parent', 'student'] },
+  // The Accounts System lives under /school/accounts but serves every business type (sidebar
+  // shows it to non-school orgs as 'Accounts System', to schools under Fees & Accounts).
+  { prefix: '/school/accounts', excludeBusinessTypes: ['restaurant'], anyPermission: ['viewAccountsSystem'], excludeSchoolRoles: ['teacher', 'parent', 'student'] },
 
   // School admin module (catch-all for remaining /school/*)
   { prefix: '/school', businessTypes: ['school'], excludeSchoolRoles: ['teacher', 'parent', 'student'] },
@@ -102,7 +104,7 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/users-management', anyPermission: ['viewUsers', 'viewStaff'] },
   { prefix: '/roles', anyPermission: ['viewRoles'] },
   { prefix: '/branches', anyPermission: ['viewBranches'] },
-  { prefix: '/branch-overview', systemRoles: ['superAdmin', 'system_admin'] },
+  { prefix: '/branch-overview', anyPermission: ['viewBranchPerformance'] },
   { prefix: '/staff', anyPermission: ['viewStaff', 'viewUsers'] },
   { prefix: '/salesmen', anyPermission: ['viewSalesmen'], excludeBusinessTypes: ['school'] },
   { prefix: '/partners', anyPermission: ['viewPartners'], excludeBusinessTypes: ['school'] },
@@ -173,13 +175,13 @@ export const ROUTE_RULES: RouteRule[] = [
   // just Customers (or Suppliers) access can reach the page to use its own ledger tab
   // even without full viewAccounting; features/accounting/index.tsx hides the other
   // tabs (Dashboard, Expenses, Recurring, My Account) for such a role.
-  { prefix: '/accounting', anyPermission: ['viewAccounting', 'viewCustomers', 'viewSuppliers'] },
+  { prefix: '/accounting', anyPermission: ['viewAccounting', 'manageExpenses', 'managePersonalWallet', 'viewCustomers', 'viewSuppliers'] },
   { prefix: '/cash-register', anyPermission: ['viewCashRegister'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/reminders', anyPermission: ['viewReminders'] },
-  // Personal notepad — every signed-in user, no role permission needed.
-  { prefix: '/notes', allowAllAuthenticated: true },
-  // Team chat between branches — every staff member; the server scopes each conversation.
-  { prefix: '/chats', allowAllAuthenticated: true },
+  // Personal notepad — the useNotes permission (on for every role by default).
+  { prefix: '/notes', anyPermission: ['useNotes'] },
+  // Team chat between branches — the useTeamChat permission; the server scopes each conversation.
+  { prefix: '/chats', anyPermission: ['useTeamChat'] },
   { prefix: '/leads', anyPermission: ['viewLeads'] },
   {
     prefix: '/reports',
@@ -199,6 +201,12 @@ export const ROUTE_RULES: RouteRule[] = [
       'viewServiceReports',
       'viewWalletReports',
       'viewInstallmentReports',
+      'viewActivityReports',
+      'viewSummaryReports',
+      'viewTaxReports',
+      'viewTeamReports',
+      'viewBillPaymentReports',
+      'viewMobilePhoneReports',
     ],
   },
 

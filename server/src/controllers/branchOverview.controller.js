@@ -7,14 +7,10 @@ const { resolveDashboardDateRange } = require('../utils/dashboardDateRange');
 /**
  * GET /v1/branch-overview/summary
  * Org-wide, per-branch performance snapshot — for the super admin who wants to
- * monitor every branch at once without switching their active branch. Deliberately
- * gated on systemRole here rather than a delegable permission: this is an
- * owner-level view of every branch's numbers, not a role a business can hand to staff.
+ * monitor every branch at once without switching their active branch. The owner always
+ * sees it; anyone else needs the viewBranchPerformance permission (checked on the route).
  */
 const getSummary = catchAsync(async (req, res) => {
-  if (req.user.systemRole !== 'superAdmin' && req.user.systemRole !== 'system_admin') {
-    throw new ApiError(httpStatus.FORBIDDEN, 'Only the organization owner can view the branch overview');
-  }
 
   const organizationId = req.user.organizationId;
   if (!organizationId) {

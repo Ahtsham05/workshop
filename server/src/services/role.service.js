@@ -214,7 +214,7 @@ const createDefaultRoles = async () => {
       name: 'Manager',
       description: 'Can manage products, invoices, purchases, and view reports',
       permissions: {
-        viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true,
+        viewProducts: true, createProducts: true, editProducts: true, deleteProducts: true, viewCostPrices: true,
         viewStockTransfers: true, manageStockTransfers: true,
         viewStockAdjustments: true, manageStockAdjustments: true,
         viewInvoices: true, createInvoices: true, editInvoices: true, printInvoices: true,
@@ -244,6 +244,7 @@ const createDefaultRoles = async () => {
         viewExpenseReports: true, viewSimSaleReports: true, viewProfitLossReports: true,
         viewLoadReports: true, viewRepairReports: true, viewServiceReports: true,
         viewWalletReports: true, viewInstallmentReports: true,
+        viewActivityReports: true, viewSummaryReports: true, viewTaxReports: true, viewTeamReports: true, viewBillPaymentReports: true, viewMobilePhoneReports: true,
         getEmployees: true, createEmployees: true, manageEmployees: true,
         getDepartments: true, createDepartments: true, manageDepartments: true,
         getAttendance: true, createAttendance: true, manageAttendance: true,
@@ -260,8 +261,9 @@ const createDefaultRoles = async () => {
         viewInsights: true,
         viewPurchaseSuggestions: true,
         viewBarcodeGenerator: true,
+        useNotes: true, useTeamChat: true, viewBranchPerformance: true,
         viewManufacturing: true, manageBoms: true, manageProductionOrders: true, executeProduction: true,
-        overIssueMaterials: true, inspectProduction: true,
+        overIssueMaterials: true, inspectProduction: true, viewManufacturingCosts: true,
         viewDashboard: true,
         // Manager already views business Reports; extend that same view-only reach to the
         // new Tax & Currency Settings group (view-only — Manager doesn't manage settings).
@@ -286,6 +288,7 @@ const createDefaultRoles = async () => {
         viewSalesReturns: true, createSalesReturns: true,
         viewCustomers: true, createCustomers: true,
         viewDashboard: true,
+        useNotes: true, useTeamChat: true,
       },
       isSystemRole: true,
       isActive: true,
@@ -294,7 +297,7 @@ const createDefaultRoles = async () => {
       name: 'Viewer',
       description: 'Read-only access to view data',
       permissions: {
-        viewProducts: true, viewInvoices: true, viewPurchases: true,
+        viewProducts: true, viewInvoices: true, viewPurchases: true, viewCostPrices: true,
         viewStockTransfers: true, viewStockAdjustments: true,
         viewPurchaseOrders: true, viewSalesReturns: true, viewPurchaseReturns: true,
         viewCustomers: true, viewSuppliers: true, viewCategories: true, viewBrands: true,
@@ -303,11 +306,12 @@ const createDefaultRoles = async () => {
         viewRepairs: true, viewServices: true, viewBillPayments: true, viewInstallments: true,
         viewImeiTracking: true,
         viewPriceChecker: true,
-        viewManufacturing: true,
+        viewManufacturing: true, viewManufacturingCosts: true,
         viewReports: true, viewSalesReports: true, viewPurchaseReports: true, viewInventoryReports: true,
         viewExpenseReports: true, viewSimSaleReports: true, viewProfitLossReports: true,
         viewLoadReports: true, viewRepairReports: true, viewServiceReports: true,
         viewWalletReports: true, viewInstallmentReports: true,
+        viewActivityReports: true, viewSummaryReports: true, viewTaxReports: true, viewTeamReports: true, viewBillPaymentReports: true, viewMobilePhoneReports: true,
         getEmployees: true, getDepartments: true, getAttendance: true, getLeaves: true, getPayroll: true,
         viewSalesmen: true,
         viewCommissionRules: true,
@@ -317,6 +321,7 @@ const createDefaultRoles = async () => {
         viewWhatsapp: true,
         viewSmsLog: true,
         viewBarcodeGenerator: true,
+        useNotes: true, useTeamChat: true,
         viewDashboard: true,
         // Viewer is read-only across every module already (mirrors Manager's Reports access);
         // extend the same view-only reach to the new Tax & Currency Settings group.
@@ -358,17 +363,37 @@ const createDefaultRoles = async () => {
  * (buildPermissionsPayload), so they are never touched.
  */
 const SPLIT_PERMISSIONS = [
-  ['viewStockTransfers', 'viewProducts'],
-  ['manageStockTransfers', 'editProducts'],
-  ['viewStockAdjustments', 'viewProducts'],
-  ['manageStockAdjustments', 'editProducts'],
+  ['viewStockTransfers', ['viewProducts']],
+  ['manageStockTransfers', ['editProducts']],
+  ['viewStockAdjustments', ['viewProducts']],
+  ['manageStockAdjustments', ['editProducts']],
+  // Before viewCostPrices, cost was shown to every product / purchasing role.
+  [
+    'viewCostPrices',
+    ['viewProducts', 'editProducts', 'viewPurchases', 'createPurchases', 'editPurchases', 'viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders', 'approveStockCounts'],
+  ],
+  ['viewManufacturingCosts', ['viewManufacturing']],
+  // Reports that only had the general viewReports key until they got their own.
+  ['viewActivityReports', ['viewReports']],
+  ['viewSummaryReports', ['viewReports']],
+  ['viewTaxReports', ['viewReports']],
+  ['viewTeamReports', ['viewReports']],
+  ['viewBillPaymentReports', ['viewReports']],
+  ['viewMobilePhoneReports', ['viewReports']],
+  // Open to every signed-in user before they became permissions.
+  ['useNotes', null],
+  ['useTeamChat', null],
 ];
 
 const backfillSplitPermissions = () =>
   Promise.all(
-    SPLIT_PERMISSIONS.map(([newKey, oldKey]) =>
+    SPLIT_PERMISSIONS.map(([newKey, oldKeys]) =>
       Role.updateMany(
-        { isSystemRole: { $ne: true }, [`permissions.${newKey}`]: { $exists: false }, [`permissions.${oldKey}`]: true },
+        {
+          isSystemRole: { $ne: true },
+          [`permissions.${newKey}`]: { $exists: false },
+          ...(oldKeys ? { $or: oldKeys.map((key) => ({ [`permissions.${key}`]: true })) } : {}),
+        },
         { $set: { [`permissions.${newKey}`]: true } }
       )
     )

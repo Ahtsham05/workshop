@@ -29,6 +29,7 @@ import {
   upsertMessage,
 } from '../lib/chat-cache'
 import { clearOutbox } from '../lib/chat-outbox'
+import { usePermissions } from '@/context/permission-context'
 
 /** Polling cadence while the socket can't connect (e.g. an API host without websockets). */
 const FALLBACK_POLL_MS = 15_000
@@ -47,7 +48,9 @@ export function ChatLiveProvider() {
   const user = useSelector((state: RootState) => state.auth.data?.user)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const userId: string | undefined = user?.id
-  const enabled = !!userId && !!user?.organizationId && !deriveSchoolRole(user)
+  // No socket, list or polling for a role without Team Chat (the server refuses it too).
+  const canUseChat = usePermissions().hasExplicitPermission('useTeamChat')
+  const enabled = !!userId && !!user?.organizationId && !deriveSchoolRole(user) && canUseChat
   // Re-renders on connection changes so the polling fallback switches on and off.
   const live = useChatLive()
 

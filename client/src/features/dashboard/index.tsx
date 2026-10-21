@@ -56,6 +56,7 @@ import {
 } from 'lucide-react'
 import SchoolDashboard from '@/features/school/dashboard'
 import { Navigate } from '@tanstack/react-router'
+import { useDashboardCardVisible } from './lib/card-permissions'
 
 // Every card on this page uses the phone layout with the icon beside the title. It's opt-in on
 // StatCard, so the cards on other pages are unaffected.
@@ -158,6 +159,8 @@ export default function Dashboard() {
   // Leads & Reminders cards — independent of the big dashboard-stats query, so their
   // own loading state is tracked separately from `statsLoading`.
   const canViewLeads = hasExplicitPermission('viewLeads')
+  // Each card follows its module's permission (lib/card-permissions.ts).
+  const cardVisible = useDashboardCardVisible()
   const { data: leadStats, isLoading: leadStatsLoading } = useGetLeadStatsQuery(undefined, { skip: !canViewLeads })
   const openPipelineValue = useMemo(
     () => (leadStats?.byStage || [])
@@ -205,6 +208,7 @@ export default function Dashboard() {
       arranging={arranging}
       onReorder={(ids) => dashboardLayout.update({ cards: ids })}
       className={cn(DASHBOARD_CARD_GRID, 'transition-opacity', statsRefreshing && !arranging && 'opacity-60')}
+      isVisible={cardVisible}
     >
           {showMobileCards && (
             <>

@@ -67,22 +67,23 @@ export const sidebarData: SidebarData = {
         //   icon: IconUsers,
         // },
         {
-          // No permission gate and no business-type filter: the notepad is
-          // personal scratch space every signed-in user gets, like /profile.
+          // Personal notepad — the useNotes permission (on for every role by default).
           title: 'Notes',
           url: '/notes',
           icon: StickyNote,
+          permission: 'useNotes',
         },
         {
-          // Every staff member, like Notes (portal users never reach the main shell).
+          // Inter-branch team chat — the useTeamChat permission (on by default).
           title: 'Team Chat',
           url: '/chats',
           icon: MessagesSquare,
+          permission: 'useTeamChat',
         },
         {
           title: 'AI Tools',
           icon: Bot,
-          permission: 'viewDashboard',
+          anyPermission: ['viewAiAssistant', 'viewInsights', 'viewPurchaseSuggestions'],
           excludeBusinessTypes: ['school'],
           items: [
             { title: 'AI Assistant', url: '/ai-assistant', icon: Bot, permission: 'viewAiAssistant', excludeBusinessTypes: ['school'] },
@@ -178,11 +179,11 @@ export const sidebarData: SidebarData = {
           // A role with just Customers (or Suppliers) access still needs this group
           // visible to reach its own ledger tab — the tabs below are individually
           // gated so it only sees what it's actually allowed to see.
-          anyPermission: ['viewAccounting', 'viewCustomers', 'viewSuppliers'],
+          anyPermission: ['viewAccounting', 'manageExpenses', 'managePersonalWallet', 'viewCustomers', 'viewSuppliers', 'viewPayments', 'manageLedgers'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
             { title: 'Dashboard', url: '/accounting?tab=dashboard' as never, icon: IconLayoutDashboard, permission: 'viewAccounting' },
-            { title: 'Expenses', url: '/accounting?tab=expenses' as never, icon: IconCash, permission: 'viewAccounting' },
+            { title: 'Expenses', url: '/accounting?tab=expenses' as never, icon: IconCash, anyPermission: ['viewAccounting', 'manageExpenses'] },
             { title: 'Customer Ledgers', url: '/accounting?tab=customers' as never, icon: IconUsers, permission: 'viewCustomers' },
             { title: 'Supplier Ledgers', url: '/accounting?tab=suppliers' as never, icon: IconBuilding, permission: 'viewSuppliers' },
             {
@@ -191,8 +192,8 @@ export const sidebarData: SidebarData = {
               icon: IconCreditCard,
               anyPermission: ['viewPayments', 'viewAccounting', 'manageLedgers'],
             },
-            { title: 'Recurring Expense', url: '/accounting?tab=recurring' as never, icon: IconCalendarEvent, permission: 'viewAccounting' },
-            { title: 'My Personal Account', url: '/accounting?tab=wallet' as never, icon: IconCreditCard, permission: 'viewAccounting' },
+            { title: 'Recurring Expense', url: '/accounting?tab=recurring' as never, icon: IconCalendarEvent, anyPermission: ['viewAccounting', 'manageExpenses'] },
+            { title: 'My Personal Account', url: '/accounting?tab=wallet' as never, icon: IconCreditCard, anyPermission: ['viewAccounting', 'managePersonalWallet'] },
           ],
         },
         {
@@ -409,7 +410,7 @@ export const sidebarData: SidebarData = {
           title: 'Branch Performance',
           url: '/branch-overview',
           icon: Building2,
-          systemRole: ['superAdmin', 'system_admin'],
+          permission: 'viewBranchPerformance',
           excludedSchoolRoles: ['teacher'],
         },
         {
@@ -998,13 +999,14 @@ export const sidebarData: SidebarData = {
         {
           title: 'Overview',
           icon: IconReportAnalytics,
-          permission: 'viewReports',
+          anyPermission: ['viewReports', 'viewActivityReports', 'viewSummaryReports'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
-            { title: 'Activities Report', url: '/reports?tab=activities' as never, icon: IconHistory },
-            { title: 'Summary Report', url: '/reports?tab=summary' as never, icon: IconReportAnalytics },
-            { title: 'Daily Summary Report', url: '/reports?tab=daily-summary' as never, icon: IconCalendarEvent, businessTypes: ['mobile_shop'] },
-            { title: 'Final Report', url: '/reports?tab=complete' as never, icon: BarChart3, businessTypes: ['mobile_shop'] },
+            { title: 'Activities Report', url: '/reports?tab=activities' as never, icon: IconHistory, anyPermission: ['viewReports', 'viewActivityReports'] },
+            { title: 'Summary Report', url: '/reports?tab=summary' as never, icon: IconReportAnalytics, anyPermission: ['viewReports', 'viewSummaryReports'] },
+            { title: 'Daily Summary Report', url: '/reports?tab=daily-summary' as never, icon: IconCalendarEvent, businessTypes: ['mobile_shop'], anyPermission: ['viewReports', 'viewSummaryReports'] },
+            // Pulls from every other report, so it stays on the all-reports key.
+            { title: 'Final Report', url: '/reports?tab=complete' as never, icon: BarChart3, businessTypes: ['mobile_shop'], permission: 'viewReports' },
           ],
         },
         {
@@ -1034,7 +1036,8 @@ export const sidebarData: SidebarData = {
         {
           title: 'Inventory & Stock',
           icon: IconPackages,
-          anyPermission: ['viewProductReports', 'viewInventoryReports'],
+          // Stock Count Accuracy (below) belongs to the stock-count roles too.
+          anyPermission: ['viewProductReports', 'viewInventoryReports', 'viewProducts', 'countStock', 'approveStockCounts'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
             { title: 'Products Report', url: '/reports?tab=products' as never, icon: IconCategory, permission: 'viewProductReports' },
@@ -1048,12 +1051,12 @@ export const sidebarData: SidebarData = {
         {
           title: 'Finance & Accounts',
           icon: IconCash,
-          anyPermission: ['viewReports', 'viewExpenseReports', 'viewWalletReports', 'viewProfitLossReports'],
+          anyPermission: ['viewReports', 'viewSummaryReports', 'viewTaxReports', 'viewExpenseReports', 'viewWalletReports', 'viewProfitLossReports'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
-            { title: 'Sale & Purchase Report', url: '/reports?tab=ledger' as never, icon: Scale, permission: 'viewReports' },
+            { title: 'Sale & Purchase Report', url: '/reports?tab=ledger' as never, icon: Scale, anyPermission: ['viewReports', 'viewSummaryReports'] },
             { title: 'Expenses Report', url: '/reports?tab=expenses' as never, icon: IconCash, permission: 'viewExpenseReports' },
-            { title: 'Tax Report', url: '/reports?tab=tax' as never, icon: IconClipboardCheck, permission: 'viewReports' },
+            { title: 'Tax Report', url: '/reports?tab=tax' as never, icon: IconClipboardCheck, anyPermission: ['viewReports', 'viewTaxReports'] },
             { title: 'Bank Accounts Report', url: '/reports?tab=my-wallet' as never, icon: WalletCards, permission: 'viewWalletReports', requiredFeature: 'wallet' },
             { title: 'Bank & Cash Position Report', url: '/reports?tab=bank-position' as never, icon: Landmark, permission: 'viewWalletReports', requiredFeature: 'wallet' },
             { title: 'Profit Loss Report', url: '/reports?tab=profit-loss' as never, icon: TrendingDown, permission: 'viewProfitLossReports', requiredFeature: 'profit_loss' },
@@ -1063,17 +1066,17 @@ export const sidebarData: SidebarData = {
         {
           title: 'Team & Partners',
           icon: Handshake,
-          permission: 'viewReports',
+          anyPermission: ['viewReports', 'viewTeamReports'],
           excludeBusinessTypes: ['school', 'restaurant'],
           items: [
-            { title: 'Salesman Commission Report', url: '/reports?tab=salesman-commission' as never, icon: Handshake },
-            { title: 'Partners Report', url: '/reports?tab=partner-profit-share' as never, icon: HandCoins },
+            { title: 'Salesman Commission Report', url: '/reports?tab=salesman-commission' as never, icon: Handshake, anyPermission: ['viewReports', 'viewTeamReports'] },
+            { title: 'Partners Report', url: '/reports?tab=partner-profit-share' as never, icon: HandCoins, anyPermission: ['viewReports', 'viewTeamReports'] },
           ],
         },
         {
           title: 'Mobile Shop Reports',
           icon: Smartphone,
-          anyPermission: ['viewLoadReports', 'viewSimSaleReports', 'viewRepairReports', 'viewServiceReports', 'viewInstallmentReports', 'viewReports'],
+          anyPermission: ['viewLoadReports', 'viewSimSaleReports', 'viewRepairReports', 'viewServiceReports', 'viewInstallmentReports', 'viewBillPaymentReports', 'viewMobilePhoneReports', 'viewReports'],
           excludeBusinessTypes: ['school', 'restaurant'],
           businessTypes: ['mobile_shop'],
           items: [
@@ -1081,11 +1084,11 @@ export const sidebarData: SidebarData = {
             { title: 'Sim Sale Report', url: '/reports?tab=sim-sale' as never, icon: Smartphone, permission: 'viewSimSaleReports' },
             { title: 'Repair Report', url: '/reports?tab=repair' as never, icon: Wrench, permission: 'viewRepairReports', requiredFeature: 'repair' },
             { title: 'Services Report', url: '/reports?tab=services' as never, icon: Sparkles, permission: 'viewServiceReports' },
-            { title: 'Bill Payments Report', url: '/reports?tab=bill-payments' as never, icon: QrCode, permission: 'viewReports', requiredFeature: 'bill_payment' },
+            { title: 'Bill Payments Report', url: '/reports?tab=bill-payments' as never, icon: QrCode, anyPermission: ['viewReports', 'viewBillPaymentReports'], requiredFeature: 'bill_payment' },
             // Email must match AGENT_BILL_EMAIL in features/mobile-shop/bill-payments
-            { title: 'Agent Bills Report', url: '/reports?tab=agent-bills' as never, icon: FileText, permission: 'viewReports', allowedEmails: ['bilalmulazim7086@gmail.com'] },
+            { title: 'Agent Bills Report', url: '/reports?tab=agent-bills' as never, icon: FileText, anyPermission: ['viewReports', 'viewBillPaymentReports'], allowedEmails: ['bilalmulazim7086@gmail.com'] },
             { title: 'Installments Report', url: '/reports?tab=installments' as never, icon: IconCalendar, permission: 'viewInstallmentReports' },
-            { title: 'Mobile Phone Report', url: '/reports?tab=mobile-phones' as never, icon: Smartphone, permission: 'viewReports' },
+            { title: 'Mobile Phone Report', url: '/reports?tab=mobile-phones' as never, icon: Smartphone, anyPermission: ['viewReports', 'viewMobilePhoneReports'] },
           ],
         },
         {

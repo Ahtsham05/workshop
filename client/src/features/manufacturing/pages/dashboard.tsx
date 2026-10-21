@@ -5,7 +5,8 @@ import {
   type AnalyticsRange,
   type ManufacturingAnalytics,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/lib/format-money'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { useLanguage } from '@/context/language-context'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -38,6 +39,7 @@ type Kpis = ManufacturingAnalytics['kpis']
 function KpiCards({ kpis, days }: { kpis?: Kpis; days: number }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
+  const canSeeCosts = useCanViewManufacturingCosts()
   if (!kpis) {
     return <Skeleton className='h-[232px] w-full rounded-xl md:h-[116px]' />
   }
@@ -97,18 +99,21 @@ function KpiCards({ kpis, days }: { kpis?: Kpis; days: number }) {
         }
         hint={
           unitsChange === null
-            ? `${formatMoney(units.value)} ${t('at cost')}`
+            ? canSeeCosts
+              ? `${formatMoney(units.value)} ${t('at cost')}`
+              : undefined
             : undefined
         }
         href='/manufacturing/finished-goods'
       />
       <Stat
-        label={t('WIP value')}
-        value={formatMoney(kpis.wipValue.value)}
-        hint={t('Material on the floor across {{n}} order(s)').replace(
-          '{{n}}',
-          String(kpis.wipValue.orders)
-        )}
+        label={canSeeCosts ? t('WIP value') : t('Orders in WIP')}
+        value={canSeeCosts ? formatMoney(kpis.wipValue.value) : String(kpis.wipValue.orders)}
+        hint={
+          canSeeCosts
+            ? t('Material on the floor across {{n}} order(s)').replace('{{n}}', String(kpis.wipValue.orders))
+            : t('Orders with material on the floor')
+        }
         href='/manufacturing/wip'
       />
       <Stat
@@ -157,6 +162,7 @@ function KpiCards({ kpis, days }: { kpis?: Kpis; days: number }) {
 }
 
 export default function ManufacturingDashboard() {
+  const canSeeCosts = useCanViewManufacturingCosts()
   const { t } = useLanguage()
   const navigate = useNavigate()
   const search = useSearch({ strict: false }) as { range?: AnalyticsRange }
@@ -229,9 +235,10 @@ export default function ManufacturingDashboard() {
           {data ? (
             <div className='grid gap-4 md:grid-cols-2'>
               <ProductionTrendChart data={data} fetching={refreshing} />
-              <ProductionCostChart data={data} fetching={refreshing} />
-              <MaterialConsumptionChart data={data} fetching={refreshing} />
-              <ScrapTrendChart data={data} fetching={refreshing} />
+              {/* Value charts — only for roles that may see manufacturing costs. */}
+              {canSeeCosts && <ProductionCostChart data={data} fetching={refreshing} />}
+              {canSeeCosts && <MaterialConsumptionChart data={data} fetching={refreshing} />}
+              {canSeeCosts && <ScrapTrendChart data={data} fetching={refreshing} />}
               <ProductionByProductChart data={data} fetching={refreshing} />
               <ProductionByWorkCenterChart data={data} fetching={refreshing} />
               <OrderStatusChart data={data} fetching={refreshing} />

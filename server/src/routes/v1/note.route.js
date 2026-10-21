@@ -12,7 +12,8 @@ const router = express.Router();
 // No permission gate: the notepad is personal scratch space that every signed-in
 // user gets, the same way /profile is. Sharing is opt-in per note and reads are
 // filtered by ownership + visibility in the service.
-router.use(auth(), branchScope());
+// The personal notepad is the useNotes permission (backfilled on for existing roles).
+router.use(auth('useNotes'), branchScope());
 
 router
   .route('/')

@@ -7,7 +7,7 @@ const router = express.Router();
 // Deliberately no branchScope() here — this endpoint aggregates across every branch
 // in the organization regardless of the caller's active x-branch-id header, so a
 // superAdmin can stay on their main branch while viewing all branches at once.
-router.use(auth());
+router.use(auth('viewBranchPerformance'));
 
 router.route('/summary').get(branchOverviewController.getSummary);
 

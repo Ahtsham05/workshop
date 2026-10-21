@@ -9,10 +9,10 @@ const router = express.Router();
 router.use(auth(), branchScope());
 
 router.route('/sales').get(auth('viewReports', 'viewSalesReports'), reportsController.getSalesReport);
-router.route('/sales/invoices').get(auth('viewReports', 'viewSalesReports'), reportsController.getSalesInvoiceDetails);
+router.route('/sales/invoices').get(auth('viewReports', 'viewSalesReports', 'viewSummaryReports'), reportsController.getSalesInvoiceDetails);
 
 router.route('/purchases').get(auth('viewReports', 'viewPurchaseReports'), reportsController.getPurchaseReport);
-router.route('/purchases/invoices').get(auth('viewReports', 'viewPurchaseReports'), reportsController.getPurchaseInvoiceDetails);
+router.route('/purchases/invoices').get(auth('viewReports', 'viewPurchaseReports', 'viewSummaryReports'), reportsController.getPurchaseInvoiceDetails);
 
 router.route('/products').get(auth('viewReports', 'viewProductReports'), reportsController.getProductReport);
 
@@ -26,7 +26,7 @@ router.route('/suppliers').get(auth('viewReports', 'viewSupplierReports'), repor
 
 router.route('/suppliers/aging').get(auth('viewReports', 'viewSupplierReports'), reportsController.getSupplierAgingReport);
 
-router.route('/expenses').get(auth('viewReports', 'viewExpenseReports'), reportsController.getExpenseReport);
+router.route('/expenses').get(auth('viewReports', 'viewExpenseReports', 'viewAccounting', 'manageExpenses'), reportsController.getExpenseReport);
 
 router.route('/profit-loss').get(auth('viewReports', 'viewProfitLossReports'), reportsController.getProfitLossReport);
 
@@ -41,7 +41,7 @@ router.route('/batches').get(auth('viewReports', 'viewInventoryReports'), report
 router.route('/stock-adjustments').get(auth('viewReports', 'viewInventoryReports'), reportsController.getStockAdjustmentReport);
 router.route('/stock-transfers').get(auth('viewReports', 'viewInventoryReports'), reportsController.getStockTransferReport);
 
-router.route('/tax').get(auth('viewReports'), reportsController.getTaxReport);
+router.route('/tax').get(auth('viewReports', 'viewTaxReports'), reportsController.getTaxReport);
 
 router.route('/sales-returns').get(auth('viewReports', 'viewSalesReports'), reportsController.getSalesReturnsReport);
 
@@ -53,7 +53,7 @@ router.route('/wallet-wise').get(auth('viewReports', 'viewWalletReports'), repor
 
 router
   .route('/load/wallet-balance-statement')
-  .get(auth('viewReports', 'viewWalletReports'), checkFeatureAccess('wallet'), mobileReportsController.getWalletBalanceStatement);
+  .get(auth('viewReports', 'viewWalletReports', 'viewWallet'), checkFeatureAccess('wallet'), mobileReportsController.getWalletBalanceStatement);
 
 router.route('/repair').get(auth('viewReports', 'viewRepairReports'), checkFeatureAccess('repair'), reportsController.getRepairReport);
 
@@ -71,23 +71,23 @@ router
 
 router
   .route('/activity-summary')
-  .get(auth('viewReports'), reportsController.getActivitySummaryReport);
+  .get(auth('viewReports', 'viewActivityReports', 'viewSummaryReports', 'viewSalesReports'), reportsController.getActivitySummaryReport);
 
 router
   .route('/sales-purchase-summary')
-  .get(auth('viewReports'), reportsController.getSalesPurchaseSummaryReport);
+  .get(auth('viewReports', 'viewSummaryReports', 'viewActivityReports'), reportsController.getSalesPurchaseSummaryReport);
 
 router
   .route('/daily-sales-summary')
-  .get(auth('viewReports'), reportsController.getDailySalesSummaryReport);
+  .get(auth('viewReports', 'viewSummaryReports'), reportsController.getDailySalesSummaryReport);
 
 router
   .route('/salesman-commission')
-  .get(auth('viewReports'), reportsController.getSalesmanCommissionReport);
+  .get(auth('viewReports', 'viewTeamReports'), reportsController.getSalesmanCommissionReport);
 
 router
   .route('/partner-profit-share')
-  .get(auth('viewReports'), reportsController.getPartnerProfitShareReport);
+  .get(auth('viewReports', 'viewTeamReports'), reportsController.getPartnerProfitShareReport);
 
 router
   .route('/bank-position')
