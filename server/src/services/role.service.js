@@ -261,9 +261,10 @@ const createDefaultRoles = async () => {
         viewInsights: true,
         viewPurchaseSuggestions: true,
         viewBarcodeGenerator: true,
-        useNotes: true, useTeamChat: true, viewBranchPerformance: true,
+        useNotes: true, useTeamChat: true, useVoiceAssistant: true, viewBranchPerformance: true,
         viewManufacturing: true, manageBoms: true, manageProductionOrders: true, executeProduction: true,
         overIssueMaterials: true, inspectProduction: true, viewManufacturingCosts: true,
+        issueMaterials: true, editMaterialIssues: true, receiveFinishedGoods: true, recordScrap: true,
         viewDashboard: true,
         // Manager already views business Reports; extend that same view-only reach to the
         // new Tax & Currency Settings group (view-only — Manager doesn't manage settings).
@@ -288,7 +289,7 @@ const createDefaultRoles = async () => {
         viewSalesReturns: true, createSalesReturns: true,
         viewCustomers: true, createCustomers: true,
         viewDashboard: true,
-        useNotes: true, useTeamChat: true,
+        useNotes: true, useTeamChat: true, useVoiceAssistant: true,
       },
       isSystemRole: true,
       isActive: true,
@@ -321,7 +322,7 @@ const createDefaultRoles = async () => {
         viewWhatsapp: true,
         viewSmsLog: true,
         viewBarcodeGenerator: true,
-        useNotes: true, useTeamChat: true,
+        useNotes: true, useTeamChat: true, useVoiceAssistant: true,
         viewDashboard: true,
         // Viewer is read-only across every module already (mirrors Manager's Reports access);
         // extend the same view-only reach to the new Tax & Currency Settings group.
@@ -373,6 +374,11 @@ const SPLIT_PERMISSIONS = [
     ['viewProducts', 'editProducts', 'viewPurchases', 'createPurchases', 'editPurchases', 'viewPurchaseOrders', 'createPurchaseOrders', 'editPurchaseOrders', 'approveStockCounts'],
   ],
   ['viewManufacturingCosts', ['viewManufacturing']],
+  // Shop-floor tasks that executeProduction used to cover on its own.
+  ['issueMaterials', ['executeProduction']],
+  ['receiveFinishedGoods', ['executeProduction']],
+  ['recordScrap', ['executeProduction']],
+  ['editMaterialIssues', ['executeProduction', 'manageProductionOrders']],
   // Reports that only had the general viewReports key until they got their own.
   ['viewActivityReports', ['viewReports']],
   ['viewSummaryReports', ['viewReports']],
@@ -383,6 +389,7 @@ const SPLIT_PERMISSIONS = [
   // Open to every signed-in user before they became permissions.
   ['useNotes', null],
   ['useTeamChat', null],
+  ['useVoiceAssistant', null],
 ];
 
 const backfillSplitPermissions = () =>

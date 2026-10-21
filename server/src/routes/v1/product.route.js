@@ -31,6 +31,8 @@ const CATALOG_READ_PERMISSIONS = [
   'viewRepairs', 'manageRepairs',
   'viewNewPhones', 'buyNewPhones', 'sellNewPhones', 'viewUsedPhones', 'sellUsedPhones',
   'viewBarcodeGenerator',
+  // Manufacturing pickers: issue vouchers, BOM lines, orders, receipts and scrap.
+  'issueMaterials', 'editMaterialIssues', 'receiveFinishedGoods', 'recordScrap', 'manageBoms', 'manageProductionOrders',
 ];
 
 router

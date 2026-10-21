@@ -90,7 +90,7 @@ export default function MaterialIssuesPage({
   const { t } = useLanguage()
   const navigate = useNavigate()
   const { hasPermission } = usePermissions()
-  const canIssue = hasPermission('executeProduction')
+  const canIssue = hasPermission('issueMaterials')
   const setSearch = (next: { view?: 'usage'; orderId?: string }) =>
     navigate({
       to: '/manufacturing/material-issues' as never,
@@ -299,7 +299,7 @@ function IssueVouchers() {
                   {t('Open voucher')}
                 </Link>
               </DropdownMenuItem>
-              {changeable && hasPermission('executeProduction') && (
+              {changeable && hasPermission('editMaterialIssues') && (
                 <DropdownMenuItem
                   onClick={() =>
                     navigate({
@@ -312,7 +312,7 @@ function IssueVouchers() {
                   {t('Edit')}
                 </DropdownMenuItem>
               )}
-              {changeable && hasPermission('manageProductionOrders') && (
+              {changeable && hasPermission('editMaterialIssues') && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

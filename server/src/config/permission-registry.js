@@ -364,11 +364,11 @@ const PERMISSION_GROUPS = [
     permissions: ['viewAiAssistant'],
   },
   {
-    // Personal notepad and inter-branch team chat (open to everyone before these keys;
-    // existing roles were backfilled with both — role.service.js SPLIT_PERMISSIONS).
+    // Personal notepad, inter-branch team chat and the floating voice button (open to everyone
+    // before these keys; existing roles were backfilled with them — role.service.js SPLIT_PERMISSIONS).
     id: 'workspace',
-    label: 'Notes & Team Chat',
-    permissions: ['useNotes', 'useTeamChat'],
+    label: 'Notes, Team Chat & Voice',
+    permissions: ['useNotes', 'useTeamChat', 'useVoiceAssistant'],
   },
   {
     id: 'insights',
@@ -393,9 +393,15 @@ const PERMISSION_GROUPS = [
       'viewManufacturing',
       'manageBoms',
       'manageProductionOrders',
-      'executeProduction',
+      // One key per shop-floor task — split out of executeProduction (backfilled from it).
+      'issueMaterials',
+      'editMaterialIssues',
       // Issue more material than an order still requires (otherwise blocked).
       'overIssueMaterials',
+      // Start / complete routing steps and assembly runs.
+      'executeProduction',
+      'receiveFinishedGoods',
+      'recordScrap',
       // Quality inspection of reported output, and rework results.
       'inspectProduction',
       'manageManufacturingSettings',

@@ -1,6 +1,7 @@
 import { Mic, ArrowUp, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
+import { usePermissions } from '@/context/permission-context'
 
 export function ChatInput({
   value,
@@ -21,6 +22,7 @@ export function ChatInput({
   isSending?: boolean
   onStop?: () => void
 }) {
+  const hasVoiceButton = usePermissions().hasExplicitPermission('useVoiceAssistant')
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!value.trim()) return
@@ -46,8 +48,12 @@ export function ChatInput({
     // Phones only: the app-wide floating Voice Assistant button (QuickLinksVoiceWidget — fixed,
     // bottom-5 right-5, h-14 w-14) sits exactly over this composer's right end, hiding the mic and
     // the send / stop buttons. So the composer stops short of it (5.25rem = 1.25 + 3.5 + a 0.5 gap)
-    // and sits 1.25rem off the bottom so its bottom edge lines up with the button's.
-    <form onSubmit={handleSubmit} className='sticky bottom-0 z-20 flex-none bg-background p-3 max-sm:pr-[5.25rem] max-sm:pb-5'>
+    // and sits 1.25rem off the bottom so its bottom edge lines up with the button's — only
+    // when the role has the button (useVoiceAssistant); otherwise the composer uses the full width.
+    <form
+      onSubmit={handleSubmit}
+      className={cn('sticky bottom-0 z-20 flex-none bg-background p-3', hasVoiceButton && 'max-sm:pr-[5.25rem] max-sm:pb-5')}
+    >
       <div className='flex items-end gap-2 rounded-3xl border bg-background px-2 py-1.5 shadow-sm transition-shadow focus-within:ring-1 focus-within:ring-ring'>
         <Textarea
           value={value}

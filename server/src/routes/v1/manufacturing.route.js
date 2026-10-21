@@ -102,7 +102,7 @@ router.patch(
 );
 router.post(
   '/products/:productId/batch-unbatched',
-  auth('manageBoms', 'editProducts', 'executeProduction'),
+  auth('manageBoms', 'editProducts', 'issueMaterials', 'receiveFinishedGoods'),
   validate(v.batchUnbatchedStock),
   c.batchUnbatchedStock
 );
@@ -176,17 +176,17 @@ router.post(
   c.refreshProductionMaterials
 );
 router.get('/production-orders/:orderId/requirements', auth(VIEW), validate(v.orderIdParam), c.getOrderRequirements);
-router.post('/production-orders/:orderId/issue', auth('executeProduction'), validate(v.issueMaterials), c.issueMaterials);
-router.post('/production-orders/:orderId/return', auth('executeProduction'), validate(v.returnMaterials), c.returnMaterials);
-// Output → (quality check) → finished goods. Reporting needs executeProduction; the QC
+router.post('/production-orders/:orderId/issue', auth('issueMaterials'), validate(v.issueMaterials), c.issueMaterials);
+router.post('/production-orders/:orderId/return', auth('issueMaterials'), validate(v.returnMaterials), c.returnMaterials);
+// Output → (quality check) → finished goods. Reporting needs receiveFinishedGoods; the QC
 // decision and rework results need inspectProduction.
-router.post('/production-orders/:orderId/outputs', auth('executeProduction'), validate(v.reportOutput), c.reportOutput);
+router.post('/production-orders/:orderId/outputs', auth('receiveFinishedGoods'), validate(v.reportOutput), c.reportOutput);
 router.post('/production-orders/:orderId/rework', auth('inspectProduction'), validate(v.resolveRework), c.resolveRework);
 router.get('/outputs', auth(VIEW), validate(v.listOutputs), c.getProductionOutputs);
 router.post('/outputs/:outputId/inspect', auth('inspectProduction'), validate(v.inspectOutput), c.inspectOutput);
 // Undo an output posted by mistake (stock, QC/rework, WIP); reopening a completed order
 // additionally needs manageProductionOrders (checked in the controller).
-router.post('/outputs/:outputId/reverse', auth('executeProduction'), validate(v.reverseOutput), c.reverseOutput);
+router.post('/outputs/:outputId/reverse', auth('receiveFinishedGoods'), validate(v.reverseOutput), c.reverseOutput);
 // The inventory ledger rows written by manufacturing, with full traceability.
 router.get('/movements', auth(VIEW), validate(v.listMovements), c.getMovements);
 // Batches / serial units / on-hand of one product, for the issue & scrap pickers.
@@ -212,20 +212,20 @@ router.post(
 
 // Execution records
 // Material Issue Voucher (MIV): check (read-only) and post — store → WIP in one transaction.
-router.get('/material-issues/options', auth('executeProduction'), c.getIssueLocations);
+router.get('/material-issues/options', auth('issueMaterials', 'editMaterialIssues'), c.getIssueLocations);
 // Issue for a finished good: its BOM exploded for a quantity (the order created on posting).
-router.get('/material-issues/plan', auth('executeProduction'), validate(v.materialIssuePlan), c.getMaterialIssuePlan);
+router.get('/material-issues/plan', auth('issueMaterials', 'editMaterialIssues'), validate(v.materialIssuePlan), c.getMaterialIssuePlan);
 // Issue by material: what open orders still need, and a voucher split over those orders.
-router.get('/material-issues/pending', auth('executeProduction'), validate(v.pendingMaterials), c.getPendingMaterials);
+router.get('/material-issues/pending', auth('issueMaterials', 'editMaterialIssues'), validate(v.pendingMaterials), c.getPendingMaterials);
 router.post(
   '/material-issues/by-material/check',
-  auth('executeProduction'),
+  auth('issueMaterials'),
   validate(v.materialIssueByMaterial),
   c.checkMaterialIssueByMaterial
 );
 router.post(
   '/material-issues/by-material',
-  auth('executeProduction'),
+  auth('issueMaterials'),
   validate(v.materialIssueByMaterial),
   c.postMaterialIssueByMaterial
 );
@@ -233,24 +233,24 @@ router.post(
 router.get('/material-usage', auth(VIEW), validate(v.materialUsage), c.getMaterialUsage);
 router.get('/reports/:report', auth(VIEW), validate(v.report), c.getReport);
 router.get('/batches/search', auth(VIEW), validate(v.searchBatches), c.searchBatches);
-router.post('/material-issues/check', auth('executeProduction'), validate(v.materialIssueVoucher), c.checkMaterialIssue);
-router.post('/material-issues', auth('executeProduction'), validate(v.materialIssueVoucher), c.postMaterialIssue);
+router.post('/material-issues/check', auth('issueMaterials'), validate(v.materialIssueVoucher), c.checkMaterialIssue);
+router.post('/material-issues', auth('issueMaterials'), validate(v.materialIssueVoucher), c.postMaterialIssue);
 router.get('/material-issues', auth(VIEW), validate(v.listTransactions), c.getMaterialIssues);
 router
   .route('/material-issues/:issueId')
   .get(auth(VIEW), validate(v.issueIdParam), c.getMaterialIssue)
   // Edit a posted voucher (header only, or lines → reversed and re-posted, same number).
-  .put(auth('executeProduction'), validate(v.editMaterialIssue), c.editMaterialIssue);
+  .put(auth('editMaterialIssues'), validate(v.editMaterialIssue), c.editMaterialIssue);
 // "Delete": reverse into stock and keep the voucher as cancelled.
 router.get(
   '/material-issues/:issueId/reversal',
-  auth('executeProduction'),
+  auth('editMaterialIssues'),
   validate(v.issueIdParam),
   c.getMaterialIssueReversal
 );
 router.post(
   '/material-issues/:issueId/cancel',
-  auth('manageProductionOrders'),
+  auth('editMaterialIssues'),
   validate(v.cancelMaterialIssue),
   c.cancelMaterialIssue
 );
@@ -258,14 +258,14 @@ router.get('/finished-goods', auth(VIEW), validate(v.listTransactions), c.getPro
 router
   .route('/scrap')
   .get(auth(VIEW), validate(v.listTransactions), c.getScrapRecords)
-  .post(auth('executeProduction'), validate(v.recordScrap), c.recordScrap);
+  .post(auth('recordScrap'), validate(v.recordScrap), c.recordScrap);
 router.get('/wip', auth(VIEW), c.getWip);
 
 // Assembly orders (ProductionOrder with orderType 'assembly') and nesting
 router.post('/assembly-orders/:orderId/start', auth('executeProduction'), validate(v.orderIdParam), c.startAssembly);
 router.post(
   '/assembly-orders/:orderId/complete',
-  auth('executeProduction'),
+  auth('receiveFinishedGoods', 'executeProduction'),
   validate(v.completeAssembly),
   c.completeAssembly
 );

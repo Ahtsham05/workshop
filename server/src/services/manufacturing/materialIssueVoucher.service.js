@@ -25,7 +25,7 @@ const { roundQty, requireBranch, RowErrors } = require('./common');
  *       exceeds_remaining  — more than the order still needs     → overIssueMaterials
  *       expired_batch      — an expired batch would be issued    → manageManufacturingSettings
  *       insufficient_stock — stock would go negative (only when the
- *                            "allow negative stock issue" setting is on) → executeProduction
+ *                            "allow negative stock issue" setting is on) → issueMaterials
  *     notes    information only (e.g. which batches FEFO will take)
  *   postVoucher — re-checks, enforces overrides + permissions, then posts.
  *
@@ -40,7 +40,7 @@ const { roundQty, requireBranch, RowErrors } = require('./common');
 const OVERRIDE_PERMISSION = {
   exceeds_remaining: 'overIssueMaterials',
   expired_batch: 'manageManufacturingSettings',
-  insufficient_stock: 'executeProduction',
+  insufficient_stock: 'issueMaterials',
 };
 
 const fmt = (n) => String(roundQty(n));

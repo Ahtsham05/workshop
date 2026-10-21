@@ -12,6 +12,7 @@ import { useFloatingPosition } from '@/hooks/use-floating-position'
 
 const LAUNCHER_DEFAULT = { side: 20, bottom: 20 }
 import { cn } from '@/lib/utils'
+import { usePermissions } from '@/context/permission-context'
 import { resolveQuickLinkIcon } from '@/lib/quick-link-icons'
 import { QUICK_LINK_CATEGORY_GROUPS, getQuickLinkCategoryGroupId } from '@/lib/quick-link-category-groups'
 import { useQuickLinkVoiceCommand } from '@/hooks/use-quick-link-voice-command'
@@ -36,7 +37,15 @@ const PILL_INACTIVE = 'border-border/80 bg-background text-foreground hover:bg-m
  * type-to-filter for free, matching the exact keyboard UX already established there
  * instead of reinventing a second, subtly-different version of it.
  */
+/** The floating voice / quick-actions button — only for roles allowed to use it
+ *  (Roles → "Use voice button"; owners always). Unmounted entirely otherwise, so its
+ *  keyboard shortcut and background data fetches go away with it. */
 export function QuickLinksVoiceWidget() {
+  const canUseVoice = usePermissions().hasExplicitPermission('useVoiceAssistant')
+  return canUseVoice ? <VoiceWidget /> : null
+}
+
+function VoiceWidget() {
   const { t } = useLanguage()
   const runQuickLink = useRunQuickLink()
   const isMobile = useIsMobile()

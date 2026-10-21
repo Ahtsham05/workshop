@@ -168,6 +168,11 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: '/sales-returns', anyPermission: ['viewSalesReturns', 'createSalesReturns'] },
   { prefix: '/barcode-generator', anyPermission: ['viewBarcodeGenerator'] },
   { prefix: '/manufacturing/settings', anyPermission: ['manageManufacturingSettings'], excludeBusinessTypes: ['school', 'restaurant'] },
+  // Entry screens need the task's own permission (the lists only need viewManufacturing).
+  { prefix: '/manufacturing/material-issues/new', anyPermission: ['issueMaterials'], excludeBusinessTypes: ['school', 'restaurant'] },
+  { prefix: '/manufacturing/production-orders/new', anyPermission: ['manageProductionOrders'], excludeBusinessTypes: ['school', 'restaurant'] },
+  { prefix: '/manufacturing/finished-goods/receive', anyPermission: ['receiveFinishedGoods'], excludeBusinessTypes: ['school', 'restaurant'] },
+  { prefix: '/manufacturing/material-receipts/new', anyPermission: ['createPurchases'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/manufacturing', anyPermission: ['viewManufacturing'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/price-checker', anyPermission: ['viewPriceChecker'], excludeBusinessTypes: ['school', 'restaurant'] },
   { prefix: '/price-updates', anyPermission: ['viewPriceUpdates', 'managePriceUpdates'], excludeBusinessTypes: ['school', 'restaurant'] },

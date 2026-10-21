@@ -72,11 +72,12 @@ export type PermissionKey =
   | 'manageWebsiteConnections'
   | 'countStock' | 'approveStockCounts'
   | 'viewAiAssistant'
-  | 'useNotes' | 'useTeamChat'
+  | 'useNotes' | 'useTeamChat' | 'useVoiceAssistant'
   | 'viewInsights'
   | 'viewPurchaseSuggestions'
   | 'viewBarcodeGenerator'
-  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'executeProduction' | 'overIssueMaterials' | 'inspectProduction' | 'manageManufacturingSettings' | 'viewManufacturingCosts';
+  | 'viewManufacturing' | 'manageBoms' | 'manageProductionOrders' | 'executeProduction' | 'overIssueMaterials' | 'inspectProduction' | 'manageManufacturingSettings' | 'viewManufacturingCosts'
+  | 'issueMaterials' | 'editMaterialIssues' | 'receiveFinishedGoods' | 'recordScrap';
 
 export type Permission = Partial<Record<PermissionKey, boolean>>;
 
@@ -173,7 +174,7 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
   { id: 'sms', label: 'SMS', permissions: ['viewSmsLog'] },
   { id: 'website_connections', label: 'Website Connections', permissions: ['manageWebsiteConnections'] },
   { id: 'ai_assistant', label: 'AI Assistant', permissions: ['viewAiAssistant'] },
-  { id: 'workspace', label: 'Notes & Team Chat', permissions: ['useNotes', 'useTeamChat'] },
+  { id: 'workspace', label: 'Notes, Team Chat & Voice', permissions: ['useNotes', 'useTeamChat', 'useVoiceAssistant'] },
   { id: 'insights', label: 'Insights', permissions: ['viewInsights'] },
   { id: 'purchase_suggestions', label: 'Purchase Suggestions', permissions: ['viewPurchaseSuggestions'] },
   { id: 'barcode', label: 'Barcode Generator', permissions: ['viewBarcodeGenerator'] },
@@ -184,8 +185,12 @@ export const PERMISSION_GROUPS: PermissionGroupDef[] = [
       'viewManufacturing',
       'manageBoms',
       'manageProductionOrders',
-      'executeProduction',
+      'issueMaterials',
+      'editMaterialIssues',
       'overIssueMaterials',
+      'executeProduction',
+      'receiveFinishedGoods',
+      'recordScrap',
       'inspectProduction',
       'manageManufacturingSettings',
       'viewManufacturingCosts',
@@ -362,10 +367,67 @@ export function buildAllPermissionsTrue(): Permission {
   return Object.fromEntries(PERMISSION_KEYS.map((key) => [key, true])) as Permission;
 }
 
+/**
+ * Plain-language names where the key alone reads badly ("Manage Boms", "Get Employees")
+ * or hides what it really allows. Everything else is spelled out from the key.
+ */
+export const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
+  viewManufacturing: 'View manufacturing',
+  manageBoms: 'Create & edit BOMs',
+  manageProductionOrders: 'Plan production orders',
+  issueMaterials: 'Issue materials',
+  editMaterialIssues: 'Edit & cancel issue vouchers',
+  overIssueMaterials: 'Issue more than required',
+  executeProduction: 'Run production steps',
+  receiveFinishedGoods: 'Receive finished goods',
+  recordScrap: 'Record scrap',
+  inspectProduction: 'Quality inspection',
+  manageManufacturingSettings: 'Manufacturing settings',
+  viewManufacturingCosts: 'See costs & prices',
+  viewCostPrices: 'See cost prices & profit',
+  viewReports: 'View all reports',
+  viewImeiTracking: 'View IMEI / serial tracking',
+  manageImeiTracking: 'Manage IMEI / serial tracking',
+  useNotes: 'Use notes',
+  useTeamChat: 'Use team chat',
+  useVoiceAssistant: 'Use voice button',
+  viewBranchPerformance: 'View branch performance',
+  viewCreatedBy: 'See who created records',
+  managePersonalWallet: 'Manage my personal account',
+};
+
+/** One line under the checkbox saying what the permission actually allows. */
+export const PERMISSION_HINTS: Partial<Record<PermissionKey, string>> = {
+  viewManufacturing: 'Open the manufacturing pages, orders, stock and reports',
+  manageBoms: 'Recipes, routing steps and BOM versions',
+  manageProductionOrders: 'Create, schedule, release, complete and cancel orders',
+  issueMaterials: 'Issue vouchers — move materials to the floor, return unused',
+  editMaterialIssues: 'Change or reverse a posted issue voucher',
+  overIssueMaterials: 'Issue above what the order still needs',
+  executeProduction: 'Start and complete operations and assembly runs',
+  receiveFinishedGoods: 'Record output, receive into stock, reverse a receipt',
+  recordScrap: 'Write off scrap and wastage',
+  inspectProduction: 'Pass or reject output at QC, send to rework',
+  manageManufacturingSettings: 'Warehouses, QC rules and numbering',
+  viewManufacturingCosts: 'Material cost, WIP and finished-goods value, prices',
+  viewCostPrices: 'Purchase cost, stock value, margin and profit',
+  viewReports: 'Every report, including ones without their own permission',
+  exportReports: 'Download reports to Excel',
+  printInvoices: 'Save & print invoices and receipts',
+  viewAllLeads: 'Leads assigned to other staff too',
+  viewCreatedBy: 'The "Created by" column and filter',
+  viewBranchPerformance: 'Sales, cash and stock of every branch side by side',
+  useVoiceAssistant: 'The floating voice / quick-actions button (bottom right)',
+};
+
 export function formatPermissionLabel(key: PermissionKey, t: (key: string) => string): string {
+  const label = PERMISSION_LABELS[key];
+  if (label) return t(label);
   const translated = t(key);
   if (translated !== key) return translated;
+  // HR keys are named get* (getEmployees) — show them as "View …".
   return key
+    .replace(/^get(?=[A-Z])/, 'view')
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, (c) => c.toUpperCase())
     .trim();

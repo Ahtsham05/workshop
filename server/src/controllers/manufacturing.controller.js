@@ -508,6 +508,7 @@ const issuePermissions = async (req) => ({
   overIssueMaterials: await userHasPermission(req, 'overIssueMaterials'),
   manageManufacturingSettings: await userHasPermission(req, 'manageManufacturingSettings'),
   executeProduction: await userHasPermission(req, 'executeProduction'),
+  issueMaterials: await userHasPermission(req, 'issueMaterials'),
   manageProductionOrders: await userHasPermission(req, 'manageProductionOrders'),
 });
 

@@ -87,7 +87,7 @@ export default function ManufacturingShell() {
 
   const canOrders = hasPermission('manageProductionOrders')
   const canBoms = hasPermission('manageBoms')
-  const canIssue = hasPermission('executeProduction')
+  const canIssue = hasPermission('issueMaterials')
 
   // The "New" menu: what you'd create, in the order the work happens.
   const createItems = [

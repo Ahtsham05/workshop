@@ -149,7 +149,7 @@ export default function ScrapPage() {
           'Manufacturing losses by stage and reason. Material and WIP scrap is recorded against an order; finished-stock scrap also deducts stock.'
         )}
         actions={
-          hasPermission('executeProduction') && (
+          hasPermission('recordScrap') && (
             <Button variant='outline' onClick={() => setRecording(true)}>
               <Plus className='mr-1.5 h-4 w-4' />
               {t('Write off finished stock')}

@@ -47,7 +47,6 @@ import {
 } from '@/stores/manufacturing.api'
 import type { AppDispatch } from '@/stores/store'
 import { toBusinessCalendarDate } from '@/lib/business-timezone'
-import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { getUnitLabel } from '@/lib/units'
@@ -79,6 +78,7 @@ import {
   type HeaderField,
   type SaveMode,
 } from '@/components/transaction-engine'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { DeleteIssueDialog } from '../components/delete-issue-dialog'
 import { PageHeader } from '../components/page'
 import { ProductPicker } from '../components/product-picker'
@@ -119,7 +119,8 @@ const EXECUTABLE = 'released,in_production,paused'
 const PERMISSION_LABEL: Record<string, string> = {
   overIssueMaterials: 'Over-issue materials',
   manageManufacturingSettings: 'Manufacturing settings (supervisor)',
-  executeProduction: 'Execute production',
+  executeProduction: 'Run production steps',
+  issueMaterials: 'Issue materials',
 }
 const CODE_LABEL: Record<IssueWarningCode, string> = {
   exceeds_remaining: 'More than required',
@@ -249,7 +250,10 @@ function IssueEntry({
   const navigate = useNavigate()
   const formatMoney = useFormatMoney()
   const canSeeCosts = useCanViewManufacturingCosts()
-  const costSuffix = useCallback((n: number) => (canSeeCosts ? ` · ${formatMoney(n)}` : ''), [canSeeCosts, formatMoney])
+  const costSuffix = useCallback(
+    (n: number) => (canSeeCosts ? ` · ${formatMoney(n)}` : ''),
+    [canSeeCosts, formatMoney]
+  )
   const branchName = useBranchName()
   const dispatch = useDispatch<AppDispatch>()
   const confirm = useConfirm()
@@ -320,8 +324,13 @@ function IssueEntry({
 
   // What this voucher issues for. Opened from an order → that order; otherwise a
   // finished good and how many to make (the order is created when posting).
+  // Issuing for a finished good creates its production order, so that mode is for roles
+  // that may plan orders; everyone else issues against an existing order.
+  const canCreateOrders = usePermissions().hasPermission(
+    'manageProductionOrders'
+  )
   const [mode, setModeState] = useState<IssueMode>(
-    edit || initialOrderId ? 'order' : 'product'
+    edit || initialOrderId || !canCreateOrders ? 'order' : 'product'
   )
   const modeRef = useRef(mode)
   const setMode = (next: IssueMode) => {
@@ -1160,7 +1169,16 @@ function IssueEntry({
     })
     // A voucher whose material was already used: its rows can't change (header can).
     return locked ? lockRows(base) : base
-  }, [headerFields, options, formatMoney, canSeeCosts, mode, lines.length, locked, t])
+  }, [
+    headerFields,
+    options,
+    formatMoney,
+    canSeeCosts,
+    mode,
+    lines.length,
+    locked,
+    t,
+  ])
 
   /** Bulk quantity actions over every material row. */
   const setQuantities = (how: 'all' | 'available' | 'clear') => {
@@ -1349,7 +1367,14 @@ function IssueEntry({
           }`
         )
         if (saveMode === 'save-print') {
-          if (!printMaterialIssue(saved, { branchName, formatMoney, t, hideMoney: !canSeeCosts }))
+          if (
+            !printMaterialIssue(saved, {
+              branchName,
+              formatMoney,
+              t,
+              hideMoney: !canSeeCosts,
+            })
+          )
             toast.error(t('Allow pop-ups for this site to print'))
         }
         navigate({ to: `${LIST}/${saved.id}` as never, replace: true })
@@ -1357,7 +1382,13 @@ function IssueEntry({
       }
       if (saveMode === 'save-print') {
         const blocked = savedAll.some(
-          (v) => !printMaterialIssue(v, { branchName, formatMoney, t, hideMoney: !canSeeCosts })
+          (v) =>
+            !printMaterialIssue(v, {
+              branchName,
+              formatMoney,
+              t,
+              hideMoney: !canSeeCosts,
+            })
         )
         if (blocked) toast.error(t('Allow pop-ups for this site to print'))
       }
@@ -1616,7 +1647,11 @@ function IssueEntry({
       {edit ? (
         <EditBanner issue={edit.issue} locked={edit.locked} />
       ) : (
-        <ModeSwitch value={mode} onChange={(m) => void switchMode(m)} />
+        <ModeSwitch
+          value={mode}
+          onChange={(m) => void switchMode(m)}
+          allowFinishedGood={canCreateOrders}
+        />
       )}
 
       {edit ? null : mode === 'material' ? (
@@ -1720,9 +1755,12 @@ function IssueEntry({
 function ModeSwitch({
   value,
   onChange,
+  allowFinishedGood = true,
 }: {
   value: IssueMode
   onChange: (mode: IssueMode) => void
+  /** Hide "For a finished good" (it creates a production order). */
+  allowFinishedGood?: boolean
 }) {
   const { t } = useLanguage()
   const options: {
@@ -1758,44 +1796,49 @@ function ModeSwitch({
     <div
       role='radiogroup'
       aria-label={t('Issue materials for')}
-      className='grid grid-cols-1 gap-2 md:grid-cols-3'
+      className={cn(
+        'grid grid-cols-1 gap-2',
+        allowFinishedGood ? 'md:grid-cols-3' : 'md:grid-cols-2'
+      )}
     >
-      {options.map((o) => {
-        const on = o.value === value
-        const Icon = o.icon
-        return (
-          <button
-            key={o.value}
-            type='button'
-            role='radio'
-            aria-checked={on}
-            onClick={() => onChange(o.value)}
-            className={cn(
-              'focus-visible:ring-ring flex items-start gap-3 rounded-xl border p-3 text-left transition-colors outline-none focus-visible:ring-2',
-              on
-                ? 'border-primary bg-primary/5 ring-primary/30 ring-1'
-                : 'bg-card hover:bg-muted/50'
-            )}
-          >
-            <span
+      {options
+        .filter((o) => allowFinishedGood || o.value !== 'product')
+        .map((o) => {
+          const on = o.value === value
+          const Icon = o.icon
+          return (
+            <button
+              key={o.value}
+              type='button'
+              role='radio'
+              aria-checked={on}
+              onClick={() => onChange(o.value)}
               className={cn(
-                'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                'focus-visible:ring-ring flex items-start gap-3 rounded-xl border p-3 text-left transition-colors outline-none focus-visible:ring-2',
                 on
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground'
+                  ? 'border-primary bg-primary/5 ring-primary/30 ring-1'
+                  : 'bg-card hover:bg-muted/50'
               )}
             >
-              <Icon className='h-4 w-4' />
-            </span>
-            <span className='min-w-0'>
-              <span className='block text-sm font-semibold'>{o.title}</span>
-              <span className='text-muted-foreground block text-xs'>
-                {o.text}
+              <span
+                className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                  on
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                <Icon className='h-4 w-4' />
               </span>
-            </span>
-          </button>
-        )
-      })}
+              <span className='min-w-0'>
+                <span className='block text-sm font-semibold'>{o.title}</span>
+                <span className='text-muted-foreground block text-xs'>
+                  {o.text}
+                </span>
+              </span>
+            </button>
+          )
+        })}
     </div>
   )
 }
@@ -2065,8 +2108,8 @@ function IssueView({ issueId }: { issueId: string }) {
   const cancelled = v?.status === 'cancelled'
   // A posted issue can be edited or deleted (cancelled); returns and cancelled ones can't.
   const changeable = !!v && v.kind === 'issue' && !cancelled
-  const canEdit = changeable && hasPermission('executeProduction')
-  const canDelete = changeable && hasPermission('manageProductionOrders')
+  const canEdit = changeable && hasPermission('editMaterialIssues')
+  const canDelete = changeable && hasPermission('editMaterialIssues')
   // What the order still needs after this voucher (e.g. packaging short on the day).
   const { data: reqs } = useGetOrderRequirementsQuery(
     v?.productionOrderId as string,
@@ -2191,7 +2234,14 @@ function IssueView({ issueId }: { issueId: string }) {
             <Button
               variant='outline'
               onClick={() => {
-                if (!printMaterialIssue(v, { branchName, formatMoney, t, hideMoney: !canSeeCosts }))
+                if (
+                  !printMaterialIssue(v, {
+                    branchName,
+                    formatMoney,
+                    t,
+                    hideMoney: !canSeeCosts,
+                  })
+                )
                   toast.error(t('Allow pop-ups for this site to print'))
               }}
             >
@@ -2303,7 +2353,9 @@ function IssueView({ issueId }: { issueId: string }) {
                   <th className='px-3 py-2 text-right font-medium'>
                     {t('Unit cost')}
                   </th>
-                  <th className='px-3 py-2 text-right font-medium'>{t('Value')}</th>
+                  <th className='px-3 py-2 text-right font-medium'>
+                    {t('Value')}
+                  </th>
                 </>
               )}
             </tr>
@@ -2592,7 +2644,8 @@ function PostedDialog({
             {t('Issued to')} {list.length} {t('production orders')}
           </DialogTitle>
           <DialogDescription>
-            {t('One voucher per order, posted together.')} {canSeeCosts && formatMoney(total)}
+            {t('One voucher per order, posted together.')}{' '}
+            {canSeeCosts && formatMoney(total)}
           </DialogDescription>
         </DialogHeader>
         <ul className='divide-y rounded-lg border'>
@@ -2626,7 +2679,13 @@ function PostedDialog({
             variant='outline'
             onClick={() => {
               const blocked = list.some(
-                (v) => !printMaterialIssue(v, { branchName, formatMoney, t, hideMoney: !canSeeCosts })
+                (v) =>
+                  !printMaterialIssue(v, {
+                    branchName,
+                    formatMoney,
+                    t,
+                    hideMoney: !canSeeCosts,
+                  })
               )
               if (blocked)
                 toast.error(t('Allow pop-ups for this site to print'))

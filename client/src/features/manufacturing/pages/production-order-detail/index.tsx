@@ -143,7 +143,11 @@ export default function ProductionOrderDetail({
   const branchName = useBranchName()
   const { hasPermission } = usePermissions()
   const canManage = hasPermission('manageProductionOrders')
+  // One permission per shop-floor task (Roles & Permissions → Manufacturing).
   const canExecute = hasPermission('executeProduction')
+  const canIssue = hasPermission('issueMaterials')
+  const canReceive = hasPermission('receiveFinishedGoods')
+  const canScrap = hasPermission('recordScrap')
   const canInspect = hasPermission('inspectProduction')
 
   const {
@@ -172,7 +176,10 @@ export default function ProductionOrderDetail({
   const search = useSearch({ strict: false }) as { tab?: string }
   // Costs is its own tab only for roles that may see manufacturing costs.
   const canSeeCosts = hasPermission('viewManufacturingCosts')
-  const tab: DetailTab = isDetailTab(search.tab) && (search.tab !== 'costs' || canSeeCosts) ? search.tab : 'overview'
+  const tab: DetailTab =
+    isDetailTab(search.tab) && (search.tab !== 'costs' || canSeeCosts)
+      ? search.tab
+      : 'overview'
   const setTab = (next: string) =>
     navigate({
       to: '.' as never,
@@ -424,31 +431,35 @@ export default function ProductionOrderDetail({
                 {t('Complete assembly')}
               </Button>
             )}
-            {canExecute && executable && !isAssembly && (
+            {(canIssue || canReceive) && executable && !isAssembly && (
               <>
                 {/* The full voucher, loaded with what this order still needs. */}
-                <Button
-                  asChild
-                  variant='outline'
-                  disabled={!order.materials.length}
-                >
-                  <Link
-                    to={'/manufacturing/material-issues/new' as never}
-                    search={{ orderId: order.id } as never}
+                {canIssue && (
+                  <Button
+                    asChild
+                    variant='outline'
+                    disabled={!order.materials.length}
                   >
-                    <PackageMinus className='mr-2 h-4 w-4' />
-                    {t('Issue materials')}
-                    {openMaterialLines > 0 && (
-                      <span className='ml-1.5 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700 tabular-nums dark:text-amber-300'>
-                        {openMaterialLines}
-                      </span>
-                    )}
-                  </Link>
-                </Button>
-                <Button onClick={() => setDialog('receive')}>
-                  <Factory className='mr-2 h-4 w-4' />
-                  {t('Receive finished goods')}
-                </Button>
+                    <Link
+                      to={'/manufacturing/material-issues/new' as never}
+                      search={{ orderId: order.id } as never}
+                    >
+                      <PackageMinus className='mr-2 h-4 w-4' />
+                      {t('Issue materials')}
+                      {openMaterialLines > 0 && (
+                        <span className='ml-1.5 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700 tabular-nums dark:text-amber-300'>
+                          {openMaterialLines}
+                        </span>
+                      )}
+                    </Link>
+                  </Button>
+                )}
+                {canReceive && (
+                  <Button onClick={() => setDialog('receive')}>
+                    <Factory className='mr-2 h-4 w-4' />
+                    {t('Receive finished goods')}
+                  </Button>
+                )}
               </>
             )}
             {canManage &&
@@ -492,13 +503,13 @@ export default function ProductionOrderDetail({
                   <Printer className='mr-2 h-4 w-4' />
                   {t('Print job card')}
                 </DropdownMenuItem>
-                {canExecute && executable && wipLotCount > 0 && (
+                {canIssue && executable && wipLotCount > 0 && (
                   <DropdownMenuItem onClick={() => setDialog('return')}>
                     <Undo2 className='mr-2 h-4 w-4' />
                     {t('Return unused material')}
                   </DropdownMenuItem>
                 )}
-                {canExecute &&
+                {canReceive &&
                   !isAssembly &&
                   ['in_production', 'paused', 'completed'].includes(
                     order.status
@@ -509,7 +520,7 @@ export default function ProductionOrderDetail({
                       {t('Reverse or correct a receipt')}
                     </DropdownMenuItem>
                   )}
-                {canExecute && order.status !== 'cancelled' && (
+                {canScrap && order.status !== 'cancelled' && (
                   <DropdownMenuItem onClick={() => setDialog('scrap')}>
                     <Recycle className='mr-2 h-4 w-4' />
                     {t('Record scrap')}
@@ -704,12 +715,14 @@ export default function ProductionOrderDetail({
       <Tabs value={tab} onValueChange={setTab} className='min-w-0'>
         <div className='-mx-1 overflow-x-auto px-1 [scrollbar-width:none]'>
           <TabsList className='w-max'>
-            {(Object.keys(TAB_LABELS) as DetailTab[]).filter((key) => key !== 'costs' || canSeeCosts).map((key) => (
-              <TabsTrigger key={key} value={key}>
-                {t(TAB_LABELS[key])}
-                {tabBadge[key]}
-              </TabsTrigger>
-            ))}
+            {(Object.keys(TAB_LABELS) as DetailTab[])
+              .filter((key) => key !== 'costs' || canSeeCosts)
+              .map((key) => (
+                <TabsTrigger key={key} value={key}>
+                  {t(TAB_LABELS[key])}
+                  {tabBadge[key]}
+                </TabsTrigger>
+              ))}
           </TabsList>
         </div>
 
@@ -729,7 +742,7 @@ export default function ProductionOrderDetail({
           <MaterialsTab
             order={order}
             requirements={requirements}
-            canIssue={canExecute && executable && !isAssembly}
+            canIssue={canIssue && executable && !isAssembly}
           />
         </TabsContent>
         <TabsContent value='operations' className='mt-3'>
@@ -746,7 +759,7 @@ export default function ProductionOrderDetail({
         <TabsContent value='wip' className='mt-3'>
           <WipTab
             order={order}
-            canReturn={canExecute && executable && wipLotCount > 0}
+            canReturn={canIssue && executable && wipLotCount > 0}
             onReturn={() => setDialog('return')}
           />
         </TabsContent>
@@ -758,7 +771,7 @@ export default function ProductionOrderDetail({
             onInspect={setInspecting}
             onRework={() => setDialog('rework')}
             canReverse={
-              canExecute &&
+              canReceive &&
               !isAssembly &&
               ['in_production', 'paused', 'completed'].includes(order.status)
             }
@@ -768,7 +781,7 @@ export default function ProductionOrderDetail({
         <TabsContent value='scrap' className='mt-3'>
           <ScrapTab
             order={order}
-            canRecord={canExecute && order.status !== 'cancelled'}
+            canRecord={canScrap && order.status !== 'cancelled'}
             onRecord={() => setDialog('scrap')}
           />
         </TabsContent>

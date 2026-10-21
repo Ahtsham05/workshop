@@ -42,6 +42,7 @@ import {
   buildPermissionsState,
   buildPermissionsPayload,
   formatPermissionLabel,
+  PERMISSION_HINTS,
   type PermissionCategoryId,
   type PermissionGroupDef,
   type PermissionKey,
@@ -150,6 +151,7 @@ export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: Permi
   const query = search.trim().toLowerCase();
   const matches = (group: PermissionGroupDef, perm: PermissionKey) =>
     formatPermissionLabel(perm, t).toLowerCase().includes(query) ||
+    (PERMISSION_HINTS[perm] ? t(PERMISSION_HINTS[perm]!).toLowerCase().includes(query) : false) ||
     perm.toLowerCase().includes(query) ||
     t(group.label).toLowerCase().includes(query);
 
@@ -255,8 +257,11 @@ export function PermissionsDialog({ open, onOpenChange, role, onSuccess }: Permi
                   disabled={readOnly}
                   onCheckedChange={(value) => setMany([perm], value === true)}
                 />
-                <span className="min-w-0 flex-1 truncate" title={formatPermissionLabel(perm, t)}>
-                  {formatPermissionLabel(perm, t)}
+                <span className="min-w-0 flex-1" title={PERMISSION_HINTS[perm] ? t(PERMISSION_HINTS[perm]!) : formatPermissionLabel(perm, t)}>
+                  <span className="block truncate">{formatPermissionLabel(perm, t)}</span>
+                  {PERMISSION_HINTS[perm] && (
+                    <span className="block truncate text-[11px] leading-tight text-muted-foreground">{t(PERMISSION_HINTS[perm]!)}</span>
+                  )}
                 </span>
                 <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', action.className)}>
                   {t(action.label)}
