@@ -16,6 +16,7 @@ const {
   ProductionReceipt,
   MaterialIssue,
   ScrapRecord,
+  PackingVoucher,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const {
@@ -32,6 +33,7 @@ const wip = require('./wip');
 const { lineUsage } = require('./materialUsage.service');
 const { roundQty, roundMoney, aggregateScope, escapeRegex } = require('./common');
 const { batchStockReport, batchTraceReport } = require('./batchReports.service');
+const { productProductionReport } = require('./productProductionReport.service');
 
 /*
  * Manufacturing reports — read-only statements built from the documents the module (and
@@ -46,6 +48,8 @@ const { batchStockReport, batchTraceReport } = require('./batchReports.service')
  *  stock-register        one product's movements, bank-statement style, running balance
  *  in-process            every open batch (order) with what is on the floor right now
  *  scrap                 scrap & rejection register
+ *  product-production    one product line day by day in kg: batches, issue, packs, in process
+ *  product-summary       the same, issue as one total (no material columns)
  *
  * Stock statements anchor on the stock the product has NOW and walk back: closing at the
  * end date = current − net movement after it; opening = closing − net movement inside the
@@ -55,6 +59,9 @@ const { batchStockReport, batchTraceReport } = require('./batchReports.service')
 const EPS = 1e-6;
 const MAX_ROWS = 5000;
 const ACTIVE_RETURN_MATCH = { status: { $ne: 'rejected' } };
+// Vouchers written before MIVs had a status (2026-10-14) have none: they are posted.
+const POSTED_MIV = { $ne: 'cancelled' };
+const isPostedMiv = (doc) => doc.status !== 'cancelled';
 const OPEN_FLOOR_STATUSES = ['released', 'in_production', 'paused', 'qc_pending'];
 const FINISHED_TYPES = ['finished_good', 'sub_assembly', 'by_product'];
 const MATERIAL_TYPES = ['raw_material', 'component', 'packaging_material'];
@@ -129,7 +136,7 @@ const productionReport = async (ctx, q) => {
           },
         ]),
         MaterialIssue.aggregate([
-          { $match: { productionOrderId: { $in: ids }, status: 'posted', issueDate: inPeriod } },
+          { $match: { productionOrderId: { $in: ids }, status: POSTED_MIV, issueDate: inPeriod } },
           {
             $group: {
               _id: '$productionOrderId',
@@ -250,8 +257,8 @@ const materialIssueRegister = async (ctx, q) => {
     .limit(MAX_ROWS)
     .lean();
 
-  const posted = docs.filter((d) => d.status === 'posted');
-  const cancelled = docs.filter((d) => d.status !== 'posted');
+  const posted = docs.filter(isPostedMiv);
+  const cancelled = docs.filter((d) => !isPostedMiv(d));
   const orderIds = [...new Set(posted.map((d) => String(d.productionOrderId)))];
   const orders = orderIds.length
     ? await ProductionOrder.find({ _id: { $in: orderIds } })
@@ -496,7 +503,7 @@ const MOVEMENT_SOURCES = [
     key: 'issued',
     Model: MaterialIssue,
     date: 'issueDate',
-    extra: { status: 'posted', kind: { $ne: 'return' } },
+    extra: { status: POSTED_MIV, kind: { $ne: 'return' } },
     array: 'lines',
     product: 'lines.productId',
     qty: '$lines.quantity',
@@ -510,7 +517,7 @@ const MOVEMENT_SOURCES = [
     key: 'returnedFromProduction',
     Model: MaterialIssue,
     date: 'issueDate',
-    extra: { status: 'posted', kind: 'return' },
+    extra: { status: POSTED_MIV, kind: 'return' },
     array: 'lines',
     product: 'lines.productId',
     qty: '$lines.quantity',
@@ -532,6 +539,39 @@ const MOVEMENT_SOURCES = [
     project: { scrapNumber: 1, orderNumber: 1, reason: 1 },
     detail: (d) => ({ orderNumber: d.orderNumber || '', note: d.reason ? String(d.reason).replace(/_/g, ' ') : '' }),
     unitCost: '$unitCost',
+  },
+  // Packing (packing.service.js): packs in; bulk + packing material out. A cancelled
+  // voucher and its reversal net to zero, so only posted ones are read.
+  {
+    key: 'packedIn',
+    Model: PackingVoucher,
+    date: 'packingDate',
+    extra: { status: 'posted' },
+    array: 'lines',
+    product: 'lines.productId',
+    qty: '$lines.quantity',
+    sign: 1,
+    number: 'voucherNumber',
+    project: { voucherNumber: 1, orderNumber: 1, batchNumber: 1, productName: 1 },
+    detail: (d) => ({
+      orderNumber: d.orderNumber || '',
+      note: [`Packed from ${d.productName}`, d.batchNumber ? `Batch ${d.batchNumber}` : ''].filter(Boolean).join(' · '),
+    }),
+    unitCost: '$lines.unitCost',
+  },
+  {
+    key: 'packedOut',
+    Model: PackingVoucher,
+    date: 'packingDate',
+    extra: { status: 'posted' },
+    array: 'consumed',
+    product: 'consumed.productId',
+    qty: '$consumed.quantity',
+    sign: -1,
+    number: 'voucherNumber',
+    project: { voucherNumber: 1, orderNumber: 1, batchNumber: 1 },
+    detail: (d) => ({ orderNumber: d.orderNumber || '', note: d.batchNumber ? `Batch ${d.batchNumber}` : '' }),
+    unitCost: '$consumed.unitCost',
   },
   {
     key: 'adjustment',
@@ -652,7 +692,7 @@ const statementProducts = async (ctx, kind, { productId, search } = {}) => {
   const touched =
     kind === 'finished'
       ? await ProductionOrder.distinct('productId', { ...scope, status: { $ne: 'cancelled' } })
-      : await MaterialIssue.distinct('lines.productId', { ...scope, status: 'posted' });
+      : await MaterialIssue.distinct('lines.productId', { ...scope, status: POSTED_MIV });
   const types = kind === 'finished' ? FINISHED_TYPES : MATERIAL_TYPES;
   const query = { ...scope, $or: [{ productType: { $in: types } }, { _id: { $in: touched } }] };
   if (search && String(search).trim()) {
@@ -895,7 +935,9 @@ const inProcessReport = async (ctx, q) => {
         unit: m.unit,
         required: roundQty(m.requiredQuantity),
         issued: roundQty((m.issuedQuantity || 0) - (m.returnedQuantity || 0)),
-        consumed: roundQty(m.consumedQuantity || 0),
+        consumed: wip.predatesWip(o)
+          ? Math.max(0, roundQty((m.issuedQuantity || 0) - (m.returnedQuantity || 0) - (m.scrappedQuantity || 0)))
+          : roundQty(m.consumedQuantity || 0),
         scrapped: roundQty(m.scrappedQuantity || 0),
         inWip,
         toIssue: wip.lineRemaining(m),
@@ -1037,15 +1079,20 @@ const dailyReport = async (ctx, q) => {
     $reduce: { input: '$consumption', initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.cost', 0] }] } },
   };
 
+  // Orders from before WIP tracking: what they were issued was consumed the same day.
+  const preWipOrders = await ProductionOrder.distinct('_id', { ...scope, wipLots: { $exists: false } });
+  const signedCost = { $cond: [{ $eq: ['$kind', 'return'] }, { $multiply: ['$totalCost', -1] }, '$totalCost'] };
+
   const [issueRows, outputRows, receiptRows, scrapRows, floorRows] = await Promise.all([
     MaterialIssue.aggregate([
-      { $match: { ...scope, status: 'posted', issueDate: since } },
+      { $match: { ...scope, status: POSTED_MIV, issueDate: since } },
       {
         $group: {
           _id: { day: dayOf('issueDate'), order: '$productionOrderId' },
           issued: { $sum: { $cond: [{ $eq: ['$kind', 'return'] }, 0, '$totalCost'] } },
           returned: { $sum: { $cond: [{ $eq: ['$kind', 'return'] }, '$totalCost', 0] } },
           vouchers: { $sum: { $cond: [{ $eq: ['$kind', 'return'] }, 0, 1] } },
+          consumed: { $sum: { $cond: [{ $in: ['$productionOrderId', preWipOrders] }, signedCost, 0] } },
         },
       },
     ]),
@@ -1075,7 +1122,16 @@ const dailyReport = async (ctx, q) => {
       {
         $group: {
           _id: { day: dayOf('scrapDate'), order: '$productionOrderId' },
-          floorScrap: { $sum: { $cond: [{ $eq: ['$stage', 'material'] }, '$totalCost', 0] } },
+          // A pre-WIP order's scrapped material was already consumed when it was issued.
+          floorScrap: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ['$stage', 'material'] }, { $not: [{ $in: ['$productionOrderId', preWipOrders] }] }] },
+                '$totalCost',
+                0,
+              ],
+            },
+          },
           scrapValue: { $sum: '$totalCost' },
         },
       },
@@ -1128,8 +1184,9 @@ const dailyReport = async (ctx, q) => {
       d.issued += r.issued;
       d.returned += r.returned;
       d.vouchers += r.vouchers;
+      d.consumed += r.consumed;
     }
-    return r.issued - r.returned;
+    return r.issued - r.returned - r.consumed;
   });
   touch(outputRows, (d, r) => {
     if (d) {
@@ -1300,7 +1357,7 @@ const batchReport = async (ctx, q) => {
   ]);
 
   const materials = (order.materials || []).map((m) => lineUsage(order, m));
-  const posted = issues.filter((i) => i.status === 'posted');
+  const posted = issues.filter(isPostedMiv);
   let net = 0;
   const issueLines = [];
   posted.forEach((v) => {
@@ -1400,7 +1457,7 @@ const batchReport = async (ctx, q) => {
     materials,
     issues: issueLines,
     cancelledVouchers: issues
-      .filter((i) => i.status !== 'posted')
+      .filter((i) => !isPostedMiv(i))
       .map((i) => ({ number: i.issueNumber, reason: i.cancelReason || '' })),
     outputs: outputs.map((o) => ({
       id: String(o._id),
@@ -1454,6 +1511,12 @@ const REPORTS = {
   batch: batchReport,
   'batch-stock': batchStockReport,
   'batch-trace': batchTraceReport,
+  'product-production': (ctx, q) => productProductionReport(ctx, q, { resolveRange }),
+  // The same register without the material-by-material columns (total issue only).
+  'product-summary': async (ctx, q) => ({
+    ...(await productProductionReport(ctx, q, { resolveRange })),
+    report: 'product-summary',
+  }),
 };
 
 const REPORT_KEYS = Object.keys(REPORTS);

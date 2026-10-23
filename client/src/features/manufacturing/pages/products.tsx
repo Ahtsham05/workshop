@@ -71,6 +71,7 @@ import { EmptyState } from '../components/page'
 import { Pager } from '../components/pager'
 import { ProductAttributesSheet } from '../components/product-attributes-sheet'
 import { ProductBatchesSheet } from '../components/product-batches-sheet'
+import { PackSizesSheet } from '../components/pack-sizes-sheet'
 import {
   PROCUREMENT_LABELS,
   PRODUCT_TYPES,
@@ -147,6 +148,7 @@ export default function ManufacturingProducts({
   const [batchesOf, setBatchesOf] = useState<ManufacturingProduct | null>(
     null
   )
+  const [packSizesOf, setPackSizesOf] = useState<string | null>(null)
   const [sort, setSort] = useState<Sort>('name')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string[]>([])
@@ -344,6 +346,27 @@ export default function ManufacturingProducts({
             </Link>
             <div className='text-muted-foreground truncate text-xs'>
               {p.sku || p.barcode || '—'}
+              {p.packOf && (
+                <span
+                  className='ml-2 text-sky-700 dark:text-sky-300'
+                  title={`${t('Made by packing')} ${p.packOf.productName}`}
+                >
+                  · {t('Pack of')} {p.packOf.productName} ({fmtQty(p.packOf.contentQuantity)}{' '}
+                  {p.packOf.contentUnit})
+                </span>
+              )}
+              {!!p.packSizeCount && (
+                <button
+                  type='button'
+                  className='ml-2 text-violet-700 hover:underline dark:text-violet-300'
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setPackSizesOf(p.id)
+                  }}
+                >
+                  · {p.packSizeCount} {t('pack sizes')}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -526,6 +549,12 @@ export default function ManufacturingProducts({
               <DropdownMenuItem onClick={() => setAttributes(p)}>
                 <Settings2 className='mr-2 h-4 w-4' />
                 {t('Manufacturing settings')}
+              </DropdownMenuItem>
+            )}
+            {(!p.productType || p.productType === 'finished_good' || p.productType === 'by_product') && (
+              <DropdownMenuItem onClick={() => setPackSizesOf(p.id)}>
+                <Boxes className='mr-2 h-4 w-4' />
+                {t('Pack sizes')}
               </DropdownMenuItem>
             )}
             {(p.tracking?.trackBatch || p.tracking?.trackExpiry) && (
@@ -913,6 +942,10 @@ export default function ManufacturingProducts({
           ) : undefined
         }
       />
+
+      {packSizesOf && (
+        <PackSizesSheet productId={packSizesOf} onClose={() => setPackSizesOf(null)} />
+      )}
 
       {batchesOf && (
         <ProductBatchesSheet

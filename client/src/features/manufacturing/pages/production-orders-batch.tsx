@@ -175,6 +175,7 @@ export default function ProductionOrdersBatchPage({
   const { data: productPage, isLoading: productsLoading } =
     useGetManufacturingProductsQuery({
       productType: BUILDABLE_PRODUCT_TYPES,
+      packRole: 'make',
       limit: 200,
       sort: 'name',
     })

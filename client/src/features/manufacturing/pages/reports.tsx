@@ -13,6 +13,8 @@ import {
   GitBranch,
   Layers,
   PackageMinus,
+  PackageOpen,
+  Sigma,
   Printer,
   RefreshCw,
   Scale,
@@ -51,6 +53,8 @@ import { Switch } from '@/components/ui/switch'
 import { FilterChips, SearchField } from '../components/list-controls'
 import { EmptyState, PageHeader } from '../components/page'
 import { ReportView } from '../components/report-view'
+import { ProductRegisterControls } from '../components/product-register-controls'
+import { packWeightsParam, useProductRegisterState } from '../lib/product-register-state'
 import { fmtQty, orderPath, statusLabel } from '../lib/constants'
 import { buildReportDoc } from '../lib/report-doc'
 import { exportReportToExcel } from '../lib/report-excel'
@@ -63,6 +67,18 @@ type MenuKey = Exclude<ReportKey, 'stock-register'>
 const REPORTS: { key: MenuKey; label: string; hint: string; icon: LucideIcon }[] = [
   { key: 'production', label: 'Production Summary', hint: 'Batch-wise planned, completed, remaining', icon: ClipboardList },
   { key: 'daily', label: 'Date-wise Summary', hint: 'Issue, production, remaining by date', icon: CalendarDays },
+  {
+    key: 'product-production',
+    label: 'Product Register',
+    hint: 'One product: batches, kg issued, packs, in process',
+    icon: PackageOpen,
+  },
+  {
+    key: 'product-summary',
+    label: 'Product Summary',
+    hint: 'Product register — total issue, no raw materials',
+    icon: Sigma,
+  },
   { key: 'batch', label: 'Batch Report', hint: 'One batch from issue to finished goods', icon: FileText },
   { key: 'material-issues', label: 'Issue for Production', hint: 'Material issue register', icon: PackageMinus },
   { key: 'material-consumption', label: 'Issue vs Consumption', hint: 'Issued, used, wasted, on floor', icon: Scale },
@@ -80,10 +96,12 @@ const IDLE_LABEL: Partial<Record<ReportKey, string>> = {
   'finished-goods': 'Hide products with no stock and no movement',
   'raw-materials': 'Hide products with no stock and no movement',
   daily: 'Hide days with no activity',
+  'product-production': 'Hide days with no activity',
+  'product-summary': 'Hide days with no activity',
 }
 const WITH_STATUS: ReportKey[] = ['production', 'material-consumption']
 const STATEMENTS: ReportKey[] = ['finished-goods', 'raw-materials']
-const DRILLS_TO_BATCH: ReportKey[] = ['production', 'daily', 'in-process', 'material-issues', 'material-consumption']
+const DRILLS_TO_BATCH: ReportKey[] = ['production', 'daily', 'product-production', 'product-summary', 'in-process', 'material-issues', 'material-consumption']
 
 export default function ManufacturingReportsPage({
   report = 'production',
@@ -116,12 +134,14 @@ export default function ManufacturingReportsPage({
   const [batchKind, setBatchKind] = useState<NonNullable<ReportParams['kind']>>('all')
   const [expiry, setExpiry] = useState<NonNullable<ReportParams['expiry']>>('all')
   const [withEmpty, setWithEmpty] = useState(false)
+  const register = useProductRegisterState()
   const debouncedSearch = useDebouncedValue(search, 300)
 
   const isRegister = report === 'stock-register'
   const isBatch = report === 'batch'
   const isBatchStock = report === 'batch-stock'
   const isTrace = report === 'batch-trace'
+  const isRegisterOfProduct = report === 'product-production' || report === 'product-summary'
   const active: MenuKey = isRegister ? from || 'finished-goods' : (report as MenuKey)
 
   const changePeriod = (next: LedgerPeriod) => {
@@ -133,6 +153,8 @@ export default function ManufacturingReportsPage({
 
   useEffect(() => {
     setSearch('')
+    // The product register lists every day of the period, like the factory's own sheet.
+    setHideIdle(report !== 'product-production' && report !== 'product-summary')
   }, [report])
 
   const params = {
@@ -152,6 +174,12 @@ export default function ManufacturingReportsPage({
         }
       : {}),
     ...(isTrace && batchId ? { batchId } : {}),
+    ...(isRegisterOfProduct
+      ? {
+          productIds: register.productIds.join(',') || undefined,
+          packWeights: packWeightsParam(register.packWeights, register.productIds),
+        }
+      : {}),
   }
   const skip = (isRegister && !productId) || (isBatch && !orderId) || (isTrace && !batchId)
   // The traceability picker: the branch's most recent batches.
@@ -198,9 +226,11 @@ export default function ManufacturingReportsPage({
 
   const decimals = currency.decimalPlaces ?? 2
   const canSeeCosts = useCanViewManufacturingCosts()
+  const isRegisterData = current?.report === 'product-production' || current?.report === 'product-summary'
+  const registerNeedsProduct = isRegisterData && !!(current as { needsProduct?: boolean }).needsProduct
   const doc = useMemo(
     () =>
-      current
+      current && !registerNeedsProduct
         ? buildReportDoc(current, {
             t,
             hideMoney: !canSeeCosts,
@@ -213,7 +243,7 @@ export default function ManufacturingReportsPage({
               })}`,
           })
         : null,
-    [current, t, currency.symbol, currency.code, decimals, canSeeCosts]
+    [current, registerNeedsProduct, t, currency.symbol, currency.code, decimals, canSeeCosts]
   )
 
   const companyName = resolveBranchCompanyName(org?.name, branch?.name) || org?.name
@@ -439,6 +469,15 @@ export default function ManufacturingReportsPage({
             </div>
           </div>
         )}
+        {isRegisterOfProduct && (
+          <ProductRegisterControls
+            data={current?.report === 'product-production' || current?.report === 'product-summary' ? current : undefined}
+            productIds={register.productIds}
+            onProductIdsChange={register.setProductIds}
+            packWeights={register.packWeights}
+            onPackWeightChange={register.setPackWeight}
+          />
+        )}
         {(WITH_STATUS.includes(report) || STATEMENTS.includes(report) || IDLE_LABEL[report]) && (
           <div className='flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between'>
             {WITH_STATUS.includes(report) && (
@@ -486,6 +525,16 @@ export default function ManufacturingReportsPage({
             description={t('Open a stock statement and click a product to see its register.')}
           />
         )
+      ) : registerNeedsProduct ? (
+        <EmptyState
+          icon={PackageOpen}
+          title={current?.options.length ? t('Choose a product') : t('No production yet')}
+          description={
+            current?.options.length
+              ? t('Pick the product above. Add its other pack sizes to see them side by side, weighed in kg.')
+              : t('The register fills in once production orders are issued material and receive finished goods.')
+          }
+        />
       ) : isError && !current ? (
         <EmptyState
           icon={ClipboardList}

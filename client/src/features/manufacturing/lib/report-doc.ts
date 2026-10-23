@@ -16,6 +16,9 @@ import type {
   ConsumptionReport,
   InProcessReport,
   IssueRegisterReport,
+  ProductProductionReport,
+  ProductRegisterData,
+  WeightSource,
   ManufacturingReport,
   MovementKey,
   ProductionReport,
@@ -511,17 +514,19 @@ const MOVEMENT_META: Record<MovementKey, { label: string; side: 'in' | 'out' | '
   issued: { label: 'Issued to production', side: 'out' },
   transferOut: { label: 'Transfer out', side: 'out' },
   scrapped: { label: 'Scrapped', side: 'out' },
+  packedIn: { label: 'Packed in', side: 'in' },
+  packedOut: { label: 'Used in packing', side: 'out' },
   adjustment: { label: 'Adjustment (±)', side: 'both' },
 }
 
 const STATEMENT_ORDER: Record<'finished-goods' | 'raw-materials', { always: MovementKey[]; order: MovementKey[] }> = {
   'finished-goods': {
     always: ['produced', 'sold'],
-    order: ['produced', 'salesReturn', 'transferIn', 'purchased', 'returnedFromProduction', 'sold', 'transferOut', 'issued', 'purchaseReturn', 'scrapped', 'adjustment'],
+    order: ['produced', 'packedIn', 'salesReturn', 'transferIn', 'purchased', 'returnedFromProduction', 'sold', 'packedOut', 'transferOut', 'issued', 'purchaseReturn', 'scrapped', 'adjustment'],
   },
   'raw-materials': {
     always: ['purchased', 'issued', 'returnedFromProduction'],
-    order: ['purchased', 'returnedFromProduction', 'transferIn', 'salesReturn', 'produced', 'issued', 'purchaseReturn', 'transferOut', 'sold', 'scrapped', 'adjustment'],
+    order: ['purchased', 'returnedFromProduction', 'transferIn', 'salesReturn', 'produced', 'packedIn', 'issued', 'packedOut', 'purchaseReturn', 'transferOut', 'sold', 'scrapped', 'adjustment'],
   },
 }
 
@@ -627,6 +632,8 @@ const SOURCE_LABEL: Record<string, string> = {
   transferIn: 'Transfer in',
   transferOut: 'Transfer out',
   scrapped: 'Scrapped',
+  packedIn: 'Packing (packs in)',
+  packedOut: 'Packing (used)',
   adjustment: 'Stock adjustment',
 }
 
@@ -1651,6 +1658,366 @@ function batchTraceDoc(data: BatchTraceReport, ctx: DocContext): ReportDoc {
   }
 }
 
+/* ── Product-wise production register (kg) ──────────────────────────────────── */
+
+/** "Vito Mineral T" from "Vito Mineral T Carton", "Vito Mineral T 20kg Bag" … */
+export function productLineName(names: string[]): string {
+  if (!names.length) return ''
+  if (names.length === 1) return names[0]
+  const words = names.map((n) => n.trim().split(/\s+/))
+  const common: string[] = []
+  for (let i = 0; i < words[0].length; i += 1) {
+    const w = words[0][i]
+    if (words.every((ws) => ws[i]?.toLowerCase() === w.toLowerCase())) common.push(w)
+    else break
+  }
+  return common.join(' ').replace(/[\s\-–—:(/]+$/, '')
+}
+
+/** A pack's name without the product-line prefix ("Carton", "20kg Bag"). */
+const packLabel = (name: string, line: string) => {
+  if (!line || name === line || !name.toLowerCase().startsWith(line.toLowerCase())) return name
+  return name.slice(line.length).replace(/^[\s\-–—:(/]+/, '').replace(/\)$/, '') || name
+}
+
+const kgText = (n: number) => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+const kgCell = (n: number, { blank = true, strong = false, tone }: { blank?: boolean; strong?: boolean; tone?: DocCell['tone'] } = {}): DocCell => ({
+  text: blank && isZero(n) ? '' : kgText(n),
+  value: Math.round((Number(n) || 0) * 1000) / 1000,
+  strong,
+  tone,
+})
+const WEIGHT_SOURCE: Record<Exclude<WeightSource, null>, string> = {
+  unit: 'Weighed in kg',
+  conversion: 'Product unit conversion',
+  recipe: 'Recipe (materials per unit)',
+  pack: 'Pack size',
+  manual: 'Typed on this report',
+}
+/** Above this many weighed materials the day table shows the total only. */
+const MAX_MATERIAL_COLUMNS = 6
+
+function productRegisterDoc(data: ProductProductionReport, ctx: DocContext): ReportDoc {
+  const { t } = ctx
+  // The summary: the same register with the issue as one total — no material columns
+  // and no material section.
+  const summaryOnly = data.report === 'product-summary'
+  const title = summaryOnly ? t('Product Production Summary') : t('Product-wise Production Register')
+  if (data.needsProduct) {
+    return {
+      key: data.report,
+      title,
+      periodStart: data.period.startDate,
+      periodEnd: data.period.endDate,
+      orientation: 'landscape',
+      summary: [],
+      sections: [],
+    }
+  }
+  const d: ProductRegisterData = data
+  const line = productLineName(d.selected.map((s) => s.name))
+  const weighed = d.materials.filter((m) => m.kgPerUnit != null)
+  const eachMaterial = !summaryOnly && weighed.length > 0 && weighed.length <= MAX_MATERIAL_COLUMNS
+  const packCols = d.packs.filter((p) => !p.loose)
+  const hasReturns = d.totals.returnedKg > 0 || d.days.some((x) => Object.keys(x.returned).length > 0)
+  const hasLoss = d.totals.scrapKg > 0
+  const issueGroup = t('Issued to production')
+  const fgGroup = t('Finished goods')
+  const runGroup = t('Running position (kg)')
+  const matUnit = (m: (typeof weighed)[number]) => (m.unit && m.unit.toLowerCase() !== 'kg' ? ` (${m.unit})` : ' (kg)')
+  const packHeader = (p: (typeof packCols)[number]) => {
+    const name = packLabel(p.shortName || p.name, line)
+    if (p.byWeight) return `${name} (${p.unit})`
+    return p.kgPerUnit == null ? `${name} (${p.unit})` : `${name} (${kgText(p.kgPerUnit)} kg)`
+  }
+
+  const cols: DocColumn[] = [
+    { key: 'date', label: t('Date'), width: '7%', nowrap: true },
+    { key: 'batches', label: t('Batch qty'), align: 'right', group: issueGroup },
+    ...(eachMaterial
+      ? weighed.map((m) => ({ key: `m:${m.key}`, label: `${m.name}${matUnit(m)}`, align: 'right' as const, group: issueGroup }))
+      : []),
+    ...(hasReturns ? [{ key: 'returned', label: t('Returned (kg)'), align: 'right' as const, group: issueGroup }] : []),
+    { key: 'issueKg', label: t('Total issue (kg)'), align: 'right', group: issueGroup },
+    ...packCols.map((p) => ({ key: `p:${p.key}`, label: packHeader(p), align: 'right' as const, group: fgGroup })),
+    {
+      key: 'packedKg',
+      label: d.hasLoose ? t('Total finished goods (kg)') : t('Total finished (kg)'),
+      align: 'right',
+      group: fgGroup,
+    },
+    ...(d.hasLoose
+      ? [
+          { key: 'looseKg', label: t('Extra packing (kg)'), align: 'right' as const, group: fgGroup },
+          { key: 'finishedKg', label: t('Total finish weight (kg)'), align: 'right' as const, group: fgGroup },
+        ]
+      : []),
+    ...(hasLoss ? [{ key: 'scrapKg', label: t('Loss / scrap (kg)'), align: 'right' as const }] : []),
+    { key: 'cumIssue', label: t('Total issue'), align: 'right', group: runGroup },
+    { key: 'cumFinished', label: t('Total finish'), align: 'right', group: runGroup },
+    { key: 'inProcess', label: t('Remaining in process'), align: 'right', group: runGroup },
+  ]
+  const firstRunning = cols.findIndex((c) => c.key === 'cumIssue')
+
+  const batchesCell = (n: number, numbers: string[]): CellInput =>
+    n
+      ? {
+          text: String(n),
+          value: n,
+          strong: true,
+          sub: numbers.length <= 2 ? numbers.join(', ') : `${numbers.slice(0, 2).join(', ')} +${numbers.length - 2}`,
+        }
+      : ''
+
+  const rows: DocRow[] = [
+    {
+      kind: 'opening',
+      label: `${formatAppDate(keyToDate(d.period.startDate))} — ${t('Opening (in process brought forward)')}`,
+      labelSpan: firstRunning,
+      cells: { inProcess: kgCell(d.openingInProcessKg, { blank: false, strong: true }) },
+    },
+    ...d.days.map((x) => {
+      const cells: Record<string, CellInput> = {
+        date: { text: formatAppDate(keyToDate(x.date)), strong: true },
+        batches: batchesCell(x.batches, x.batchNumbers),
+        returned: kgCell(x.returnedKg),
+        issueKg: kgCell(x.issueKg - x.returnedKg, { strong: true }),
+        packedKg: kgCell(d.hasLoose ? x.packedKg : x.finishedKg, { strong: !d.hasLoose }),
+        looseKg: kgCell(x.looseKg),
+        finishedKg: kgCell(x.finishedKg, { strong: true }),
+        scrapKg: kgCell(x.scrapKg, { tone: x.scrapKg > 0 ? 'danger' : undefined }),
+        cumIssue: kgCell(x.cumIssueKg, { blank: false }),
+        cumFinished: kgCell(x.cumFinishedKg, { blank: false }),
+        inProcess: kgCell(x.inProcessKg, { blank: false, strong: true, tone: x.inProcessKg < -0.0005 ? 'danger' : undefined }),
+      }
+      if (eachMaterial) weighed.forEach((m) => (cells[`m:${m.key}`] = qty(x.issued[m.key] || 0)))
+      packCols.forEach((p) => (cells[`p:${p.key}`] = qty(x.packs[p.key] || 0)))
+      return { cells }
+    }),
+  ]
+  const totalCells: Record<string, CellInput> = {
+    batches: { text: String(d.totals.batches), value: d.totals.batches, strong: true },
+    returned: kgCell(d.totals.returnedKg, { blank: false, strong: true }),
+    issueKg: kgCell(d.totals.netIssueKg, { blank: false, strong: true }),
+    packedKg: kgCell(d.hasLoose ? d.totals.packedKg : d.totals.finishedKg, { blank: false, strong: true }),
+    looseKg: kgCell(d.totals.looseKg, { blank: false, strong: true }),
+    finishedKg: kgCell(d.totals.finishedKg, { blank: false, strong: true }),
+    scrapKg: kgCell(d.totals.scrapKg, { blank: false, strong: true }),
+    cumIssue: kgCell(d.totals.netIssueKg, { blank: false, strong: true }),
+    cumFinished: kgCell(d.totals.finishedKg, { blank: false, strong: true }),
+    inProcess: kgCell(d.closingInProcessKg, { blank: false, strong: true }),
+  }
+  if (eachMaterial) weighed.forEach((m) => (totalCells[`m:${m.key}`] = qty(m.issued, { blank: false, strong: true })))
+  packCols.forEach((p) => (totalCells[`p:${p.key}`] = qty(p.quantity, { blank: false, strong: true })))
+  rows.push({ kind: 'total', label: t('Total'), labelSpan: 1, cells: totalCells })
+
+  // Finished goods by pack.
+  const packRows: DocRow[] = d.packs.map((p) => ({
+    cells: {
+      pack: { text: packLabel(p.name, line), sub: p.sku || undefined, strong: true },
+      unit: p.unit,
+      kgEach:
+        p.kgPerUnit == null
+          ? { text: t('Not set'), tone: 'danger' }
+          : { text: kgText(p.kgPerUnit), value: p.kgPerUnit },
+      source: p.weightSource ? t(WEIGHT_SOURCE[p.weightSource]) : '—',
+      kind: p.loose ? t('Extra packing') : t('Pack'),
+      quantity: qty(p.quantity, { blank: false, strong: true }),
+      kg: kgCell(p.kg, { blank: false }),
+      share: d.totals.finishedKg > 0 ? pct((p.kg / d.totals.finishedKg) * 100) : '',
+    },
+  }))
+  if (packRows.length) {
+    packRows.push({
+      kind: 'total',
+      label: t('Total finished weight'),
+      labelSpan: 6,
+      cells: { kg: kgCell(d.totals.finishedKg, { blank: false, strong: true }), share: d.totals.finishedKg > 0 ? pct(100) : '' },
+    })
+  }
+
+  // Materials issued.
+  const netIssueKg = d.totals.netIssueKg
+  const materialRows: DocRow[] = d.materials.map((m) => ({
+    cells: {
+      material: { text: m.name, sub: m.sku || undefined, strong: true },
+      unit: m.unit,
+      kgEach: m.kgPerUnit == null ? { text: t('Not weighed'), tone: 'muted' } : { text: kgText(m.kgPerUnit), value: m.kgPerUnit },
+      issued: qty(m.issued, { blank: false }),
+      returned: qty(m.returned),
+      scrapped: { ...qty(m.scrapped), tone: m.scrapped > 0 ? 'danger' : undefined },
+      net: qty(m.issued - m.returned, { blank: false, strong: true }),
+      netKg: m.netKg == null ? { text: '—', tone: 'muted' } : kgCell(m.netKg, { blank: false }),
+      share: m.netKg != null && netIssueKg > 0 ? pct((m.netKg / netIssueKg) * 100) : '',
+    },
+  }))
+  if (materialRows.length) {
+    materialRows.push({
+      kind: 'total',
+      label: t('Total weighed material (net)'),
+      labelSpan: 7,
+      cells: { netKg: kgCell(netIssueKg, { blank: false, strong: true }), share: netIssueKg > 0 ? pct(100) : '' },
+    })
+  }
+
+  // Batch-wise.
+  const batchRows: DocRow[] = d.batches.map((b) => ({
+    drill: { orderId: b.orderId },
+    cells: {
+      batch: { text: b.batchNumber, sub: b.batchNumber !== b.orderNumber ? b.orderNumber : undefined, strong: true },
+      pack: packLabel(b.productName, line),
+      started: b.startedOn ? formatAppDate(keyToDate(b.startedOn)) : '—',
+      status: statusLabel(b.status, b.orderType),
+      planned: { ...qty(b.planned, { blank: false }), sub: b.unit },
+      issued: kgCell(b.netIssuedKg, { blank: false }),
+      finishedQty: qty(b.finishedQty),
+      finishedKg: kgCell(b.finishedKg, { strong: true }),
+      loss: kgCell(b.scrapKg, { tone: b.scrapKg > 0 ? 'danger' : undefined }),
+      inProcess: kgCell(b.inProcessKg, {
+        blank: false,
+        strong: true,
+        tone: b.inProcessKg < -0.0005 ? 'danger' : Math.abs(b.inProcessKg) < 0.0005 ? 'success' : undefined,
+      }),
+      yield: b.yieldPercent == null ? '' : { ...pct(b.yieldPercent), tone: b.yieldPercent > 100.05 ? 'danger' : undefined },
+    },
+  }))
+  if (batchRows.length) {
+    const sumB = (k: 'netIssuedKg' | 'finishedKg' | 'scrapKg' | 'inProcessKg') => d.batches.reduce((s, b) => s + b[k], 0)
+    batchRows.push({
+      kind: 'total',
+      label: `${t('Total')} — ${d.batches.length} ${t('batches')}`,
+      labelSpan: 5,
+      cells: {
+        issued: kgCell(sumB('netIssuedKg'), { blank: false, strong: true }),
+        finishedQty: '',
+        finishedKg: kgCell(sumB('finishedKg'), { blank: false, strong: true }),
+        loss: kgCell(sumB('scrapKg'), { blank: false, strong: true }),
+        inProcess: kgCell(sumB('inProcessKg'), { blank: false, strong: true }),
+        yield: sumB('netIssuedKg') > 0 ? pct((sumB('finishedKg') / sumB('netIssuedKg')) * 100) : '',
+      },
+    })
+  }
+
+  const packHint = packCols
+    .filter((p) => p.quantity)
+    .map((p) => `${fmtQty(p.quantity)} ${packLabel(p.shortName || p.name, line)}`)
+    .join(' · ')
+  return {
+    key: data.report,
+    title,
+    subtitle: line || d.selected.map((s) => s.name).join(', '),
+    periodStart: d.period.startDate,
+    periodEnd: d.period.endDate,
+    orientation: 'landscape',
+    info: [
+      { label: t('Product'), value: d.selected.map((s) => s.name).join(', ') },
+      { label: t('Unit of weight'), value: 'kg' },
+    ],
+    summary: [
+      { label: t('Opening in process (kg)'), value: kgText(d.openingInProcessKg) },
+      {
+        label: t('Issued (kg)'),
+        value: kgText(d.totals.netIssueKg),
+        hint: `${d.totals.batches} ${t('batches started')} · ${d.totals.activeDays} ${t('working days')}`,
+      },
+      {
+        label: t('Finished (kg)'),
+        value: kgText(d.totals.finishedKg),
+        hint:
+          [
+            packHint,
+            d.totals.completedYieldPercent != null
+              ? `${t('yield')} ${d.totals.completedYieldPercent}% ${t('on completed batches')}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' · ') || undefined,
+      },
+      { label: t('Remaining in process (kg)'), value: kgText(d.closingInProcessKg), emphasis: true },
+    ],
+    sections: ([
+      {
+        id: 'days',
+        title: t('Day-wise issue, finished goods and remaining in process'),
+        note: [
+          t('Batch qty = production batches whose first material issue was on that day.'),
+          eachMaterial || summaryOnly
+            ? ''
+            : weighed.length
+              ? t('Materials are many — the day table shows the total; each material is listed below.')
+              : '',
+          d.hasLoose
+            ? t('Extra packing = finished but left loose; a minus means loose bulk from earlier days was packed.')
+            : '',
+          hasLoss
+            ? t('Remaining in process = opening + total issue − total finish − loss / scrap.')
+            : t('Remaining in process = opening + total issue − total finish.'),
+        ]
+          .filter(Boolean)
+          .join(' '),
+        columns: cols,
+        rows,
+        empty: t('No days in this period.'),
+      },
+      {
+        id: 'packs',
+        title: t('Finished goods by pack'),
+        columns: [
+          { key: 'pack', label: t('Pack / product'), width: '24%' },
+          { key: 'unit', label: t('Unit'), width: '7%' },
+          { key: 'kgEach', label: t('kg per unit'), align: 'right' },
+          { key: 'source', label: t('Weight from'), width: '18%' },
+          { key: 'kind', label: t('Type'), width: '10%' },
+          { key: 'quantity', label: t('Quantity'), align: 'right' },
+          { key: 'kg', label: t('Weight (kg)'), align: 'right' },
+          { key: 'share', label: t('Share'), align: 'right', width: '7%' },
+        ],
+        rows: packRows,
+        empty: t('Nothing was received in this period.'),
+      },
+      {
+        id: 'materials',
+        title: t('Materials issued'),
+        note: t('Packing materials counted in pieces are listed but not weighed.'),
+        columns: [
+          { key: 'material', label: t('Material'), width: '24%' },
+          { key: 'unit', label: t('Unit'), width: '6%' },
+          { key: 'kgEach', label: t('kg per unit'), align: 'right' },
+          { key: 'issued', label: t('Issued'), align: 'right' },
+          { key: 'returned', label: t('Returned'), align: 'right' },
+          { key: 'scrapped', label: t('Scrapped'), align: 'right' },
+          { key: 'net', label: t('Net issued'), align: 'right' },
+          { key: 'netKg', label: t('Net (kg)'), align: 'right' },
+          { key: 'share', label: t('Share'), align: 'right', width: '7%' },
+        ],
+        rows: materialRows,
+        empty: t('No material was issued in this period.'),
+      },
+      {
+        id: 'batches',
+        title: t('Batch-wise position'),
+        note: t('Each batch to the end of the period, from its first issue. In process = issued − finished − loss. Click a batch for its full report.'),
+        columns: [
+          { key: 'batch', label: t('Batch No.'), width: '11%', nowrap: true },
+          { key: 'pack', label: t('Pack / product'), width: '14%' },
+          { key: 'started', label: t('Started'), width: '8%', nowrap: true },
+          { key: 'status', label: t('Status'), width: '8%' },
+          { key: 'planned', label: t('Planned'), align: 'right' },
+          { key: 'issued', label: t('Issued (kg)'), align: 'right' },
+          { key: 'finishedQty', label: t('Finished (qty)'), align: 'right' },
+          { key: 'finishedKg', label: t('Finished (kg)'), align: 'right' },
+          { key: 'loss', label: t('Loss (kg)'), align: 'right' },
+          { key: 'inProcess', label: t('In process (kg)'), align: 'right' },
+          { key: 'yield', label: t('Yield'), align: 'right', width: '6%' },
+        ],
+        rows: batchRows,
+        empty: t('No batch of this product was worked in this period.'),
+      },
+    ] as DocSection[]).filter((sec) => !(summaryOnly && sec.id === 'materials')),
+    footnotes: d.warnings.map((w) => `${t(w.message)} (${w.names.join(', ')})`),
+  }
+}
+
 export function buildReportDoc(data: ManufacturingReport, ctx: DocContext): ReportDoc {
   const doc = buildFullDoc(data, ctx)
   return ctx.hideMoney ? withoutMoney(doc, ctx) : doc
@@ -1706,6 +2073,9 @@ function buildFullDoc(data: ManufacturingReport, ctx: DocContext): ReportDoc {
       return batchStockDoc(data, ctx)
     case 'batch-trace':
       return batchTraceDoc(data, ctx)
+    case 'product-production':
+    case 'product-summary':
+      return productRegisterDoc(data, ctx)
   }
 }
 

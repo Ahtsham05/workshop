@@ -27,8 +27,9 @@ const STATUS_SETS = {
 const lineUsage = (order, m) => {
   const issued = roundQty(m.issuedQuantity || 0);
   const returned = roundQty(m.returnedQuantity || 0);
-  const used = roundQty(m.consumedQuantity || 0);
   const wastage = roundQty(m.scrappedQuantity || 0);
+  const legacy = wip.predatesWip(order);
+  const used = legacy ? Math.max(0, roundQty(issued - returned - wastage)) : roundQty(m.consumedQuantity || 0);
   const inFactory = wip.lineWip(order, m);
   const avgCost = issued > 0 ? (m.issuedCost || 0) / issued : 0;
   const lots = (order.wipLots || []).filter((l) => String(l.materialLineId) === String(m._id) && l.quantity > wip.EPS);
@@ -52,7 +53,7 @@ const lineUsage = (order, m) => {
     standard,
     variance: roundQty(used + wastage - standard),
     issuedValue: roundMoney(m.issuedCost || 0),
-    usedValue: roundMoney(m.consumedCost || 0),
+    usedValue: roundMoney(legacy ? used * avgCost : m.consumedCost || 0),
     returnedValue: roundMoney(returned * avgCost),
     wastageValue: roundMoney(wastage * avgCost),
     inFactoryValue: roundMoney(lots.reduce((s, l) => s + l.quantity * (l.unitCost || 0), 0)),

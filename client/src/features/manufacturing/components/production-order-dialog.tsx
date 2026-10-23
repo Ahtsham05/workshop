@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   useCreateProductionOrderMutation,
   useGetBomsQuery,
+  useGetManufacturingProductVariantsQuery,
   useGetManufacturingSettingsQuery,
   useGetOperatorsQuery,
   useUpdateProductionOrderMutation,
@@ -82,6 +83,14 @@ export function ProductionOrderDialog({
       : null
   )
   const [bomId, setBomId] = useState<string>(order?.bomId || NONE)
+  // A product with several variants: the order must say which one it makes.
+  const [variantId, setVariantId] = useState<string>(order?.variantId || '')
+  const { data: variantInfo } = useGetManufacturingProductVariantsQuery(
+    product?.id || '',
+    { skip: !product }
+  )
+  const variantChoices =
+    variantInfo && variantInfo.variants.length > 1 ? variantInfo.variants : []
   const [quantity, setQuantity] = useState(
     order ? String(order.plannedQuantity) : ''
   )
@@ -122,10 +131,13 @@ export function ProductionOrderDialog({
     if (!product) return toast.error(t('Choose the product to produce'))
     if (!(Number(quantity) > 0))
       return toast.error(t('Planned quantity must be greater than zero'))
+    if (recipeEditable && variantChoices.length > 0 && !variantId)
+      return toast.error(t('Choose which variant this order makes'))
     const body = {
       ...(recipeEditable
         ? {
             productId: product.id,
+            ...(variantChoices.length > 0 ? { variantId } : {}),
             bomId: bomId === NONE ? null : bomId,
             plannedQuantity: Number(quantity),
           }
@@ -214,13 +226,38 @@ export function ProductionOrderDialog({
             <Label>{t('Product')}</Label>
             <ProductPicker
               value={product}
+              packRole='make'
               disabled={!recipeEditable}
               onChange={(p) => {
                 setProduct(p)
                 setBomId(p.defaultBomId || NONE)
+                setVariantId('')
               }}
             />
           </div>
+          {variantChoices.length > 0 && (
+            <div className='grid gap-1.5 md:col-span-6'>
+              <Label>{t('Variant')}</Label>
+              <div className='flex flex-wrap gap-2'>
+                {variantChoices.map((v) => (
+                  <button
+                    key={v.id}
+                    type='button'
+                    disabled={!recipeEditable}
+                    onClick={() => setVariantId(v.id)}
+                    aria-pressed={variantId === v.id}
+                    className={
+                      variantId === v.id
+                        ? 'border-foreground bg-foreground text-background rounded-lg border px-3 py-1.5 text-sm font-medium'
+                        : 'hover:border-foreground/40 rounded-lg border px-3 py-1.5 text-sm'
+                    }
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className='grid gap-1.5 md:col-span-2'>
             <Label>{t('Planned quantity')}</Label>
             <div className='relative'>

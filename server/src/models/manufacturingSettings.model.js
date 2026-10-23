@@ -12,6 +12,7 @@ const counterDefaults = () => ({
   scrap: 0,
   rawMaterialReceipt: 0,
   batch: 0,
+  packing: 0,
 });
 
 /**
@@ -40,6 +41,8 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
       rawMaterialReceipt: { type: String, trim: true, default: 'RMV' },
       // Finished-goods batch (lot) numbers: B261019-007 — prefix, production date, sequence.
       batch: { type: String, trim: true, default: 'B' },
+      // Packing vouchers: bulk finished goods packed into pack sizes (cartons, bags …).
+      packing: { type: String, trim: true, default: 'PK' },
     },
     numberPadding: { type: Number, min: 3, max: 10, default: 5 },
     // How a new production order's finished-goods batch number is made: its own dated
@@ -80,6 +83,7 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
           scrap: { type: Number, default: 0 },
           rawMaterialReceipt: { type: Number, default: 0 },
           batch: { type: Number, default: 0 },
+          packing: { type: Number, default: 0 },
         },
         { _id: false }
       ),

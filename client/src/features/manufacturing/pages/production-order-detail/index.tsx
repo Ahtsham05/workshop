@@ -61,6 +61,7 @@ import {
 } from '../../components/execution-dialogs'
 import { ProductionOrderDialog } from '../../components/production-order-dialog'
 import { ReceiveFinishedGoodsDialog } from '../../components/receive-finished-goods-dialog'
+import type { ReceiptPrefill } from '../../lib/use-finished-goods-receipt'
 import { RecordScrapDialog } from '../../components/record-scrap-dialog'
 import { ReverseOutputDialog } from '../../components/reverse-output-dialog'
 import { useConfirm } from '../../lib/confirm'
@@ -167,6 +168,8 @@ export default function ProductionOrderDetail({
   const confirm = useConfirm()
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const [inspecting, setInspecting] = useState<ProductionOutput | null>(null)
+  // Filled in by "Reverse & receive again": the reversed receipt's quantity and packs.
+  const [receivePrefill, setReceivePrefill] = useState<ReceiptPrefill | undefined>(undefined)
   const [reversing, setReversing] = useState<{
     output: ProductionOutput
     intent: 'correct' | 'reverse'
@@ -819,7 +822,11 @@ export default function ProductionOrderDetail({
       {dialog === 'receive' && (
         <ReceiveFinishedGoodsDialog
           order={order}
-          onClose={() => setDialog(null)}
+          prefill={receivePrefill}
+          onClose={() => {
+            setDialog(null)
+            setReceivePrefill(undefined)
+          }}
           onInspect={setInspecting}
         />
       )}
@@ -843,9 +850,11 @@ export default function ProductionOrderDetail({
           }
           canReopen={canManage}
           onClose={() => setReversing(null)}
-          onReceiveAgain={async () => {
-            // Open the receipt on the reopened order, with its WIP restored.
+          onReceiveAgain={async (prefill) => {
+            // Open the receipt on the reopened order, with its WIP restored and the
+            // reversed receipt's packs filled in.
             await refetchOrder()
+            setReceivePrefill(prefill)
             setDialog('receive')
           }}
         />

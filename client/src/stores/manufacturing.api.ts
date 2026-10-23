@@ -106,6 +106,16 @@ type Ref = string | { id?: string; _id?: string; name?: string; email?: string }
 
 export interface ManufacturingProduct {
   id: string
+  /** A pack of a bulk product (made by packing, not by a BOM). */
+  packOf?: {
+    productId: string
+    productName: string
+    sizeName: string
+    contentQuantity: number
+    contentUnit: string
+  } | null
+  /** Pack sizes this (bulk) product is packed into. */
+  packSizeCount?: number
   name: string
   nameUrdu?: string
   sku?: string
@@ -178,6 +188,11 @@ export interface ManufacturingProductFilters {
   procurementType?: ProcurementType | 'none'
   stock?: 'in' | 'out'
   tracking?: 'batch' | 'none'
+  /**
+   * Packing roles: 'make' hides pack products (what a BOM / order makes), 'pack' = what a
+   * pack size can be stocked as, 'packs' = pack products only.
+   */
+  packRole?: 'make' | 'pack' | 'packs'
   search?: string
 }
 
@@ -1706,6 +1721,7 @@ const TAGS = [
   'MfgDemo',
   'MfgMaterialReceipt',
   'MfgAccess',
+  'MfgPacking',
 ] as const
 
 /** Everything a stock movement can change. */
@@ -1720,7 +1736,140 @@ const EXECUTION_TAGS = [
   'MfgProduct',
   'MfgOutput',
   'MfgMovement',
+  'MfgPacking',
 ] as const
+
+/* ── Packing: bulk finished goods into pack sizes (server packing.service.js) ── */
+
+export interface PackItemInfo {
+  id: string
+  name: string
+  sku: string
+  unit: string
+  price?: number | null
+  missing?: boolean
+  available: number
+  unitCost?: number
+}
+
+export interface PackSizeDto {
+  id: string
+  name: string
+  contentQuantity: number
+  contentUnit: string
+  innerCount: number
+  innerName: string
+  isActive: boolean
+  sequence: number
+  packProduct: PackItemInfo & { tracking: { trackBatch: boolean; trackExpiry: boolean } | null }
+  materials: (PackItemInfo & { quantity: number })[]
+}
+
+export interface PackingSetup {
+  product: {
+    id: string
+    name: string
+    sku: string
+    unit: string
+    productType: string | null
+    variantId: string | null
+    hasVariants: boolean
+    /** The product's variants (when it has several, one must be chosen). */
+    variants: { id: string; label: string; sku: string }[]
+    /** Pack sizes can be saved (not serial-tracked). */
+    canSetUp: boolean
+    /** Can be packed right now; otherwise `problem` says why. */
+    packable: boolean
+    problem: string | null
+    available: number
+    unitCost?: number
+    tracking: { trackBatch: boolean; trackExpiry: boolean }
+    batches: {
+      id: string
+      batchNumber: string
+      quantity: number
+      expiryDate: string | null
+      manufactureDate: string | null
+    }[]
+  }
+  sizes: PackSizeDto[]
+}
+
+export interface PackSizeInput {
+  id?: string | null
+  name: string
+  packProductId: string
+  contentQuantity: number
+  innerCount?: number
+  innerName?: string
+  isActive?: boolean
+  materials: { productId: string; quantity: number }[]
+}
+
+export interface PackingLineInput {
+  packSizeId: string
+  quantity: number
+}
+
+export interface PackingVoucher {
+  id: string
+  voucherNumber: string
+  packingDate: string
+  productId: string
+  productName: string
+  unit: string
+  source: 'receipt' | 'stock'
+  productionOrderId: string | null
+  orderNumber?: string
+  /** The finished-goods receipt it was packed from (packed on receipt). */
+  receiptId?: string | null
+  batchNumber: string
+  bulkQuantity: number
+  bulkUnitCost?: number
+  looseQuantity: number
+  lines: {
+    _id: string
+    packSizeId: string
+    packName: string
+    productId: string
+    productName: string
+    unit: string
+    quantity: number
+    contentQuantity: number
+    bulkQuantity: number
+    unitCost?: number
+    materialCost?: number
+    totalCost?: number
+    batchNumber?: string
+  }[]
+  consumed: {
+    role: 'bulk' | 'material'
+    productId: string
+    productName: string
+    unit: string
+    quantity: number
+    unitCost?: number
+    totalCost?: number
+    batches?: { batchId: string; batchNumber: string; quantity: number }[]
+  }[]
+  totalCost?: number
+  notes: string
+  status: 'posted' | 'cancelled'
+  cancelledAt?: string
+  cancelledBy?: { name?: string }
+  cancelReason?: string
+  createdByName?: string
+  createdAt: string
+}
+
+export interface PackableProduct {
+  id: string
+  name: string
+  sku: string
+  unit: string
+  sizes: number
+  available: number
+}
 
 export interface DemoDataJob {
   /** `interrupted`: still marked running but its heartbeat went stale (server restarted). */
@@ -2472,7 +2621,7 @@ export const manufacturingApi = createApi({
       onQueryStarted: invalidateStockCaches,
     }),
     reportOutput: builder.mutation<
-      ProductionOutput & { orderCompleted?: boolean },
+      ProductionOutput & { orderCompleted?: boolean; packing?: { id: string; voucherNumber: string } | null },
       {
         orderId: string
         producedQuantity: number
@@ -2484,6 +2633,10 @@ export const manufacturingApi = createApi({
         rejectReason?: string
         finishedGoods?: FinishedGoodsInput
         notes?: string
+        /** Pack the good output in the same step (bulk → cartons / bags). */
+        packing?: { lines: PackingLineInput[]; notes?: string }
+        /** The variant made, for an order that never named one. */
+        variantId?: string | null
       }
     >({
       query: ({ orderId, ...body }) => ({
@@ -2516,8 +2669,14 @@ export const manufacturingApi = createApi({
     }),
     /** Undo an output posted by mistake — stock, QC/rework, WIP; reopens a completed order. */
     reverseOutput: builder.mutation<
-      ProductionOutput & { orderStatus: ProductionStatus },
-      { outputId: string; reason: OutputReversalReason; notes?: string }
+      ProductionOutput & { orderStatus: ProductionStatus; cancelledPacking?: string[] },
+      {
+        outputId: string
+        reason: OutputReversalReason
+        notes?: string
+        /** A packed receipt: cancel its packing in the same step. */
+        cancelPacking?: boolean
+      }
     >({
       query: ({ outputId, ...body }) => ({
         url: `/manufacturing/outputs/${outputId}/reverse`,
@@ -2589,6 +2748,63 @@ export const manufacturingApi = createApi({
     >({
       query: (params) => ({ url: '/manufacturing/movements', params }),
       providesTags: ['MfgMovement'],
+    }),
+    getManufacturingProductVariants: builder.query<
+      { hasVariants: boolean; variants: { id: string; label: string; sku: string }[] },
+      string
+    >({
+      query: (productId) => `/manufacturing/products/${productId}/variants`,
+      providesTags: ['MfgProduct'],
+    }),
+    getPackableProducts: builder.query<PackableProduct[], void>({
+      query: () => '/manufacturing/packing/products',
+      providesTags: ['MfgPacking', 'MfgProduct'],
+    }),
+    getPackingSetup: builder.query<PackingSetup, { productId: string; variantId?: string | null }>({
+      query: ({ productId, variantId }) => ({
+        url: `/manufacturing/packing/setup/${productId}`,
+        params: variantId ? { variantId } : undefined,
+      }),
+      providesTags: ['MfgPacking', 'MfgProduct'],
+    }),
+    savePackSizes: builder.mutation<PackingSetup, { productId: string; sizes: PackSizeInput[] }>({
+      query: ({ productId, sizes }) => ({
+        url: `/manufacturing/packing/setup/${productId}`,
+        method: 'PUT',
+        body: { sizes },
+      }),
+      invalidatesTags: ['MfgPacking'],
+    }),
+    createPackProduct: builder.mutation<
+      { id: string; name: string; sku: string; unit: string; price: number },
+      { productId: string; name: string; sku?: string; unit?: string; price?: number }
+    >({
+      query: ({ productId, ...body }) => ({
+        url: `/manufacturing/packing/setup/${productId}/pack-product`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['MfgPacking', 'MfgProduct'],
+    }),
+    getPackingVouchers: builder.query<
+      Paginated<PackingVoucher>,
+      { productId?: string; productionOrderId?: string; status?: 'all' | 'posted' | 'cancelled'; search?: string; page?: number; limit?: number }
+    >({
+      query: (params) => ({ url: '/manufacturing/packing', params }),
+      providesTags: ['MfgPacking'],
+    }),
+    postPacking: builder.mutation<
+      PackingVoucher,
+      { productId: string; lines: PackingLineInput[]; batchId?: string | null; productionOrderId?: string | null; packingDate?: string; notes?: string }
+    >({
+      query: (body) => ({ url: '/manufacturing/packing', method: 'POST', body }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    cancelPacking: builder.mutation<PackingVoucher, { id: string; reason: string }>({
+      query: ({ id, reason }) => ({ url: `/manufacturing/packing/${id}/cancel`, method: 'POST', body: { reason } }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
     }),
     getStockDetail: builder.query<
       StockDetail,
@@ -2800,6 +3016,14 @@ export const refreshAfterDemoData =
   }
 
 export const {
+  useGetManufacturingProductVariantsQuery,
+  useGetPackableProductsQuery,
+  useGetPackingSetupQuery,
+  useSavePackSizesMutation,
+  useCreatePackProductMutation,
+  useGetPackingVouchersQuery,
+  usePostPackingMutation,
+  useCancelPackingMutation,
   useGetManufacturingAccessQuery,
   useGetManufacturingDashboardQuery,
   useGetManufacturingAnalyticsQuery,

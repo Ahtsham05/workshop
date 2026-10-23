@@ -111,6 +111,13 @@ const loadProduct = async ({ organizationId, branchId, productId, variantId }) =
   if (variantId) {
     variant = await ProductVariant.findOne({ _id: variantId, productId, organizationId }).select('sku isDefault');
     if (!variant) throw new ApiError(httpStatus.NOT_FOUND, 'Variant not found for this product');
+  } else if (product.hasVariants) {
+    // An order must say which variant it makes: the only one, or the one chosen.
+    // eslint-disable-next-line global-require
+    const stockService = require('./stock.service');
+    const sole = await stockService.soleVariant(product);
+    if (sole.ambiguous) throw stockService.chooseVariantError(product, sole.variants);
+    if (sole.variant && !sole.variant.isDefault) variant = sole.variant;
   }
   return { product, variant };
 };

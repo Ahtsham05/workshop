@@ -107,6 +107,7 @@ router.post(
   c.batchUnbatchedStock
 );
 router.get('/products/:productId/where-used', auth(VIEW), validate(v.productIdParam), c.getWhereUsed);
+router.get('/products/:productId/variants', auth(VIEW), validate(v.productIdParam), c.getProductVariants);
 router.get('/products/:productId/overview', auth(VIEW), validate(v.productIdParam), c.getProductOverview);
 router.get('/assemblies', auth(VIEW), c.getAssemblies);
 
@@ -232,6 +233,25 @@ router.post(
 // Where issued material went: used in output, wastage, returned, still in the factory.
 router.get('/material-usage', auth(VIEW), validate(v.materialUsage), c.getMaterialUsage);
 router.get('/reports/:report', auth(VIEW), validate(v.report), c.getReport);
+
+// Packing: bulk finished goods into pack sizes (cartons, bags …) — services/manufacturing/packing.service.js
+router.get('/packing/products', auth(VIEW), c.getPackableProducts);
+router
+  .route('/packing/setup/:productId')
+  .get(auth(VIEW), validate(v.packingSetupQuery), c.getPackingSetup)
+  .put(auth('manageBoms', 'editProducts'), validate(v.savePackSizes), c.savePackSizes);
+router.post(
+  '/packing/setup/:productId/pack-product',
+  auth('createProducts'),
+  validate(v.createPackProduct),
+  c.createPackProduct
+);
+router
+  .route('/packing')
+  .get(auth(VIEW), validate(v.listPacking), c.listPacking)
+  .post(auth('receiveFinishedGoods'), validate(v.postPacking), c.postPacking);
+router.get('/packing/:voucherId', auth(VIEW), validate(v.packingVoucherParam), c.getPacking);
+router.post('/packing/:voucherId/cancel', auth('manageProductionOrders'), validate(v.cancelPacking), c.cancelPacking);
 router.get('/batches/search', auth(VIEW), validate(v.searchBatches), c.searchBatches);
 router.post('/material-issues/check', auth('issueMaterials'), validate(v.materialIssueVoucher), c.checkMaterialIssue);
 router.post('/material-issues', auth('issueMaterials'), validate(v.materialIssueVoucher), c.postMaterialIssue);

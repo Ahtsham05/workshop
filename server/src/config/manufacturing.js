@@ -149,6 +149,7 @@ const COUNTER_KEYS = [
   'scrap',
   'rawMaterialReceipt',
   'batch',
+  'packing',
 ];
 
 /** Max depth when exploding a multi-level BOM — guards against pathological trees. */

@@ -6,6 +6,7 @@ import {
   FileStack,
   Gauge,
   ListChecks,
+  Package2,
   PackageMinus,
   Workflow,
   type LucideIcon,
@@ -116,6 +117,18 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Production Orders',
         icon: ClipboardList,
         keywords: 'mo work order',
+      },
+    ],
+  },
+  {
+    id: 'packing',
+    label: 'Packing',
+    sections: [
+      {
+        to: '/manufacturing/packing',
+        label: 'Packing',
+        icon: Package2,
+        keywords: 'pack packing carton bag pouch pack size repack bulk',
       },
     ],
   },

@@ -48,6 +48,7 @@ const updateSettings = {
         scrap: prefix(),
         rawMaterialReceipt: prefix(),
         batch: prefix(),
+        packing: prefix(),
       }),
       batchNumbering: Joi.string().valid('sequence', 'order'),
       numberPadding: Joi.number().integer().min(3).max(10),
@@ -74,6 +75,9 @@ const productListFilters = {
   procurementType: Joi.string().valid(...PROCUREMENT_TYPES, 'none'),
   stock: Joi.string().valid('in', 'out'),
   tracking: Joi.string().valid('batch', 'none'),
+  // Packing roles: 'make' hides pack products, 'pack' = what a pack size can be stocked as,
+  // 'packs' = pack products only.
+  packRole: Joi.string().valid('make', 'pack', 'packs'),
   search: Joi.string().allow(''),
 };
 
@@ -707,7 +711,9 @@ const report = {
         'daily',
         'batch',
         'batch-stock',
-        'batch-trace'
+        'batch-trace',
+        'product-production',
+        'product-summary'
       )
       .required(),
   }),
@@ -724,6 +730,10 @@ const report = {
     kind: Joi.string().valid('all', 'finished', 'materials'),
     expiry: Joi.string().valid('all', 'expired', '30', '60', '90'),
     stock: Joi.string().valid('in', 'all'),
+    // Product-wise production register: up to 12 comma-separated product ids, and typed
+    // kg per pack ("productId[:variantId]=kg,…") — both parsed strictly by the service.
+    productIds: Joi.string().max(400),
+    packWeights: Joi.string().max(2000).allow(''),
   }),
 };
 
@@ -763,9 +773,77 @@ const rejectFields = {
   finishedGoods,
 };
 
+/* ── Packing (bulk → cartons / bags) ── */
+const packingLines = () =>
+  Joi.array()
+    .max(30)
+    .items(Joi.object().keys({ packSizeId: id().required(), quantity: Joi.number().min(0).required() }));
+const packingProductParam = { params: Joi.object().keys({ productId: id().required() }) };
+const packingVoucherParam = { params: Joi.object().keys({ voucherId: id().required() }) };
+const packingSetupQuery = { ...packingProductParam, query: Joi.object().keys({ variantId: id().allow(null, '') }) };
+const savePackSizes = {
+  ...packingProductParam,
+  body: Joi.object().keys({
+    sizes: Joi.array()
+      .max(30)
+      .items(
+        Joi.object().keys({
+          id: id().allow(null, ''),
+          name: Joi.string().trim().max(80).required(),
+          packProductId: id().required(),
+          contentQuantity: Joi.number().positive().required(),
+          innerCount: Joi.number().integer().min(1).max(100000),
+          innerName: Joi.string().allow('').trim().max(60),
+          isActive: Joi.boolean(),
+          materials: Joi.array()
+            .max(20)
+            .items(Joi.object().keys({ productId: id().required(), quantity: Joi.number().positive().required() })),
+        })
+      )
+      .required(),
+  }),
+};
+const createPackProduct = {
+  ...packingProductParam,
+  body: Joi.object().keys({
+    name: Joi.string().trim().max(150).required(),
+    sku: Joi.string().allow('').trim().max(60),
+    unit: unit(),
+    price: Joi.number().min(0),
+  }),
+};
+const listPacking = {
+  query: Joi.object().keys({
+    productId: id(),
+    productionOrderId: id(),
+    status: Joi.string().valid('all', 'posted', 'cancelled'),
+    search: Joi.string().allow('').max(100),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(100),
+  }),
+};
+const postPacking = {
+  body: Joi.object().keys({
+    productId: id().required(),
+    lines: packingLines().min(1).required(),
+    batchId: id().allow(null, ''),
+    productionOrderId: id().allow(null, ''),
+    packingDate: Joi.alternatives().try(calendarDay(), Joi.date().iso()),
+    notes: Joi.string().allow('').max(1000),
+  }),
+};
+const cancelPacking = {
+  ...packingVoucherParam,
+  body: Joi.object().keys({ reason: Joi.string().trim().min(2).max(500).required() }),
+};
+
 const reportOutput = {
   ...orderIdParam,
   body: Joi.object().keys({
+    // The variant made, for an order on a product with variants that never named it.
+    variantId: id().allow(null, ''),
+    // Pack the good output straight away (packing.service#packReceipt).
+    packing: Joi.object().keys({ lines: packingLines().required(), notes: Joi.string().allow('').max(1000) }),
     producedQuantity: Joi.number().positive().required(),
     // 'hold' → QC; 'direct' → finished stock now. Default: the require-QC setting.
     qcMode: Joi.string().valid('direct', 'hold'),
@@ -792,6 +870,8 @@ const reverseOutput = {
       .valid(...OUTPUT_REVERSAL_REASONS)
       .required(),
     notes: Joi.string().allow('').max(1000),
+    // A packed receipt: cancel its packing in the same step.
+    cancelPacking: Joi.boolean(),
   }),
 };
 
@@ -947,6 +1027,14 @@ module.exports = {
   productionOrderBatch,
   returnMaterials,
   reportOutput,
+  packingProductParam,
+  packingSetupQuery,
+  packingVoucherParam,
+  savePackSizes,
+  createPackProduct,
+  listPacking,
+  postPacking,
+  cancelPacking,
   inspectOutput,
   reverseOutput,
   resolveRework,

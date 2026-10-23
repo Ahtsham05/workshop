@@ -381,6 +381,7 @@ function IssueEntry({
     useGetManufacturingProductsQuery({
       productType: BUILDABLE_PRODUCT_TYPES,
       hasBom: true,
+      packRole: 'make',
       limit: 200,
       sort: 'name',
     } as never)
@@ -778,6 +779,7 @@ function IssueEntry({
                 : null
             }
             productType={BUILDABLE_PRODUCT_TYPES}
+            packRole='make'
             icon={<Factory className='text-muted-foreground h-4 w-4' />}
             placeholder={t('Choose what to make')}
             searchPlaceholder={t('Search finished goods…')}

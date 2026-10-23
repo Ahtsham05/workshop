@@ -34,7 +34,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, ClipboardCheck, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote, MessagesSquare, Factory, FileStack, ListChecks, Workflow, Boxes, PackageMinus } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, ClipboardCheck, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote, MessagesSquare, Factory, FileStack, ListChecks, Workflow, Boxes, PackageMinus, Package2 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -137,6 +137,7 @@ export const sidebarData: SidebarData = {
             { title: 'Work in Progress', url: '/manufacturing/wip', icon: Workflow, permission: 'viewManufacturing' },
             { title: 'Material Requirements', url: '/manufacturing/requirements', icon: ListChecks, permission: 'viewManufacturing' },
             { title: 'Production Orders', url: '/manufacturing/production-orders', icon: ClipboardList, permission: 'viewManufacturing' },
+            { title: 'Packing', url: '/manufacturing/packing', icon: Package2, permission: 'viewManufacturing' },
             { title: 'Production Reports', url: '/manufacturing/reports', icon: BarChart3, permission: 'viewManufacturing' },
           ],
         },

@@ -15,6 +15,8 @@ export type ReportKey =
   | 'batch'
   | 'batch-stock'
   | 'batch-trace'
+  | 'product-production'
+  | 'product-summary'
 
 export interface ReportParams {
   report: ReportKey
@@ -29,6 +31,9 @@ export interface ReportParams {
   kind?: 'all' | 'finished' | 'materials'
   expiry?: 'all' | 'expired' | '30' | '60' | '90'
   stock?: 'in' | 'all'
+  /** Product-wise register: the product line (comma-separated ids) and typed kg per pack. */
+  productIds?: string
+  packWeights?: string
 }
 
 interface Period {
@@ -215,6 +220,8 @@ export const MOVEMENT_KEYS = [
   'issued',
   'transferOut',
   'scrapped',
+  'packedIn',
+  'packedOut',
   'adjustment',
 ] as const
 export type MovementKey = (typeof MOVEMENT_KEYS)[number]
@@ -663,7 +670,132 @@ export interface BatchTraceReport {
   soldTo: { invoiceId: string; number: string; customer: string; date: string; quantity: number }[]
 }
 
+export interface ProductRegisterOption {
+  productId: string
+  name: string
+  sku: string
+  unit: string
+  orders: number
+  lastOrderAt: string
+}
+
+export type WeightSource = 'unit' | 'conversion' | 'recipe' | 'pack' | 'manual' | null
+
+export interface ProductRegisterPack {
+  key: string
+  productId: string
+  variantId: string | null
+  name: string
+  shortName: string
+  sku: string
+  unit: string
+  kgPerUnit: number | null
+  weightSource: WeightSource
+  byWeight: boolean
+  /** Received by weight beside real packs — shown as "extra packing". */
+  loose: boolean
+  quantity: number
+  kg: number
+}
+
+export interface ProductRegisterMaterial {
+  key: string
+  productId: string
+  name: string
+  sku: string
+  unit: string
+  kgPerUnit: number | null
+  weightSource: WeightSource
+  issued: number
+  returned: number
+  scrapped: number
+  netKg: number | null
+}
+
+export interface ProductRegisterDay {
+  date: string
+  batches: number
+  batchNumbers: string[]
+  /** Material key → quantity in the material's unit. */
+  issued: Record<string, number>
+  returned: Record<string, number>
+  /** Pack key → quantity in the pack's unit. */
+  packs: Record<string, number>
+  issueKg: number
+  returnedKg: number
+  packedKg: number
+  looseKg: number
+  finishedKg: number
+  scrapKg: number
+  cumIssueKg: number
+  cumFinishedKg: number
+  inProcessKg: number
+}
+
+export interface ProductRegisterBatch {
+  orderId: string
+  orderNumber: string
+  batchNumber: string
+  orderType: OrderType
+  status: ProductionStatus
+  productName: string
+  packKey: string | null
+  unit: string
+  startedOn: string | null
+  lastReceiptAt: string | null
+  planned: number
+  issuedKg: number
+  returnedKg: number
+  netIssuedKg: number
+  finishedQty: number
+  finishedKg: number
+  scrapKg: number
+  inProcessKg: number
+  yieldPercent: number | null
+}
+
+interface ProductRegisterEmpty {
+  report: 'product-production' | 'product-summary'
+  period: Period
+  options: ProductRegisterOption[]
+  needsProduct: true
+}
+
+export interface ProductRegisterData {
+  /** 'product-summary' is the same register with the issue as one total column. */
+  report: 'product-production' | 'product-summary'
+  period: Period
+  options: ProductRegisterOption[]
+  needsProduct?: false
+  selected: { productId: string; name: string; sku: string; unit: string }[]
+  baseUnit: 'kg'
+  materials: ProductRegisterMaterial[]
+  packs: ProductRegisterPack[]
+  hasLoose: boolean
+  openingInProcessKg: number
+  closingInProcessKg: number
+  days: ProductRegisterDay[]
+  batches: ProductRegisterBatch[]
+  warnings: { kind: 'pack' | 'material'; names: string[]; message: string }[]
+  totals: {
+    batches: number
+    issueKg: number
+    returnedKg: number
+    netIssueKg: number
+    packedKg: number
+    looseKg: number
+    finishedKg: number
+    scrapKg: number
+    activeDays: number
+    completedBatches: number
+    completedYieldPercent: number | null
+  }
+}
+
+export type ProductProductionReport = ProductRegisterEmpty | ProductRegisterData
+
 export type ManufacturingReport =
+  | ProductProductionReport
   | BatchStockReport
   | BatchTraceReport
   | DailyReport

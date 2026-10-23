@@ -374,7 +374,7 @@ const editIssue = async (ctx, issueId, body, permissions = {}) => {
     // Header only: nothing moves in stock.
     const summary = headerSummary(issue, body, people);
     const updated = await MaterialIssue.findOneAndUpdate(
-      { _id: issue._id, revision: issue.revision || 0, status: 'posted' },
+      { _id: issue._id, revision: issue.revision || 0, status: { $ne: 'cancelled' } },
       {
         $set: {
           issueDate: body.date || issue.issueDate,

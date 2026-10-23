@@ -29,6 +29,7 @@ const {
   materialIssueEdit: issueEditService,
   productionOrderBatch: productionOrderBatchService,
   reports: reportsService,
+  packing: packingService,
 } = manufacturingService;
 
 /** Read context: org always, branch when the client picked one (superAdmins may read org-wide). */
@@ -110,7 +111,7 @@ const removeDemoData = catchAsync(async (req, res) => {
 });
 
 // ── Products ─────────────────────────────────────────────────────────────────────
-const PRODUCT_LIST_FILTERS = ['productType', 'classifiedOnly', 'hasBom', 'procurementType', 'stock', 'tracking', 'search'];
+const PRODUCT_LIST_FILTERS = ['productType', 'classifiedOnly', 'hasBom', 'procurementType', 'stock', 'tracking', 'packRole', 'search'];
 
 const getProducts = catchAsync(async (req, res) => {
   const filter = pick(req.query, [...PRODUCT_LIST_FILTERS, 'sort']);
@@ -679,7 +680,17 @@ const reportOutput = catchAsync(async (req, res) => {
       );
     }
   }
-  const output = await executionService.reportOutput(ctx, req.params.orderId, req.body);
+  // With `packing`, the good output is packed in the same transaction (packing.service).
+  const { output, packing } = await packingService.receiveAndPack(ctx, req.params.orderId, req.body);
+  if (packing) {
+    await audit(req, {
+      action: 'stock_adjust',
+      module: 'PackingVoucher',
+      entity: packing,
+      entityName: `${packing.voucherNumber} (${packing.productName})`,
+      metadata: { packs: packing.lines.map((l) => `${l.quantity} × ${l.packName}`).join(', '), bulk: packing.bulkQuantity },
+    });
+  }
   await audit(req, {
     action: 'stock_adjust',
     module: 'ProductionOutput',
@@ -694,7 +705,92 @@ const reportOutput = catchAsync(async (req, res) => {
     },
   });
   const orderCompleted = await autoComplete(req, ctx, req.params.orderId);
-  res.status(httpStatus.CREATED).send({ ...output.toJSON(), orderCompleted });
+  res.status(httpStatus.CREATED).send({
+    ...output.toJSON(),
+    orderCompleted,
+    packing: packing ? { id: String(packing._id), voucherNumber: packing.voucherNumber } : null,
+  });
+});
+
+/* ── Packing ── */
+
+/** A product's variants, for choosing which one an order makes. */
+const getProductVariants = catchAsync(async (req, res) => {
+  const ctx = readCtx(req);
+  const product = await Product.findOne({ _id: req.params.productId, organizationId: ctx.organizationId })
+    .select('name hasVariants')
+    .lean();
+  if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
+  if (!product.hasVariants) return res.send({ hasVariants: false, variants: [] });
+  const { variants } = await stockService.soleVariant(product);
+  res.send({
+    hasVariants: true,
+    variants: variants.map((v) => ({ id: String(v._id), label: stockService.variantLabel(v), sku: v.sku || '' })),
+  });
+});
+
+const getPackableProducts = catchAsync(async (req, res) => {
+  res.send(await packingService.getPackableProducts(readCtx(req)));
+});
+
+const getPackingSetup = catchAsync(async (req, res) => {
+  // Same branch resolution as stock-detail: the bulk's stock is read in one concrete branch.
+  const ctx = await writeCtx(req);
+  res.send(await packingService.getSetup(ctx, req.params.productId, { variantId: req.query.variantId || null }));
+});
+
+const savePackSizes = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const setup = await packingService.saveSizes(ctx, req.params.productId, req.body);
+  await audit(req, {
+    action: 'update',
+    module: 'PackSize',
+    entity: { _id: req.params.productId },
+    entityName: `${setup.product.name} — pack sizes`,
+    metadata: { sizes: setup.sizes.map((s) => s.name).join(', ') },
+  });
+  res.send(setup);
+});
+
+const createPackProduct = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const product = await packingService.createPackProduct(ctx, req.params.productId, req.body);
+  await audit(req, { action: 'create', module: 'Product', entity: { _id: product.id }, entityName: product.name });
+  res.status(httpStatus.CREATED).send(product);
+});
+
+const listPacking = catchAsync(async (req, res) => {
+  res.send(await packingService.listPacking(readCtx(req), req.query));
+});
+
+const getPacking = catchAsync(async (req, res) => {
+  res.send(await packingService.getPacking(readCtx(req), req.params.voucherId));
+});
+
+const postPacking = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const voucher = await packingService.postPacking(ctx, req.body);
+  await audit(req, {
+    action: 'stock_adjust',
+    module: 'PackingVoucher',
+    entity: voucher,
+    entityName: `${voucher.voucherNumber} (${voucher.productName})`,
+    metadata: { packs: voucher.lines.map((l) => `${l.quantity} × ${l.packName}`).join(', '), bulk: voucher.bulkQuantity },
+  });
+  res.status(httpStatus.CREATED).send(voucher);
+});
+
+const cancelPacking = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const voucher = await packingService.cancelPacking(ctx, req.params.voucherId, req.body);
+  await audit(req, {
+    action: 'status_change',
+    module: 'PackingVoucher',
+    entity: voucher,
+    entityName: `${voucher.voucherNumber} cancelled`,
+    metadata: { reason: voucher.cancelReason },
+  });
+  res.send(voucher);
 });
 
 const inspectOutput = catchAsync(async (req, res) => {
@@ -720,7 +816,7 @@ const reverseOutput = catchAsync(async (req, res) => {
       `${pre.orderNumber} is completed — reopening it to reverse a receipt needs the "manage production orders" permission`
     );
   }
-  const { output, order } = await executionService.reverseOutput(ctx, req.params.outputId, req.body);
+  const { output, order, cancelledPacking } = await executionService.reverseOutput(ctx, req.params.outputId, req.body);
   await audit(req, {
     action: 'stock_adjust',
     module: 'ProductionOutput',
@@ -733,6 +829,7 @@ const reverseOutput = catchAsync(async (req, res) => {
       rejected: output.rejectedQuantity,
       previousStatus: output.reversal.previousStatus,
       reopenedOrder: output.reversal.reopenedOrder,
+      cancelledPacking: (cancelledPacking || []).join(', ') || undefined,
     },
   });
   if (output.reversal.reopenedOrder) {
@@ -744,7 +841,7 @@ const reverseOutput = catchAsync(async (req, res) => {
       metadata: { status: order.status, note: `Reopened — ${output.outputNumber} reversed` },
     });
   }
-  res.send({ ...output.toJSON(), orderStatus: order.status });
+  res.send({ ...output.toJSON(), orderStatus: order.status, cancelledPacking: cancelledPacking || [] });
 });
 
 const resolveRework = catchAsync(async (req, res) => {
@@ -1065,6 +1162,15 @@ const getWip = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getProductVariants,
+  getPackableProducts,
+  getPackingSetup,
+  savePackSizes,
+  createPackProduct,
+  listPacking,
+  getPacking,
+  postPacking,
+  cancelPacking,
   getReport,
   searchBatches,
   getProductionOrderFilterOptions,

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -25,8 +26,13 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { fmtQty } from '../lib/constants'
-import { useFinishedGoodsReceipt } from '../lib/use-finished-goods-receipt'
+import {
+  useFinishedGoodsReceipt,
+  type ReceiptPrefill,
+} from '../lib/use-finished-goods-receipt'
 import { FinishedGoodsFields } from './execution-dialogs'
+import { PackSizesSheet } from './pack-sizes-sheet'
+import { ReceivePackingSection } from './receive-packing-section'
 import { QualityDecision } from './quality-decision'
 import {
   MaterialCheck,
@@ -47,17 +53,21 @@ export function ReceiveFinishedGoodsDialog({
   order,
   onClose,
   onInspect,
+  prefill,
 }: {
   order: ProductionOrder
+  /** Starting values (e.g. the packs of a receipt that was just reversed). */
+  prefill?: ReceiptPrefill
   onClose: () => void
   /** Opens inspection for units that were sent to QC (offered on the success toast). */
   onInspect?: (output: ProductionOutput) => void
 }) {
   const { t } = useLanguage()
   const formatMoney = useFormatMoney()
-  const r = useFinishedGoodsReceipt(order)
+  const r = useFinishedGoodsReceipt(order, prefill)
   const unit = getUnitLabel(order.unit)
   const direct = r.mode === 'direct'
+  const [sizesOpen, setSizesOpen] = useState(false)
 
   const submit = async () => {
     if (await r.post({ onInspect })) onClose()
@@ -92,6 +102,43 @@ export function ReceiveFinishedGoodsDialog({
         <div className='flex-1 space-y-5 overflow-y-auto px-5 py-4'>
           <OrderStrip order={order} />
 
+          {r.variantChoices.length > 0 && (
+            <div className='space-y-2'>
+              <Label>{t('Which variant was made?')}</Label>
+              <div className='flex flex-wrap gap-2'>
+                {r.variantChoices.map((v) => (
+                  <button
+                    key={v.id}
+                    type='button'
+                    onClick={() => r.setChosenVariant(v.id)}
+                    aria-pressed={r.chosenVariant === v.id}
+                    className={
+                      r.chosenVariant === v.id
+                        ? 'border-foreground bg-foreground text-background rounded-lg border px-3 py-1.5 text-sm font-medium'
+                        : 'hover:border-foreground/40 rounded-lg border px-3 py-1.5 text-sm'
+                    }
+                  >
+                    {v.label}
+                    {v.sku && v.sku !== v.label ? (
+                      <span className='ml-1.5 text-xs opacity-70'>{v.sku}</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+              <p className='text-muted-foreground text-xs'>
+                {t('This order did not say which variant it makes — the choice is saved on the order.')}
+              </p>
+            </div>
+          )}
+
+          {/* Packing first: the packs entered add up to the quantity made below */}
+          <ReceivePackingSection
+            r={r}
+            order={order}
+            direct={direct}
+            onSetUp={() => setSizesOpen(true)}
+          />
+
           {/* Quantity made */}
           <div className='space-y-2'>
             <Label>{t('Quantity made')}</Label>
@@ -100,7 +147,7 @@ export function ReceiveFinishedGoodsDialog({
                 value={r.qty}
                 onChange={r.setQuantity}
                 unit={order.unit}
-                autoFocus
+                autoFocus={!r.packEnabled}
               />
               <div className='flex flex-wrap gap-1.5'>
                 <QuickChip
@@ -122,6 +169,16 @@ export function ReceiveFinishedGoodsDialog({
                 )}
               </div>
             </div>
+            {r.autoActive && (
+              <p className='text-xs text-emerald-700 dark:text-emerald-400'>
+                {t('Adds up from the packing above')}: {fmtQty(r.packedKg)}{' '}
+                {t('packed')} + {fmtQty(r.loose || 0)} {t('loose')}
+                {r.rejected > EPS
+                  ? ` + ${fmtQty(r.rejected)} ${t('rejected')}`
+                  : ''}{' '}
+                · {t('type a quantity to enter it by hand')}
+              </p>
+            )}
             {r.remaining <= EPS && (
               <p className='flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400'>
                 <CheckCircle2 className='h-3.5 w-3.5 shrink-0' />
@@ -191,12 +248,20 @@ export function ReceiveFinishedGoodsDialog({
                 value={{ ...r.quality, good: r.good }}
                 onChange={r.setQuality}
               />
+              {/* Its stock look-up needs the variant — wait until it is chosen. */}
+              {(order.variantId ||
+                (r.packSetup && !(r.variantChoices.length > 0 && !r.chosenVariant))) && (
               <FinishedGoodsFields
-                order={order}
+                order={
+                  r.chosenVariant && !order.variantId
+                    ? { ...order, variantId: r.chosenVariant }
+                    : order
+                }
                 quantity={r.good}
                 value={r.fg}
                 onChange={r.setFg}
               />
+              )}
             </>
           )}
 
@@ -233,6 +298,12 @@ export function ReceiveFinishedGoodsDialog({
                 ? `→ ${fmtQty(r.good)} ${t('to finished stock')}${r.rejected > EPS ? ` · ${fmtQty(r.rejected)} ${t('rejected')}` : ''}`
                 : `→ ${t('QC hold')}`}
             </div>
+            {direct && r.packEnabled && r.packing.packs > 0 && (
+              <div className='tabular-nums'>
+                {t('Packed')} {fmtQty(r.packing.packs)} {t('packs')} ({fmtQty(r.packing.packed)} {unit})
+                {r.packing.loose > EPS ? ` · ${fmtQty(r.packing.loose)} ${unit} ${t('loose')}` : ''}
+              </div>
+            )}
             <div className='tabular-nums'>
               {t('Material used')} {formatMoney(r.materialCost)}
               {r.quantity > 0 &&
@@ -260,6 +331,13 @@ export function ReceiveFinishedGoodsDialog({
           </div>
         </DialogFooter>
       </DialogContent>
+      {sizesOpen && (
+        <PackSizesSheet
+          productId={order.productId}
+          variantId={order.variantId || null}
+          onClose={() => setSizesOpen(false)}
+        />
+      )}
     </Dialog>
   )
 }

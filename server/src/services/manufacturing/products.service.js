@@ -9,6 +9,7 @@ const {
   Batch,
   Supplier,
   InventoryTransaction,
+  PackSize,
 } = require('../../models');
 const { toBusinessCalendarDate } = require('../../utils/businessTimezone');
 const ApiError = require('../../utils/ApiError');
@@ -127,11 +128,28 @@ const trackedProductIds = async (ctx) =>
     $or: [{ trackBatch: true }, { trackExpiry: true }],
   });
 
-/** Resolves the async parts of a filter (batch tracking) into plain query values. */
-const resolveFilter = async (ctx, filter = {}) =>
-  filter.tracking === 'batch' || filter.tracking === 'none'
-    ? { ...filter, trackedIds: await trackedProductIds(ctx) }
-    : filter;
+/**
+ * Packing roles (packing.service.js): a "pack product" (1 KG Pack, 20 KG Bag …) is made by
+ * packing a bulk product, never by its own BOM; a "bulk product" has pack sizes.
+ */
+const packRoles = async (ctx) => {
+  const scope = { organizationId: ctx.organizationId, ...(ctx.branchId ? { branchId: ctx.branchId } : {}) };
+  const [packIds, bulkIds] = await Promise.all([
+    PackSize.distinct('packProductId', scope),
+    PackSize.distinct('productId', scope),
+  ]);
+  return { packIds, bulkIds };
+};
+
+/** Resolves the async parts of a filter (batch tracking, packing roles) into plain query values. */
+const resolveFilter = async (ctx, filter = {}) => {
+  let resolved = filter;
+  if (filter.tracking === 'batch' || filter.tracking === 'none') {
+    resolved = { ...resolved, trackedIds: await trackedProductIds(ctx) };
+  }
+  if (filter.packRole) resolved = { ...resolved, packRoleIds: await packRoles(ctx) };
+  return resolved;
+};
 
 /**
  * The existing product catalog seen through manufacturing eyes — same Product documents,
@@ -159,6 +177,19 @@ const buildProductQuery = (ctx, filter = {}) => {
     query.$or = [{ name: re }, { sku: re }, { barcode: re }];
   }
   if (filter.trackedIds) query._id = filter.tracking === 'batch' ? { $in: filter.trackedIds } : { $nin: filter.trackedIds };
+  // packRole 'make': what a BOM / production order makes — pack products are left out.
+  // 'pack': what a pack size is stocked as — pack products, or goods with no BOM that are
+  // not themselves packed. 'packs': pack products only.
+  if (filter.packRoleIds) {
+    const { packIds, bulkIds } = filter.packRoleIds;
+    const and = query.$and || [];
+    if (filter.packRole === 'make') and.push({ _id: { $nin: packIds } });
+    if (filter.packRole === 'packs') and.push({ _id: { $in: packIds } });
+    if (filter.packRole === 'pack') {
+      and.push({ $or: [{ _id: { $in: packIds } }, { defaultBomId: null, _id: { $nin: bulkIds } }] });
+    }
+    if (and.length) query.$and = and;
+  }
   return query;
 };
 
@@ -184,19 +215,35 @@ const queryProducts = async (ctx, rawFilter, options) => {
       .lean(),
     Product.countDocuments(query),
   ]);
-  const [counts, tracking] = await Promise.all([
-    bomCountsFor(
-      ctx,
-      results.map((p) => p._id)
-    ),
-    trackingFor(results.map((p) => p._id)),
+  const ids = results.map((p) => p._id);
+  const [counts, tracking, packOf, sizesOf] = await Promise.all([
+    bomCountsFor(ctx, ids),
+    trackingFor(ids),
+    PackSize.find({ packProductId: { $in: ids } })
+      .select('packProductId productId name contentQuantity contentUnit')
+      .populate('productId', 'name')
+      .lean(),
+    PackSize.aggregate([{ $match: { productId: { $in: ids } } }, { $group: { _id: '$productId', n: { $sum: 1 } } }]),
   ]);
+  const packByProduct = new Map(packOf.map((s) => [String(s.packProductId), s]));
+  const sizeCount = new Map(sizesOf.map((r) => [String(r._id), r.n]));
   return {
     results: results.map(({ _id, ...product }) => ({
       ...product,
       id: String(_id),
       bomCount: (counts.get(String(_id)) || {}).total || 0,
       activeBomCount: (counts.get(String(_id)) || {}).active || 0,
+      // Packing: this product is a pack of a bulk product, or has pack sizes of its own.
+      packOf: packByProduct.get(String(_id))
+        ? {
+            productId: String((packByProduct.get(String(_id)).productId || {})._id || ''),
+            productName: (packByProduct.get(String(_id)).productId || {}).name || '',
+            sizeName: packByProduct.get(String(_id)).name,
+            contentQuantity: packByProduct.get(String(_id)).contentQuantity,
+            contentUnit: packByProduct.get(String(_id)).contentUnit,
+          }
+        : null,
+      packSizeCount: sizeCount.get(String(_id)) || 0,
       tracking: tracking.get(String(_id)) || {
         trackBatch: false,
         trackExpiry: false,

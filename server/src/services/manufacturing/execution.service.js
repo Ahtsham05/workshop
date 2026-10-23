@@ -9,6 +9,9 @@ const {
   InventoryTransaction,
   Imei,
   Batch,
+  PackingVoucher,
+  Product,
+  ProductVariant,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const logger = require('../../config/logger');
@@ -75,6 +78,36 @@ const runTransaction = async (work) => {
     await session.endSession();
   }
   return result;
+};
+
+/**
+ * An order for a product with variants that never named one (orders could be created
+ * without it): the receipt names it — `variantId` from the receive dialog — or the
+ * product's only variant is used. Stored on the order, so every later step agrees.
+ */
+const settleOrderVariant = async (order, variantId, session) => {
+  if (order.variantId) {
+    if (variantId && String(variantId) !== String(order.variantId)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `${order.orderNumber} makes a different variant`);
+    }
+    return;
+  }
+  const product = await Product.findById(order.productId).select('name hasVariants').session(session);
+  if (!product || !product.hasVariants) return;
+  let variant;
+  if (variantId) {
+    variant = await ProductVariant.findOne({ _id: variantId, productId: product._id }).session(session);
+    if (!variant) throw new ApiError(httpStatus.NOT_FOUND, `Variant not found for "${product.name}"`);
+  } else {
+    const sole = await stockService.soleVariant(product, session);
+    if (sole.ambiguous) throw stockService.chooseVariantError(product, sole.variants);
+    variant = sole.variant;
+  }
+  if (!variant || variant.isDefault) return; // a stand-in variant: the product is held as a simple one
+  /* eslint-disable no-param-reassign */
+  order.variantId = variant._id;
+  if (variant.sku) order.sku = variant.sku;
+  /* eslint-enable no-param-reassign */
 };
 
 const loadOrder = async ({ organizationId, branchId }, orderId, session) => {
@@ -924,7 +957,7 @@ const reserveInspectionNumbers = async (organizationId, { goodQuantity, rejected
  * Reports output: backflushes WIP, then holds the units for quality inspection — or,
  * with quality checks turned off, posts good/rejected straight away.
  */
-const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, body) => {
+const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, body, hooks = {}) => {
   requireBranch(branchId);
   const producedQuantity = roundQty(body.producedQuantity);
   if (!(producedQuantity > 0)) throw new ApiError(httpStatus.BAD_REQUEST, 'Produced quantity must be greater than zero');
@@ -948,6 +981,7 @@ const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, bo
   return runTransaction(async (session) => {
     const order = await loadOrder({ organizationId, branchId }, orderId, session);
     assertExecutable(order);
+    await settleOrderVariant(order, body.variantId, session);
     if (!settings.allowOverProduction && roundQty(order.producedQuantity + producedQuantity) > order.plannedQuantity + EPS) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
@@ -1024,6 +1058,9 @@ const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, bo
         session,
       });
     }
+
+    // Packed straight off the receipt (packing.service#packReceipt), in this transaction.
+    if (hooks.afterReceipt) await hooks.afterReceipt({ order, output, session });
 
     autoStart(order, createdBy);
     order.updatedBy = createdBy;
@@ -1466,7 +1503,11 @@ const getOutputOrderStatus = async ({ organizationId, branchId }, outputId) => {
  * The output stays, marked 'reversed' with a snapshot of what it had posted; its receipt and
  * scrap documents are removed so stock, receipts and scrap reports no longer count it.
  */
-const reverseOutput = async ({ organizationId, branchId, createdBy }, outputId, { reason, notes } = {}) => {
+const reverseOutput = async (
+  { organizationId, branchId, createdBy },
+  outputId,
+  { reason, notes, cancelPacking = false } = {}
+) => {
   requireBranch(branchId);
   return runTransaction(async (session) => {
     const output = await ProductionOutput.findOne({ _id: outputId, organizationId, branchId }).session(session);
@@ -1493,7 +1534,32 @@ const reverseOutput = async ({ organizationId, branchId, createdBy }, outputId, 
     let receiptNumber;
     let scrapNumber;
 
-    // 1. Good units back out of finished stock.
+    // 1. Good units back out of finished stock. Packed goods first need their packing
+    // cancelled — the bulk is in cartons and bags now, not on the shelf as bulk.
+    let cancelledPacking = [];
+    if (output.receiptId) {
+      const packed = await PackingVoucher.find({ receiptId: output.receiptId, status: 'posted' }).session(session);
+      if (packed.length && !cancelPacking) {
+        throw new ApiError(
+          httpStatus.CONFLICT,
+          `This receipt was packed on ${packed.map((p) => p.voucherNumber).join(', ')} — reverse it together with its packing`
+        );
+      }
+      // Packing first: the packs leave stock and the bulk returns, then the bulk leaves below.
+      // eslint-disable-next-line global-require
+      const packingService = require('./packing.service');
+      // eslint-disable-next-line no-restricted-syntax
+      for (const voucher of packed) {
+        // eslint-disable-next-line no-await-in-loop
+        await packingService.cancelPackingInTx(
+          { organizationId, branchId, createdBy },
+          voucher,
+          `Receipt ${output.outputNumber} reversed (${String(reason).replace(/_/g, ' ')})`,
+          session
+        );
+      }
+      cancelledPacking = packed.map((p) => p.voucherNumber);
+    }
     if (previousStatus === 'inspected' && output.receiptId) {
       const receipt = await ProductionReceipt.findById(output.receiptId).session(session);
       if (receipt) {
@@ -1697,7 +1763,7 @@ const reverseOutput = async ({ organizationId, branchId, createdBy }, outputId, 
     };
     await order.save({ session });
     await output.save({ session });
-    return { output, order };
+    return { output, order, cancelledPacking };
   });
 };
 
@@ -1722,7 +1788,7 @@ const completeOrder = async ({ organizationId, branchId, createdBy }, orderId, {
   if (pre.reworkPendingQuantity > EPS) {
     throw new ApiError(httpStatus.CONFLICT, `${pre.reworkPendingQuantity} unit(s) are still in rework`);
   }
-  const lots = pre.wipLots.filter((l) => l.quantity > EPS);
+  const lots = (pre.wipLots || []).filter((l) => l.quantity > EPS);
   if (lots.length && !wipDisposition) {
     throw new ApiError(
       httpStatus.CONFLICT,

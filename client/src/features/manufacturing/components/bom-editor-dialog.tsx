@@ -409,6 +409,7 @@ export function BomEditorDialog({
               <ProductPicker
                 value={product}
                 productType={BUILDABLE_PRODUCT_TYPES}
+                packRole='make'
                 createAs='finished_good'
                 placeholder={t('Select finished good…')}
                 searchPlaceholder={t('Search finished goods & sub-assemblies…')}

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
+  useGetPackingVouchersQuery,
   useReverseOutputMutation,
   type OutputReversalReason,
   type ProductionOrder,
@@ -62,8 +63,14 @@ export function ReverseOutputDialog({
   onClose: () => void
   /** Reopening a completed order needs "manage production orders". */
   canReopen?: boolean
-  /** Called after a successful reversal when the user wants to receive again. */
-  onReceiveAgain?: () => void
+  /**
+   * Called after a successful reversal when the user wants to receive again — with the
+   * packs of the reversed receipt, so only what was wrong has to change.
+   */
+  onReceiveAgain?: (prefill: {
+    quantity: number
+    packCounts: Record<string, number>
+  }) => void
   /** "Correct this receipt" starts at Wrong quantity. */
   initialReason?: OutputReversalReason
 }) {
@@ -74,6 +81,14 @@ export function ReverseOutputDialog({
   )
   const [notes, setNotes] = useState('')
   const [reverse, { isLoading }] = useReverseOutputMutation()
+  // Packing made from this receipt — cancelled together with it.
+  const { data: packingData } = useGetPackingVouchersQuery(
+    { productionOrderId: order.id, status: 'posted', limit: 100 },
+    { skip: !output.receiptId }
+  )
+  const packings = (packingData?.results || []).filter(
+    (v) => output.receiptId && v.receiptId === output.receiptId
+  )
 
   const unit = getUnitLabel(order.unit)
   const inspected = output.status === 'inspected'
@@ -112,12 +127,29 @@ export function ReverseOutputDialog({
   const submit = async (receiveAgain: boolean) => {
     if (!reason || isLoading || blocked) return
     try {
-      await reverse({ outputId: output.id, reason, notes }).unwrap()
+      const res = await reverse({
+        outputId: output.id,
+        reason,
+        notes,
+        ...(packings.length ? { cancelPacking: true } : {}),
+      }).unwrap()
       toast.success(
-        `${output.outputNumber} ${t('reversed')}${reopens ? ` · ${order.orderNumber} ${t('reopened')}` : ''}`
+        `${output.outputNumber} ${t('reversed')}${
+          res.cancelledPacking?.length
+            ? ` · ${res.cancelledPacking.join(', ')} ${t('cancelled')}`
+            : ''
+        }${reopens ? ` · ${order.orderNumber} ${t('reopened')}` : ''}`
       )
       onClose()
-      if (receiveAgain) onReceiveAgain?.()
+      if (receiveAgain) {
+        const packCounts: Record<string, number> = {}
+        packings.forEach((v) =>
+          v.lines.forEach((l) => {
+            packCounts[l.packSizeId] = (packCounts[l.packSizeId] || 0) + l.quantity
+          })
+        )
+        onReceiveAgain?.({ quantity: output.producedQuantity, packCounts })
+      }
     } catch (err) {
       toast.error(getErrorMessage(err, t('Could not reverse the receipt')))
     }
@@ -150,6 +182,34 @@ export function ReverseOutputDialog({
           <div className='space-y-2'>
             <Label>{t('What will be undone')}</Label>
             <ul className='divide-y rounded-lg border text-sm'>
+              {packings.map((v) => (
+                <Effect
+                  key={v.id}
+                  icon={Boxes}
+                  tone='rose'
+                  title={`${t('Packing')} ${v.voucherNumber} ${t('is cancelled too')}`}
+                  text={t(
+                    'The packs leave stock and the bulk and packing material go back — refused if some packs were already sold.'
+                  )}
+                >
+                  <div className='mt-2 overflow-hidden rounded-md border'>
+                    {v.lines.map((l) => (
+                      <div
+                        key={l._id}
+                        className='flex items-center justify-between gap-3 border-b px-2.5 py-1.5 text-xs last:border-b-0'
+                      >
+                        <span className='min-w-0 truncate font-medium'>
+                          {l.packName}
+                        </span>
+                        <span className='text-muted-foreground shrink-0 tabular-nums'>
+                          −{fmtQty(l.quantity)} {getUnitLabel(l.unit)} ·{' '}
+                          {fmtQty(l.bulkQuantity)} {unit}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Effect>
+              ))}
               {good > EPS && (
                 <Effect
                   icon={PackageMinus}

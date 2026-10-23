@@ -46,6 +46,8 @@ const InventoryTransactionSchema = new mongoose.Schema({
             'rework_in', //       rework    + : rejected output sent to rework
             'rework_out', //      rework    − : rework resolved (good → stock, rest → scrap)
             'production_scrap', // available − : finished stock written off as scrap
+            'packing_out', //     available − : bulk + packing material used by a packing voucher
+            'packing_in', //      available + : the packs it made (cartons, bags …)
         ],
         required: true,
     },

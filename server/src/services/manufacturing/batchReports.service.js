@@ -15,6 +15,7 @@ const {
   InventoryTransfer,
   SalesReturn,
   PurchaseReturn,
+  PackingVoucher,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const { SOLD_INVOICE_MATCH } = require('../productAnalytics.service');
@@ -250,6 +251,8 @@ const MOVE_LABELS = {
   production_return: 'Returned from production',
   production_receipt: 'Produced',
   production_scrap: 'Scrapped',
+  packing_out: 'Packed (used)',
+  packing_in: 'Packed',
 };
 
 /** Document number + party for each ledger row, looked up in bulk per document type. */
@@ -257,7 +260,7 @@ const describeRefs = async (rows, batch) => {
   const idsOf = (...types) => [
     ...new Set(rows.filter((r) => types.includes(r.refType) && r.refId).map((r) => String(r.refId))),
   ];
-  const [invoices, issues, receipts, scraps, transfers, salesReturns, purchaseReturns, purchases] = await Promise.all([
+  const [invoices, issues, receipts, scraps, transfers, salesReturns, purchaseReturns, purchases, packings] = await Promise.all([
     Invoice.find({ _id: { $in: idsOf('Invoice') } })
       .select('invoiceNumber customerName walkInCustomerName')
       .lean(),
@@ -282,6 +285,9 @@ const describeRefs = async (rows, batch) => {
     batch.purchaseId
       ? Purchase.find({ _id: batch.purchaseId }).select('invoiceNumber supplier').populate('supplier', 'name').lean()
       : [],
+    PackingVoucher.find({ _id: { $in: idsOf('PackingVoucher', 'PackingVoucherReversal') } })
+      .select('voucherNumber orderNumber productName')
+      .lean(),
   ]);
   const map = new Map();
   invoices.forEach((d) =>
@@ -293,6 +299,7 @@ const describeRefs = async (rows, batch) => {
   transfers.forEach((d) => map.set(String(d._id), { number: d.transferNumber || '', party: '' }));
   salesReturns.forEach((d) => map.set(String(d._id), { number: d.returnNumber, party: d.customerName || '' }));
   purchaseReturns.forEach((d) => map.set(String(d._id), { number: d.returnNumber, party: '' }));
+  packings.forEach((d) => map.set(String(d._id), { number: d.voucherNumber, party: d.orderNumber || d.productName || '' }));
   const purchase = purchases[0];
   return (r) => {
     if (r.refType === 'Batch') {
@@ -345,7 +352,12 @@ const batchTraceReport = async (ctx, q) => {
   if (!batch || !inventory || (ctx.branchId && String(inventory.branchId) !== String(ctx.branchId))) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Batch not found in this branch');
   }
-  const product = await Product.findById(inventory.productId).select('name sku unit productType shelfLifeDays').lean();
+  // A deleted product leaves its inventory and batches behind; the lot's history still reads.
+  const product = (await Product.findById(inventory.productId).select('name sku unit productType shelfLifeDays').lean()) || {
+    _id: inventory.productId,
+    name: 'Deleted product',
+    unit: '',
+  };
   const batchId = String(batch._id);
 
   // Every available-stock movement of the batch. Older purchase-side rows name the batch
@@ -421,8 +433,9 @@ const batchTraceReport = async (ctx, q) => {
       ledger.filter((r) => types.includes(r.type)).reduce((s, r) => s + (sign > 0 ? r.quantityDelta : -r.quantityDelta), 0)
     );
   const summary = {
-    received: roundQty(sumType(['purchase', 'production_receipt'], 1) + Math.max(0, unexplained)),
-    issuedToProduction: roundQty(sumType(['production_issue', 'production_return'], -1)),
+    received: roundQty(sumType(['purchase', 'production_receipt', 'packing_in'], 1) + Math.max(0, unexplained)),
+    // Packing draws bulk / packing material out of the batch the same way an issue does.
+    issuedToProduction: roundQty(sumType(['production_issue', 'production_return', 'packing_out'], -1)),
     sold: roundQty(sumType(['sale', 'return_in'], -1)),
     scrapped: roundQty(sumType(['production_scrap', 'expiry_writeoff', 'damage', 'theft'], -1)),
     other: roundQty(sumType(['adjustment', 'transfer_in', 'transfer_out', 'return_out'], 1) + Math.min(0, unexplained)),
@@ -553,17 +566,20 @@ const searchBatches = async (ctx, q) => {
         .lean()
     ).forEach((p) => productById.set(String(p._id), p));
   }
-  return batches.map((b) => {
-    const p = productById.get(productOfInventory.get(String(b.inventoryId))) || {};
-    return {
-      id: String(b._id),
-      batchNumber: b.batchNumber,
-      productName: p.name || '',
-      unit: p.unit || '',
-      quantity: roundQty(b.quantity),
-      expiryDate: b.expiryDate || null,
-    };
-  });
+  // Lots of a deleted product are left out of the picker.
+  return batches
+    .filter((b) => productById.has(productOfInventory.get(String(b.inventoryId))))
+    .map((b) => {
+      const p = productById.get(productOfInventory.get(String(b.inventoryId)));
+      return {
+        id: String(b._id),
+        batchNumber: b.batchNumber,
+        productName: p.name || '',
+        unit: p.unit || '',
+        quantity: roundQty(b.quantity),
+        expiryDate: b.expiryDate || null,
+      };
+    });
 };
 
 module.exports = { batchStockReport, batchTraceReport, searchBatches };

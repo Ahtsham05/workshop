@@ -204,3 +204,5 @@ module.exports.ProductionReceipt = require('./productionReceipt.model');
 module.exports.RawMaterialReceipt = require('./rawMaterialReceipt.model');
 module.exports.ProductionOutput = require('./productionOutput.model');
 module.exports.ScrapRecord = require('./scrapRecord.model');
+module.exports.PackSize = require('./packSize.model');
+module.exports.PackingVoucher = require('./packingVoucher.model');

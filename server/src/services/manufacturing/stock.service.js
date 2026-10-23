@@ -24,6 +24,34 @@ const { roundQty, roundMoney } = require('./common');
 
 const isSerialized = (product, variant) => !!(product.trackImei || product.trackSerial || (variant && variant.trackSerial));
 
+const variantLabel = (v) => {
+  if (!v) return '';
+  const attrs = v.attributes instanceof Map ? [...v.attributes.values()] : Object.values(v.attributes || {});
+  return attrs.filter(Boolean).join(' / ') || v.sku || 'Variant';
+};
+
+/**
+ * The variant to use when a product with variants is moved without one named: its only
+ * real variant (or the default stand-in when it has none). `variant` is null when there
+ * are several — the caller must ask which one; `variants` lists them.
+ */
+const soleVariant = async (product, session) => {
+  const all = await ProductVariant.find({ productId: product._id, isActive: { $ne: false } })
+    .sort({ createdAt: 1 })
+    .session(session || null);
+  const real = all.filter((v) => !v.isDefault);
+  if (real.length === 1) return { variant: real[0], variants: real, ambiguous: false };
+  // Flagged "has variants" but none were ever added: it is held like a simple product.
+  if (real.length === 0) return { variant: all.find((v) => v.isDefault) || null, variants: [], ambiguous: false };
+  return { variant: null, variants: real, ambiguous: true };
+};
+
+const chooseVariantError = (product, variants) =>
+  new ApiError(
+    httpStatus.BAD_REQUEST,
+    `"${product.name}" has ${variants.length} variants (${variants.map(variantLabel).join(', ')}) — choose which one`
+  );
+
 /** Loads a product (+ variant) of this branch and works out how its stock is held. */
 const resolveItem = async ({ organizationId, branchId, productId, variantId, session }) => {
   const product = await Product.findOne({ _id: productId, organizationId, branchId }).session(session || null);
@@ -36,7 +64,10 @@ const resolveItem = async ({ organizationId, branchId, productId, variantId, ses
     );
     if (!variant) throw new ApiError(httpStatus.NOT_FOUND, `Variant not found for "${product.name}"`);
   } else if (product.hasVariants) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `"${product.name}" has variants — pick the variant to move.`);
+    // No variant named: a product with only one variant uses it; several must be chosen.
+    const sole = await soleVariant(product, session);
+    if (sole.ambiguous) throw chooseVariantError(product, sole.variants);
+    variant = sole.variant;
   } else {
     variant = await ProductVariant.findOne({ productId: product._id, isDefault: true }).session(session || null);
   }
@@ -452,6 +483,9 @@ const getUnitCosts = async ({ organizationId, items }) => {
 };
 
 module.exports = {
+  variantLabel,
+  soleVariant,
+  chooseVariantError,
   getUnitCosts,
   resolveItem,
   ensureLedgerAnchor,

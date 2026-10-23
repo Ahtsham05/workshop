@@ -21,6 +21,7 @@ import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { OrderPackingPanel } from '../../components/order-packing-panel'
 import { Panel } from '../../components/page'
 import { fmtDate, fmtQty } from '../../lib/constants'
 import { lineRemaining } from '../../lib/material-math'
@@ -347,6 +348,7 @@ export function OverviewTab({
           requirements={requirements}
           onTab={onTab}
         />
+        <OrderPackingPanel order={order} />
         {order.notes && (
           <Panel title={t('Notes')}>
             <p className='text-sm whitespace-pre-wrap'>{order.notes}</p>

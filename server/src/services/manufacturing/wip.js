@@ -13,8 +13,21 @@ const EPS = 1e-6;
 
 const lotCredited = (lot) => roundQty(lot.quantity / (lot.ratio || 1));
 
+/**
+ * The order's WIP lots. Lean reads skip schema defaults, and orders written before WIP lots
+ * existed (e.g. an early manufacturing demo load) have no `wipLots` at all.
+ */
+const lotsOf = (order) => order.wipLots || [];
+
+/**
+ * An order written before WIP tracking (lean read, no `wipLots` field). Its issued material
+ * went straight into the order's cost, so it counts as consumed when issued — nothing of
+ * it waits on the floor.
+ */
+const predatesWip = (order) => order.wipLots === undefined;
+
 const lotsForLine = (order, materialLineId) =>
-  order.wipLots
+  lotsOf(order)
     .filter((lot) => String(lot.materialLineId) === String(materialLineId) && lot.quantity > EPS)
     .sort((a, b) => new Date(a.issuedAt) - new Date(b.issuedAt));
 
@@ -39,18 +52,18 @@ const lineRemaining = (material) =>
 /** Physical units of one product/variant this order holds in WIP — the 'wip' ledger balance. */
 const wipBalanceOf = (order, productId, variantId) =>
   roundQty(
-    order.wipLots
+    lotsOf(order)
       .filter(
         (lot) => String(lot.productId) === String(productId) && String(lot.variantId || '') === String(variantId || '')
       )
       .reduce((s, lot) => s + lot.quantity, 0)
   );
 
-const wipValue = (order) => roundMoney(order.wipLots.reduce((s, lot) => s + lot.quantity * (lot.unitCost || 0), 0));
+const wipValue = (order) => roundMoney(lotsOf(order).reduce((s, lot) => s + lot.quantity * (lot.unitCost || 0), 0));
 
 const pruneEmptyLots = (order) => {
   // eslint-disable-next-line no-param-reassign
-  order.wipLots = order.wipLots.filter((lot) => lot.quantity > EPS);
+  order.wipLots = lotsOf(order).filter((lot) => lot.quantity > EPS);
 };
 
 /**
@@ -154,6 +167,7 @@ module.exports = {
   EPS,
   lotCredited,
   lotsForLine,
+  predatesWip,
   lineWip,
   lineRemaining,
   wipBalanceOf,

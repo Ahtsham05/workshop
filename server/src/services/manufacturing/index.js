@@ -21,6 +21,7 @@ const materialIssueByMaterial = require('./materialIssueByMaterial.service');
 const materialIssueEdit = require('./materialIssueEdit.service');
 const productionOrderBatch = require('./productionOrderBatch.service');
 const reports = require('./reports.service');
+const packing = require('./packing.service');
 
 module.exports = {
   settings,
@@ -42,4 +43,5 @@ module.exports = {
   materialIssueEdit,
   productionOrderBatch,
   reports,
+  packing,
 };

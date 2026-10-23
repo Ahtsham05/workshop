@@ -144,6 +144,7 @@ import { Route as AuthenticatedManufacturingRequirementsImport } from './routes/
 import { Route as AuthenticatedManufacturingReportsImport } from './routes/_authenticated/manufacturing/reports'
 import { Route as AuthenticatedManufacturingQualityImport } from './routes/_authenticated/manufacturing/quality'
 import { Route as AuthenticatedManufacturingProductsImport } from './routes/_authenticated/manufacturing/products'
+import { Route as AuthenticatedManufacturingPackingImport } from './routes/_authenticated/manufacturing/packing'
 import { Route as AuthenticatedManufacturingMovementsImport } from './routes/_authenticated/manufacturing/movements'
 import { Route as AuthenticatedManufacturingBomsImport } from './routes/_authenticated/manufacturing/boms'
 import { Route as AuthenticatedManufacturingAssembliesImport } from './routes/_authenticated/manufacturing/assemblies'
@@ -1117,6 +1118,13 @@ const AuthenticatedManufacturingProductsRoute =
     getParentRoute: () => AuthenticatedManufacturingRouteRoute,
   } as any)
 
+const AuthenticatedManufacturingPackingRoute =
+  AuthenticatedManufacturingPackingImport.update({
+    id: '/packing',
+    path: '/packing',
+    getParentRoute: () => AuthenticatedManufacturingRouteRoute,
+  } as any)
+
 const AuthenticatedManufacturingMovementsRoute =
   AuthenticatedManufacturingMovementsImport.update({
     id: '/movements',
@@ -1905,6 +1913,13 @@ declare module '@tanstack/react-router' {
       path: '/movements'
       fullPath: '/manufacturing/movements'
       preLoaderRoute: typeof AuthenticatedManufacturingMovementsImport
+      parentRoute: typeof AuthenticatedManufacturingRouteImport
+    }
+    '/_authenticated/manufacturing/packing': {
+      id: '/_authenticated/manufacturing/packing'
+      path: '/packing'
+      fullPath: '/manufacturing/packing'
+      preLoaderRoute: typeof AuthenticatedManufacturingPackingImport
       parentRoute: typeof AuthenticatedManufacturingRouteImport
     }
     '/_authenticated/manufacturing/products': {
@@ -3071,6 +3086,7 @@ interface AuthenticatedManufacturingRouteRouteChildren {
   AuthenticatedManufacturingAssembliesRoute: typeof AuthenticatedManufacturingAssembliesRoute
   AuthenticatedManufacturingBomsRoute: typeof AuthenticatedManufacturingBomsRoute
   AuthenticatedManufacturingMovementsRoute: typeof AuthenticatedManufacturingMovementsRoute
+  AuthenticatedManufacturingPackingRoute: typeof AuthenticatedManufacturingPackingRoute
   AuthenticatedManufacturingProductsRoute: typeof AuthenticatedManufacturingProductsRoute
   AuthenticatedManufacturingQualityRoute: typeof AuthenticatedManufacturingQualityRoute
   AuthenticatedManufacturingReportsRoute: typeof AuthenticatedManufacturingReportsRoute
@@ -3102,6 +3118,8 @@ const AuthenticatedManufacturingRouteRouteChildren: AuthenticatedManufacturingRo
     AuthenticatedManufacturingBomsRoute: AuthenticatedManufacturingBomsRoute,
     AuthenticatedManufacturingMovementsRoute:
       AuthenticatedManufacturingMovementsRoute,
+    AuthenticatedManufacturingPackingRoute:
+      AuthenticatedManufacturingPackingRoute,
     AuthenticatedManufacturingProductsRoute:
       AuthenticatedManufacturingProductsRoute,
     AuthenticatedManufacturingQualityRoute:
@@ -3644,6 +3662,7 @@ export interface FileRoutesByFullPath {
   '/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
   '/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
   '/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
+  '/manufacturing/packing': typeof AuthenticatedManufacturingPackingRoute
   '/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
   '/manufacturing/reports': typeof AuthenticatedManufacturingReportsRoute
@@ -3848,6 +3867,7 @@ export interface FileRoutesByTo {
   '/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
   '/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
   '/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
+  '/manufacturing/packing': typeof AuthenticatedManufacturingPackingRoute
   '/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
   '/manufacturing/reports': typeof AuthenticatedManufacturingReportsRoute
@@ -4055,6 +4075,7 @@ export interface FileRoutesById {
   '/_authenticated/manufacturing/assemblies': typeof AuthenticatedManufacturingAssembliesRoute
   '/_authenticated/manufacturing/boms': typeof AuthenticatedManufacturingBomsRoute
   '/_authenticated/manufacturing/movements': typeof AuthenticatedManufacturingMovementsRoute
+  '/_authenticated/manufacturing/packing': typeof AuthenticatedManufacturingPackingRoute
   '/_authenticated/manufacturing/products': typeof AuthenticatedManufacturingProductsRoute
   '/_authenticated/manufacturing/quality': typeof AuthenticatedManufacturingQualityRoute
   '/_authenticated/manufacturing/reports': typeof AuthenticatedManufacturingReportsRoute
@@ -4265,6 +4286,7 @@ export interface FileRouteTypes {
     | '/manufacturing/assemblies'
     | '/manufacturing/boms'
     | '/manufacturing/movements'
+    | '/manufacturing/packing'
     | '/manufacturing/products'
     | '/manufacturing/quality'
     | '/manufacturing/reports'
@@ -4468,6 +4490,7 @@ export interface FileRouteTypes {
     | '/manufacturing/assemblies'
     | '/manufacturing/boms'
     | '/manufacturing/movements'
+    | '/manufacturing/packing'
     | '/manufacturing/products'
     | '/manufacturing/quality'
     | '/manufacturing/reports'
@@ -4673,6 +4696,7 @@ export interface FileRouteTypes {
     | '/_authenticated/manufacturing/assemblies'
     | '/_authenticated/manufacturing/boms'
     | '/_authenticated/manufacturing/movements'
+    | '/_authenticated/manufacturing/packing'
     | '/_authenticated/manufacturing/products'
     | '/_authenticated/manufacturing/quality'
     | '/_authenticated/manufacturing/reports'
@@ -5004,6 +5028,7 @@ export const routeTree = rootRoute
         "/_authenticated/manufacturing/assemblies",
         "/_authenticated/manufacturing/boms",
         "/_authenticated/manufacturing/movements",
+        "/_authenticated/manufacturing/packing",
         "/_authenticated/manufacturing/products",
         "/_authenticated/manufacturing/quality",
         "/_authenticated/manufacturing/reports",
@@ -5238,6 +5263,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/manufacturing/movements": {
       "filePath": "_authenticated/manufacturing/movements.tsx",
+      "parent": "/_authenticated/manufacturing"
+    },
+    "/_authenticated/manufacturing/packing": {
+      "filePath": "_authenticated/manufacturing/packing.tsx",
       "parent": "/_authenticated/manufacturing"
     },
     "/_authenticated/manufacturing/products": {

@@ -4,8 +4,9 @@ const ApiError = require('../../utils/ApiError');
 const { startOfBusinessDay, toBusinessCalendarDate } = require('../../utils/businessTimezone');
 
 /** Quantities keep 6 decimals (fractional units like kg/m are normal in manufacturing). */
-const roundQty = (value) => Math.round((Number(value) || 0) * 1e6) / 1e6;
-const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
+// `+ 0` turns -0 (a tiny negative rounded) into 0, which would otherwise print as "-0".
+const roundQty = (value) => Math.round((Number(value) || 0) * 1e6) / 1e6 + 0;
+const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100 + 0;
 
 /** Every manufacturing write belongs to exactly one branch (products are branch-scoped). */
 const requireBranch = (branchId) => {

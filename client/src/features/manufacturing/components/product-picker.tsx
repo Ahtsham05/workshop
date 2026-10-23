@@ -69,6 +69,7 @@ export function ProductPicker({
   value,
   onChange,
   productType,
+  packRole,
   placeholder,
   searchPlaceholder,
   disabled,
@@ -86,6 +87,8 @@ export function ProductPicker({
   onChange: (product: PickedProduct) => void
   /** One type, or a comma list (may include 'unclassified'). */
   productType?: string
+  /** Packing role filter — see ManufacturingProductFilters.packRole. */
+  packRole?: 'make' | 'pack' | 'packs'
   placeholder?: string
   searchPlaceholder?: string
   disabled?: boolean
@@ -150,7 +153,7 @@ export function ProductPicker({
 
   const debounced = useDebouncedValue(search, 250)
   const { data, isFetching } = useGetManufacturingProductsQuery(
-    { search: debounced.trim() || undefined, productType, limit: LIMIT },
+    { search: debounced.trim() || undefined, productType, packRole, limit: LIMIT },
     { skip: !open }
   )
   const options = (data?.results || []).filter(
@@ -390,6 +393,20 @@ export function ProductPicker({
                             {product.defaultBomId && (
                               <span className='text-muted-foreground shrink-0 rounded border px-1.5 py-px text-[10px]'>
                                 {t('Has BOM')}
+                              </span>
+                            )}
+                            {product.packOf && (
+                              <span
+                                className='shrink-0 rounded border border-sky-500/40 px-1.5 py-px text-[10px] text-sky-700 dark:text-sky-300'
+                                title={`${t('Packed from')} ${product.packOf.productName}`}
+                              >
+                                {t('Pack')} · {fmtQty(product.packOf.contentQuantity)}{' '}
+                                {product.packOf.contentUnit}
+                              </span>
+                            )}
+                            {!!product.packSizeCount && (
+                              <span className='shrink-0 rounded border border-violet-500/40 px-1.5 py-px text-[10px] text-violet-700 dark:text-violet-300'>
+                                {product.packSizeCount} {t('pack sizes')}
                               </span>
                             )}
                           </div>
