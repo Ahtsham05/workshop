@@ -313,9 +313,10 @@ const lookupProductByCode = catchAsync(async (req, res) => {
 });
 
 const deleteProduct = catchAsync(async (req, res) => {
-  // Get product to delete associated image
-  const product = await productService.getProductById(req.params.productId);
-  
+  // Scoped to the caller's org/branch, and refused for a product used in manufacturing —
+  // the image is only removed once the product itself is gone.
+  const product = await productService.deleteProductById(req.params.productId, applyBranchFilter({}, req));
+
   // Delete image from Cloudinary if it exists
   if (product && product.image && product.image.publicId) {
     try {
@@ -325,8 +326,7 @@ const deleteProduct = catchAsync(async (req, res) => {
       // Continue with product deletion even if image deletion fails
     }
   }
-  
-  await productService.deleteProductById(req.params.productId);
+
   await auditLogService.recordAuditLog({
     req,
     action: 'delete',
@@ -340,7 +340,7 @@ const deleteProduct = catchAsync(async (req, res) => {
 
 const bulkDeleteProducts = catchAsync(async (req, res) => {
   const { ids } = req.body;
-  const { deleted, notFoundIds } = await productService.bulkDeleteProductsByIds(ids);
+  const { deleted, notFoundIds, blocked } = await productService.bulkDeleteProductsByIds(ids, applyBranchFilter({}, req));
 
   // Best-effort Cloudinary cleanup — same "log and continue" tolerance the single-product
   // delete above uses; a failed image delete shouldn't block the product records from
@@ -375,6 +375,7 @@ const bulkDeleteProducts = catchAsync(async (req, res) => {
     deletedCount: deleted.length,
     deletedIds: deleted.map((product) => product._id),
     notFoundIds,
+    blocked,
   });
 });
 
@@ -472,6 +473,14 @@ const getPurchasableCatalog = catchAsync(async (req, res) => {
   res.send(canViewCost ? items : items.map(stripCostFields));
 });
 
+// Inactive products for the item pickers' "exists but inactive" status — names/codes/stock
+// only, no prices or costs, so no cost redaction is needed.
+const getInactiveCatalog = catchAsync(async (req, res) => {
+  const filter = {};
+  applyBranchFilter(filter, req);
+  res.send(await productService.getInactiveCatalog(filter));
+});
+
 const getProductBranchAvailability = catchAsync(async (req, res) => {
   const rows = await branchAvailabilityService.getProductBranchAvailability({
     organizationId: req.organizationId,
@@ -495,6 +504,25 @@ const bulkUpdateProducts = catchAsync(async (req, res) => {
   } catch (error) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Bulk update failed: ' + error.message);
   }
+});
+
+// "Set brand" bulk action — one brand (or none) on every selected product, scoped to the
+// caller's org/branch like bulkSetProductCategories below.
+const bulkSetProductBrand = catchAsync(async (req, res) => {
+  const { productIds, brandId } = req.body;
+  const scope = applyBranchFilter({}, req);
+
+  const result = await productService.bulkSetProductBrand({
+    productIds,
+    brandId: brandId || null,
+    organizationId: scope.organizationId,
+    branchId: scope.branchId,
+  });
+
+  res.send({
+    message: `Updated brand for ${result.modifiedCount} of ${productIds.length} product${productIds.length === 1 ? '' : 's'}`,
+    ...result,
+  });
 });
 
 // Products list's "Set Category" bulk action — applies the same categories/sub-categories
@@ -583,6 +611,7 @@ const bulkAddProducts = catchAsync(async (req, res) => {
 
 module.exports = {
   getProductNameIndex,
+  getInactiveCatalog,
   createProduct,
   getProducts,
   getProduct,
@@ -599,6 +628,7 @@ module.exports = {
   fetchImageFromSearch,
   bulkUpdateProducts,
   bulkSetProductCategories,
+  bulkSetProductBrand,
   bulkAddProducts,
   scanProductImage,
   updateProductFlag,

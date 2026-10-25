@@ -140,6 +140,8 @@ export interface ManufacturingProduct {
   /** Batch / expiry tracking and the product's live batches (list + overview). */
   tracking?: ProductBatchTracking
   categories?: { _id: string; name: string }[]
+  brandId?: string | null
+  brand?: { id: string; name: string } | null
   createdAt?: string
 }
 
@@ -193,6 +195,9 @@ export interface ManufacturingProductFilters {
    * pack size can be stocked as, 'packs' = pack products only.
    */
   packRole?: 'make' | 'pack' | 'packs'
+  /** A category / brand id, or 'none' for products without one. */
+  categoryId?: string
+  brandId?: string
   search?: string
 }
 
@@ -2000,6 +2005,16 @@ export const manufacturingApi = createApi({
       query: () => '/manufacturing/products/type-summary',
       providesTags: ['MfgProduct'],
     }),
+    /** Every product the filter matches (id + name), for "select all N matching". */
+    getMatchingManufacturingProductIds: builder.query<
+      { results: { id: string; name: string }[]; total: number; limit: number },
+      ManufacturingProductFilters & {
+        sort?: 'name' | 'newest' | 'stock' | 'stockLow' | 'cost'
+      }
+    >({
+      // Fetched on demand only (lazy) — no tags, so bulk writes don't refetch it.
+      query: (params) => ({ url: '/manufacturing/products/ids', params }),
+    }),
     updateManufacturingProduct: builder.mutation<
       ManufacturingProduct,
       {
@@ -3036,6 +3051,7 @@ export const {
   useGetManufacturingProductStatsQuery,
   useGetManufacturingProductOverviewQuery,
   useGetProductTypeSummaryQuery,
+  useLazyGetMatchingManufacturingProductIdsQuery,
   useUpdateManufacturingProductMutation,
   useBulkClassifyProductsMutation,
   useBulkProductTrackingMutation,

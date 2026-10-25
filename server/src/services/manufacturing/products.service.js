@@ -10,6 +10,7 @@ const {
   Supplier,
   InventoryTransaction,
   PackSize,
+  Brand,
 } = require('../../models');
 const { toBusinessCalendarDate } = require('../../utils/businessTimezone');
 const ApiError = require('../../utils/ApiError');
@@ -24,7 +25,7 @@ const stockService = () => require('./stock.service');
 const { requireBranch, scopeFilter, aggregateScope, escapeRegex, startOfBusinessToday, daysUntil } = require('./common');
 
 const PRODUCT_FIELDS =
-  'name nameUrdu sku barcode unit cost price stockQuantity hasVariants isActive image categories productType procurementType defaultBomId manufacturingLeadTimeDays shelfLifeDays trackImei trackSerial branchId createdAt';
+  'name nameUrdu sku barcode unit cost price stockQuantity hasVariants isActive image categories brandId productType procurementType defaultBomId manufacturingLeadTimeDays shelfLifeDays trackImei trackSerial branchId createdAt';
 
 const bomCountsFor = async (ctx, productIds) => {
   if (!productIds.length) return new Map();
@@ -170,6 +171,10 @@ const buildProductQuery = (ctx, filter = {}) => {
   if (filter.hasBom === true || filter.hasBom === 'true') query.defaultBomId = { $ne: null };
   if (filter.hasBom === false || filter.hasBom === 'false') query.defaultBomId = null;
   if (filter.procurementType) query.procurementType = filter.procurementType === 'none' ? null : filter.procurementType;
+  if (filter.categoryId === 'none') query['categories.0'] = { $exists: false };
+  else if (filter.categoryId) query['categories._id'] = oid(filter.categoryId);
+  if (filter.brandId === 'none') query.brandId = null;
+  else if (filter.brandId) query.brandId = oid(filter.brandId);
   if (filter.stock === 'out') query.stockQuantity = { $lte: 0 };
   if (filter.stock === 'in') query.stockQuantity = { $gt: 0 };
   if (filter.search) {
@@ -193,6 +198,11 @@ const buildProductQuery = (ctx, filter = {}) => {
   return query;
 };
 
+/** Biggest page the list serves — the client's "All" rows option (client lib/page-size ALL_ROWS). */
+const MAX_PAGE_SIZE = 100000;
+/** Most products one bulk action may touch at once (kept in step with the bulk validators). */
+const MAX_BULK_PRODUCTS = 5000;
+
 const SORTS = {
   name: { name: 1 },
   newest: { createdAt: -1, _id: -1 },
@@ -204,7 +214,7 @@ const SORTS = {
 const queryProducts = async (ctx, rawFilter, options) => {
   const filter = await resolveFilter(ctx, rawFilter);
   const query = buildProductQuery(ctx, filter);
-  const limit = Math.min(parseInt(options.limit, 10) || 20, 100);
+  const limit = Math.min(parseInt(options.limit, 10) || 20, MAX_PAGE_SIZE);
   const page = Math.max(parseInt(options.page, 10) || 1, 1);
   const [results, totalResults] = await Promise.all([
     Product.find(query)
@@ -216,7 +226,8 @@ const queryProducts = async (ctx, rawFilter, options) => {
     Product.countDocuments(query),
   ]);
   const ids = results.map((p) => p._id);
-  const [counts, tracking, packOf, sizesOf] = await Promise.all([
+  const brandIds = [...new Set(results.map((p) => p.brandId && String(p.brandId)).filter(Boolean))];
+  const [counts, tracking, packOf, sizesOf, brands] = await Promise.all([
     bomCountsFor(ctx, ids),
     trackingFor(ids),
     PackSize.find({ packProductId: { $in: ids } })
@@ -224,13 +235,18 @@ const queryProducts = async (ctx, rawFilter, options) => {
       .populate('productId', 'name')
       .lean(),
     PackSize.aggregate([{ $match: { productId: { $in: ids } } }, { $group: { _id: '$productId', n: { $sum: 1 } } }]),
+    brandIds.length ? Brand.find({ _id: { $in: brandIds } }).select('name').lean() : [],
   ]);
+  const brandName = new Map(brands.map((b) => [String(b._id), b.name]));
   const packByProduct = new Map(packOf.map((s) => [String(s.packProductId), s]));
   const sizeCount = new Map(sizesOf.map((r) => [String(r._id), r.n]));
   return {
     results: results.map(({ _id, ...product }) => ({
       ...product,
       id: String(_id),
+      brand: product.brandId && brandName.has(String(product.brandId))
+        ? { id: String(product.brandId), name: brandName.get(String(product.brandId)) }
+        : null,
       bomCount: (counts.get(String(_id)) || {}).total || 0,
       activeBomCount: (counts.get(String(_id)) || {}).active || 0,
       // Packing: this product is a pack of a bulk product, or has pack sizes of its own.
@@ -258,6 +274,24 @@ const queryProducts = async (ctx, rawFilter, options) => {
     totalPages: Math.ceil(totalResults / limit),
     totalResults,
   };
+};
+
+/**
+ * Every product the current filter matches (id + name only), for "select all N matching"
+ * on the list — capped at MAX_BULK_PRODUCTS, `total` says how many there really are.
+ */
+const matchingProductIds = async (ctx, rawFilter) => {
+  const filter = await resolveFilter(ctx, rawFilter);
+  const query = buildProductQuery(ctx, filter);
+  const [rows, total] = await Promise.all([
+    Product.find(query)
+      .select('name')
+      .sort(SORTS[filter.sort] || SORTS.name)
+      .limit(MAX_BULK_PRODUCTS)
+      .lean(),
+    Product.countDocuments(query),
+  ]);
+  return { results: rows.map((p) => ({ id: String(p._id), name: p.name })), total, limit: MAX_BULK_PRODUCTS };
 };
 
 /** Count of products per productType in scope (incl. unclassified). */
@@ -671,6 +705,7 @@ module.exports = {
   getTypeSummary,
   updateAttributes,
   bulkClassify,
+  matchingProductIds,
   getAssemblies,
   getProductStats,
   getProductOverview,

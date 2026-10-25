@@ -13,6 +13,7 @@ const WRITE_THUNKS = new Set([
   'product/bulkDeleteProducts',
   'product/bulkUpdateProducts',
   'product/bulkSetProductCategories',
+  'product/bulkSetProductBrand',
   'product/bulkAddProducts',
 ])
 const WRITE_APIS = new Set([

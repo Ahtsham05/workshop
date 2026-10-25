@@ -16,8 +16,8 @@ import { useLanguage } from '@/context/language-context'
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  currentRow: Product
-  setFetch: any
+  currentRow: Pick<Product, 'id' | '_id' | 'name'>
+  setFetch: (update: (prev: boolean) => boolean) => void
 }
 
 export function UsersDeleteDialog({ open, onOpenChange, currentRow, setFetch }: Props) {
@@ -29,10 +29,12 @@ export function UsersDeleteDialog({ open, onOpenChange, currentRow, setFetch }: 
     if (value.trim() !== currentRow.name.trim()) return
 
     onOpenChange(false)
-    await dispatch(deleteProduct(currentRow.id || currentRow._id)).then(()=>{
-      toast.success(t('product_deleted_successfully'))
-      setFetch((prev: any) => !prev)
-    })
+    // A refused delete (e.g. the product is used in manufacturing) already shows the
+    // server's reason as an error toast — only a real delete reports success.
+    const result = await dispatch(deleteProduct((currentRow.id || currentRow._id) as string))
+    if (result.meta.requestStatus !== 'fulfilled') return
+    toast.success(t('product_deleted_successfully'))
+    setFetch((prev) => !prev)
   }
 
   return (

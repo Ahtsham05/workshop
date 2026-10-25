@@ -99,7 +99,10 @@ export function useAutoUrduNameFromEnglish<T extends FieldValues>(
       if (!/[A-Za-z]/.test(trimmed)) return
 
       const translated = await fetchUrduNameSuggestion(trimmed)
-      if (translated) {
+      // The answer can arrive after the form moved on (saved and reset for the next record,
+      // or the name was edited again) — never write one name's translation onto another.
+      const current = String(form.getValues(englishField) ?? '').trim()
+      if (translated && current === trimmed) {
         form.setValue(urduField, translated as PathValue<T, Path<T>>)
       }
     }, 450)

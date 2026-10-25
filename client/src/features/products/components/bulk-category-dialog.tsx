@@ -32,12 +32,15 @@ import { Product } from '../data/schema'
 
 const PREVIEW_LIMIT = 5
 
+/** What a bulk dialog needs of each selected product — a catalog row or any list's row. */
+export type BulkProductTarget = Pick<Product, '_id' | 'id'> & { name?: string }
+
 type CategoryRef = { _id: string; name: string; image?: { url?: string; publicId?: string } }
 
 interface BulkCategoryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  products: Product[]
+  products: BulkProductTarget[]
   onApplied: () => void
 }
 

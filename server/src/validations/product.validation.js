@@ -408,6 +408,14 @@ const bulkSetProductCategories = {
   }),
 };
 
+// One brand (or null to clear it) on every product in `productIds`.
+const bulkSetProductBrand = {
+  body: Joi.object().keys({
+    productIds: Joi.array().items(Joi.string().custom(objectId)).required().min(1),
+    brandId: Joi.string().custom(objectId).allow(null, '').required(),
+  }),
+};
+
 const bulkDeleteProducts = {
   body: Joi.object().keys({
     ids: Joi.array().items(Joi.string()).required().min(1),
@@ -516,6 +524,7 @@ module.exports = {
   getProductStats,
   bulkUpdateProducts,
   bulkSetProductCategories,
+  bulkSetProductBrand,
   bulkDeleteProducts,
   bulkAddProducts,
   updateProductFlag,

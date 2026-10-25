@@ -82,6 +82,7 @@ router
 router.get('/products', auth(VIEW), validate(v.getProducts), c.getProducts);
 router.get('/products/type-summary', auth(VIEW), c.getProductTypeSummary);
 router.get('/products/stats', auth(VIEW), validate(v.getProductStats), c.getProductStats);
+router.get('/products/ids', auth(VIEW), validate(v.getMatchingProductIds), c.getMatchingProductIds);
 router.post(
   '/products/bulk-classify',
   auth('manageBoms', 'editProducts'),

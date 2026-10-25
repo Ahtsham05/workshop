@@ -11,7 +11,7 @@ import { AppDispatch } from '@/stores/store'
 import { bulkDeleteProducts } from '@/stores/product.slice'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
 import { useLanguage } from '@/context/language-context'
-import { Product } from '../data/schema'
+import type { BulkProductTarget } from './bulk-category-dialog'
 
 const CONFIRM_WORD = 'DELETE'
 const PREVIEW_LIMIT = 5
@@ -19,7 +19,7 @@ const PREVIEW_LIMIT = 5
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  products: Product[]
+  products: BulkProductTarget[]
   onDeleted: () => void
 }
 
@@ -54,13 +54,27 @@ export function BulkDeleteDialog({ open, onOpenChange, products, onDeleted }: Pr
       const result = await dispatch(bulkDeleteProducts(ids))
 
       if (result.meta.requestStatus === 'fulfilled') {
-        const payload = result.payload as { deletedCount?: number; notFoundIds?: string[] }
+        const payload = result.payload as {
+          deletedCount?: number
+          notFoundIds?: string[]
+          blocked?: { id: string; name: string; reason: string }[]
+        }
         const deletedCount = payload?.deletedCount ?? ids.length
+        const blocked = payload?.blocked ?? []
 
         if (deletedCount < ids.length) {
-          toast.success(`${deletedCount} ${t('bulk_delete_partial')}`)
+          if (deletedCount > 0) toast.success(`${deletedCount} ${t('bulk_delete_partial')}`)
         } else {
           toast.success(`${deletedCount} ${t('bulk_delete_success')}`)
+        }
+        // Products used in manufacturing (BOMs, orders, vouchers) are kept, not deleted.
+        if (blocked.length === 1) toast.error(blocked[0].reason, { duration: 7000 })
+        else if (blocked.length > 1) {
+          const names = blocked.slice(0, 3).map((b) => b.name).join(', ')
+          toast.error(
+            `${blocked.length} products were kept because they are used in manufacturing (${names}${blocked.length > 3 ? ', …' : ''}) — deactivate them instead.`,
+            { duration: 8000 }
+          )
         }
 
         // Same cross-slice cache invalidation the per-row/bulk status actions use —

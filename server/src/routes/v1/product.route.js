@@ -115,6 +115,13 @@ router.route('/purchasable').get(
   productController.getPurchasableCatalog
 );
 
+// The branch's inactive products, so a picker search that only matches one can say so
+// (and offer Activate to editProducts users) rather than "No products found".
+router.route('/purchasable/inactive').get(
+  auth(...CATALOG_READ_PERMISSIONS),
+  productController.getInactiveCatalog
+);
+
 // Per-branch stock breakdown for one product/variant — powers the "Branches" pill on
 // the Invoice item picker. Same read access as the catalog endpoints above.
 router.route('/:productId/branch-availability').get(
@@ -141,6 +148,11 @@ router
 router
   .route('/bulk-category')
   .patch(auth('editProducts'), validate(productValidation.bulkSetProductCategories), productController.bulkSetProductCategories);
+
+// Bulk brand assignment — the "Set brand" toolbar action (brandId null clears it).
+router
+  .route('/bulk-brand')
+  .patch(auth('editProducts'), validate(productValidation.bulkSetProductBrand), productController.bulkSetProductBrand);
 
 // Bulk delete route — registered before the `/:productId` catch-all below so
 // `/bulk-delete` isn't swallowed as a productId.

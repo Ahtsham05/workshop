@@ -71,6 +71,10 @@ const summery = {
     url: '/products/bulk-category',
     method: 'patch'
   },
+  bulkSetProductBrand: {
+    url: '/products/bulk-brand',
+    method: 'patch'
+  },
   bulkAddProducts: {
     url: '/products/bulk',
     method: 'post'

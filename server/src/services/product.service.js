@@ -1,7 +1,7 @@
 const { productNameKey } = require('../utils/productNameKey');
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Product, ProductVariant, Inventory, Batch, Imei, Organization, Category, SubCategory, Supplier } = require('../models');
+const { Product, ProductVariant, Inventory, Batch, Imei, Organization, Category, SubCategory, Supplier, Brand } = require('../models');
 const ApiError = require('../utils/ApiError');
 // Shared spreadsheet-cell parsing, used by every bulk import endpoint — see utils/importRow.js
 const { toImportText, parseImportNumber } = require('../utils/importRow');
@@ -1049,11 +1049,58 @@ const updateProductById = async (productId, updateBody, { existing } = {}) => {
  * @param {ObjectId} productId
  * @returns {Promise<Product>}
  */
-const deleteProductById = async (productId) => {
-  const product = await getProductById(productId);
+/**
+ * Manufacturing records that point at a product. Deleting it would leave BOMs, orders,
+ * vouchers and the reports built on them pointing at nothing, so such a product can't be
+ * deleted (deactivating it hides it instead). In priority order for the message.
+ */
+const MANUFACTURING_REFERENCES = [
+  ['Bom', ['productId', 'components.productId', 'components.alternatives.productId'], 'a bill of materials'],
+  ['ProductionOrder', ['productId', 'materials.productId'], 'a production order'],
+  ['MaterialIssue', ['lines.productId'], 'a material issue'],
+  ['ProductionOutput', ['productId', 'consumption.productId'], 'production output'],
+  ['ProductionReceipt', ['productId'], 'a finished goods receipt'],
+  ['RawMaterialReceipt', ['lines.productId'], 'a raw material receipt'],
+  ['PackSize', ['productId', 'packProductId', 'materials.productId'], 'a pack size'],
+  ['PackingVoucher', ['productId', 'lines.productId', 'consumed.productId'], 'a packing voucher'],
+];
+
+/** Map of product id → what it is used in, for the products that can't be deleted. */
+const manufacturingDeleteBlockers = async (productIds) => {
+  const wanted = new Set(productIds.map(String));
+  const blocked = new Map();
+  if (!wanted.size) return blocked;
+  const oids = [...wanted].map((id) => new mongoose.Types.ObjectId(id));
+  // eslint-disable-next-line global-require
+  const models = require('../models');
+  const found = await Promise.all(
+    MANUFACTURING_REFERENCES.map(([model, paths]) =>
+      Promise.all(paths.map((path) => models[model].distinct(path, { [path]: { $in: oids } })))
+    )
+  );
+  found.forEach((perPath, i) => {
+    perPath.flat().forEach((id) => {
+      const key = String(id);
+      if (wanted.has(key) && !blocked.has(key)) blocked.set(key, MANUFACTURING_REFERENCES[i][2]);
+    });
+  });
+  return blocked;
+};
+
+const deleteBlockedMessage = (name, usedIn) =>
+  `"${name}" is used in ${usedIn}, so it can't be deleted — deactivate it instead to hide it from lists.`;
+
+/**
+ * Deletes one product of the caller's organization/branch (`scope`). Refused when the
+ * product is used in manufacturing records. Returns the deleted product.
+ */
+const deleteProductById = async (productId, scope = {}) => {
+  const product = await Product.findOne({ _id: productId, ...scope });
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   }
+  const usedIn = (await manufacturingDeleteBlockers([product._id])).get(String(product._id));
+  if (usedIn) throw new ApiError(httpStatus.CONFLICT, deleteBlockedMessage(product.name, usedIn));
   // Drop unsold IMEIs so the tracking page doesn't keep listing a deleted product;
   // sold/returned/lost/stolen ones are kept — they're real sale/audit history.
   await imeiService.deleteInStockImeisForProduct(product._id);
@@ -1062,23 +1109,33 @@ const deleteProductById = async (productId) => {
 };
 
 /**
- * Deletes multiple products by id in one call, for the Products list's bulk-delete
- * action. Ids that don't match an existing product are silently skipped and reported
- * back as `notFoundIds` rather than failing the whole batch — same "skip and report"
- * tolerance bulkAddProducts uses for import rows.
+ * Deletes multiple products by id in one call, for the bulk-delete actions. Only products
+ * of the caller's organization/branch (`scope`) are touched. Ids that don't match one are
+ * skipped and reported as `notFoundIds`; products used in manufacturing records are kept
+ * and reported as `blocked` — the rest are still deleted.
  * @param {string[]} ids
- * @returns {Promise<{ deleted: Product[], notFoundIds: string[] }>}
+ * @returns {Promise<{ deleted: Product[], notFoundIds: string[], blocked: {id, name, reason}[] }>}
  */
-const bulkDeleteProductsByIds = async (ids) => {
-  const products = await Product.find({ _id: { $in: ids } });
+const bulkDeleteProductsByIds = async (ids, scope = {}) => {
+  const products = await Product.find({ _id: { $in: ids }, ...scope });
   const foundIds = new Set(products.map((product) => product._id.toString()));
   const notFoundIds = ids.filter((id) => !foundIds.has(id));
 
-  // Same unsold-IMEI cleanup deleteProductById does for a single product.
-  await Promise.all(products.map((product) => imeiService.deleteInStockImeisForProduct(product._id)));
-  await Product.deleteMany({ _id: { $in: products.map((product) => product._id) } });
+  const blockers = await manufacturingDeleteBlockers(products.map((product) => product._id));
+  const blocked = products
+    .filter((product) => blockers.has(String(product._id)))
+    .map((product) => ({
+      id: String(product._id),
+      name: product.name,
+      reason: deleteBlockedMessage(product.name, blockers.get(String(product._id))),
+    }));
+  const deletable = products.filter((product) => !blockers.has(String(product._id)));
 
-  return { deleted: products, notFoundIds };
+  // Same unsold-IMEI cleanup deleteProductById does for a single product.
+  await Promise.all(deletable.map((product) => imeiService.deleteInStockImeisForProduct(product._id)));
+  await Product.deleteMany({ _id: { $in: deletable.map((product) => product._id) } });
+
+  return { deleted: deletable, notFoundIds, blocked };
 };
 
 // Excludes deactivated products from every operational picker (Invoice, Fast Billing,
@@ -1250,6 +1307,31 @@ const getPurchasableCatalog = async (filter = {}) => {
 };
 
 /**
+ * The branch's inactive products, reduced to what the Invoice/Purchase/Stock Transfer
+ * pickers need to say "this exists but is inactive" instead of "not found" when a search
+ * only matches a deactivated product (getPurchasableCatalog leaves them out entirely).
+ */
+const getInactiveCatalog = async (filter = {}) => {
+  const rows = await Product.find({ ...filter, isActive: false })
+    .select('name nameUrdu barcode sku image.url stockQuantity hasVariants brandId')
+    .populate('brandId', 'name')
+    .sort({ name: 1 })
+    .limit(20000)
+    .lean();
+  return rows.map((p) => ({
+    id: String(p._id),
+    name: p.name,
+    nameUrdu: p.nameUrdu || undefined,
+    barcode: p.barcode || undefined,
+    sku: p.sku || undefined,
+    imageUrl: p.image?.url || undefined,
+    stockQuantity: p.stockQuantity ?? 0,
+    hasVariants: !!p.hasVariants,
+    brandName: p.brandId?.name || undefined,
+  }));
+};
+
+/**
  * Bulk update products
  * @param {Array} productsToUpdate - Array of products with updates
  * @returns {Promise<Array>}
@@ -1335,6 +1417,34 @@ const bulkSetProductCategories = async ({ productIds, categories = [], subCatego
     modifiedCount: result.modifiedCount,
     categories: resolvedCategories,
     subCategories: resolvedSubCategories,
+  };
+};
+
+/**
+ * Sets the SAME brand on every product in `productIds` (or clears it with `brandId: null`)
+ * — the "Set brand" bulk action. Products are limited to the caller's org/branch; the
+ * brand only has to belong to the organization, since brands are listed org-wide
+ * (brand.service getAllBrands) and the product form can pick any of them.
+ */
+const bulkSetProductBrand = async ({ productIds, brandId, organizationId, branchId }) => {
+  const scope = {};
+  if (organizationId) scope.organizationId = organizationId;
+  if (branchId) scope.branchId = branchId;
+
+  let brand = null;
+  if (brandId) {
+    brand = await Brand.findOne({ _id: brandId, ...(organizationId ? { organizationId } : {}) })
+      .select('_id name')
+      .lean();
+    if (!brand) throw new ApiError(httpStatus.BAD_REQUEST, 'The selected brand could not be found');
+  }
+
+  const result = await Product.updateMany({ _id: { $in: productIds }, ...scope }, { $set: { brandId: brand ? brand._id : null } });
+
+  return {
+    matchedCount: result.matchedCount,
+    modifiedCount: result.modifiedCount,
+    brand: brand ? { id: String(brand._id), name: brand.name } : null,
   };
 };
 
@@ -1955,6 +2065,7 @@ module.exports = {
   syncDefaultVariantTracking,
   findSameNameProduct,
   getProductNameIndex,
+  getInactiveCatalog,
   ensureProductIndexes,
   createProduct,
   queryProducts,
@@ -1970,6 +2081,7 @@ module.exports = {
   getCategoryBreakdown,
   bulkUpdateProducts,
   bulkSetProductCategories,
+  bulkSetProductBrand,
   bulkAddProducts,
   attachVariantAggregates,
   getPurchasableCatalog,

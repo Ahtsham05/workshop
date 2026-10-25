@@ -1,39 +1,49 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import {
+  Award,
   Boxes,
+  Check,
+  ChevronsUpDown,
   CircleDollarSign,
   ExternalLink,
   Eye,
   FileStack,
   Layers,
+  Loader2,
   MoreHorizontal,
   Package,
   Pencil,
   PlusCircle,
   Settings2,
+  Shapes,
   Tags,
+  Trash2,
   Wallet,
+  X,
 } from 'lucide-react'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { toast } from 'sonner'
 import {
   manufacturingApi,
-  useBulkClassifyProductsMutation,
   useBulkProductTrackingMutation,
   useGetManufacturingProductStatsQuery,
   useGetManufacturingProductsQuery,
   useGetProductTypeSummaryQuery,
+  useLazyGetMatchingManufacturingProductIdsQuery,
   type ManufacturingProduct,
   type ManufacturingProductFilters,
   type ProcurementType,
   type ProductType,
 } from '@/stores/manufacturing.api'
+import { useGetAllBrandsQuery } from '@/stores/brand.api'
+import { fetchCategories } from '@/stores/category.slice'
 import { useGetProductQuery } from '@/stores/product.api'
 import { purchaseCatalogApi } from '@/stores/purchaseCatalog.api'
-import type { AppDispatch } from '@/stores/store'
+import type { AppDispatch, RootState } from '@/stores/store'
 import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
+import { ALL_ROWS } from '@/lib/page-size'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'
@@ -44,12 +54,22 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -58,9 +78,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ImageGalleryViewer } from '@/components/image-gallery-viewer'
+import { BulkBrandDialog } from '@/features/products/components/bulk-brand-dialog'
+import { BulkCategoryDialog } from '@/features/products/components/bulk-category-dialog'
+import { BulkDeleteDialog } from '@/features/products/components/bulk-delete-dialog'
 import { ProductSummaryChip } from '@/features/products/components/product-summary-chip'
 import { UsersActionDialog } from '@/features/products/components/users-action-dialog'
+import { UsersDeleteDialog } from '@/features/products/components/users-delete-dialog'
 import { BatchBadge, ProductTypeBadge } from '../components/badges'
+import { BulkTypeDialog } from '../components/bulk-type-dialog'
 import { DataTable, type Column } from '../components/data-table'
 import {
   FilterChips,
@@ -79,8 +104,20 @@ import {
   fmtQty,
 } from '../lib/constants'
 
-const NONE = '__none__'
 const ANY = 'any'
+const PAGE_SIZE_KEY = 'mfg-products-page-size'
+const PAGE_SIZES = [10, 20, 50, 100, 200, 500, ALL_ROWS]
+/** Batch tracking is switched per product on the server — sent in slices this size. */
+const TRACKING_CHUNK = 500
+
+const savedPageSize = () => {
+  try {
+    const n = Number(localStorage.getItem(PAGE_SIZE_KEY))
+    return PAGE_SIZES.includes(n) ? n : 20
+  } catch {
+    return 20
+  }
+}
 
 /** Whole calendar days from today to `date` (negative = expired). */
 const daysFromToday = (date: string) => {
@@ -134,6 +171,11 @@ export default function ManufacturingProducts({
   const { hasAnyPermission, hasPermission } = usePermissions()
   const canEdit = hasAnyPermission('manageBoms', 'editProducts')
   const canCreate = hasPermission('createProducts')
+  // Category / brand writes go through the catalog's own endpoints (editProducts).
+  const canEditCatalog = hasPermission('editProducts')
+  const canDelete = hasPermission('deleteProducts')
+  // Rows can be ticked by anyone who has at least one bulk action.
+  const canSelect = canEdit || canDelete
   const routeSearch = useSearch({ strict: false }) as { type?: string }
 
   const [typeFilter, setTypeFilter] = useState<string>(
@@ -145,14 +187,21 @@ export default function ManufacturingProducts({
   const [bom, setBom] = useState<string>(ANY)
   const [stock, setStock] = useState<string>(ANY)
   const [tracking, setTracking] = useState<string>(ANY)
+  const [category, setCategory] = useState<string>(ANY)
+  const [brand, setBrand] = useState<string>(ANY)
   const [batchesOf, setBatchesOf] = useState<ManufacturingProduct | null>(
     null
   )
   const [packSizesOf, setPackSizesOf] = useState<string | null>(null)
   const [sort, setSort] = useState<Sort>('name')
   const [page, setPage] = useState(1)
-  const [selected, setSelected] = useState<string[]>([])
-  const [bulkType, setBulkType] = useState<string>('')
+  const [limit, setLimit] = useState(savedPageSize)
+  /** Selected products, id → name (names feed the bulk dialogs' previews). */
+  const [selection, setSelection] = useState<Map<string, string>>(new Map())
+  const [bulkDialog, setBulkDialog] = useState<
+    'type' | 'category' | 'brand' | 'delete' | null
+  >(null)
+  const [deleting, setDeleting] = useState<ManufacturingProduct | null>(null)
   const [attributes, setAttributes] = useState<ManufacturingProduct | null>(
     null
   )
@@ -173,7 +222,14 @@ export default function ManufacturingProducts({
     hasBom: bom === ANY ? undefined : bom === 'yes',
     stock: stock === ANY ? undefined : (stock as 'in' | 'out'),
     tracking: tracking === ANY ? undefined : (tracking as 'batch' | 'none'),
+    categoryId: category === ANY ? undefined : category,
+    brandId: brand === ANY ? undefined : brand,
   }
+  const categories = useSelector((state: RootState) => state.category.categories)
+  const { data: brands = [] } = useGetAllBrandsQuery()
+  useEffect(() => {
+    dispatch(fetchCategories({ page: 1, limit: 100 }))
+  }, [dispatch])
   const { data: summary } = useGetProductTypeSummaryQuery()
   const { data: stats, isFetching: statsLoading } =
     useGetManufacturingProductStatsQuery(filters)
@@ -181,10 +237,10 @@ export default function ManufacturingProducts({
     ...filters,
     sort,
     page,
-    limit: 20,
+    limit,
   })
-  const [bulkClassify, { isLoading: bulkBusy }] =
-    useBulkClassifyProductsMutation()
+  const [fetchMatching, { isFetching: matchingBusy }] =
+    useLazyGetMatchingManufacturingProductIdsQuery()
   const [bulkTracking, { isLoading: trackingBusy }] =
     useBulkProductTrackingMutation()
   const { data: productForEdit } = useGetProductQuery(editingId as string, {
@@ -192,19 +248,48 @@ export default function ManufacturingProducts({
   })
 
   const rows = data?.results || []
-  const allOnPage =
-    rows.length > 0 && rows.every((r) => selected.includes(r.id))
-  const someOnPage = rows.some((r) => selected.includes(r.id))
+  const selected = useMemo(() => [...selection.keys()], [selection])
+  const selectedTargets = useMemo(
+    () => [...selection].map(([id, name]) => ({ id, name })),
+    [selection]
+  )
+  const isSelected = (id: string) => selection.has(id)
+  const allOnPage = rows.length > 0 && rows.every((r) => selection.has(r.id))
+  const someOnPage = rows.some((r) => selection.has(r.id))
+  const matchingTotal = data?.totalResults ?? 0
+  const allMatchingSelected =
+    matchingTotal > 0 && selection.size >= matchingTotal
   const total = summary ? Object.values(summary).reduce((s, n) => s + n, 0) : 0
   const filtered =
     !!debounced ||
     procurement !== ANY ||
     bom !== ANY ||
     stock !== ANY ||
-    tracking !== ANY
+    tracking !== ANY ||
+    category !== ANY ||
+    brand !== ANY
+  const clearSelection = () => setSelection(new Map())
   const resetPage = () => {
     setPage(1)
-    setSelected([])
+    clearSelection()
+  }
+  const clearFilters = () => {
+    setSearch('')
+    setProcurement(ANY)
+    setBom(ANY)
+    setStock(ANY)
+    setTracking(ANY)
+    setCategory(ANY)
+    setBrand(ANY)
+    resetPage()
+  }
+  const changeLimit = (n: number) => {
+    setLimit(n)
+    try {
+      localStorage.setItem(PAGE_SIZE_KEY, String(n))
+    } catch {
+      /* per-viewer convenience only */
+    }
   }
 
   /** What a new product starts as: the type being viewed, else a finished good. */
@@ -225,24 +310,26 @@ export default function ManufacturingProducts({
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
   }
 
-  const applyBulk = async () => {
-    if (!bulkType || !selected.length) return
+  /** Every product the current filter matches — not just this page. */
+  const selectAllMatching = async () => {
     try {
-      const res = await bulkClassify({
-        productIds: selected,
-        productType: bulkType === NONE ? null : (bulkType as ProductType),
-      }).unwrap()
-      toast.success(
-        t('{{count}} product(s) updated').replace(
-          '{{count}}',
-          String(res.modified)
+      const res = await fetchMatching({ ...filters, sort }).unwrap()
+      setSelection(new Map(res.results.map((r) => [r.id, r.name])))
+      if (res.total > res.results.length)
+        toast.warning(
+          t('Only the first {{n}} products were selected — narrow the filter to reach the rest.').replace(
+            '{{n}}',
+            res.results.length.toLocaleString()
+          )
         )
-      )
-      setSelected([])
-      setBulkType('')
     } catch (err) {
-      toast.error(getErrorMessage(err, t('Failed to classify products')))
+      toast.error(getErrorMessage(err, t('Failed to select products')))
     }
+  }
+
+  const afterBulk = () => {
+    refreshAfterSave()
+    clearSelection()
   }
 
   /** Batch tracking on / off for the selected products (each on its own). */
@@ -252,26 +339,50 @@ export default function ManufacturingProducts({
   }) => {
     if (!selected.length) return
     try {
-      const res = await bulkTracking({
-        productIds: selected,
-        ...flags,
-      }).unwrap()
-      if (res.updated)
+      let updated = 0
+      const failed: { name: string; message: string }[] = []
+      for (let i = 0; i < selected.length; i += TRACKING_CHUNK) {
+        const res = await bulkTracking({
+          productIds: selected.slice(i, i + TRACKING_CHUNK),
+          ...flags,
+        }).unwrap()
+        updated += res.updated
+        failed.push(...res.failed)
+      }
+      if (updated)
         toast.success(
           t('Batch tracking updated for {{count}} product(s)').replace(
             '{{count}}',
-            String(res.updated)
+            String(updated)
           )
         )
-      res.failed.forEach((f) => toast.error(`${f.name}: ${f.message}`))
-      if (!res.failed.length) setSelected([])
+      failed.slice(0, 5).forEach((f) => toast.error(`${f.name}: ${f.message}`))
+      if (failed.length > 5)
+        toast.error(
+          t('{{n}} more product(s) could not be changed').replace(
+            '{{n}}',
+            String(failed.length - 5)
+          )
+        )
+      if (!failed.length) clearSelection()
     } catch (err) {
       toast.error(getErrorMessage(err, t('Failed to update batch tracking')))
     }
   }
 
-  const toggle = (id: string, on: boolean) =>
-    setSelected(on ? [...selected, id] : selected.filter((x) => x !== id))
+  const toggle = (p: ManufacturingProduct, on: boolean) =>
+    setSelection((cur) => {
+      const next = new Map(cur)
+      if (on) next.set(p.id, p.name)
+      else next.delete(p.id)
+      return next
+    })
+  const togglePage = (on: boolean) =>
+    setSelection((cur) => {
+      const next = new Map(cur)
+      rows.forEach((r) => (on ? next.set(r.id, r.name) : next.delete(r.id)))
+      return next
+    })
 
   const chips: ChipOption[] = [
     { value: 'all', label: t('All'), count: total },
@@ -291,7 +402,7 @@ export default function ManufacturingProducts({
   ]
 
   const columns: Column<ManufacturingProduct>[] = [
-    ...(canEdit
+    ...(canSelect
       ? [
           {
             id: 'select',
@@ -301,20 +412,14 @@ export default function ManufacturingProducts({
                 checked={
                   allOnPage ? true : someOnPage ? 'indeterminate' : false
                 }
-                onCheckedChange={(v) =>
-                  setSelected(
-                    v
-                      ? [...new Set([...selected, ...rows.map((r) => r.id)])]
-                      : selected.filter((id) => !rows.some((r) => r.id === id))
-                  )
-                }
+                onCheckedChange={(v) => togglePage(!!v)}
                 aria-label={t('Select all on this page')}
               />
             ),
             cell: (p: ManufacturingProduct) => (
               <Checkbox
-                checked={selected.includes(p.id)}
-                onCheckedChange={(v) => toggle(p.id, !!v)}
+                checked={isSelected(p.id)}
+                onCheckedChange={(v) => toggle(p, !!v)}
                 onClick={(e) => e.stopPropagation()}
                 aria-label={t('Select {{name}}').replace('{{name}}', p.name)}
               />
@@ -395,6 +500,20 @@ export default function ManufacturingProducts({
               </span>
             )}
           </div>
+        ) : (
+          <span className='text-muted-foreground'>-</span>
+        ),
+    },
+    {
+      id: 'brand',
+      header: t('Brand'),
+      hideBelow: 'xl',
+      cell: (p) =>
+        p.brand ? (
+          <span className='inline-flex max-w-36 items-center gap-1 truncate text-sm'>
+            <Award className='text-muted-foreground h-3.5 w-3.5 shrink-0' />
+            <span className='truncate'>{p.brand.name}</span>
+          </span>
         ) : (
           <span className='text-muted-foreground'>-</span>
         ),
@@ -577,6 +696,18 @@ export default function ManufacturingProducts({
                 </DropdownMenuItem>
               </>
             )}
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant='destructive'
+                  onClick={() => setDeleting(p)}
+                >
+                  <Trash2 className='mr-2 h-4 w-4' />
+                  {t('Delete product')}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -694,174 +825,259 @@ export default function ManufacturingProducts({
         />
       </div>
 
-      {/* Toolbar: search + filters + sort, or the bulk bar while rows are selected */}
-      {canEdit && selected.length > 0 ? (
+      {/* Toolbar: search + filters + sort */}
+      <div className='flex flex-wrap items-center gap-2'>
+        <div className='min-w-0 flex-1 basis-64'>
+          <SearchField
+            value={search}
+            onChange={(v) => {
+              setSearch(v)
+              resetPage()
+            }}
+            placeholder={t('Search name, SKU or barcode')}
+          />
+        </div>
+        <div className='grid grid-cols-2 gap-2 max-sm:w-full sm:flex sm:flex-wrap'>
+          <FilterSelect
+            label={t('Procurement')}
+            value={procurement}
+            onChange={(v) => {
+              setProcurement(v)
+              resetPage()
+            }}
+            options={[
+              [ANY, t('Any procurement')],
+              ...(Object.keys(PROCUREMENT_LABELS) as ProcurementType[]).map(
+                (p) => [p, t(PROCUREMENT_LABELS[p])] as [string, string]
+              ),
+              ['none', t('Not set')],
+            ]}
+          />
+          <FilterSelect
+            label={t('BOM')}
+            value={bom}
+            onChange={(v) => {
+              setBom(v)
+              resetPage()
+            }}
+            options={[
+              [ANY, t('Any BOM')],
+              ['yes', t('Has a BOM')],
+              ['no', t('No BOM')],
+            ]}
+          />
+          <FilterSelect
+            label={t('Stock')}
+            value={stock}
+            onChange={(v) => {
+              setStock(v)
+              resetPage()
+            }}
+            options={[
+              [ANY, t('All stock')],
+              ['in', t('In stock')],
+              ['out', t('Out of stock')],
+            ]}
+          />
+          <FilterSelect
+            label={t('Batch tracking')}
+            value={tracking}
+            onChange={(v) => {
+              setTracking(v)
+              resetPage()
+            }}
+            options={[
+              [ANY, t('Any tracking')],
+              ['batch', t('Batch tracked')],
+              ['none', t('Not batch tracked')],
+            ]}
+          />
+          <SearchFilterSelect
+            label={t('Category')}
+            anyLabel={t('Any category')}
+            noneLabel={t('No category')}
+            value={category}
+            onChange={(v) => {
+              setCategory(v)
+              resetPage()
+            }}
+            options={categories
+              .filter((c) => c.isActive !== false || c.id === category)
+              .map((c) => ({ value: c.id, label: c.name }))}
+          />
+          <SearchFilterSelect
+            label={t('Brand')}
+            anyLabel={t('Any brand')}
+            noneLabel={t('No brand')}
+            value={brand}
+            onChange={(v) => {
+              setBrand(v)
+              resetPage()
+            }}
+            options={brands.map((b) => ({
+              value: (b._id || b.id) as string,
+              label: b.name,
+            }))}
+          />
+          <FilterSelect
+            label={t('Sort')}
+            value={sort}
+            onChange={(v) => {
+              setSort(v as Sort)
+              resetPage()
+            }}
+            options={[
+              ['name', t('Name A–Z')],
+              ['newest', t('Newest first')],
+              ['stock', t('Most stock')],
+              ['stockLow', t('Least stock')],
+              ['cost', t('Highest cost')],
+            ]}
+          />
+          {filtered && (
+            <Button
+              variant='ghost'
+              size='sm'
+              className='h-9 gap-1 max-sm:col-span-2'
+              onClick={clearFilters}
+            >
+              <X className='h-3.5 w-3.5' />
+              {t('Clear filters')}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Selection bar: what's selected, select-all-matching, and the bulk actions */}
+      {canSelect && selection.size > 0 && (
         <div
-          className='bg-muted/50 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2'
+          className='bg-primary/5 border-primary/20 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2'
           role='region'
           aria-label={t('Bulk actions')}
         >
-          <span className='text-sm font-medium'>
-            {t('{{count}} selected').replace(
-              '{{count}}',
-              String(selected.length)
-            )}
-          </span>
-          <div className='ml-auto flex flex-wrap items-center gap-2 max-sm:ml-0 max-sm:w-full'>
-            <Select value={bulkType} onValueChange={setBulkType}>
-              <SelectTrigger
-                className='h-9 w-48 max-sm:flex-1'
-                aria-label={t('Set type')}
+          <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm'>
+            <span className='bg-primary text-primary-foreground inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-xs font-semibold tabular-nums'>
+              {selection.size.toLocaleString()}
+            </span>
+            <span className='font-medium'>
+              {allMatchingSelected
+                ? t('All {{count}} matching products selected').replace(
+                    '{{count}}',
+                    matchingTotal.toLocaleString()
+                  )
+                : t('selected')}
+            </span>
+            {!allMatchingSelected && allOnPage && matchingTotal > rows.length && (
+              <Button
+                variant='link'
+                size='sm'
+                className='h-auto p-0'
+                onClick={selectAllMatching}
+                disabled={matchingBusy}
               >
-                <SelectValue placeholder={t('Set type…')} />
-              </SelectTrigger>
-              <SelectContent>
-                {PRODUCT_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {t(PRODUCT_TYPE_META[type].label)}
-                  </SelectItem>
-                ))}
-                <SelectItem value={NONE}>
-                  {t('Clear classification')}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              size='sm'
-              className='h-9'
-              onClick={applyBulk}
-              disabled={!bulkType || bulkBusy}
-            >
-              <Tags className='mr-1.5 h-3.5 w-3.5' />
-              {t('Apply')}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+                {matchingBusy && <Loader2 className='mr-1 h-3.5 w-3.5 animate-spin' />}
+                {t('Select all {{count}} matching').replace(
+                  '{{count}}',
+                  matchingTotal.toLocaleString()
+                )}
+              </Button>
+            )}
+          </div>
+          <div className='ml-auto flex flex-wrap items-center gap-2 max-sm:ml-0 max-sm:grid max-sm:w-full max-sm:grid-cols-2'>
+            {canEdit && (
+              <Button
+                size='sm'
+                variant='outline'
+                className='bg-background h-9 gap-1.5'
+                onClick={() => setBulkDialog('type')}
+              >
+                <Shapes className='h-3.5 w-3.5' />
+                {t('Set type')}
+              </Button>
+            )}
+            {canEditCatalog && (
+              <>
                 <Button
                   size='sm'
                   variant='outline'
-                  className='h-9'
-                  disabled={trackingBusy}
+                  className='bg-background h-9 gap-1.5'
+                  onClick={() => setBulkDialog('category')}
                 >
-                  <Layers className='mr-1.5 h-3.5 w-3.5' />
-                  {t('Batch tracking')}
+                  <Tags className='h-3.5 w-3.5' />
+                  {t('Set category')}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='end' className='w-56'>
-                <DropdownMenuItem
-                  onClick={() => applyTracking({ trackBatch: true })}
+                <Button
+                  size='sm'
+                  variant='outline'
+                  className='bg-background h-9 gap-1.5'
+                  onClick={() => setBulkDialog('brand')}
                 >
-                  {t('Track batches')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    applyTracking({ trackBatch: true, trackExpiry: true })
-                  }
-                >
-                  {t('Track batches + expiry')}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() =>
-                    applyTracking({ trackBatch: false, trackExpiry: false })
-                  }
-                >
-                  {t('Turn tracking off')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <Award className='h-3.5 w-3.5' />
+                  {t('Set brand')}
+                </Button>
+              </>
+            )}
+            {canEdit && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    className='bg-background h-9 gap-1.5'
+                    disabled={trackingBusy}
+                  >
+                    {trackingBusy ? (
+                      <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                    ) : (
+                      <Layers className='h-3.5 w-3.5' />
+                    )}
+                    {t('Batch tracking')}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end' className='w-56'>
+                  <DropdownMenuItem
+                    onClick={() => applyTracking({ trackBatch: true })}
+                  >
+                    {t('Track batches')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      applyTracking({ trackBatch: true, trackExpiry: true })
+                    }
+                  >
+                    {t('Track batches + expiry')}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      applyTracking({ trackBatch: false, trackExpiry: false })
+                    }
+                  >
+                    {t('Turn tracking off')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {canDelete && (
+              <Button
+                size='sm'
+                variant='outline'
+                className='bg-background text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/10 h-9 gap-1.5'
+                onClick={() => setBulkDialog('delete')}
+              >
+                <Trash2 className='h-3.5 w-3.5' />
+                {t('Delete')}
+              </Button>
+            )}
             <Button
               size='sm'
               variant='ghost'
-              className='h-9'
-              onClick={() => setSelected([])}
+              className='h-9 gap-1'
+              onClick={clearSelection}
             >
-              {t('Clear')}
+              <X className='h-3.5 w-3.5' />
+              {t('Clear selection')}
             </Button>
-          </div>
-        </div>
-      ) : (
-        <div className='flex flex-wrap items-center gap-2'>
-          <div className='min-w-0 flex-1 basis-64'>
-            <SearchField
-              value={search}
-              onChange={(v) => {
-                setSearch(v)
-                resetPage()
-              }}
-              placeholder={t('Search name, SKU or barcode')}
-            />
-          </div>
-          <div className='grid grid-cols-2 gap-2 max-sm:w-full sm:flex sm:flex-wrap'>
-            <FilterSelect
-              label={t('Procurement')}
-              value={procurement}
-              onChange={(v) => {
-                setProcurement(v)
-                resetPage()
-              }}
-              options={[
-                [ANY, t('Any procurement')],
-                ...(Object.keys(PROCUREMENT_LABELS) as ProcurementType[]).map(
-                  (p) => [p, t(PROCUREMENT_LABELS[p])] as [string, string]
-                ),
-                ['none', t('Not set')],
-              ]}
-            />
-            <FilterSelect
-              label={t('BOM')}
-              value={bom}
-              onChange={(v) => {
-                setBom(v)
-                resetPage()
-              }}
-              options={[
-                [ANY, t('Any BOM')],
-                ['yes', t('Has a BOM')],
-                ['no', t('No BOM')],
-              ]}
-            />
-            <FilterSelect
-              label={t('Stock')}
-              value={stock}
-              onChange={(v) => {
-                setStock(v)
-                resetPage()
-              }}
-              options={[
-                [ANY, t('All stock')],
-                ['in', t('In stock')],
-                ['out', t('Out of stock')],
-              ]}
-            />
-            <FilterSelect
-              label={t('Batch tracking')}
-              value={tracking}
-              onChange={(v) => {
-                setTracking(v)
-                resetPage()
-              }}
-              options={[
-                [ANY, t('Any tracking')],
-                ['batch', t('Batch tracked')],
-                ['none', t('Not batch tracked')],
-              ]}
-            />
-            <FilterSelect
-              label={t('Sort')}
-              value={sort}
-              onChange={(v) => {
-                setSort(v as Sort)
-                resetPage()
-              }}
-              options={[
-                ['name', t('Name A–Z')],
-                ['newest', t('Newest first')],
-                ['stock', t('Most stock')],
-                ['stockLow', t('Least stock')],
-                ['cost', t('Highest cost')],
-              ]}
-            />
           </div>
         </div>
       )}
@@ -874,7 +1090,7 @@ export default function ManufacturingProducts({
         loading={isLoading}
         fetching={isFetching}
         onRowClick={(p) => navigate(detailsLink(p, embedded))}
-        rowClassName={(p) => selected.includes(p.id) && 'bg-muted/40'}
+        rowClassName={(p) => isSelected(p.id) && 'bg-muted/40'}
         empty={
           <EmptyState
             bordered={false}
@@ -937,11 +1153,61 @@ export default function ManufacturingProducts({
           </div>
         )}
         footer={
-          data && data.totalPages > 1 ? (
-            <Pager data={data} page={page} onPageChange={setPage} />
+          data && data.totalResults > 0 ? (
+            <Pager
+              data={data}
+              page={page}
+              onPageChange={setPage}
+              onLimitChange={changeLimit}
+              pageSizeOptions={PAGE_SIZES}
+              itemLabel={t('products')}
+            />
           ) : undefined
         }
       />
+
+      {bulkDialog === 'type' && (
+        <BulkTypeDialog
+          productIds={selected}
+          onClose={() => setBulkDialog(null)}
+          onApplied={afterBulk}
+        />
+      )}
+      <BulkCategoryDialog
+        open={bulkDialog === 'category'}
+        onOpenChange={(o) => !o && setBulkDialog(null)}
+        products={selectedTargets}
+        onApplied={afterBulk}
+      />
+      <BulkBrandDialog
+        open={bulkDialog === 'brand'}
+        onOpenChange={(o) => !o && setBulkDialog(null)}
+        products={selectedTargets}
+        onApplied={afterBulk}
+      />
+      <BulkDeleteDialog
+        open={bulkDialog === 'delete'}
+        onOpenChange={(o) => !o && setBulkDialog(null)}
+        products={selectedTargets}
+        onDeleted={afterBulk}
+      />
+      {deleting && (
+        <UsersDeleteDialog
+          key={deleting.id}
+          open
+          onOpenChange={(o) => !o && setDeleting(null)}
+          currentRow={{ id: deleting.id, name: deleting.name }}
+          setFetch={() => {
+            refreshAfterSave()
+            setSelection((cur) => {
+              if (!cur.has(deleting.id)) return cur
+              const next = new Map(cur)
+              next.delete(deleting.id)
+              return next
+            })
+          }}
+        />
+      )}
 
       {packSizesOf && (
         <PackSizesSheet productId={packSizesOf} onClose={() => setPackSizesOf(null)} />
@@ -1009,5 +1275,85 @@ function FilterSelect({
         ))}
       </SelectContent>
     </Select>
+  )
+}
+
+/**
+ * A filter with a search box for long lists (categories, brands): "Any …", "No …", then
+ * every option. Same height and look as FilterSelect so the toolbar lines up.
+ */
+function SearchFilterSelect({
+  label,
+  anyLabel,
+  noneLabel,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  anyLabel: string
+  noneLabel: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  const { t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const current =
+    value === ANY
+      ? anyLabel
+      : value === 'none'
+        ? noneLabel
+        : options.find((o) => o.value === value)?.label || anyLabel
+  const pick = (v: string) => {
+    onChange(v)
+    setOpen(false)
+  }
+  const item = (v: string, text: string) => (
+    <CommandItem key={v} value={`${text} ${v}`} onSelect={() => pick(v)}>
+      <Check
+        className={cn('mr-2 h-4 w-4', value === v ? 'opacity-100' : 'opacity-0')}
+      />
+      <span className='truncate'>{text}</span>
+    </CommandItem>
+  )
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant='outline'
+          role='combobox'
+          aria-expanded={open}
+          aria-label={label}
+          className={cn(
+            'h-9 min-w-36 justify-between px-3 font-normal max-sm:w-full',
+            value !== ANY && 'border-primary/40 bg-primary/5'
+          )}
+        >
+          <span className='max-w-40 truncate'>{current}</span>
+          <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className='w-64 p-0' align='start'>
+        <Command>
+          <CommandInput placeholder={`${t('Search')} ${label.toLowerCase()}…`} />
+          <CommandList>
+            <CommandEmpty>{t('Nothing found')}</CommandEmpty>
+            <CommandGroup>
+              {item(ANY, anyLabel)}
+              {item('none', noneLabel)}
+            </CommandGroup>
+            {options.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup>
+                  {options.map((o) => item(o.value, o.label))}
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }

@@ -204,3 +204,172 @@ describe('Manufacturing access (business type + rollout list)', () => {
     }
   });
 });
+
+describe('products list controls: category / brand filters, select all matching, bulk brand', () => {
+  const { Brand } = require('../../src/models');
+  const productService = require('../../src/services/product.service');
+  const mfgValidation = require('../../src/validations/manufacturing.validation');
+
+  const brand = async (name, extra = {}) => {
+    const doc = { _id: id(), organizationId: ORG, branchId: BRANCH, name, slug: name.toLowerCase(), status: 'active', ...extra };
+    await Brand.collection.insertOne(doc);
+    return doc;
+  };
+
+  test('category and brand filters (incl. "none") reach the list, its stats and the brand name', async () => {
+    const powders = { _id: id(), name: 'Powders' };
+    const acme = await brand('Acme');
+    await insert('Chalk', { categories: [powders], brandId: acme._id, stockQuantity: 3 });
+    await insert('Talc', { categories: [powders] });
+    await insert('Bottle', { categories: [], brandId: acme._id });
+    await insert('Loose', {});
+
+    const names = async (filter) =>
+      (await products.queryProducts(ctx, { ...filter, sort: 'name' }, {})).results.map((p) => p.name);
+    expect(await names({ categoryId: String(powders._id) })).toEqual(['Chalk', 'Talc']);
+    expect(await names({ categoryId: 'none' })).toEqual(['Bottle', 'Loose']);
+    expect(await names({ brandId: String(acme._id) })).toEqual(['Bottle', 'Chalk']);
+    expect(await names({ brandId: 'none' })).toEqual(['Loose', 'Talc']);
+    expect(await names({ categoryId: String(powders._id), brandId: 'none' })).toEqual(['Talc']);
+    expect((await products.getProductStats(ctx, { categoryId: String(powders._id) })).products).toBe(2);
+
+    const [chalk] = (await products.queryProducts(ctx, { search: 'Chalk' }, {})).results;
+    expect(chalk.brand).toEqual({ id: String(acme._id), name: 'Acme' });
+    const [loose] = (await products.queryProducts(ctx, { search: 'Loose' }, {})).results;
+    expect(loose.brand).toBeNull();
+  });
+
+  test('pages up to "All" rows; "select all matching" returns every id for the filter, scoped', async () => {
+    await Product.collection.insertMany(
+      Array.from({ length: 120 }, (_, i) => ({
+        _id: id(),
+        organizationId: ORG,
+        branchId: BRANCH,
+        name: `Item ${String(i).padStart(3, '0')}`,
+        productType: i % 2 ? 'raw_material' : 'finished_good',
+        stockQuantity: 0,
+        createdAt: new Date(),
+      }))
+    );
+    await insert('Other org item', { organizationId: id(), productType: 'raw_material' });
+
+    const page = await products.queryProducts(ctx, {}, { limit: 200, page: 1 });
+    expect(page.results).toHaveLength(120);
+    expect(page.limit).toBe(200);
+    const all = await products.queryProducts(ctx, {}, { limit: 100000 });
+    expect(all.results).toHaveLength(120);
+    expect(all.totalPages).toBe(1);
+    expect((await products.queryProducts(ctx, {}, { limit: 999999 })).limit).toBe(100000);
+
+    const matching = await products.matchingProductIds(ctx, { productType: 'raw_material' });
+    expect(matching.total).toBe(60);
+    expect(matching.results).toHaveLength(60);
+    expect(matching.results.every((r) => /^Item \d{3}$/.test(r.name) && r.id)).toBe(true);
+
+    expect(mfgValidation.getProducts.query.validate({ limit: 100000 }).error).toBeUndefined();
+    expect(mfgValidation.getProducts.query.validate({ limit: 100001 }).error).toBeDefined();
+    expect(mfgValidation.getProducts.query.validate({ categoryId: 'none', brandId: String(id()) }).error).toBeUndefined();
+    expect(mfgValidation.getProducts.query.validate({ categoryId: 'powders' }).error).toBeDefined();
+    const many = Array.from({ length: 1200 }, () => String(id()));
+    expect(mfgValidation.bulkClassifyProducts.body.validate({ productIds: many, productType: 'scrap' }).error).toBeUndefined();
+  });
+
+  test('bulk classify can set procurement with the type', async () => {
+    const a = await insert('A');
+    const b = await insert('B', { procurementType: 'make' });
+    await products.bulkClassify(ctx, { productIds: [a._id, b._id], productType: 'packaging_material', procurementType: 'buy' });
+    const rows = await Product.find({ _id: { $in: [a._id, b._id] } }).lean();
+    expect(rows.map((r) => [r.productType, r.procurementType])).toEqual([
+      ['packaging_material', 'buy'],
+      ['packaging_material', 'buy'],
+    ]);
+  });
+
+  test('bulk brand sets or clears one brand, only inside the caller\'s branch', async () => {
+    const acme = await brand('Acme');
+    const foreign = await brand('Foreign', { organizationId: id() });
+    const mine = await insert('Mine');
+    const theirs = await insert('Theirs', { organizationId: id() });
+    const scope = { organizationId: ORG, branchId: BRANCH };
+
+    const res = await productService.bulkSetProductBrand({
+      productIds: [String(mine._id), String(theirs._id)],
+      brandId: String(acme._id),
+      ...scope,
+    });
+    expect(res).toMatchObject({ matchedCount: 1, modifiedCount: 1, brand: { name: 'Acme' } });
+    expect(String((await Product.findById(mine._id).lean()).brandId)).toBe(String(acme._id));
+    expect((await Product.findById(theirs._id).lean()).brandId).toBeUndefined();
+
+    await expect(
+      productService.bulkSetProductBrand({ productIds: [String(mine._id)], brandId: String(foreign._id), ...scope })
+    ).rejects.toThrow(/brand could not be found/);
+
+    // Brands are listed org-wide, so one created in another branch of the org is accepted.
+    const sister = await brand('Sister branch brand', { branchId: id() });
+    await productService.bulkSetProductBrand({ productIds: [String(mine._id)], brandId: String(sister._id), ...scope });
+    expect(String((await Product.findById(mine._id).lean()).brandId)).toBe(String(sister._id));
+
+    await productService.bulkSetProductBrand({ productIds: [String(mine._id)], brandId: null, ...scope });
+    expect((await Product.findById(mine._id).lean()).brandId).toBeNull();
+
+    const v = productValidation.bulkSetProductBrand.body;
+    expect(v.validate({ productIds: [String(id())], brandId: null }).error).toBeUndefined();
+    expect(v.validate({ productIds: [String(id())] }).error).toBeDefined();
+    expect(v.validate({ productIds: ['nope'], brandId: null }).error).toBeDefined();
+  });
+});
+
+describe('deleting products: own branch only, and never one used in manufacturing', () => {
+  const productService = require('../../src/services/product.service');
+  const { PackSize } = require('../../src/models');
+  const scope = { organizationId: ORG, branchId: BRANCH };
+
+  test('single delete refuses a BOM component and another tenant\'s product, deletes a free one', async () => {
+    const steel = await insert('Steel', { productType: 'raw_material' });
+    const fan = await insert('Fan', { productType: 'finished_good' });
+    const spare = await insert('Spare');
+    const foreign = await insert('Foreign', { organizationId: id() });
+    await manufacturing.bom.createBom(ctx, { productId: fan._id, components: [{ productId: steel._id, quantity: 2 }] });
+
+    await expect(productService.deleteProductById(String(steel._id), scope)).rejects.toThrow(
+      /"Steel" is used in a bill of materials/
+    );
+    await expect(productService.deleteProductById(String(fan._id), scope)).rejects.toThrow(/bill of materials/);
+    await expect(productService.deleteProductById(String(foreign._id), scope)).rejects.toThrow(/not found/i);
+    expect(await Product.countDocuments({ _id: { $in: [steel._id, fan._id, foreign._id] } })).toBe(3);
+
+    const deleted = await productService.deleteProductById(String(spare._id), scope);
+    expect(deleted.name).toBe('Spare');
+    expect(await Product.exists({ _id: spare._id })).toBeNull();
+  });
+
+  test('bulk delete removes the free ones, keeps (and reports) used and foreign ones', async () => {
+    const bulk = await insert('Bulk powder', { productType: 'finished_good' });
+    const bag = await insert('1 KG Bag', { productType: 'finished_good' });
+    const order = await insert('Ordered', { productType: 'finished_good' });
+    const a = await insert('Free A');
+    const b = await insert('Free B');
+    const foreign = await insert('Foreign', { organizationId: id() });
+    await PackSize.collection.insertOne({
+      _id: id(), organizationId: ORG, branchId: BRANCH, productId: bulk._id, packProductId: bag._id,
+      name: '1 KG', contentQuantity: 1, contentUnit: 'kg', materials: [],
+    });
+    await ProductionOrder.collection.insertOne({
+      _id: id(), organizationId: ORG, branchId: BRANCH, orderNumber: 'PO-1', productId: order._id,
+      plannedQuantity: 5, status: 'draft', materials: [],
+    });
+
+    const ids = [bulk, bag, order, a, b, foreign].map((p) => String(p._id));
+    const res = await productService.bulkDeleteProductsByIds(ids, scope);
+    expect(res.deleted.map((p) => p.name).sort()).toEqual(['Free A', 'Free B']);
+    expect(res.notFoundIds).toEqual([String(foreign._id)]);
+    expect(res.blocked.map((x) => [x.name, x.reason.match(/used in (.+?), so/)[1]]).sort()).toEqual([
+      ['1 KG Bag', 'a pack size'],
+      ['Bulk powder', 'a pack size'],
+      ['Ordered', 'a production order'],
+    ]);
+    expect(await Product.countDocuments({ _id: { $in: [bulk._id, bag._id, order._id, foreign._id] } })).toBe(4);
+    expect(await Product.countDocuments({ _id: { $in: [a._id, b._id] } })).toBe(0);
+  });
+});

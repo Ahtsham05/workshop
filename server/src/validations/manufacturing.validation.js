@@ -78,6 +78,9 @@ const productListFilters = {
   // Packing roles: 'make' hides pack products, 'pack' = what a pack size can be stocked as,
   // 'packs' = pack products only.
   packRole: Joi.string().valid('make', 'pack', 'packs'),
+  // A category / brand id, or 'none' for products without one.
+  categoryId: Joi.alternatives().try(id(), Joi.string().valid('none')),
+  brandId: Joi.alternatives().try(id(), Joi.string().valid('none')),
   search: Joi.string().allow(''),
 };
 
@@ -86,6 +89,15 @@ const getProducts = {
     ...productListFilters,
     sort: Joi.string().valid('name', 'newest', 'stock', 'stockLow', 'cost'),
     ...pagination,
+    // Up to the client's "All" rows option (lib/page-size ALL_ROWS).
+    limit: Joi.number().integer().min(1).max(100000),
+  }),
+};
+
+const getMatchingProductIds = {
+  query: Joi.object().keys({
+    ...productListFilters,
+    sort: Joi.string().valid('name', 'newest', 'stock', 'stockLow', 'cost'),
   }),
 };
 
@@ -132,7 +144,7 @@ const bulkProductTracking = {
 
 const bulkClassifyProducts = {
   body: Joi.object().keys({
-    productIds: Joi.array().items(id()).min(1).max(500).required(),
+    productIds: Joi.array().items(id()).min(1).max(5000).required(),
     productType: Joi.string()
       .valid(...PRODUCT_TYPES)
       .allow(null)
@@ -985,6 +997,7 @@ module.exports = {
   getOrderStatusCounts,
   updateSettings,
   getProducts,
+  getMatchingProductIds,
   updateProductAttributes,
   bulkClassifyProducts,
   bulkProductTracking,

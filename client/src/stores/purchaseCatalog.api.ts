@@ -80,6 +80,19 @@ export interface BranchStockRow {
   batches: { batchNumber: string; quantity: number; expiryDate?: string }[]
 }
 
+/** One inactive product — see product.service.js#getInactiveCatalog. */
+export interface InactiveCatalogItem {
+  id: string
+  name: string
+  nameUrdu?: string
+  barcode?: string
+  sku?: string
+  imageUrl?: string
+  stockQuantity: number
+  hasVariants: boolean
+  brandName?: string
+}
+
 export const purchaseCatalogApi = createApi({
   reducerPath: 'purchaseCatalogApi',
   baseQuery: baseQueryWithAuth,
@@ -88,6 +101,12 @@ export const purchaseCatalogApi = createApi({
     getPurchasableCatalog: builder.query<PurchaseCatalogItem[], void>({
       query: () => '/purchasable',
       providesTags: [{ type: 'PurchaseCatalog', id: 'LIST' }],
+    }),
+    // Same tag type as the catalog, so every invalidateTags(['PurchaseCatalog']) after a
+    // product write (catalog-invalidation.middleware.ts) refreshes this list too.
+    getInactiveCatalog: builder.query<InactiveCatalogItem[], void>({
+      query: () => '/purchasable/inactive',
+      providesTags: [{ type: 'PurchaseCatalog', id: 'INACTIVE' }],
     }),
     getProductBranchAvailability: builder.query<BranchStockRow[], { productId: string; variantId?: string }>({
       query: ({ productId, variantId }) => ({
@@ -98,4 +117,4 @@ export const purchaseCatalogApi = createApi({
   }),
 })
 
-export const { useGetPurchasableCatalogQuery, useLazyGetProductBranchAvailabilityQuery } = purchaseCatalogApi
+export const { useGetPurchasableCatalogQuery, useGetInactiveCatalogQuery, useLazyGetProductBranchAvailabilityQuery } = purchaseCatalogApi

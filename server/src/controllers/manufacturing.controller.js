@@ -111,11 +111,28 @@ const removeDemoData = catchAsync(async (req, res) => {
 });
 
 // ── Products ─────────────────────────────────────────────────────────────────────
-const PRODUCT_LIST_FILTERS = ['productType', 'classifiedOnly', 'hasBom', 'procurementType', 'stock', 'tracking', 'packRole', 'search'];
+const PRODUCT_LIST_FILTERS = [
+  'productType',
+  'classifiedOnly',
+  'hasBom',
+  'procurementType',
+  'stock',
+  'tracking',
+  'packRole',
+  'categoryId',
+  'brandId',
+  'search',
+];
 
 const getProducts = catchAsync(async (req, res) => {
   const filter = pick(req.query, [...PRODUCT_LIST_FILTERS, 'sort']);
   res.send(await productsService.queryProducts(readCtx(req), filter, listOptions(req)));
+});
+
+// "Select all N matching" on the products list: ids + names for the whole filter, not one page.
+const getMatchingProductIds = catchAsync(async (req, res) => {
+  const filter = pick(req.query, [...PRODUCT_LIST_FILTERS, 'sort']);
+  res.send(await productsService.matchingProductIds(readCtx(req), filter));
 });
 
 const getProductTypeSummary = catchAsync(async (req, res) => {
@@ -1185,6 +1202,7 @@ module.exports = {
   loadDemoData,
   removeDemoData,
   getProducts,
+  getMatchingProductIds,
   getProductTypeSummary,
   updateProductAttributes,
   bulkClassifyProducts,

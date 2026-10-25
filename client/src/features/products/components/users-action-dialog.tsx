@@ -724,7 +724,13 @@ export function UsersActionDialog({
       setScannedProduct(null)
       if (!isEdit && addAnotherRef.current) {
         // Straight on to the next product: same dialog, blank form, cursor in the name.
-        form.reset(blankValues())
+        // The unit and manufacturing type carry over — a run of products is usually entered
+        // in the same unit and of the same type (e.g. a batch of raw materials).
+        form.reset({
+          ...blankValues(),
+          unit: values.unit || DEFAULT_UNIT,
+          ...('productType' in values ? { productType: values.productType ?? null } : {}),
+        })
         setDraftVariants([])
         descriptionAutoSyncRef.current = true
         requestAnimationFrame(() => form.setFocus('name'))

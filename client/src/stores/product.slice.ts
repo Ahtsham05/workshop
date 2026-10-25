@@ -161,6 +161,18 @@ export const bulkSetProductCategories = createAsyncThunk(
     })
 )
 
+// One brand (or null to clear it) on every selected product — the "Set brand" bulk action.
+export const bulkSetProductBrand = createAsyncThunk(
+    'product/bulkSetProductBrand',
+    catchAsync(async (data: { productIds: string[]; brandId: string | null }) => {
+        const response = await Axios({
+            ...summery.bulkSetProductBrand,
+            data: data
+        });
+        return response.data as { matchedCount: number; modifiedCount: number; brand: { id: string; name: string } | null };
+    })
+)
+
 export const bulkAddProducts = createAsyncThunk(
     'product/bulkAddProducts',
     // duplicateStrategy decides what happens to a row whose barcode/SKU already exists:

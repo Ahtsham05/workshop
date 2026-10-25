@@ -164,6 +164,9 @@ function useDraftCore<T>(
     timerRef.current = null
     pendingRef.current = null
     touchedRef.current = false
+    // After a save, only the user's next keystroke/pick may start a new draft — not what the
+    // form fills in by itself (the reset for "save & add another", a late async value).
+    interactedRef.current = false
     removeDraft(key)
     setRestoredAt(null)
   }, [key])

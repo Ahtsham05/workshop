@@ -45,6 +45,7 @@ import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { BilingualName } from '@/components/bilingual-name'
 import { SerialPickDialog } from '@/components/serial-pick-dialog'
+import { InactiveProductMatches, pickerEmptyMessage, useInactiveProductMatches } from '@/components/inactive-product-matches'
 import { formatAppDate } from '@/lib/date-format'
 
 import { toPrintLanguage } from '@/features/invoice/utils/language'
@@ -166,6 +167,7 @@ function ProductPicker({
   visibleCatalog,
   filteredCatalog,
   outOfStockMatches,
+  alreadyAddedMatches,
   onSelect,
   t,
   triggerClassName,
@@ -178,10 +180,20 @@ function ProductPicker({
   visibleCatalog: PurchaseCatalogItem[]
   filteredCatalog: PurchaseCatalogItem[]
   outOfStockMatches: PurchaseCatalogItem[]
+  /** Matches already on another row — one row per product, so they're named, not listed. */
+  alreadyAddedMatches: PurchaseCatalogItem[]
   onSelect: (item: PurchaseCatalogItem) => void
   t: LangFn
   triggerClassName: string
 }) {
+  const inactiveMatches = useInactiveProductMatches(open ? searchQuery : '')
+  const emptyMessage = pickerEmptyMessage(t, searchQuery, {
+    inactiveCount: inactiveMatches.length,
+    otherStatusCount: alreadyAddedMatches.length,
+    emptyListMessage: filteredCatalog.length === 0 && !searchQuery.trim()
+      ? t('All in-stock products are already on this transfer')
+      : t('No in-stock products in this branch'),
+  })
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
@@ -208,7 +220,7 @@ function ProductPicker({
                 {t('Loading products...')}
               </div>
             ) : visibleCatalog.length === 0 && outOfStockMatches.length === 0 ? (
-              <p className='py-6 text-center text-sm text-muted-foreground'>{t('No more in-stock products found')}</p>
+              <p className='px-4 py-6 text-center text-sm text-muted-foreground'>{emptyMessage}</p>
             ) : visibleCatalog.length === 0 ? null : (
               <CommandGroup>
                 {visibleCatalog.map((item) => (
@@ -276,6 +288,14 @@ function ProductPicker({
                 ))}
               </CommandGroup>
             ) : null}
+            {!catalogLoading && searchQuery.trim() && alreadyAddedMatches.length > 0 ? (
+              <div className='border-t px-3 py-2 text-xs text-muted-foreground'>
+                {t('Already added')}:{' '}
+                <span className='font-medium text-foreground'>{alreadyAddedMatches.slice(0, 3).map((i) => i.name).join(', ')}</span>
+                {alreadyAddedMatches.length > 3 ? ` +${alreadyAddedMatches.length - 3}` : ''}
+              </div>
+            ) : null}
+            {!catalogLoading ? <InactiveProductMatches matches={inactiveMatches} /> : null}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -583,6 +603,14 @@ export function BulkTransferPanel({
       (c) => [c.name, c.nameUrdu, c.barcode, c.brand?.name],
     ).slice(0, MAX_OUT_OF_STOCK_RESULTS)
   }, [catalog, productSearchQuery])
+  const alreadyAddedMatches = useMemo(() => {
+    if (!productSearchQuery.trim()) return []
+    return filterAndRankBySearch(
+      transferableCatalog.filter((c) => addedIds.has(c.id)),
+      productSearchQuery,
+      (c) => [c.name, c.nameUrdu, c.barcode, c.brand?.name],
+    )
+  }, [transferableCatalog, addedIds, productSearchQuery])
 
   const filledLines = lines.filter((l): l is BulkTransferLine & { item: PurchaseCatalogItem } => l.item !== null)
   const totalQuantity = filledLines.reduce((sum, l) => sum + (lineNeedsSerials(l.item) ? l.imeis.length : l.quantity), 0)
@@ -875,6 +903,7 @@ export function BulkTransferPanel({
                               visibleCatalog={visibleCatalog}
                               filteredCatalog={filteredCatalog}
                               outOfStockMatches={outOfStockMatches}
+                              alreadyAddedMatches={alreadyAddedMatches}
                               onSelect={(item) => selectProductForRow(line.rowId, item)}
                               t={t}
                               triggerClassName='h-10 w-full justify-between border-dashed text-sm font-normal text-muted-foreground'
@@ -960,6 +989,7 @@ export function BulkTransferPanel({
                                     visibleCatalog={visibleCatalog}
                                     filteredCatalog={filteredCatalog}
                                     outOfStockMatches={outOfStockMatches}
+                                    alreadyAddedMatches={alreadyAddedMatches}
                                     onSelect={(item) => selectProductForRow(line.rowId, item)}
                                     t={t}
                                     triggerClassName='h-9 w-full min-w-[220px] justify-between border-dashed text-sm font-normal text-muted-foreground'

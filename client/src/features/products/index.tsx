@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Edit, Package, Boxes, Wallet, CircleDollarSign, Sparkles, Trash2, Tags, RefreshCw, CalendarPlus } from 'lucide-react'
+import { Edit, Package, Boxes, Wallet, CircleDollarSign, Sparkles, Trash2, Tags, RefreshCw, CalendarPlus, Award } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { LIST_SEARCH_FIELDS } from '@/lib/list-search-fields'
@@ -41,6 +41,7 @@ import { useFormatMoney } from '@/lib/format-money'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BulkDeleteDialog } from './components/bulk-delete-dialog'
 import { BulkCategoryDialog } from './components/bulk-category-dialog'
+import { BulkBrandDialog } from './components/bulk-brand-dialog'
 import { SyncBranchesDialog } from './components/sync-branches-dialog'
 import { useSyncTargetBranches } from './hooks/use-branch-sync'
 import { useNavigate, useSearch } from '@tanstack/react-router'
@@ -152,6 +153,7 @@ export default function Products() {
   const [bulkStatusUpdating, setBulkStatusUpdating] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false)
+  const [bulkBrandOpen, setBulkBrandOpen] = useState(false)
   // "Added Today" view — only what this branch added today (Pakistan calendar). Resolved by
   // the server on every fetch, so it is simply empty again the next business day.
   const [addedTodayOnly, setAddedTodayOnly] = useState(false)
@@ -827,6 +829,14 @@ export default function Products() {
                     <Tags size={16} />
                     <span>{t('bulk_set_category')} ({selectedProducts.length})</span>
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setBulkBrandOpen(true)}
+                    className='space-x-1'
+                  >
+                    <Award size={16} />
+                    <span>{t('Set Brand')} ({selectedProducts.length})</span>
+                  </Button>
                   <Can permission='editProducts'>
                     <AddToListMenu products={selectedProducts} onAdded={() => selectedListId && setFetch((prev) => !prev)} />
                   </Can>
@@ -1214,6 +1224,16 @@ export default function Products() {
         <BulkCategoryDialog
           open={bulkCategoryOpen}
           onOpenChange={setBulkCategoryOpen}
+          products={selectedProducts}
+          onApplied={() => {
+            setSelectedProducts([])
+            setFetch((prev) => !prev)
+          }}
+        />
+
+        <BulkBrandDialog
+          open={bulkBrandOpen}
+          onOpenChange={setBulkBrandOpen}
           products={selectedProducts}
           onApplied={() => {
             setSelectedProducts([])
