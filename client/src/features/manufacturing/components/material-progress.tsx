@@ -37,6 +37,18 @@ export function IssueStatusBadge({
   material: ProductionMaterial
 }) {
   const { t } = useLanguage()
+  if (material.supply === 'floor') {
+    // Never issued to the order: receipts use it straight from production stock.
+    return (
+      <Badge
+        variant='outline'
+        title={t('Used automatically from production stock when finished goods are received')}
+        className='h-5 border-teal-500/25 bg-teal-500/10 px-1.5 text-[10px] font-medium text-teal-700 dark:text-teal-300'
+      >
+        {t('Production stock')}
+      </Badge>
+    )
+  }
   const meta = STATE_META[issueState(material)]
   return (
     <Badge

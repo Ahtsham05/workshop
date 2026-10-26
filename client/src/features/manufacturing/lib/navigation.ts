@@ -8,6 +8,7 @@ import {
   ListChecks,
   Package2,
   PackageMinus,
+  Warehouse,
   Workflow,
   type LucideIcon,
 } from 'lucide-react'
@@ -81,6 +82,19 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Material Issues',
         icon: PackageMinus,
         keywords: 'issue return picking miv',
+      },
+    ],
+  },
+  {
+    id: 'production-stock',
+    label: 'Production Stock',
+    sections: [
+      {
+        to: '/manufacturing/production-stock',
+        label: 'Production Stock',
+        icon: Warehouse,
+        keywords:
+          'floor stock line stock packing material carton label bottle bulk issue used remaining wastage count',
       },
     ],
   },

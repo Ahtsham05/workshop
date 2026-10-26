@@ -179,7 +179,10 @@ export function PackingGrid({
                   {fmtQty(m.need)} {getUnitLabel(m.unit)}
                   <span className='text-muted-foreground text-xs'>
                     {' '}
-                    / {fmtQty(m.available)} {t('in stock')}
+                    /{' '}
+                    {m.inProduction != null
+                      ? `${fmtQty(m.inProduction)} ${t('in production stock')}`
+                      : `${fmtQty(m.available)} ${t('in stock')}`}
                   </span>
                 </span>
               </li>

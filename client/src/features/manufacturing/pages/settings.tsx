@@ -38,6 +38,9 @@ const PREFIX_FIELDS: { key: PrefixKey; label: string }[] = [
   { key: 'productionReceipt', label: 'Finished goods receipt' },
   { key: 'rawMaterialReceipt', label: 'Raw material receipt' },
   { key: 'scrap', label: 'Scrap record' },
+  { key: 'floorIssue', label: 'Issue to production stock' },
+  { key: 'floorReturn', label: 'Return from production stock' },
+  { key: 'floorCount', label: 'Production stock count' },
 ]
 
 const TOGGLES: {
@@ -129,6 +132,7 @@ export default function ManufacturingSettingsPage() {
         defaultRejectDisposition: form.defaultRejectDisposition,
         autoCompleteOrders: form.autoCompleteOrders,
         batchNumbering: form.batchNumbering,
+        floorShortfall: form.floorShortfall,
       }).unwrap()
       toast.success(t('Manufacturing settings saved'))
     } catch (err) {
@@ -179,7 +183,7 @@ export default function ManufacturingSettingsPage() {
                 }
               />
               <span className='text-muted-foreground font-mono text-xs max-sm:hidden'>
-                {preview(form.prefixes[field.key])}
+                {preview(form.prefixes[field.key] || '')}
               </span>
             </div>
           ))}
@@ -373,6 +377,36 @@ export default function ManufacturingSettingsPage() {
               <SelectContent>
                 <SelectItem value='scrap'>{t('Scrap')}</SelectItem>
                 <SelectItem value='rework'>{t('Rework')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className='flex items-start justify-between gap-4 px-5 py-3.5 max-sm:flex-col max-sm:px-4'>
+            <div className='space-y-0.5'>
+              <Label className='font-medium'>
+                {t('When production stock is short')}
+              </Label>
+              <p className='text-muted-foreground text-sm'>
+                {t(
+                  'A receipt or packing needs more packing material than the floor holds. Issue the rest from the store automatically (flagged as auto-issued in Production Stock), or refuse until it is issued.'
+                )}
+              </p>
+            </div>
+            <Select
+              value={form.floorShortfall || 'auto_issue'}
+              disabled={!canEdit}
+              onValueChange={(v) =>
+                set('floorShortfall', v as ManufacturingSettings['floorShortfall'])
+              }
+            >
+              <SelectTrigger
+                className='w-44 max-sm:w-full'
+                aria-label={t('When production stock is short')}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='auto_issue'>{t('Issue from store')}</SelectItem>
+                <SelectItem value='block'>{t('Refuse')}</SelectItem>
               </SelectContent>
             </Select>
           </div>

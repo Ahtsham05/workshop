@@ -21,6 +21,8 @@ export interface PackingSummary {
     need: number
     available: number
     short: number
+    /** Kept in production stock: what is on the floor (used first). */
+    inProduction?: number
   }[]
   shortMaterials: string[]
 }
@@ -53,6 +55,7 @@ export function packingSummary(
         need: 0,
         available: m.available,
         short: 0,
+        inProduction: m.fromProductionStock ? (m.inProduction ?? 0) : undefined,
       }
       entry.need = round(entry.need + qty * m.quantity)
       materials.set(m.id, entry)

@@ -516,17 +516,19 @@ const MOVEMENT_META: Record<MovementKey, { label: string; side: 'in' | 'out' | '
   scrapped: { label: 'Scrapped', side: 'out' },
   packedIn: { label: 'Packed in', side: 'in' },
   packedOut: { label: 'Used in packing', side: 'out' },
+  issuedToFloor: { label: 'Issued to production stock', side: 'out' },
+  returnedFromFloor: { label: 'Back from production stock', side: 'in' },
   adjustment: { label: 'Adjustment (±)', side: 'both' },
 }
 
 const STATEMENT_ORDER: Record<'finished-goods' | 'raw-materials', { always: MovementKey[]; order: MovementKey[] }> = {
   'finished-goods': {
     always: ['produced', 'sold'],
-    order: ['produced', 'packedIn', 'salesReturn', 'transferIn', 'purchased', 'returnedFromProduction', 'sold', 'packedOut', 'transferOut', 'issued', 'purchaseReturn', 'scrapped', 'adjustment'],
+    order: ['produced', 'packedIn', 'salesReturn', 'transferIn', 'purchased', 'returnedFromProduction', 'returnedFromFloor', 'sold', 'packedOut', 'transferOut', 'issued', 'issuedToFloor', 'purchaseReturn', 'scrapped', 'adjustment'],
   },
   'raw-materials': {
     always: ['purchased', 'issued', 'returnedFromProduction'],
-    order: ['purchased', 'returnedFromProduction', 'transferIn', 'salesReturn', 'produced', 'packedIn', 'issued', 'packedOut', 'purchaseReturn', 'transferOut', 'sold', 'scrapped', 'adjustment'],
+    order: ['purchased', 'returnedFromProduction', 'returnedFromFloor', 'transferIn', 'salesReturn', 'produced', 'packedIn', 'issued', 'issuedToFloor', 'packedOut', 'purchaseReturn', 'transferOut', 'sold', 'scrapped', 'adjustment'],
   },
 }
 
@@ -634,6 +636,8 @@ const SOURCE_LABEL: Record<string, string> = {
   scrapped: 'Scrapped',
   packedIn: 'Packing (packs in)',
   packedOut: 'Packing (used)',
+  issuedToFloor: 'Issued to production stock',
+  returnedFromFloor: 'Back from production stock',
   adjustment: 'Stock adjustment',
 }
 

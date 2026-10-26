@@ -24,7 +24,7 @@ export default function MovementsPage() {
         onChange={(v) => setBucket(v as StockBucket | 'all')}
         options={[
           { value: 'all', label: t('All buckets') },
-          ...(['available', 'wip', 'qc', 'rework'] as const).map((key) => ({
+          ...(['available', 'floor', 'wip', 'qc', 'rework'] as const).map((key) => ({
             value: key,
             label: t(BUCKET_META[key].label),
           })),

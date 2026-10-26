@@ -24,6 +24,7 @@ const UPDATABLE_FIELDS = [
   'defaultRejectDisposition',
   'autoCompleteOrders',
   'batchNumbering',
+  'floorShortfall',
 ];
 
 const updateSettings = async (organizationId, body, updatedBy) => {

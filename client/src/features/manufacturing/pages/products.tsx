@@ -480,7 +480,12 @@ export default function ManufacturingProducts({
     {
       id: 'type',
       header: t('Type'),
-      cell: (p) => <ProductTypeBadge type={p.productType} />,
+      cell: (p) => (
+        <div className='flex flex-col items-start gap-1'>
+          <ProductTypeBadge type={p.productType} />
+          {p.issueMethod === 'floor' && <ProductionStockTag />}
+        </div>
+      ),
     },
     {
       id: 'categories',
@@ -1355,5 +1360,20 @@ function SearchFilterSelect({
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+/** Kept in production stock: issued to the floor in bulk, used automatically. */
+function ProductionStockTag() {
+  const { t } = useLanguage()
+  return (
+    <Link
+      to={'/manufacturing/production-stock' as never}
+      onClick={(e) => e.stopPropagation()}
+      title={t('Issued to production in bulk and used automatically — see Production Stock')}
+      className='rounded border border-teal-500/25 bg-teal-500/10 px-1.5 text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300'
+    >
+      {t('Production stock')}
+    </Link>
   )
 }

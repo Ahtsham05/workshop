@@ -16,6 +16,7 @@ const {
   SalesReturn,
   PurchaseReturn,
   PackingVoucher,
+  FloorStockVoucher,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const { SOLD_INVOICE_MATCH } = require('../productAnalytics.service');
@@ -253,6 +254,8 @@ const MOVE_LABELS = {
   production_scrap: 'Scrapped',
   packing_out: 'Packed (used)',
   packing_in: 'Packed',
+  floor_issue: 'Issued to production stock',
+  floor_restock: 'Back from production stock',
 };
 
 /** Document number + party for each ledger row, looked up in bulk per document type. */
@@ -260,35 +263,39 @@ const describeRefs = async (rows, batch) => {
   const idsOf = (...types) => [
     ...new Set(rows.filter((r) => types.includes(r.refType) && r.refId).map((r) => String(r.refId))),
   ];
-  const [invoices, issues, receipts, scraps, transfers, salesReturns, purchaseReturns, purchases, packings] = await Promise.all([
-    Invoice.find({ _id: { $in: idsOf('Invoice') } })
-      .select('invoiceNumber customerName walkInCustomerName')
-      .lean(),
-    MaterialIssue.find({ _id: { $in: idsOf('MaterialIssue', 'MaterialReturn', 'MaterialIssueReversal') } })
-      .select('issueNumber orderNumber')
-      .lean(),
-    ProductionReceipt.find({ _id: { $in: idsOf('ProductionReceipt') } })
-      .select('receiptNumber orderNumber')
-      .lean(),
-    ScrapRecord.find({ _id: { $in: idsOf('ScrapRecord') } })
-      .select('scrapNumber orderNumber')
-      .lean(),
-    InventoryTransfer.find({ _id: { $in: idsOf('InventoryTransfer') } })
-      .select('transferNumber')
-      .lean(),
-    SalesReturn.find({ _id: { $in: idsOf('SalesReturn') } })
-      .select('returnNumber customerName')
-      .lean(),
-    PurchaseReturn.find({ _id: { $in: idsOf('PurchaseReturn') } })
-      .select('returnNumber')
-      .lean(),
-    batch.purchaseId
-      ? Purchase.find({ _id: batch.purchaseId }).select('invoiceNumber supplier').populate('supplier', 'name').lean()
-      : [],
-    PackingVoucher.find({ _id: { $in: idsOf('PackingVoucher', 'PackingVoucherReversal') } })
-      .select('voucherNumber orderNumber productName')
-      .lean(),
-  ]);
+  const [invoices, issues, receipts, scraps, transfers, salesReturns, purchaseReturns, purchases, packings, floor] =
+    await Promise.all([
+      Invoice.find({ _id: { $in: idsOf('Invoice') } })
+        .select('invoiceNumber customerName walkInCustomerName')
+        .lean(),
+      MaterialIssue.find({ _id: { $in: idsOf('MaterialIssue', 'MaterialReturn', 'MaterialIssueReversal') } })
+        .select('issueNumber orderNumber')
+        .lean(),
+      ProductionReceipt.find({ _id: { $in: idsOf('ProductionReceipt') } })
+        .select('receiptNumber orderNumber')
+        .lean(),
+      ScrapRecord.find({ _id: { $in: idsOf('ScrapRecord') } })
+        .select('scrapNumber orderNumber')
+        .lean(),
+      InventoryTransfer.find({ _id: { $in: idsOf('InventoryTransfer') } })
+        .select('transferNumber')
+        .lean(),
+      SalesReturn.find({ _id: { $in: idsOf('SalesReturn') } })
+        .select('returnNumber customerName')
+        .lean(),
+      PurchaseReturn.find({ _id: { $in: idsOf('PurchaseReturn') } })
+        .select('returnNumber')
+        .lean(),
+      batch.purchaseId
+        ? Purchase.find({ _id: batch.purchaseId }).select('invoiceNumber supplier').populate('supplier', 'name').lean()
+        : [],
+      PackingVoucher.find({ _id: { $in: idsOf('PackingVoucher', 'PackingVoucherReversal') } })
+        .select('voucherNumber orderNumber productName')
+        .lean(),
+      FloorStockVoucher.find({ _id: { $in: idsOf('FloorStockVoucher', 'FloorStockVoucherReversal') } })
+        .select('voucherNumber')
+        .lean(),
+    ]);
   const map = new Map();
   invoices.forEach((d) =>
     map.set(String(d._id), { number: d.invoiceNumber, party: d.customerName || d.walkInCustomerName || '' })
@@ -300,6 +307,7 @@ const describeRefs = async (rows, batch) => {
   salesReturns.forEach((d) => map.set(String(d._id), { number: d.returnNumber, party: d.customerName || '' }));
   purchaseReturns.forEach((d) => map.set(String(d._id), { number: d.returnNumber, party: '' }));
   packings.forEach((d) => map.set(String(d._id), { number: d.voucherNumber, party: d.orderNumber || d.productName || '' }));
+  floor.forEach((d) => map.set(String(d._id), { number: d.voucherNumber, party: 'Production stock' }));
   const purchase = purchases[0];
   return (r) => {
     if (r.refType === 'Batch') {
@@ -365,7 +373,7 @@ const batchTraceReport = async (ctx, q) => {
   // from the invoices themselves.
   const ledger = await InventoryTransaction.find({
     $or: [{ batchId: batch._id }, { refType: 'Batch', refId: batch._id }],
-    stockBucket: { $nin: ['wip', 'qc', 'rework'] },
+    stockBucket: { $nin: ['wip', 'qc', 'rework', 'floor'] },
   })
     .select('type quantityDelta unitCost refType refId productionOrderId createdAt createdBy')
     .sort({ createdAt: 1, _id: 1 })
@@ -435,7 +443,9 @@ const batchTraceReport = async (ctx, q) => {
   const summary = {
     received: roundQty(sumType(['purchase', 'production_receipt', 'packing_in'], 1) + Math.max(0, unexplained)),
     // Packing draws bulk / packing material out of the batch the same way an issue does.
-    issuedToProduction: roundQty(sumType(['production_issue', 'production_return', 'packing_out'], -1)),
+    issuedToProduction: roundQty(
+      sumType(['production_issue', 'production_return', 'packing_out', 'floor_issue', 'floor_restock'], -1)
+    ),
     sold: roundQty(sumType(['sale', 'return_in'], -1)),
     scrapped: roundQty(sumType(['production_scrap', 'expiry_writeoff', 'damage', 'theft'], -1)),
     other: roundQty(sumType(['adjustment', 'transfer_in', 'transfer_out', 'return_out'], 1) + Math.min(0, unexplained)),

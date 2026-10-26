@@ -11,7 +11,6 @@ import type {
   ProductionOrder,
   ProductionOutput,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { getUnitLabel } from '@/lib/units'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
@@ -25,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { fmtQty } from '../lib/constants'
 import {
   useFinishedGoodsReceipt,
@@ -32,8 +32,8 @@ import {
 } from '../lib/use-finished-goods-receipt'
 import { FinishedGoodsFields } from './execution-dialogs'
 import { PackSizesSheet } from './pack-sizes-sheet'
-import { ReceivePackingSection } from './receive-packing-section'
 import { QualityDecision } from './quality-decision'
+import { NoPackingConfirm, ReceiptPackingUsed } from './receipt-packing-used'
 import {
   MaterialCheck,
   ModeCard,
@@ -41,6 +41,7 @@ import {
   QuantityStepper,
   QuickChip,
 } from './receipt-parts'
+import { ReceivePackingSection } from './receive-packing-section'
 
 const EPS = 1e-6
 
@@ -69,7 +70,12 @@ export function ReceiveFinishedGoodsDialog({
   const direct = r.mode === 'direct'
   const [sizesOpen, setSizesOpen] = useState(false)
 
-  const submit = async () => {
+  const [askPacking, setAskPacking] = useState(false)
+  const submit = async (withoutPacking = false) => {
+    if (!withoutPacking && r.packingMissing && !r.problems.length) {
+      setAskPacking(true)
+      return
+    }
     if (await r.post({ onInspect })) onClose()
   }
 
@@ -126,7 +132,9 @@ export function ReceiveFinishedGoodsDialog({
                 ))}
               </div>
               <p className='text-muted-foreground text-xs'>
-                {t('This order did not say which variant it makes — the choice is saved on the order.')}
+                {t(
+                  'This order did not say which variant it makes — the choice is saved on the order.'
+                )}
               </p>
             </div>
           )}
@@ -138,6 +146,9 @@ export function ReceiveFinishedGoodsDialog({
             direct={direct}
             onSetUp={() => setSizesOpen(true)}
           />
+
+          {/* Packing material used — with the packing, before the quantity and recipe */}
+          <ReceiptPackingUsed r={r} />
 
           {/* Quantity made */}
           <div className='space-y-2'>
@@ -250,17 +261,18 @@ export function ReceiveFinishedGoodsDialog({
               />
               {/* Its stock look-up needs the variant — wait until it is chosen. */}
               {(order.variantId ||
-                (r.packSetup && !(r.variantChoices.length > 0 && !r.chosenVariant))) && (
-              <FinishedGoodsFields
-                order={
-                  r.chosenVariant && !order.variantId
-                    ? { ...order, variantId: r.chosenVariant }
-                    : order
-                }
-                quantity={r.good}
-                value={r.fg}
-                onChange={r.setFg}
-              />
+                (r.packSetup &&
+                  !(r.variantChoices.length > 0 && !r.chosenVariant))) && (
+                <FinishedGoodsFields
+                  order={
+                    r.chosenVariant && !order.variantId
+                      ? { ...order, variantId: r.chosenVariant }
+                      : order
+                  }
+                  quantity={r.good}
+                  value={r.fg}
+                  onChange={r.setFg}
+                />
               )}
             </>
           )}
@@ -300,8 +312,11 @@ export function ReceiveFinishedGoodsDialog({
             </div>
             {direct && r.packEnabled && r.packing.packs > 0 && (
               <div className='tabular-nums'>
-                {t('Packed')} {fmtQty(r.packing.packs)} {t('packs')} ({fmtQty(r.packing.packed)} {unit})
-                {r.packing.loose > EPS ? ` · ${fmtQty(r.packing.loose)} ${unit} ${t('loose')}` : ''}
+                {t('Packed')} {fmtQty(r.packing.packs)} {t('packs')} (
+                {fmtQty(r.packing.packed)} {unit})
+                {r.packing.loose > EPS
+                  ? ` · ${fmtQty(r.packing.loose)} ${unit} ${t('loose')}`
+                  : ''}
               </div>
             )}
             <div className='tabular-nums'>
@@ -315,7 +330,7 @@ export function ReceiveFinishedGoodsDialog({
               {t('Cancel')}
             </Button>
             <Button
-              onClick={submit}
+              onClick={() => void submit()}
               disabled={!!r.problems.length || r.posting}
               title='Ctrl+Enter'
             >
@@ -331,6 +346,16 @@ export function ReceiveFinishedGoodsDialog({
           </div>
         </DialogFooter>
       </DialogContent>
+      <NoPackingConfirm
+        r={r}
+        open={askPacking}
+        onClose={() => setAskPacking(false)}
+        onConfirm={() => {
+          setAskPacking(false)
+          void submit(true)
+        }}
+        label={`${fmtQty(r.quantity)} ${unit} ${t('of')} ${order.productName}`}
+      />
       {sizesOpen && (
         <PackSizesSheet
           productId={order.productId}

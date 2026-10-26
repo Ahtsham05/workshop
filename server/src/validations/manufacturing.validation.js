@@ -49,7 +49,11 @@ const updateSettings = {
         rawMaterialReceipt: prefix(),
         batch: prefix(),
         packing: prefix(),
+        floorIssue: prefix(),
+        floorReturn: prefix(),
+        floorCount: prefix(),
       }),
+      floorShortfall: Joi.string().valid('auto_issue', 'block'),
       batchNumbering: Joi.string().valid('sequence', 'order'),
       numberPadding: Joi.number().integer().min(3).max(10),
       defaultSourceLocation: Joi.string().allow('').trim().max(100),
@@ -849,6 +853,60 @@ const cancelPacking = {
   body: Joi.object().keys({ reason: Joi.string().trim().min(2).max(500).required() }),
 };
 
+/* ── Production stock (material issued to the floor in bulk) ── */
+const floorPeriod = { dateFrom: calendarDay(), dateTo: calendarDay() };
+const floorOverview = { query: Joi.object().keys(floorPeriod) };
+const floorMaterial = { params: Joi.object().keys({ productId: id().required() }), query: Joi.object().keys(floorPeriod) };
+const floorUsageTemplate = { params: Joi.object().keys({ productId: id().required() }) };
+const floorMaterialChoices = { query: Joi.object().keys({ search: Joi.string().allow('').max(100) }) };
+const floorIssueMethod = {
+  body: Joi.object().keys({
+    productIds: Joi.array().items(id()).min(1).max(5000).required(),
+    issueMethod: Joi.string().valid('floor', 'order').required(),
+  }),
+};
+const floorVoucherHeader = {
+  voucherDate: Joi.alternatives().try(calendarDay(), Joi.date().iso()),
+  notes: Joi.string().allow('').max(1000),
+};
+const floorMove = {
+  body: Joi.object().keys({
+    ...floorVoucherHeader,
+    lines: Joi.array()
+      .min(1)
+      .max(200)
+      .items(Joi.object().keys({ productId: id().required(), quantity: Joi.number().min(0).required() }))
+      .required(),
+  }),
+};
+const floorCount = {
+  body: Joi.object().keys({
+    ...floorVoucherHeader,
+    reason: Joi.string().allow('').trim().max(200),
+    lines: Joi.array()
+      .min(1)
+      .max(200)
+      .items(Joi.object().keys({ productId: id().required(), countedQuantity: Joi.number().min(0).required() }))
+      .required(),
+  }),
+};
+const listFloorVouchers = {
+  query: Joi.object().keys({
+    ...floorPeriod,
+    kind: Joi.string().valid('all', 'issue', 'return', 'count'),
+    status: Joi.string().valid('all', 'posted', 'cancelled'),
+    productId: id(),
+    search: Joi.string().allow('').max(100),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(100),
+  }),
+};
+const floorVoucherParam = { params: Joi.object().keys({ voucherId: id().required() }) };
+const cancelFloorVoucher = {
+  ...floorVoucherParam,
+  body: Joi.object().keys({ reason: Joi.string().trim().min(2).max(500).required() }),
+};
+
 const reportOutput = {
   ...orderIdParam,
   body: Joi.object().keys({
@@ -857,6 +915,10 @@ const reportOutput = {
     // Pack the good output straight away (packing.service#packReceipt).
     packing: Joi.object().keys({ lines: packingLines().required(), notes: Joi.string().allow('').max(1000) }),
     producedQuantity: Joi.number().positive().required(),
+    // Packing material actually used, beyond the recipe — taken from production stock.
+    floorUsage: Joi.array()
+      .max(50)
+      .items(Joi.object().keys({ productId: id().required(), quantity: Joi.number().min(0).required() })),
     // 'hold' → QC; 'direct' → finished stock now. Default: the require-QC setting.
     qcMode: Joi.string().valid('direct', 'hold'),
     // Only used when inspecting now (direct, or quality checks turned off).
@@ -954,7 +1016,7 @@ const listMovements = {
   query: Joi.object().keys({
     productionOrderId: id(),
     productId: id(),
-    bucket: Joi.string().valid('available', 'wip', 'qc', 'rework'),
+    bucket: Joi.string().valid('available', 'wip', 'qc', 'rework', 'floor'),
     type: Joi.string(),
     ...dateRange,
     ...pagination,
@@ -989,6 +1051,16 @@ const listTransactions = {
 const issueIdParam = { params: Joi.object().keys({ issueId: id().required() }) };
 
 module.exports = {
+  floorOverview,
+  floorMaterial,
+  floorMaterialChoices,
+  floorUsageTemplate,
+  floorIssueMethod,
+  floorMove,
+  floorCount,
+  listFloorVouchers,
+  floorVoucherParam,
+  cancelFloorVoucher,
   exportProductionOrders,
   bulkUpdateProductionOrders,
   getAnalytics,

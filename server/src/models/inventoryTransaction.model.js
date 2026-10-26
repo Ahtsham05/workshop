@@ -48,6 +48,13 @@ const InventoryTransactionSchema = new mongoose.Schema({
             'production_scrap', // available − : finished stock written off as scrap
             'packing_out', //     available − : bulk + packing material used by a packing voucher
             'packing_in', //      available + : the packs it made (cartons, bags …)
+            // Production stock (floorStock.service.js): material issued in bulk to the floor.
+            'floor_issue', //     available − : issued from the store to production stock
+            'floor_in', //        floor     + : …and arriving there
+            'floor_return', //    floor     − : unused production stock sent back…
+            'floor_restock', //   available + : …into the store
+            'floor_consume', //   floor     − : used by finished goods received / packed
+            'floor_adjust', //    floor     ± : physical count difference (wastage / found)
         ],
         required: true,
     },
@@ -55,7 +62,8 @@ const InventoryTransactionSchema = new mongoose.Schema({
     // Product.stockQuantity / Inventory.quantity hold); the others are manufacturing holding
     // areas whose balances exist only in this ledger, per production order. Every row written
     // before manufacturing existed is implicitly 'available'.
-    stockBucket: { type: String, enum: ['available', 'wip', 'qc', 'rework'], default: 'available' },
+    // 'floor' is production stock: material issued in bulk, shared by every order.
+    stockBucket: { type: String, enum: ['available', 'wip', 'qc', 'rework', 'floor'], default: 'available' },
     quantityDelta: { type: Number, required: true }, // signed
     balanceAfter: { type: Number, required: true },
     unitCost: { type: Number },

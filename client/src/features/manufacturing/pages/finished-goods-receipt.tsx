@@ -38,6 +38,7 @@ import {
   QuickChip,
   SummaryRow,
 } from '../components/receipt-parts'
+import { NoPackingConfirm, ReceiptPackingUsed } from '../components/receipt-packing-used'
 import { fmtQty, orderPath } from '../lib/constants'
 import { useFinishedGoodsReceipt } from '../lib/use-finished-goods-receipt'
 
@@ -98,7 +99,12 @@ export default function FinishedGoodsReceiptPage({
   const [posted, setPosted] = useState<ProductionOutput | null>(null)
   const [inspecting, setInspecting] = useState(false)
 
-  const submit = async () => {
+  const [askPacking, setAskPacking] = useState(false)
+  const submit = async (withoutPacking = false) => {
+    if (!withoutPacking && receipt.packingMissing && !receipt.problems.length) {
+      setAskPacking(true)
+      return
+    }
     const out = await receipt.post()
     if (out) setPosted(out)
   }
@@ -131,6 +137,20 @@ export default function FinishedGoodsReceiptPage({
 
   return (
     <div className='space-y-4'>
+      <NoPackingConfirm
+        r={receipt}
+        open={askPacking}
+        onClose={() => setAskPacking(false)}
+        onConfirm={() => {
+          setAskPacking(false)
+          void submit(true)
+        }}
+        label={
+          order
+            ? `${fmtQty(receipt.quantity)} ${getUnitLabel(order.unit)} ${t('of')} ${order.productName}`
+            : ''
+        }
+      />
       <nav className='text-muted-foreground flex items-center gap-1.5 text-sm'>
         <Link
           to={back.to as never}
@@ -247,6 +267,7 @@ export default function FinishedGoodsReceiptPage({
                     orderId={order.id}
                     quantity={quantity}
                   />
+                  <ReceiptPackingUsed r={receipt} />
                 </section>
 
                 {/* 3. Quality */}
@@ -391,7 +412,7 @@ export default function FinishedGoodsReceiptPage({
               )}
               <div className='flex flex-col gap-2'>
                 <Button
-                  onClick={submit}
+                  onClick={() => void submit()}
                   disabled={!!problems.length || posting}
                   className='w-full justify-between'
                 >

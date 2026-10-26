@@ -225,6 +225,12 @@ export const MOVEMENT_LABELS: Record<string, string> = {
   rework_in: 'Sent to rework',
   rework_out: 'Rework resolved',
   production_scrap: 'Finished stock scrapped',
+  floor_issue: 'Issued to production stock',
+  floor_in: 'Into production stock',
+  floor_return: 'Returned from production stock',
+  floor_restock: 'Back in store from production stock',
+  floor_consume: 'Used from production stock',
+  floor_adjust: 'Production stock count difference',
 }
 
 export const BUCKET_META: Record<
@@ -249,6 +255,11 @@ export const BUCKET_META: Record<
     label: 'Rework',
     className:
       'bg-violet-500/10 text-violet-700 border-violet-500/25 dark:text-violet-300',
+  },
+  floor: {
+    label: 'Production stock',
+    className:
+      'bg-teal-500/10 text-teal-700 border-teal-500/25 dark:text-teal-300',
   },
 }
 

@@ -90,8 +90,18 @@ const snapshotMaterials = async ({ organizationId, branchId, bom, quantity, sett
   const { lines } = await bomService.explodeBom({ organizationId, branchId }, bom._id, quantity, {
     explode: !!settings.explodeSubAssemblies,
   });
+  // Materials kept in production stock (issued to the floor in bulk) are never issued to
+  // the order — receipts use them from the floor (floorStock.service.js).
+  const floor = new Set(
+    (
+      await Product.find({ _id: { $in: lines.map((l) => l.productId) }, issueMethod: 'floor' })
+        .select('_id')
+        .lean()
+    ).map((p) => String(p._id))
+  );
   return lines.map((line) => ({
     ...line,
+    supply: floor.has(String(line.productId)) ? 'floor' : 'order',
     issuedQuantity: 0,
     issuedCost: 0,
     returnedQuantity: 0,
@@ -516,6 +526,7 @@ const getOrderRequirements = async ({ organizationId, branchId }, orderId) => {
     if (claims) free.set(key, roundQty(free.get(key) - coverable));
     return {
       materialLineId: String(m._id),
+      supply: m.supply || 'order',
       productId: String(m.productId),
       variantId: m.variantId ? String(m.variantId) : null,
       productName: m.productName,
@@ -540,6 +551,8 @@ const getOrderRequirements = async ({ organizationId, branchId }, orderId) => {
       alternatives: m.alternatives,
     };
   });
+  // eslint-disable-next-line global-require
+  await require('./floorStock.service').annotateFloorLines({ organizationId, branchId: order.branchId }, lines);
   return {
     orderId: String(order._id),
     orderNumber: order.orderNumber,

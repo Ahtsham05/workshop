@@ -109,6 +109,8 @@ export interface TransactionEntryProps<
   appearance?: 'default' | 'card'
   /** Title of the rows section, shown left of Paste rows / Add row. */
   gridTitle?: React.ReactNode
+  /** While set, the grid is covered by a loading state with this label (rows being fetched). */
+  gridLoading?: string | false
 }
 
 /**
@@ -449,7 +451,13 @@ export function TransactionEntry<R extends EntryRowBase, H extends object>(
           card={card}
           title={props.gridTitle}
         />
-        <EntryGrid />
+        <div
+          className={cn('relative', props.gridLoading && 'min-h-[11rem]')}
+          aria-busy={props.gridLoading ? true : undefined}
+        >
+          <EntryGrid />
+          {props.gridLoading && <GridLoading label={props.gridLoading} />}
+        </div>
         <div
           className={cn(
             'bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border-t backdrop-blur',
@@ -905,3 +913,33 @@ const EntryTotals = memo(function EntryTotals({
     </dl>
   )
 })
+
+/** Covers the grid while its rows are being fetched: a spinner and placeholder rows. */
+function GridLoading({ label }: { label: string }) {
+  return (
+    <div
+      role='status'
+      className='bg-background/80 absolute inset-0 z-[5] flex flex-col overflow-hidden rounded-xl border backdrop-blur-[1px]'
+    >
+      <div className='flex items-center gap-2 border-b px-4 py-3 text-sm font-medium'>
+        <Loader2 className='text-primary h-4 w-4 animate-spin' aria-hidden />
+        {label}
+      </div>
+      <div className='flex-1 space-y-3 px-4 py-3' aria-hidden>
+        {[72, 58, 66].map((w, i) => (
+          <div key={i} className='flex items-center gap-4'>
+            <div className='bg-muted h-3 w-5 animate-pulse rounded' />
+            <div
+              className='bg-muted h-3 animate-pulse rounded'
+              style={{ width: `${w}%`, animationDelay: `${i * 150}ms` }}
+            />
+            <div
+              className='bg-muted ml-auto h-3 w-16 animate-pulse rounded'
+              style={{ animationDelay: `${i * 150}ms` }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

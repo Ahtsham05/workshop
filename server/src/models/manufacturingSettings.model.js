@@ -43,6 +43,10 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
       batch: { type: String, trim: true, default: 'B' },
       // Packing vouchers: bulk finished goods packed into pack sizes (cartons, bags …).
       packing: { type: String, trim: true, default: 'PK' },
+      // Production stock: bulk issue to the floor, return to the store, physical count.
+      floorIssue: { type: String, trim: true, default: 'PSI' },
+      floorReturn: { type: String, trim: true, default: 'PSR' },
+      floorCount: { type: String, trim: true, default: 'PSC' },
     },
     numberPadding: { type: Number, min: 3, max: 10, default: 5 },
     // How a new production order's finished-goods batch number is made: its own dated
@@ -69,6 +73,10 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
     // A production order completes itself once every planned unit is received as good
     // (unused WIP goes back to stock); when off, it waits for a manual Complete.
     autoCompleteOrders: { type: Boolean, default: true },
+    // When finished goods need more production-stock material than the floor holds:
+    // 'auto_issue' issues the shortfall from the store on the spot (an automatic PSI,
+    // flagged in the reports); 'block' refuses until it is issued.
+    floorShortfall: { type: String, enum: ['auto_issue', 'block'], default: 'auto_issue' },
     defaultPriority: { type: String, enum: ['low', 'normal', 'high', 'urgent'], default: 'normal' },
     counters: {
       type: new mongoose.Schema(
@@ -84,6 +92,9 @@ const ManufacturingSettingsSchema = new mongoose.Schema(
           rawMaterialReceipt: { type: Number, default: 0 },
           batch: { type: Number, default: 0 },
           packing: { type: Number, default: 0 },
+          floorIssue: { type: Number, default: 0 },
+          floorReturn: { type: Number, default: 0 },
+          floorCount: { type: Number, default: 0 },
         },
         { _id: false }
       ),

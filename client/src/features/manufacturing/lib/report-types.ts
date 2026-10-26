@@ -222,6 +222,8 @@ export const MOVEMENT_KEYS = [
   'scrapped',
   'packedIn',
   'packedOut',
+  'issuedToFloor',
+  'returnedFromFloor',
   'adjustment',
 ] as const
 export type MovementKey = (typeof MOVEMENT_KEYS)[number]

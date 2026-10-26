@@ -11,6 +11,8 @@ const batchPart = new mongoose.Schema(
   { _id: false }
 );
 
+const { floorPart } = require('./floorStockLot.model');
+
 /**
  * A packing voucher: bulk finished goods turned into packs in one transaction.
  *
@@ -83,6 +85,25 @@ const PackingVoucherSchema = new mongoose.Schema(
             unitCost: { type: Number, default: 0 },
             totalCost: { type: Number, default: 0 },
             batches: { type: [batchPart], default: undefined },
+            // Packing material kept in production stock is taken from there ('floor'),
+            // lot by lot (`floorParts`), not from the store — cancel puts it back there.
+            source: { type: String, enum: ['store', 'floor'], default: undefined },
+            floorParts: { type: [floorPart], default: undefined },
+            // Which packs used it — so production stock can say "used in which product".
+            uses: {
+              type: [
+                new mongoose.Schema(
+                  {
+                    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+                    productName: { type: String, trim: true },
+                    packName: { type: String, trim: true },
+                    quantity: { type: Number },
+                  },
+                  { _id: false }
+                ),
+              ],
+              default: undefined,
+            },
           },
           { _id: false }
         ),

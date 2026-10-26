@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { skipToken } from '@reduxjs/toolkit/query'
 import { toast } from 'sonner'
 import {
+  useGetFloorPickListQuery,
+  useGetFloorUsageTemplateQuery,
   useGetManufacturingSettingsQuery,
   useGetPackingSetupQuery,
   useReportOutputMutation,
@@ -19,6 +21,29 @@ import { buildableFrom, cleanFg, consumptionFor } from './output-math'
 import { packingSummary, type PackCounts } from './packing-math'
 
 const EPS = 1e-6
+
+/** One line of packing material used, recorded on the receipt (beyond the recipe). */
+export interface PackingUseRow {
+  key: number
+  productId: string
+  /** From the last receipt of this product: quantity per unit made (follows the quantity). */
+  perUnit: number | null
+  quantity: string
+  /** Typed by hand — no longer follows the quantity made. */
+  touched: boolean
+}
+let packingRowKey = 1
+export const newPackingUseRow = (
+  patch: Partial<PackingUseRow> = {}
+): PackingUseRow => ({
+  key: packingRowKey++,
+  productId: '',
+  perUnit: null,
+  quantity: '',
+  touched: false,
+  ...patch,
+})
+const round3 = (n: number) => Math.round(n * 1000) / 1000
 
 /*
  * Receiving finished goods on a production order — shared by the full receipt page and the
@@ -73,9 +98,7 @@ export function useFinishedGoodsReceipt(
     isLoading: packSetupLoading,
     error: packSetupError,
   } = useGetPackingSetupQuery(
-    order
-      ? { productId: order.productId, variantId }
-      : skipToken
+    order ? { productId: order.productId, variantId } : skipToken
   )
   const packSizes = useMemo(
     () => (packSetup?.sizes || []).filter((s) => s.isActive),
@@ -130,20 +153,93 @@ export function useFinishedGoodsReceipt(
   }, [order?.id])
 
   const quantity = qty || 0
+
+  // Packing material used (bottles, labels, cartons kept in production stock), recorded on
+  // the receipt. Starts from what the last receipt of this product used per unit made.
+  const { data: floorItems } = useGetFloorPickListQuery()
+  const floorChoices = useMemo(
+    () => (floorItems || []).filter((i) => i.isFloor),
+    [floorItems]
+  )
+  const { data: usageTemplate } = useGetFloorUsageTemplateQuery(
+    order ? order.productId : skipToken
+  )
+  const [packingUse, setPackingUse] = useState<PackingUseRow[]>([])
+  const templatedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!order || !usageTemplate || templatedFor.current === order.id) return
+    templatedFor.current = order.id
+    setPackingUse(
+      usageTemplate.lines.map((l) =>
+        newPackingUseRow({
+          productId: l.productId,
+          perUnit: l.perUnit,
+          quantity: quantity > 0 ? String(round3(l.perUnit * quantity)) : '',
+        })
+      )
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id, usageTemplate])
+  // Untouched lines follow the quantity made.
+  useEffect(() => {
+    setPackingUse((rows) =>
+      rows.some((r) => r.perUnit != null && !r.touched)
+        ? rows.map((r) =>
+            r.perUnit != null && !r.touched
+              ? {
+                  ...r,
+                  quantity:
+                    quantity > 0 ? String(round3(r.perUnit * quantity)) : '',
+                }
+              : r
+          )
+        : rows
+    )
+  }, [quantity])
+  const floorById = useMemo(
+    () => new Map((floorItems || []).map((i) => [i.id, i])),
+    [floorItems]
+  )
+  const packingUsed = packingUse
+    .filter((r) => r.productId && Number(r.quantity) > 0)
+    .map((r) => ({ productId: r.productId, quantity: Number(r.quantity) }))
+  const packingUseCost = packingUsed.reduce(
+    (s, u) => s + u.quantity * (floorById.get(u.productId)?.unitCost || 0),
+    0
+  )
+  const blockShort = settings?.floorShortfall === 'block'
+  const packingUseShort = packingUsed.filter(
+    (u) => u.quantity > (floorById.get(u.productId)?.inProduction || 0) + EPS
+  )
+
   const lines = useMemo(
     () => (order ? consumptionFor(order, quantity) : []),
     [order, quantity]
   )
   const shortLines = lines.filter((l) => l.short > EPS)
-  const materialCost = lines.reduce((s, l) => s + l.cost, 0)
+  const materialCost = lines.reduce((s, l) => s + l.cost, 0) + packingUseCost
   const overPlan = !!order && quantity > remaining + EPS
   const good = Math.min(quality.good, quantity)
   const rejected = Math.max(0, quantity - good)
   const packing = packingSummary(packSizes, packCounts, good)
   const packingNow =
     packEnabled && mode === 'direct' && packing.lines.length > 0
+  // Nothing recorded as packing for a receipt while production stock holds packing
+  // material: asked before posting (packing by pack sizes counts as recorded).
+  const packedFromPacks =
+    packingNow && packing.materials.some((m) => m.need > EPS)
+  const packingMissing =
+    floorChoices.length > 0 &&
+    quantity > EPS &&
+    packingUsed.length === 0 &&
+    !packedFromPacks
+  // Bumped by "Add packing material" in the reminder: the section adds a row and shows it.
+  const [addPackingSignal, setAddPackingSignal] = useState(0)
   const autoActive =
-    autoQty && packEnabled && mode === 'direct' && (packedKg > 0 || (loose || 0) > 0)
+    autoQty &&
+    packEnabled &&
+    mode === 'direct' &&
+    (packedKg > 0 || (loose || 0) > 0)
 
   // Auto total: whenever the packs or the loose kg change, good = packed + loose and the
   // quantity made = good + whatever was rejected.
@@ -182,6 +278,11 @@ export function useFinishedGoodsReceipt(
     packingNow &&
       packing.shortMaterials.length > 0 &&
       `${t('Not enough packing material')}: ${packing.shortMaterials.join(', ')}`,
+    blockShort &&
+      packingUseShort.length > 0 &&
+      `${t('Not enough in production stock')}: ${packingUseShort
+        .map((u) => floorById.get(u.productId)?.name || '')
+        .join(', ')} — ${t('issue it first')}`,
   ].filter(Boolean) as string[]
 
   /**
@@ -198,7 +299,9 @@ export function useFinishedGoodsReceipt(
       const out = await reportOutput({
         orderId: order.id,
         producedQuantity: quantity,
-        ...(chosenVariant && !order.variantId ? { variantId: chosenVariant } : {}),
+        ...(chosenVariant && !order.variantId
+          ? { variantId: chosenVariant }
+          : {}),
         qcMode: mode,
         ...(mode === 'direct'
           ? {
@@ -209,6 +312,7 @@ export function useFinishedGoodsReceipt(
               ...(packingNow ? { packing: { lines: packing.lines } } : {}),
             }
           : {}),
+        ...(packingUsed.length ? { floorUsage: packingUsed } : {}),
         notes,
       }).unwrap()
       if (out.packing) {
@@ -246,6 +350,12 @@ export function useFinishedGoodsReceipt(
     setNotes('')
     setQcMode(null)
     setPackCounts({})
+    // The next receipt starts from the per-unit amounts again.
+    setPackingUse((rows) =>
+      rows
+        .filter((r) => r.perUnit != null)
+        .map((r) => ({ ...r, touched: false }))
+    )
   }
 
   return {
@@ -293,5 +403,14 @@ export function useFinishedGoodsReceipt(
     packCounts,
     setPackCounts,
     packing,
+    packingUse,
+    setPackingUse,
+    floorChoices,
+    floorById,
+    packingUseCost,
+    blockShort,
+    packingMissing,
+    addPackingSignal,
+    requestAddPacking: () => setAddPackingSignal((n) => n + 1),
   }
 }

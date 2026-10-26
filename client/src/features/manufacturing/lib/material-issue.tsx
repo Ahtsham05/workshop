@@ -55,6 +55,11 @@ export type IssueRow = EntryRowBase & {
   issued: number
   remaining: number
   isOptional: boolean
+  /**
+   * A production-stock line: what the floor holds (the receipt uses it first) and the
+   * requirement still open. `remaining` is then only what the floor does not cover.
+   */
+  floor: { onFloor: number; open: number } | null
 }
 
 /**
@@ -173,6 +178,7 @@ export const blankIssueRow = (): Omit<IssueRow, 'id'> => ({
   issued: 0,
   remaining: 0,
   isOptional: false,
+  floor: null,
 })
 
 /** The order's material lines (+ alternatives) as engine products, matched to the catalog. */
@@ -226,6 +232,9 @@ export function orderMaterialProducts(
           // What this voucher still has to issue of it, first — that's why it's listed.
           !e.alt && (line.outstandingQuantity ?? line.requiredQuantity) > 0
             ? `Needs ${fmtQty(line.outstandingQuantity ?? line.requiredQuantity)} ${line.unit}`
+            : null,
+          !e.alt && line.supply === 'floor'
+            ? `Production stock ${fmtQty(line.floorQuantity ?? 0)} ${line.unit}`
             : null,
           e.alt
             ? `Alternative for ${line.productName}${e.ratio !== 1 ? ` (×${e.ratio})` : ''}`
@@ -359,6 +368,13 @@ export function rowFromProduct<T extends IssueRow>(
     issued: line.issuedQuantity || 0,
     remaining: line.outstandingQuantity || 0,
     isOptional: !!line.isOptional,
+    floor:
+      !alt && line.supply === 'floor'
+        ? {
+            onFloor: line.floorQuantity ?? 0,
+            open: line.openQuantity ?? line.outstandingQuantity ?? 0,
+          }
+        : null,
     batchId: null,
     batchNumber: null,
     batches: null,
@@ -475,10 +491,14 @@ export function rowStatus(row: IssueRow): RowStatus {
   const qty = row.product.trackSerial
     ? row.serials?.length || 0
     : row.quantity || 0
-  if (!(qty > 0))
+  if (!(qty > 0)) {
+    // Production stock covers it: the receipt takes it from the floor.
+    if (row.floor && row.remaining <= 1e-9 && row.floor.open > 1e-9)
+      return { tone: 'ok', text: 'From production stock' }
     return row.remaining > 0 && row.available <= 0
       ? { tone: 'error', text: 'Out of stock' }
       : { tone: 'muted', text: 'Not issued' }
+  }
   const cover = row.product.trackBatch ? batchCoverage(row) : null
   if (cover?.over.length)
     return { tone: 'error', text: `${cover.over[0].batchNumber} too low` }
@@ -500,10 +520,12 @@ export function rowStatus(row: IssueRow): RowStatus {
   if (cover && (cover.expired || cover.expiredOnly))
     return { tone: 'warn', text: 'Expired batch' }
   const credited = qty / (row.ratio || 1)
-  if (credited > remainingOf(row) + 1e-9)
+  // A production-stock line may be issued up to its whole open requirement.
+  const limit = row.floor ? row.floor.open : remainingOf(row)
+  if (credited > limit + 1e-9)
     return {
       tone: 'warn',
-      text: `Over by ${fmtQty(credited - remainingOf(row))}`,
+      text: `Over by ${fmtQty(credited - limit)}`,
     }
   if (cover && cover.allocations.length > 1)
     return {
@@ -828,14 +850,17 @@ export function requirementRows(
   lines: RequirementLine[],
   products: EntryProduct[]
 ): Omit<IssueRow, 'id'>[] {
-  return lines
-    .filter((l) => (l.outstandingQuantity || 0) > 0)
-    .map((l) => {
-      const product = products.find((p) => p.key === `${l.materialLineId}:`)
-      return product
-        ? rowFromProduct({ ...blankIssueRow(), id: '' } as IssueRow, product)
-        : null
-    })
-    .filter((r): r is IssueRow => !!r)
-    .map(({ id: _id, ...r }) => r)
+  return (
+    lines
+      // Production-stock lines are listed even when the floor covers them (quantity 0).
+      .filter((l) => (l.outstandingQuantity || 0) > 0 || l.supply === 'floor')
+      .map((l) => {
+        const product = products.find((p) => p.key === `${l.materialLineId}:`)
+        return product
+          ? rowFromProduct({ ...blankIssueRow(), id: '' } as IssueRow, product)
+          : null
+      })
+      .filter((r): r is IssueRow => !!r)
+      .map(({ id: _id, ...r }) => r)
+  )
 }

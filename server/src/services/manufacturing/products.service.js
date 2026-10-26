@@ -25,7 +25,7 @@ const stockService = () => require('./stock.service');
 const { requireBranch, scopeFilter, aggregateScope, escapeRegex, startOfBusinessToday, daysUntil } = require('./common');
 
 const PRODUCT_FIELDS =
-  'name nameUrdu sku barcode unit cost price stockQuantity hasVariants isActive image categories brandId productType procurementType defaultBomId manufacturingLeadTimeDays shelfLifeDays trackImei trackSerial branchId createdAt';
+  'name nameUrdu sku barcode unit cost price stockQuantity hasVariants isActive image categories brandId productType procurementType issueMethod defaultBomId manufacturingLeadTimeDays shelfLifeDays trackImei trackSerial branchId createdAt';
 
 const bomCountsFor = async (ctx, productIds) => {
   if (!productIds.length) return new Map();

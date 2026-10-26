@@ -17,6 +17,7 @@ const {
   MaterialIssue,
   ScrapRecord,
   PackingVoucher,
+  FloorStockVoucher,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const {
@@ -566,12 +567,48 @@ const MOVEMENT_SOURCES = [
     extra: { status: 'posted' },
     array: 'consumed',
     product: 'consumed.productId',
+    // Packing material taken from production stock left the store when it was issued there.
+    lineMatch: { 'consumed.source': { $ne: 'floor' } },
     qty: '$consumed.quantity',
     sign: -1,
     number: 'voucherNumber',
     project: { voucherNumber: 1, orderNumber: 1, batchNumber: 1 },
     detail: (d) => ({ orderNumber: d.orderNumber || '', note: d.batchNumber ? `Batch ${d.batchNumber}` : '' }),
     unitCost: '$consumed.unitCost',
+  },
+  // Production stock (floorStock.service.js): material issued to the floor in bulk leaves
+  // the store then, and comes back on a return. Cancelled vouchers net to zero (left out).
+  {
+    key: 'issuedToFloor',
+    Model: FloorStockVoucher,
+    date: 'voucherDate',
+    extra: { status: 'posted', kind: 'issue' },
+    array: 'lines',
+    product: 'lines.productId',
+    qty: '$lines.quantity',
+    sign: -1,
+    number: 'voucherNumber',
+    project: { voucherNumber: 1, auto: 1, source: 1 },
+    detail: (d) => ({
+      note: d.auto
+        ? `To production stock — auto for ${(d.source && d.source.number) || 'a receipt'}`
+        : 'To production stock',
+    }),
+    unitCost: '$lines.unitCost',
+  },
+  {
+    key: 'returnedFromFloor',
+    Model: FloorStockVoucher,
+    date: 'voucherDate',
+    extra: { status: 'posted', kind: 'return' },
+    array: 'lines',
+    product: 'lines.productId',
+    qty: '$lines.quantity',
+    sign: 1,
+    number: 'voucherNumber',
+    project: { voucherNumber: 1 },
+    detail: () => ({ note: 'Back from production stock' }),
+    unitCost: '$lines.unitCost',
   },
   {
     key: 'adjustment',
@@ -634,7 +671,9 @@ const movementTotals = async (scope, productIds, from, end) => {
     MOVEMENT_SOURCES.map((s) =>
       s.Model.aggregate([
         { $match: { ...scope, ...(s.extra || {}), [s.date]: { $gte: from }, [s.product]: { $in: productIds } } },
-        ...(s.array ? [{ $unwind: `$${s.array}` }, { $match: { [s.product]: { $in: productIds } } }] : []),
+        ...(s.array
+          ? [{ $unwind: `$${s.array}` }, { $match: { [s.product]: { $in: productIds }, ...(s.lineMatch || {}) } }]
+          : []),
         {
           $group: {
             _id: { p: `$${s.product}`, after: { $gt: [`$${s.date}`, end] } },
@@ -782,7 +821,7 @@ const stockRegister = async (ctx, q) => {
       MOVEMENT_SOURCES.map((s) =>
         s.Model.aggregate([
           { $match: { ...scope, ...(s.extra || {}), [s.date]: inPeriod, [s.product]: pid } },
-          ...(s.array ? [{ $unwind: `$${s.array}` }, { $match: { [s.product]: pid } }] : []),
+          ...(s.array ? [{ $unwind: `$${s.array}` }, { $match: { [s.product]: pid, ...(s.lineMatch || {}) } }] : []),
           {
             $project: {
               ...s.project,

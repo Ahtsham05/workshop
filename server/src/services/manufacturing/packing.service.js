@@ -38,6 +38,8 @@ const { atBusinessTimeOfDay } = require('../../utils/businessTimezone');
 
 const EPS = 1e-6;
 const MAX_SIZES = 30;
+// eslint-disable-next-line global-require
+const floorStock = () => require('./floorStock.service');
 const oid = (v) => new mongoose.Types.ObjectId(String(v));
 const scopeOf = ({ organizationId, branchId }) => ({ organizationId, ...(branchId ? { branchId } : {}) });
 
@@ -128,7 +130,7 @@ const getSetup = async (ctx, productId, { variantId: asked } = {}) => {
   const [products, availability, costs, tracking, bulkDetail] = await Promise.all([
     allIds.length
       ? Product.find({ _id: { $in: allIds.map(oid) }, organizationId: ctx.organizationId })
-          .select('name sku unit price productType isActive')
+          .select('name sku unit price productType isActive issueMethod')
           .lean()
       : [],
     stockService.getAvailability({
@@ -156,8 +158,30 @@ const getSetup = async (ctx, productId, { variantId: asked } = {}) => {
   const problem = packProblem(bulk, variantId) || (bulkDetail && bulkDetail.error) || null;
   const detail = bulkDetail && !bulkDetail.error ? bulkDetail : null;
   const productOf = new Map(products.map((p) => [String(p._id), p]));
+  // Packing material kept in production stock is used from the floor — plus the store
+  // when a shortfall is issued automatically (setting floorShortfall).
+  const floorIds = products.filter((p) => p.issueMethod === 'floor').map((p) => String(p._id));
+  const [floorHeld, settings] = floorIds.length
+    ? await Promise.all([floorStock().balances(ctx, floorIds), settingsService.getSettings(ctx.organizationId)])
+    : [new Map(), null];
   const info = (id) => {
     const p = productOf.get(String(id)) || {};
+    const store = roundQty(availability.get(`${id}:`) || 0);
+    if (p.issueMethod === 'floor') {
+      const inProduction = (floorHeld.get(String(id)) || { quantity: 0 }).quantity;
+      return {
+        id: String(id),
+        name: p.name,
+        sku: p.sku || '',
+        unit: p.unit || '',
+        price: p.price != null ? p.price : null,
+        missing: false,
+        available: roundQty(inProduction + (settings.floorShortfall === 'block' ? 0 : store)),
+        inProduction,
+        fromProductionStock: true,
+        unitCost: costs.get(`${id}:`) || 0,
+      };
+    }
     return {
       id: String(id),
       name: p.name || '(deleted product)',
@@ -165,7 +189,7 @@ const getSetup = async (ctx, productId, { variantId: asked } = {}) => {
       unit: p.unit || '',
       price: p.price != null ? p.price : null,
       missing: !p.name,
-      available: roundQty(availability.get(`${id}:`) || 0),
+      available: store,
       unitCost: costs.get(`${id}:`) || 0,
     };
   };
@@ -543,7 +567,7 @@ const planLines = async (ctx, productId, lines, session) => {
  *  body: { productId, lines: [{ packSizeId, quantity }], batchId?, productionOrderId?,
  *          receiptId?, looseQuantity?, packingDate?, notes? }
  */
-const packInTransaction = async (ctx, body, { voucherNumber, session, source = 'stock' }) => {
+const packInTransaction = async (ctx, body, { voucherNumber, session, source = 'stock', settings = null }) => {
   const bulkVariantId = body.variantId || null;
   const loaded = await Product.findOne({ _id: body.productId, organizationId: ctx.organizationId, branchId: ctx.branchId })
     .select('name hasVariants trackImei trackSerial')
@@ -616,8 +640,15 @@ const packInTransaction = async (ctx, body, { voucherNumber, session, source = '
     },
   ];
 
-  // 2. Packing material out.
+  // 2. Packing material out — from production stock for materials kept there (issued to
+  // the floor in bulk), else from the store.
   const materialCostBySize = new Map();
+  const floorAuto = floorStock().autoIssue({
+    refType: 'PackingVoucher',
+    refId: voucherId,
+    number: voucherNumber,
+    productName: bulkItem.name,
+  });
   // eslint-disable-next-line no-restricted-syntax
   for (const m of materials.values()) {
     // eslint-disable-next-line no-await-in-loop
@@ -628,20 +659,49 @@ const packInTransaction = async (ctx, body, { voucherNumber, session, source = '
       session,
     });
     assertPackable(item.product, 'material');
-    // eslint-disable-next-line no-await-in-loop
-    const out = await takeOut(item, m.quantity, moveCtx);
-    consumed.push({
-      role: 'material',
-      productId: item.product._id,
-      productName: item.name,
-      unit: item.unit,
-      quantity: m.quantity,
-      unitCost: roundMoney(out.unitCost),
-      totalCost: roundMoney(out.totalCost),
-      batches: out.parts.some((p) => p.batch)
-        ? out.parts.map((p) => ({ batchId: p.batch._id, batchNumber: p.batch.batchNumber, quantity: p.quantity }))
-        : undefined,
-    });
+    const uses = m.perLine.map((pl) => ({ sizeId: pl.sizeId, quantity: pl.quantity }));
+    let out;
+    if (item.product.issueMethod === 'floor') {
+      // eslint-disable-next-line no-await-in-loop
+      const used = await floorStock().useFromFloor(ctx, item, m.quantity, {
+        refType: 'PackingVoucher',
+        refId: voucherId,
+        productionOrderId,
+        settings,
+        auto: floorAuto,
+        session,
+      });
+      out = { totalCost: used.cost, unitCost: m.quantity > 0 ? used.cost / m.quantity : 0 };
+      consumed.push({
+        role: 'material',
+        productId: item.product._id,
+        productName: item.name,
+        unit: item.unit,
+        quantity: m.quantity,
+        unitCost: roundMoney(out.unitCost),
+        totalCost: roundMoney(out.totalCost),
+        source: 'floor',
+        floorParts: used.parts,
+        uses,
+      });
+    } else {
+      // eslint-disable-next-line no-await-in-loop
+      out = await takeOut(item, m.quantity, moveCtx);
+      consumed.push({
+        role: 'material',
+        productId: item.product._id,
+        productName: item.name,
+        unit: item.unit,
+        quantity: m.quantity,
+        unitCost: roundMoney(out.unitCost),
+        totalCost: roundMoney(out.totalCost),
+        batches: out.parts.some((p) => p.batch)
+          ? out.parts.map((p) => ({ batchId: p.batch._id, batchNumber: p.batch.batchNumber, quantity: p.quantity }))
+          : undefined,
+        source: 'store',
+        uses,
+      });
+    }
     m.perLine.forEach((pl) =>
       materialCostBySize.set(pl.sizeId, (materialCostBySize.get(pl.sizeId) || 0) + pl.quantity * out.unitCost)
     );
@@ -689,6 +749,23 @@ const packInTransaction = async (ctx, body, { voucherNumber, session, source = '
     });
   }
 
+  // Which pack each material went into, named by the pack product.
+  const packOf = new Map(lines.map((l) => [String(l.packSizeId), l]));
+  consumed.forEach((c) => {
+    if (!c.uses) return;
+    // eslint-disable-next-line no-param-reassign
+    c.uses = c.uses.map((u) => {
+      const line = packOf.get(String(u.sizeId));
+      return {
+        productId: line ? line.productId : undefined,
+        productName: line ? line.productName : undefined,
+        packName: line ? line.packName : undefined,
+        quantity: roundQty(u.quantity),
+      };
+    });
+  });
+  await floorStock().flushAutoIssue(ctx, floorAuto, session);
+
   const user = ctx.createdBy ? await User.findById(ctx.createdBy).select('name').session(session).lean() : null;
   const [voucher] = await PackingVoucher.create(
     [
@@ -727,7 +804,8 @@ const packInTransaction = async (ctx, body, { voucherNumber, session, source = '
 const postPacking = async (ctx, body) => {
   requireBranch(ctx.branchId);
   const voucherNumber = await settingsService.nextDocumentNumber(ctx.organizationId, 'packing');
-  return runTransaction((session) => packInTransaction(ctx, body, { voucherNumber, session, source: 'stock' }));
+  const settings = await settingsService.getSettings(ctx.organizationId);
+  return runTransaction((session) => packInTransaction(ctx, body, { voucherNumber, session, source: 'stock', settings }));
 };
 
 /**
@@ -735,7 +813,7 @@ const postPacking = async (ctx, body) => {
  * was received: packs it from the receipt's own batch. Packing more than was received is
  * refused; what is not packed stays as loose bulk stock.
  */
-const packReceipt = async (ctx, { order, output, packing, voucherNumber, session }) => {
+const packReceipt = async (ctx, { order, output, packing, voucherNumber, session, settings }) => {
   const receipt = await ProductionReceipt.findOne({ outputId: output._id }).session(session).lean();
   if (!receipt) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Pack the goods once they are received — this output went to quality check');
@@ -762,7 +840,7 @@ const packReceipt = async (ctx, { order, output, packing, voucherNumber, session
       looseQuantity: roundQty(receipt.quantity - bulkQuantity),
       notes: packing.notes,
     },
-    { voucherNumber, session, source: 'receipt' }
+    { voucherNumber, session, source: 'receipt', settings }
   );
 };
 
@@ -777,6 +855,7 @@ const receiveAndPack = async (ctx, orderId, body) => {
   if (!lines.length) return { output: await execution.reportOutput(ctx, orderId, body), packing: null };
   // Numbers are taken before the transaction — counters are never advanced inside one.
   const voucherNumber = await settingsService.nextDocumentNumber(ctx.organizationId, 'packing');
+  const settings = await settingsService.getSettings(ctx.organizationId);
   let packing = null;
   const output = await execution.reportOutput(ctx, orderId, body, {
     afterReceipt: async ({ order, output: out, session }) => {
@@ -786,6 +865,7 @@ const receiveAndPack = async (ctx, orderId, body) => {
         packing: { lines, notes: body.packing.notes },
         voucherNumber,
         session,
+        settings,
       });
     },
   });
@@ -843,6 +923,16 @@ const cancelPackingInTx = async (ctx, voucher, text, session) => {
   }
   // eslint-disable-next-line no-restricted-syntax
   for (const c of voucher.consumed) {
+    if (c.source === 'floor') {
+      // eslint-disable-next-line no-await-in-loop
+      await floorStock().restoreToFloor(
+        ctx,
+        c.productId,
+        (c.floorParts || []).map((p) => (p.toObject ? p.toObject() : p)),
+        { refType: 'PackingVoucherReversal', refId: voucher._id, productionOrderId: voucher.productionOrderId, session }
+      );
+      continue; // eslint-disable-line no-continue
+    }
     // eslint-disable-next-line no-await-in-loop
     const item = await stockService.resolveItem({
       ...ctx,

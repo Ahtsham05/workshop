@@ -30,6 +30,7 @@ const {
   productionOrderBatch: productionOrderBatchService,
   reports: reportsService,
   packing: packingService,
+  floorStock: floorStockService,
 } = manufacturingService;
 
 /** Read context: org always, branch when the client picked one (superAdmins may read org-wide). */
@@ -810,6 +811,82 @@ const cancelPacking = catchAsync(async (req, res) => {
   res.send(voucher);
 });
 
+/* ── Production stock ── */
+
+const getFloorOverview = catchAsync(async (req, res) => {
+  res.send(await floorStockService.getOverview(readCtx(req), req.query));
+});
+
+const getFloorMaterial = catchAsync(async (req, res) => {
+  res.send(await floorStockService.getMaterial(readCtx(req), req.params.productId, req.query));
+});
+
+const getFloorPickList = catchAsync(async (req, res) => {
+  res.send(await floorStockService.getPickList(await writeCtx(req)));
+});
+
+const getFloorUsageTemplate = catchAsync(async (req, res) => {
+  res.send(await floorStockService.getUsageTemplate(readCtx(req), req.params.productId));
+});
+
+const getFloorMaterialChoices = catchAsync(async (req, res) => {
+  res.send(await floorStockService.getMaterialChoices(readCtx(req), req.query));
+});
+
+const setFloorIssueMethod = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const result = await floorStockService.setIssueMethod(ctx, req.body);
+  await audit(req, {
+    action: 'update',
+    module: 'Product',
+    entity: { _id: req.body.productIds[0] },
+    entityName: `Production stock ${result.issueMethod === 'floor' ? 'on' : 'off'} for ${result.updated} material(s)`,
+    metadata: { productIds: req.body.productIds.join(','), ordersUpdated: result.ordersUpdated },
+  });
+  res.send(result);
+});
+
+const floorVoucherAudit = (req, voucher, action = 'stock_adjust') =>
+  audit(req, {
+    action,
+    module: 'FloorStockVoucher',
+    entity: voucher,
+    entityName: `${voucher.voucherNumber} (${voucher.kind})`,
+    metadata: { lines: voucher.lines.map((l) => `${l.quantity} ${l.unit} ${l.productName}`).join(', ') },
+  });
+
+const postFloorIssue = catchAsync(async (req, res) => {
+  const voucher = await floorStockService.postIssue(await writeCtx(req), req.body);
+  await floorVoucherAudit(req, voucher);
+  res.status(httpStatus.CREATED).send(voucher);
+});
+
+const postFloorReturn = catchAsync(async (req, res) => {
+  const voucher = await floorStockService.postReturn(await writeCtx(req), req.body);
+  await floorVoucherAudit(req, voucher);
+  res.status(httpStatus.CREATED).send(voucher);
+});
+
+const postFloorCount = catchAsync(async (req, res) => {
+  const voucher = await floorStockService.postCount(await writeCtx(req), req.body);
+  await floorVoucherAudit(req, voucher);
+  res.status(httpStatus.CREATED).send(voucher);
+});
+
+const listFloorVouchers = catchAsync(async (req, res) => {
+  res.send(await floorStockService.listVouchers(readCtx(req), req.query));
+});
+
+const getFloorVoucher = catchAsync(async (req, res) => {
+  res.send(await floorStockService.getVoucher(readCtx(req), req.params.voucherId));
+});
+
+const cancelFloorVoucher = catchAsync(async (req, res) => {
+  const voucher = await floorStockService.cancelVoucher(await writeCtx(req), req.params.voucherId, req.body);
+  await floorVoucherAudit(req, voucher, 'status_change');
+  res.send(voucher);
+});
+
 const inspectOutput = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
   const output = await executionService.inspectOutput(ctx, req.params.outputId, req.body);
@@ -1179,6 +1256,18 @@ const getWip = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getFloorOverview,
+  getFloorMaterial,
+  getFloorPickList,
+  getFloorMaterialChoices,
+  getFloorUsageTemplate,
+  setFloorIssueMethod,
+  postFloorIssue,
+  postFloorReturn,
+  postFloorCount,
+  listFloorVouchers,
+  getFloorVoucher,
+  cancelFloorVoucher,
   getProductVariants,
   getPackableProducts,
   getPackingSetup,

@@ -33,6 +33,9 @@ const { roundQty, roundMoney, requireBranch, scopeFilter, escapeRegex, parseDate
  */
 
 const { EPS } = wip;
+// Lazy: floorStock.service needs stock/settings only, but keeps the require graph acyclic.
+// eslint-disable-next-line global-require
+const floorStock = () => require('./floorStock.service');
 
 const assertExecutable = (order) => {
   if (!EXECUTABLE_PRODUCTION_STATUSES.includes(order.status)) {
@@ -254,7 +257,8 @@ const issueMaterials = async (
 
       const physical = roundQty(pieces.reduce((s, p) => s + p.quantity, 0));
       const credited = roundQty(physical / ratio);
-      const remaining = wip.lineRemaining(material);
+      // A production-stock line may still be issued to the order (used before the floor).
+      const remaining = wip.lineOpen(material);
       if (credited > remaining + EPS) {
         if (!body.allowOverIssue) {
           throw new ApiError(
@@ -768,10 +772,126 @@ const writeOutputBucket = async (order, entry) => {
 // ── Output, quality check, rework ───────────────────────────────────────────────────
 
 /**
+ * Uses `quantity` of a production-stock material line straight from the floor: it counts as
+ * issued to the order and consumed at once, at the cost of the floor lots it came from.
+ */
+const useFloorStock = async (order, material, quantity, ctx) => {
+  const item = await stockService.resolveItem({
+    organizationId: ctx.organizationId,
+    branchId: ctx.branchId,
+    productId: material.productId,
+    session: ctx.session,
+  });
+  const { parts, cost } = await floorStock().useFromFloor(ctx, item, quantity, {
+    refType: ctx.refType,
+    refId: ctx.refId,
+    productionOrderId: order._id,
+    settings: ctx.settings,
+    auto: ctx.floorAuto,
+    session: ctx.session,
+  });
+  /* eslint-disable no-param-reassign */
+  material.issuedQuantity = roundQty((material.issuedQuantity || 0) + quantity);
+  material.issuedCost = roundMoney((material.issuedCost || 0) + cost);
+  material.consumedQuantity = roundQty(material.consumedQuantity + quantity);
+  material.consumedCost = roundMoney(material.consumedCost + cost);
+  /* eslint-enable no-param-reassign */
+  return {
+    cost,
+    consumption: parts.map((p) => ({
+      materialLineId: material._id,
+      source: 'floor',
+      floorLotId: p.lotId,
+      floorVoucherId: p.voucherId,
+      productId: material.productId,
+      productName: material.productName,
+      unit: material.unit,
+      quantity: p.quantity,
+      batchId: p.batchId,
+      batchNumber: p.batchNumber,
+      cost: roundMoney(p.quantity * (p.unitCost || 0)),
+      variantId: material.variantId || null,
+      ratio: 1,
+      isAlternative: false,
+      issuedAt: p.issuedAt,
+    })),
+  };
+};
+
+/**
+ * Packing material recorded on a receipt beyond the recipe — `floorUsage` [{ productId,
+ * quantity }]: what was actually used of bottles, labels, cartons kept in production stock.
+ * Taken from the floor (oldest first; a shortfall per the floorShortfall setting) and
+ * added to the output's cost, so the finished goods carry their packing.
+ */
+const useExtraFloorMaterials = async (order, floorUsage, ctx) => {
+  const wanted = new Map();
+  (floorUsage || []).forEach((u) => {
+    const q = roundQty(u && u.quantity);
+    if (!u || !u.productId || !(q > EPS)) return;
+    wanted.set(String(u.productId), roundQty((wanted.get(String(u.productId)) || 0) + q));
+  });
+  const consumption = [];
+  let cost = 0;
+  // eslint-disable-next-line no-restricted-syntax
+  for (const [productId, quantity] of wanted) {
+    // eslint-disable-next-line no-await-in-loop
+    const item = await stockService.resolveItem({
+      organizationId: ctx.organizationId,
+      branchId: ctx.branchId,
+      productId,
+      session: ctx.session,
+    });
+    if (item.product.issueMethod !== 'floor') {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `"${item.name}" is not a production-stock material — turn it on under Production Stock → Materials`
+      );
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const used = await floorStock().useFromFloor(ctx, item, quantity, {
+      refType: ctx.refType,
+      refId: ctx.refId,
+      productionOrderId: order._id,
+      settings: ctx.settings,
+      auto: ctx.floorAuto,
+      session: ctx.session,
+    });
+    cost += used.cost;
+    used.parts.forEach((p) =>
+      consumption.push({
+        materialLineId: null,
+        extra: true,
+        source: 'floor',
+        floorLotId: p.lotId,
+        floorVoucherId: p.voucherId,
+        productId: item.product._id,
+        productName: item.name,
+        unit: item.unit,
+        quantity: p.quantity,
+        batchId: p.batchId,
+        batchNumber: p.batchNumber,
+        cost: roundMoney(p.quantity * (p.unitCost || 0)),
+        variantId: null,
+        ratio: 1,
+        isAlternative: false,
+        issuedAt: p.issuedAt,
+      })
+    );
+  }
+  return { consumption, cost: roundMoney(cost) };
+};
+
+/**
  * Backflushes the material a quantity of output used, out of WIP. Each line's cumulative
  * consumption follows its requirement in proportion to cumulative output, so the final
  * output consumes exactly what was required (no rounding drift). Optional lines consume
  * only what was actually issued.
+ *
+ * A production-stock line (`supply` 'floor') uses whatever was issued to this order first,
+ * the rest straight from production stock — issued and consumed in the one step
+ * (floorStock.service.js). `ctx.settings` / `ctx.floorAuto` say what to do when the floor is
+ * short; without them a shortfall is refused.
  */
 const backflush = async (order, producedQty, ctx) => {
   const cumulative = roundQty(order.producedQuantity + producedQty);
@@ -785,7 +905,12 @@ const backflush = async (order, producedQty, ctx) => {
     if (lots.some((lot) => lot.imeiIds && lot.imeiIds.length)) need = Math.round(need);
     if (need <= EPS) continue; // eslint-disable-line no-continue
     const available = wip.lineWip(order, material);
-    if (available + EPS < need) {
+    const fromFloorLine = material.supply === 'floor' && !material.isOptional;
+    let fromFloor = 0;
+    if (fromFloorLine && available + EPS < need) {
+      fromFloor = roundQty(need - available);
+      need = available;
+    } else if (available + EPS < need) {
       if (!material.isOptional) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
@@ -795,6 +920,13 @@ const backflush = async (order, producedQty, ctx) => {
       need = available;
       if (need <= EPS) continue; // eslint-disable-line no-continue
     }
+    if (fromFloor > EPS) {
+      // eslint-disable-next-line no-await-in-loop
+      const used = await useFloorStock(order, material, fromFloor, ctx);
+      cost += used.cost;
+      consumption.push(...used.consumption);
+    }
+    if (need <= EPS) continue; // eslint-disable-line no-continue
     // eslint-disable-next-line no-await-in-loop
     const taken = await wip.takeFromWip(order, material, need, {
       ...ctx,
@@ -989,8 +1121,26 @@ const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, bo
       );
     }
     const outputId = new mongoose.Types.ObjectId();
-    const ctx = { organizationId, branchId, createdBy, refType: 'ProductionOutput', refId: outputId, session };
+    const floorAuto = floorStock().autoIssue({
+      refType: 'ProductionOutput',
+      refId: outputId,
+      number: outputNumber,
+      productName: order.productName,
+    });
+    const ctx = {
+      organizationId,
+      branchId,
+      createdBy,
+      refType: 'ProductionOutput',
+      refId: outputId,
+      session,
+      settings,
+      floorAuto,
+    };
     const { consumption, cost } = await backflush(order, producedQuantity, ctx);
+    const extra = await useExtraFloorMaterials(order, body.floorUsage, ctx);
+    consumption.push(...extra.consumption);
+    await floorStock().flushAutoIssue(ctx, floorAuto, session);
     order.producedQuantity = roundQty(order.producedQuantity + producedQuantity);
 
     let materialCost = cost;
@@ -1004,6 +1154,7 @@ const reportOutput = async ({ organizationId, branchId, createdBy }, orderId, bo
       });
       materialCost = roundMoney(item.unitCost * producedQuantity);
     }
+    materialCost = roundMoney(materialCost + extra.cost);
     const output = new ProductionOutput({
       _id: outputId,
       organizationId,
@@ -1542,7 +1693,9 @@ const reverseOutput = async (
       if (packed.length && !cancelPacking) {
         throw new ApiError(
           httpStatus.CONFLICT,
-          `This receipt was packed on ${packed.map((p) => p.voucherNumber).join(', ')} — reverse it together with its packing`
+          `This receipt was packed on ${packed
+            .map((p) => p.voucherNumber)
+            .join(', ')} — reverse it together with its packing`
         );
       }
       // Packing first: the packs leave stock and the bulk returns, then the bulk leaves below.
@@ -1669,8 +1822,55 @@ const reverseOutput = async (
     // 4. The material it used goes back into WIP, lot by lot.
     // eslint-disable-next-line no-restricted-syntax
     for (const c of output.consumption) {
+      if (c.extra && c.source === 'floor' && c.quantity > EPS) {
+        // Packing recorded on the receipt beyond the recipe: back to production stock.
+        // eslint-disable-next-line no-await-in-loop
+        await floorStock().restoreToFloor(
+          ctx,
+          c.productId,
+          [
+            {
+              lotId: c.floorLotId,
+              voucherId: c.floorVoucherId,
+              batchId: c.batchId || null,
+              batchNumber: c.batchNumber,
+              quantity: c.quantity,
+              unitCost: c.quantity ? c.cost / c.quantity : 0,
+              issuedAt: c.issuedAt,
+            },
+          ],
+          { ...ref, productionOrderId: order._id, session }
+        );
+        continue; // eslint-disable-line no-continue
+      }
       const material = order.materials.id(c.materialLineId);
       if (!material || !(c.quantity > EPS)) continue; // eslint-disable-line no-continue
+      if (c.source === 'floor') {
+        // Used straight from production stock: it goes back there, lot by lot, and no
+        // longer counts as issued to this order.
+        // eslint-disable-next-line no-await-in-loop
+        await floorStock().restoreToFloor(
+          ctx,
+          c.productId,
+          [
+            {
+              lotId: c.floorLotId,
+              voucherId: c.floorVoucherId,
+              batchId: c.batchId || null,
+              batchNumber: c.batchNumber,
+              quantity: c.quantity,
+              unitCost: c.quantity ? c.cost / c.quantity : 0,
+              issuedAt: c.issuedAt,
+            },
+          ],
+          { ...ref, productionOrderId: order._id, session }
+        );
+        material.issuedQuantity = roundQty(Math.max(0, material.issuedQuantity - c.quantity));
+        material.issuedCost = roundMoney(Math.max(0, material.issuedCost - (c.cost || 0)));
+        material.consumedQuantity = roundQty(Math.max(0, material.consumedQuantity - c.quantity));
+        material.consumedCost = roundMoney(Math.max(0, material.consumedCost - (c.cost || 0)));
+        continue; // eslint-disable-line no-continue
+      }
       let lot = order.wipLots.id(c.wipLotId);
       const ratio = c.ratio || (lot && lot.ratio) || 1;
       const variantId =
@@ -2004,6 +2204,12 @@ const MANUFACTURING_MOVEMENT_TYPES = [
   'rework_in',
   'rework_out',
   'production_scrap',
+  'floor_issue',
+  'floor_in',
+  'floor_return',
+  'floor_restock',
+  'floor_consume',
+  'floor_adjust',
 ];
 
 /** The ledger itself — every manufacturing movement with its full trace. */

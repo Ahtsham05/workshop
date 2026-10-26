@@ -84,7 +84,7 @@ export type ScrapStage =
   | 'rework'
   | 'finished_good'
 export type RejectDisposition = 'scrap' | 'rework'
-export type StockBucket = 'available' | 'wip' | 'qc' | 'rework'
+export type StockBucket = 'available' | 'wip' | 'qc' | 'rework' | 'floor'
 export type ScrapReason =
   | 'defect'
   | 'damage'
@@ -116,6 +116,8 @@ export interface ManufacturingProduct {
   } | null
   /** Pack sizes this (bulk) product is packed into. */
   packSizeCount?: number
+  /** 'floor' = kept in production stock (issued in bulk, used automatically). */
+  issueMethod?: 'order' | 'floor' | null
   name: string
   nameUrdu?: string
   sku?: string
@@ -401,6 +403,8 @@ export interface ProductionMaterial {
   consumedCost: number
   scrappedQuantity: number
   isOptional: boolean
+  /** 'floor' = used from production stock (issued in bulk), never issued to the order. */
+  supply?: 'order' | 'floor'
   level: number
   alternatives: BomAlternative[]
 }
@@ -629,6 +633,13 @@ export interface ProductionOrderInput {
 
 export interface RequirementLine {
   materialLineId?: string
+  /** 'floor' = used from production stock at receipt, never issued on a voucher. */
+  supply?: 'order' | 'floor'
+  /** Floor lines: in production stock now, and what this order will still use from it. */
+  floorQuantity?: number
+  floorNeed?: number
+  /** Floor lines: the requirement still open (outstanding = open − what the floor holds). */
+  openQuantity?: number
   branchId?: string
   productId: string
   variantId?: string | null
@@ -1684,7 +1695,14 @@ export interface ManufacturingSettings {
     scrap: string
     /** Finished-goods batch numbers: B261019-007. */
     batch: string
+    packing?: string
+    /** Production stock: issue (PSI), return (PSR), count (PSC). */
+    floorIssue?: string
+    floorReturn?: string
+    floorCount?: string
   }
+  /** Production stock short at a receipt / packing: issue the rest from the store, or refuse. */
+  floorShortfall?: 'auto_issue' | 'block'
   /** New orders' batch number: own dated sequence, or the order number. */
   batchNumbering: 'sequence' | 'order'
   numberPadding: number
@@ -1727,6 +1745,7 @@ const TAGS = [
   'MfgMaterialReceipt',
   'MfgAccess',
   'MfgPacking',
+  'MfgFloor',
 ] as const
 
 /** Everything a stock movement can change. */
@@ -1742,6 +1761,7 @@ const EXECUTION_TAGS = [
   'MfgOutput',
   'MfgMovement',
   'MfgPacking',
+  'MfgFloor',
 ] as const
 
 /* ── Packing: bulk finished goods into pack sizes (server packing.service.js) ── */
@@ -1754,6 +1774,9 @@ export interface PackItemInfo {
   price?: number | null
   missing?: boolean
   available: number
+  /** Packing material kept in production stock: what is on the floor (`available` adds the store when shortfalls are auto-issued). */
+  fromProductionStock?: boolean
+  inProduction?: number
   unitCost?: number
 }
 
@@ -1856,6 +1879,8 @@ export interface PackingVoucher {
     unitCost?: number
     totalCost?: number
     batches?: { batchId: string; batchNumber: string; quantity: number }[]
+    /** 'floor' = packing material taken from production stock. */
+    source?: 'store' | 'floor'
   }[]
   totalCost?: number
   notes: string
@@ -1865,6 +1890,148 @@ export interface PackingVoucher {
   cancelReason?: string
   createdByName?: string
   createdAt: string
+}
+
+/* ── Production stock: material issued to the floor in bulk (server floorStock.service.js) ── */
+
+export interface FloorUse {
+  productId: string
+  name: string
+  quantity: number
+}
+
+export interface FloorOverviewRow {
+  productId: string
+  name: string
+  sku: string
+  unit: string
+  productType: ProductType | null
+  isFloor: boolean
+  opening: number
+  issued: number
+  /** Of `issued`: what receipts / packing issued themselves because the floor was short. */
+  autoIssued: number
+  used: number
+  returned: number
+  /** Physical count difference: − wastage / loss, + found. */
+  countDiff: number
+  closing: number
+  usedFor: FloorUse[]
+  usedCost?: number
+  inProduction: number
+  inProductionValue?: number
+  storeQuantity: number
+  openOrderNeed: number
+  openOrders: number
+}
+
+export interface FloorOverview {
+  rows: FloorOverviewRow[]
+  totals: {
+    materials: number
+    inProductionValue?: number
+    usedCost?: number
+    issued: number
+    used: number
+    autoIssued: number
+    wastage: number
+    short: number
+  } | null
+}
+
+export type FloorMoveKind = 'issue' | 'auto_issue' | 'return' | 'count' | 'used'
+
+export interface FloorMovement {
+  productId: string
+  date: string
+  kind: FloorMoveKind
+  /** Signed, as seen from production stock. */
+  quantity: number
+  balance: number
+  number: string
+  refType: 'FloorStockVoucher' | 'ProductionOutput' | 'PackingVoucher'
+  refId: string
+  orderNumber?: string
+  usedFor?: FloorUse[]
+  note: string
+  by?: string
+  cost?: number
+}
+
+export interface FloorMaterialDetail {
+  product: { id: string; name: string; sku: string; unit: string; productType: ProductType | null; isFloor: boolean }
+  opening: number
+  closing: number
+  inProduction: number
+  inProductionValue?: number
+  openOrderNeed: number
+  usedFor: FloorUse[]
+  lots: { id: string; quantity: number; unitCost?: number; batchNumber: string; issuedAt: string; voucherNumber: string }[]
+  movements: FloorMovement[]
+}
+
+export interface FloorPickItem {
+  id: string
+  name: string
+  sku: string
+  unit: string
+  productType: ProductType | null
+  isFloor: boolean
+  storeQuantity: number
+  inProduction: number
+  /** Average cost of what is on the floor (store cost when empty); hidden without cost access. */
+  unitCost?: number
+}
+
+export interface FloorUsageTemplate {
+  fromOutput?: string
+  lines: { productId: string; name: string; unit: string; quantity: number; perUnit: number }[]
+}
+
+export interface FloorMaterialChoice {
+  id: string
+  name: string
+  sku: string
+  unit: string
+  productType: ProductType | null
+  isFloor: boolean
+}
+
+export type FloorVoucherKind = 'issue' | 'return' | 'count'
+
+export interface FloorVoucher {
+  id: string
+  voucherNumber: string
+  kind: FloorVoucherKind
+  voucherDate: string
+  auto: boolean
+  source?: { refType?: string; refId?: string; number?: string; productName?: string }
+  lines: {
+    _id: string
+    productId: string
+    productName: string
+    unit: string
+    quantity: number
+    bookQuantity?: number
+    countedQuantity?: number
+    unitCost?: number
+    totalCost?: number
+    batches?: { batchNumber?: string; quantity: number }[]
+  }[]
+  totalCost?: number
+  reason: string
+  notes: string
+  status: 'posted' | 'cancelled'
+  cancelledAt?: string
+  cancelledBy?: { name?: string }
+  cancelReason?: string
+  createdByName?: string
+  createdAt: string
+}
+
+export interface FloorPeriod {
+  dateFrom?: string
+  dateTo?: string
 }
 
 export interface PackableProduct {
@@ -2652,6 +2819,8 @@ export const manufacturingApi = createApi({
         packing?: { lines: PackingLineInput[]; notes?: string }
         /** The variant made, for an order that never named one. */
         variantId?: string | null
+        /** Packing material actually used beyond the recipe — taken from production stock. */
+        floorUsage?: { productId: string; quantity: number }[]
       }
     >({
       query: ({ orderId, ...body }) => ({
@@ -2818,6 +2987,63 @@ export const manufacturingApi = createApi({
     }),
     cancelPacking: builder.mutation<PackingVoucher, { id: string; reason: string }>({
       query: ({ id, reason }) => ({ url: `/manufacturing/packing/${id}/cancel`, method: 'POST', body: { reason } }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    getFloorOverview: builder.query<FloorOverview, FloorPeriod>({
+      query: (params) => ({ url: '/manufacturing/floor-stock', params }),
+      providesTags: ['MfgFloor'],
+    }),
+    getFloorMaterial: builder.query<FloorMaterialDetail, FloorPeriod & { productId: string }>({
+      query: ({ productId, ...params }) => ({ url: `/manufacturing/floor-stock/materials/${productId}`, params }),
+      providesTags: ['MfgFloor'],
+    }),
+    getFloorPickList: builder.query<FloorPickItem[], void>({
+      query: () => '/manufacturing/floor-stock/pick-list',
+      providesTags: ['MfgFloor', 'MfgProduct'],
+    }),
+    getFloorUsageTemplate: builder.query<FloorUsageTemplate, string>({
+      query: (productId) => `/manufacturing/floor-stock/usage-template/${productId}`,
+      providesTags: ['MfgFloor'],
+    }),
+    getFloorMaterialChoices: builder.query<FloorMaterialChoice[], { search?: string }>({
+      query: (params) => ({ url: '/manufacturing/floor-stock/material-choices', params }),
+      providesTags: ['MfgFloor', 'MfgProduct'],
+    }),
+    setFloorIssueMethod: builder.mutation<
+      { updated: number; issueMethod: 'floor' | 'order'; ordersUpdated: number },
+      { productIds: string[]; issueMethod: 'floor' | 'order' }
+    >({
+      query: (body) => ({ url: '/manufacturing/floor-stock/issue-method', method: 'PUT', body }),
+      invalidatesTags: ['MfgFloor', 'MfgProduct', 'MfgOrder', 'MfgRequirements'],
+    }),
+    getFloorVouchers: builder.query<
+      Paginated<FloorVoucher>,
+      FloorPeriod & { kind?: FloorVoucherKind | 'all'; status?: 'all' | 'posted' | 'cancelled'; productId?: string; search?: string; page?: number; limit?: number }
+    >({
+      query: (params) => ({ url: '/manufacturing/floor-stock/vouchers', params }),
+      providesTags: ['MfgFloor'],
+    }),
+    getFloorVoucher: builder.query<FloorVoucher, string>({
+      query: (id) => `/manufacturing/floor-stock/vouchers/${id}`,
+      providesTags: ['MfgFloor'],
+    }),
+    postFloorVoucher: builder.mutation<
+      FloorVoucher,
+      {
+        kind: FloorVoucherKind
+        lines: { productId: string; quantity?: number; countedQuantity?: number }[]
+        voucherDate?: string
+        reason?: string
+        notes?: string
+      }
+    >({
+      query: ({ kind, ...body }) => ({ url: `/manufacturing/floor-stock/${kind}`, method: 'POST', body }),
+      invalidatesTags: [...EXECUTION_TAGS],
+      onQueryStarted: invalidateStockCaches,
+    }),
+    cancelFloorVoucher: builder.mutation<FloorVoucher, { id: string; reason: string }>({
+      query: ({ id, reason }) => ({ url: `/manufacturing/floor-stock/vouchers/${id}/cancel`, method: 'POST', body: { reason } }),
       invalidatesTags: [...EXECUTION_TAGS],
       onQueryStarted: invalidateStockCaches,
     }),
@@ -3031,6 +3257,16 @@ export const refreshAfterDemoData =
   }
 
 export const {
+  useGetFloorOverviewQuery,
+  useGetFloorMaterialQuery,
+  useGetFloorPickListQuery,
+  useGetFloorMaterialChoicesQuery,
+  useGetFloorUsageTemplateQuery,
+  useSetFloorIssueMethodMutation,
+  useGetFloorVouchersQuery,
+  useGetFloorVoucherQuery,
+  usePostFloorVoucherMutation,
+  useCancelFloorVoucherMutation,
   useGetManufacturingProductVariantsQuery,
   useGetPackableProductsQuery,
   useGetPackingSetupQuery,

@@ -35,10 +35,10 @@ const lotsForLine = (order, materialLineId) =>
 const lineWip = (order, material) => roundQty(lotsForLine(order, material._id).reduce((s, lot) => s + lotCredited(lot), 0));
 
 /**
- * Still to be issued for a line: requirement minus what's on the floor or already built in.
- * Returned and scrapped material no longer counts as issued (scrap has to be replaced).
+ * Requirement not yet issued, whatever the line's supply: required − issued + returned +
+ * scrapped (scrapped material has to be replaced). What a voucher may still issue.
  */
-const lineRemaining = (material) =>
+const lineOpen = (material) =>
   Math.max(
     0,
     roundQty(
@@ -48,6 +48,12 @@ const lineRemaining = (material) =>
         (material.scrappedQuantity || 0)
     )
   );
+
+/**
+ * Still to be issued for a line. A production-stock line is never "still to issue" — the
+ * receipt uses it from the floor — though a voucher may still issue it (see lineOpen).
+ */
+const lineRemaining = (material) => (material.supply === 'floor' ? 0 : lineOpen(material));
 
 /** Physical units of one product/variant this order holds in WIP — the 'wip' ledger balance. */
 const wipBalanceOf = (order, productId, variantId) =>
@@ -169,6 +175,7 @@ module.exports = {
   lotsForLine,
   predatesWip,
   lineWip,
+  lineOpen,
   lineRemaining,
   wipBalanceOf,
   wipValue,

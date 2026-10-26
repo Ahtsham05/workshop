@@ -51,6 +51,9 @@ type SearchableSelectProps = {
   /** Picking the current value again clears it (the default). Pass false for a required
    * choice: the current value is then highlighted on open, and Enter keeps it. */
   deselectable?: boolean
+  /** false: closing the list leaves focus where onSelected put it (e.g. the next field)
+   * instead of returning it to this trigger. */
+  returnFocus?: boolean
 }
 
 export function SearchableSelect({
@@ -72,6 +75,7 @@ export function SearchableSelect({
   open: openProp,
   onOpenChange,
   deselectable = true,
+  returnFocus = true,
 }: SearchableSelectProps) {
   const [openState, setOpenState] = React.useState(false)
   const open = openProp ?? openState
@@ -132,6 +136,7 @@ export function SearchableSelect({
         sideOffset={4}
         collisionPadding={8}
         avoidCollisions
+        onCloseAutoFocus={returnFocus ? undefined : (e) => e.preventDefault()}
       >
         <Command defaultValue={!deselectable && selected ? itemValue(selected) : undefined}>
           <CommandInput placeholder={searchPlaceholder} />
@@ -176,9 +181,10 @@ export function SearchableSelect({
                       </div>
                     ) : (
                       <>
-                        <span className='flex-1 truncate'>{option.label}</span>
+                        {/* The name keeps at least half the row — a long sublabel used to squeeze it out entirely. */}
+                        <span className='min-w-0 flex-1 truncate'>{option.label}</span>
                         {option.sublabel && (
-                          <span className='ml-2 truncate text-xs text-muted-foreground'>{option.sublabel}</span>
+                          <span className='ml-2 max-w-[50%] shrink-0 truncate text-xs text-muted-foreground'>{option.sublabel}</span>
                         )}
                       </>
                     )}

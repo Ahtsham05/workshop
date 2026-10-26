@@ -216,9 +216,19 @@ router.post(
 // Material Issue Voucher (MIV): check (read-only) and post — store → WIP in one transaction.
 router.get('/material-issues/options', auth('issueMaterials', 'editMaterialIssues'), c.getIssueLocations);
 // Issue for a finished good: its BOM exploded for a quantity (the order created on posting).
-router.get('/material-issues/plan', auth('issueMaterials', 'editMaterialIssues'), validate(v.materialIssuePlan), c.getMaterialIssuePlan);
+router.get(
+  '/material-issues/plan',
+  auth('issueMaterials', 'editMaterialIssues'),
+  validate(v.materialIssuePlan),
+  c.getMaterialIssuePlan
+);
 // Issue by material: what open orders still need, and a voucher split over those orders.
-router.get('/material-issues/pending', auth('issueMaterials', 'editMaterialIssues'), validate(v.pendingMaterials), c.getPendingMaterials);
+router.get(
+  '/material-issues/pending',
+  auth('issueMaterials', 'editMaterialIssues'),
+  validate(v.pendingMaterials),
+  c.getPendingMaterials
+);
 router.post(
   '/material-issues/by-material/check',
   auth('issueMaterials'),
@@ -253,6 +263,30 @@ router
   .post(auth('receiveFinishedGoods'), validate(v.postPacking), c.postPacking);
 router.get('/packing/:voucherId', auth(VIEW), validate(v.packingVoucherParam), c.getPacking);
 router.post('/packing/:voucherId/cancel', auth('manageProductionOrders'), validate(v.cancelPacking), c.cancelPacking);
+// Production stock: material issued to the floor in bulk (cartons, labels …) and used from
+// there by receipts and packing — services/manufacturing/floorStock.service.js
+router.get('/floor-stock', auth(VIEW), validate(v.floorOverview), c.getFloorOverview);
+router.get('/floor-stock/pick-list', auth(VIEW), c.getFloorPickList);
+router.get('/floor-stock/material-choices', auth(VIEW), validate(v.floorMaterialChoices), c.getFloorMaterialChoices);
+router.put(
+  '/floor-stock/issue-method',
+  auth('manageBoms', 'editProducts'),
+  validate(v.floorIssueMethod),
+  c.setFloorIssueMethod
+);
+router.get('/floor-stock/materials/:productId', auth(VIEW), validate(v.floorMaterial), c.getFloorMaterial);
+router.get('/floor-stock/usage-template/:productId', auth(VIEW), validate(v.floorUsageTemplate), c.getFloorUsageTemplate);
+router.get('/floor-stock/vouchers', auth(VIEW), validate(v.listFloorVouchers), c.listFloorVouchers);
+router.post('/floor-stock/issue', auth('issueMaterials'), validate(v.floorMove), c.postFloorIssue);
+router.post('/floor-stock/return', auth('issueMaterials'), validate(v.floorMove), c.postFloorReturn);
+router.post('/floor-stock/count', auth('manageProductionOrders'), validate(v.floorCount), c.postFloorCount);
+router.get('/floor-stock/vouchers/:voucherId', auth(VIEW), validate(v.floorVoucherParam), c.getFloorVoucher);
+router.post(
+  '/floor-stock/vouchers/:voucherId/cancel',
+  auth('manageProductionOrders'),
+  validate(v.cancelFloorVoucher),
+  c.cancelFloorVoucher
+);
 router.get('/batches/search', auth(VIEW), validate(v.searchBatches), c.searchBatches);
 router.post('/material-issues/check', auth('issueMaterials'), validate(v.materialIssueVoucher), c.checkMaterialIssue);
 router.post('/material-issues', auth('issueMaterials'), validate(v.materialIssueVoucher), c.postMaterialIssue);

@@ -635,6 +635,21 @@ function IssueEntry({
   /** A finished good picked on a grid row → it becomes the header's, then its quantity. */
   const loadPlanRef = useRef(loadPlan)
   loadPlanRef.current = loadPlan
+
+  /** Fetches the voucher's materials again (Reload, or after production stock changed). */
+  const reloadMaterials = () => {
+    if (mode === 'material') {
+      refetchPending()
+      return
+    }
+    if (mode === 'product') {
+      void loadPlan()
+      return
+    }
+    const id = storeRef.current?.getState().header.productionOrderId
+    if (id) void loadOrder(id, { info: orderInfo || undefined })
+  }
+
   const ready = !catalog.loading && !!options
   const handlingPick = useRef(false)
   useEffect(() => {
@@ -1620,18 +1635,7 @@ function IssueEntry({
                     ? planLoading || !plan
                     : !orderInfo || loadingOrder
               }
-              onClick={() => {
-                if (mode === 'material') {
-                  refetchPending()
-                  return
-                }
-                if (mode === 'product') {
-                  void loadPlan()
-                  return
-                }
-                const id = storeRef.current?.getState().header.productionOrderId
-                if (id) void loadOrder(id, { info: orderInfo || undefined })
-              }}
+              onClick={reloadMaterials}
             >
               <RefreshCw
                 className={cn(
@@ -1685,6 +1689,15 @@ function IssueEntry({
       )}
 
       <TransactionEntry<IssueRow, IssueHeader>
+        gridLoading={
+          mode === 'product' && planLoading
+            ? t('Loading the materials of this BOM…')
+            : mode === 'order' && loadingOrder
+              ? t('Loading the order’s materials…')
+              : mode === 'material' && pendingLoading && !pendingData
+                ? t('Loading what open orders still need…')
+                : false
+        }
         config={config}
         products={source}
         stock={stock}
@@ -1876,8 +1889,16 @@ function PlanSummary({
         )}
       </div>
     )
+  // Production-stock lines only need from the store what the floor does not cover.
+  const fromFloor = plan.lines.filter((l) => l.supply === 'floor').length
   const ready = plan.lines.filter(
-    (l) => l.isOptional || l.availableQuantity >= l.requiredQuantity - 1e-9
+    (l) =>
+      l.isOptional ||
+      l.availableQuantity >=
+        (l.supply === 'floor'
+          ? (l.outstandingQuantity ?? 0)
+          : l.requiredQuantity) -
+          1e-9
   ).length
   const short = plan.lines.length - ready
   return (
@@ -1901,6 +1922,12 @@ function PlanSummary({
           value={`${plan.bom.bomNumber} v${plan.bom.version}`}
         />
         <SummaryFact label={t('Materials')} value={String(plan.lines.length)} />
+        {fromFloor > 0 && (
+          <SummaryFact
+            label={t('From production stock')}
+            value={String(fromFloor)}
+          />
+        )}
         <SummaryFact
           label={t('In stock')}
           value={`${ready} / ${plan.lines.length}`}

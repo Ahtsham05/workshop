@@ -34,6 +34,10 @@ const ProductionMaterialSchema = new mongoose.Schema(
     consumedCost: { type: Number, default: 0 },
     scrappedQuantity: { type: Number, default: 0 },
     isOptional: { type: Boolean, default: false },
+    // 'floor' = this material comes from production stock (Product.issueMethod), not from
+    // issues to the order: it is never "still to issue", and output backflushes it from
+    // the floor — issued and consumed in the same step (floorStock.service.js).
+    supply: { type: String, enum: ['order', 'floor'], default: 'order' },
     // 1 = direct component of the order's BOM, 2+ = came from an exploded sub-assembly.
     level: { type: Number, default: 1 },
     // Which BOM (version) this line was exploded from, for traceability.

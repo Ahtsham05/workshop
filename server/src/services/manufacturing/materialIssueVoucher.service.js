@@ -432,7 +432,7 @@ const checkVoucher = async (ctx, body, { giveBack = null } = {}) => {
     const credited = roundQty(quantity / ratio);
     const remaining = remainingByLine.has(String(material._id))
       ? remainingByLine.get(String(material._id))
-      : roundQty(wip.lineRemaining(material) + (lineCredit.get(String(material._id)) || 0));
+      : roundQty(wip.lineOpen(material) + (lineCredit.get(String(material._id)) || 0));
     if (credited > remaining + wip.EPS) {
       warnings.push({
         line: n,
@@ -614,8 +614,11 @@ const planForProduct = async (ctx, { productId, variantId, bomId, quantity }) =>
   );
   const lines = order.materials.map((m, index) => {
     const available = roundQty(availability.get(key(m)) || 0);
+    // Production-stock material is used from the floor at receipt, never issued here.
+    const outstanding = wip.lineRemaining(m);
     return {
       materialLineId: `new:${index}`,
+      supply: m.supply || 'order',
       productId: String(m.productId),
       variantId: m.variantId ? String(m.variantId) : null,
       productName: m.productName,
@@ -631,9 +634,9 @@ const planForProduct = async (ctx, { productId, variantId, bomId, quantity }) =>
       consumedQuantity: 0,
       scrappedQuantity: 0,
       wipQuantity: 0,
-      outstandingQuantity: m.requiredQuantity,
+      outstandingQuantity: outstanding,
       availableQuantity: available,
-      shortageQuantity: m.isOptional ? 0 : Math.max(0, roundQty(m.requiredQuantity - Math.max(0, available))),
+      shortageQuantity: m.isOptional ? 0 : Math.max(0, roundQty(outstanding - Math.max(0, available))),
       // Not reserved yet — the order doesn't exist. What other open orders still need:
       reservedQuantity: 0,
       heldByEarlierOrdersQuantity: held.get(key(m)) || 0,
@@ -647,6 +650,8 @@ const planForProduct = async (ctx, { productId, variantId, bomId, quantity }) =>
       })),
     };
   });
+  // eslint-disable-next-line global-require
+  await require('./floorStock.service').annotateFloorLines(ctx, lines);
   return {
     productId: String(order.productId),
     variantId: order.variantId ? String(order.variantId) : null,

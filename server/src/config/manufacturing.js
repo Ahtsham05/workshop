@@ -150,6 +150,9 @@ const COUNTER_KEYS = [
   'rawMaterialReceipt',
   'batch',
   'packing',
+  'floorIssue',
+  'floorReturn',
+  'floorCount',
 ];
 
 /** Max depth when exploding a multi-level BOM — guards against pathological trees. */

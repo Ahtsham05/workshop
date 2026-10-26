@@ -201,6 +201,11 @@ const ProductSchema = new mongoose.Schema({
     // How long a batch of this product stays good after it is made — a production
     // receipt's expiry date defaults to manufacture date + this many days.
     shelfLifeDays: { type: Number, min: 0, default: null },
+    // How production gets this material: 'order' (null) = issued to each production order
+    // on a Material Issue Voucher; 'floor' = issued in bulk to production stock (cartons,
+    // labels, bottles shared by many products) and used from there automatically when
+    // finished goods are received or packed (services/manufacturing/floorStock.service.js).
+    issueMethod: { type: String, enum: ['order', 'floor', null], default: null },
 },{
     timestamps: true,
     keepTimestampsInJSON: true,

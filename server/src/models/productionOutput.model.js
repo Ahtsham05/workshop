@@ -50,6 +50,14 @@ const ProductionOutputSchema = new mongoose.Schema(
             isAlternative: { type: Boolean },
             issueId: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialIssue' },
             issuedAt: { type: Date },
+            // 'floor' = used straight from production stock (floor lot `floorLotId`), not
+            // from this order's WIP; a reversal puts it back on the floor.
+            source: { type: String, enum: ['wip', 'floor'], default: undefined },
+            floorLotId: { type: mongoose.Schema.Types.ObjectId },
+            floorVoucherId: { type: mongoose.Schema.Types.ObjectId, ref: 'FloorStockVoucher' },
+            // Packing material recorded on the receipt beyond the recipe (no BOM line):
+            // the bottles, labels and cartons actually used, taken from production stock.
+            extra: { type: Boolean, default: undefined },
           },
           { _id: false }
         ),
