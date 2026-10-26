@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { CashBookEntry } = require('../models');
+const { CashBookEntry, CashWithdrawal } = require('../models');
 const ApiError = require('../utils/ApiError');
 const {
   PKT_OFFSET_MS,
@@ -259,6 +259,72 @@ const getSummary = async (filter = {}) => {
   };
 };
 
+/**
+ * A cash Received/Send entry folds our commission into its one cash line, and the bank's
+ * GST on the amount leaves the wallet, not the drawer — so neither is visible as a cash
+ * line of its own. Attach the entry's commission, taxes and net profit to its cash line
+ * so the page can show what was earned, what was deducted and what is left. Read-time,
+ * so entries saved earlier show it too (on their old separate commission line).
+ */
+const attachCashWithdrawalBreakdown = async (rows) => {
+  const ids = [
+    ...new Set(
+      rows.filter((row) => row.referenceModel === 'CashWithdrawal' && row.referenceId).map((row) => String(row.referenceId))
+    ),
+  ];
+  if (!ids.length) return rows;
+
+  const withdrawals = await CashWithdrawal.find({ _id: { $in: ids } })
+    .select('transactionType walletType amount commissionRate extraCharge gstRate gstAmount amountGstRate amountGstAmount profit')
+    .lean();
+  const byId = new Map(
+    withdrawals
+      .map((w) => {
+        const commission =
+          Math.round(((Number(w.amount || 0) * Number(w.commissionRate || 0)) / 100 + Number(w.extraCharge || 0)) * 100) /
+          100;
+        return [String(w._id), { ...w, commission }];
+      })
+      .filter(([, w]) => w.commission > 0 || Number(w.gstAmount || 0) > 0 || Number(w.amountGstAmount || 0) > 0)
+  );
+  if (!byId.size) return rows;
+
+  // Which of the entry's lines carries it: the old separate commission line, else the cash
+  // paid/received line, else whatever cash line the entry has (never the GST line).
+  const rank = (row) => {
+    const text = row.description || '';
+    if (/^GST /.test(text)) return -1;
+    if (/ commission from /.test(text)) return 2;
+    if (/: cash (paid to|received from) /.test(text)) return 1;
+    return 0;
+  };
+  const target = new Map();
+  rows.forEach((row, index) => {
+    const id = row.referenceModel === 'CashWithdrawal' ? String(row.referenceId) : null;
+    if (!id || !byId.has(id) || rank(row) < 0) return;
+    if (!target.has(id) || rank(row) > rank(rows[target.get(id)])) target.set(id, index);
+  });
+
+  const result = rows.slice();
+  target.forEach((index, id) => {
+    const w = byId.get(id);
+    result[index] = {
+      ...result[index],
+      cashWithdrawalBreakdown: {
+        transactionType: w.transactionType,
+        walletType: w.walletType,
+        commission: w.commission,
+        gstRate: Number(w.gstRate || 0),
+        gstAmount: Number(w.gstAmount || 0),
+        amountGstRate: Number(w.amountGstRate || 0),
+        amountGstAmount: Number(w.amountGstAmount || 0),
+        profit: Number(w.profit || 0),
+      },
+    };
+  });
+  return result;
+};
+
 const queryEntries = async (filter, options) => {
   const queryFilter = { ...filter };
   const queryOptions = { ...options };
@@ -310,7 +376,7 @@ const queryEntries = async (filter, options) => {
   const start = (page - 1) * limit;
 
   return {
-    results: ordered.slice(start, start + limit),
+    results: await attachCashWithdrawalBreakdown(ordered.slice(start, start + limit)),
     page,
     limit,
     totalPages,

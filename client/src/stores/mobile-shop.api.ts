@@ -484,6 +484,18 @@ export interface CashBookEntryRecord {
   date: string
   /** Running cash balance immediately after this entry, walked in true chronological order. */
   balance: number
+  /** Cash Received/Send entry: commission folded into the cash line, GST deducted, net profit. */
+  cashWithdrawalBreakdown?: {
+    transactionType: 'withdrawal' | 'deposit'
+    walletType: string
+    /** Commission + extra charges. */
+    commission: number
+    gstRate: number
+    gstAmount: number
+    amountGstRate: number
+    amountGstAmount: number
+    profit: number
+  }
 }
 
 export interface CashBookSummary {

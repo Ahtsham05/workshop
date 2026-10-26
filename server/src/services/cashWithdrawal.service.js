@@ -55,8 +55,8 @@ const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
 
 /**
  * Profit split for one cash Received/Send entry.
- *  - GST on commission: `gstRate` % of our commission (not of extra charges or the
- *    settlement margin), out of the commission.
+ *  - GST on commission: `gstRate` % of the total commission charged — the % commission
+ *    plus extra charges (not the settlement margin), out of the commission.
  *  - GST on amount: `amountGstRate` % of the whole amount, deducted by the bank / wallet
  *    provider from the account itself — a cost of the entry. (Paying the customer less
  *    cash on a withdrawal shows up as settlement margin and covers it.)
@@ -75,7 +75,8 @@ const calculateWithdrawalBreakdown = ({
   const commissionProfit = (Number(amount || 0) * Number(commissionRate || 0)) / 100;
   const settlementProfit = calculateSettlementProfit({ amount, cashAmount, transactionType });
   const grossProfit = commissionProfit + Number(extraCharge || 0) + settlementProfit;
-  const gstAmount = Math.min(grossProfit, roundMoney((commissionProfit * Number(gstRate || 0)) / 100));
+  const totalCommission = commissionProfit + Number(extraCharge || 0);
+  const gstAmount = Math.min(grossProfit, roundMoney((totalCommission * Number(gstRate || 0)) / 100));
   const amountGstAmount = roundMoney((Number(amount || 0) * Number(amountGstRate || 0)) / 100);
   return {
     grossProfit,
@@ -106,39 +107,97 @@ const calculateWithdrawalProfit = (input) => calculateWithdrawalBreakdown(input)
 const hasExplicitCommissionOrExtra = ({ commissionRate, extraCharge }) =>
   Number(commissionRate || 0) > 0 || Number(extraCharge || 0) > 0;
 
+/** Commission + extra charges the customer pays on the entry (not the settlement margin). */
+const entryCharges = (withdrawal) => {
+  if (!hasExplicitCommissionOrExtra(withdrawal)) return 0;
+  const commission = (Number(withdrawal.amount || 0) * Number(withdrawal.commissionRate || 0)) / 100;
+  return roundMoney(commission + Number(withdrawal.extraCharge || 0));
+};
+
+const plainMoney = (value) => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+/** Cash into the drawer (+) or out of it (−) on the entry's one cash line, commission folded in. */
+const drawerCashFor = (withdrawal) => {
+  const cashAmount = Number(withdrawal.cashAmount) || 0;
+  const charges = entryCharges(withdrawal);
+  return roundMoney(withdrawal.transactionType === 'withdrawal' ? charges - cashAmount : cashAmount + charges);
+};
+
+const customerLabelFor = (withdrawal) =>
+  withdrawal.customerName
+    ? `${withdrawal.customerName}${withdrawal.customerNumber ? ` (${withdrawal.customerNumber})` : ''}`
+    : withdrawal.customerNumber || 'customer';
+
 /**
- * Cash Book lines for what we earn on the entry: the full commission collected from the
- * customer as income, then the GST on it as a separate expense so the deduction stays
- * visible (and totals up for tax filing) instead of disappearing into a smaller figure.
+ * Every Cash Book line for one entry. The drawer gets ONE line for the cash that really
+ * moved, with the commission folded in — the commission is never handed over separately:
+ *  - Received (withdrawal): the customer sends the amount to our wallet and we hand back the
+ *    cash less our commission (100 sent at 3% → we pay 97).
+ *  - Send (deposit): the customer gives the cash plus our commission (900 at 3% → 927).
+ * The bank's GST on the amount comes out of the wallet (wallet-side line); GST on the
+ * commission stays a separate cash expense so it totals up for tax filing.
  */
-const postCommissionCashBookLines = async (withdrawal, { grossProfit, gstAmount, customerLabel }) => {
-  // Omit when commission and extra are both zero — no phantom profit line.
-  if (!hasExplicitCommissionOrExtra(withdrawal) || grossProfit <= 0) return;
-  const label = withdrawal.transactionType === 'withdrawal' ? 'Withdrawal' : 'Deposit';
+const postCashBookLines = async (withdrawal, customerLabel, { date } = {}) => {
+  const isWithdrawal = withdrawal.transactionType === 'withdrawal';
   const base = {
     organizationId: withdrawal.organizationId,
     branchId: withdrawal.branchId,
     source: 'other',
-    paymentMethod: 'cash',
     referenceId: withdrawal._id,
     referenceModel: 'CashWithdrawal',
-    date: withdrawal.date,
+    // A re-post (repost-cash-withdrawal-cashbook script) keeps the lines where they were.
+    date: date || withdrawal.date,
     createdBy: withdrawal.createdBy,
   };
+
   await cashBookService.createEntry({
     ...base,
-    type: 'income',
-    amount: grossProfit,
-    description: `${label} commission from ${customerLabel}`,
+    type: isWithdrawal ? 'income' : 'expense',
+    amount: withdrawal.amount,
+    paymentMethod: 'wallet',
+    description: isWithdrawal
+      ? `Withdrawal: digital received from ${customerLabel} via ${withdrawal.walletType}`
+      : `Deposit: digital sent to ${customerLabel} via ${withdrawal.walletType}`,
   });
+
+  const cashAmount = Number(withdrawal.cashAmount) || 0;
+  const charges = entryCharges(withdrawal);
+  const netCash = drawerCashFor(withdrawal);
+  if (netCash !== 0) {
+    let description;
+    if (cashAmount <= 0) {
+      // Nothing settled in cash (all on the customer's ledger) — only the commission was.
+      description = `${isWithdrawal ? 'Withdrawal' : 'Deposit'} commission from ${customerLabel}`;
+    } else if (isWithdrawal) {
+      description = `Withdrawal: cash paid to ${customerLabel}${
+        charges > 0 ? ` (${plainMoney(cashAmount)} less commission ${plainMoney(charges)})` : ''
+      }`;
+    } else {
+      description = `Deposit: cash received from ${customerLabel}${
+        charges > 0 ? ` (${plainMoney(cashAmount)} + commission ${plainMoney(charges)})` : ''
+      }`;
+    }
+    await cashBookService.createEntry({
+      ...base,
+      type: netCash > 0 ? 'income' : 'expense',
+      amount: Math.abs(netCash),
+      paymentMethod: 'cash',
+      description,
+    });
+  }
+
+  const gstAmount = Number(withdrawal.gstAmount || 0);
   if (gstAmount > 0) {
     await cashBookService.createEntry({
       ...base,
       type: 'expense',
       amount: gstAmount,
-      description: `GST ${Number(withdrawal.gstRate || 0)}% on ${label.toLowerCase()} commission — ${customerLabel}`,
+      paymentMethod: 'cash',
+      description: `GST ${Number(withdrawal.gstRate || 0)}% on ${isWithdrawal ? 'withdrawal' : 'deposit'} commission — ${customerLabel}`,
     });
   }
+
+  await postAmountGstCashBookLine(withdrawal, customerLabel);
 };
 
 /**
@@ -260,7 +319,7 @@ const createCashWithdrawal = async (body) => {
   if (cashAmount > Number(body.amount || 0)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cash paid/received must be less than or equal to amount');
   }
-  const { grossProfit, gstAmount, amountGstAmount, profit } = calculateWithdrawalBreakdown({ ...body, cashAmount });
+  const { gstAmount, amountGstAmount, profit } = calculateWithdrawalBreakdown({ ...body, cashAmount });
   const withdrawal = await CashWithdrawal.create({
     ...body,
     customerId: linkedCustomer ? linkedCustomer._id : undefined,
@@ -270,8 +329,6 @@ const createCashWithdrawal = async (body) => {
     amountGstAmount,
     profit,
   });
-
-  const isWithdrawal = withdrawal.transactionType === 'withdrawal';
 
   // Withdrawal: customer sends digital money → our wallet INCREASES, we give cash
   // Deposit: customer gives cash → we send digital → our wallet DECREASES
@@ -284,76 +341,9 @@ const createCashWithdrawal = async (body) => {
     userId: withdrawal.createdBy,
   });
 
-  const customerLabel = withdrawal.customerName
-    ? `${withdrawal.customerName}${withdrawal.customerNumber ? ` (${withdrawal.customerNumber})` : ''}`
-    : withdrawal.customerNumber || 'customer';
+  const customerLabel = customerLabelFor(withdrawal);
 
-  if (isWithdrawal) {
-    // Withdrawal: customer sends digital → our wallet increases (income)
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId,
-      branchId: withdrawal.branchId,
-      type: 'income',
-      source: 'other',
-      amount: withdrawal.amount,
-      paymentMethod: 'wallet',
-      referenceId: withdrawal._id,
-      referenceModel: 'CashWithdrawal',
-      description: `Withdrawal: digital received from ${customerLabel} via ${withdrawal.walletType}`,
-      date: withdrawal.date,
-      createdBy: withdrawal.createdBy,
-    });
-    // Withdrawal: we pay cash to customer (expense)
-    if (cashAmount > 0) {
-      await cashBookService.createEntry({
-        organizationId: withdrawal.organizationId,
-        branchId: withdrawal.branchId,
-        type: 'expense',
-        source: 'other',
-        amount: cashAmount,
-        paymentMethod: 'cash',
-        referenceId: withdrawal._id,
-        referenceModel: 'CashWithdrawal',
-        description: `Withdrawal: cash paid to ${customerLabel}`,
-        date: withdrawal.date,
-        createdBy: withdrawal.createdBy,
-      });
-    }
-  } else {
-    // Deposit: we send digital → our wallet decreases (expense)
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId,
-      branchId: withdrawal.branchId,
-      type: 'expense',
-      source: 'other',
-      amount: withdrawal.amount,
-      paymentMethod: 'wallet',
-      referenceId: withdrawal._id,
-      referenceModel: 'CashWithdrawal',
-      description: `Deposit: digital sent to ${customerLabel} via ${withdrawal.walletType}`,
-      date: withdrawal.date,
-      createdBy: withdrawal.createdBy,
-    });
-    // Deposit: we receive cash from customer (income)
-    if (cashAmount > 0) {
-      await cashBookService.createEntry({
-        organizationId: withdrawal.organizationId,
-        branchId: withdrawal.branchId,
-        type: 'income',
-        source: 'other',
-        amount: cashAmount,
-        paymentMethod: 'cash',
-        referenceId: withdrawal._id,
-        referenceModel: 'CashWithdrawal',
-        description: `Deposit: cash received from ${customerLabel}`,
-        date: withdrawal.date,
-        createdBy: withdrawal.createdBy,
-      });
-    }
-  }
-
-  await postCommissionCashBookLines(withdrawal, { grossProfit, gstAmount, customerLabel });
-  await postAmountGstCashBookLine(withdrawal, customerLabel);
+  await postCashBookLines(withdrawal, customerLabel);
 
   await syncCustomerLedgerForCashWithdrawal(withdrawal);
 
@@ -424,13 +414,11 @@ const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
   if (Number(withdrawal.cashAmount || 0) > Number(withdrawal.amount || 0)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cash paid/received must be less than or equal to amount');
   }
-  const { grossProfit, gstAmount, amountGstAmount, profit } = calculateWithdrawalBreakdown(withdrawal);
+  const { gstAmount, amountGstAmount, profit } = calculateWithdrawalBreakdown(withdrawal);
   withdrawal.gstAmount = gstAmount;
   withdrawal.amountGstAmount = amountGstAmount;
   withdrawal.profit = profit;
   await withdrawal.save();
-
-  const isWithdrawal = withdrawal.transactionType === 'withdrawal';
 
   // Apply new wallet adjustment
   await walletService.adjustWalletBalance({
@@ -441,48 +429,9 @@ const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
     userId: withdrawal.createdBy,
   });
 
-  const customerLabel = withdrawal.customerName
-    ? `${withdrawal.customerName}${withdrawal.customerNumber ? ` (${withdrawal.customerNumber})` : ''}`
-    : withdrawal.customerNumber || 'customer';
+  const customerLabel = customerLabelFor(withdrawal);
 
-  if (isWithdrawal) {
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
-      type: 'income', source: 'other', amount: withdrawal.amount, paymentMethod: 'wallet',
-      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
-      description: `Withdrawal: digital received from ${customerLabel} via ${withdrawal.walletType}`,
-      date: withdrawal.date, createdBy: withdrawal.createdBy,
-    });
-    if (Number(withdrawal.cashAmount) > 0) {
-      await cashBookService.createEntry({
-        organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
-        type: 'expense', source: 'other', amount: withdrawal.cashAmount, paymentMethod: 'cash',
-        referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
-        description: `Withdrawal: cash paid to ${customerLabel}`,
-        date: withdrawal.date, createdBy: withdrawal.createdBy,
-      });
-    }
-  } else {
-    await cashBookService.createEntry({
-      organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
-      type: 'expense', source: 'other', amount: withdrawal.amount, paymentMethod: 'wallet',
-      referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
-      description: `Deposit: digital sent to ${customerLabel} via ${withdrawal.walletType}`,
-      date: withdrawal.date, createdBy: withdrawal.createdBy,
-    });
-    if (Number(withdrawal.cashAmount) > 0) {
-      await cashBookService.createEntry({
-        organizationId: withdrawal.organizationId, branchId: withdrawal.branchId,
-        type: 'income', source: 'other', amount: withdrawal.cashAmount, paymentMethod: 'cash',
-        referenceId: withdrawal._id, referenceModel: 'CashWithdrawal',
-        description: `Deposit: cash received from ${customerLabel}`,
-        date: withdrawal.date, createdBy: withdrawal.createdBy,
-      });
-    }
-  }
-
-  await postCommissionCashBookLines(withdrawal, { grossProfit, gstAmount, customerLabel });
-  await postAmountGstCashBookLine(withdrawal, customerLabel);
+  await postCashBookLines(withdrawal, customerLabel);
 
   await syncCustomerLedgerForCashWithdrawal(withdrawal);
 
@@ -625,6 +574,9 @@ const deleteCashWithdrawalsBatch = async (ids) => {
 
 module.exports = {
   calculateWithdrawalBreakdown,
+  drawerCashFor,
+  customerLabelFor,
+  postCashBookLines,
   calculateAmountGst,
   walletMovement,
   calculateWithdrawalProfit,

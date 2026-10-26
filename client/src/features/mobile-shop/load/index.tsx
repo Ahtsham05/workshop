@@ -865,7 +865,8 @@ function LoadManagementPage({
     const commissionRate = Number(withdrawalForm.commissionRate) || 0
     const extraCharge = Number(withdrawalForm.extraCharge) || 0
     const commissionProfit = (amount * commissionRate) / 100
-    const gstAmount = gstOnCommission(commissionProfit, withdrawalForm.gstRate)
+    // GST on the total commission: the % commission plus extra charges.
+    const gstAmount = gstOnCommission(commissionProfit + extraCharge, withdrawalForm.gstRate)
     const amountGst = gstOnAmount(amount, withdrawalForm.amountGstRate)
     const normalizedCashAmount = Math.max(0, cashAmount)
     const remainingAmount = Math.max(0, amount - normalizedCashAmount)
@@ -881,6 +882,13 @@ function LoadManagementPage({
       amountGst,
       // Net of both GSTs — negative when the bank's GST is more than the entry earns.
       totalProfit: roundMoney(commissionProfit + extraCharge + settlementProfit - gstAmount - amountGst),
+      // Cash that really changes hands: the commission is kept out of a payout and
+      // collected on top of a deposit — never handed over separately.
+      handCash: roundMoney(
+        withdrawalForm.transactionType === 'withdrawal'
+          ? normalizedCashAmount - commissionProfit - extraCharge
+          : normalizedCashAmount + commissionProfit + extraCharge,
+      ),
     }
   }, [withdrawalForm.amount, withdrawalForm.cashAmount, withdrawalForm.commissionRate, withdrawalForm.gstRate, withdrawalForm.amountGstRate, withdrawalForm.extraCharge, withdrawalForm.transactionType])
   // const requiresFullCashSettlement = !withdrawalForm.customerId
@@ -891,12 +899,13 @@ function LoadManagementPage({
     let totalGst = 0
     let totalAmountGst = 0
     let totalProfit = 0
+    let totalHandCash = 0
     let validCount = 0
     for (const e of bulkWithdrawalForm.entries) {
       const amount = Number(e.amount) || 0
       const extraCharge = Number(e.extraCharge) || 0
       const commission = bulkEntryCommission(e, bulkWithdrawalForm.commissionRate)
-      const gst = gstOnCommission(commission, bulkWithdrawalForm.gstRate)
+      const gst = gstOnCommission(commission + extraCharge, bulkWithdrawalForm.gstRate)
       if (amount > 0) {
         totalAmount += amount
         totalCommission += commission + extraCharge
@@ -904,11 +913,15 @@ function LoadManagementPage({
         const amountGst = gstOnAmount(amount, bulkWithdrawalForm.amountGstRate)
         totalAmountGst += amountGst
         totalProfit += commission + extraCharge - gst - amountGst
+        // Bulk rows settle fully in cash: payout less commission / collection plus it.
+        totalHandCash += bulkWithdrawalForm.transactionType === 'withdrawal'
+          ? amount - commission - extraCharge
+          : amount + commission + extraCharge
         validCount++
       }
     }
-    return { totalAmount, totalCommission, totalGst, totalAmountGst, totalProfit, validCount }
-  }, [bulkWithdrawalForm.entries, bulkWithdrawalForm.commissionRate, bulkWithdrawalForm.gstRate, bulkWithdrawalForm.amountGstRate])
+    return { totalAmount, totalCommission, totalGst, totalAmountGst, totalProfit, totalHandCash, validCount }
+  }, [bulkWithdrawalForm.entries, bulkWithdrawalForm.commissionRate, bulkWithdrawalForm.gstRate, bulkWithdrawalForm.amountGstRate, bulkWithdrawalForm.transactionType])
 
   const handlePurchaseChange = (field: keyof PurchaseFormState, value: string) => {
     if (field === 'savedSupplierId') {
@@ -2616,7 +2629,7 @@ function LoadManagementPage({
                                 </td>
                                 {Number(bulkWithdrawalForm.gstRate) > 0 && (() => {
                                   const rowGst = Number(entry.amount) > 0
-                                    ? gstOnCommission(bulkEntryCommission(entry, bulkWithdrawalForm.commissionRate), bulkWithdrawalForm.gstRate)
+                                    ? gstOnCommission(bulkEntryCommission(entry, bulkWithdrawalForm.commissionRate) + (Number(entry.extraCharge) || 0), bulkWithdrawalForm.gstRate)
                                     : 0
                                   return (
                                     <td className='p-2 whitespace-nowrap tabular-nums' title='GST deducted from this row’s commission'>
@@ -2703,8 +2716,28 @@ function LoadManagementPage({
                               {bulkWithdrawalTotals.totalProfit < 0 && '− '}
                               {formatMoney(Math.abs(bulkWithdrawalTotals.totalProfit))}
                             </p>
+                            {bulkWithdrawalTotals.totalProfit > 0 && (
+                              <p className='text-[11px] text-muted-foreground'>
+                                {bulkWithdrawalForm.transactionType === 'withdrawal' ? 'stays in the wallet' : 'in cash'}
+                              </p>
+                            )}
                           </div>
                         </div>
+                        {bulkWithdrawalTotals.validCount > 0 && bulkWithdrawalTotals.totalHandCash !== bulkWithdrawalTotals.totalAmount && (
+                          <div className='mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-orange-200 pt-3 text-sm'>
+                            <span className='text-muted-foreground'>
+                              {bulkWithdrawalForm.transactionType === 'withdrawal' ? 'Cash you pay customers:' : 'Cash you collect from customers:'}
+                            </span>
+                            <span className={`font-bold ${bulkWithdrawalForm.transactionType === 'withdrawal' ? 'text-rose-600' : 'text-green-600'}`}>
+                              {formatMoney(bulkWithdrawalTotals.totalHandCash)}
+                            </span>
+                            <span className='text-xs text-muted-foreground'>
+                              ({formatMoney(bulkWithdrawalTotals.totalAmount)}{' '}
+                              {bulkWithdrawalForm.transactionType === 'withdrawal' ? 'less' : '+'} commission{' '}
+                              {formatMoney(bulkWithdrawalTotals.totalCommission)})
+                            </span>
+                          </div>
+                        )}
                         {bulkWithdrawalTotals.totalAmountGst > 0 && (
                           <div className='mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-orange-200 pt-3 text-sm'>
                             <span className='text-muted-foreground'>
@@ -2900,7 +2933,7 @@ function LoadManagementPage({
                       {...withdrawalEnter.enterProps('withdrawal-cash-amount')}
                     />
                     <p className='text-xs text-muted-foreground'>
-                      {`Cash amount must be less than or equal to amount. Remaining amount is ${withdrawalForm.transactionType === 'withdrawal' ? 'cash payable' : 'cash receivable'} and will be added to customer ledger.`}
+                      {`Before commission — the commission is ${withdrawalForm.transactionType === 'withdrawal' ? 'kept out of the cash you pay' : 'added to the cash you collect'} automatically. Must be less than or equal to amount; the rest is ${withdrawalForm.transactionType === 'withdrawal' ? 'cash payable' : 'cash receivable'} on the customer ledger.`}
                     </p>
                   </div>
                   )}
@@ -2978,9 +3011,16 @@ function LoadManagementPage({
                             {withdrawalForm.transactionType === 'withdrawal' ? 'Cash Paid to Customer:' : 'Cash Received from Customer:'}
                           </span>
                           <span className={`font-semibold ${withdrawalForm.transactionType === 'withdrawal' ? 'text-red-600' : 'text-green-600'}`}>
-                            {withdrawalForm.transactionType === 'withdrawal' ? '-' : '+'} {formatMoney(withdrawalProfit.normalizedCashAmount)}
+                            {withdrawalForm.transactionType === 'withdrawal' ? '-' : '+'} {formatMoney(Math.abs(withdrawalProfit.handCash))}
                           </span>
                         </div>
+                        {withdrawalProfit.handCash !== withdrawalProfit.normalizedCashAmount && (
+                          <p className='-mt-2 text-right text-xs text-muted-foreground'>
+                            {formatMoney(withdrawalProfit.normalizedCashAmount)}{' '}
+                            {withdrawalForm.transactionType === 'withdrawal' ? 'less' : '+'} commission{' '}
+                            {formatMoney(withdrawalProfit.commissionProfit + Number(withdrawalForm.extraCharge || 0))}
+                          </p>
+                        )}
                         <div className='flex justify-between items-center'>
                           <span className='text-muted-foreground'>
                             Remaining ({withdrawalForm.transactionType === 'withdrawal' ? 'Payable' : 'Receivable'}):
@@ -3033,6 +3073,13 @@ function LoadManagementPage({
                             {formatMoney(Math.abs(withdrawalProfit.totalProfit))}
                           </span>
                         </div>
+                        )}
+                        {withdrawalProfit.totalProfit > 0 && (
+                          <p className='-mt-2 text-right text-xs text-muted-foreground'>
+                            {withdrawalForm.transactionType === 'withdrawal'
+                              ? `Stays in your ${withdrawalForm.walletType || 'wallet'} wallet — the Cash Book only shows the cash you pay out.`
+                              : 'Commission comes in with the cash — the bank’s GST is paid from the wallet.'}
+                          </p>
                         )}
                       </div>
                     </CardContent>
@@ -3178,8 +3225,14 @@ function LoadManagementPage({
                             {formatMoney(Math.max(0, Number(w.amount || 0) - Number((w as any).cashAmount || 0)))}
                           </TableCell>
                           <TableCell>{Number(w.commissionRate || 0).toFixed(2)}%</TableCell>
-                          <TableCell className='text-orange-600 font-bold'>
-                            {formatMoney(Number(w.profit || 0))}
+                          <TableCell className={`font-bold ${Number(w.profit || 0) < 0 ? 'text-rose-600' : 'text-orange-600'}`}>
+                            {Number(w.profit || 0) < 0 && '− '}
+                            {formatMoney(Math.abs(Number(w.profit || 0)))}
+                            {(Number(w.gstAmount || 0) > 0 || Number(w.amountGstAmount || 0) > 0) && (
+                              <div className='text-xs font-normal text-green-600 whitespace-nowrap'>
+                                Commission: {formatMoney((Number(w.amount || 0) * Number(w.commissionRate || 0)) / 100 + Number(w.extraCharge || 0))}
+                              </div>
+                            )}
                             {Number(w.gstAmount || 0) > 0 && (
                               <div className='text-xs font-normal text-rose-600 whitespace-nowrap'>
                                 GST {Number(w.gstRate || 0)}%: − {formatMoney(Number(w.gstAmount))}
@@ -3188,6 +3241,11 @@ function LoadManagementPage({
                             {Number(w.amountGstAmount || 0) > 0 && (
                               <div className='text-xs font-normal text-rose-600 whitespace-nowrap'>
                                 GST on amount {Number(w.amountGstRate || 0)}% (bank): − {formatMoney(Number(w.amountGstAmount))}
+                              </div>
+                            )}
+                            {Number(w.profit || 0) !== 0 && (
+                              <div className='text-xs font-normal text-muted-foreground whitespace-nowrap'>
+                                {w.transactionType === 'withdrawal' ? `in ${w.walletType} wallet` : 'in cash'}
                               </div>
                             )}
                           </TableCell>

@@ -256,7 +256,49 @@ export default function CashBookPage() {
                   <TableCell>{formatBusinessDateTime(entry.date)}</TableCell>
                   <TableCell>{entry.source ? entry.source.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '-'}</TableCell>
                   <TableCell className='capitalize'>{entry.paymentMethod}</TableCell>
-                  <TableCell>{entry.description || 'No description'}</TableCell>
+                  <TableCell>
+                    {entry.description || 'No description'}
+                    {entry.cashWithdrawalBreakdown && (() => {
+                      const b = entry.cashWithdrawalBreakdown
+                      return (
+                        <div className='text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 text-xs'>
+                          {b.commission > 0 && (
+                            <span>
+                              Commission:{' '}
+                              <span className='font-medium text-green-600'>{formatMoney(b.commission)}</span>
+                            </span>
+                          )}
+                          {b.amountGstAmount > 0 && (
+                            <span>
+                              GST {b.amountGstRate}% on amount deducted by {b.walletType}:{' '}
+                              <span className='font-medium text-red-600'>{formatMoney(b.amountGstAmount)}</span>{' '}
+                              (from wallet, not cash)
+                            </span>
+                          )}
+                          {b.gstAmount > 0 && (
+                            <span>
+                              GST {b.gstRate}% on commission:{' '}
+                              <span className='font-medium text-red-600'>{formatMoney(b.gstAmount)}</span>
+                            </span>
+                          )}
+                          <span>
+                            {b.profit < 0 ? 'Your loss' : 'Your net profit'}:{' '}
+                            <span className={b.profit < 0 ? 'font-semibold text-red-600' : 'font-semibold text-green-600'}>
+                              {formatMoney(Math.abs(b.profit))}
+                            </span>
+                            {b.profit !== 0 && (
+                              <>
+                                {' '}
+                                {b.transactionType === 'withdrawal'
+                                  ? `— stays in ${b.walletType} wallet, not in cash`
+                                  : '— commission collected in cash'}
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      )
+                    })()}
+                  </TableCell>
                   <TableCell className='text-red-600'>
                     {entry.type === 'expense' ? formatMoney(entry.amount) : '-'}
                   </TableCell>
