@@ -144,6 +144,7 @@ const ar: Record<string, string> = {
   "no_items_added": "لم يتم إضافة بنود",
   "select_product": "اختر المنتج",
   "no_products_found": "لم يتم العثور على منتجات",
+  "check_product_is_active": "تحقق من أن المنتج نشط",
   "search_customers_by_name_or_phone": "ابحث بالاسم أو رقم الهاتف",
   "search_products": "ابحث عن المنتجات",
 

@@ -143,6 +143,7 @@ const hi: Record<string, string> = {
   "no_items_added": "कोई आइटम नहीं जोड़ा गया",
   "select_product": "उत्पाद चुनें",
   "no_products_found": "कोई उत्पाद नहीं मिला",
+  "check_product_is_active": "जांचें कि उत्पाद सक्रिय है",
   "search_customers_by_name_or_phone": "नाम या फोन से खोजें",
   "search_products": "उत्पाद खोजें",
 

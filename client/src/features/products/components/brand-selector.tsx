@@ -20,6 +20,34 @@ import { useGetAllBrandsQuery, useCreateBrandMutation, type Brand } from '@/stor
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { filterAndRankBySearch } from '@/utils/urdu-text-utils'
 
+const nameWords = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+
+// A brand name is never longer than this many words — keeps the prefix scan cheap.
+const MAX_BRAND_WORDS = 4
+
+/**
+ * The brand a product name starts with — "Samsung Galaxy A15" → Samsung. Whole words only
+ * (brand "Sam" doesn't match "Samsung …"), case and punctuation ignored, and spacing too:
+ * "QMobile Noir", "Q Mobile Noir" and "Q-Mobile Noir" all match brand "Q Mobile". When
+ * several brands match ("Dany" and "Dany Tech"), the longest wins. Inactive brands are skipped.
+ */
+export function matchBrandFromProductName(productName: string, brands: readonly Brand[]): Brand | undefined {
+  const words = nameWords(productName)
+  if (words.length === 0) return undefined
+  const prefixes = new Map<string, number>()
+  for (let k = 1; k <= Math.min(MAX_BRAND_WORDS, words.length); k++) {
+    prefixes.set(words.slice(0, k).join(''), k)
+  }
+  let best: { brand: Brand; length: number } | undefined
+  for (const brand of brands) {
+    if (brand.status === 'inactive') continue
+    const key = nameWords(brand.name).join('')
+    if (key.length < 2 || !prefixes.has(key)) continue
+    if (!best || key.length > best.length) best = { brand, length: key.length }
+  }
+  return best?.brand
+}
+
 interface Props {
   value?: string
   onChange: (brandId: string | undefined) => void

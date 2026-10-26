@@ -1029,9 +1029,10 @@ export default function PurchaseOrderPanel({
                                       Loading products...
                                     </div>
                                   ) : filteredCatalogItems.length === 0 ? (
-                                    <p className='py-6 text-center text-sm text-muted-foreground'>
-                                      No products found
-                                    </p>
+                                    <div className='space-y-1 py-6 text-center text-sm text-muted-foreground'>
+                                      <p>No products found</p>
+                                      <p className='text-xs'>Check the product is active</p>
+                                    </div>
                                   ) : (
                                     <CommandGroup>
                                       {visibleCatalogItems.map((catalogItem) => (

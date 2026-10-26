@@ -48,14 +48,19 @@ export function EntityCreateShortcutButton({ label, onClick, className }: Shortc
 
 type EmptyPromptProps = {
   message: string
+  /** Optional second line under the message, e.g. why nothing matched. */
+  hint?: string
   actionLabel: string
   onCreate: () => void
 }
 
-export function EntityCreateEmptyPrompt({ message, actionLabel, onCreate }: EmptyPromptProps) {
+export function EntityCreateEmptyPrompt({ message, hint, actionLabel, onCreate }: EmptyPromptProps) {
   return (
     <div className='flex flex-col items-center gap-3 px-4 py-6 text-center'>
-      <p className='text-sm text-muted-foreground'>{message}</p>
+      <div className='space-y-1'>
+        <p className='text-sm text-muted-foreground'>{message}</p>
+        {hint && <p className='text-xs text-muted-foreground'>{hint}</p>}
+      </div>
       <Button type='button' variant='outline' size='sm' onClick={onCreate} className='gap-2'>
         <Plus className='h-4 w-4' />
         {actionLabel}

@@ -650,6 +650,7 @@ const ur: Record<string, string> = {
     "print_invoice": "انوائس پرنٹ کریں",
     "press_enter_to_search": "تلاش کے لیے انٹر دبائیں",
     "no_products_found": "کوئی پروڈکٹ نہیں ملا",
+    "check_product_is_active": "چیک کریں کہ پروڈکٹ ایکٹو ہے",
     "no_products_available": "کوئی پروڈکٹ دستیاب نہیں",
     // "low_stock": "کم اسٹاک",
     // "out_of_stock": "اسٹاک ختم",

@@ -793,6 +793,7 @@ const en: Record<string, string> = {
     "barcode_mode_active": "Barcode mode active",
     "press_enter_to_search": "Press Enter to search",
     "no_products_found": "No products found",
+    "check_product_is_active": "Check the product is active",
     "no_products_available": "No products available",
     "no_product_with_barcode": "No product found with barcode",
     "consider_adding_new_product": "Consider adding this as a new product",

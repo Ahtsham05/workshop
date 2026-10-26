@@ -139,6 +139,7 @@ import {
   EntityQuickCreateDialogs,
   type QuickCreateState,
 } from '@/components/entity-create-shortcut'
+import { InactiveProductMatches, useInactiveProductMatches } from '@/components/inactive-product-matches'
 
 const entryImei = (e: ImeiEntryInput) => (typeof e === 'string' ? e : e.imei)
 const entryImei2 = (e: ImeiEntryInput) => (typeof e === 'string' ? undefined : e.imei2)
@@ -460,6 +461,9 @@ export default function PurchasePanel({
   // A stray second Enter landing in a just-opened, empty product search must not add
   // the first product in the list (see usePickerEnterGuard).
   const productPickerEnterGuard = usePickerEnterGuard(productSelectOpen, productSearchQuery)
+  // Inactive products are left out of the picker; name any the search matches so an empty
+  // result explains itself (and can be activated on the spot).
+  const inactiveProductMatches = useInactiveProductMatches(productSelectOpen ? productSearchQuery : '')
   const [suppliersLoading, setSuppliersLoading] = useState(false)
   const [aiScanOpen, setAiScanOpen] = useState(false)
   const [isEditingPurchaseNumber, setIsEditingPurchaseNumber] = useState(false)
@@ -1500,17 +1504,22 @@ export default function PurchasePanel({
                                       {t('loading_products')}
                                     </div>
                                   ) : filteredPurchaseProducts.length === 0 ? (
-                                    canCreateProduct ? (
-                                      <EntityCreateEmptyPrompt
-                                        message={t('No products found')}
-                                        actionLabel={t('add_product')}
-                                        onCreate={() => openQuickCreate('product', productSearchQuery, index)}
-                                      />
-                                    ) : (
-                                      <div className="py-6 text-center text-sm text-muted-foreground">
-                                        {t('No products found')}
-                                      </div>
-                                    )
+                                    <>
+                                      {canCreateProduct ? (
+                                        <EntityCreateEmptyPrompt
+                                          message={t('No products found')}
+                                          hint={inactiveProductMatches.length > 0 ? t('Matching inactive products are listed below') : t('check_product_is_active')}
+                                          actionLabel={t('add_product')}
+                                          onCreate={() => openQuickCreate('product', productSearchQuery, index)}
+                                        />
+                                      ) : (
+                                        <div className="space-y-1 py-6 text-center text-sm text-muted-foreground">
+                                          <p>{t('No products found')}</p>
+                                          <p className="text-xs">{inactiveProductMatches.length > 0 ? t('Matching inactive products are listed below') : t('check_product_is_active')}</p>
+                                        </div>
+                                      )}
+                                      <InactiveProductMatches matches={inactiveProductMatches} />
+                                    </>
                                   ) : (
                                     <CommandGroup>
                                       {visiblePurchaseProducts.map((catalogItem) => (

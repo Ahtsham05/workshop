@@ -34,7 +34,7 @@ import { useLanguage } from '@/context/language-context'
 import InlineBarcodeInput from '@/components/inline-barcode-input'
 import { VoiceInputButton } from '@/components/ui/voice-input-button'
 import { Badge } from '@/components/ui/badge'
-import { X, Search, Check, Plus, Package, DollarSign, Barcode, Image as ImageIcon, Layers, Lock } from 'lucide-react'
+import { X, Search, Check, Plus, Package, DollarSign, Barcode, Image as ImageIcon, Layers, Lock, Sparkles } from 'lucide-react'
 import SmartInput from '@/components/smart-input.tsx'
 import {
   Command,
@@ -75,7 +75,8 @@ import { VariantInventoryTable } from './variants/variant-inventory-table'
 import { ProductDefaultVariantBatchPanel } from './variants/product-default-variant-batch-panel'
 import type { VariantDraftRow } from './variants/generate-variant-combinations'
 import { generateBatchNumber } from './variants/generate-variant-combinations'
-import { BrandSelector } from './brand-selector'
+import { BrandSelector, matchBrandFromProductName } from './brand-selector'
+import { useGetAllBrandsQuery } from '@/stores/brand.api'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { useGetTaxCategoriesQuery } from '@/stores/taxCategory.api'
 import { handleFormEnterKeyDown } from '@/lib/form-enter-navigation'
@@ -354,6 +355,11 @@ export function UsersActionDialog({
   // directly — then it's theirs and name changes stop overwriting it. Only for new products;
   // editing an existing one starts with description already "owned" by the user.
   const descriptionAutoSyncRef = useRef(!isEdit)
+  // Brand follows the brand the product name starts with ("Samsung Galaxy A15" → Samsung)
+  // until the user picks or clears a brand themselves. New products only, like description.
+  const brandAutoSyncRef = useRef(!isEdit)
+  // The brand last filled in from the name — drives the "From the product name" note.
+  const [autoBrandId, setAutoBrandId] = useState<string | null>(null)
   const tagsInputRef = useRef<HTMLInputElement>(null)
 
   const dispatch = useDispatch<AppDispatch>()
@@ -466,6 +472,8 @@ export function UsersActionDialog({
   useEffect(() => {
     if (!open) return
     descriptionAutoSyncRef.current = !isEdit
+    brandAutoSyncRef.current = !isEdit
+    setAutoBrandId(null)
     if (isEdit && activeRow) {
       form.reset({
         name: activeRow.name || '',
@@ -568,6 +576,27 @@ export function UsersActionDialog({
     if (!open || isEdit || !defaultName?.trim()) return
     form.setValue('name', defaultName.trim())
   }, [open, isEdit, defaultName, form])
+
+  const { data: brands = [] } = useGetAllBrandsQuery(undefined, { skip: !open || isEdit })
+  const syncBrandFromName = (name: string) => {
+    if (!brandAutoSyncRef.current) return
+    const current = form.getValues('brandId') || undefined
+    // A brand that's there but not ours (restored draft, scanned product) is the user's.
+    if (current && current !== autoBrandId) {
+      brandAutoSyncRef.current = false
+      return
+    }
+    const match = matchBrandFromProductName(name, brands)
+    const next = match ? (match._id || match.id) : undefined
+    if (next !== current) form.setValue('brandId', next, { shouldDirty: true })
+    setAutoBrandId(next ?? null)
+  }
+  // Names that arrive without typing (quick-create's defaultName, a restored draft) — and
+  // the brand list loading after the name was already typed.
+  useEffect(() => {
+    if (open && !isEdit && brands.length > 0) syncBrandFromName(form.getValues('name') || '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isEdit, brands, defaultName])
 
   // A quick-create from a picker (defaultName) starts from the typed name, never a draft.
   const draft = useFormDraft(form, {
@@ -733,6 +762,8 @@ export function UsersActionDialog({
         })
         setDraftVariants([])
         descriptionAutoSyncRef.current = true
+        brandAutoSyncRef.current = true
+        setAutoBrandId(null)
         requestAnimationFrame(() => form.setFocus('name'))
         return
       }
@@ -1323,6 +1354,7 @@ export function UsersActionDialog({
                           if (descriptionAutoSyncRef.current) {
                             form.setValue('description', e.target.value)
                           }
+                          syncBrandFromName(e.target.value)
                         }}
                         data-enter-field='name'
                         onKeyDown={enterAdvance('name')}
@@ -1731,11 +1763,22 @@ export function UsersActionDialog({
                     <FormControl>
                       <BrandSelector
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(brandId) => {
+                          // Picked or cleared by hand — the name stops driving it.
+                          brandAutoSyncRef.current = false
+                          setAutoBrandId(null)
+                          field.onChange(brandId)
+                        }}
                         data-enter-field='brand'
                         onSelected={() => advanceEnterChain('brand')}
                       />
                     </FormControl>
+                    {field.value && field.value === autoBrandId ? (
+                      <p className='flex items-center gap-1 text-xs text-muted-foreground'>
+                        <Sparkles className='h-3 w-3' aria-hidden />
+                        From the product name — change it anytime.
+                      </p>
+                    ) : null}
                     <FormMessage />
                   </FormItem>
                 )}
