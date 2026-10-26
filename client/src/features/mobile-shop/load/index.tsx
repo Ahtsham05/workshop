@@ -196,6 +196,8 @@ type WithdrawalFormState = {
   commissionRate: string
   /** GST % charged on our commission — defaults from the selected account. */
   gstRate: string
+  /** GST % on the whole amount, paid by the customer on top — defaults from the account. */
+  amountGstRate: string
   extraCharge: string
   notes: string
   date: string
@@ -223,6 +225,8 @@ type BulkWithdrawalFormState = {
   commissionRate: string
   /** GST % on the commission, applied to every row — defaults from the selected account. */
   gstRate: string
+  /** GST % on the whole amount (customer pays it on top), every row — from the account. */
+  amountGstRate: string
   date: string
   entries: BulkWithdrawalEntry[]
 }
@@ -260,6 +264,10 @@ const bulkEntryCommission = (entry: BulkWithdrawalEntry, sharedRatePercent: stri
 const gstOnCommission = (commission: number, gstRatePercent: string) =>
   roundMoney((commission * (Number(gstRatePercent) || 0)) / 100)
 
+/** GST the bank deducts on the whole amount (a cost of the entry) — rounded like the server. */
+const gstOnAmount = (amount: number, ratePercent: string) =>
+  roundMoney((amount * (Number(ratePercent) || 0)) / 100)
+
 /** Keeps flat-mode rows the operator hasn't hand-edited in sync with the shared rate. */
 const resyncUneditedFlatEntries = (entries: BulkWithdrawalEntry[], sharedRatePercent: string): BulkWithdrawalEntry[] =>
   entries.map((entry) =>
@@ -274,6 +282,7 @@ const makeInitialBulkWithdrawalForm = (): BulkWithdrawalFormState => ({
   transactionType: 'withdrawal',
   commissionRate: '0',
   gstRate: '0',
+  amountGstRate: '0',
   date: getBusinessToday(),
   entries: [makeEmptyBulkEntry()],
 })
@@ -322,6 +331,7 @@ const initialWithdrawalForm: WithdrawalFormState = {
   customerAccountType: 'other',
   commissionRate: '0',
   gstRate: '0',
+  amountGstRate: '0',
   extraCharge: '0',
   notes: '',
   date: getBusinessToday(),
@@ -375,6 +385,7 @@ function buildWithdrawalFormWithWallet(
     transactionType: txType,
     commissionRate: rate,
     gstRate: String(wallet.gstRate ?? 0),
+    amountGstRate: String(wallet.amountGstRate ?? 0),
   }
 }
 
@@ -497,6 +508,9 @@ function LoadManagementPage({
         walletType: next.walletType || walletType,
         transactionType: next.transactionType,
         commissionRate: next.commissionRate,
+        // The account's GST rates too — bulk used to keep 0 when the account loaded late.
+        gstRate: next.gstRate,
+        amountGstRate: next.amountGstRate,
       }))
       setActiveTab('withdrawal')
       return
@@ -607,6 +621,7 @@ function LoadManagementPage({
       transactionType: base.transactionType,
       commissionRate: base.commissionRate,
       gstRate: base.gstRate,
+      amountGstRate: base.amountGstRate,
     }
   })
 
@@ -851,6 +866,7 @@ function LoadManagementPage({
     const extraCharge = Number(withdrawalForm.extraCharge) || 0
     const commissionProfit = (amount * commissionRate) / 100
     const gstAmount = gstOnCommission(commissionProfit, withdrawalForm.gstRate)
+    const amountGst = gstOnAmount(amount, withdrawalForm.amountGstRate)
     const normalizedCashAmount = Math.max(0, cashAmount)
     const remainingAmount = Math.max(0, amount - normalizedCashAmount)
     const settlementProfit = withdrawalForm.transactionType === 'withdrawal'
@@ -862,15 +878,18 @@ function LoadManagementPage({
       normalizedCashAmount,
       settlementProfit,
       gstAmount,
-      totalProfit: Math.max(0, commissionProfit + extraCharge + settlementProfit - gstAmount),
+      amountGst,
+      // Net of both GSTs — negative when the bank's GST is more than the entry earns.
+      totalProfit: roundMoney(commissionProfit + extraCharge + settlementProfit - gstAmount - amountGst),
     }
-  }, [withdrawalForm.amount, withdrawalForm.cashAmount, withdrawalForm.commissionRate, withdrawalForm.gstRate, withdrawalForm.extraCharge, withdrawalForm.transactionType])
+  }, [withdrawalForm.amount, withdrawalForm.cashAmount, withdrawalForm.commissionRate, withdrawalForm.gstRate, withdrawalForm.amountGstRate, withdrawalForm.extraCharge, withdrawalForm.transactionType])
   // const requiresFullCashSettlement = !withdrawalForm.customerId
 
   const bulkWithdrawalTotals = useMemo(() => {
     let totalAmount = 0
     let totalCommission = 0
     let totalGst = 0
+    let totalAmountGst = 0
     let totalProfit = 0
     let validCount = 0
     for (const e of bulkWithdrawalForm.entries) {
@@ -882,12 +901,14 @@ function LoadManagementPage({
         totalAmount += amount
         totalCommission += commission + extraCharge
         totalGst += gst
-        totalProfit += Math.max(0, commission + extraCharge - gst)
+        const amountGst = gstOnAmount(amount, bulkWithdrawalForm.amountGstRate)
+        totalAmountGst += amountGst
+        totalProfit += commission + extraCharge - gst - amountGst
         validCount++
       }
     }
-    return { totalAmount, totalCommission, totalGst, totalProfit, validCount }
-  }, [bulkWithdrawalForm.entries, bulkWithdrawalForm.commissionRate, bulkWithdrawalForm.gstRate])
+    return { totalAmount, totalCommission, totalGst, totalAmountGst, totalProfit, validCount }
+  }, [bulkWithdrawalForm.entries, bulkWithdrawalForm.commissionRate, bulkWithdrawalForm.gstRate, bulkWithdrawalForm.amountGstRate])
 
   const handlePurchaseChange = (field: keyof PurchaseFormState, value: string) => {
     if (field === 'savedSupplierId') {
@@ -1029,6 +1050,7 @@ function LoadManagementPage({
           walletType: selectedWallet?.type || '',
           commissionRate: selectedWallet ? rate : prev.commissionRate,
           gstRate: selectedWallet ? String(selectedWallet.gstRate ?? 0) : prev.gstRate,
+          amountGstRate: selectedWallet ? String(selectedWallet.amountGstRate ?? 0) : prev.amountGstRate,
         }
       })
       return
@@ -1165,6 +1187,7 @@ function LoadManagementPage({
           customerAccountType: 'other',
           commissionRate: prevCommission,
           gstRate: withdrawalForm.gstRate,
+          amountGstRate: withdrawalForm.amountGstRate,
           extraCharge: '0',
           notes: '',
           date: prevDate,
@@ -1193,6 +1216,7 @@ function LoadManagementPage({
         customerAccountType: withdrawalForm.customerAccountType || undefined,
         commissionRate: Number(withdrawalForm.commissionRate),
         gstRate: Number(withdrawalForm.gstRate) || 0,
+        amountGstRate: Number(withdrawalForm.amountGstRate) || 0,
         extraCharge: Number(withdrawalForm.extraCharge),
         notes: withdrawalForm.notes.trim() || undefined,
         date: parseBusinessDateTimeLocal(withdrawalForm.date || getBusinessToday()),
@@ -1217,6 +1241,7 @@ function LoadManagementPage({
         customerAccountType: 'other',
         commissionRate: prevCommission,
         gstRate: withdrawalForm.gstRate,
+        amountGstRate: withdrawalForm.amountGstRate,
         extraCharge: '0',
         notes: '',
         date: prevDate,
@@ -1288,6 +1313,7 @@ function LoadManagementPage({
           'withdrawal-cash-amount',
           'withdrawal-commission',
           'withdrawal-gst',
+          'withdrawal-amount-gst',
           'withdrawal-extra',
           'withdrawal-notes',
           'withdrawal-date',
@@ -1330,6 +1356,7 @@ function LoadManagementPage({
         walletType: selectedWallet?.type || '',
         commissionRate: nextRate,
         gstRate: selectedWallet ? String(selectedWallet.gstRate ?? 0) : prev.gstRate,
+        amountGstRate: selectedWallet ? String(selectedWallet.amountGstRate ?? 0) : prev.amountGstRate,
         entries: resyncUneditedFlatEntries(prev.entries, nextRate),
       }
     })
@@ -1442,6 +1469,7 @@ function LoadManagementPage({
         transactionType: bulkWithdrawalForm.transactionType,
         commissionRate: Number(bulkWithdrawalForm.commissionRate) || 0,
         gstRate: Number(bulkWithdrawalForm.gstRate) || 0,
+        amountGstRate: Number(bulkWithdrawalForm.amountGstRate) || 0,
         date: parseBusinessDateTimeLocal(bulkWithdrawalForm.date || getBusinessToday()),
         entries: validEntries.map(e => ({
           amount: Number(e.amount),
@@ -1639,6 +1667,7 @@ function LoadManagementPage({
       customerAccountType: w.customerAccountType || 'other',
       commissionRate: String(w.commissionRate || 0),
       gstRate: String(w.gstRate || 0),
+      amountGstRate: String(w.amountGstRate || 0),
       extraCharge: String(w.extraCharge || 0),
       notes: w.notes || '',
       date: toBusinessCalendarDate(new Date(w.date)),
@@ -1670,6 +1699,7 @@ function LoadManagementPage({
           customerAccountType: withdrawalForm.customerAccountType || undefined,
           commissionRate: Number(withdrawalForm.commissionRate),
           gstRate: Number(withdrawalForm.gstRate) || 0,
+          amountGstRate: Number(withdrawalForm.amountGstRate) || 0,
           extraCharge: Number(withdrawalForm.extraCharge),
           notes: withdrawalForm.notes.trim() || undefined,
           date: parseBusinessDateTimeLocal(withdrawalForm.date || getBusinessToday()),
@@ -2397,7 +2427,7 @@ function LoadManagementPage({
                     )}
 
                     {/* Shared fields */}
-                    <div className='grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4'>
+                    <div className='grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5'>
                       <div className='space-y-2'>
                         <Label>Select Wallet *</Label>
                         <Select
@@ -2456,6 +2486,18 @@ function LoadManagementPage({
                         </p>
                       </div>
                       <div className='space-y-2'>
+                        <Label>GST on Amount (%)</Label>
+                        <Input
+                          type='number' min='0' max='100' step='0.01'
+                          placeholder='e.g., 2'
+                          value={bulkWithdrawalForm.amountGstRate}
+                          onChange={(e) => setBulkWithdrawalForm(prev => ({ ...prev, amountGstRate: e.target.value }))}
+                        />
+                        <p className='text-xs text-muted-foreground'>
+                          On each row's whole amount — deducted by the bank from the wallet, out of your profit.
+                        </p>
+                      </div>
+                      <div className='space-y-2'>
                         <Label>Date</Label>
                         <Input
                           type='date'
@@ -2488,6 +2530,11 @@ function LoadManagementPage({
                               {Number(bulkWithdrawalForm.gstRate) > 0 && (
                                 <th className='text-left p-2 min-w-[100px] text-muted-foreground font-medium whitespace-nowrap'>
                                   GST ({Number(bulkWithdrawalForm.gstRate)}%)
+                                </th>
+                              )}
+                              {Number(bulkWithdrawalForm.amountGstRate) > 0 && (
+                                <th className='text-left p-2 min-w-[110px] text-muted-foreground font-medium whitespace-nowrap'>
+                                  GST on Amt ({Number(bulkWithdrawalForm.amountGstRate)}%)
                                 </th>
                               )}
                               <th className='text-left p-2 min-w-[150px] text-muted-foreground font-medium'>Notes</th>
@@ -2579,6 +2626,16 @@ function LoadManagementPage({
                                     </td>
                                   )
                                 })()}
+                                {Number(bulkWithdrawalForm.amountGstRate) > 0 && (() => {
+                                  const rowTax = gstOnAmount(Number(entry.amount) || 0, bulkWithdrawalForm.amountGstRate)
+                                  return (
+                                    <td className='p-2 whitespace-nowrap tabular-nums' title='GST the bank deducts from the wallet on this row’s amount'>
+                                      {rowTax > 0
+                                        ? <span className='text-rose-600'>− {formatMoney(rowTax)}</span>
+                                        : <span className='text-muted-foreground'>—</span>}
+                                    </td>
+                                  )
+                                })()}
                                 <td className='p-2'>
                                   <Input
                                     placeholder='Optional'
@@ -2636,11 +2693,35 @@ function LoadManagementPage({
                           )}
                           <div className={bulkWithdrawalTotals.totalGst > 0 ? 'col-span-2 md:col-span-1' : undefined}>
                             <p className='text-xs text-muted-foreground'>
-                              {bulkWithdrawalTotals.totalGst > 0 ? 'Your Net Profit' : 'Your Total Profit'}
+                              {bulkWithdrawalTotals.totalProfit < 0
+                                ? 'Loss'
+                                : bulkWithdrawalTotals.totalGst > 0 || bulkWithdrawalTotals.totalAmountGst > 0
+                                  ? 'Your Net Profit'
+                                  : 'Your Total Profit'}
                             </p>
-                            <p className='text-xl font-bold text-orange-700'>{formatMoney(bulkWithdrawalTotals.totalProfit)}</p>
+                            <p className={`text-xl font-bold ${bulkWithdrawalTotals.totalProfit < 0 ? 'text-rose-600' : 'text-orange-700'}`}>
+                              {bulkWithdrawalTotals.totalProfit < 0 && '− '}
+                              {formatMoney(Math.abs(bulkWithdrawalTotals.totalProfit))}
+                            </p>
                           </div>
                         </div>
+                        {bulkWithdrawalTotals.totalAmountGst > 0 && (
+                          <div className='mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-orange-200 pt-3 text-sm'>
+                            <span className='text-muted-foreground'>
+                              GST on Amount ({Number(bulkWithdrawalForm.amountGstRate)}%) — deducted by bank from wallet:
+                            </span>
+                            <span className='font-bold text-rose-600'>− {formatMoney(bulkWithdrawalTotals.totalAmountGst)}</span>
+                            <span className='text-xs text-muted-foreground'>
+                              (wallet {bulkWithdrawalForm.transactionType === 'withdrawal' ? 'gets' : 'pays'}{' '}
+                              {formatMoney(
+                                bulkWithdrawalForm.transactionType === 'withdrawal'
+                                  ? bulkWithdrawalTotals.totalAmount - bulkWithdrawalTotals.totalAmountGst
+                                  : bulkWithdrawalTotals.totalAmount + bulkWithdrawalTotals.totalAmountGst,
+                              )}
+                              ; already taken out of the profit above)
+                            </span>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
 
@@ -2849,6 +2930,21 @@ function LoadManagementPage({
                       )}
                     </div>
                     <div className='space-y-2'>
+                      <Label htmlFor='withdrawal-amount-gst'>GST on Amount (%)</Label>
+                      <Input id='withdrawal-amount-gst' type='number' min='0' max='100' step='0.01' placeholder='e.g., 2' value={withdrawalForm.amountGstRate} onChange={(e) => handleWithdrawalChange('amountGstRate', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-amount-gst')} />
+                      {withdrawalProfit.amountGst > 0 && (
+                        <p className='text-xs text-muted-foreground'>
+                          Bank deducts {formatMoney(withdrawalProfit.amountGst)} — wallet{' '}
+                          {withdrawalForm.transactionType === 'withdrawal' ? 'gets' : 'pays'}{' '}
+                          {formatMoney(
+                            withdrawalForm.transactionType === 'withdrawal'
+                              ? (Number(withdrawalForm.amount) || 0) - withdrawalProfit.amountGst
+                              : (Number(withdrawalForm.amount) || 0) + withdrawalProfit.amountGst,
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <div className='space-y-2'>
                       <Label htmlFor='withdrawal-extra'>Extra Charges ({currencySymbol}) - Optional</Label>
                       <Input id='withdrawal-extra' type='number' min='0' step='0.01' placeholder='e.g., 5, 10' value={withdrawalForm.extraCharge} onChange={(e) => handleWithdrawalChange('extraCharge', e.target.value)} {...withdrawalEnter.enterProps('withdrawal-extra')} />
                     </div>
@@ -2915,10 +3011,27 @@ function LoadManagementPage({
                             <span className='text-rose-600 font-semibold'>− {formatMoney(withdrawalProfit.gstAmount)}</span>
                           </div>
                         )}
-                        {withdrawalProfit.totalProfit > 0 && (
+                        {withdrawalProfit.amountGst > 0 && (
+                          <div className='flex justify-between items-center'>
+                            <span className='text-muted-foreground'>
+                              GST on Amount ({withdrawalForm.amountGstRate}%) — deducted by bank:
+                            </span>
+                            <span className='text-rose-600 font-semibold'>− {formatMoney(withdrawalProfit.amountGst)}</span>
+                          </div>
+                        )}
+                        {withdrawalProfit.totalProfit !== 0 && (
                         <div className='border-t-2 border-orange-200 pt-3 flex justify-between items-center'>
-                          <span className='text-lg font-bold'>{withdrawalProfit.gstAmount > 0 ? 'Your Net Profit:' : 'Your Profit:'}</span>
-                          <span className='text-2xl font-bold text-orange-700'>{formatMoney(withdrawalProfit.totalProfit)}</span>
+                          <span className='text-lg font-bold'>
+                            {withdrawalProfit.totalProfit < 0
+                              ? 'Loss on this entry:'
+                              : withdrawalProfit.gstAmount > 0 || withdrawalProfit.amountGst > 0
+                                ? 'Your Net Profit:'
+                                : 'Your Profit:'}
+                          </span>
+                          <span className={`text-2xl font-bold ${withdrawalProfit.totalProfit < 0 ? 'text-rose-600' : 'text-orange-700'}`}>
+                            {withdrawalProfit.totalProfit < 0 && '− '}
+                            {formatMoney(Math.abs(withdrawalProfit.totalProfit))}
+                          </span>
                         </div>
                         )}
                       </div>
@@ -3070,6 +3183,11 @@ function LoadManagementPage({
                             {Number(w.gstAmount || 0) > 0 && (
                               <div className='text-xs font-normal text-rose-600 whitespace-nowrap'>
                                 GST {Number(w.gstRate || 0)}%: − {formatMoney(Number(w.gstAmount))}
+                              </div>
+                            )}
+                            {Number(w.amountGstAmount || 0) > 0 && (
+                              <div className='text-xs font-normal text-rose-600 whitespace-nowrap'>
+                                GST on amount {Number(w.amountGstRate || 0)}% (bank): − {formatMoney(Number(w.amountGstAmount))}
                               </div>
                             )}
                           </TableCell>

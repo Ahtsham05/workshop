@@ -74,6 +74,7 @@ type WalletRecord = {
   withdrawalCommissionRate?: number
   depositCommissionRate?: number
   gstRate?: number
+  amountGstRate?: number
   accountType?: BankAccountType
   bankName?: string
   accountNumber?: string
@@ -110,6 +111,7 @@ export default function WalletPage() {
   const [withdrawalCommissionRate, setWithdrawalCommissionRate] = useState('0')
   const [depositCommissionRate, setDepositCommissionRate] = useState('0')
   const [gstRate, setGstRate] = useState('0')
+  const [amountGstRate, setAmountGstRate] = useState('0')
   const [accountType, setAccountType] = useState<BankAccountType | ''>('')
   const [bankName, setBankName] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
@@ -122,7 +124,7 @@ export default function WalletPage() {
   const walletEnter = useMemo(
     () =>
       makeEnterChain(
-        ['wallet-name', 'balance', 'commission-rate', 'withdrawal-rate', 'deposit-rate', 'gst-rate'],
+        ['wallet-name', 'balance', 'commission-rate', 'withdrawal-rate', 'deposit-rate', 'gst-rate', 'amount-gst-rate'],
         { onSubmit: () => document.querySelector<HTMLFormElement>('[data-mobile-form="wallet"]')?.requestSubmit() },
       ),
     [],
@@ -149,7 +151,10 @@ export default function WalletPage() {
         withdrawalCommissionRate: Number(withdrawalCommissionRate),
         depositCommissionRate: Number(depositCommissionRate),
         // Only the mobile-shop form shows the GST field — elsewhere leave the stored rate alone.
-        ...(isMobileShop && { gstRate: Number(gstRate) || 0 }),
+        ...(isMobileShop && {
+          gstRate: Number(gstRate) || 0,
+          amountGstRate: Number(amountGstRate) || 0,
+        }),
         accountType,
         bankName: accountType === 'bank' ? bankName : '',
         accountNumber: accountType === 'bank' ? accountNumber : '',
@@ -163,6 +168,7 @@ export default function WalletPage() {
       setWithdrawalCommissionRate('0')
       setDepositCommissionRate('0')
       setGstRate('0')
+      setAmountGstRate('0')
       setAccountType('')
       setBankName('')
       setAccountNumber('')
@@ -181,6 +187,7 @@ export default function WalletPage() {
     setWithdrawalCommissionRate(String(wallet.withdrawalCommissionRate ?? 0))
     setDepositCommissionRate(String(wallet.depositCommissionRate ?? 0))
     setGstRate(String(wallet.gstRate ?? 0))
+    setAmountGstRate(String(wallet.amountGstRate ?? 0))
     setAccountType(wallet.accountType ?? '')
     setBankName(wallet.bankName ?? '')
     setAccountNumber(wallet.accountNumber ?? '')
@@ -375,6 +382,24 @@ export default function WalletPage() {
                         {currencySymbol}200 commission leaves {currencySymbol}168 profit.
                       </p>
                     </div>
+                    <div className='space-y-2'>
+                      <Label htmlFor='amount-gst-rate'>GST on Amount (%)</Label>
+                      <Input
+                        id='amount-gst-rate'
+                        min='0'
+                        max='100'
+                        step='0.01'
+                        type='number'
+                        placeholder='e.g., 2'
+                        value={amountGstRate}
+                        onChange={(event) => setAmountGstRate(event.target.value)}
+                        {...walletEnter.enterProps('amount-gst-rate')}
+                      />
+                      <p className='text-xs text-muted-foreground'>
+                        Deducted by the bank from this account on the whole Received/Send amount — e.g. 2% on a{' '}
+                        {currencySymbol}100 withdrawal: the wallet gets {currencySymbol}98. Taken out of your profit.
+                      </p>
+                    </div>
                   </div>
                 </>
               )}
@@ -421,6 +446,7 @@ export default function WalletPage() {
                         <TableHead>Received %</TableHead>
                         <TableHead>Send %</TableHead>
                         <TableHead>GST %</TableHead>
+                        <TableHead>GST on Amt %</TableHead>
                       </>
                     )}
                     <TableHead>Updated</TableHead>
@@ -478,6 +504,9 @@ export default function WalletPage() {
                             </TableCell>
                             <TableCell className='text-rose-600 whitespace-nowrap'>
                               {Number(wallet.gstRate ?? 0).toFixed(2)}%
+                            </TableCell>
+                            <TableCell className='text-amber-700 whitespace-nowrap'>
+                              {Number(wallet.amountGstRate ?? 0).toFixed(2)}%
                             </TableCell>
                           </>
                         )}

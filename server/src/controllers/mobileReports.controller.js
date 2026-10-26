@@ -255,6 +255,8 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
           _id: null,
           totalWithdrawals: { $sum: { $cond: [{ $eq: ['$transactionType', 'withdrawal'] }, '$amount', 0] } },
           totalDeposits: { $sum: { $cond: [{ $eq: ['$transactionType', 'deposit'] }, '$amount', 0] } },
+          // GST the bank deducts on the amount — out of the account on both types.
+          totalBankGst: { $sum: { $ifNull: ['$amountGstAmount', 0] } },
         },
       },
     ]),
@@ -288,6 +290,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   const totalLoadAfter = loadAfterRes[0] ? loadAfterRes[0].total : 0;
   const totalWithdrawalsAfter = cashAfterRes[0] ? cashAfterRes[0].totalWithdrawals : 0;
   const totalDepositsAfter = cashAfterRes[0] ? cashAfterRes[0].totalDeposits : 0;
+  const totalBankGstAfter = cashAfterRes[0] ? cashAfterRes[0].totalBankGst || 0 : 0;
   const totalSimSaleLoadAfter = simSaleAfterRes[0] ? simSaleAfterRes[0].total : 0;
   const totalLoadPurchaseAfter = loadPurchaseAfterRes[0] ? loadPurchaseAfterRes[0].total : 0;
   const totalWalletInAfter = walletEntryAfterRes[0] ? walletEntryAfterRes[0].totalIn : 0;
@@ -333,6 +336,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
     -totalLoadAfter +
     totalWithdrawalsAfter -
     totalDepositsAfter -
+    totalBankGstAfter -
     totalSimSaleLoadAfter +
     totalLoadPurchaseAfter +
     totalWalletInAfter -
@@ -397,7 +401,7 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
       .lean(),
     CashWithdrawal.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
-      .select('date createdAt transactionType customerNumber customerName customerAccountType amount cashAmount extraCharge profit notes')
+      .select('date createdAt transactionType customerNumber customerName customerAccountType amount cashAmount extraCharge profit notes amountGstRate amountGstAmount')
       .lean(),
     SimSale.find({ ...txBaseMatch, date: { $gte: start, $lte: end } })
       .sort({ date: 1, createdAt: 1 })
@@ -539,18 +543,23 @@ const getWalletBalanceStatement = catchAsync(async (req, res) => {
   cashDetails.forEach((item) => {
     const dateKey = toCalendarDateKey(item.date);
     const isWithdrawal = item.transactionType === 'withdrawal';
+    // The bank deducts its GST on the amount from the account: the wallet moves net of it.
+    const bankGst = Number(item.amountGstAmount || 0);
     ensureBucket(dateKey).push({
       id: String(item._id),
       date: item.date,
       createdAt: item.createdAt,
       source: 'cash_withdrawal',
       transactionType: item.transactionType,
-      title: isWithdrawal ? 'Cash Withdrawal' : 'Cash Deposit',
+      title: `${isWithdrawal ? 'Cash Withdrawal' : 'Cash Deposit'}${
+        bankGst > 0 ? ` (GST ${Number(item.amountGstRate || 0)}% ${bankGst.toFixed(2)} deducted)` : ''
+      }`,
       accountNumber: item.customerNumber || '',
       customerName: item.customerName || '',
       network: item.customerAccountType || '',
       amount: Number(item.amount || 0),
-      walletImpact: isWithdrawal ? Number(item.amount || 0) : -Number(item.amount || 0),
+      walletImpact: isWithdrawal ? Number(item.amount || 0) - bankGst : -Number(item.amount || 0) - bankGst,
+      bankGst,
       cashAmount: Number(item.cashAmount || 0),
       extraCharge: Number(item.extraCharge || 0),
       profit: Number(item.profit || 0),

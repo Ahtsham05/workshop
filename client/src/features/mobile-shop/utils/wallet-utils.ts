@@ -7,6 +7,7 @@ export type WalletLike = {
   withdrawalCommissionRate?: number
   depositCommissionRate?: number
   gstRate?: number
+  amountGstRate?: number
   updatedAt?: string
   isActive?: boolean
   accountType?: string

@@ -773,6 +773,7 @@ const walletToBankAccountShape = (w) => ({
   withdrawalCommissionRate: w.withdrawalCommissionRate,
   depositCommissionRate: w.depositCommissionRate,
   gstRate: w.gstRate,
+  amountGstRate: w.amountGstRate,
 });
 
 const getBankAccounts = async (scope) => {

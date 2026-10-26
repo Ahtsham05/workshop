@@ -70,6 +70,14 @@ const walletSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
+    // GST the bank / wallet provider deducts on the whole Received/Send amount (e.g. 2% of a
+    // ₹100 withdrawal → the wallet gets ₹98). A cost of the entry: profit is net of it.
+    amountGstRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
     // Professional "Bank Accounts" fields — optional, so pre-existing wallets
     // (JazzCash, EasyPaisa, Load, etc.) created before this field existed keep
     // working unchanged. Only relevant when accountType === 'bank'.

@@ -51,6 +51,8 @@ export interface WalletRecord {
   depositCommissionRate: number
   /** GST % charged on cash Received/Send commission. */
   gstRate?: number
+  /** GST % on the whole Received/Send amount — paid by the customer on top (tax payable). */
+  amountGstRate?: number
   accountType?: BankAccountType
   bankName?: string
   accountNumber?: string
@@ -130,6 +132,9 @@ export interface CashWithdrawalRecord {
   gstRate?: number
   /** GST deducted from the commission; `profit` is already net of it. */
   gstAmount?: number
+  /** GST on the whole amount, collected from the customer in cash — not in `profit`. */
+  amountGstRate?: number
+  amountGstAmount?: number
   extraCharge: number
   profit: number
   notes?: string
@@ -149,6 +154,7 @@ export interface CreateCashWithdrawalInput {
   customerAccountType?: string
   commissionRate: number
   gstRate?: number
+  amountGstRate?: number
   extraCharge: number
   notes?: string
   date: string
@@ -191,6 +197,7 @@ export interface CreateCashWithdrawalsBatchInput {
   transactionType: 'withdrawal' | 'deposit'
   commissionRate: number
   gstRate?: number
+  amountGstRate?: number
   date: string
   entries: CashWithdrawalBatchEntry[]
 }
@@ -702,7 +709,7 @@ export const mobileShopApi = createApi({
       }),
       providesTags: ['Wallets'],
     }),
-    upsertWallet: builder.mutation<WalletRecord, { type: string; balance: number; commissionRate?: number; withdrawalCommissionRate?: number; depositCommissionRate?: number; gstRate?: number; accountType?: BankAccountType | ''; bankName?: string; accountNumber?: string; branchName?: string; id?: string }>({
+    upsertWallet: builder.mutation<WalletRecord, { type: string; balance: number; commissionRate?: number; withdrawalCommissionRate?: number; depositCommissionRate?: number; gstRate?: number; amountGstRate?: number; accountType?: BankAccountType | ''; bankName?: string; accountNumber?: string; branchName?: string; id?: string }>({
       query: (body) => ({
         url: '/wallets',
         method: 'POST',

@@ -88,11 +88,24 @@ const cashWithdrawalSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
-    // Net profit: commission + extra charge + settlement margin − gstAmount.
+    // GST on the whole amount (snapshot of the account's rate), deducted by the bank / wallet
+    // provider from the account: the wallet moves by amount ∓ this, and `profit` is net of it.
+    amountGstRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    amountGstAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Net profit: commission + extra charge + settlement margin − gstAmount − amountGstAmount.
+    // Negative when the bank's GST on the amount is more than the entry earned (a loss).
     profit: {
       type: Number,
       required: true,
-      min: 0,
     },
     // 'withdrawal': customer gets cash, your wallet INCREASES (2% commission)
     // 'deposit': customer sends cash, your wallet DECREASES (1% commission)

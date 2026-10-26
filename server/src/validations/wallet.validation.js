@@ -10,6 +10,7 @@ const upsertWallet = {
     depositCommissionRate: Joi.number().min(0).max(100).default(0),
     // No default: callers that don't send it keep the account's existing GST rate.
     gstRate: Joi.number().min(0).max(100),
+    amountGstRate: Joi.number().min(0).max(100),
     accountType: Joi.string().valid('cash', 'bank', 'mobile_wallet').allow('', null),
     bankName: Joi.string().trim().allow('', null),
     accountNumber: Joi.string().trim().allow('', null),

@@ -54,9 +54,14 @@ const calculateSettlementProfit = ({ amount, cashAmount, transactionType }) => {
 const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
 
 /**
- * Profit split for one cash Received/Send entry. GST is charged on our commission only
- * (not on extra charges or the settlement margin) and comes out of it, so `profit` — what
- * every report and the dashboard sum — is net of GST.
+ * Profit split for one cash Received/Send entry.
+ *  - GST on commission: `gstRate` % of our commission (not of extra charges or the
+ *    settlement margin), out of the commission.
+ *  - GST on amount: `amountGstRate` % of the whole amount, deducted by the bank / wallet
+ *    provider from the account itself — a cost of the entry. (Paying the customer less
+ *    cash on a withdrawal shows up as settlement margin and covers it.)
+ * `profit` — what every report and the dashboard sum — is net of both, and is negative
+ * when the entry made a loss.
  */
 const calculateWithdrawalBreakdown = ({
   amount,
@@ -65,12 +70,34 @@ const calculateWithdrawalBreakdown = ({
   commissionRate = 0,
   extraCharge = 0,
   gstRate = 0,
+  amountGstRate = 0,
 }) => {
   const commissionProfit = (Number(amount || 0) * Number(commissionRate || 0)) / 100;
   const settlementProfit = calculateSettlementProfit({ amount, cashAmount, transactionType });
   const grossProfit = commissionProfit + Number(extraCharge || 0) + settlementProfit;
   const gstAmount = Math.min(grossProfit, roundMoney((commissionProfit * Number(gstRate || 0)) / 100));
-  return { grossProfit, gstAmount, profit: Math.max(0, grossProfit - gstAmount) };
+  const amountGstAmount = roundMoney((Number(amount || 0) * Number(amountGstRate || 0)) / 100);
+  return {
+    grossProfit,
+    gstAmount,
+    amountGstAmount,
+    profit: roundMoney(grossProfit - gstAmount - amountGstAmount),
+  };
+};
+
+/** GST on the whole amount that the bank deducts from the account. */
+const calculateAmountGst = ({ amount, amountGstRate = 0 }) =>
+  roundMoney((Number(amount || 0) * Number(amountGstRate || 0)) / 100);
+
+/**
+ * How the entry moves the account balance: a withdrawal (Received) brings the amount in
+ * less the bank's GST on it; a deposit (Send) takes the amount out plus that GST.
+ */
+const walletMovement = (withdrawal) => {
+  const tax = Number(withdrawal.amountGstAmount || 0);
+  return withdrawal.transactionType === 'withdrawal'
+    ? { operation: 'add', amount: roundMoney(Number(withdrawal.amount) - tax) }
+    : { operation: 'deduct', amount: roundMoney(Number(withdrawal.amount) + tax) };
 };
 
 const calculateWithdrawalProfit = (input) => calculateWithdrawalBreakdown(input).profit;
@@ -112,6 +139,29 @@ const postCommissionCashBookLines = async (withdrawal, { grossProfit, gstAmount,
       description: `GST ${Number(withdrawal.gstRate || 0)}% on ${label.toLowerCase()} commission — ${customerLabel}`,
     });
   }
+};
+
+/**
+ * Cash Book line for GST on the whole amount: deducted by the bank from the account, so a
+ * wallet-side expense next to the entry's own wallet line (visible, totals up for tax).
+ */
+const postAmountGstCashBookLine = async (withdrawal, customerLabel) => {
+  const tax = Number(withdrawal.amountGstAmount || 0);
+  if (!(tax > 0)) return;
+  const label = withdrawal.transactionType === 'withdrawal' ? 'withdrawal' : 'deposit';
+  await cashBookService.createEntry({
+    organizationId: withdrawal.organizationId,
+    branchId: withdrawal.branchId,
+    source: 'other',
+    paymentMethod: 'wallet',
+    referenceId: withdrawal._id,
+    referenceModel: 'CashWithdrawal',
+    date: withdrawal.date,
+    createdBy: withdrawal.createdBy,
+    type: 'expense',
+    amount: tax,
+    description: `GST ${Number(withdrawal.amountGstRate || 0)}% on ${label} amount deducted by ${withdrawal.walletType} — ${customerLabel}`,
+  });
 };
 
 const syncCustomerLedgerForCashWithdrawal = async (withdrawal) => {
@@ -210,13 +260,14 @@ const createCashWithdrawal = async (body) => {
   if (cashAmount > Number(body.amount || 0)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cash paid/received must be less than or equal to amount');
   }
-  const { grossProfit, gstAmount, profit } = calculateWithdrawalBreakdown({ ...body, cashAmount });
+  const { grossProfit, gstAmount, amountGstAmount, profit } = calculateWithdrawalBreakdown({ ...body, cashAmount });
   const withdrawal = await CashWithdrawal.create({
     ...body,
     customerId: linkedCustomer ? linkedCustomer._id : undefined,
     customerName: linkedCustomer ? linkedCustomer.name : (body.customerName || ''),
     cashAmount,
     gstAmount,
+    amountGstAmount,
     profit,
   });
 
@@ -224,12 +275,12 @@ const createCashWithdrawal = async (body) => {
 
   // Withdrawal: customer sends digital money → our wallet INCREASES, we give cash
   // Deposit: customer gives cash → we send digital → our wallet DECREASES
+  // (either way less the GST the bank deducts on the amount)
   await walletService.adjustWalletBalance({
     organizationId: withdrawal.organizationId,
     branchId: withdrawal.branchId,
     type: withdrawal.walletType,
-    amount: withdrawal.amount,
-    operation: isWithdrawal ? 'add' : 'deduct',
+    ...walletMovement(withdrawal),
     userId: withdrawal.createdBy,
   });
 
@@ -302,6 +353,7 @@ const createCashWithdrawal = async (body) => {
   }
 
   await postCommissionCashBookLines(withdrawal, { grossProfit, gstAmount, customerLabel });
+  await postAmountGstCashBookLine(withdrawal, customerLabel);
 
   await syncCustomerLedgerForCashWithdrawal(withdrawal);
 
@@ -350,12 +402,12 @@ const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
   });
   const oldIsWithdrawal = withdrawal.transactionType === 'withdrawal';
 
-  // Reverse old wallet adjustment
+  // Reverse old wallet adjustment (incl. the bank's GST on the amount)
   await walletService.adjustWalletBalance({
     organizationId: withdrawal.organizationId,
     branchId: withdrawal.branchId,
     type: withdrawal.walletType,
-    amount: withdrawal.amount,
+    amount: walletMovement(withdrawal).amount,
     operation: oldIsWithdrawal ? 'deduct' : 'add',
     userId: withdrawal.createdBy,
   });
@@ -372,8 +424,9 @@ const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
   if (Number(withdrawal.cashAmount || 0) > Number(withdrawal.amount || 0)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cash paid/received must be less than or equal to amount');
   }
-  const { grossProfit, gstAmount, profit } = calculateWithdrawalBreakdown(withdrawal);
+  const { grossProfit, gstAmount, amountGstAmount, profit } = calculateWithdrawalBreakdown(withdrawal);
   withdrawal.gstAmount = gstAmount;
+  withdrawal.amountGstAmount = amountGstAmount;
   withdrawal.profit = profit;
   await withdrawal.save();
 
@@ -384,8 +437,7 @@ const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
     organizationId: withdrawal.organizationId,
     branchId: withdrawal.branchId,
     type: withdrawal.walletType,
-    amount: withdrawal.amount,
-    operation: isWithdrawal ? 'add' : 'deduct',
+    ...walletMovement(withdrawal),
     userId: withdrawal.createdBy,
   });
 
@@ -430,6 +482,7 @@ const updateCashWithdrawalUnlocked = async (withdrawalId, updateBody) => {
   }
 
   await postCommissionCashBookLines(withdrawal, { grossProfit, gstAmount, customerLabel });
+  await postAmountGstCashBookLine(withdrawal, customerLabel);
 
   await syncCustomerLedgerForCashWithdrawal(withdrawal);
 
@@ -443,12 +496,12 @@ const deleteCashWithdrawalUnlocked = async (withdrawalId) => {
   const withdrawal = await getCashWithdrawalById(withdrawalId);
   const isWithdrawal = withdrawal.transactionType === 'withdrawal';
 
-  // Reverse wallet adjustment
+  // Reverse wallet adjustment (incl. the bank's GST on the amount)
   await walletService.adjustWalletBalance({
     organizationId: withdrawal.organizationId,
     branchId: withdrawal.branchId,
     type: withdrawal.walletType,
-    amount: withdrawal.amount,
+    amount: walletMovement(withdrawal).amount,
     operation: isWithdrawal ? 'deduct' : 'add',
     userId: withdrawal.createdBy,
   });
@@ -464,11 +517,23 @@ const deleteCashWithdrawalUnlocked = async (withdrawalId) => {
 const deleteCashWithdrawal = (withdrawalId) =>
   withKeyedLock(`cash-withdrawal:${withdrawalId}`, () => deleteCashWithdrawalUnlocked(withdrawalId));
 
-const assertBatchWalletBalance = async ({ organizationId, branchId, walletType, transactionType, entries, createdBy }) => {
+const assertBatchWalletBalance = async ({
+  organizationId,
+  branchId,
+  walletType,
+  transactionType,
+  entries,
+  createdBy,
+  amountGstRate = 0,
+}) => {
   if (transactionType === 'withdrawal') {
     return;
   }
-  const totalAmount = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  // Each Send takes its amount plus the bank's GST on it out of the account.
+  const totalAmount = entries.reduce(
+    (sum, entry) => sum + (Number(entry.amount) || 0) + calculateAmountGst({ amount: entry.amount, amountGstRate }),
+    0
+  );
   if (totalAmount <= 0) {
     return;
   }
@@ -479,7 +544,19 @@ const assertBatchWalletBalance = async ({ organizationId, branchId, walletType, 
 };
 
 const createCashWithdrawalsBatch = async (body) => {
-  const { walletId, walletType, transactionType, commissionRate, gstRate, date, entries, organizationId, branchId, createdBy } = body;
+  const {
+    walletId,
+    walletType,
+    transactionType,
+    commissionRate,
+    gstRate,
+    amountGstRate,
+    date,
+    entries,
+    organizationId,
+    branchId,
+    createdBy,
+  } = body;
 
   await assertBatchWalletBalance({
     organizationId,
@@ -488,6 +565,7 @@ const createCashWithdrawalsBatch = async (body) => {
     transactionType,
     entries,
     createdBy,
+    amountGstRate,
   });
 
   const results = [];
@@ -504,6 +582,7 @@ const createCashWithdrawalsBatch = async (body) => {
         // customer rate be entered without changing the rate for the rest of the batch.
         commissionRate: Number(entry.commissionRate ?? commissionRate ?? 0),
         gstRate: Number(gstRate || 0),
+        amountGstRate: Number(amountGstRate || 0),
         amount: Number(entry.amount),
         customerId: entry.customerId || undefined,
         cashAmount: Number(entry.cashAmount ?? entry.amount),
@@ -546,6 +625,8 @@ const deleteCashWithdrawalsBatch = async (ids) => {
 
 module.exports = {
   calculateWithdrawalBreakdown,
+  calculateAmountGst,
+  walletMovement,
   calculateWithdrawalProfit,
   createCashWithdrawal,
   createCashWithdrawalsBatch,
