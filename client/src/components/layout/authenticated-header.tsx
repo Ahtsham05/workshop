@@ -13,12 +13,17 @@ import { CalculatorButton } from '@/components/layout/calculator-button'
 import { ChatHeaderButton } from '@/components/layout/chat-header-button'
 import { BackgroundTasksIndicator } from '@/components/layout/background-tasks-indicator'
 import { QuickTransferButton } from '@/components/layout/quick-transfer-button'
+import { HeaderShortcutsMenu } from '@/components/layout/header-shortcuts-menu'
+import { useScreenCapture } from '@/hooks/use-screen-capture'
 
 type AuthenticatedHeaderProps = {
   showSearch?: boolean
 }
 
 export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderProps) {
+  // One screen-capture state (it owns global keyboard shortcuts): the camera button and the
+  // profile menu's screenshot / record rows both use it.
+  const capture = useScreenCapture()
   return (
     // @container/header: the clock and camera size themselves against the header's own width (not the
     // viewport), because the sidebar opening/closing changes the room by 256px at the same viewport.
@@ -37,16 +42,17 @@ export function AuthenticatedHeader({ showSearch = true }: AuthenticatedHeaderPr
         {/* Team chat with its unread count — phones included, a message from another branch is never hunted for. */}
         <ChatHeaderButton />
         <NotepadButton />
-        {/* Business calculator (also Ctrl+Alt+C). On phones it lives in the profile menu instead. */}
+        {/* Business calculator (also Ctrl+Alt+C). On phones it is in the profile menu. */}
         <CalculatorButton className='hidden sm:inline-flex' />
         {/* Stock Transfer from any screen, without leaving it (also Ctrl+Alt+S). From 640px
-            up only: on phones it would squeeze out the branch name — there it is on the
-            dashboard's quick links, the floating quick-links button and each product's menu. */}
+            up only: on phones it would squeeze out the branch name — there it is in the
+            profile menu, the dashboard's quick links and each product's menu. */}
         <QuickTransferButton className='hidden sm:inline-flex' />
-        <ScreenCaptureButton className='hidden @min-[880px]/header:inline-flex' />
+        <ScreenCaptureButton capture={capture} className='hidden @min-[880px]/header:inline-flex' />
         <LanguageSwitch className='hidden sm:inline-flex' />
         <ThemeSwitch />
-        <ProfileDropdown />
+        {/* Whatever the header hides for room shows in the profile menu instead. */}
+        <ProfileDropdown shortcuts={<HeaderShortcutsMenu capture={capture} />} />
       </div>
     </Header>
   )

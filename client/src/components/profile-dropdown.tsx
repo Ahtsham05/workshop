@@ -16,12 +16,16 @@ import { RootState } from '@/stores/store'
 import { useLanguage } from '@/context/language-context'
 import toast from 'react-hot-toast'
 import { useGetBranchQuery } from '@/stores/branch.api'
-import { Building2, Calculator, Download, Settings, UserRound } from 'lucide-react'
-import { openCalculator } from '@/features/calculator/lib/calculator-store'
+import { Building2, Download, Settings, UserRound } from 'lucide-react'
 import { usePWAInstall } from '@/hooks/use-pwa-install'
 import { useLogout } from '@/hooks/use-logout'
 
-export function ProfileDropdown() {
+export function ProfileDropdown({
+  shortcuts,
+}: {
+  /** Header shortcuts hidden for lack of room (HeaderShortcutsMenu), listed here instead. */
+  shortcuts?: React.ReactNode
+} = {}) {
   const user = useSelector((state: any) => state.auth.data?.user)
   const activeBranchId = useSelector((state: RootState) => state.auth.activeBranchId)
   const { data: branch } = useGetBranchQuery(activeBranchId!, { skip: !activeBranchId })
@@ -52,7 +56,8 @@ export function ProfileDropdown() {
           <CurrentUserAvatar />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className='sidebar-popover-theme w-56' align='end' forceMount>
+      {/* data-html2canvas-ignore: the menu never shows in a screenshot taken from it. */}
+      <DropdownMenuContent className='sidebar-popover-theme w-56' align='end' forceMount data-html2canvas-ignore>
         <DropdownMenuLabel className='font-normal'>
           <div className='flex items-center gap-2'>
             <CurrentUserAvatar className='h-9 w-9' />
@@ -100,11 +105,6 @@ export function ProfileDropdown() {
               <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
             </Link>
           </DropdownMenuItem>
-          {/* Phones only — from 640px up the calculator has its own header button. */}
-          <DropdownMenuItem className='sm:hidden' onClick={() => openCalculator()}>
-            <Calculator className='mr-2 h-4 w-4' />
-            <span>Calculator</span>
-          </DropdownMenuItem>
           {isInstallable && (
             <DropdownMenuItem onClick={handleInstallApp}>
               <Download className='mr-2 h-4 w-4' />
@@ -112,6 +112,7 @@ export function ProfileDropdown() {
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>
+        {shortcuts}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={(event) => {

@@ -77,7 +77,14 @@ function MicMeter({ getLevel, active }: { getLevel: () => number; active: boolea
  * Header camera: take a screenshot or record the screen while testing, then download / copy /
  * share it. Everything happens in the browser — no capture is ever uploaded.
  */
-export function ScreenCaptureButton({ className }: { className?: string }) {
+export function ScreenCaptureButton({
+  className,
+  capture,
+}: {
+  className?: string
+  /** The header's capture state — shared with the profile menu's screenshot / record rows. */
+  capture: ReturnType<typeof useScreenCapture>
+}) {
   const {
     canRecord,
     canUseMic,
@@ -92,7 +99,7 @@ export function ScreenCaptureButton({ className }: { className?: string }) {
     startRecording,
     stopRecording,
     dismissResult,
-  } = useScreenCapture()
+  } = capture
 
   return (
     <>
@@ -138,6 +145,7 @@ export function ScreenCaptureButton({ className }: { className?: string }) {
               variant='ghost'
               size='icon'
               className={cn('scale-95 rounded-full', className)}
+              data-header-shortcut='capture'
               aria-label={canRecord ? 'Screenshot or record screen' : 'Take screenshot'}
               title={canRecord ? 'Screenshot / record screen' : `Take screenshot (${SCREENSHOT_SHORTCUT})`}
             >
