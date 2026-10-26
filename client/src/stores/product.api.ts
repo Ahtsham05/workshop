@@ -35,6 +35,10 @@ export interface ProductWithTracking {
   trackBatch?: boolean
   trackExpiry?: boolean
   defaultVariantId?: string
+  /** Tracked products: what their active batches hold, and how many there are. */
+  batchedQuantity?: number
+  batchCount?: number
+  stockQuantity?: number
   /** Unpopulated — a plain Brand id string, unlike the list query's populated object. */
   brandId?: string | null
   /** Primary photo — always images[0], mirrored server-side (product.model.js). */

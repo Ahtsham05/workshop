@@ -469,8 +469,18 @@ export function UsersActionDialog({
       },
   })
 
+  // The form is filled once per opened product. A refetch of the same product while the
+  // dialog is open (e.g. after a batch is received below) hands in a new activeRow object;
+  // resetting then would throw away what the user typed.
+  const filledFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      filledFor.current = null
+      return
+    }
+    const fillKey = isEdit && activeRow ? String(activeRow.id || activeRow._id || '') : `new:${newProductType ?? ''}`
+    if (filledFor.current === fillKey) return
+    filledFor.current = fillKey
     descriptionAutoSyncRef.current = !isEdit
     brandAutoSyncRef.current = !isEdit
     setAutoBrandId(null)
@@ -523,6 +533,42 @@ export function UsersActionDialog({
   const { data: freshProduct } = useGetProductQuery(editingProductId!, {
     skip: !open || !isEdit || !editingProductId,
   })
+  // A batch-tracked product's stock lives in its batches. What the typed stock has beyond
+  // them goes into a batch on save; less is taken out of them, earliest expiry first.
+  const trackedStockWatch = !!(form.watch('trackBatch') || form.watch('trackExpiry'))
+  const batchedStock = freshProduct?.trackBatch || freshProduct?.trackExpiry ? Number(freshProduct?.batchedQuantity) || 0 : 0
+  const typedStock = Number(form.watch('stockQuantity')) || 0
+  const unbatchedStock = trackedStockWatch ? Math.round((typedStock - batchedStock) * 1e6) / 1e6 : 0
+  // The batch box opens with a number already in it.
+  useEffect(() => {
+    if (open && form.getValues('trackBatch') && unbatchedStock > 1e-9 && !form.getValues('batchNumber')) {
+      form.setValue('batchNumber', generateBatchNumber())
+    }
+  }, [open, unbatchedStock, form])
+  // The stock shown when the product was loaded. A batch received from the Batches box
+  // below changes the stock on the server while this form is open; the form follows it
+  // (keeping any change the user typed) so saving never takes that batch back out.
+  const stockBaseline = useRef<number | null>(null)
+  useEffect(() => {
+    if (!open) stockBaseline.current = null
+  }, [open])
+  useEffect(() => {
+    if (!open || !isEdit || !freshProduct || freshProduct.stockQuantity == null) return
+    const fresh = Number(freshProduct.stockQuantity) || 0
+    const base = stockBaseline.current
+    stockBaseline.current = fresh
+    if (base === null) {
+      if (!form.getFieldState('stockQuantity').isDirty) form.setValue('stockQuantity', fresh)
+      return
+    }
+    if (Math.abs(fresh - base) > 1e-9) {
+      // Untouched: show the new stock. Typed a change: keep that change on top of it.
+      const typed = Number(form.getValues('stockQuantity')) || 0
+      const next = form.getFieldState('stockQuantity').isDirty ? typed + fresh - base : fresh
+      form.setValue('stockQuantity', Math.round(next * 1e6) / 1e6)
+    }
+  }, [open, isEdit, freshProduct, form])
+
   useEffect(() => {
     if (!open || !isEdit || !freshProduct) return
     form.setValue('trackBatch', !!freshProduct.trackBatch)
@@ -680,9 +726,10 @@ export function UsersActionDialog({
     // product that already has stock (same gate the batch number field itself uses —
     // see freshProduct?.defaultVariantId above) — once a default variant exists, further
     // batches are received through ProductDefaultVariantBatchPanel instead, not this field.
-    if ((rawValues.trackBatch || rawValues.trackExpiry) && rawValues.stockQuantity > 0 && !freshProduct?.defaultVariantId && !rawValues.batchNumber) {
-      toast.error('Enter a batch number for the existing stock before turning on batch tracking')
-      return
+    // Stock not in a batch yet (opening stock, or more typed in) goes into the batch named
+    // here — the server does the same, so a blank number just gets a generated one.
+    if ((rawValues.trackBatch || rawValues.trackExpiry) && !rawValues.hasVariants && unbatchedStock > 1e-9 && !rawValues.batchNumber?.trim()) {
+      rawValues.batchNumber = generateBatchNumber()
     }
     // Same (or near-same) name/barcode as a product already here: ask before creating it.
     if (!isEdit && !allowDuplicate) {
@@ -986,7 +1033,6 @@ export function UsersActionDialog({
   const hasVariantsWatch = form.watch('hasVariants')
   const trackBatchWatch = form.watch('trackBatch')
   const trackExpiryWatch = form.watch('trackExpiry')
-  const stockQuantityWatch = form.watch('stockQuantity')
 
   return (
     <Dialog
@@ -2007,13 +2053,17 @@ export function UsersActionDialog({
                       </FormItem>
                     )}
                   />
-                  {trackBatchWatch && stockQuantityWatch > 0 && !freshProduct?.defaultVariantId && (
+                  {trackBatchWatch && unbatchedStock > 1e-9 && (
                     <FormField
                       control={form.control}
                       name='batchNumber'
                       render={({ field }) => (
                         <FormItem className='gap-1.5'>
-                          <FormLabel>Batch number</FormLabel>
+                          <FormLabel>
+                            {batchedStock > 0 || freshProduct?.defaultVariantId
+                              ? `${unbatchedStock} ${form.watch('unit') || ''} not in a batch yet — goes into batch`
+                              : 'Batch number'}
+                          </FormLabel>
                           <FormControl>
                             <Input placeholder='Batch number' {...field} />
                           </FormControl>
@@ -2039,7 +2089,7 @@ export function UsersActionDialog({
                       </FormItem>
                     )}
                   />
-                  {trackExpiryWatch && stockQuantityWatch > 0 && !freshProduct?.defaultVariantId && (
+                  {trackExpiryWatch && unbatchedStock > 1e-9 && (
                     <FormField
                       control={form.control}
                       name='expiryDate'
@@ -2053,6 +2103,16 @@ export function UsersActionDialog({
                         </FormItem>
                       )}
                     />
+                  )}
+                  {isEdit && trackedStockWatch && unbatchedStock < -1e-9 && (
+                    <p className='text-xs text-amber-700 dark:text-amber-400'>
+                      {`${-unbatchedStock} ${form.watch('unit') || ''} will be taken out of the batches on save, earliest expiry first.`}
+                    </p>
+                  )}
+                  {isEdit && trackedStockWatch && Math.abs(unbatchedStock) <= 1e-9 && (freshProduct?.batchCount ?? 0) > 0 && (
+                    <p className='text-xs text-muted-foreground'>
+                      {`All ${typedStock} ${form.watch('unit') || ''} is in ${freshProduct?.batchCount} batch${freshProduct?.batchCount === 1 ? '' : 'es'}.`}
+                    </p>
                   )}
                 </div>
               )}

@@ -1,15 +1,28 @@
+import type {
+  BaseQueryFn,
+  FetchArgs,
+  FetchBaseQueryError,
+} from '@reduxjs/toolkit/query'
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { createAppFetchBaseQuery } from './app-fetch-base-query'
-import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
+import { manufacturingApi } from './manufacturing.api'
+import { productApi } from './product.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 
 // Receiving/writing-off a batch here also changes the stock+batch chips shown in the
 // Purchase/Sale Invoice product catalog, which lives in a separate RTK Query slice and
 // won't auto-refetch otherwise.
-const invalidatePurchaseCatalog = async (_arg: unknown, { dispatch, queryFulfilled }: any) => {
+const invalidatePurchaseCatalog = async (
+  _arg: unknown,
+  { dispatch, queryFulfilled }: any
+) => {
   try {
     await queryFulfilled
     dispatch(purchaseCatalogApi.util.invalidateTags(['PurchaseCatalog']))
+    // A batch moves the product's stock: the edit form (single product) and the
+    // manufacturing lists read it too.
+    dispatch(productApi.util.invalidateTags(['Product']))
+    dispatch(manufacturingApi.util.invalidateTags(['MfgProduct']))
   } catch {
     // mutation failed — nothing to invalidate
   }
@@ -74,19 +87,32 @@ export const batchApi = createApi({
       providesTags: (result, _err, variantId) =>
         result
           ? [
-              ...result.map((b) => ({ type: 'Batch' as const, id: b._id || b.id })),
+              ...result.map((b) => ({
+                type: 'Batch' as const,
+                id: b._id || b.id,
+              })),
               { type: 'Batch' as const, id: `LIST-${variantId}` },
             ]
           : [{ type: 'Batch' as const, id: `LIST-${variantId}` }],
     }),
 
     getExpiringBatches: builder.query<Batch[], number | void>({
-      query: (days) => ({ url: '/expiring', params: days ? { days } : undefined }),
+      query: (days) => ({
+        url: '/expiring',
+        params: days ? { days } : undefined,
+      }),
       providesTags: [{ type: 'Batch', id: 'EXPIRING' }],
     }),
 
-    createBatch: builder.mutation<Batch, { variantId: string; data: CreateBatchBody }>({
-      query: ({ variantId, data }) => ({ url: `/variant/${variantId}`, method: 'POST', body: data }),
+    createBatch: builder.mutation<
+      Batch,
+      { variantId: string; data: CreateBatchBody }
+    >({
+      query: ({ variantId, data }) => ({
+        url: `/variant/${variantId}`,
+        method: 'POST',
+        body: data,
+      }),
       invalidatesTags: (_r, _e, { variantId }) => [
         { type: 'Batch', id: `LIST-${variantId}` },
         { type: 'Batch', id: 'EXPIRING' },
@@ -94,8 +120,15 @@ export const batchApi = createApi({
       onQueryStarted: invalidatePurchaseCatalog,
     }),
 
-    writeOffBatch: builder.mutation<Batch, { batchId: string; variantId: string; reason?: string }>({
-      query: ({ batchId, reason }) => ({ url: `/${batchId}/write-off`, method: 'POST', body: { reason } }),
+    writeOffBatch: builder.mutation<
+      Batch,
+      { batchId: string; variantId: string; reason?: string }
+    >({
+      query: ({ batchId, reason }) => ({
+        url: `/${batchId}/write-off`,
+        method: 'POST',
+        body: { reason },
+      }),
       invalidatesTags: (_r, _e, { variantId }) => [
         { type: 'Batch', id: `LIST-${variantId}` },
         { type: 'Batch', id: 'EXPIRING' },

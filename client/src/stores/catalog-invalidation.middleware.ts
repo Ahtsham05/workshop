@@ -1,4 +1,6 @@
 import { isFulfilled, type Middleware } from '@reduxjs/toolkit'
+import { batchApi } from './batch.api'
+import { productApi } from './product.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 
 // Product writes that change what the Invoice/Purchase/POS pickers show (new product,
@@ -44,6 +46,13 @@ export const catalogInvalidationMiddleware: Middleware = (api) => {
       const isWrite =
         WRITE_THUNKS.has(type.replace(/\/fulfilled$/, '')) ||
         (!isQueryResult && WRITE_APIS.has(rtkqApi))
+      // The single-product query (edit dialog: tracking, batch totals) is stale after a
+      // thunk-based product write too; RTK Query writes invalidate their own tags.
+      if (WRITE_THUNKS.has(type.replace(/\/fulfilled$/, ''))) {
+        api.dispatch(productApi.util.invalidateTags(['Product']))
+        // A product edit can put stock into / take it out of batches (reconcileTrackedStock).
+        api.dispatch(batchApi.util.invalidateTags(['Batch']))
+      }
       if (isWrite) {
         if (timer) clearTimeout(timer)
         timer = setTimeout(() => {

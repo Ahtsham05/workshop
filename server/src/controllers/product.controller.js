@@ -271,7 +271,7 @@ const updateProduct = catchAsync(async (req, res) => {
     const product = await productService.updateProductById(
       req.params.productId,
       { ...productData, businessType: req.user.businessType },
-      { existing: before },
+      { existing: before, updatedBy: req.user && req.user.id },
     );
     await auditLogService.recordAuditLog({
       req,

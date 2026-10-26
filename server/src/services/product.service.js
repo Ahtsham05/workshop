@@ -1,7 +1,7 @@
 const { productNameKey } = require('../utils/productNameKey');
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Product, ProductVariant, Inventory, Batch, Imei, Organization, Category, SubCategory, Supplier, Brand } = require('../models');
+const { Product, ProductVariant, Inventory, InventoryTransaction, Batch, Imei, Organization, Category, SubCategory, Supplier, Brand } = require('../models');
 const ApiError = require('../utils/ApiError');
 // Shared spreadsheet-cell parsing, used by every bulk import endpoint — see utils/importRow.js
 const { toImportText, parseImportNumber } = require('../utils/importRow');
@@ -234,6 +234,122 @@ const syncDefaultVariantTracking = async (product, updateFields, session, { isNe
       );
     }
   }
+};
+
+const roundStock = (n) => Math.round((Number(n) || 0) * 1e6) / 1e6;
+
+/** Dated name for stock put into a batch by a product edit: ADJ-261026-1342. */
+const adjustmentBatchNumber = (date = new Date()) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `ADJ-${String(date.getFullYear()).slice(2)}${p(date.getMonth() + 1)}${p(date.getDate())}-${p(date.getHours())}${p(date.getMinutes())}`;
+};
+
+/**
+ * A batch-tracked simple product keeps its stock in three places that must agree:
+ * Product.stockQuantity (what lists and the edit form show), the default variant's
+ * Inventory row (what batch-aware flows and manufacturing read) and the sum of its active
+ * batches. Writing Product.stockQuantity directly — the edit form, bulk edit — used to
+ * move only the first, leaving stock that no batch held: invisible to sales by batch and
+ * to material issues ("No batches" next to 1,000 kg).
+ *
+ * This makes the other two follow Product.stockQuantity, the figure the user typed:
+ *   more than the batches hold → the difference goes into a batch (`batchNumber`, else a
+ *                                 dated ADJ- batch; an existing batch of that number is
+ *                                 topped up)
+ *   less                       → taken out of the batches, earliest expiry first
+ *   Inventory                  → set to the same figure, with one 'adjustment' ledger row
+ * Untracked and variant products are left alone. → null, or what changed.
+ */
+const reconcileTrackedStock = async (product, { batchNumber, expiryDate, createdBy, session } = {}) => {
+  if (!product || product.hasVariants) return null;
+  const variant = await ProductVariant.findOne({ productId: product._id, isDefault: true }).session(session || null);
+  if (!variant || !(variant.trackBatch || variant.trackExpiry)) return null;
+  const inventory = await getOrCreateInventory(variant, session);
+  const target = roundStock(product.stockQuantity);
+  const batchTarget = Math.max(0, target);
+  const batches = (
+    await Batch.find({ inventoryId: inventory._id, status: 'active', quantity: { $gt: 0 } }).session(session || null)
+  ).sort((a, b) => {
+    // Earliest expiry first; batches without an expiry last, then oldest first.
+    const ea = a.expiryDate ? new Date(a.expiryDate).getTime() : Infinity;
+    const eb = b.expiryDate ? new Date(b.expiryDate).getTime() : Infinity;
+    return ea - eb || new Date(a.createdAt) - new Date(b.createdAt);
+  });
+  const batched = roundStock(batches.reduce((s, b) => s + b.quantity, 0));
+  const changes = [];
+
+  if (batchTarget > batched + 1e-9) {
+    const quantity = roundStock(batchTarget - batched);
+    const number = String(batchNumber || '').trim() || adjustmentBatchNumber();
+    const existing = await Batch.findOne({
+      inventoryId: inventory._id,
+      batchNumber: number,
+      status: { $in: ['active', 'depleted'] },
+    }).session(session || null);
+    const batch = existing
+      ? await Batch.findOneAndUpdate(
+          { _id: existing._id },
+          { $inc: { quantity }, $set: { status: 'active' } },
+          { new: true, session },
+        )
+      : (
+          await Batch.create(
+            [{
+              organizationId: variant.organizationId,
+              inventoryId: inventory._id,
+              batchNumber: number,
+              quantity,
+              costPerUnit: Number(product.cost) || 0,
+              sellingPrice: Number(product.price) || undefined,
+              expiryDate: expiryDate || undefined,
+              status: 'active',
+            }],
+            { session },
+          )
+        )[0];
+    changes.push({ batchId: batch._id, batchNumber: batch.batchNumber, quantity });
+  } else if (batched > batchTarget + 1e-9) {
+    let left = roundStock(batched - batchTarget);
+    // eslint-disable-next-line no-restricted-syntax
+    for (const batch of batches) {
+      if (left <= 1e-9) break;
+      const take = roundStock(Math.min(batch.quantity, left));
+      const remaining = roundStock(batch.quantity - take);
+      // eslint-disable-next-line no-await-in-loop
+      await Batch.updateOne(
+        { _id: batch._id },
+        { $set: { quantity: remaining, status: remaining > 1e-9 ? 'active' : 'depleted' } },
+        { session },
+      );
+      changes.push({ batchId: batch._id, batchNumber: batch.batchNumber, quantity: -take });
+      left = roundStock(left - take);
+    }
+  }
+
+  const inventoryDelta = roundStock(target - (Number(inventory.quantity) || 0));
+  if (Math.abs(inventoryDelta) > 1e-9) {
+    await Inventory.updateOne({ _id: inventory._id }, { $set: { quantity: target } }, { session });
+    await InventoryTransaction.create(
+      [{
+        organizationId: variant.organizationId,
+        branchId: variant.branchId,
+        inventoryId: inventory._id,
+        variantId: variant._id,
+        productId: product._id,
+        unit: product.unit,
+        type: 'adjustment',
+        quantityDelta: inventoryDelta,
+        balanceAfter: target,
+        unitCost: Number(product.cost) || 0,
+        refType: 'ProductEdit',
+        refId: product._id,
+        batchId: changes.length === 1 ? changes[0].batchId : undefined,
+        createdBy: createdBy || undefined,
+      }],
+      { session },
+    );
+  }
+  return changes.length || Math.abs(inventoryDelta) > 1e-9 ? { changes, inventoryDelta } : null;
 };
 
 /**
@@ -943,11 +1059,21 @@ const getProductForEdit = async (id) => {
   const variant = await ProductVariant.findOne({ productId: product._id, isDefault: true });
   if (!variant || !(variant.trackBatch || variant.trackExpiry)) return product;
 
+  // What the batches hold, so the form can say how much of the stock is not in one yet.
+  const inventory = await Inventory.findOne({ variantId: variant._id }).select('quantity').lean();
+  const [held] = inventory
+    ? await Batch.aggregate([
+        { $match: { inventoryId: inventory._id, status: 'active', quantity: { $gt: 0 } } },
+        { $group: { _id: null, quantity: { $sum: '$quantity' }, count: { $sum: 1 } } },
+      ])
+    : [];
   return {
     ...product.toJSON(),
     trackBatch: !!variant.trackBatch,
     trackExpiry: !!variant.trackExpiry,
     defaultVariantId: variant._id,
+    batchedQuantity: roundStock(held ? held.quantity : 0),
+    batchCount: held ? held.count : 0,
   };
 };
 
@@ -982,7 +1108,7 @@ const findProductByCode = async ({ organizationId, branchId, code }) => {
  * @param {Object} updateBody
  * @returns {Promise<Product>}
  */
-const updateProductById = async (productId, updateBody, { existing } = {}) => {
+const updateProductById = async (productId, updateBody, { existing, updatedBy } = {}) => {
   await ensureProductIndexes();
   // `existing`: the caller already loaded this product (to snapshot it for the audit log),
   // so it is not read a second time.
@@ -1014,6 +1140,8 @@ const updateProductById = async (productId, updateBody, { existing } = {}) => {
       await product.save({ session });
 
       await syncDefaultVariantTracking(product, updateBody, session);
+      // Stock typed on a batch-tracked product goes into / comes out of its batches.
+      await reconcileTrackedStock(product, { batchNumber, expiryDate, createdBy: updatedBy, session });
 
       if ((product.trackImei || product.trackSerial) && imeis) {
         await imeiService.syncImeisForPurchaseItem({
@@ -1359,6 +1487,14 @@ const bulkUpdateProducts = async (productsToUpdate) => {
   // Return the updated products
   const productIds = productsToUpdate.map(p => p.id);
   const updatedProducts = await Product.find({ _id: { $in: productIds } });
+
+  // Stock set on batch-tracked products goes into / comes out of their batches too.
+  const stockSet = new Set(productsToUpdate.filter((p) => p.stockQuantity !== undefined).map((p) => String(p.id)));
+  // eslint-disable-next-line no-restricted-syntax
+  for (const product of updatedProducts.filter((p) => stockSet.has(String(p._id)) && !p.hasVariants)) {
+    // eslint-disable-next-line no-await-in-loop
+    await reconcileTrackedStock(product);
+  }
 
   return updatedProducts;
 };
@@ -2063,6 +2199,7 @@ const bulkAddProducts = async (productsToAdd, branchContext = {}, options = {}) 
 
 module.exports = {
   syncDefaultVariantTracking,
+  reconcileTrackedStock,
   findSameNameProduct,
   getProductNameIndex,
   getInactiveCatalog,
