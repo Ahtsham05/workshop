@@ -1,6 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { createAppFetchBaseQuery } from './app-fetch-base-query'
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query'
+import type { AdjustmentType } from './stockAdjustment.api'
 
 const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/v1'
 
@@ -422,7 +423,7 @@ export interface StockAdjustmentReportLineItem {
   id: string
   date: string
   productName: string
-  type: 'damage' | 'theft' | 'expired' | 'lost' | 'found' | 'correction' | 'count' | 'other'
+  type: AdjustmentType
   direction: 'increase' | 'decrease'
   quantity: number
   previousQuantity: number

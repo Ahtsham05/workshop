@@ -1,4 +1,16 @@
-import { AlertTriangle, ShieldAlert, Clock, PackageX, PackageSearch, RefreshCcw, HelpCircle, ClipboardCheck } from 'lucide-react'
+import {
+  AlertTriangle,
+  ShieldAlert,
+  Clock,
+  PackageX,
+  PackageSearch,
+  RefreshCcw,
+  HelpCircle,
+  ClipboardCheck,
+  Wrench,
+  Replace,
+  PackageCheck,
+} from 'lucide-react'
 import type { AdjustmentDirection, AdjustmentType } from '@/stores/stockAdjustment.api'
 import type { StatCardTone } from '@/lib/stat-card-tones'
 
@@ -14,10 +26,25 @@ export interface AdjustmentTypeMeta {
   reasonPlaceholder: string
 }
 
-export const ADJUSTMENT_TYPE_ORDER: AdjustmentType[] = ['damage', 'theft', 'expired', 'lost', 'found', 'correction', 'count', 'other']
+export const ADJUSTMENT_TYPE_ORDER: AdjustmentType[] = [
+  'damage',
+  'theft',
+  'expired',
+  'lost',
+  'found',
+  'correction',
+  'count',
+  'warranty_out',
+  'warranty_replacement',
+  'warranty_in',
+  'other',
+]
 
-/** What a person can pick by hand — 'count' entries are only ever posted by a stock count. */
-export const MANUAL_ADJUSTMENT_TYPES: AdjustmentType[] = ADJUSTMENT_TYPE_ORDER.filter((type) => type !== 'count')
+/** Posted by the system, never picked by hand — 'count' by a stock count, 'warranty_*' by a warranty claim. */
+const SYSTEM_ADJUSTMENT_TYPES: AdjustmentType[] = ['count', 'warranty_out', 'warranty_replacement', 'warranty_in']
+
+/** What a person can pick by hand. */
+export const MANUAL_ADJUSTMENT_TYPES: AdjustmentType[] = ADJUSTMENT_TYPE_ORDER.filter((type) => !SYSTEM_ADJUSTMENT_TYPES.includes(type))
 
 export const ADJUSTMENT_TYPE_META: Record<AdjustmentType, AdjustmentTypeMeta> = {
   damage: {
@@ -86,6 +113,36 @@ export const ADJUSTMENT_TYPE_META: Record<AdjustmentType, AdjustmentTypeMeta> = 
     tone: 'sky',
     badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
     description: 'Difference found by a posted stock count',
+    reasonPlaceholder: '',
+  },
+  warranty_out: {
+    value: 'warranty_out',
+    label: 'Warranty Out',
+    icon: Wrench,
+    tone: 'violet',
+    badgeClass: 'bg-violet-50 text-violet-700 border-violet-200',
+    fixedDirection: 'decrease',
+    description: 'Defective unit taken out of sellable stock for a warranty claim',
+    reasonPlaceholder: '',
+  },
+  warranty_replacement: {
+    value: 'warranty_replacement',
+    label: 'Warranty Replacement',
+    icon: Replace,
+    tone: 'violet',
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    fixedDirection: 'decrease',
+    description: 'Unit from stock handed to a customer as a warranty replacement',
+    reasonPlaceholder: '',
+  },
+  warranty_in: {
+    value: 'warranty_in',
+    label: 'Warranty In',
+    icon: PackageCheck,
+    tone: 'cyan',
+    badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
+    fixedDirection: 'increase',
+    description: 'Repaired or replacement unit back into sellable stock from a warranty claim',
     reasonPlaceholder: '',
   },
   other: {

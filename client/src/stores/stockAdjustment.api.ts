@@ -20,7 +20,18 @@ const invalidateDownstreamCaches = async (_arg: unknown, { dispatch, queryFulfil
   }
 }
 
-export type AdjustmentType = 'damage' | 'theft' | 'expired' | 'lost' | 'found' | 'correction' | 'count' | 'other'
+export type AdjustmentType =
+  | 'damage'
+  | 'theft'
+  | 'expired'
+  | 'lost'
+  | 'found'
+  | 'correction'
+  | 'count'
+  | 'warranty_out'
+  | 'warranty_replacement'
+  | 'warranty_in'
+  | 'other'
 export type AdjustmentDirection = 'increase' | 'decrease'
 export type AdjustmentStatus = 'completed' | 'reversed'
 
