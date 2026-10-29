@@ -343,6 +343,7 @@ export function InvoiceList({ onBack, onCreateNew, onEdit,
         paidAmount: invoice.paidAmount || 0,
         balance: invoice.balance || 0,
         notes: invoice.notes,
+        termsAndConditions: invoice.termsAndConditions,
         invoiceAddress: branchData?.location?.address?.trim() || undefined,
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoice.deliveryCharge || 0,
@@ -1270,16 +1271,19 @@ function InvoiceDetails({
         )}
       </div>
 
-      {/* Terms & Conditions */}
-      {invoice.notes && (
-        <div>
-          <Label className="text-sm">{t('terms_and_conditions')}</Label>
+      {/* Notes, then Terms & Conditions */}
+      {([
+        ['notes', invoice.notes],
+        ['terms_and_conditions', invoice.termsAndConditions],
+      ] as const).map(([labelKey, html]) => html?.trim() ? (
+        <div key={labelKey}>
+          <Label className="text-sm">{t(labelKey)}</Label>
           <div
             className="text-sm bg-muted p-2 rounded [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline"
-            dangerouslySetInnerHTML={{ __html: invoiceTermsToSafeHtml(invoice.notes) }}
+            dangerouslySetInnerHTML={{ __html: invoiceTermsToSafeHtml(html) }}
           />
         </div>
-      )}
+      ) : null)}
     </div>
   )
 }

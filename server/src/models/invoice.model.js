@@ -184,6 +184,8 @@ const InvoiceSchema = new mongoose.Schema({
     
     // Additional information
     notes: { type: String },
+    /** Terms & conditions printed on the invoice (rich-text HTML, same subset as notes). */
+    termsAndConditions: { type: String },
     
     // System fields
     // Not unique here — uniqueness is per-organization via the compound index below (see

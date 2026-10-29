@@ -1312,6 +1312,7 @@ export function CustomerLedgerDetails({ customer, onBack, initialLedgerEntry }: 
         paidAmount: invoice.paidAmount ?? 0,
         balance: invoice.balance ?? 0,
         notes: invoice.notes,
+        termsAndConditions: invoice.termsAndConditions,
         invoiceAddress: branchData?.location?.address?.trim() || undefined,
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoice.deliveryCharge ?? 0,

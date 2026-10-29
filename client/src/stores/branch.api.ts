@@ -53,6 +53,8 @@ export interface Branch {
   isActive: boolean;
   /** Printed on receipts/invoices (thermal & HTML) for this branch */
   invoiceNote?: string;
+  /** Terms & conditions pre-filled on every new invoice from this branch */
+  defaultInvoiceTerms?: string;
   /** Default print paper size for this branch */
   printSettings?: BranchPrintSettings;
   /** Colour identity — tints the app so staff can see which branch they are in */
@@ -77,6 +79,7 @@ export interface CreateBranchRequest {
   manager?: string;
   isActive?: boolean;
   invoiceNote?: string;
+  defaultInvoiceTerms?: string;
   printSettings?: BranchPrintSettings;
   appearance?: { colorKey?: BranchColorKey };
   bankAccounts?: BranchBankAccount[];

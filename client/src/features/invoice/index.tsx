@@ -200,6 +200,9 @@ export interface Invoice {
   invoiceDate?: string
   dueDate?: string
   notes?: string
+  /** Printed under "Terms & Conditions". Left undefined on a fresh invoice so the panel
+   *  can pre-fill the branch default; '' means the user cleared it on purpose. */
+  termsAndConditions?: string
   /** Name of the person collecting the products, for 'pending' invoices — shown in the SMS/WhatsApp handoff message. */
   receivedByName?: string
   // Payment method (how customer paid)
@@ -1634,6 +1637,7 @@ export default function InvoicePage() {
       customerName: invoiceData.customerName,
       walkInCustomerName: invoiceData.walkInCustomerName,
       notes: invoiceData.notes || '',
+      termsAndConditions: invoiceData.termsAndConditions || '',
       invoiceDate: formattedInvoiceDate,
       couponCode: invoiceData.couponCode,
       returnPolicy: invoiceData.returnPolicy,

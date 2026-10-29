@@ -70,6 +70,8 @@ export interface PrintInvoiceData {
   balance: number
   dueDate?: string
   notes?: string
+  /** Printed under its own "Terms & Conditions" heading, after the notes. */
+  termsAndConditions?: string
   /** Branch-level footer from Branch Management (shown on all prints when set) */
   invoiceNote?: string
   deliveryCharge?: number
@@ -258,6 +260,7 @@ export const generateInvoiceHTML = (
     paidAmount,
     // balance,
     notes,
+    termsAndConditions,
     invoiceNote,
     deliveryCharge = 0,
     serviceCharge = 0,
@@ -298,7 +301,8 @@ export const generateInvoiceHTML = (
     business_name: headerBusinessName || labels.business_name,
   }
 
-  const termsHtml = notes ? invoiceTermsToSafeHtml(String(notes)) : ''
+  const notesHtml = notes ? invoiceTermsToSafeHtml(String(notes)) : ''
+  const termsHtml = termsAndConditions ? invoiceTermsToSafeHtml(String(termsAndConditions)) : ''
   const printNumber = resolvePrintDocumentNumber(invoiceNumber, isQuotationPrint(data))
   const documentTitle = resolvePrintDocumentTitle(data, labels)
   const documentDate = resolvePrintDocumentDate(data)
@@ -838,6 +842,13 @@ export const generateInvoiceHTML = (
     <div class="barcode-text">${printNumber}</div>
   </div>
   
+  ${notesHtml ? `
+    <div class="notes-section">
+      <div style="font-weight: bold; margin-bottom: 3px;">${urduTexts.notes}:</div>
+      <div class="notes-content" dir="auto">${notesHtml}</div>
+    </div>
+  ` : ''}
+
   ${termsHtml ? `
     <div class="notes-section">
       <div style="font-weight: bold; margin-bottom: 3px;">${urduTexts.terms_and_conditions}:</div>
@@ -890,6 +901,7 @@ export const generateA4InvoiceHTML = (
     paidAmount,
     // balance,
     notes,
+    termsAndConditions,
     deliveryCharge = 0,
     serviceCharge = 0,
     companyPhone,
@@ -1079,7 +1091,8 @@ export const generateA4InvoiceHTML = (
 `
     : ''
 
-  const termsHtml = notes ? invoiceTermsToSafeHtml(String(notes)) : ''
+  const notesHtml = notes ? invoiceTermsToSafeHtml(String(notes)) : ''
+  const termsHtml = termsAndConditions ? invoiceTermsToSafeHtml(String(termsAndConditions)) : ''
 
   const totalsBlock = `
 ${itemizedTotalsTable}
@@ -1118,6 +1131,13 @@ ${itemizedTotalsTable}
   ` : ''}
 
   
+  ${notesHtml ? `
+    <div class="notes-section">
+      <div class="terms-heading">${urduTexts.additional_notes}:</div>
+      <div class="notes-content" dir="auto">${notesHtml}</div>
+    </div>
+  ` : ''}
+
   ${termsHtml ? `
     <div class="notes-section">
       <div class="terms-heading">${urduTexts.terms_and_conditions}:</div>

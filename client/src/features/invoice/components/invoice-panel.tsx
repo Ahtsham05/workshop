@@ -10,7 +10,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 // import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History, CreditCard, Eye, Percent, Receipt, ScanBarcode, Layers, Ban, Pencil, RotateCcw } from 'lucide-react'
+import { Minus, Plus, Trash2, Save, Calculator, DollarSign, Search, Check, User, Package, Loader2, Printer, ArrowLeft, ArrowLeftRight, ChevronDown, Banknote, FileCheck, MessageSquare, Send, Briefcase, Truck, History, CreditCard, Eye, Percent, Receipt, ScanBarcode, Layers, Ban, Pencil, RotateCcw, ScrollText } from 'lucide-react'
 import type { ImeiRecord, ImeiEntryInput } from '@/stores/imei.api'
 import {
   entryImei,
@@ -110,7 +110,8 @@ const INVOICE_TYPE_STYLES: Record<'cash' | 'credit' | 'pending' | 'quotation', {
 import { detectCurrentKeyboardLanguage } from '@/utils/keyboard-language-utils'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState, AppDispatch } from '@/stores/store'
-import { useGetBranchQuery } from '@/stores/branch.api'
+import { useGetBranchQuery, useUpdateBranchMutation } from '@/stores/branch.api'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import {
   Command,
@@ -406,6 +407,30 @@ export function InvoicePanel({
   const { data: orgData } = useGetMyOrganizationQuery(undefined, { skip: !user?.organizationId })
   const showUnitConversions = isWholesaleRetailBusiness(orgData?.businessType || user?.businessType)
   const defaultPaperSize: PaperSize = branchData?.printSettings?.paperSize ?? 'thermal80'
+  const branchDefaultTerms = branchData?.defaultInvoiceTerms?.trim() || ''
+  const canSaveDefaultTerms = hasPermission('manageBranches' as never) || hasPermission('editSettings' as never)
+  const [updateBranch, { isLoading: isSavingDefaultTerms }] = useUpdateBranchMutation()
+
+  // New invoices start with the branch's default terms. Only fills while the field has
+  // never been touched (undefined) — '' means the user cleared it, and edits keep what
+  // was saved on the invoice.
+  useEffect(() => {
+    if (isEditing || !branchDefaultTerms) return
+    setInvoice(prev => (prev.termsAndConditions === undefined ? { ...prev, termsAndConditions: branchDefaultTerms } : prev))
+  }, [isEditing, branchDefaultTerms, invoice.termsAndConditions, setInvoice])
+
+  const handleSaveDefaultTerms = async () => {
+    if (!activeBranchId) return
+    try {
+      await updateBranch({
+        branchId: activeBranchId,
+        body: { defaultInvoiceTerms: normalizeInvoiceNotesHtml(invoice.termsAndConditions || '') },
+      }).unwrap()
+      toast.success(t('terms_saved_as_default'))
+    } catch (err: any) {
+      toast.error(err?.data?.message || t('Something went wrong'))
+    }
+  }
 
   // New invoices default the salesman to the logged-in user, if they're themselves a
   // tracked salesman — saves a click for the common case of a salesman billing their own
@@ -476,6 +501,7 @@ export function InvoicePanel({
         paidAmount: invoiceData.paidAmount,
         balance: invoiceData.balance,
         notes: invoiceData.notes,
+        termsAndConditions: invoiceData.termsAndConditions,
         invoiceAddress: branchData?.location?.address?.trim() || undefined,
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoiceData.deliveryCharge,
@@ -573,6 +599,7 @@ export function InvoicePanel({
         paidAmount: invoiceData.paidAmount,
         balance: invoiceData.balance,
         notes: invoiceData.notes,
+        termsAndConditions: invoiceData.termsAndConditions,
         invoiceAddress: branchData?.location?.address?.trim() || undefined,
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: invoiceData.deliveryCharge,
@@ -670,6 +697,7 @@ export function InvoicePanel({
       paidAmount: totalPaidAmountForPreview,
       balance: invoice.total - totalPaidAmountForPreview,
       notes: invoice.notes,
+      termsAndConditions: invoice.termsAndConditions,
       deliveryCharge: invoice.deliveryCharge,
       serviceCharge: invoice.serviceCharge,
       invoiceDate: invoice.invoiceDate,
@@ -1599,6 +1627,7 @@ export function InvoicePanel({
         balance: invoice.total - totalPaidAmountForSave,
         salesmanId: invoice.salesmanId || undefined,
         notes: normalizeInvoiceNotesHtml(invoice.notes || ''),
+        termsAndConditions: normalizeInvoiceNotesHtml(invoice.termsAndConditions || ''),
         receivedByName: invoice.type === 'pending' ? (invoice.receivedByName || '').trim() : undefined,
         deliveryCharge: invoice.deliveryCharge,
         serviceCharge: invoice.serviceCharge,
@@ -1753,6 +1782,7 @@ export function InvoicePanel({
         isUrduOnly: (r.isUrduOnly as boolean | undefined) ?? invoice.isUrduOnly,
         invoiceDate: (r.invoiceDate as string | undefined) || invoice.invoiceDate,
         notes: (r.notes as string | undefined) ?? invoice.notes,
+        termsAndConditions: (r.termsAndConditions as string | undefined) ?? invoice.termsAndConditions,
         receivedByName: (r.receivedByName as string | undefined) ?? invoice.receivedByName,
       }
 
@@ -1881,6 +1911,7 @@ export function InvoicePanel({
               paidAmount: savedInvoicePayload.paidAmount,
               balance: savedInvoicePayload.balance,
               notes: savedInvoicePayload.notes,
+              termsAndConditions: savedInvoicePayload.termsAndConditions,
               invoiceAddress: branchData?.location?.address?.trim() || undefined,
               invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
               deliveryCharge: savedInvoicePayload.deliveryCharge,
@@ -3575,6 +3606,71 @@ export function InvoicePanel({
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Notes & Terms — both print on the invoice (notes under "Notes", terms under
+          "Terms & Conditions"). Terms start from the branch default; "Save as default"
+          writes the current text back to the branch for the next invoices. */}
+      <Card>
+        <CardHeader className='pb-3'>
+          <CardTitle className='flex items-center gap-2 text-base'>
+            <ScrollText className='h-4 w-4 text-muted-foreground' />
+            {t('notes_and_terms')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-3 pt-0'>
+          <RichTextEditor
+            value={invoice.notes || ''}
+            onChange={(notes) => setInvoice((prev) => ({ ...prev, notes }))}
+            fieldLabel={t('notes')}
+            addButtonLabel={t('add_invoice_note')}
+            placeholder={t('invoice_notes_placeholder')}
+          />
+          <RichTextEditor
+            value={invoice.termsAndConditions || ''}
+            onChange={(termsAndConditions) => setInvoice((prev) => ({ ...prev, termsAndConditions }))}
+            fieldLabel={t('terms_and_conditions')}
+            addButtonLabel={t('add_terms_and_conditions')}
+            placeholder={t('invoice_terms_placeholder')}
+          />
+          {(() => {
+            const currentTerms = normalizeInvoiceNotesHtml(invoice.termsAndConditions || '').trim()
+            const differsFromDefault = currentTerms !== normalizeInvoiceNotesHtml(branchDefaultTerms).trim()
+            if (!differsFromDefault) return null
+            const showUseDefault = Boolean(branchDefaultTerms)
+            const showSaveDefault = canSaveDefaultTerms && Boolean(currentTerms)
+            if (!showUseDefault && !showSaveDefault) return null
+            return (
+              <div className='flex flex-wrap justify-end gap-2'>
+                {showUseDefault && (
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='sm'
+                    className='h-7 text-xs'
+                    onClick={() => setInvoice((prev) => ({ ...prev, termsAndConditions: branchDefaultTerms }))}
+                  >
+                    <RotateCcw className='mr-1 h-3 w-3' />
+                    {t('use_default_terms')}
+                  </Button>
+                )}
+                {showSaveDefault && (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    className='h-7 text-xs'
+                    disabled={isSavingDefaultTerms}
+                    onClick={handleSaveDefaultTerms}
+                  >
+                    {isSavingDefaultTerms ? <Loader2 className='mr-1 h-3 w-3 animate-spin' /> : <Save className='mr-1 h-3 w-3' />}
+                    {t('save_terms_as_default')}
+                  </Button>
+                )}
+              </div>
+            )
+          })()}
         </CardContent>
       </Card>
 

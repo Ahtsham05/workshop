@@ -419,6 +419,7 @@ export function PendingInvoiceConverter({ customers, onBack }: PendingInvoiceCon
         paidAmount: invoiceData.paidAmount || 0,
         balance: invoiceData.balance || invoiceData.total,
         notes: invoiceData.notes,
+        termsAndConditions: invoiceData.termsAndConditions,
         invoiceAddress: branchData?.location?.address?.trim() || undefined,
         invoiceAddressUrdu: branchData?.location?.addressUrdu?.trim() || undefined,
         deliveryCharge: 0,

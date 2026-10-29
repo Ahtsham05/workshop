@@ -588,7 +588,7 @@ export function InvoiceDesigner({ open, onOpenChange, initial, saving, onSave }:
                       />
                     </label>
                   ))}
-                  <p className='text-xs text-muted-foreground'>Terms &amp; conditions and the branch invoice note are edited where you set them today (invoice notes and Business Profile).</p>
+                  <p className='text-xs text-muted-foreground'>Notes and terms &amp; conditions are typed on each invoice (default terms live in Branch Management, next to the branch invoice note).</p>
                 </Group>
               )}
 

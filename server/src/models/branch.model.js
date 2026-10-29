@@ -65,6 +65,13 @@ const branchSchema = mongoose.Schema(
       maxlength: 2000,
       default: '',
     },
+    /** Terms & conditions pre-filled on every new invoice from this branch (editable per invoice) */
+    defaultInvoiceTerms: {
+      type: String,
+      trim: true,
+      maxlength: 10000,
+      default: '',
+    },
     /** Default paper size / layout used for invoices/receipts/statements printed from this branch */
     printSettings: {
       paperSize: {

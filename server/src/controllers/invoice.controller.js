@@ -342,6 +342,7 @@ const duplicateInvoice = catchAsync(async (req, res) => {
     serviceCharge: originalInvoice.serviceCharge,
     roundingAdjustment: originalInvoice.roundingAdjustment,
     loyaltyPoints: originalInvoice.loyaltyPoints,
+    termsAndConditions: originalInvoice.termsAndConditions,
     notes: originalInvoice.notes ? `Copy of ${originalInvoice.invoiceNumber}: ${originalInvoice.notes}` : `Copy of ${originalInvoice.invoiceNumber}`
   };
   

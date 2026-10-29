@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import {
   Form,
   FormControl,
@@ -60,6 +61,7 @@ const branchDialogSchema = z.object({
   phone: z.string().optional(),
   email: z.string().optional(),
   invoiceNote: z.string().optional(),
+  defaultInvoiceTerms: z.string().optional(),
   location: z.object({
     address: z.string().optional(),
     addressUrdu: z.string().optional(),
@@ -100,6 +102,7 @@ export default function BranchesPage() {
       phone: '',
       email: '',
       invoiceNote: '',
+      defaultInvoiceTerms: '',
       bankAccounts: [],
     },
   })
@@ -151,6 +154,7 @@ export default function BranchesPage() {
         phone: selectedBranch.phone || '',
         email: selectedBranch.email || '',
         invoiceNote: selectedBranch.invoiceNote || '',
+        defaultInvoiceTerms: selectedBranch.defaultInvoiceTerms || '',
         bankAccounts: (selectedBranch.bankAccounts || []).map((b) => ({
           bankName: b.bankName || '',
           accountTitle: b.accountTitle || '',
@@ -167,6 +171,7 @@ export default function BranchesPage() {
         phone: '',
         email: '',
         invoiceNote: '',
+        defaultInvoiceTerms: '',
         bankAccounts: [],
       })
     }
@@ -641,6 +646,25 @@ export default function BranchesPage() {
                     </FormControl>
                     <p className="text-xs text-muted-foreground">
                       Shown on sales invoices, purchase slips, mobile shop receipts, repair tickets, bills, and restaurant prints when this branch is active.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={branchForm.control}
+                name="defaultInvoiceTerms"
+                render={({ field }) => (
+                  <FormItem>
+                    <RichTextEditor
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      fieldLabel="Default invoice terms & conditions"
+                      addButtonLabel="Add default invoice terms & conditions"
+                      placeholder="e.g. Goods once sold will not be taken back. Warranty as per manufacturer policy."
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Pre-filled on every new sales invoice from this branch and printed under "Terms &amp; Conditions". Can be changed per invoice.
                     </p>
                     <FormMessage />
                   </FormItem>
