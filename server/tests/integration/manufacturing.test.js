@@ -162,6 +162,46 @@ describe('Bill of materials', () => {
     expect(used.map((u) => u.id)).toEqual([String(assemblyBom._id)]);
   });
 
+  test('a by-product can have its own BOM and be a material of a finished good', async () => {
+    const herb = await insertProduct('Herb Extract', { productType: 'raw_material', unit: 'kg', stockQuantity: 50 });
+    const base = await insertProduct('Calcium Base', { productType: 'by_product', unit: 'l', stockQuantity: 0 });
+    const syrup = await insertProduct('Calcophos 5 Ltr', { productType: 'finished_good', unit: 'pcs' });
+
+    const baseBom = await manufacturing.bom.createBom(ctx, {
+      productId: base._id,
+      quantity: 10,
+      components: [{ productId: herb._id, quantity: 4 }],
+    });
+    expect(String((await Product.findById(base._id)).defaultBomId)).toBe(String(baseBom._id));
+    const syrupBom = await manufacturing.bom.createBom(ctx, {
+      productId: syrup._id,
+      components: [{ productId: base._id, quantity: 5 }],
+    });
+
+    // The by-product's own BOM expands inside the finished good's: 2 × 5 ltr base = 10 ltr → 4 kg herb.
+    const { lines } = await manufacturing.bom.explodeBom(ctx, syrupBom._id, 2, { explode: true });
+    expect(lines.map((l) => [l.productName, l.requiredQuantity])).toEqual([['Herb Extract', 4]]);
+    expect((await manufacturing.bom.whereUsed(ctx, base._id)).map((u) => u.id)).toEqual([String(syrupBom._id)]);
+
+    // A production order can make the by-product itself.
+    const order = await manufacturing.productionOrder.createOrder(ctx, { productId: base._id, plannedQuantity: 10 });
+    expect(String(order.bomId)).toBe(String(baseBom._id));
+
+    // The pickers' filters: by-products are offered both as something to build and as a material.
+    const buildable = await manufacturing.products.queryProducts(
+      ctx,
+      { productType: 'finished_good,by_product,sub_assembly' },
+      { limit: 50 }
+    );
+    expect(buildable.results.map((p) => p.name).sort()).toEqual(['Calcium Base', 'Calcophos 5 Ltr']);
+    const materials = await manufacturing.products.queryProducts(
+      ctx,
+      { productType: 'raw_material,component,packaging_material,sub_assembly,wip,by_product,scrap,service,unclassified' },
+      { limit: 50 }
+    );
+    expect(materials.results.map((p) => p.name).sort()).toEqual(['Calcium Base', 'Herb Extract']);
+  });
+
   test('a released BOM is locked; changes go into a new version', async () => {
     const { fan, fanBom, motor } = await buildMotorTree();
     const order = await manufacturing.productionOrder.createOrder(ctx, { productId: fan._id, plannedQuantity: 1 });

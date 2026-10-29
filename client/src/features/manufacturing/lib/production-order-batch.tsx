@@ -57,6 +57,9 @@ export const blankBatchRow = (): Omit<BatchRow, 'id'> => ({
   batchNumber: '',
 })
 
+/** Browse order of the buildable types; anything else (sub-assemblies) comes after. */
+const BROWSE_RANK: Record<string, number> = { finished_good: 0, by_product: 1 }
+
 /** Manufacturing products → engine products (searched in memory). */
 export function buildableSource(list: ManufacturingProduct[]): ProductSource & {
   products: EntryProduct[]
@@ -86,9 +89,10 @@ export function buildableSource(list: ManufacturingProduct[]): ProductSource & {
     products,
     search: (query, limit) => {
       const q = norm(query.trim())
-      // Browsing (nothing typed): finished goods first, then sub-assemblies.
+      // Browsing (nothing typed): finished goods first, then by-products, then
+      // sub-assemblies.
       const rank = (p: EntryProduct) =>
-        !q && productOf(p)?.productType !== 'finished_good' ? 1 : 0
+        q ? 0 : (BROWSE_RANK[productOf(p)?.productType ?? ''] ?? 2)
       const scored = products
         .map((p) => {
           const name = norm(p.name)

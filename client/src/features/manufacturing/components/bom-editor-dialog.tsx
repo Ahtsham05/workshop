@@ -411,8 +411,10 @@ export function BomEditorDialog({
                 productType={BUILDABLE_PRODUCT_TYPES}
                 packRole='make'
                 createAs='finished_good'
-                placeholder={t('Select finished good…')}
-                searchPlaceholder={t('Search finished goods & sub-assemblies…')}
+                placeholder={t('Select product to build…')}
+                searchPlaceholder={t(
+                  'Search finished goods, by-products & sub-assemblies…'
+                )}
                 icon={<Package className='text-muted-foreground h-4 w-4' />}
                 className={FIELD}
                 data-field='header:product'
@@ -588,7 +590,7 @@ export function BomEditorDialog({
                           productType={COMPONENT_PRODUCT_TYPES}
                           createAs='raw_material'
                           searchPlaceholder={t(
-                            'Search raw materials, components…'
+                            'Search raw materials, components, by-products…'
                           )}
                           excludeIds={product ? [product.id] : []}
                           open={openPicker === line.key}

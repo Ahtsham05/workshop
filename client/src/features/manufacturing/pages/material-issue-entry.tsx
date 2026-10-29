@@ -797,7 +797,7 @@ function IssueEntry({
             packRole='make'
             icon={<Factory className='text-muted-foreground h-4 w-4' />}
             placeholder={t('Choose what to make')}
-            searchPlaceholder={t('Search finished goods…')}
+            searchPlaceholder={t('Search finished goods & by-products…')}
             className={error ? 'border-destructive' : undefined}
             onChange={(p) => {
               storeRef.current?.setHeader({
@@ -2512,6 +2512,7 @@ const PENDING_TYPES: { value: string; label: string }[] = [
   { value: 'raw_material', label: 'Raw materials' },
   { value: 'component', label: 'Components' },
   { value: 'sub_assembly', label: 'Sub-assemblies' },
+  { value: 'by_product', label: 'By-products' },
   { value: 'unclassified', label: 'Unclassified' },
 ]
 

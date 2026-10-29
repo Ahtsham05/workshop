@@ -350,12 +350,12 @@ export function PackSizesSheet({
                                 packProduct: { id: p.id, name: p.name },
                               })
                             }
-                            productType='finished_good'
+                            productType='finished_good,by_product'
                             packRole='pack'
                             createAs='finished_good'
                             excludeIds={[bulk.id]}
                             placeholder={t('Pick the pack product…')}
-                            searchPlaceholder={t('Search finished goods…')}
+                            searchPlaceholder={t('Search finished goods & by-products…')}
                             icon={
                               <Package className='text-muted-foreground h-4 w-4' />
                             }

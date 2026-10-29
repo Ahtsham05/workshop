@@ -72,10 +72,12 @@ export const PRODUCT_TYPE_META: Record<
 }
 export const PRODUCT_TYPES = Object.keys(PRODUCT_TYPE_META) as ProductType[]
 
-/** What a BOM can build (a product filter): things made here — finished goods, and
- * sub-assemblies, which have their own BOM inside a bigger one. */
-export const BUILDABLE_PRODUCT_TYPES = 'finished_good,sub_assembly'
-/** What a BOM can consume: every type except finished goods, plus unclassified products. */
+/** What a BOM can build (a product filter): things made here — finished goods,
+ * by-products, and sub-assemblies. A by-product or sub-assembly with its own BOM expands
+ * automatically when it is used inside a bigger one. */
+export const BUILDABLE_PRODUCT_TYPES = 'finished_good,by_product,sub_assembly'
+/** What a BOM can consume: every type except finished goods (so by-products and
+ * sub-assemblies too), plus unclassified products. */
 export const COMPONENT_PRODUCT_TYPES = [
   ...PRODUCT_TYPES.filter((type) => type !== 'finished_good'),
   'unclassified',
