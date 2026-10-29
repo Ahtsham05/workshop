@@ -2913,7 +2913,9 @@ export const manufacturingApi = createApi({
       Paginated<ProductionOutput>,
       ListParams & {
         productionOrderId?: string
-        status?: 'pending_qc' | 'inspected'
+        status?: ProductionOutput['status']
+        dateFrom?: string
+        dateTo?: string
       }
     >({
       query: (params) => ({ url: '/manufacturing/outputs', params }),

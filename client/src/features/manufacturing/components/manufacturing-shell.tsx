@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Factory,
   FileStack,
+  PackageCheck,
   PackageMinus,
   Plus,
   Search,
@@ -88,6 +89,7 @@ export default function ManufacturingShell() {
   const canOrders = hasPermission('manageProductionOrders')
   const canBoms = hasPermission('manageBoms')
   const canIssue = hasPermission('issueMaterials')
+  const canReceive = hasPermission('receiveFinishedGoods')
 
   // The "New" menu: what you'd create, in the order the work happens.
   const createItems = [
@@ -108,6 +110,14 @@ export default function ManufacturingShell() {
       label: 'Material issue',
       hint: 'Move components from stock to the floor',
       go: () => navigate({ to: '/manufacturing/material-issues/new' as never }),
+    },
+    canReceive && {
+      key: 'receipt',
+      icon: PackageCheck,
+      label: 'Finished goods receipt',
+      hint: 'Put what was made into stock',
+      go: () =>
+        navigate({ to: '/manufacturing/finished-goods/receive' as never }),
     },
     canBoms && {
       key: 'bom',

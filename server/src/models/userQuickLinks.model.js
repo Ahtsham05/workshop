@@ -44,6 +44,16 @@ const userQuickLinksSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // The Manufacturing Overview's own board — same rules as `links` / `hasCustomized`,
+    // offered only the registry's Manufacturing actions (services/quickLinks.service.js).
+    manufacturingLinks: {
+      type: [quickLinkItemSchema],
+      default: [],
+    },
+    manufacturingCustomized: {
+      type: Boolean,
+      default: false,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

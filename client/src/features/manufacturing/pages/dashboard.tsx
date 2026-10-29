@@ -10,6 +10,7 @@ import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { useLanguage } from '@/context/language-context'
 import { Skeleton } from '@/components/ui/skeleton'
+import { QuickLinksPanel } from '@/features/dashboard/components/quick-links-panel'
 import { PriorityText, ProgressBar } from '../components/badges'
 import {
   MaterialConsumptionChart,
@@ -182,6 +183,13 @@ export default function ManufacturingDashboard() {
         description={t(
           'Production performance for this branch. Every card, chart and alert follows the selected period.'
         )}
+      />
+
+      {/* The plant's everyday shortcuts — each user picks and orders their own. */}
+      <QuickLinksPanel
+        board='manufacturing'
+        title='Quick links'
+        description='One tap to the manufacturing work you do most'
       />
 
       <FilterChips

@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
-  AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   ClipboardCheck,
   Loader2,
   PackageCheck,
+  RefreshCw,
   ShieldCheck,
 } from 'lucide-react'
 import {
   useGetProductionOrderQuery,
-  useGetProductionOrdersQuery,
   type ProductionOrder,
   type ProductionOutput,
 } from '@/stores/manufacturing.api'
@@ -19,37 +19,35 @@ import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { getUnitLabel } from '@/lib/units'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  FinishedGoodsFields,
-  InspectOutputDialog,
-} from '../components/execution-dialogs'
+import { PriorityText, StatusBadge } from '../components/badges'
+import { InspectOutputDialog } from '../components/execution-dialogs'
 import { PageHeader } from '../components/page'
-import { QualityDecision } from '../components/quality-decision'
+import { PackSizesSheet } from '../components/pack-sizes-sheet'
+import { ReadyToReceiveGrid } from '../components/ready-to-receive'
+import { NoPackingConfirm } from '../components/receipt-packing-used'
 import {
-  MaterialCheck,
-  ModeCard,
   OrderStrip,
   ProgressAfter,
-  QuantityStepper,
-  QuickChip,
   SummaryRow,
 } from '../components/receipt-parts'
-import { NoPackingConfirm, ReceiptPackingUsed } from '../components/receipt-packing-used'
-import { fmtQty, orderPath } from '../lib/constants'
+import {
+  ReceiptProblems,
+  ReceiveFinishedGoodsForm,
+} from '../components/receive-finished-goods-form'
+import { fmtDate, fmtQty, orderPath } from '../lib/constants'
 import { useFinishedGoodsReceipt } from '../lib/use-finished-goods-receipt'
+import { useReceivableOrders } from '../lib/use-receivable-orders'
 
 const EPS = 1e-6
-const EXECUTABLE = 'released,in_production,paused'
+const LIST = '/manufacturing/finished-goods'
 
 /**
- * Finished goods receipt: report what was made on a production order and put it into
- * stock — straight to finished stock (passed on receipt: good / rejected → scrap or rework)
- * or into the QC hold for inspection. Shows, before posting, what the output backflushes
- * from the floor and how much the issued material covers.
+ * Finished goods receipt voucher: choose the finished good (the production order it was
+ * made on), then the full receipt — packing, packing material used, quantity made, what
+ * that takes off the floor, quality and batch — with a running summary beside it. The
+ * same details as the "Receive finished goods" dialog on the order, on a page of its own.
  */
 export default function FinishedGoodsReceiptPage({
   orderId: initialOrderId,
@@ -57,55 +55,130 @@ export default function FinishedGoodsReceiptPage({
   orderId?: string
 }) {
   const { t } = useLanguage()
+  const receivable = useReceivableOrders()
+  const [orderId, setOrderId] = useState(initialOrderId || '')
+  // Bumped by "Receive more" — a fresh voucher on the same order.
+  const [round, setRound] = useState(0)
+  const { data: order, isFetching } = useGetProductionOrderQuery(orderId, {
+    skip: !orderId,
+  })
+
+  const options = useMemo(
+    () =>
+      receivable.orders.map((o) => ({
+        value: o.id,
+        label: `${o.productName} — ${o.orderNumber}`,
+        sublabel: `${fmtQty(o.producedQuantity)} / ${fmtQty(o.plannedQuantity)} ${getUnitLabel(o.unit)} ${t('made')} · ${
+          o.remainingQuantity > EPS
+            ? `${fmtQty(o.remainingQuantity)} ${t('left')}`
+            : t('All made')
+        } · ${t(o.status.replace('_', ' '))}`,
+      })),
+    [receivable.orders, t]
+  )
+
+  // Came from an order: back to it. Otherwise back to the Finished Goods page.
+  const back =
+    initialOrderId && order
+      ? { to: orderPath(order), label: order.orderNumber }
+      : { to: LIST, label: t('Finished goods') }
+
+  const picker = (
+    <SearchableSelect
+      options={options}
+      value={orderId}
+      deselectable={false}
+      onValueChange={(v) => v && setOrderId(v)}
+      placeholder={t('Choose the finished good / production order')}
+      searchPlaceholder={t('Search product or order number…')}
+      emptyText={t('No production orders on the floor')}
+    />
+  )
+
+  return (
+    <div className='space-y-4'>
+      <nav className='text-muted-foreground flex items-center gap-1.5 text-sm'>
+        <Link
+          to={back.to as never}
+          className='hover:text-foreground inline-flex items-center gap-1'
+        >
+          <ArrowLeft className='h-3.5 w-3.5' aria-hidden />
+          {back.label}
+        </Link>
+      </nav>
+      <PageHeader
+        title={t('Finished goods receipt')}
+        description={t(
+          'Choose the finished good, then report what was made and put it into stock — straight to finished stock, or through quality control. The material it used comes off the production floor.'
+        )}
+      />
+
+      {!orderId ? (
+        <section className='bg-card space-y-4 rounded-xl border p-4'>
+          <SectionTitle n={1} title={t('Finished good')} />
+          {picker}
+          <div className='space-y-2'>
+            <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+              {t('Ready to receive')}
+            </div>
+            <ReadyToReceiveGrid
+              compact
+              orders={receivable.orders}
+              loading={receivable.isLoading}
+              onPick={(o) => setOrderId(o.id)}
+            />
+          </div>
+        </section>
+      ) : !order || (isFetching && order.id !== orderId) ? (
+        <div className='grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
+          <Skeleton className='h-96 w-full rounded-xl' />
+          <Skeleton className='h-64 w-full rounded-xl' />
+        </div>
+      ) : (
+        <ReceiptVoucher
+          key={`${order.id}:${round}`}
+          order={order}
+          picker={picker}
+          onReceiveMore={() => setRound((n) => n + 1)}
+          onAnother={() => {
+            setOrderId('')
+            setRound((n) => n + 1)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** The receipt for one order: the full form on the left, the summary and Post on the right. */
+function ReceiptVoucher({
+  order,
+  picker,
+  onReceiveMore,
+  onAnother,
+}: {
+  order: ProductionOrder
+  picker: React.ReactNode
+  onReceiveMore: () => void
+  onAnother: () => void
+}) {
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const formatMoney = useFormatMoney()
-  const [orderId, setOrderId] = useState(initialOrderId || '')
-  const { data: orderPage } = useGetProductionOrdersQuery({
-    status: EXECUTABLE,
-    limit: 100,
-    sortBy: 'createdAt:desc',
-  } as never)
-  const { data: order, isFetching: orderLoading } = useGetProductionOrderQuery(
-    orderId,
-    { skip: !orderId }
-  )
-  const receipt = useFinishedGoodsReceipt(order)
-  const {
-    settings,
-    canInspect,
-    qcRequired,
-    directBlocked,
-    mode,
-    setQcMode,
-    qty,
-    quantity,
-    setQuantity,
-    quality,
-    setQuality,
-    good,
-    rejected,
-    fg,
-    setFg,
-    notes,
-    setNotes,
-    remaining,
-    buildable,
-    lines,
-    materialCost,
-    overPlan,
-    problems,
-    posting,
-  } = receipt
+  const r = useFinishedGoodsReceipt(order)
+  const unit = getUnitLabel(order.unit)
+  const direct = r.mode === 'direct'
   const [posted, setPosted] = useState<ProductionOutput | null>(null)
   const [inspecting, setInspecting] = useState(false)
-
+  const [sizesOpen, setSizesOpen] = useState(false)
   const [askPacking, setAskPacking] = useState(false)
+
   const submit = async (withoutPacking = false) => {
-    if (!withoutPacking && receipt.packingMissing && !receipt.problems.length) {
+    if (!withoutPacking && r.packingMissing && !r.problems.length) {
       setAskPacking(true)
       return
     }
-    const out = await receipt.post()
+    const out = await r.post()
     if (out) setPosted(out)
   }
 
@@ -121,338 +194,182 @@ export default function FinishedGoodsReceiptPage({
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const orderOptions = useMemo(
-    () =>
-      (orderPage?.results || []).map((o) => ({
-        value: o.id,
-        label: `${o.orderNumber} — ${o.productName}`,
-        sublabel: `${fmtQty(o.producedQuantity || 0)} / ${fmtQty(o.plannedQuantity)} ${o.unit} ${t('made')} · ${t(o.status.replace('_', ' '))}`,
-      })),
-    [orderPage, t]
-  )
-
-  const back = order
-    ? { to: orderPath(order), label: order.orderNumber }
-    : { to: '/manufacturing/production-orders', label: t('Production orders') }
+  if (posted) {
+    return (
+      <>
+        <PostedCard
+          output={posted}
+          order={order}
+          canInspect={r.canInspect}
+          onInspect={() => setInspecting(true)}
+          onMore={onReceiveMore}
+          onAnother={onAnother}
+        />
+        {inspecting && (
+          <InspectOutputDialog
+            order={order}
+            output={posted}
+            onClose={() => {
+              setInspecting(false)
+              navigate({ to: LIST as never })
+            }}
+          />
+        )}
+      </>
+    )
+  }
 
   return (
-    <div className='space-y-4'>
+    <div className='grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
+      <div className='min-w-0 space-y-4'>
+        {/* 1. The finished good */}
+        <section className='bg-card space-y-3 rounded-xl border p-4'>
+          <SectionTitle n={1} title={t('Finished good')} />
+          {picker}
+          <OrderStrip order={order} />
+          <div className='text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs'>
+            <StatusBadge status={order.status} orderType={order.orderType} />
+            <PriorityText priority={order.priority} />
+            {order.bomNumber && (
+              <span>
+                {t('BOM')}{' '}
+                <span className='text-foreground font-mono'>
+                  {order.bomNumber}
+                  {order.bomVersion ? ` v${order.bomVersion}` : ''}
+                </span>
+              </span>
+            )}
+            {order.plannedCompletionDate && (
+              <span>
+                {t('Due')}{' '}
+                <span className='text-foreground'>
+                  {fmtDate(order.plannedCompletionDate)}
+                </span>
+              </span>
+            )}
+            <Link
+              to={orderPath(order) as never}
+              className='text-primary ml-auto inline-flex items-center gap-1 font-medium hover:underline'
+            >
+              {t('Open')} {order.orderNumber}
+              <ArrowRight className='h-3 w-3' />
+            </Link>
+          </div>
+        </section>
+
+        {/* 2. The receipt — the same details as the order's dialog */}
+        <section className='bg-card space-y-4 rounded-xl border p-4'>
+          <SectionTitle n={2} title={t('What was made')} />
+          <ReceiveFinishedGoodsForm
+            r={r}
+            order={order}
+            showOrder={false}
+            onSetUpPacks={() => setSizesOpen(true)}
+          />
+        </section>
+      </div>
+
+      {/* Summary */}
+      <aside className='lg:sticky lg:top-4 lg:self-start'>
+        <div className='bg-card space-y-4 rounded-xl border p-4'>
+          <div className='text-sm font-semibold'>{t('Receipt summary')}</div>
+          <dl className='space-y-2 text-sm'>
+            <SummaryRow
+              label={t('Made')}
+              value={`${fmtQty(r.quantity)} ${unit}`}
+              strong
+            />
+            {direct ? (
+              <>
+                <SummaryRow
+                  label={t('To finished stock')}
+                  value={fmtQty(r.good)}
+                  tone='ok'
+                />
+                <SummaryRow
+                  label={
+                    r.quality.disposition === 'rework'
+                      ? t('Rejected → rework')
+                      : t('Rejected → scrap')
+                  }
+                  value={fmtQty(r.rejected)}
+                  tone={r.rejected > EPS ? 'bad' : undefined}
+                />
+              </>
+            ) : (
+              <SummaryRow
+                label={t('To the QC hold')}
+                value={fmtQty(r.quantity)}
+                tone='info'
+              />
+            )}
+            {direct && r.packEnabled && r.packing.packs > 0 && (
+              <SummaryRow
+                label={t('Packed')}
+                value={`${fmtQty(r.packing.packs)} ${t('packs')}${
+                  r.packing.loose > EPS
+                    ? ` + ${fmtQty(r.packing.loose)} ${unit} ${t('loose')}`
+                    : ''
+                }`}
+              />
+            )}
+            <SummaryRow
+              label={t('Material used (at cost)')}
+              value={formatMoney(r.materialCost)}
+            />
+            {r.quantity > 0 && (
+              <SummaryRow
+                label={t('Cost per unit')}
+                value={formatMoney(r.materialCost / r.quantity)}
+              />
+            )}
+          </dl>
+          <ProgressAfter
+            order={order}
+            quantity={r.quantity}
+            good={direct ? r.good : 0}
+          />
+          <ReceiptProblems problems={r.problems} />
+          <div className='flex flex-col gap-2'>
+            <Button
+              onClick={() => void submit()}
+              disabled={!!r.problems.length || r.posting}
+              className='w-full justify-between'
+            >
+              <span className='flex items-center gap-1.5'>
+                {r.posting ? (
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                ) : direct ? (
+                  <PackageCheck className='h-4 w-4' />
+                ) : (
+                  <ClipboardCheck className='h-4 w-4' />
+                )}
+                {direct ? t('Receive into stock') : t('Send to QC')}
+              </span>
+              <kbd className='text-[10px] opacity-70'>Ctrl+Enter</kbd>
+            </Button>
+            <Button variant='ghost' onClick={onAnother}>
+              {t('Cancel')}
+            </Button>
+          </div>
+        </div>
+      </aside>
+
       <NoPackingConfirm
-        r={receipt}
+        r={r}
         open={askPacking}
         onClose={() => setAskPacking(false)}
         onConfirm={() => {
           setAskPacking(false)
           void submit(true)
         }}
-        label={
-          order
-            ? `${fmtQty(receipt.quantity)} ${getUnitLabel(order.unit)} ${t('of')} ${order.productName}`
-            : ''
-        }
+        label={`${fmtQty(r.quantity)} ${unit} ${t('of')} ${order.productName}`}
       />
-      <nav className='text-muted-foreground flex items-center gap-1.5 text-sm'>
-        <Link
-          to={back.to as never}
-          className='hover:text-foreground inline-flex items-center gap-1'
-        >
-          <ArrowLeft className='h-3.5 w-3.5' aria-hidden />
-          {back.label}
-        </Link>
-      </nav>
-      <PageHeader
-        title={t('Receive finished goods')}
-        description={t(
-          'Report what was made and put it into stock — straight to finished stock, or through quality control. The material it used comes off the production floor.'
-        )}
-      />
-
-      {posted && order ? (
-        <PostedCard
-          output={posted}
-          order={order}
-          canInspect={canInspect}
-          onInspect={() => setInspecting(true)}
-          onMore={() => {
-            setPosted(null)
-            receipt.reset()
-          }}
-        />
-      ) : (
-        <div className='grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
-          <div className='min-w-0 space-y-4'>
-            {/* 1. Order */}
-            <section className='bg-card space-y-3 rounded-xl border p-4'>
-              <SectionTitle n={1} title={t('Production order')} />
-              <SearchableSelect
-                options={orderOptions}
-                value={orderId}
-                deselectable={false}
-                onValueChange={(v) => v && setOrderId(v)}
-                placeholder={t('Choose the order the goods were made on')}
-                searchPlaceholder={t('Search order number or product…')}
-                emptyText={t('No open production orders')}
-              />
-              {orderId && (!order || orderLoading) ? (
-                <Skeleton className='h-16 w-full rounded-lg' />
-              ) : (
-                order && <OrderStrip order={order} />
-              )}
-            </section>
-
-            {order && (
-              <>
-                {/* 2. Quantity made + what it uses */}
-                <section className='bg-card space-y-4 rounded-xl border p-4'>
-                  <SectionTitle n={2} title={t('Quantity made')} />
-                  <div className='flex flex-wrap items-end gap-3'>
-                    <QuantityStepper
-                      value={qty}
-                      onChange={setQuantity}
-                      unit={order.unit}
-                      autoFocus
-                    />
-                    <div className='flex flex-wrap gap-1.5'>
-                      <QuickChip
-                        label={t('All remaining')}
-                        value={remaining}
-                        onClick={() => setQuantity(remaining)}
-                      />
-                      {Number.isFinite(buildable) && (
-                        <QuickChip
-                          label={t('Floor can build')}
-                          value={buildable}
-                          tone={buildable + EPS < remaining ? 'warn' : 'ok'}
-                          onClick={() =>
-                            setQuantity(
-                              Math.min(buildable, remaining) || buildable
-                            )
-                          }
-                        />
-                      )}
-                    </div>
-                  </div>
-                  {remaining <= EPS && (
-                    <div className='flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm'>
-                      <CheckCircle2 className='h-4 w-4 shrink-0 text-emerald-600' />
-                      <span className='min-w-0 flex-1'>
-                        {t('Everything planned on this order has been made.')}{' '}
-                        <span className='text-muted-foreground'>
-                          {settings?.allowOverProduction
-                            ? t('Over-production is allowed by your settings.')
-                            : t('Complete the order from its page.')}
-                        </span>
-                      </span>
-                      <Button
-                        asChild
-                        size='sm'
-                        variant='outline'
-                        className='h-8'
-                      >
-                        <Link to={orderPath(order) as never}>
-                          {t('Open')} {order.orderNumber}
-                        </Link>
-                      </Button>
-                    </div>
-                  )}
-                  {overPlan && remaining > EPS && (
-                    <p className='text-xs text-amber-700 dark:text-amber-400'>
-                      {settings?.allowOverProduction
-                        ? t('More than planned — allowed by your settings.')
-                        : `${t('Only')} ${fmtQty(remaining)} ${getUnitLabel(order.unit)} ${t('left to make on this order.')}`}
-                    </p>
-                  )}
-                  <MaterialCheck
-                    lines={lines}
-                    orderId={order.id}
-                    quantity={quantity}
-                  />
-                  <ReceiptPackingUsed r={receipt} />
-                </section>
-
-                {/* 3. Quality */}
-                <section className='bg-card space-y-4 rounded-xl border p-4'>
-                  <SectionTitle n={3} title={t('Quality')} />
-                  <div
-                    role='radiogroup'
-                    aria-label={t('Where the units go')}
-                    className='grid grid-cols-1 gap-2 sm:grid-cols-2'
-                  >
-                    <ModeCard
-                      on={mode === 'direct'}
-                      disabled={directBlocked}
-                      onClick={() => setQcMode('direct')}
-                      icon={PackageCheck}
-                      title={t('Receive directly')}
-                      text={
-                        directBlocked
-                          ? t(
-                              'QC is required — only an inspector can receive past it.'
-                            )
-                          : t(
-                              'Checked on receipt — good units go straight to finished stock.'
-                            )
-                      }
-                      badge={
-                        qcRequired && !directBlocked
-                          ? t('Inspector')
-                          : undefined
-                      }
-                    />
-                    <ModeCard
-                      on={mode === 'hold'}
-                      onClick={() => setQcMode('hold')}
-                      icon={ClipboardCheck}
-                      title={t('Send to QC')}
-                      text={t(
-                        'Units wait in the QC hold — finished stock goes up when they pass inspection.'
-                      )}
-                      badge={qcRequired ? t('Required by settings') : undefined}
-                    />
-                  </div>
-                  {mode === 'direct' && quantity > 0 && (
-                    <>
-                      <QualityDecision
-                        total={quantity}
-                        unit={order.unit}
-                        value={{ ...quality, good }}
-                        onChange={setQuality}
-                      />
-                      <FinishedGoodsFields
-                        order={order}
-                        quantity={good}
-                        value={fg}
-                        onChange={setFg}
-                      />
-                    </>
-                  )}
-                </section>
-
-                <section className='bg-card space-y-2 rounded-xl border p-4'>
-                  <Label htmlFor='receipt-notes'>{t('Notes')}</Label>
-                  <Textarea
-                    id='receipt-notes'
-                    rows={2}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder={t('Shift, line, batch remarks…')}
-                  />
-                </section>
-              </>
-            )}
-          </div>
-
-          {/* Summary */}
-          <aside className='lg:sticky lg:top-4 lg:self-start'>
-            <div className='bg-card space-y-4 rounded-xl border p-4'>
-              <div className='text-sm font-semibold'>
-                {t('Receipt summary')}
-              </div>
-              <dl className='space-y-2 text-sm'>
-                <SummaryRow
-                  label={t('Made')}
-                  value={
-                    order
-                      ? `${fmtQty(quantity)} ${getUnitLabel(order.unit)}`
-                      : '—'
-                  }
-                  strong
-                />
-                {mode === 'direct' ? (
-                  <>
-                    <SummaryRow
-                      label={t('To finished stock')}
-                      value={order ? fmtQty(good) : '—'}
-                      tone='ok'
-                    />
-                    <SummaryRow
-                      label={
-                        quality.disposition === 'rework'
-                          ? t('Rejected → rework')
-                          : t('Rejected → scrap')
-                      }
-                      value={order ? fmtQty(rejected) : '—'}
-                      tone={rejected > EPS ? 'bad' : undefined}
-                    />
-                  </>
-                ) : (
-                  <SummaryRow
-                    label={t('To the QC hold')}
-                    value={order ? fmtQty(quantity) : '—'}
-                    tone='info'
-                  />
-                )}
-                <SummaryRow
-                  label={t('Material used (at cost)')}
-                  value={order ? formatMoney(materialCost) : '—'}
-                />
-                {order && quantity > 0 && (
-                  <SummaryRow
-                    label={t('Cost per unit')}
-                    value={formatMoney(materialCost / quantity)}
-                  />
-                )}
-              </dl>
-              {order && (
-                <ProgressAfter
-                  order={order}
-                  quantity={quantity}
-                  good={mode === 'direct' ? good : 0}
-                />
-              )}
-              {problems.length > 0 && order && (
-                <ul className='space-y-1 text-xs text-rose-700 dark:text-rose-400'>
-                  {problems.map((p) => (
-                    <li key={p} className='flex gap-1.5'>
-                      <AlertTriangle className='mt-0.5 h-3.5 w-3.5 shrink-0' />
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className='flex flex-col gap-2'>
-                <Button
-                  onClick={() => void submit()}
-                  disabled={!!problems.length || posting}
-                  className='w-full justify-between'
-                >
-                  <span className='flex items-center gap-1.5'>
-                    {posting ? (
-                      <Loader2 className='h-4 w-4 animate-spin' />
-                    ) : mode === 'direct' ? (
-                      <PackageCheck className='h-4 w-4' />
-                    ) : (
-                      <ClipboardCheck className='h-4 w-4' />
-                    )}
-                    {mode === 'direct'
-                      ? t('Receive into stock')
-                      : t('Send to QC')}
-                  </span>
-                  <kbd className='text-[10px] opacity-70'>Ctrl+Enter</kbd>
-                </Button>
-                <Button
-                  variant='ghost'
-                  onClick={() => navigate({ to: back.to as never })}
-                >
-                  {t('Cancel')}
-                </Button>
-              </div>
-            </div>
-          </aside>
-        </div>
-      )}
-
-      {inspecting && posted && order && (
-        <InspectOutputDialog
-          order={order}
-          output={posted}
-          onClose={() => {
-            setInspecting(false)
-            navigate({
-              to: orderPath(order) as never,
-              search: { tab: 'quality' } as never,
-            })
-          }}
+      {sizesOpen && (
+        <PackSizesSheet
+          productId={order.productId}
+          variantId={order.variantId || null}
+          onClose={() => setSizesOpen(false)}
         />
       )}
     </div>
@@ -477,12 +394,14 @@ function PostedCard({
   canInspect,
   onInspect,
   onMore,
+  onAnother,
 }: {
   output: ProductionOutput
   order: ProductionOrder
   canInspect: boolean
   onInspect: () => void
   onMore: () => void
+  onAnother: () => void
 }) {
   const { t } = useLanguage()
   const held = output.status === 'pending_qc'
@@ -549,12 +468,15 @@ function PostedCard({
           </Button>
         )}
         <Button variant='outline' onClick={onMore}>
+          <RefreshCw className='mr-1.5 h-4 w-4' />
           {t('Receive more')}
         </Button>
-        <Button asChild variant='outline'>
-          <Link to={orderPath(order) as never}>
-            {t('Back to')} {order.orderNumber}
-          </Link>
+        <Button variant='outline' onClick={onAnother}>
+          <PackageCheck className='mr-1.5 h-4 w-4' />
+          {t('Another finished good')}
+        </Button>
+        <Button asChild variant='ghost'>
+          <Link to={LIST as never}>{t('All receipts')}</Link>
         </Button>
       </div>
     </div>

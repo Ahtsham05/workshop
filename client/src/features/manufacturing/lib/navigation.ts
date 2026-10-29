@@ -7,6 +7,7 @@ import {
   Gauge,
   ListChecks,
   Package2,
+  PackageCheck,
   PackageMinus,
   Warehouse,
   Workflow,
@@ -31,7 +32,7 @@ export interface NavGroup {
 
 /**
  * The module's navigation: one flat row of tabs, no sub-menus — the pages a plant uses
- * every day, in the order the user asked for (Overview, Products, then BOM, Material Issues, WIP). (Assembly orders, quality, inventory and traceability pages still exist
+ * every day, in the order the user asked for (Overview, Products, then BOM, Material Issues, WIP, Finished Goods). (Assembly orders, quality, inventory and traceability pages still exist
  * as routes but are not in the menus.) A group with one section shows no sub-menu
  * (manufacturing-shell.tsx); keep it that way unless a tab really needs children.
  */
@@ -107,6 +108,18 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Work in Progress',
         icon: Workflow,
         keywords: 'wip floor',
+      },
+    ],
+  },
+  {
+    id: 'finished-goods',
+    label: 'Finished Goods',
+    sections: [
+      {
+        to: '/manufacturing/finished-goods',
+        label: 'Finished Goods',
+        icon: PackageCheck,
+        keywords: 'fg receipt receive output voucher production received stock qc',
       },
     ],
   },

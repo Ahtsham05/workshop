@@ -1,6 +1,7 @@
 const catchAsync = require('../utils/catchAsync');
 const { quickLinksService } = require('../services');
 const { Organization } = require('../models');
+const { resolveAccess } = require('../services/manufacturing/access.service');
 
 /**
  * No fine-grained permission gates these routes (unlike most other features) — this is
@@ -23,6 +24,9 @@ const getScope = async (req) => {
   // Same derivation dashboard/index.tsx uses client-side: a linked-teacher account
   // without an explicit schoolRole is still effectively a teacher for gating purposes.
   const schoolRole = req.user.schoolRole || (req.user.linkedTeacherId ? 'teacher' : null);
+  // Manufacturing actions follow the module's own access rule (business type, rollout
+  // list, testers) — the same one its sidebar group and API use.
+  const manufacturing = await resolveAccess({ user: req.user, organizationId });
 
   return {
     organizationId,
@@ -34,29 +38,33 @@ const getScope = async (req) => {
     schoolRole,
     email: req.user.email,
     bypassPermissions: req.user.systemRole === 'superAdmin' || req.user.systemRole === 'system_admin',
+    manufacturingEnabled: manufacturing.enabled,
   };
 };
 
+/** Which Quick Links board: ?board=manufacturing (the Manufacturing Overview), else the dashboard. */
+const boardOf = (req) => (req.query && req.query.board) || 'dashboard';
+
 const getAvailableActions = catchAsync(async (req, res) => {
   const scope = await getScope(req);
-  res.send(quickLinksService.listAvailableActions(scope));
+  res.send(quickLinksService.listAvailableActions(scope, boardOf(req)));
 });
 
 const getMyQuickLinks = catchAsync(async (req, res) => {
   const scope = await getScope(req);
-  const links = await quickLinksService.getMyQuickLinks(scope);
+  const links = await quickLinksService.getMyQuickLinks(scope, boardOf(req));
   res.send(links);
 });
 
 const updateQuickLinks = catchAsync(async (req, res) => {
   const scope = await getScope(req);
-  const links = await quickLinksService.updateQuickLinks(req.body.links, scope);
+  const links = await quickLinksService.updateQuickLinks(req.body.links, scope, boardOf(req));
   res.send(links);
 });
 
 const resetQuickLinks = catchAsync(async (req, res) => {
   const scope = await getScope(req);
-  const links = await quickLinksService.resetQuickLinks(scope);
+  const links = await quickLinksService.resetQuickLinks(scope, boardOf(req));
   res.send(links);
 });
 

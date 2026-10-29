@@ -1,6 +1,10 @@
 const Joi = require('joi');
 
+const board = Joi.string().valid('dashboard', 'manufacturing');
+const boardQuery = { query: Joi.object().keys({ board }) };
+
 const updateQuickLinks = {
+  query: Joi.object().keys({ board }),
   body: Joi.object().keys({
     links: Joi.array()
       .items(
@@ -14,5 +18,6 @@ const updateQuickLinks = {
 };
 
 module.exports = {
+  boardQuery,
   updateQuickLinks,
 };

@@ -24,6 +24,8 @@
  *   portals: 'teacher' vs everyone else).
  * - `allowedEmails` — allow-list by exact User.email (mirrors one hardcoded sidebar
  *   entry gated the same way).
+ * - `requiresManufacturing` — only when the Manufacturing module is open to the caller
+ *   (scope.manufacturingEnabled, from services/manufacturing/access.service.js).
  * - `synonyms` are extra spoken phrases the voice command matcher should also accept
  *   besides the label itself.
  */
@@ -1908,6 +1910,203 @@ const QUICK_LINK_ACTIONS = [
     businessTypes: ['school'],
     excludedSchoolRoles: ['teacher'],
   },
+
+  // ---- Manufacturing ----
+  // `requiresManufacturing`: shown only to someone the Manufacturing module is open to
+  // (services/manufacturing/access.service.js — business type, rollout list, testers),
+  // the same rule as the sidebar group. They also make up the Manufacturing Overview's
+  // own Quick Links board (BOARDS in services/quickLinks.service.js).
+  {
+    actionKey: 'mfg_overview',
+    label: 'Manufacturing Overview',
+    iconKey: 'Factory',
+    route: '/manufacturing',
+    category: 'Manufacturing',
+    color: 'bg-slate-700 hover:bg-slate-800',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+    synonyms: ['manufacturing', 'manufacturing dashboard', 'factory'],
+  },
+  {
+    actionKey: 'mfg_new_production_order',
+    label: 'New Production Order',
+    iconKey: 'ClipboardList',
+    route: '/manufacturing/production-orders/new',
+    category: 'Manufacturing',
+    color: 'bg-blue-600 hover:bg-blue-700',
+    permission: 'manageProductionOrders',
+    requiresManufacturing: true,
+    synonyms: ['create production order', 'new order', 'plan production'],
+  },
+  {
+    actionKey: 'mfg_production_orders',
+    label: 'Production Orders',
+    iconKey: 'ClipboardCheck',
+    route: '/manufacturing/production-orders',
+    category: 'Manufacturing',
+    color: 'bg-indigo-600 hover:bg-indigo-700',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+  },
+  {
+    actionKey: 'mfg_new_material_issue',
+    label: 'Issue Materials',
+    iconKey: 'PackageMinus',
+    route: '/manufacturing/material-issues/new',
+    category: 'Manufacturing',
+    color: 'bg-amber-600 hover:bg-amber-700',
+    permission: 'issueMaterials',
+    requiresManufacturing: true,
+    synonyms: ['material issue', 'new material issue', 'miv'],
+  },
+  {
+    actionKey: 'mfg_material_issues',
+    label: 'Material Issues',
+    iconKey: 'Package',
+    route: '/manufacturing/material-issues',
+    category: 'Manufacturing',
+    color: 'bg-orange-500 hover:bg-orange-600',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+  },
+  {
+    actionKey: 'mfg_receive_finished_goods',
+    label: 'Receive Finished Goods',
+    iconKey: 'PackageCheck',
+    route: '/manufacturing/finished-goods/receive',
+    category: 'Manufacturing',
+    color: 'bg-emerald-600 hover:bg-emerald-700',
+    permission: 'receiveFinishedGoods',
+    requiresManufacturing: true,
+    synonyms: ['finished goods receipt', 'receive production', 'fg receipt'],
+  },
+  {
+    actionKey: 'mfg_finished_goods',
+    label: 'Finished Goods',
+    iconKey: 'PackageOpen',
+    route: '/manufacturing/finished-goods',
+    category: 'Manufacturing',
+    color: 'bg-teal-600 hover:bg-teal-700',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+  },
+  {
+    actionKey: 'mfg_wip',
+    label: 'Work in Progress',
+    iconKey: 'Workflow',
+    route: '/manufacturing/wip',
+    category: 'Manufacturing',
+    color: 'bg-yellow-600 hover:bg-yellow-700',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+    synonyms: ['wip', 'production floor'],
+  },
+  {
+    actionKey: 'mfg_new_bom',
+    label: 'New BOM',
+    iconKey: 'FileStack',
+    route: '/manufacturing/boms',
+    routeSearch: { new: true },
+    category: 'Manufacturing',
+    color: 'bg-violet-600 hover:bg-violet-700',
+    permission: 'manageBoms',
+    requiresManufacturing: true,
+    synonyms: ['new bill of materials', 'create bom', 'recipe'],
+  },
+  {
+    actionKey: 'mfg_boms',
+    label: 'Bills of Materials',
+    iconKey: 'Layers',
+    route: '/manufacturing/boms',
+    category: 'Manufacturing',
+    color: 'bg-purple-600 hover:bg-purple-700',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+  },
+  {
+    actionKey: 'mfg_raw_material_receipt',
+    label: 'Raw Material Receipt',
+    iconKey: 'Truck',
+    route: '/manufacturing/material-receipts/new',
+    category: 'Manufacturing',
+    color: 'bg-cyan-600 hover:bg-cyan-700',
+    permission: 'createPurchases',
+    requiresManufacturing: true,
+    synonyms: ['rmv', 'receive raw material'],
+  },
+  {
+    actionKey: 'mfg_production_stock',
+    label: 'Production Stock',
+    iconKey: 'Warehouse',
+    route: '/manufacturing/production-stock',
+    category: 'Manufacturing',
+    color: 'bg-stone-600 hover:bg-stone-700',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+    synonyms: ['floor stock'],
+  },
+  {
+    actionKey: 'mfg_packing',
+    label: 'Packing',
+    iconKey: 'Package2',
+    route: '/manufacturing/packing',
+    category: 'Manufacturing',
+    color: 'bg-lime-600 hover:bg-lime-700',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+  },
+  {
+    actionKey: 'mfg_requirements',
+    label: 'Material Requirements',
+    iconKey: 'ListChecks',
+    route: '/manufacturing/requirements',
+    category: 'Manufacturing',
+    color: 'bg-rose-500 hover:bg-rose-600',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+    synonyms: ['mrp', 'shortages'],
+  },
+  {
+    actionKey: 'mfg_quality',
+    label: 'Quality Control',
+    iconKey: 'ShieldCheck',
+    route: '/manufacturing/quality',
+    category: 'Manufacturing',
+    color: 'bg-sky-600 hover:bg-sky-700',
+    permission: 'inspectProduction',
+    requiresManufacturing: true,
+    synonyms: ['qc', 'inspection'],
+  },
+  {
+    actionKey: 'mfg_products',
+    label: 'Manufacturing Products',
+    iconKey: 'Boxes',
+    route: '/manufacturing/products',
+    category: 'Manufacturing',
+    color: 'bg-fuchsia-600 hover:bg-fuchsia-700',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+  },
+  {
+    actionKey: 'mfg_reports',
+    label: 'Production Reports',
+    iconKey: 'BarChart3',
+    route: '/manufacturing/reports',
+    category: 'Manufacturing',
+    color: 'bg-green-700 hover:bg-green-800',
+    permission: 'viewManufacturing',
+    requiresManufacturing: true,
+  },
+  {
+    actionKey: 'mfg_settings',
+    label: 'Manufacturing Settings',
+    iconKey: 'IconSettings',
+    route: '/manufacturing/settings',
+    category: 'Manufacturing',
+    color: 'bg-gray-600 hover:bg-gray-700',
+    permission: 'manageManufacturingSettings',
+    requiresManufacturing: true,
+  },
 ];
 
 /** Curated, ordered subset of the registry seeded for a brand-new user — the full
@@ -1938,6 +2137,23 @@ const DEFAULT_ACTION_KEY_ORDER = [
   'leads',
   'tasks_reminders',
   'salesmen',
+];
+
+/** What a new user's Manufacturing Overview Quick Links start with — the daily loop
+ *  of a plant in the order the work happens. Same filtering as the dashboard list. */
+const MANUFACTURING_DEFAULT_ACTION_KEY_ORDER = [
+  'mfg_new_production_order',
+  'mfg_new_material_issue',
+  'mfg_receive_finished_goods',
+  'mfg_wip',
+  'mfg_finished_goods',
+  'mfg_production_orders',
+  'mfg_new_bom',
+  'mfg_raw_material_receipt',
+  'mfg_production_stock',
+  'mfg_packing',
+  'mfg_requirements',
+  'mfg_reports',
 ];
 
 /** Category-level fallback for the business-type exclusion — these categories are
@@ -1996,7 +2212,7 @@ const resolveExcludeBusinessTypes = (action) => {
  *  registry gate added after the fact) keeps silently showing forever. */
 const matchesScope = (
   action,
-  { permissions, businessType, systemRole, schoolRole, email, bypassPermissions = false } = {}
+  { permissions, businessType, systemRole, schoolRole, email, bypassPermissions = false, manufacturingEnabled = false } = {}
 ) => {
   const hasPermission = (key) => bypassPermissions || (!!permissions && permissions[key] === true);
   const hasAny = (keys) => bypassPermissions || keys.some(hasPermission);
@@ -2008,6 +2224,7 @@ const matchesScope = (
   if (action.allowedSchoolRoles && !action.allowedSchoolRoles.includes(schoolRole)) return false;
   if (action.excludedSchoolRoles && action.excludedSchoolRoles.includes(schoolRole)) return false;
   if (action.allowedEmails && !action.allowedEmails.includes(email)) return false;
+  if (action.requiresManufacturing && !manufacturingEnabled) return false;
   if (action.permission) return hasPermission(action.permission);
   if (action.anyPermission) return hasAny(action.anyPermission);
   return true;
@@ -2035,9 +2252,16 @@ const getVisibleActions = (permissions, opts = {}) => {
 /** Ordered actionKeys to seed a brand-new user's Quick Links with, or to reset back
  *  to: DEFAULT_ACTION_KEY_ORDER filtered down to whatever that caller can actually
  *  see. */
-const getDefaultActionKeys = (permissions, opts = {}) => {
+const getDefaultActionKeys = (permissions, opts = {}, order = DEFAULT_ACTION_KEY_ORDER) => {
   const visibleKeys = new Set(getVisibleActions(permissions, opts).map((action) => action.actionKey));
-  return DEFAULT_ACTION_KEY_ORDER.filter((key) => visibleKeys.has(key));
+  return order.filter((key) => visibleKeys.has(key));
 };
 
-module.exports = { QUICK_LINK_ACTIONS, DEFAULT_ACTION_KEY_ORDER, getVisibleActions, getDefaultActionKeys, matchesScope };
+module.exports = {
+  QUICK_LINK_ACTIONS,
+  DEFAULT_ACTION_KEY_ORDER,
+  MANUFACTURING_DEFAULT_ACTION_KEY_ORDER,
+  getVisibleActions,
+  getDefaultActionKeys,
+  matchesScope,
+};

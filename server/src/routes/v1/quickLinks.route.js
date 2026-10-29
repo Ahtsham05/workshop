@@ -8,13 +8,13 @@ const quickLinksController = require('../../controllers/quickLinks.controller');
 const router = express.Router();
 router.use(auth(), branchScope());
 
-router.get('/actions', quickLinksController.getAvailableActions);
+router.get('/actions', validate(quickLinksValidation.boardQuery), quickLinksController.getAvailableActions);
 
 router
   .route('/')
-  .get(quickLinksController.getMyQuickLinks)
+  .get(validate(quickLinksValidation.boardQuery), quickLinksController.getMyQuickLinks)
   .put(validate(quickLinksValidation.updateQuickLinks), quickLinksController.updateQuickLinks);
 
-router.post('/reset', quickLinksController.resetQuickLinks);
+router.post('/reset', validate(quickLinksValidation.boardQuery), quickLinksController.resetQuickLinks);
 
 module.exports = router;

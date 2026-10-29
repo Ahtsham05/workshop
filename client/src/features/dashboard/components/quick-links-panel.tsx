@@ -38,6 +38,7 @@ import {
   useUpdateQuickLinksMutation,
   useResetQuickLinksMutation,
   type QuickLinkAction,
+  type QuickLinkBoard,
 } from '@/stores/quickLinks.api'
 
 /** Dynamic per-action badge counts that can't live in the static server registry (e.g.
@@ -95,11 +96,26 @@ function SortableLinkRow({ action, onRemove }: { action: QuickLinkAction; onRemo
   )
 }
 
-export function QuickLinksPanel({ arranging = false }: { arranging?: boolean } = {}) {
+/**
+ * A customisable grid of one-tap shortcuts. `board` picks whose list it is: the main
+ * dashboard's (default) or the Manufacturing Overview's, which only offers Manufacturing
+ * actions — each user keeps a separate, separately saved list per board.
+ */
+export function QuickLinksPanel({
+  arranging = false,
+  board,
+  title = 'Quick Links',
+  description = 'One-tap shortcuts to your most-used actions',
+}: {
+  arranging?: boolean
+  board?: QuickLinkBoard
+  title?: string
+  description?: string
+} = {}) {
   const { t } = useLanguage()
   const runQuickLink = useRunQuickLink()
-  const { data: myLinks = [], isLoading } = useGetMyQuickLinksQuery()
-  const { data: allActions = [] } = useGetQuickLinkActionsQuery()
+  const { data: myLinks = [], isLoading } = useGetMyQuickLinksQuery(board)
+  const { data: allActions = [] } = useGetQuickLinkActionsQuery(board)
   const [updateQuickLinks] = useUpdateQuickLinksMutation()
   const [resetQuickLinks] = useResetQuickLinksMutation()
   const badges = useActionBadges()
@@ -151,6 +167,7 @@ export function QuickLinksPanel({ arranging = false }: { arranging?: boolean } =
 
   const handleSave = async () => {
     await updateQuickLinks({
+      board,
       links: draftLinks.map((l) => ({ actionKey: l.actionKey })),
       optimistic: draftLinks,
     })
@@ -158,7 +175,7 @@ export function QuickLinksPanel({ arranging = false }: { arranging?: boolean } =
   }
 
   const handleReset = async () => {
-    const result = await resetQuickLinks().unwrap()
+    const result = await resetQuickLinks(board).unwrap()
     setDraftLinks(result)
   }
 
@@ -198,8 +215,8 @@ export function QuickLinksPanel({ arranging = false }: { arranging?: boolean } =
                 <Zap className='h-4 w-4' />
               </span>
               <div className='min-w-0'>
-                <h2 className='whitespace-nowrap text-base font-semibold leading-tight'>{t('Quick Links')}</h2>
-                <p className='hidden truncate text-xs text-muted-foreground sm:block'>{t('One-tap shortcuts to your most-used actions')}</p>
+                <h2 className='whitespace-nowrap text-base font-semibold leading-tight'>{t(title)}</h2>
+                <p className='hidden truncate text-xs text-muted-foreground sm:block'>{t(description)}</p>
               </div>
             </div>
             <Button
@@ -234,7 +251,7 @@ export function QuickLinksPanel({ arranging = false }: { arranging?: boolean } =
                 const next = reorder(myLinks.map((l) => l.actionKey), event)
                 if (!next) return
                 const ordered = next.map((key) => myLinks.find((l) => l.actionKey === key)!).filter(Boolean)
-                void updateQuickLinks({ links: ordered.map((l) => ({ actionKey: l.actionKey })), optimistic: ordered })
+                void updateQuickLinks({ board, links: ordered.map((l) => ({ actionKey: l.actionKey })), optimistic: ordered })
               }}
             >
             <SortableContext items={myLinks.map((l) => l.actionKey)} strategy={rectSortingStrategy} disabled={!arranging}>

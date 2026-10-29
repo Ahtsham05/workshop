@@ -34,7 +34,7 @@ import {
   IconTransfer,
   IconHistory,
 } from '@tabler/icons-react'
-import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, ClipboardCheck, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote, MessagesSquare, Factory, FileStack, ListChecks, Workflow, Boxes, PackageMinus, Package2, Warehouse } from 'lucide-react'
+import { Command, NotebookText, Smartphone, WalletCards, Wrench, Receipt, GraduationCap, BookOpen, FileText, UserCog, Users2, Users, TrendingDown, MessageCircle, MessageSquare, QrCode, ClipboardList, Bell, Sparkles, ShoppingCart, ShieldCheck, Bot, Landmark, PiggyBank, BarChart3, ClipboardEdit, ClipboardCheck, AlarmClock, Scale, Handshake, Building2, HandCoins, Target, DollarSign, LayoutGrid, CalendarCheck, Activity, TrendingUp, UserX, StickyNote, MessagesSquare, Factory, FileStack, ListChecks, Workflow, Boxes, PackageMinus, Package2, PackageCheck, Warehouse } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -136,6 +136,7 @@ export const sidebarData: SidebarData = {
             { title: 'Material Issues', url: '/manufacturing/material-issues', icon: PackageMinus, permission: 'viewManufacturing' },
             { title: 'Production Stock', url: '/manufacturing/production-stock', icon: Warehouse, permission: 'viewManufacturing' },
             { title: 'Work in Progress', url: '/manufacturing/wip', icon: Workflow, permission: 'viewManufacturing' },
+            { title: 'Finished Goods', url: '/manufacturing/finished-goods', icon: PackageCheck, permission: 'viewManufacturing' },
             { title: 'Material Requirements', url: '/manufacturing/requirements', icon: ListChecks, permission: 'viewManufacturing' },
             { title: 'Production Orders', url: '/manufacturing/production-orders', icon: ClipboardList, permission: 'viewManufacturing' },
             { title: 'Packing', url: '/manufacturing/packing', icon: Package2, permission: 'viewManufacturing' },
