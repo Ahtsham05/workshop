@@ -2016,6 +2016,11 @@ export function UsersActionDialog({
                           </PopoverContent>
                         </Popover>
                       </FormControl>
+                      {isEdit && activeRow?.unit && field.value && field.value !== activeRow.unit && (
+                        <p className='text-xs text-muted-foreground'>
+                          Bills of materials and production records will show this unit too. Quantities stay as they are — they are not converted.
+                        </p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}

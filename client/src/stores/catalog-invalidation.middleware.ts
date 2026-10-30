@@ -1,5 +1,6 @@
 import { isFulfilled, type Middleware } from '@reduxjs/toolkit'
 import { batchApi } from './batch.api'
+import { manufacturingApi } from './manufacturing.api'
 import { productApi } from './product.api'
 import { purchaseCatalogApi } from './purchaseCatalog.api'
 
@@ -52,6 +53,15 @@ export const catalogInvalidationMiddleware: Middleware = (api) => {
         api.dispatch(productApi.util.invalidateTags(['Product']))
         // A product edit can put stock into / take it out of batches (reconcileTrackedStock).
         api.dispatch(batchApi.util.invalidateTags(['Batch']))
+        // A unit change is carried onto BOMs, orders and vouchers (productUnitSync.service.js).
+        if (meta?.arg && 'unit' in (meta.arg as object)) {
+          api.dispatch(
+            manufacturingApi.util.invalidateTags([
+              'MfgProduct', 'MfgBom', 'MfgOrder', 'MfgRequirements', 'MfgIssue', 'MfgReceipt',
+              'MfgScrap', 'MfgWip', 'MfgOutput', 'MfgMaterialReceipt', 'MfgPacking', 'MfgFloor',
+            ])
+          )
+        }
       }
       if (isWrite) {
         if (timer) clearTimeout(timer)

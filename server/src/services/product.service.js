@@ -11,6 +11,7 @@ const { getOrCreateDefaultVariant, getOrCreateInventory, buildDefaultVariantDoc 
 const { normalizeBusinessType } = require('../config/businessTypes');
 const { UNITS, DEFAULT_UNIT } = require('../config/units');
 const masterProductService = require('./masterProduct.service');
+const { syncProductUnit } = require('./productUnitSync.service');
 const { extractDuplicateFieldFromMessage, labelFor } = require('../utils/duplicateKeyError');
 const logger = require('../config/logger');
 const { addedTodayFilter } = require('../utils/addedToday');
@@ -1126,6 +1127,7 @@ const updateProductById = async (productId, updateBody, { existing, updatedBy } 
     await assertImeiAllowedForBusinessType({ organizationId: product.organizationId, businessType });
   }
   const nameChanged = Object.prototype.hasOwnProperty.call(updateFields, 'name') && updateFields.name !== product.name;
+  const unitChanged = Boolean(updateFields.unit) && updateFields.unit !== product.unit;
   Object.assign(product, updateFields);
 
   // Everything that follows must succeed together — same reasoning as createProduct's
@@ -1138,6 +1140,8 @@ const updateProductById = async (productId, updateBody, { existing, updatedBy } 
   try {
     await session.withTransaction(async () => {
       await product.save({ session });
+      // BOMs, production orders and vouchers copy the unit; relabel them with it.
+      if (unitChanged) await syncProductUnit(product, { session });
 
       await syncDefaultVariantTracking(product, updateBody, session);
       // Stock typed on a batch-tracked product goes into / comes out of its batches.
