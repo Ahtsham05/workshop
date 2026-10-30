@@ -261,19 +261,17 @@ export function BomDetailSheet({
                 </Button>
                 {canManage && !bom.deletedAt && (
                   <>
-                    {!bom.isLocked && (
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        onClick={() => setEditor('edit')}
-                      >
-                        <Pencil className='mr-1.5 h-3.5 w-3.5' />
-                        {t('Edit')}
-                      </Button>
-                    )}
                     <Button
                       size='sm'
                       variant={bom.isLocked ? 'default' : 'outline'}
+                      onClick={() => setEditor('edit')}
+                    >
+                      <Pencil className='mr-1.5 h-3.5 w-3.5' />
+                      {t('Edit')}
+                    </Button>
+                    <Button
+                      size='sm'
+                      variant='outline'
                       onClick={() => setEditor('version')}
                     >
                       <GitBranch className='mr-1.5 h-3.5 w-3.5' />
@@ -326,7 +324,7 @@ export function BomDetailSheet({
               {bom.isLocked && !bom.deletedAt && (
                 <p className='bg-muted/60 text-muted-foreground rounded-lg px-3 py-2 text-xs'>
                   {t(
-                    'This version has been released to production, so its recipe is frozen. Create a new version to change it.'
+                    'Released to production, so this recipe stays as the orders used it. Changing components or quantity in Edit saves a new version.'
                   )}
                 </p>
               )}

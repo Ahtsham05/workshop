@@ -121,6 +121,31 @@ const toDraft = (bom?: Bom | null): LineDraft[] =>
     expanded: false,
   }))
 
+/** Component lines as the API takes them; `keepIds` when editing the same version in place. */
+const toComponentsPayload = (lines: LineDraft[], keepIds: boolean) =>
+  lines
+    .filter((l) => l.productId)
+    .map((l, index) => ({
+      ...(keepIds && l._id ? { _id: l._id } : {}),
+      productId: l.productId,
+      quantity: Number(l.quantity),
+      unit: l.unit,
+      scrapPercent: Number(l.scrapPercent) || 0,
+      isOptional: l.isOptional,
+      childBomId: l.childBomId === AUTO ? null : l.childBomId,
+      notes: l.notes,
+      sequence: index,
+      alternatives: l.alternatives
+        .filter((a) => a.productId)
+        .map((a) => ({ productId: a.productId, ratio: Number(a.ratio) || 1 })),
+    }))
+
+/** What a locked version freezes — the output quantity and the component lines. */
+const recipeKey = (
+  quantity: number,
+  components: ReturnType<typeof toComponentsPayload>
+) => JSON.stringify([quantity, components])
+
 const toDateInput = (value?: string | null) =>
   value ? new Date(value).toISOString().slice(0, 10) : ''
 
@@ -177,10 +202,16 @@ export function BomEditorDialog({
   const [isDefault, setIsDefault] = useState(
     mode === 'edit' ? !!bom?.isDefault : mode === 'create'
   )
+  // A locked version (released orders use it) keeps its recipe: editing it saves recipe
+  // changes as the next version; name, notes, dates and routing still update in place.
+  const revises = mode === 'edit' && !!bom?.isLocked
   const [lines, setLines] = useState<LineDraft[]>(() => {
     const draft = toDraft(bom)
     return draft.length ? draft : [blankLine()]
   })
+  const [originalRecipe] = useState(() =>
+    recipeKey(bom?.quantity ?? 1, toComponentsPayload(toDraft(bom), false))
+  )
   const [routing, setRouting] = useState<RoutingDraft[]>(() =>
     toRoutingDraft(bom?.operations)
   )
@@ -272,6 +303,11 @@ export function BomEditorDialog({
         ? `${t('Edit')} ${bom?.bomNumber} · v${bom?.version}`
         : `${t('New version of')} ${bom?.bomNumber}`
 
+  const recipeChanged =
+    revises &&
+    recipeKey(Number(quantity) || 1, toComponentsPayload(lines, false)) !==
+      originalRecipe
+
   const submit = async () => {
     if (busy) return
     if (!product) {
@@ -303,28 +339,37 @@ export function BomEditorDialog({
       notes,
       effectiveFrom: effectiveFrom || null,
       effectiveTo: effectiveTo || null,
-      operations: fromRoutingDraft(routing, mode === 'edit'),
-      components: valid.map((l, index) => ({
-        ...(mode === 'edit' && l._id ? { _id: l._id } : {}),
-        productId: l.productId,
-        quantity: Number(l.quantity),
-        unit: l.unit,
-        scrapPercent: Number(l.scrapPercent) || 0,
-        isOptional: l.isOptional,
-        childBomId: l.childBomId === AUTO ? null : l.childBomId,
-        notes: l.notes,
-        sequence: index,
-        alternatives: l.alternatives
-          .filter((a) => a.productId)
-          .map((a) => ({
-            productId: a.productId,
-            ratio: Number(a.ratio) || 1,
-          })),
-      })),
+      operations: fromRoutingDraft(routing, mode === 'edit' && !recipeChanged),
+      components: toComponentsPayload(valid, mode === 'edit' && !recipeChanged),
     }
     try {
       let saved: Bom
-      if (mode === 'create')
+      if (recipeChanged) {
+        saved = await createVersion({
+          bomId: bom!.id,
+          ...body,
+          isDefault,
+        }).unwrap()
+        toast.success(
+          t(
+            'Saved as version {{v}} — version {{old}} stays with the orders that used it'
+          )
+            .replace('{{v}}', String(saved.version))
+            .replace('{{old}}', String(bom!.version))
+        )
+        onSaved?.(saved)
+        onClose()
+        return
+      }
+      if (revises) {
+        // Only the parts a locked version allows; the server refuses recipe fields.
+        const { components: _c, quantity: _q, ...inPlace } = body
+        saved = await updateBom({
+          bomId: bom!.id,
+          ...inPlace,
+          ...(isDefault && !bom!.isDefault ? { isDefault: true } : {}),
+        }).unwrap()
+      } else if (mode === 'create')
         saved = await createBom({
           ...body,
           productId: product.id,
@@ -403,9 +448,13 @@ export function BomEditorDialog({
                   ? t(
                       'The current version stays untouched — orders already released keep using it.'
                     )
-                  : t(
-                      'Define what goes into one batch of this product. Sub-assemblies with their own BOM expand automatically.'
-                    )}
+                  : revises
+                    ? t(
+                        'Released orders use this version, so changing components or quantity saves a new version — this one stays with those orders. Name, notes and routing update here.'
+                      )
+                    : t(
+                        'Define what goes into one batch of this product. Sub-assemblies with their own BOM expand automatically.'
+                      )}
               </DialogDescription>
             </div>
           </div>
@@ -783,12 +832,16 @@ export function BomEditorDialog({
             {t('Cancel')}
           </Button>
           <Button onClick={submit} disabled={busy}>
-            {mode === 'version' ? (
+            {mode === 'version' || recipeChanged ? (
               <GitBranch className='mr-2 h-4 w-4' />
             ) : (
               <Save className='mr-2 h-4 w-4' />
             )}
-            {mode === 'version' ? t('Create version') : t('Save BOM')}
+            {mode === 'version'
+              ? t('Create version')
+              : recipeChanged
+                ? t('Save as new version')
+                : t('Save BOM')}
           </Button>
         </DialogFooter>
       </DialogContent>
