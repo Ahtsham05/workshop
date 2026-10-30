@@ -455,6 +455,51 @@ describeTx('Product-wise production register', () => {
     expect(batch[String(o2._id)].batchCount).toBe(2); // PM-B, PM-C
   });
 
+  test('a unit corrected on the product applies to vouchers saved before the change', async () => {
+    await ManufacturingSettings.create({ organizationId: ORG, requireQualityCheck: false });
+    // Calcium was set up in pcs by mistake and issued that way; the product is now kg.
+    const calcium = await insertProduct('Calcium 1000 Mash', { unit: 'pcs', stockQuantity: 1000 });
+    const premix = await insertProduct('Mineral premix', { unit: 'kg', stockQuantity: 1000 });
+    const adeh = await insertProduct('Trust Adeh KG', { unit: 'pcs', productType: 'finished_good' });
+    await manufacturing.bom.createBom(ctx, {
+      productId: adeh._id,
+      components: [
+        { productId: calcium._id, quantity: 0.4 },
+        { productId: premix._id, quantity: 0.6, unit: 'kg' },
+      ],
+    });
+    const o = await release(adeh._id, 100);
+    await issue(
+      o,
+      [
+        { materialLineId: lineOf(o, calcium), quantity: 40 },
+        { materialLineId: lineOf(o, premix), quantity: 60 },
+      ],
+      '2026-10-29'
+    );
+    await receive(o, 95, '2026-10-30');
+    const before = await register({ productIds: String(adeh._id), startDate: '2026-10-01', endDate: '2026-10-31' });
+    // In pcs, calcium is out of KG and each finished pcs weighs its recipe's 0.6 kg premix.
+    expect(before.totals).toMatchObject({ mainKg: 60, finishedKg: 57 });
+
+    // The units are corrected on the products only — the saved vouchers still say pcs
+    // (as they did when the change was made before units were synced).
+    await Product.updateMany({ _id: { $in: [calcium._id, adeh._id] } }, { $set: { unit: 'kg' } });
+    expect(
+      (await MaterialIssue.findOne({}).lean()).lines.find((l) => String(l.productId) === String(calcium._id)).unit
+    ).toBe('pcs');
+
+    const r = await register({ productIds: String(adeh._id), startDate: '2026-10-01', endDate: '2026-10-31' });
+    expect(r.materials.find((m) => m.name === 'Calcium 1000 Mash')).toMatchObject({ unit: 'kg', kgPerUnit: 1, netKg: 40 });
+    expect(r.packs.find((p) => p.productId === String(adeh._id))).toMatchObject({ unit: 'kg', kgPerUnit: 1, kg: 95 });
+    expect(r.totals).toMatchObject({ mainKg: 100, issueKg: 100, finishedKg: 95 });
+    expect(r.closingInProcessKg).toBe(5);
+    expect(r.warnings.filter((w) => w.kind !== 'batch')).toEqual([]);
+    expect(r.batches[0].unit).toBe('kg');
+    const res = await report({ productIds: String(adeh._id), startDate: '2026-10-01', endDate: '2026-10-31' });
+    expect(res.options.find((x) => x.productId === String(adeh._id)).unit).toBe('kg');
+  });
+
   test('a bulk product with pack sizes: a column per pack size, packed kg vs extra packing', async () => {
     await User.collection.insertOne({ _id: USER, organizationId: ORG, name: 'Supervisor', email: 'sup@example.com' });
     await ManufacturingSettings.create({ organizationId: ORG, requireQualityCheck: false });

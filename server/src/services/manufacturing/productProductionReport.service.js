@@ -112,11 +112,16 @@ const productOptions = async (scope) => {
     { $sort: { lastOrderAt: -1 } },
     { $limit: 500 },
   ]);
+  // Name and unit as the product has them now (orders keep the ones they were made with).
+  const current = await Product.find({ _id: { $in: rows.map((r) => r._id) } })
+    .select('name sku unit')
+    .lean();
+  const now = new Map(current.map((p) => [String(p._id), p]));
   return rows.map((r) => ({
     productId: String(r._id),
-    name: r.name || '',
-    sku: r.sku || '',
-    unit: r.unit || '',
+    name: (now.get(String(r._id)) || {}).name || r.name || '',
+    sku: (now.get(String(r._id)) || {}).sku || r.sku || '',
+    unit: (now.get(String(r._id)) || {}).unit || r.unit || '',
     orders: r.orders,
     lastOrderAt: r.lastOrderAt,
   }));
@@ -130,7 +135,7 @@ const buildRegister = async (scope, range, days, productIds, q) => {
       .lean(),
     ProductionOrder.find({ ...scope, productId: { $in: productIds.map(oid) } })
       .select(
-        'orderNumber batchNumber orderType status productId variantId productName unit bomId plannedQuantity completedQuantity materials.productId materials.unit materials.baseQuantity createdAt actualCompletionDate'
+        'orderNumber batchNumber orderType status productId variantId productName unit bomId plannedQuantity completedQuantity materials.productId materials.variantId materials.unit materials.baseQuantity createdAt actualCompletionDate'
       )
       .sort({ createdAt: 1 })
       .lean(),
@@ -165,6 +170,7 @@ const buildRegister = async (scope, range, days, productIds, q) => {
                 kind: '$kind',
                 order: '$productionOrderId',
                 product: '$lines.productId',
+                variant: '$lines.variantId',
                 unit: '$lines.unit',
               },
               quantity: { $sum: '$lines.quantity' },
@@ -254,7 +260,17 @@ const buildRegister = async (scope, range, days, productIds, q) => {
   orders.forEach((o) => (o.materials || []).forEach((m) => materialIds.add(String(m.productId))));
   productIds.forEach((id) => materialIds.delete(id));
   const variantIds = [
-    ...new Set([...receiptRows.map((r) => r._id.variant), ...orders.map((o) => o.variantId)].filter(Boolean).map(String)),
+    ...new Set(
+      [
+        ...receiptRows.map((r) => r._id.variant),
+        ...issueRows.map((r) => r._id.variant),
+        ...scrapRows.map((r) => r._id.variant),
+        ...orders.map((o) => o.variantId),
+        ...orders.flatMap((o) => (o.materials || []).map((m) => m.variantId)),
+      ]
+        .filter(Boolean)
+        .map(String)
+    ),
   ];
   const [materialProducts, variants] = await Promise.all([
     materialIds.size
@@ -270,6 +286,19 @@ const buildRegister = async (scope, range, days, productIds, q) => {
   ]);
   const anyProduct = new Map([...materialProducts, ...finishedProducts].map((p) => [String(p._id), p]));
   const variantOf = new Map(variants.map((v) => [String(v._id), v]));
+  /**
+   * The unit a record's quantity is in: the product's unit as it is NOW (a real variant's
+   * own unit for a variant line) — the same unit vouchers show (stock.service resolveItem).
+   * Quantities are never converted, so a unit corrected on the product applies to every
+   * document, including ones saved with the old label before the change was synced.
+   */
+  const unitNow = (productId, variantId, stored) => {
+    const product = anyProduct.get(String(productId));
+    if (!product) return stored || '';
+    const variant = variantId && variantOf.get(String(variantId));
+    if (variant && !variant.isDefault && product.hasVariants && variant.unit) return variant.unit;
+    return product.unit || stored || '';
+  };
 
   // Materials: one column per material, in its own unit; weighed when we can.
   const materials = new Map();
@@ -311,7 +340,7 @@ const buildRegister = async (scope, range, days, productIds, q) => {
       const o = candidates[i];
       // Packing material (cartons, bags in pcs) carries no product weight and is skipped.
       const total = o.materials.reduce((s, m) => {
-        const w = unitWeight(anyProduct.get(String(m.productId)), m.unit);
+        const w = unitWeight(anyProduct.get(String(m.productId)), unitNow(m.productId, m.variantId, m.unit));
         return w.kgPerUnit == null ? s : s + (m.baseQuantity || 0) * w.kgPerUnit;
       }, 0);
       if (total > 0 && o.plannedQuantity > 0) return total / o.plannedQuantity;
@@ -356,7 +385,7 @@ const buildRegister = async (scope, range, days, productIds, q) => {
     return packs.get(key);
   };
   // Every selected product gets a column, in the order chosen, even with no receipt yet.
-  orders.forEach((o) => packCol(o.productId, o.variantId, o.unit));
+  orders.forEach((o) => packCol(o.productId, o.variantId, unitNow(o.productId, o.variantId, o.unit)));
   selected.forEach((s) => {
     if (![...packs.values()].some((p) => p.productId === s.productId)) packCol(s.productId, null, s.unit);
   });
@@ -369,11 +398,14 @@ const buildRegister = async (scope, range, days, productIds, q) => {
     col.shortName = ps.name || col.shortName;
     col.sequence = i;
   });
-  receiptRows.forEach((r) => packCol(r._id.product, r._id.variant, r._id.unit));
-  const bulkKgPerUnit = (r) => unitWeight(productOf.get(String(r._id.bulk)), r._id.bulkUnit).kgPerUnit;
+  receiptRows.forEach((r) => packCol(r._id.product, r._id.variant, unitNow(r._id.product, r._id.variant, r._id.unit)));
+  const bulkKgPerUnit = (r) =>
+    unitWeight(productOf.get(String(r._id.bulk)), unitNow(r._id.bulk, null, r._id.bulkUnit)).kgPerUnit;
   packingRows.forEach((r) => {
     const per = bulkKgPerUnit(r);
-    packCol(r._id.product, null, r._id.unit, { kgPerUnit: per == null ? null : r._id.content * per });
+    packCol(r._id.product, null, unitNow(r._id.product, null, r._id.unit), {
+      kgPerUnit: per == null ? null : r._id.content * per,
+    });
   });
   const packOrder = new Map(productIds.map((id, i) => [id, i]));
 
@@ -428,7 +460,7 @@ const buildRegister = async (scope, range, days, productIds, q) => {
   issueRows.forEach((r) => {
     const b = bucket(r._id.day);
     if (!b) return;
-    const col = materialCol(r._id.product, r._id.unit, r.name);
+    const col = materialCol(r._id.product, unitNow(r._id.product, r._id.variant, r._id.unit), r.name);
     const isReturn = r._id.kind === 'return';
     const w = col.kgPerUnit == null ? 0 : r.quantity * col.kgPerUnit;
     if (col.kgPerUnit == null && r._id.day !== '') unweighed.materials.add(col.name);
@@ -462,7 +494,7 @@ const buildRegister = async (scope, range, days, productIds, q) => {
   receiptRows.forEach((r) => {
     const b = bucket(r._id.day);
     if (!b) return;
-    const col = packCol(r._id.product, r._id.variant, r._id.unit);
+    const col = packCol(r._id.product, r._id.variant, unitNow(r._id.product, r._id.variant, r._id.unit));
     const w = col.kgPerUnit == null ? 0 : r.quantity * col.kgPerUnit;
     if (col.kgPerUnit == null && r._id.day !== '') unweighed.packs.add(col.name);
     b.packs[col.key] = (b.packs[col.key] || 0) + r.quantity;
@@ -485,7 +517,7 @@ const buildRegister = async (scope, range, days, productIds, q) => {
   packingRows.forEach((r) => {
     const b = bucket(r._id.day);
     if (!b) return;
-    const col = packCol(r._id.product, null, r._id.unit);
+    const col = packCol(r._id.product, null, unitNow(r._id.product, null, r._id.unit));
     const per = bulkKgPerUnit(r);
     const w = per == null ? 0 : r.bulkQuantity * per;
     if (per == null && r._id.day !== '') unweighed.packs.add(col.name);
@@ -509,8 +541,8 @@ const buildRegister = async (scope, range, days, productIds, q) => {
     if (!b) return;
     const isFinished = productOf.has(String(r._id.product));
     const col = isFinished
-      ? packCol(r._id.product, r._id.variant, r._id.unit)
-      : materialCol(r._id.product, r._id.unit, r.name);
+      ? packCol(r._id.product, r._id.variant, unitNow(r._id.product, r._id.variant, r._id.unit))
+      : materialCol(r._id.product, unitNow(r._id.product, r._id.variant, r._id.unit), r.name);
     const w = col.kgPerUnit == null ? 0 : r.quantity * col.kgPerUnit;
     if (col.kgPerUnit == null && r._id.day !== '') (isFinished ? unweighed.packs : unweighed.materials).add(col.name);
     b.scrapKg += w;
@@ -589,7 +621,7 @@ const buildRegister = async (scope, range, days, productIds, q) => {
         status: o.status,
         productName: pack ? pack.name : o.productName,
         packKey: pack ? pack.key : null,
-        unit: o.unit,
+        unit: unitNow(o.productId, o.variantId, o.unit),
         startedOn: startedOn.get(String(o._id)) || null,
         lastReceiptAt: t.lastReceipt,
         planned: roundQty(o.plannedQuantity),
