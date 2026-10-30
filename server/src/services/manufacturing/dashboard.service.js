@@ -82,7 +82,7 @@ const getDashboard = async (ctx) => {
     sumSince(MaterialIssue, { ...match, kind: { $ne: 'return' } }, 'issueDate', monthStart, ['totalCost']),
     sumSince(ScrapRecord, match, 'scrapDate', monthStart, ['quantity', 'totalCost']),
     Bom.countDocuments({ ...scopeFilter(ctx), isActive: true }),
-    ProductionOrder.find({ ...scopeFilter(ctx) })
+    ProductionOrder.find({ ...scopeFilter(ctx), status: { $ne: 'cancelled' } })
       .select(
         'orderNumber orderType productName plannedQuantity completedQuantity unit status priority plannedCompletionDate createdAt'
       )

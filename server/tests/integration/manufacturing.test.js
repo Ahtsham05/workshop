@@ -1115,7 +1115,8 @@ describe('List support for the UI', () => {
     await po.changeStatus(ctx, a._id, { status: 'cancelled' });
 
     const counts = await manufacturing.orderList.summarizeOrders(ctx, { orderType: 'production' });
-    expect(counts).toMatchObject({ total: 2, open: 1, overdue: 1, byStatus: { draft: 1, cancelled: 1 } });
+    // A cancelled order has its own count and isn't in the total (it's left out of "All").
+    expect(counts).toMatchObject({ total: 1, open: 1, overdue: 1, cancelled: 1, byStatus: { draft: 1, cancelled: 1 } });
     expect(await manufacturing.orderList.summarizeOrders(ctx, { orderType: 'assembly' })).toMatchObject({
       total: 0,
       open: 0,
@@ -1421,24 +1422,25 @@ describe('Production orders workspace (filters, sorting, summary, export, bulk)'
   test('every filter narrows the same org-scoped set', async () => {
     const { otherBranch, foreignBranch, opA, maker, bomA } = await seed();
 
-    expect(numbers(await find({}))).toEqual(['MO-004', 'MO-002', 'MO-001', 'MO-003']); // newest first
-    expect(numbers(await find({ orderNumber: '00' }))).toHaveLength(4);
+    expect(numbers(await find({}))).toEqual(['MO-002', 'MO-001', 'MO-003']); // newest first, cancelled left out
+    expect(numbers(await find({ status: 'cancelled' }))).toEqual(['MO-004']);
+    expect(numbers(await find({ orderNumber: '00' }))).toHaveLength(3);
     expect(numbers(await find({ product: 'mot' }))).toEqual(['MO-003']);
     expect(numbers(await find({ status: 'planned,in_production' })).sort()).toEqual(['MO-001', 'MO-002']);
     expect(numbers(await find({ priority: 'urgent,high' })).sort()).toEqual(['MO-001', 'MO-002']);
     expect(numbers(await find({ productionFrom: '2026-10-06', productionTo: '2026-10-06' }))).toEqual(['MO-002']);
     expect(numbers(await find({ dueFrom: '2026-10-01', dueTo: '2026-10-05' })).sort()).toEqual(['MO-001', 'MO-003']);
     expect(numbers(await find({ completedFrom: '2026-10-01', completedTo: '2026-10-31' }))).toEqual(['MO-003']);
-    expect(numbers(await find({ warehouse: 'Raw Store' }))).toHaveLength(4);
+    expect(numbers(await find({ warehouse: 'Raw Store' }))).toHaveLength(3);
     expect(numbers(await find({ warehouse: 'Nowhere' }))).toEqual([]);
-    expect(numbers(await find({ branchId: String(otherBranch) }))).toEqual(['MO-004']);
+    expect(numbers(await find({ branchId: String(otherBranch), status: 'cancelled' }))).toEqual(['MO-004']);
     // Another organization's branch id can't widen the scope — it simply matches nothing.
     expect(numbers(await find({ branchId: String(foreignBranch) }))).toEqual([]);
     expect(numbers(await find({ bomId: String(bomA) }))).toEqual(['MO-001']);
     expect(numbers(await find({ productType: 'sub_assembly' }))).toEqual(['MO-003']);
     expect(numbers(await find({ workCenter: 'Line 2' }))).toEqual(['MO-002']);
     expect(numbers(await find({ operatorId: String(opA) }))).toEqual(['MO-001']);
-    expect(numbers(await find({ createdBy: String(maker) }))).toHaveLength(4);
+    expect(numbers(await find({ createdBy: String(maker) }))).toHaveLength(3);
     expect(numbers(await find({ quantityMin: 15, quantityMax: 100 }))).toEqual(['MO-001']);
     expect(numbers(await find({ completionMin: 40, completionMax: 60 }))).toEqual(['MO-001']);
     expect(numbers(await find({ overdue: 'true' }))).toEqual(['MO-001']);
@@ -1459,29 +1461,29 @@ describe('Production orders workspace (filters, sorting, summary, export, bulk)'
   test('sorting, summary cards and export follow the same filters', async () => {
     await seed();
     const by = async (sort, dir) => numbers(await find({}, { sort, dir }));
-    expect(await by('oldest')).toEqual(['MO-003', 'MO-001', 'MO-002', 'MO-004']);
-    expect(await by('due')).toEqual(['MO-003', 'MO-001', 'MO-002', 'MO-004']); // undated last
-    expect(await by('quantity')).toEqual(['MO-004', 'MO-001', 'MO-002', 'MO-003']);
-    expect(await by('priority')).toEqual(['MO-002', 'MO-001', 'MO-004', 'MO-003']);
-    expect(await by('status')).toEqual(['MO-002', 'MO-001', 'MO-003', 'MO-004']);
-    expect(await by('completion')).toEqual(['MO-003', 'MO-001', 'MO-004', 'MO-002']);
-    expect(await by('cost')).toEqual(['MO-001', 'MO-003', 'MO-004', 'MO-002']);
-    expect(await by('cost', 'asc')).toEqual(['MO-004', 'MO-002', 'MO-003', 'MO-001']);
+    expect(await by('oldest')).toEqual(['MO-003', 'MO-001', 'MO-002']);
+    expect(await by('due')).toEqual(['MO-003', 'MO-001', 'MO-002']); // undated last
+    expect(await by('quantity')).toEqual(['MO-001', 'MO-002', 'MO-003']);
+    expect(await by('priority')).toEqual(['MO-002', 'MO-001', 'MO-003']);
+    expect(await by('status')).toEqual(['MO-002', 'MO-001', 'MO-003']);
+    expect(await by('completion')).toEqual(['MO-003', 'MO-001', 'MO-002']);
+    expect(await by('cost')).toEqual(['MO-001', 'MO-003', 'MO-002']);
+    expect(await by('cost', 'asc')).toEqual(['MO-002', 'MO-003', 'MO-001']);
     await expect(find({}, { sort: 'colour' })).rejects.toThrow(/Unknown sort/);
 
     const page = await find({}, { limit: 2, page: 2 });
-    expect(page).toMatchObject({ page: 2, limit: 2, totalPages: 2, totalResults: 4 });
+    expect(page).toMatchObject({ page: 2, limit: 2, totalPages: 2, totalResults: 3 });
 
     const summary = await ol().summarizeOrders(orgCtx, { status: 'completed' }, NOW); // status is ignored here
     expect(summary).toMatchObject({
-      total: 4,
+      total: 3,
       inProduction: 1,
       planned: 1,
       completed: 1,
       cancelled: 1,
       delayed: 2,
       overdue: 1,
-      plannedQuantity: 540,
+      plannedQuantity: 40,
       materialCost: 1200,
     });
     expect((await ol().summarizeOrders(orgCtx, { priority: 'urgent' }, NOW)).total).toBe(1);

@@ -88,6 +88,9 @@ const buildOrderMatch = async (ctx, filter = {}, { now = new Date(), omit = [] }
     and.push({ $or: [{ productName: re }, { sku: re }] });
   }
   if (list(f.status).length) and.push({ status: { $in: list(f.status) } });
+  // No status picked = every LIVE order: a cancelled order (e.g. one whose voucher was
+  // deleted) leaves the list like a deleted voucher does — the Cancelled card shows them.
+  else if (!omit.includes('status')) and.push({ status: { $ne: 'cancelled' } });
   if (list(f.priority).length) and.push({ priority: { $in: list(f.priority) } });
 
   // dateFrom/dateTo are the older names for the planned-start range.
@@ -301,10 +304,13 @@ const summarizeOrders = async (ctx, filter = {}, now = new Date()) => {
   let cost = 0;
   result.byStatus.forEach((r) => {
     byStatus[r._id] = r.count;
+    if (r._id === 'cancelled') return;
     quantity += r.quantity;
     cost += r.cost;
   });
-  const total = Object.values(byStatus).reduce((s, n) => s + n, 0);
+  // Cancelled orders aren't counted as orders (or in the planned quantity / cost) — they
+  // have their own card.
+  const total = Object.values(byStatus).reduce((s, n) => s + n, 0) - byStatus.cancelled;
   return {
     total,
     byStatus,
