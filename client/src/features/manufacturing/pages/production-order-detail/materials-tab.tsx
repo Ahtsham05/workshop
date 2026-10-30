@@ -7,8 +7,8 @@ import {
   type ProductionOrder,
   type RequirementLine,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
+import { formatTotalsByUnit } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Badge } from '@/components/ui/badge'
@@ -17,10 +17,12 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import {
   IssueStatusBadge,
   MaterialProgress,
@@ -56,6 +58,18 @@ export function MaterialsTab({
 
   if (order.materials.length === 0) {
     return <EmptyLine text={t('This order has no BOM materials.')} />
+  }
+
+  // per unit (kg with kg) — the lines are the exploded leaves, so nothing is counted twice
+  const total = (pick: (m: ProductionMaterial) => number) =>
+    formatTotalsByUnit(
+      order.materials.map((m) => ({ quantity: pick(m), unit: m.unit }))
+    )
+  const totals = {
+    required: total((m) => m.requiredQuantity),
+    issued: total(lineIssuedNet),
+    consumed: total((m) => m.consumedQuantity),
+    remaining: total(lineRemaining),
   }
 
   return (
@@ -175,6 +189,28 @@ export function MaterialsTab({
                 )
               })}
             </TableBody>
+            {order.materials.length > 0 && (
+              <TableFooter>
+                <TableRow className='font-semibold'>
+                  <TableCell>{t('Total')}</TableCell>
+                  <TableCell className='max-lg:hidden' />
+                  <TableCell className='text-right tabular-nums'>
+                    {totals.required}
+                  </TableCell>
+                  <TableCell />
+                  <TableCell className='text-right tabular-nums'>
+                    {totals.issued}
+                  </TableCell>
+                  <TableCell className='text-muted-foreground text-right tabular-nums'>
+                    {totals.consumed}
+                  </TableCell>
+                  <TableCell className='text-right tabular-nums'>
+                    {totals.remaining}
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </div>
 
@@ -209,6 +245,19 @@ export function MaterialsTab({
               </li>
             )
           })}
+          {order.materials.length > 0 && (
+            <li className='bg-muted/40 px-4 py-3'>
+              <div className='mb-1.5 text-sm font-semibold'>{t('Total')}</div>
+              <dl className='grid grid-cols-2 gap-x-3 gap-y-2 text-sm'>
+                <MiniFigure label={t('Required')}>{totals.required}</MiniFigure>
+                <MiniFigure label={t('Issued')}>{totals.issued}</MiniFigure>
+                <MiniFigure label={t('Consumed')}>{totals.consumed}</MiniFigure>
+                <MiniFigure label={t('Remaining')}>
+                  {totals.remaining}
+                </MiniFigure>
+              </dl>
+            </li>
+          )}
         </ul>
       </Panel>
 
@@ -355,6 +404,7 @@ function IssueHistory({ orderId }: { orderId: string }) {
   const canSeeCosts = useCanViewManufacturingCosts()
   const { data } = useGetMaterialIssuesQuery({
     productionOrderId: orderId,
+    status: 'posted',
     limit: 50,
   })
   return (
@@ -438,6 +488,14 @@ function IssueHistory({ orderId }: { orderId: string }) {
                     </span>
                   </li>
                 ))}
+                {issue.lines.length > 1 && (
+                  <li className='flex justify-between gap-2 border-t pt-0.5 font-medium'>
+                    <span>{t('Total')}</span>
+                    <span className='shrink-0 tabular-nums'>
+                      {formatTotalsByUnit(issue.lines)}
+                    </span>
+                  </li>
+                )}
               </ul>
             </li>
           ))}

@@ -228,6 +228,7 @@ const getBoms = {
     bomNumber: Joi.string(),
     isActive: Joi.boolean(),
     isDefault: Joi.boolean(),
+    deleted: Joi.boolean(),
     search: Joi.string().allow(''),
     ...pagination,
   }),

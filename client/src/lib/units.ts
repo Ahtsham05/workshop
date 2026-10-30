@@ -136,3 +136,51 @@ export const getUnitDisplay = (quantity: number, unit?: string): string => {
   const unitLabel = getUnitLabel(unit);
   return `${quantity} ${unitLabel}`;
 };
+
+/**
+ * Adds quantities up per unit — kg with kg, pcs with pcs — since different units can't be
+ * summed. "kg" and "KG" count as one unit (shown as first seen). Zero totals are dropped.
+ */
+export const totalsByUnit = (
+  items: { quantity: number | string | null | undefined; unit?: string | null }[]
+): { unit: string; quantity: number }[] => {
+  const totals = new Map<string, { unit: string; quantity: number }>();
+  for (const item of items) {
+    const qty = Number(item.quantity) || 0;
+    if (!qty) continue;
+    const unit = (item.unit || '').trim();
+    const key = unit.toLowerCase();
+    const entry = totals.get(key) || { unit, quantity: 0 };
+    entry.quantity += qty;
+    totals.set(key, entry);
+  }
+  return [...totals.values()]
+    .map((e) => ({ ...e, quantity: Math.round(e.quantity * 1e6) / 1e6 }))
+    .filter((e) => e.quantity !== 0);
+};
+
+/**
+ * Display a quantity: 3 decimals as usual, but tiny amounts keep their first significant
+ * digits instead of rounding to 0 (0.00005 kg → "0.00005", 0.0015 → "0.0015"). Capped at
+ * the 6 decimals the server stores.
+ */
+export const formatQuantity = (value: number | string | null | undefined): string => {
+  const n = Number(value) || 0;
+  const abs = Math.abs(n);
+  const digits = abs > 0 && abs < 1 ? Math.min(6, Math.max(3, 2 - Math.floor(Math.log10(abs)))) : 3;
+  return n.toLocaleString(undefined, { maximumFractionDigits: digits });
+};
+
+/** "1.035 kg + 2 pcs" — a per-unit total as one line ("0" when there is nothing). */
+export const formatTotalsByUnit = (
+  items: { quantity: number | string | null | undefined; unit?: string | null }[]
+): string => {
+  const totals = totalsByUnit(items);
+  if (!totals.length) return '0';
+  return totals
+    .map(
+      (e) =>
+        `${formatQuantity(e.quantity)}${e.unit ? ` ${e.unit}` : ''}`
+    )
+    .join(' + ');
+};

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/get-error-message'
+import { formatTotalsByUnit } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { useIsPhone } from '@/hooks/use-mobile'
@@ -855,7 +856,6 @@ const EntryTotals = memo(function EntryTotals({
     const filled = order
       .map((id) => rows[id])
       .filter((r) => r && !store.isEmpty(r))
-    const qty = filled.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0)
     return [
       {
         key: '__rows',
@@ -867,7 +867,8 @@ const EntryTotals = memo(function EntryTotals({
       {
         key: '__qty',
         label: t('Quantity'),
-        value: Math.round(qty * 1000) / 1000,
+        // per unit — "1.035 kg + 2 pcs" — so a kg recipe shows its total weight
+        value: formatTotalsByUnit(filled),
         emphasis: false,
         icon: <Hash />,
       },

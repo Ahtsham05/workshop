@@ -128,6 +128,8 @@ router
   .post(auth('manageBoms'), validate(v.createBomVersion), c.createBomVersion);
 router.post('/boms/:bomId/set-default', auth('manageBoms'), validate(v.bomIdParam), c.setDefaultBom);
 router.post('/boms/:bomId/set-active', auth('manageBoms'), validate(v.setBomActive), c.setBomActive);
+router.get('/boms/:bomId/delete-impact', auth('manageBoms'), validate(v.bomIdParam), c.getBomDeleteImpact);
+router.post('/boms/:bomId/restore', auth('manageBoms'), validate(v.bomIdParam), c.restoreBom);
 router.get('/boms/:bomId/explode', auth(VIEW), validate(v.explodeBom), c.explodeBom);
 
 // Material requirements (aggregated over open orders)

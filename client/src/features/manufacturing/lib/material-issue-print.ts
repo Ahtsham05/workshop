@@ -1,4 +1,5 @@
 import type { MaterialIssue } from '@/stores/manufacturing.api'
+import { formatTotalsByUnit } from '@/lib/units'
 import { fmtDate, fmtQty } from './constants'
 import { escapeHtml } from './order-export'
 
@@ -77,7 +78,7 @@ export function printMaterialIssue(
 </style></head><body>
   <div class="top"><div><h1>${e(t('Material Issue Voucher'))}</h1></div><div class="no">${e(v.issueNumber)}${
     v.status === 'cancelled'
-      ? ` <span style="color:#be123c;border:1.5px solid #be123c;border-radius:4px;padding:1px 6px;font-size:12px;letter-spacing:.08em">${e(t('CANCELLED'))}</span>`
+      ? ` <span style="color:#be123c;border:1.5px solid #be123c;border-radius:4px;padding:1px 6px;font-size:12px;letter-spacing:.08em">${e(t('DELETED'))}</span>`
       : ''
   }</div></div>
   <dl>${head.map(([k, val]) => `<div><dt>${e(k)}</dt><dd>${e(val)}</dd></div>`).join('')}</dl>
@@ -85,7 +86,8 @@ export function printMaterialIssue(
   <table><thead><tr>
     <th class="num">#</th><th>${e(t('Material'))}</th><th class="num">${e(t('Qty issued'))}</th>
     ${money(`<th class="num">${e(t('Unit cost'))}</th><th class="num">${e(t('Value'))}</th>`)}
-  </tr></thead><tbody>${rows}</tbody></table>
+  </tr></thead><tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="2" class="num"><b>${e(t('Total'))}</b></td><td class="num"><b>${e(formatTotalsByUnit(v.lines))}</b></td>${money('<td></td><td></td>')}</tr></tfoot></table>
   ${money(`<div class="total"><span>${e(t('Total value'))}</span><span>${e(formatMoney(v.totalCost || 0))}</span></div>`)}
   ${overrides ? `<div class="warn"><b>${e(t('Overridden warnings'))}</b><ul>${overrides}</ul></div>` : ''}
   <div class="sign"><div>${e(t('Requested by'))}</div><div>${e(t('Issued by (store)'))}</div><div>${e(t('Received by (production)'))}</div></div>

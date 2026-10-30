@@ -212,7 +212,7 @@ const createBom = catchAsync(async (req, res) => {
 });
 
 const getBoms = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['productId', 'bomNumber', 'isActive', 'isDefault', 'search']);
+  const filter = pick(req.query, ['productId', 'bomNumber', 'isActive', 'isDefault', 'deleted', 'search']);
   res.send(await bomService.queryBoms(readCtx(req), filter, listOptions(req)));
 });
 
@@ -290,12 +290,34 @@ const setBomActive = catchAsync(async (req, res) => {
   res.send(bom);
 });
 
+const getBomDeleteImpact = catchAsync(async (req, res) => {
+  res.send(await bomService.getDeleteImpact(readCtx(req), req.params.bomId));
+});
+
 const deleteBom = catchAsync(async (req, res) => {
   const ctx = await writeCtx(req);
-  const bom = await bomService.getBom(ctx, req.params.bomId);
-  await bomService.deleteBom(ctx, req.params.bomId);
-  await audit(req, { action: 'delete', module: 'Bom', entity: bom, entityName: `${bom.bomNumber} v${bom.version}` });
-  res.status(httpStatus.NO_CONTENT).send();
+  const result = await bomService.deleteBom(ctx, req.params.bomId);
+  await audit(req, {
+    action: 'delete',
+    module: 'Bom',
+    entity: { _id: result.bom.id },
+    entityName: `${result.bom.bomNumber} v${result.bom.version}`,
+    metadata: { mode: result.mode, newDefaultBomId: result.nextDefault ? result.nextDefault.id : null },
+  });
+  res.send(result);
+});
+
+const restoreBom = catchAsync(async (req, res) => {
+  const ctx = await writeCtx(req);
+  const bom = await bomService.restoreBom(ctx, req.params.bomId);
+  await audit(req, {
+    action: 'status_change',
+    module: 'Bom',
+    entity: bom,
+    entityName: `${bom.bomNumber} v${bom.version}`,
+    metadata: { restored: true },
+  });
+  res.send(bom);
 });
 
 const explodeBom = catchAsync(async (req, res) => {
@@ -1309,7 +1331,9 @@ module.exports = {
   getBomVersions,
   setDefaultBom,
   setBomActive,
+  getBomDeleteImpact,
   deleteBom,
+  restoreBom,
   explodeBom,
   createProductionOrder,
   getProductionOrders,

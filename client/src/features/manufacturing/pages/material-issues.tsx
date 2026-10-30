@@ -15,8 +15,8 @@ import {
   useGetMaterialIssuesQuery,
   type MaterialIssue,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
+import { formatTotalsByUnit } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DateRangeFilter } from '@/components/filters/date-range-filter'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { CellStack, DataTable, type Column } from '../components/data-table'
 import { DeleteIssueDialog } from '../components/delete-issue-dialog'
 import { DetailSheet, SheetSection } from '../components/detail-sheet'
@@ -61,7 +62,7 @@ function KindBadge({ issue }: { issue: MaterialIssue }) {
           variant='outline'
           className='h-5 border-rose-500/30 bg-rose-500/10 px-1.5 text-[10px] font-medium text-rose-700 dark:text-rose-300'
         >
-          {t('Cancelled')}
+          {t('Deleted')}
         </Badge>
       )}
       {issue.isOverIssue && (
@@ -156,7 +157,7 @@ function IssueVouchers() {
   const canSeeCosts = useCanViewManufacturingCosts()
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search, 300)
-  const [kind, setKind] = useState<'all' | 'issue' | 'return' | 'cancelled'>(
+  const [kind, setKind] = useState<'all' | 'issue' | 'return' | 'deleted'>(
     'all'
   )
   const { hasPermission } = usePermissions()
@@ -172,12 +173,8 @@ function IssueVouchers() {
     limit: 20,
     search: debounced || undefined,
     kind: kind === 'issue' || kind === 'return' ? kind : undefined,
-    status:
-      kind === 'cancelled'
-        ? 'cancelled'
-        : kind === 'issue'
-          ? 'posted'
-          : undefined,
+    // A deleted voucher leaves the list; it is only kept for the 'Deleted' audit view.
+    status: kind === 'deleted' ? 'cancelled' : 'posted',
     dateFrom: range.startDate,
     dateTo: range.endDate,
   })
@@ -231,10 +228,10 @@ function IssueVouchers() {
           }
           secondary={
             issue.lines.length > 1
-              ? t('+{{n}} more').replace(
+              ? `${t('+{{n}} more').replace(
                   '{{n}}',
                   String(issue.lines.length - 1)
-                )
+                )} · ${t('Total')} ${formatTotalsByUnit(issue.lines)}`
               : undefined
           }
         />
@@ -364,7 +361,7 @@ function IssueVouchers() {
             { value: 'all', label: t('All') },
             { value: 'issue', label: t('Issues') },
             { value: 'return', label: t('Returns') },
-            { value: 'cancelled', label: t('Cancelled'), tone: 'danger' },
+            { value: 'deleted', label: t('Deleted'), tone: 'danger' },
           ]}
         />
       </Toolbar>
@@ -470,7 +467,12 @@ function IssueVouchers() {
           <dl className='grid grid-cols-2 gap-4'>
             <Field label={t('Date')}>{fmtDate(open.issueDate)}</Field>
             <Field label={t('Order')}>{open.orderNumber}</Field>
-            {canSeeCosts && <Field label={t('Value')}>{formatMoney(open.totalCost)}</Field>}
+            <Field label={t('Total quantity')}>
+              {formatTotalsByUnit(open.lines)}
+            </Field>
+            {canSeeCosts && (
+              <Field label={t('Value')}>{formatMoney(open.totalCost)}</Field>
+            )}
             <Field label={t('Recorded by')}>
               {refName(open.createdBy) || '—'}
             </Field>

@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 const httpStatus = require('http-status');
 const {
   Product,
+  ProductVariant,
   Inventory,
+  Batch,
   Customer,
   Supplier,
   Invoice,
@@ -101,6 +103,17 @@ const workedOrdersMatch = (ctx, range, { status, productId } = {}) => {
   return match;
 };
 
+/** productId → manufacturing type (finished_good, by_product, …) of the given products. */
+const productTypes = async (productIds) => {
+  const ids = [...new Set(productIds.filter(Boolean).map(String))];
+  const products = ids.length
+    ? await Product.find({ _id: { $in: ids.map(oid) } })
+        .select('productType')
+        .lean()
+    : [];
+  return new Map(products.map((p) => [String(p._id), p.productType || null]));
+};
+
 /** Balance still to come off the line: planned minus good, QC and rework already made. */
 const balanceToMake = (o) =>
   Math.max(
@@ -120,7 +133,7 @@ const productionReport = async (ctx, q) => {
     .lean();
   const ids = orders.map((o) => o._id);
   const inPeriod = { $gte: range.start, $lte: range.end };
-  const [receiptRows, outputRows, issueRows] = ids.length
+  const [receiptRows, outputRows, issueRows, typeOf] = ids.length
     ? await Promise.all([
         ProductionReceipt.aggregate([
           { $match: { productionOrderId: { $in: ids }, receiptDate: inPeriod } },
@@ -146,8 +159,9 @@ const productionReport = async (ctx, q) => {
             },
           },
         ]),
+        productTypes(orders.map((o) => o.productId)),
       ])
-    : [[], [], []];
+    : [[], [], [], new Map()];
   const receipts = new Map(receiptRows.map((r) => [String(r._id), r]));
   const outputs = new Map(outputRows.map((r) => [String(r._id), r]));
   const issues = new Map(issueRows.map((r) => [String(r._id), r]));
@@ -166,6 +180,7 @@ const productionReport = async (ctx, q) => {
       status: o.status,
       productId: String(o.productId),
       productName: o.productName,
+      productType: typeOf.get(String(o.productId)) || null,
       sku: o.sku || '',
       unit: o.unit,
       bomNumber: o.bomNumber || '',
@@ -201,6 +216,7 @@ const productionReport = async (ctx, q) => {
     const g = byProduct.get(key) || {
       productId: r.productId,
       productName: r.productName,
+      productType: r.productType,
       sku: r.sku,
       unit: r.unit,
       orders: 0,
@@ -360,6 +376,62 @@ const materialIssueRegister = async (ctx, q) => {
 
 /* ── Material consumption (issue vs used vs remaining) ────────────────────────── */
 
+/**
+ * Packing material recorded on receipts beyond the recipe (execution#useExtraFloorMaterials):
+ * taken from production stock and used in one step, on no material line of the order, yet
+ * part of the finished goods' cost. → Map(orderId → rows shaped like lineUsage), so the
+ * material tables add up to what the output cost.
+ */
+const extraUsageLines = async (orderIds) => {
+  const byOrder = new Map();
+  if (!orderIds.length) return byOrder;
+  const rows = await ProductionOutput.aggregate([
+    { $match: { productionOrderId: { $in: orderIds }, status: { $ne: 'reversed' }, 'consumption.extra': true } },
+    { $unwind: '$consumption' },
+    { $match: { 'consumption.extra': true } },
+    {
+      $group: {
+        _id: { order: '$productionOrderId', product: '$consumption.productId', unit: '$consumption.unit' },
+        productName: { $last: '$consumption.productName' },
+        quantity: { $sum: '$consumption.quantity' },
+        cost: { $sum: '$consumption.cost' },
+      },
+    },
+    { $sort: { productName: 1 } },
+  ]);
+  rows.forEach((r) => {
+    const quantity = roundQty(r.quantity);
+    const cost = roundMoney(r.cost);
+    const line = {
+      materialLineId: null,
+      extra: true,
+      productId: String(r._id.product),
+      variantId: null,
+      productName: r.productName,
+      sku: '',
+      unit: r._id.unit,
+      isOptional: false,
+      required: 0,
+      issued: quantity,
+      returned: 0,
+      used: quantity,
+      wastage: 0,
+      inFactory: 0,
+      toIssue: 0,
+      standard: 0,
+      variance: 0,
+      issuedValue: cost,
+      usedValue: cost,
+      returnedValue: 0,
+      wastageValue: 0,
+      inFactoryValue: 0,
+    };
+    const key = String(r._id.order);
+    byOrder.set(key, [...(byOrder.get(key) || []), line]);
+  });
+  return byOrder;
+};
+
 const materialConsumption = async (ctx, q) => {
   const range = resolveRange(q);
   const match = workedOrdersMatch(ctx, range, q);
@@ -373,9 +445,10 @@ const materialConsumption = async (ctx, q) => {
 
   const KEYS = ['required', 'issued', 'returned', 'used', 'wastage', 'inFactory', 'toIssue', 'standard', 'variance'];
   const VALUES = ['issuedValue', 'usedValue', 'returnedValue', 'wastageValue', 'inFactoryValue'];
+  const extras = await extraUsageLines(orders.map((o) => o._id));
   const byMaterial = new Map();
   const orderRows = orders.map((order) => {
-    const lines = (order.materials || []).map((m) => lineUsage(order, m));
+    const lines = [...(order.materials || []).map((m) => lineUsage(order, m)), ...(extras.get(String(order._id)) || [])];
     lines.forEach((l) => {
       const key = `${l.productId}:${l.variantId || ''}:${l.unit}`;
       const g = byMaterial.get(key) || {
@@ -717,6 +790,79 @@ const currentStock = async (products) => {
   );
 };
 
+/**
+ * What one unit of each product's stock is worth: the cost of the batches held, else the
+ * product's cost (its variants' for a variant product — kept current by purchases), else
+ * the stock row's average cost, else what its latest production cost — a made finished
+ * good or by-product has no bought cost of its own (stock.service#madeUnitCost).
+ */
+const stockUnitCosts = async (scope, products) => {
+  const ids = products.map((p) => p._id);
+  const costs = new Map();
+  if (!ids.length) return costs;
+  const weighted = (rows) => {
+    const priced = rows.filter((r) => r.cost > 0);
+    if (!priced.length) return 0;
+    const held = priced.reduce((s, r) => s + Math.max(0, r.quantity), 0);
+    return held > EPS
+      ? priced.reduce((s, r) => s + Math.max(0, r.quantity) * r.cost, 0) / held
+      : priced.reduce((s, r) => s + r.cost, 0) / priced.length;
+  };
+  const [inventories, variants, receipts] = await Promise.all([
+    Inventory.find({ ...scope, productId: { $in: ids } })
+      .select('productId quantity averageCost')
+      .lean(),
+    ProductVariant.find({ productId: { $in: ids }, isDefault: { $ne: true }, cost: { $gt: 0 } })
+      .select('productId cost')
+      .lean(),
+    ProductionReceipt.aggregate([
+      { $match: { ...scope, productId: { $in: ids }, unitCost: { $gt: 0 } } },
+      { $sort: { receiptDate: -1, createdAt: -1 } },
+      { $group: { _id: '$productId', unitCost: { $first: '$unitCost' } } },
+    ]),
+  ]);
+  const batches = inventories.length
+    ? await Batch.find({ inventoryId: { $in: inventories.map((i) => i._id) }, quantity: { $gt: EPS } })
+        .select('inventoryId quantity costPerUnit')
+        .lean()
+    : [];
+  const productOfInventory = new Map(inventories.map((i) => [String(i._id), String(i.productId)]));
+  const group = (rows, keyOf, map) =>
+    rows.reduce((acc, r) => {
+      const k = keyOf(r);
+      acc.set(k, [...(acc.get(k) || []), map(r)]);
+      return acc;
+    }, new Map());
+  const batchRows = group(
+    batches,
+    (b) => productOfInventory.get(String(b.inventoryId)),
+    (b) => ({ quantity: b.quantity, cost: b.costPerUnit || 0 })
+  );
+  const stockRows = group(
+    inventories,
+    (i) => String(i.productId),
+    (i) => ({ quantity: i.quantity || 0, cost: i.averageCost || 0 })
+  );
+  const variantRows = group(
+    variants,
+    (v) => String(v.productId),
+    (v) => ({ quantity: 0, cost: v.cost })
+  );
+  const made = new Map(receipts.map((r) => [String(r._id), r.unitCost]));
+  products.forEach((p) => {
+    const id = String(p._id);
+    costs.set(
+      id,
+      weighted(batchRows.get(id) || []) ||
+        (p.hasVariants ? weighted(variantRows.get(id) || []) : Number(p.cost)) ||
+        weighted(stockRows.get(id) || []) ||
+        made.get(id) ||
+        0
+    );
+  });
+  return costs;
+};
+
 /** Products a statement covers: by manufacturing type, plus whatever production actually touched. */
 const statementProducts = async (ctx, kind, { productId, search } = {}) => {
   const scope = aggregateScope(ctx);
@@ -746,9 +892,10 @@ const stockStatement = async (ctx, q, kind) => {
   const products = await statementProducts(ctx, kind, q);
   const scope = aggregateScope(ctx);
   const ids = products.map((p) => p._id);
-  const [moves, stock] = await Promise.all([
+  const [moves, stock, costs] = await Promise.all([
     ids.length ? movementTotals(scope, ids, range.start, range.end) : new Map(),
     currentStock(products),
+    stockUnitCosts(scope, products),
   ]);
   const rows = products.map((p) => {
     const id = String(p._id);
@@ -758,7 +905,7 @@ const stockStatement = async (ctx, q, kind) => {
     const closing = roundQty(current - m.after);
     const opening = roundQty(closing - net);
     const movements = Object.fromEntries(MOVEMENT_KEYS.map((k) => [k, roundQty(m.period[k] || 0)]));
-    const unitCost = Number(p.cost) || 0;
+    const unitCost = costs.get(id) || 0;
     return {
       productId: id,
       productName: p.name,
@@ -1114,9 +1261,20 @@ const dailyReport = async (ctx, q) => {
     throw new ApiError(httpStatus.BAD_REQUEST, `Choose a period of at most ${MAX_DAYS} days for the date-wise report`);
   }
   const since = { $gte: range.start };
-  const consumedCost = {
-    $reduce: { input: '$consumption', initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.cost', 0] }] } },
-  };
+  // Material taken from production stock at receipt never sat in the order's WIP: it was
+  // issued and used in one step, so it is shown on its own, not taken off the WIP balance.
+  const costFrom = (fromFloor) => ({
+    $reduce: {
+      input: '$consumption',
+      initialValue: 0,
+      in: {
+        $add: [
+          '$$value',
+          { $cond: [{ [fromFloor ? '$eq' : '$ne']: ['$$this.source', 'floor'] }, { $ifNull: ['$$this.cost', 0] }, 0] },
+        ],
+      },
+    },
+  });
 
   // Orders from before WIP tracking: what they were issued was consumed the same day.
   const preWipOrders = await ProductionOrder.distinct('_id', { ...scope, wipLots: { $exists: false } });
@@ -1142,7 +1300,8 @@ const dailyReport = async (ctx, q) => {
           _id: { day: dayOf('reportedAt'), order: '$productionOrderId' },
           produced: { $sum: '$producedQuantity' },
           rejected: { $sum: '$rejectedQuantity' },
-          consumed: { $sum: consumedCost },
+          consumed: { $sum: costFrom(false) },
+          floorUsed: { $sum: costFrom(true) },
         },
       },
     ]),
@@ -1193,6 +1352,7 @@ const dailyReport = async (ctx, q) => {
         issued: 0,
         returned: 0,
         consumed: 0,
+        floorUsed: 0,
         floorScrap: 0,
         scrapValue: 0,
         good: 0,
@@ -1230,6 +1390,7 @@ const dailyReport = async (ctx, q) => {
   touch(outputRows, (d, r) => {
     if (d) {
       d.consumed += r.consumed;
+      d.floorUsed += r.floorUsed;
       d.produced += r.produced;
       d.rejected += r.rejected;
     }
@@ -1266,6 +1427,7 @@ const dailyReport = async (ctx, q) => {
       issued: roundMoney(d.issued),
       returned: roundMoney(d.returned),
       consumed: roundMoney(d.consumed),
+      floorUsed: roundMoney(d.floorUsed),
       floorScrap: roundMoney(d.floorScrap),
       wipBalance: balance,
       produced: roundQty(d.produced),
@@ -1350,13 +1512,17 @@ const dailyReport = async (ctx, q) => {
     closingWip,
     days:
       q.hideIdle === 'true' || q.hideIdle === true
-        ? dayRows.filter((d) => d.issued || d.returned || d.consumed || d.floorScrap || d.produced || d.good || d.scrapValue)
+        ? dayRows.filter(
+            (d) =>
+              d.issued || d.returned || d.consumed || d.floorUsed || d.floorScrap || d.produced || d.good || d.scrapValue
+          )
         : dayRows,
     batches: batchRows,
     totals: {
       issued: sum('issued'),
       returned: sum('returned'),
       consumed: sum('consumed'),
+      floorUsed: sum('floorUsed'),
       floorScrap: sum('floorScrap'),
       goodValue: sum('goodValue'),
       scrapValue: sum('scrapValue'),
@@ -1395,7 +1561,8 @@ const batchReport = async (ctx, q) => {
       .lean(),
   ]);
 
-  const materials = (order.materials || []).map((m) => lineUsage(order, m));
+  const extras = await extraUsageLines([order._id]);
+  const materials = [...(order.materials || []).map((m) => lineUsage(order, m)), ...(extras.get(String(order._id)) || [])];
   const posted = issues.filter(isPostedMiv);
   let net = 0;
   const issueLines = [];

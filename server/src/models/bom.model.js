@@ -93,6 +93,10 @@ const BomSchema = new mongoose.Schema(
     isLocked: { type: Boolean, default: false },
     effectiveFrom: { type: Date, default: null },
     effectiveTo: { type: Date, default: null },
+    // Deleted after production used it: kept (inactive, hidden from lists and pickers) so
+    // the orders and reports that reference it stay intact. Unused versions are removed.
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     // Created by the manufacturing demo-data seeder (services/manufacturing/demoData.service.js).

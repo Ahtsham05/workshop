@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { Product, ProductVariant, Inventory, InventoryTransaction, Batch, Imei } = require('../../models');
+const { Product, ProductVariant, Inventory, InventoryTransaction, Batch, Imei, ProductionReceipt } = require('../../models');
 const inventorySyncService = require('../inventorySync.service');
 const ApiError = require('../../utils/ApiError');
 const { roundQty, roundMoney } = require('./common');
@@ -52,6 +52,28 @@ const chooseVariantError = (product, variants) =>
     `"${product.name}" has ${variants.length} variants (${variants.map(variantLabel).join(', ')}) — choose which one`
   );
 
+/**
+ * Unit cost of the latest production receipt of a product — of this variant when it has
+ * real ones, else of any (older receipts carry no variant); 0 if it was never made.
+ */
+const madeUnitCost = async (product, variant, session) => {
+  const match = {
+    organizationId: product.organizationId,
+    branchId: product.branchId,
+    productId: product._id,
+    unitCost: { $gt: 0 },
+  };
+  const latest = (m) =>
+    ProductionReceipt.findOne(m)
+      .sort({ receiptDate: -1, createdAt: -1 })
+      .select('unitCost')
+      .session(session || null)
+      .lean();
+  const last =
+    (variant && !variant.isDefault && (await latest({ ...match, variantId: variant._id }))) || (await latest(match));
+  return last ? last.unitCost : 0;
+};
+
 /** Loads a product (+ variant) of this branch and works out how its stock is held. */
 const resolveItem = async ({ organizationId, branchId, productId, variantId, session }) => {
   const product = await Product.findOne({ _id: productId, organizationId, branchId }).session(session || null);
@@ -80,6 +102,10 @@ const resolveItem = async ({ organizationId, branchId, productId, variantId, ses
   const inventory = variant ? await Inventory.findOne({ variantId: variant._id }).session(session || null) : null;
   const available = inventoryBacked ? (inventory ? inventory.quantity : 0) : product.stockQuantity || 0;
   const averageCost = inventory && inventory.averageCost > 0 ? inventory.averageCost : null;
+  let unitCost = averageCost ?? (variant && !variant.isDefault ? variant.cost : null) ?? product.cost ?? 0;
+  // A product made here (a by-product or sub-assembly used as a material) has no bought
+  // cost: it is worth what its latest production cost.
+  if (!(unitCost > 0)) unitCost = await madeUnitCost(product, variant, session);
 
   return {
     product,
@@ -90,7 +116,7 @@ const resolveItem = async ({ organizationId, branchId, productId, variantId, ses
     inventoryBacked,
     available,
     unit: (variant && variant.unit) || product.unit,
-    unitCost: averageCost ?? (variant && !variant.isDefault ? variant.cost : null) ?? product.cost ?? 0,
+    unitCost,
     name: variant && !variant.isDefault ? `${product.name}${variant.sku ? ` — ${variant.sku}` : ''}` : product.name,
   };
 };

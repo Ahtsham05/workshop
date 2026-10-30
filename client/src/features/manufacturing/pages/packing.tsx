@@ -23,7 +23,7 @@ import {
 import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 import { getErrorMessage } from '@/lib/get-error-message'
-import { getUnitLabel } from '@/lib/units'
+import { formatTotalsByUnit, getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -624,6 +624,19 @@ function PackingDetailSheet({
                   </div>
                 </div>
               ))}
+              {voucher.lines.length > 1 && (
+                <div className='bg-muted/40 flex items-center justify-between gap-3 px-3 py-2 font-semibold'>
+                  <span>{t('Total')}</span>
+                  <span className='tabular-nums'>
+                    {formatTotalsByUnit(
+                      voucher.lines.map((l) => ({
+                        quantity: l.quantity,
+                        unit: getUnitLabel(l.unit),
+                      }))
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
           </section>
 

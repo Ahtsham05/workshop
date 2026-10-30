@@ -385,7 +385,14 @@ const changeStatus = async ({ organizationId, branchId, createdBy }, orderId, { 
   const order = await findOrderOrThrow({ organizationId, branchId }, orderId);
   const from = order.status;
   if (from === to) return order;
-  if (!(transitionsFor(order.orderType)[from] || []).includes(to)) {
+  // A started order whose every issue and receipt was reversed/deleted is empty again — it
+  // can be cancelled (and then deleted) instead of being stuck "in production" forever.
+  const cancelEmptyStarted =
+    to === 'cancelled' &&
+    order.orderType !== 'assembly' &&
+    ['in_production', 'paused'].includes(from) &&
+    !hasExecution(order);
+  if (!cancelEmptyStarted && !(transitionsFor(order.orderType)[from] || []).includes(to)) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Cannot move a ${kindLabel(order)} from ${from} to ${to}`);
   }
   // Completion settles WIP / QC / rework, so it runs as one stock transaction.

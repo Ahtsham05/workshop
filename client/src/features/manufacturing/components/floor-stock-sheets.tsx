@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import {
-  Ban,
   ClipboardCheck,
   Loader2,
   PackagePlus,
+  Trash2,
   Undo2,
   Warehouse,
 } from 'lucide-react'
@@ -19,7 +19,7 @@ import {
 import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 import { getErrorMessage } from '@/lib/get-error-message'
-import { getUnitLabel } from '@/lib/units'
+import { formatTotalsByUnit, getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -403,9 +403,10 @@ export function FloorVoucherSheet({
       const v = await cancel({ id: voucher.id, reason: reason.trim() }).unwrap()
       setVoucher({ ...voucher, ...v, id: voucher.id })
       setCancelOpen(false)
-      toast.success(`${voucher.voucherNumber} ${t('cancelled — stock put back')}`)
+      toast.success(`${voucher.voucherNumber} ${t('deleted — stock put back')}`)
+      onClose()
     } catch (err) {
-      toast.error(getErrorMessage(err, t('Could not cancel')))
+      toast.error(getErrorMessage(err, t('Could not delete')))
     }
   }
 
@@ -429,7 +430,7 @@ export function FloorVoucherSheet({
             </Badge>
             {cancelled && (
               <Badge variant='outline' className='border-rose-500/40 text-rose-600'>
-                {t('Cancelled')}
+                {t('Deleted')}
               </Badge>
             )}
           </SheetTitle>
@@ -485,13 +486,23 @@ export function FloorVoucherSheet({
                 </div>
               </div>
             ))}
+            {!isCount && voucher.lines.length > 1 && (
+              <div className='bg-muted/40 flex items-center justify-between gap-3 px-3 py-2 font-semibold'>
+                <span>{t('Total')}</span>
+                <span className='tabular-nums'>
+                  {formatTotalsByUnit(
+                    voucher.lines.map((l) => ({ quantity: l.quantity, unit: getUnitLabel(l.unit) }))
+                  )}
+                </span>
+              </div>
+            )}
           </div>
           {voucher.notes && (
             <p className='text-muted-foreground whitespace-pre-wrap'>{voucher.notes}</p>
           )}
           {cancelled && (
             <p className='rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-700 dark:text-rose-400'>
-              {t('Cancelled')}
+              {t('Deleted')}
               {voucher.cancelledAt ? ` ${formatAppDateTime(new Date(voucher.cancelledAt))}` : ''}
               {voucher.cancelledBy?.name ? ` · ${voucher.cancelledBy.name}` : ''} —{' '}
               {voucher.cancelReason}
@@ -499,7 +510,7 @@ export function FloorVoucherSheet({
           )}
           {cancelOpen && (
             <div className='space-y-2 rounded-lg border border-rose-500/30 p-3'>
-              <Label htmlFor='floor-cancel-reason'>{t('Why cancel?')}</Label>
+              <Label htmlFor='floor-cancel-reason'>{t('Why delete?')}</Label>
               <Textarea
                 id='floor-cancel-reason'
                 rows={2}
@@ -526,7 +537,7 @@ export function FloorVoucherSheet({
                   onClick={doCancel}
                 >
                   {cancelling && <Loader2 className='h-4 w-4 animate-spin' />}
-                  {t('Cancel voucher')}
+                  {t('Delete voucher')}
                 </Button>
               </div>
             </div>
@@ -535,8 +546,8 @@ export function FloorVoucherSheet({
         {!cancelled && canCancel && !cancelOpen && (
           <div className='bg-muted/30 flex justify-end border-t px-5 py-3'>
             <Button variant='outline' size='sm' onClick={() => setCancelOpen(true)}>
-              <Ban className='h-4 w-4' />
-              {t('Cancel voucher')}
+              <Trash2 className='h-4 w-4' />
+              {t('Delete voucher')}
             </Button>
           </div>
         )}

@@ -75,7 +75,7 @@ const sectionHtml = (s: DocSection) => {
   </section>`
 }
 
-export function generateReportHTML(doc: ReportDoc, header: ReportPrintHeader, t: (s: string) => string): string {
+export function generateReportHTML(doc: Omit<ReportDoc, 'key'>, header: ReportPrintHeader, t: (s: string) => string): string {
   const landscape = doc.orientation === 'landscape'
   const period = doc.asOf
     ? `${t('As of')} ${formatAppDateTime(new Date(doc.asOf))}`

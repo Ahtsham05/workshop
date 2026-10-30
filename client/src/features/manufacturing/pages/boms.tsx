@@ -1,20 +1,45 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { FileStack, Plus, X } from 'lucide-react'
-import { useGetBomsQuery, type Bom } from '@/stores/manufacturing.api'
+import {
+  Eye,
+  FileStack,
+  GitBranch,
+  MoreHorizontal,
+  Plus,
+  Power,
+  RotateCcw,
+  Trash2,
+  X,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  useGetBomsQuery,
+  useRestoreBomMutation,
+  useSetBomActiveMutation,
+  type Bom,
+} from '@/stores/manufacturing.api'
+import { getErrorMessage } from '@/lib/get-error-message'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { BomDetailSheet, BomStateBadges } from '../components/bom-detail-sheet'
 import { BomEditorDialog } from '../components/bom-editor-dialog'
 import { DataTable, type Column } from '../components/data-table'
+import { DeleteBomDialog } from '../components/delete-bom-dialog'
 import { FilterChips, SearchField, Toolbar } from '../components/list-controls'
 import { EmptyState, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
 import { fmtDate, fmtQty } from '../lib/constants'
 
-type View = 'all' | 'default' | 'inactive'
+type View = 'all' | 'default' | 'inactive' | 'deleted'
 
 export default function BomsPage() {
   const { t } = useLanguage()
@@ -34,6 +59,19 @@ export default function BomsPage() {
     routeSearch.bomId || null
   )
   const [creating, setCreating] = useState(!!routeSearch.new)
+  const [versioning, setVersioning] = useState<Bom | null>(null)
+  const [deleting, setDeleting] = useState<Bom | null>(null)
+  const [setActive] = useSetBomActiveMutation()
+  const [restoreBom] = useRestoreBomMutation()
+
+  const run = async (fn: () => Promise<unknown>, success: string) => {
+    try {
+      await fn()
+      toast.success(success)
+    } catch (err) {
+      toast.error(getErrorMessage(err, t('Action failed')))
+    }
+  }
 
   useEffect(() => {
     if (routeSearch.bomId) setOpenBomId(routeSearch.bomId)
@@ -49,6 +87,7 @@ export default function BomsPage() {
     productId: routeSearch.productId,
     ...(view === 'default' ? { isDefault: true } : {}),
     ...(view === 'inactive' ? { isActive: false } : {}),
+    ...(view === 'deleted' ? { deleted: true } : {}),
   })
   const rows = data?.results || []
   const canManage = hasPermission('manageBoms')
@@ -121,8 +160,79 @@ export default function BomsPage() {
       hideBelow: 'lg',
       cell: (bom) => (
         <span className='text-muted-foreground tabular-nums'>
-          {fmtDate(bom.updatedAt)}
+          {fmtDate(bom.deletedAt || bom.updatedAt)}
         </span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: <span className='sr-only'>{t('Actions')}</span>,
+      className: 'w-12',
+      align: 'right',
+      cell: (bom) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='h-8 w-8'
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`${t('Actions for')} ${bom.bomNumber} v${bom.version}`}
+            >
+              <MoreHorizontal className='h-4 w-4' />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end' onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem onClick={() => setOpenBomId(bom.id)}>
+              <Eye className='mr-2 h-4 w-4' />
+              {t('Open')}
+            </DropdownMenuItem>
+            {canManage && bom.deletedAt && (
+              <DropdownMenuItem
+                onClick={() =>
+                  run(
+                    () => restoreBom(bom.id).unwrap(),
+                    `${bom.bomNumber} v${bom.version} ${t('restored — activate it to use it again')}`
+                  )
+                }
+              >
+                <RotateCcw className='mr-2 h-4 w-4' />
+                {t('Restore')}
+              </DropdownMenuItem>
+            )}
+            {canManage && !bom.deletedAt && (
+              <>
+                <DropdownMenuItem onClick={() => setVersioning(bom)}>
+                  <GitBranch className='mr-2 h-4 w-4' />
+                  {t('New version')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    run(
+                      () =>
+                        setActive({
+                          bomId: bom.id,
+                          isActive: !bom.isActive,
+                        }).unwrap(),
+                      bom.isActive ? t('Deactivated') : t('Activated')
+                    )
+                  }
+                >
+                  <Power className='mr-2 h-4 w-4' />
+                  {bom.isActive ? t('Deactivate') : t('Activate')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className='text-rose-600 focus:text-rose-700 dark:text-rose-400'
+                  onClick={() => setDeleting(bom)}
+                >
+                  <Trash2 className='mr-2 h-4 w-4' />
+                  {t('Delete')}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
     },
   ]
@@ -164,6 +274,7 @@ export default function BomsPage() {
             { value: 'all', label: t('All versions') },
             { value: 'default', label: t('Default only') },
             { value: 'inactive', label: t('Inactive') },
+            { value: 'deleted', label: t('Deleted') },
           ]}
         />
         {routeSearch.productId && (
@@ -200,14 +311,22 @@ export default function BomsPage() {
             bordered={false}
             icon={FileStack}
             title={
-              filtered ? t('No BOMs match these filters') : t('No BOMs yet')
+              view === 'deleted' && !debounced
+                ? t('No deleted BOMs')
+                : filtered
+                  ? t('No BOMs match these filters')
+                  : t('No BOMs yet')
             }
             description={
-              filtered
-                ? t('Try another filter or clear the search.')
-                : t(
-                    'A BOM lists the components, quantities and scrap allowance needed to build a product.'
+              view === 'deleted' && !debounced
+                ? t(
+                    'BOMs deleted after production used them are kept here, so you can restore them.'
                   )
+                : filtered
+                  ? t('Try another filter or clear the search.')
+                  : t(
+                      'A BOM lists the components, quantities and scrap allowance needed to build a product.'
+                    )
             }
             action={
               canManage &&
@@ -256,6 +375,21 @@ export default function BomsPage() {
           bomId={openBomId}
           onClose={() => setOpenBomId(null)}
           onSelect={setOpenBomId}
+        />
+      )}
+      {deleting && (
+        <DeleteBomDialog
+          bom={deleting}
+          open
+          onOpenChange={(open) => !open && setDeleting(null)}
+        />
+      )}
+      {versioning && (
+        <BomEditorDialog
+          mode='version'
+          bom={versioning}
+          onClose={() => setVersioning(null)}
+          onSaved={(bom) => setOpenBomId(bom.id)}
         />
       )}
       {creating && (

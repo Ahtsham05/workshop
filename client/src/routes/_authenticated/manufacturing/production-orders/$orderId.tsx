@@ -22,6 +22,9 @@ export const Route = createFileRoute(
       ])
       .optional()
       .catch(undefined),
+    // ?reverse=<outputId> opens that receipt's Reverse dialog (linked from a voucher
+    // that can't be deleted until the receipt that used its material is undone).
+    reverse: z.string().optional().catch(undefined),
   }),
   component: ProductionOrderRoute,
 })

@@ -49,6 +49,8 @@ export interface ProductionReportOrder {
   status: ProductionStatus
   productId: string
   productName: string
+  /** Manufacturing type of the product made (finished_good, by_product, …). */
+  productType: string | null
   sku: string
   unit: string
   bomNumber: string
@@ -80,6 +82,7 @@ export interface ProductionReport {
   byProduct: {
     productId: string
     productName: string
+    productType: string | null
     sku: string
     unit: string
     orders: number
@@ -162,6 +165,8 @@ export interface ConsumptionLine {
   productName: string
   sku: string
   unit: string
+  /** Packing material recorded on a receipt beyond the recipe, used straight from production stock. */
+  extra?: boolean
   required: number
   issued: number
   returned: number
@@ -385,6 +390,8 @@ export interface DailyReport {
     issued: number
     returned: number
     consumed: number
+    /** Material used straight from production stock at receipt — never in the WIP balance. */
+    floorUsed: number
     floorScrap: number
     wipBalance: number
     produced: number
@@ -413,6 +420,7 @@ export interface DailyReport {
     issued: number
     returned: number
     consumed: number
+    floorUsed: number
     floorScrap: number
     goodValue: number
     scrapValue: number

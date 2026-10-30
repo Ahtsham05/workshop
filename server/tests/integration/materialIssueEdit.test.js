@@ -180,14 +180,41 @@ describeTx('Cancel ("delete") a posted voucher', () => {
       { materialLineId: lineOf(order, bearing)._id, quantity: 20 },
       { materialLineId: lineOf(order, steel)._id, quantity: 5.5 },
     ]);
-    await manufacturing.execution.reportOutput(ctx, order._id, { producedQuantity: 3 });
+    const output = await manufacturing.execution.reportOutput(ctx, order._id, { producedQuantity: 3 });
     const preview = await edit().getReversalPreview(ctx, issue._id);
     expect(preview.canReverse).toBe(false);
     expect(preview.lines.find((l) => l.productName === 'Motor')).toMatchObject({ quantity: 10, inWip: 7, gone: 3 });
+    // The dialog names what has to be undone first.
+    expect(preview.usedBy).toEqual([
+      expect.objectContaining({ kind: 'receipt', id: String(output._id), number: output.outputNumber, reversible: true }),
+    ]);
     const err = await edit().cancelIssue(ctx, issue._id, { reason: 'too late' }).catch((e) => e);
     expect(err.errorCode).toBe('VOUCHER_LOCKED');
     expect(err.message).toMatch(/3 pcs of Motor/);
     expect(await stockOf(motor._id)).toBe(110);
+
+    // Reverse that receipt → the voucher can be deleted, and all of its stock is back.
+    await manufacturing.execution.reverseOutput(ctx, output._id, { reason: 'wrong_quantity' });
+    const after = await edit().getReversalPreview(ctx, issue._id);
+    expect(after.canReverse).toBe(true);
+    expect(after.usedBy).toEqual([]);
+    await edit().cancelIssue(ctx, issue._id, { reason: 'undo all' });
+    expect(await stockOf(motor._id)).toBe(120);
+
+    // The order was started ("in production") but is empty again: it can be cancelled and deleted.
+    expect((await ProductionOrder.findById(order._id)).status).toBe('in_production');
+    await manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'cancelled' });
+    await manufacturing.productionOrder.deleteOrder(ctx, order._id);
+    expect(await ProductionOrder.findById(order._id)).toBeNull();
+  });
+
+  test('a started order that still holds material cannot be cancelled', async () => {
+    const { motor, fan } = await setup();
+    const order = await releasedOrder(fan, 10);
+    await issueFor(order, [{ materialLineId: lineOf(order, motor)._id, quantity: 10 }]);
+    await expect(manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'cancelled' })).rejects.toThrow(
+      /Cannot move/
+    );
   });
 
   test('a stale revision is refused', async () => {

@@ -1,4 +1,5 @@
 import type { MaterialReceipt } from '@/stores/manufacturing.api'
+import { formatTotalsByUnit } from '@/lib/units'
 import { fmtDate, fmtQty } from './constants'
 import { productTypeLabel } from './material-receipt'
 import { escapeHtml } from './order-export'
@@ -97,7 +98,7 @@ export function printMaterialReceipt(
   </tr></thead><tbody>${rows}</tbody></table>
   <table class="totals"><tbody>
     <tr><td>${e(t('Total Items'))}</td><td class="num">${v.totals.items}</td></tr>
-    <tr><td>${e(t('Total Quantity'))}</td><td class="num">${e(fmtQty(v.totals.quantity))}</td></tr>
+    <tr><td>${e(t('Total Quantity'))}</td><td class="num">${e(formatTotalsByUnit(v.lines))}</td></tr>
     ${totals.map(([k, n, g]) => `<tr${g ? ' class="grand"' : ''}><td>${e(k)}</td><td class="num">${k === t('Discount') && n ? '−' : ''}${e(formatMoney(n))}</td></tr>`).join('')}
   </tbody></table>
   <div class="sign"><div>${e(t('Received by (store)'))}</div><div>${e(t('Checked by (QC)'))}</div><div>${e(t('Approved by (accounts)'))}</div></div>

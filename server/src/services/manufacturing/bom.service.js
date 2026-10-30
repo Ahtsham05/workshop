@@ -1,7 +1,12 @@
 const httpStatus = require('http-status');
 const { Bom, Product, ProductVariant, ProductionOrder } = require('../../models');
 const ApiError = require('../../utils/ApiError');
-const { MAX_BOM_DEPTH, MAX_OPERATIONS } = require('../../config/manufacturing');
+const {
+  MAX_BOM_DEPTH,
+  MAX_OPERATIONS,
+  EDITABLE_PRODUCTION_STATUSES,
+  OPEN_PRODUCTION_STATUSES,
+} = require('../../config/manufacturing');
 const settingsService = require('./settings.service');
 const { roundQty, requireBranch, scopeFilter, escapeRegex, idOf } = require('./common');
 
@@ -9,6 +14,11 @@ const findBomOrThrow = async ({ organizationId, branchId }, bomId) => {
   const bom = await Bom.findOne({ _id: bomId, ...scopeFilter({ organizationId, branchId }) });
   if (!bom) throw new ApiError(httpStatus.NOT_FOUND, 'BOM not found');
   return bom;
+};
+
+/** A deleted (archived) version is read-only until restored. */
+const assertNotDeleted = (bom) => {
+  if (bom.deletedAt) throw new ApiError(httpStatus.BAD_REQUEST, 'This BOM version is deleted — restore it first');
 };
 
 /** Loads the BOM's output product (and variant) from the same org + branch. */
@@ -290,6 +300,8 @@ const createBom = async ({ organizationId, branchId, createdBy }, body) => {
 
 const queryBoms = async ({ organizationId, branchId }, filter, options) => {
   const query = { ...scopeFilter({ organizationId, branchId }) };
+  // Deleted versions only show in their own view.
+  query.deletedAt = filter.deleted === true || filter.deleted === 'true' ? { $ne: null } : null;
   if (filter.productId) query.productId = filter.productId;
   if (filter.bomNumber) query.bomNumber = filter.bomNumber;
   if (filter.isActive !== undefined) query.isActive = filter.isActive === true || filter.isActive === 'true';
@@ -308,6 +320,7 @@ const EDITABLE_FIELDS = ['name', 'quantity', 'unit', 'notes', 'effectiveFrom', '
 const updateBom = async ({ organizationId, branchId, createdBy }, bomId, body) => {
   requireBranch(branchId);
   const bom = await findBomOrThrow({ organizationId, branchId }, bomId);
+  assertNotDeleted(bom);
   const touchesRecipe = body.components !== undefined || body.quantity !== undefined;
   if (bom.isLocked && touchesRecipe) {
     throw new ApiError(
@@ -348,6 +361,7 @@ const updateBom = async ({ organizationId, branchId, createdBy }, bomId, body) =
 const createNewVersion = async ({ organizationId, branchId, createdBy }, bomId, body = {}) => {
   requireBranch(branchId);
   const source = await findBomOrThrow({ organizationId, branchId }, bomId);
+  assertNotDeleted(source);
   const latest = await Bom.findOne({ organizationId, bomNumber: source.bomNumber })
     .sort({ version: -1 })
     .select('version')
@@ -398,6 +412,7 @@ const listVersions = async ({ organizationId, branchId }, bomId) => {
 const setDefaultBom = async ({ organizationId, branchId }, bomId) => {
   requireBranch(branchId);
   const bom = await findBomOrThrow({ organizationId, branchId }, bomId);
+  assertNotDeleted(bom);
   if (!bom.isActive) throw new ApiError(httpStatus.BAD_REQUEST, 'Activate this BOM version before making it the default');
   await syncProductDefault({ organizationId, branchId: bom.branchId, productId: bom.productId, bomId: bom._id });
   return Bom.findById(bom._id);
@@ -406,6 +421,7 @@ const setDefaultBom = async ({ organizationId, branchId }, bomId) => {
 const setBomActive = async ({ organizationId, branchId }, bomId, isActive) => {
   requireBranch(branchId);
   const bom = await findBomOrThrow({ organizationId, branchId }, bomId);
+  assertNotDeleted(bom);
   bom.isActive = !!isActive;
   if (!bom.isActive && bom.isDefault) {
     bom.isDefault = false;
@@ -418,22 +434,133 @@ const setBomActive = async ({ organizationId, branchId }, bomId, isActive) => {
   return bom;
 };
 
-const deleteBom = async ({ organizationId, branchId }, bomId) => {
+const orderRef = (o) => ({ id: String(o._id), orderNumber: o.orderNumber, status: o.status });
+const bomRef = (b) => ({ id: String(b._id), bomNumber: b.bomNumber, version: b.version, productName: b.productName });
+
+/**
+ * What deleting a BOM version would do, shown before the user confirms:
+ *  delete  — never used: removed for good
+ *  archive — production used it: kept for the orders and reports that reference it, but
+ *            inactive and hidden from lists and pickers (restorable from the Deleted view)
+ *  blocked — something still depends on it (draft/planned orders that re-read the recipe,
+ *            or BOMs that pin it as a sub-assembly)
+ * Deleting the default version hands the default to the newest other active version.
+ */
+const getDeleteImpact = async ({ organizationId, branchId }, bomId) => {
+  const bom = await findBomOrThrow({ organizationId, branchId }, bomId);
+  const [orders, parentBoms, nextDefault, componentOf] = await Promise.all([
+    ProductionOrder.find({ organizationId, bomId: bom._id }).select('orderNumber status').sort({ createdAt: -1 }).lean(),
+    Bom.find({ organizationId, 'components.childBomId': bom._id, deletedAt: null })
+      .select('bomNumber version productName')
+      .sort({ bomNumber: 1, version: -1 })
+      .lean(),
+    bom.isDefault
+      ? Bom.findOne({
+          organizationId,
+          branchId: bom.branchId,
+          productId: bom.productId,
+          _id: { $ne: bom._id },
+          isActive: true,
+          deletedAt: null,
+        })
+          .select('bomNumber version productName')
+          .sort({ version: -1, createdAt: -1 })
+          .lean()
+      : null,
+    bom.isDefault
+      ? Bom.countDocuments({
+          organizationId,
+          branchId: bom.branchId,
+          'components.productId': bom.productId,
+          deletedAt: null,
+        })
+      : 0,
+  ]);
+
+  const draftOrders = orders.filter((o) => EDITABLE_PRODUCTION_STATUSES.includes(o.status));
+  const blockers = [];
+  if (draftOrders.length) {
+    const numbers = draftOrders
+      .slice(0, 3)
+      .map((o) => o.orderNumber)
+      .join(', ');
+    blockers.push(
+      `${draftOrders.length} draft/planned production order${draftOrders.length === 1 ? '' : 's'} (${numbers}${
+        draftOrders.length > 3 ? ', …' : ''
+      }) still take${draftOrders.length === 1 ? 's' : ''} materials from this BOM — cancel ${
+        draftOrders.length === 1 ? 'it' : 'them'
+      } or switch to another BOM first`
+    );
+  }
+  if (parentBoms.length) {
+    const names = parentBoms
+      .slice(0, 3)
+      .map((b) => `${b.bomNumber} v${b.version}`)
+      .join(', ');
+    blockers.push(
+      `${names}${parentBoms.length > 3 ? ', …' : ''} use${
+        parentBoms.length === 1 ? 's' : ''
+      } this version as a sub-assembly — remove it from ${parentBoms.length === 1 ? 'that BOM' : 'those BOMs'} first`
+    );
+  }
+
+  let mode = 'delete';
+  if (bom.deletedAt) mode = 'deleted';
+  else if (blockers.length) mode = 'blocked';
+  else if (orders.length || bom.isLocked) mode = 'archive';
+
+  return {
+    bom: { ...bomRef(bom), isDefault: bom.isDefault, isLocked: bom.isLocked },
+    mode,
+    blockers,
+    orders: {
+      total: orders.length,
+      open: orders.filter((o) => OPEN_PRODUCTION_STATUSES.includes(o.status)).length,
+      recent: orders.slice(0, 5).map(orderRef),
+      draft: draftOrders.slice(0, 10).map(orderRef),
+    },
+    parentBoms: parentBoms.slice(0, 10).map(bomRef),
+    nextDefault: nextDefault ? bomRef(nextDefault) : null,
+    // Other BOMs that consume this product and explode it through its default BOM.
+    componentOf,
+  };
+};
+
+const deleteBom = async ({ organizationId, branchId, createdBy }, bomId) => {
+  requireBranch(branchId);
+  const impact = await getDeleteImpact({ organizationId, branchId }, bomId);
+  if (impact.mode === 'deleted') throw new ApiError(httpStatus.BAD_REQUEST, 'This BOM version is already deleted');
+  if (impact.mode === 'blocked') throw new ApiError(httpStatus.CONFLICT, impact.blockers[0]);
+
+  const bom = await findBomOrThrow({ organizationId, branchId }, bomId);
+  const wasDefault = bom.isDefault;
+  if (impact.mode === 'archive') {
+    bom.isActive = false;
+    bom.isDefault = false;
+    bom.deletedAt = new Date();
+    bom.deletedBy = createdBy || null;
+    bom.updatedBy = createdBy || bom.updatedBy;
+    await bom.save();
+  } else {
+    await bom.deleteOne();
+  }
+  if (wasDefault) {
+    const next = impact.nextDefault ? impact.nextDefault.id : null;
+    await syncProductDefault({ organizationId, branchId: bom.branchId, productId: bom.productId, bomId: next });
+  }
+  return { mode: impact.mode, bom: impact.bom, nextDefault: impact.nextDefault };
+};
+
+/** Brings back a deleted (archived) version — inactive, so it is reviewed before use. */
+const restoreBom = async ({ organizationId, branchId, createdBy }, bomId) => {
   requireBranch(branchId);
   const bom = await findBomOrThrow({ organizationId, branchId }, bomId);
-  if (bom.isLocked)
-    throw new ApiError(httpStatus.CONFLICT, 'This BOM version has been used in production — deactivate it instead');
-  const [usedByOrder, usedAsChild] = await Promise.all([
-    ProductionOrder.exists({ organizationId, bomId: bom._id }),
-    Bom.exists({ organizationId, 'components.childBomId': bom._id }),
-  ]);
-  if (usedByOrder) throw new ApiError(httpStatus.CONFLICT, 'A production order references this BOM — deactivate it instead');
-  if (usedAsChild)
-    throw new ApiError(httpStatus.CONFLICT, 'Another BOM uses this one as a sub-assembly — deactivate it instead');
-  if (bom.isDefault) {
-    await Product.updateOne({ _id: bom.productId, organizationId, defaultBomId: bom._id }, { $set: { defaultBomId: null } });
-  }
-  await bom.deleteOne();
+  if (!bom.deletedAt) throw new ApiError(httpStatus.BAD_REQUEST, 'This BOM version is not deleted');
+  bom.deletedAt = null;
+  bom.deletedBy = null;
+  bom.updatedBy = createdBy || bom.updatedBy;
+  await bom.save();
+  return bom;
 };
 
 /**
@@ -530,7 +657,7 @@ const explodeBom = async ({ organizationId, branchId }, bomId, quantity, { explo
 
 /** BOMs (active or not) that consume the given product as a component. */
 const whereUsed = async ({ organizationId, branchId }, productId) =>
-  Bom.find({ ...scopeFilter({ organizationId, branchId }), 'components.productId': productId })
+  Bom.find({ ...scopeFilter({ organizationId, branchId }), 'components.productId': productId, deletedAt: null })
     .select(
       'bomNumber version name productId productName isActive isDefault components.productId components.quantity components.unit'
     )
@@ -563,7 +690,9 @@ module.exports = {
   listVersions,
   setDefaultBom,
   setBomActive,
+  getDeleteImpact,
   deleteBom,
+  restoreBom,
   explodeBom,
   whereUsed,
   findBomOrThrow,

@@ -493,14 +493,16 @@ function VouchersList({
   onOpen: (id: string) => void
 }) {
   const { t } = useLanguage()
-  const [kind, setKind] = useState<FloorVoucherKind | 'all'>('all')
+  const [kind, setKind] = useState<FloorVoucherKind | 'all' | 'deleted'>('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const debounced = useDebouncedValue(search, 300)
   useEffect(() => setPage(1), [kind, debounced, range.dateFrom, range.dateTo])
   const { data, isLoading, isFetching } = useGetFloorVouchersQuery({
     ...range,
-    kind,
+    // A deleted voucher leaves the list; it is only kept for the 'Deleted' audit view.
+    kind: kind === 'deleted' ? 'all' : kind,
+    status: kind === 'deleted' ? 'cancelled' : 'posted',
     search: debounced.trim() || undefined,
     page,
     limit: 25,
@@ -519,6 +521,7 @@ function VouchersList({
             { value: 'issue', label: t('Issues') },
             { value: 'return', label: t('Returns') },
             { value: 'count', label: t('Counts') },
+            { value: 'deleted', label: t('Deleted'), tone: 'danger' },
           ]}
         />
         <SearchField value={search} onChange={setSearch} placeholder={t('Search voucher or material')} />
@@ -570,7 +573,7 @@ function VoucherRow({ voucher: v, onOpen }: { voucher: FloorVoucher; onOpen: () 
         </Badge>
         {cancelled && (
           <Badge variant='outline' className='ml-1 border-rose-500/40 text-rose-600'>
-            {t('Cancelled')}
+            {t('Deleted')}
           </Badge>
         )}
       </td>

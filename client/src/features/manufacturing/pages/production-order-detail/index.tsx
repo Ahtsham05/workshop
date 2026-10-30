@@ -28,6 +28,7 @@ import {
   useDeleteProductionOrderMutation,
   useGetManufacturingSettingsQuery,
   useGetOrderRequirementsQuery,
+  useGetOutputsQuery,
   useGetProductionOrderQuery,
   useRefreshProductionMaterialsMutation,
   useStartAssemblyMutation,
@@ -176,7 +177,10 @@ export default function ProductionOrderDetail({
   } | null>(null)
 
   // The open tab lives in the URL (?tab=…) so it survives reloads and can be linked.
-  const search = useSearch({ strict: false }) as { tab?: string }
+  const search = useSearch({ strict: false }) as {
+    tab?: string
+    reverse?: string
+  }
   // Costs is its own tab only for roles that may see manufacturing costs.
   const canSeeCosts = hasPermission('viewManufacturingCosts')
   const tab: DetailTab =
@@ -214,6 +218,28 @@ export default function ProductionOrderDetail({
     }
   }, [canonical, pathname, navigate, search.tab, order])
 
+  // ?reverse=<outputId>: open that receipt's Reverse dialog once, on the Quality tab.
+  const reverseId = search.reverse
+  const { data: outputsToReverse } = useGetOutputsQuery(
+    { productionOrderId: orderId, limit: 100 },
+    { skip: !reverseId }
+  )
+  useEffect(() => {
+    if (!reverseId || !outputsToReverse) return
+    const output = outputsToReverse.results.find((o) => o.id === reverseId)
+    if (output && output.status !== 'reversed')
+      setReversing({ output, intent: 'reverse' })
+    navigate({
+      to: '.' as never,
+      search: ((prev: Record<string, unknown>) => ({
+        ...prev,
+        reverse: undefined,
+        tab: 'quality',
+      })) as never,
+      replace: true,
+    })
+  }, [reverseId, outputsToReverse, navigate])
+
   if (isLoading) return <Skeleton className='h-96 w-full rounded-xl' />
   if (!order) {
     return (
@@ -240,6 +266,16 @@ export default function ProductionOrderDetail({
       !(isAssembly && s === 'in_production' && order.status === 'released')
   )
   const canComplete = allowed.includes('completed')
+  // Mirrors the server: a started order whose issues/receipts were all reversed is empty
+  // again and can be cancelled.
+  const emptyStarted =
+    !isAssembly &&
+    ['in_production', 'paused'].includes(order.status) &&
+    !order.materials.some((m) => m.issuedQuantity > 0) &&
+    !(order.producedQuantity > 0) &&
+    !(order.completedQuantity > 0) &&
+    !order.wipLots.length
+  const canCancel = allowed.includes('cancelled') || emptyStarted
   const canStartAssembly = isAssembly && order.status === 'released'
   const canCompleteAssembly =
     isAssembly &&
@@ -560,7 +596,7 @@ export default function ProductionOrderDetail({
                     {t('Back to Draft')}
                   </DropdownMenuItem>
                 )}
-                {canManage && allowed.includes('cancelled') && (
+                {canManage && canCancel && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem

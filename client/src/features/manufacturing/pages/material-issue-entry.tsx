@@ -49,7 +49,7 @@ import type { AppDispatch } from '@/stores/store'
 import { toBusinessCalendarDate } from '@/lib/business-timezone'
 import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
-import { getUnitLabel } from '@/lib/units'
+import { formatTotalsByUnit, getUnitLabel } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useCurrentUser } from '@/context/auth-context'
 import { useLanguage } from '@/context/language-context'
@@ -217,7 +217,7 @@ function IssueEditLoader({ issueId }: { issueId: string }) {
     return (
       <div className='text-muted-foreground rounded-xl border p-10 text-center text-sm'>
         {ctx.issue.status === 'cancelled'
-          ? t('This voucher is cancelled — it can’t be edited.')
+          ? t('This voucher was deleted — it can’t be edited.')
           : t('A material return can’t be edited — issue again instead.')}
       </div>
     )
@@ -2207,7 +2207,7 @@ function IssueView({ issueId }: { issueId: string }) {
                 variant='outline'
                 className='border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300'
               >
-                {t('Cancelled')}
+                {t('Deleted')}
               </Badge>
             ) : (
               <Badge
@@ -2304,7 +2304,7 @@ function IssueView({ issueId }: { issueId: string }) {
         <div className='flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-sm'>
           <Undo2 className='mt-0.5 h-4 w-4 shrink-0 text-rose-600' />
           <span>
-            <b>{t('Cancelled')}</b> {v.cancelledAt && fmtDate(v.cancelledAt)}
+            <b>{t('Deleted')}</b> {v.cancelledAt && fmtDate(v.cancelledAt)}
             {v.cancelledBy?.name && ` ${t('by')} ${v.cancelledBy.name}`}
             {v.cancelReason && (
               <span className='text-muted-foreground'> — {v.cancelReason}</span>
@@ -2424,18 +2424,26 @@ function IssueView({ issueId }: { issueId: string }) {
               </tr>
             ))}
           </tbody>
-          {canSeeCosts && (
-            <tfoot>
-              <tr className='border-t font-semibold'>
-                <td colSpan={5} className='px-3 py-2 text-right'>
-                  {t('Total value')}
-                </td>
-                <td className='px-3 py-2 text-right tabular-nums'>
-                  {formatMoney(v.totalCost)}
-                </td>
-              </tr>
-            </tfoot>
-          )}
+          <tfoot>
+            <tr className='bg-muted/40 border-t font-semibold'>
+              <td colSpan={3} className='px-3 py-2 text-right'>
+                {t('Total')}
+              </td>
+              <td className='px-3 py-2 text-right tabular-nums'>
+                {formatTotalsByUnit(v.lines)}
+              </td>
+              {canSeeCosts && (
+                <>
+                  <td className='text-muted-foreground px-3 py-2 text-right text-xs font-normal'>
+                    {t('Total value')}
+                  </td>
+                  <td className='px-3 py-2 text-right tabular-nums'>
+                    {formatMoney(v.totalCost)}
+                  </td>
+                </>
+              )}
+            </tr>
+          </tfoot>
         </table>
       </div>
       {!!v.overrides?.length && (

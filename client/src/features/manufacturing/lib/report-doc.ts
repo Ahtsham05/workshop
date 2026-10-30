@@ -1,5 +1,6 @@
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 import {
+  PRODUCT_TYPE_META,
   SCRAP_REASON_LABELS,
   SCRAP_STAGE_LABELS,
   fmtQty,
@@ -138,6 +139,11 @@ const cash = (ctx: DocContext, n: number, { blank = true, strong = false } = {})
   strong,
 })
 const pct = (n: number): DocCell => ({ text: `${Math.round(n * 10) / 10}%`, value: n })
+/** "By-Product", "Sub-Assembly"… — named for anything made that is not a plain finished good. */
+const madeTypeLabel = (type: string | null | undefined, t: DocContext['t']) =>
+  type && type !== 'finished_good' && type in PRODUCT_TYPE_META
+    ? t(PRODUCT_TYPE_META[type as keyof typeof PRODUCT_TYPE_META].label)
+    : ''
 const withCur = (ctx: DocContext, label: string) =>
   ctx.currency ? `${ctx.t(label)} (${ctx.currency})` : ctx.t(label)
 
@@ -173,7 +179,7 @@ function productionDoc(data: ProductionReport, ctx: DocContext): ReportDoc {
             .join(' · ') || undefined,
         strong: true,
       },
-      product: { text: o.productName, sub: o.sku || undefined },
+      product: { text: o.productName, sub: [o.sku, madeTypeLabel(o.productType, t)].filter(Boolean).join(' · ') || undefined },
       start: day(o.startDate),
       due: { text: day(o.dueDate), tone: o.isLate ? 'danger' : undefined },
       status: statusLabel(o.status, o.orderType),
@@ -216,7 +222,11 @@ function productionDoc(data: ProductionReport, ctx: DocContext): ReportDoc {
   ]
   const productRows: DocRow[] = data.byProduct.map((p) => ({
     cells: {
-      product: { text: p.productName, sub: p.sku || undefined, strong: true },
+      product: {
+        text: p.productName,
+        sub: [p.sku, madeTypeLabel(p.productType, t)].filter(Boolean).join(' · ') || undefined,
+        strong: true,
+      },
       unit: p.unit,
       orders: { text: String(p.orders), value: p.orders },
       planned: qty(p.planned, { blank: false }),
@@ -421,6 +431,13 @@ function consumptionColumns(ctx: DocContext, first: DocColumn): DocColumn[] {
   ]
 }
 
+/** A material line's name; packing recorded on a receipt is marked as coming from production stock. */
+const materialCell = (l: ConsumptionLine, t: DocContext['t'], strong = false): DocCell => ({
+  text: l.productName,
+  sub: [l.sku, l.extra ? t('Packing used at receipt — from production stock') : ''].filter(Boolean).join(' · ') || undefined,
+  strong,
+})
+
 const consumptionCells = (ctx: DocContext, l: ConsumptionLine) => ({
   unit: l.unit,
   required: qty(l.required, { blank: false }),
@@ -465,7 +482,7 @@ function consumptionDoc(data: ConsumptionReport, ctx: DocContext): ReportDoc {
       cells: {},
     })
     lines.forEach((l) => {
-      orderRows.push({ cells: { material: { text: l.productName }, ...consumptionCells(ctx, l) } })
+      orderRows.push({ cells: { material: materialCell(l, t), ...consumptionCells(ctx, l) } })
     })
   })
 
@@ -532,6 +549,26 @@ const STATEMENT_ORDER: Record<'finished-goods' | 'raw-materials', { always: Move
   },
 }
 
+/**
+ * Statement rows are listed by kind — finished goods, by-products, sub-assemblies; raw
+ * materials, packaging, and things made here that were used as material — each kind with
+ * its own subtotal. A statement holding one kind only stays a plain list.
+ */
+const STATEMENT_GROUPS: Record<'finished-goods' | 'raw-materials', { label: string; types: string[] }[]> = {
+  'finished-goods': [
+    { label: 'Finished goods', types: ['finished_good'] },
+    { label: 'By-products', types: ['by_product'] },
+    { label: 'Sub-assemblies', types: ['sub_assembly', 'wip'] },
+  ],
+  'raw-materials': [
+    { label: 'Raw materials', types: ['raw_material'] },
+    { label: 'Components', types: ['component'] },
+    { label: 'Packaging materials', types: ['packaging_material'] },
+    { label: 'By-products used as material', types: ['by_product'] },
+    { label: 'Made here, used as material', types: ['sub_assembly', 'wip', 'finished_good'] },
+  ],
+}
+
 function statementDoc(data: StockStatementReport, ctx: DocContext): ReportDoc {
   const { t } = ctx
   const finished = data.report === 'finished-goods'
@@ -553,7 +590,7 @@ function statementDoc(data: StockStatementReport, ctx: DocContext): ReportDoc {
     { key: 'rate', label: withCur(ctx, 'Rate'), align: 'right' },
     { key: 'value', label: withCur(ctx, 'Value'), align: 'right' },
   ]
-  const rows: DocRow[] = data.rows.map((r) => {
+  const lineOf = (r: StockStatementReport['rows'][number]): DocRow => {
     const cells: Record<string, CellInput> = {
       product: { text: r.productName, sub: r.sku || undefined, strong: true },
       unit: r.unit,
@@ -571,7 +608,28 @@ function statementDoc(data: StockStatementReport, ctx: DocContext): ReportDoc {
           : qty(Math.abs(v))
     })
     return { cells, drill: { productId: r.productId } }
-  })
+  }
+  const groups = STATEMENT_GROUPS[data.report]
+  const groupOf = (r: StockStatementReport['rows'][number]) => {
+    const i = groups.findIndex((g) => g.types.includes(r.productType || ''))
+    return i < 0 ? groups.length : i
+  }
+  const listed = [...groups, { label: 'Other products', types: [] }]
+    .map((g, i) => ({ ...g, rows: data.rows.filter((r) => groupOf(r) === i) }))
+    .filter((g) => g.rows.length)
+  const rows: DocRow[] =
+    listed.length > 1
+      ? listed.flatMap((g) => [
+          { kind: 'group' as const, label: t(g.label), labelSpan: cols.length, cells: {} },
+          ...g.rows.map(lineOf),
+          {
+            kind: 'subtotal' as const,
+            label: `${t('Total')} ${t(g.label)} — ${g.rows.length} ${t('products')}`,
+            labelSpan: cols.length - 1,
+            cells: { value: cash(ctx, g.rows.reduce((s, r) => s + r.closingValue, 0), { blank: false, strong: true }) },
+          },
+        ])
+      : data.rows.map(lineOf)
   if (rows.length) {
     rows.push({
       kind: 'total',
@@ -960,6 +1018,9 @@ function dailyDoc(data: DailyReport, ctx: DocContext): ReportDoc {
     { key: 'consumed', label: t('Used in production'), align: 'right', group: mat },
     { key: 'floorScrap', label: t('Scrapped'), align: 'right', group: mat },
     { key: 'balance', label: t('Remaining (balance)'), align: 'right', group: mat },
+    ...(isZero(data.totals.floorUsed ?? 0)
+      ? []
+      : [{ key: 'floorUsed', label: withCur(ctx, 'Used from production stock'), align: 'right' as const }]),
     { key: 'produced', label: t('Produced'), align: 'right', group: out },
     { key: 'good', label: t('Completed'), align: 'right', group: out },
     { key: 'rejected', label: t('Rejected'), align: 'right', group: out },
@@ -981,6 +1042,7 @@ function dailyDoc(data: DailyReport, ctx: DocContext): ReportDoc {
         consumed: cash(ctx, d.consumed),
         floorScrap: { ...cash(ctx, d.floorScrap), tone: d.floorScrap > 0 ? ('danger' as const) : undefined },
         balance: cash(ctx, d.wipBalance, { blank: false, strong: true }),
+        floorUsed: cash(ctx, d.floorUsed ?? 0),
         produced: qty(d.produced),
         good: qty(d.good, { strong: true }),
         rejected: { ...qty(d.rejected), tone: d.rejected > 0 ? ('danger' as const) : undefined },
@@ -997,6 +1059,7 @@ function dailyDoc(data: DailyReport, ctx: DocContext): ReportDoc {
         consumed: cash(ctx, data.totals.consumed, { blank: false, strong: true }),
         floorScrap: cash(ctx, data.totals.floorScrap, { blank: false, strong: true }),
         balance: cash(ctx, data.closingWip, { blank: false, strong: true }),
+        floorUsed: cash(ctx, data.totals.floorUsed ?? 0, { blank: false, strong: true }),
         produced: qty(data.totals.produced, { blank: false, strong: true }),
         good: qty(data.totals.good, { blank: false, strong: true }),
         rejected: '',
@@ -1069,7 +1132,7 @@ function dailyDoc(data: DailyReport, ctx: DocContext): ReportDoc {
         title: t('Day-wise issue, production and remaining'),
         note: ctx.hideMoney
           ? t('Output quantities add all products together.')
-          : t('Opening + issued − returned − used in production − scrapped = remaining on the floor (WIP), valued at issue cost. Output quantities add all products together.'),
+          : t('Opening + issued − returned − used in production − scrapped = remaining on the floor (WIP), valued at issue cost. Material used straight from production stock never sat on an order’s floor, so it is shown on its own. Output quantities add all products together.'),
         columns: cols,
         rows,
         empty: t('No days in this period.'),
@@ -1141,7 +1204,7 @@ function batchDoc(data: BatchReport, ctx: DocContext): ReportDoc {
   ]
 
   const matRows: DocRow[] = data.materials.map((l) => ({
-    cells: { material: { text: l.productName, sub: l.sku || undefined, strong: true }, ...consumptionCells(ctx, l) },
+    cells: { material: materialCell(l, t, true), ...consumptionCells(ctx, l) },
   }))
   if (matRows.length) {
     matRows.push({

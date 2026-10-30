@@ -10,6 +10,7 @@ import type {
   OrderType,
 } from '@/stores/manufacturing.api'
 import { formatAppDate } from '@/lib/date-format'
+import { formatQuantity } from '@/lib/units'
 
 /** Mirrors server/src/config/manufacturing.js — keep the two in sync. */
 export const PRODUCT_TYPE_META: Record<
@@ -286,8 +287,7 @@ export const SCRAP_REASON_LABELS: Record<ScrapReason, string> = {
   other: 'Other',
 }
 
-export const fmtQty = (value: number | null | undefined) =>
-  (Number(value) || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })
+export const fmtQty = (value: number | null | undefined) => formatQuantity(value)
 
 export const fmtDate = (value?: string | null) =>
   value ? formatAppDate(new Date(value)) : '—'

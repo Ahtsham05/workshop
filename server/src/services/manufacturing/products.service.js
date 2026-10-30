@@ -34,6 +34,7 @@ const bomCountsFor = async (ctx, productIds) => {
       $match: {
         ...aggregateScope(ctx),
         productId: { $in: productIds.map((id) => new mongoose.Types.ObjectId(String(id))) },
+        deletedAt: null,
       },
     },
     { $group: { _id: '$productId', total: { $sum: 1 }, active: { $sum: { $cond: ['$isActive', 1, 0] } } } },
@@ -485,7 +486,7 @@ const getAssemblies = async (ctx) => {
     Bom.find({ _id: { $in: defaultBomIds } })
       .select('bomNumber version quantity unit components.productId isLocked')
       .lean(),
-    Bom.find({ ...scopeFilter(ctx), 'components.productId': { $in: ids } })
+    Bom.find({ ...scopeFilter(ctx), 'components.productId': { $in: ids }, deletedAt: null })
       .select('bomNumber version productName isActive components.productId')
       .lean(),
   ]);
@@ -629,7 +630,7 @@ const getProductOverview = async (ctx, productId) => {
   if (!product) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   const scope = scopeFilter(ctx);
   const [boms, makingOrders, consumingOrders, whereUsed] = await Promise.all([
-    Bom.find({ ...scope, productId: product._id })
+    Bom.find({ ...scope, productId: product._id, deletedAt: null })
       .select(
         'bomNumber version name isActive isDefault isLocked quantity unit components.productId operations.name updatedAt'
       )

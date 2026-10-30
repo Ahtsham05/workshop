@@ -5,7 +5,7 @@ import {
   useGetMaterialReceiptsQuery,
   type MaterialReceipt,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
+import { formatTotalsByUnit } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
@@ -13,11 +13,12 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DateRangeFilter } from '@/components/filters/date-range-filter'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { CellStack, DataTable, type Column } from '../components/data-table'
 import { FilterChips, SearchField, Toolbar } from '../components/list-controls'
 import { EmptyState, PageHeader } from '../components/page'
 import { Pager } from '../components/pager'
-import { fmtDate, fmtQty } from '../lib/constants'
+import { fmtDate } from '../lib/constants'
 
 const LIST = '/manufacturing/material-receipts'
 
@@ -117,7 +118,7 @@ export default function MaterialReceiptsPage() {
               {v.lines[0]?.productName || '—'}
             </span>
           }
-          secondary={`${v.totals.items} ${t('item(s)')} · ${fmtQty(v.totals.quantity)} ${t('qty')}`}
+          secondary={`${v.totals.items} ${t('item(s)')} · ${formatTotalsByUnit(v.lines)}`}
         />
       ),
     },

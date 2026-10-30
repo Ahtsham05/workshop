@@ -268,7 +268,7 @@ function ProductionRecords({
   const canSeeCosts = useCanViewManufacturingCosts()
   const costSuffix = (n: number) => (canSeeCosts ? ` · ${formatMoney(n)}` : '')
   const q = { productionOrderId: order.id, limit: 100 }
-  const { data: issues } = useGetMaterialIssuesQuery(q)
+  const { data: issues } = useGetMaterialIssuesQuery({ ...q, status: 'posted' })
   const { data: outputs } = useGetOutputsQuery(q)
   const { data: receipts } = useGetProductionReceiptsQuery(q)
   const { data: scrap } = useGetScrapRecordsQuery(q)

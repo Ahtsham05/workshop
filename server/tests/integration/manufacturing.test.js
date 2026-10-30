@@ -218,7 +218,81 @@ describe('Bill of materials', () => {
     expect((await Bom.findById(fanBom._id)).isDefault).toBe(false);
     expect(String((await Product.findById(fan._id)).defaultBomId)).toBe(String(v2._id));
     expect(await manufacturing.bom.listVersions(ctx, fanBom._id)).toHaveLength(2);
-    await expect(manufacturing.bom.deleteBom(ctx, fanBom._id)).rejects.toThrow(/used in production/);
+  });
+});
+
+describe('Deleting a BOM', () => {
+  test('an unused version is removed for good and the default moves to the newest active version', async () => {
+    const { fan, fanBom } = await buildMotorTree();
+    const v2 = await manufacturing.bom.createNewVersion(ctx, fanBom._id);
+    await manufacturing.bom.setBomActive(ctx, v2._id, true);
+
+    const impact = await manufacturing.bom.getDeleteImpact(ctx, fanBom._id);
+    expect(impact.mode).toBe('delete');
+    expect(impact.nextDefault).toMatchObject({ id: String(v2._id), version: 2 });
+
+    const result = await manufacturing.bom.deleteBom(ctx, fanBom._id);
+    expect(result.mode).toBe('delete');
+    expect(await Bom.findById(fanBom._id)).toBeNull();
+    expect(String((await Product.findById(fan._id)).defaultBomId)).toBe(String(v2._id));
+    expect((await Bom.findById(v2._id)).isDefault).toBe(true);
+  });
+
+  test('a version production used is moved to Deleted: kept for its orders, hidden, restorable', async () => {
+    const { fan, fanBom, assembly } = await buildMotorTree();
+    const order = await manufacturing.productionOrder.createOrder(ctx, { productId: fan._id, plannedQuantity: 1 });
+
+    // A draft order still re-reads the recipe, so it blocks the delete.
+    const blocked = await manufacturing.bom.getDeleteImpact(ctx, fanBom._id);
+    expect(blocked.mode).toBe('blocked');
+    expect(blocked.orders.draft.map((o) => o.orderNumber)).toEqual([order.orderNumber]);
+    await expect(manufacturing.bom.deleteBom(ctx, fanBom._id)).rejects.toThrow(/draft\/planned/);
+
+    await manufacturing.productionOrder.changeStatus(ctx, order._id, { status: 'released' });
+    const impact = await manufacturing.bom.getDeleteImpact(ctx, fanBom._id);
+    expect(impact.mode).toBe('archive');
+    expect(impact.orders).toMatchObject({ total: 1, open: 1 });
+    expect(impact.nextDefault).toBeNull();
+
+    expect((await manufacturing.bom.deleteBom(ctx, fanBom._id)).mode).toBe('archive');
+    const archived = await Bom.findById(fanBom._id);
+    expect(archived.deletedAt).toBeInstanceOf(Date);
+    expect(String(archived.deletedBy)).toBe(String(USER));
+    expect(archived).toMatchObject({ isActive: false, isDefault: false });
+    expect((await Product.findById(fan._id)).defaultBomId).toBeNull();
+    expect(String((await ProductionOrder.findById(order._id)).bomId)).toBe(String(fanBom._id));
+
+    // Hidden from the list and where-used, listed in the Deleted view, read-only until restored.
+    const ids = async (filter) => (await manufacturing.bom.queryBoms(ctx, filter, {})).results.map((b) => String(b.id));
+    expect(await ids({})).not.toContain(String(fanBom._id));
+    expect(await ids({ deleted: 'true' })).toEqual([String(fanBom._id)]);
+    expect(await manufacturing.bom.whereUsed(ctx, assembly._id)).toEqual([]);
+    await expect(manufacturing.bom.setBomActive(ctx, fanBom._id, true)).rejects.toThrow(/restore it first/);
+    await expect(manufacturing.bom.createNewVersion(ctx, fanBom._id)).rejects.toThrow(/restore it first/);
+    await expect(manufacturing.bom.deleteBom(ctx, fanBom._id)).rejects.toThrow(/already deleted/);
+
+    const restored = await manufacturing.bom.restoreBom(ctx, fanBom._id);
+    expect(restored.deletedAt).toBeNull();
+    expect(restored.isActive).toBe(false);
+    expect(await ids({})).toContain(String(fanBom._id));
+  });
+
+  test('a version pinned as a sub-assembly by another BOM is blocked', async () => {
+    const { motor, motorBom, housing } = await buildMotorTree();
+    const parent = await insertProduct('Pump', { productType: 'finished_good' });
+    const pumpBom = await manufacturing.bom.createBom(ctx, {
+      productId: parent._id,
+      components: [
+        { productId: motor._id, quantity: 1, childBomId: motorBom._id },
+        { productId: housing._id, quantity: 1 },
+      ],
+    });
+    const impact = await manufacturing.bom.getDeleteImpact(ctx, motorBom._id);
+    expect(impact.mode).toBe('blocked');
+    expect(impact.parentBoms.map((b) => b.id)).toEqual([String(pumpBom._id)]);
+    // The default is used (unpinned) by the assembly BOM too — reported, not blocking.
+    expect(impact.componentOf).toBe(2);
+    await expect(manufacturing.bom.deleteBom(ctx, motorBom._id)).rejects.toThrow(/sub-assembly/);
   });
 });
 

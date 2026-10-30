@@ -1,5 +1,14 @@
-import { useState } from 'react'
-import { AlertTriangle, Loader2, Lock, Undo2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link } from '@tanstack/react-router'
+import {
+  AlertTriangle,
+  ArrowRight,
+  Loader2,
+  Lock,
+  PackageCheck,
+  Trash2,
+  Undo2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import {
   useCancelMaterialIssueMutation,
@@ -23,7 +32,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import { fmtQty } from '../lib/constants'
+import { fmtDate, fmtQty } from '../lib/constants'
 
 /**
  * "Delete" a posted Material Issue Voucher = cancel it: its material goes back from the
@@ -50,9 +59,20 @@ export function DeleteIssueDialog({
   )
   const [cancel, { isLoading }] = useCancelMaterialIssueMutation()
   const [reason, setReason] = useState('')
-  const [cancelOrder, setCancelOrder] = useState(false)
+  // Ticked by default: an order nothing else touched is usually one this voucher created.
+  // (Only offered — and only sent — when the server says the order can be cancelled.)
+  const [cancelOrder, setCancelOrder] = useState(true)
+  useEffect(() => {
+    if (open) setCancelOrder(true)
+  }, [open, issue.id])
   const reasonOk = reason.trim().length >= 3
   const locked = preview && !preview.canReverse
+  const usedBy = preview?.usedBy || []
+  const kindLabel = {
+    receipt: t('Finished goods receipt'),
+    return: t('Material return'),
+    scrap: t('Scrap'),
+  } as const
 
   const submit = async () => {
     if (!preview || !reasonOk) return
@@ -72,7 +92,6 @@ export function DeleteIssueDialog({
       )
       onOpenChange(false)
       setReason('')
-      setCancelOrder(false)
       onDone?.(done)
     } catch (err) {
       toast.error(getErrorMessage(err, t('Could not delete the voucher')))
@@ -96,10 +115,10 @@ export function DeleteIssueDialog({
           <DialogDescription>
             {locked
               ? t(
-                  'Some of its material was already used in output, scrapped or returned. Return what is still on the floor from the order instead — you can still edit the date, reference, notes and people.'
+                  'Some of its material was already used. Reverse the documents below first, then delete this voucher — or edit its date, reference, notes and people.'
                 )
               : t(
-                  'Its material goes back from the production floor into stock. The voucher stays on record as cancelled, with your reason — its number is not reused.'
+                  'Its material goes back from the production floor into stock and the voucher is removed from the list. Its number is not reused.'
                 )}
           </DialogDescription>
         </DialogHeader>
@@ -182,12 +201,73 @@ export function DeleteIssueDialog({
                 )}
               </>
             )}
+            {locked && usedBy.length > 0 && (
+              <div className='space-y-2'>
+                <div className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+                  {t('Used by — undo these first')}
+                </div>
+                <ul className='divide-y rounded-lg border'>
+                  {usedBy.map((d) => (
+                    <li
+                      key={`${d.kind}-${d.id}`}
+                      className='flex items-center justify-between gap-3 px-3 py-2 text-sm'
+                    >
+                      <span className='flex min-w-0 items-start gap-2'>
+                        {d.kind === 'receipt' ? (
+                          <PackageCheck className='mt-0.5 h-4 w-4 shrink-0 text-emerald-600' />
+                        ) : d.kind === 'return' ? (
+                          <Undo2 className='mt-0.5 h-4 w-4 shrink-0 text-sky-600' />
+                        ) : (
+                          <Trash2 className='mt-0.5 h-4 w-4 shrink-0 text-rose-600' />
+                        )}
+                        <span className='min-w-0'>
+                          <span className='block truncate'>
+                            <span className='font-mono text-xs font-medium'>
+                              {d.number}
+                            </span>{' '}
+                            <span className='text-muted-foreground'>
+                              · {kindLabel[d.kind]}
+                            </span>
+                          </span>
+                          <span className='text-muted-foreground block text-xs tabular-nums'>
+                            {fmtDate(d.date)}
+                            {d.detail && ` · ${d.detail}`}
+                          </span>
+                        </span>
+                      </span>
+                      {d.reversible ? (
+                        <Button asChild size='sm' variant='outline'>
+                          <Link
+                            to={
+                              `/manufacturing/production-orders/${preview.order.id}` as never
+                            }
+                            search={{ reverse: d.id } as never}
+                            onClick={() => onOpenChange(false)}
+                          >
+                            {t('Reverse')}
+                            <ArrowRight className='ml-1 h-3.5 w-3.5' />
+                          </Link>
+                        </Button>
+                      ) : (
+                        <span className='text-muted-foreground shrink-0 text-xs'>
+                          {t('Can’t be undone')}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {locked && (
               <div className='flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs'>
                 <AlertTriangle className='mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500' />
-                {t(
-                  'Stock that went into finished goods can’t be un-issued without undoing that output first.'
-                )}
+                {usedBy.some((d) => !d.reversible)
+                  ? t(
+                      'Returns and scrap can’t be undone, so this voucher has to stay. Edit it instead, or issue a correction.'
+                    )
+                  : t(
+                      'Reverse each receipt above (its finished goods leave stock and the material goes back to the order), then come back and delete this voucher.'
+                    )}
               </div>
             )}
           </div>

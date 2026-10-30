@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { MaterialIssue, ProductionOrder, User } = require('../../models');
+const { MaterialIssue, ProductionOrder, ProductionOutput, ScrapRecord, User } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const { EXECUTABLE_PRODUCTION_STATUSES } = require('../../config/manufacturing');
 const settingsService = require('./settings.service');
@@ -204,6 +204,56 @@ const orderCancellable = async (order, issue, session = null) => {
   return (await query) === 0;
 };
 
+/**
+ * The documents that took this voucher's material out of WIP — what has to be undone
+ * before the voucher can be deleted. Receipts (outputs) are matched by the exact WIP lot
+ * they consumed; scrap records don't keep the lot, so they're matched by material line.
+ */
+const blockingDocuments = async (ctx, order, issue) => {
+  const lotIds = issue.lines.map((l) => l.wipLotId).filter(Boolean);
+  const lineIds = issue.lines.map((l) => l.materialLineId).filter(Boolean);
+  const scope = { organizationId: ctx.organizationId, productionOrderId: order._id };
+  const [outputs, returns, scraps] = await Promise.all([
+    ProductionOutput.find({ ...scope, status: { $ne: 'reversed' }, 'consumption.wipLotId': { $in: lotIds } })
+      .select('outputNumber reportedAt producedQuantity unit')
+      .sort({ reportedAt: 1 })
+      .lean(),
+    MaterialIssue.find({ ...scope, kind: 'return', status: { $ne: 'cancelled' }, 'lines.wipLotId': { $in: lotIds } })
+      .select('issueNumber issueDate')
+      .sort({ issueDate: 1 })
+      .lean(),
+    ScrapRecord.find({ ...scope, stage: 'material', materialLineId: { $in: lineIds } })
+      .select('scrapNumber scrapDate quantity unit productName')
+      .sort({ scrapDate: 1 })
+      .lean(),
+  ]);
+  return [
+    ...outputs.map((o) => ({
+      kind: 'receipt',
+      id: String(o._id),
+      number: o.outputNumber,
+      date: o.reportedAt,
+      detail: `${fmt(o.producedQuantity)} ${o.unit || ''}`.trim(),
+      reversible: true,
+    })),
+    ...returns.map((r) => ({
+      kind: 'return',
+      id: String(r._id),
+      number: r.issueNumber,
+      date: r.issueDate,
+      reversible: false,
+    })),
+    ...scraps.map((x) => ({
+      kind: 'scrap',
+      id: String(x._id),
+      number: x.scrapNumber,
+      date: x.scrapDate,
+      detail: `${x.productName} ${fmt(x.quantity)} ${x.unit || ''}`.trim(),
+      reversible: false,
+    })),
+  ];
+};
+
 /** What deleting would do — shown before the person confirms. */
 const getReversalPreview = async (ctx, issueId) => {
   requireBranch(ctx.branchId);
@@ -216,6 +266,7 @@ const getReversalPreview = async (ctx, issueId) => {
     status: issue.status,
     revision: issue.revision || 0,
     ...plan,
+    usedBy: plan.canReverse ? [] : await blockingDocuments(ctx, order, issue),
     totalCost: issue.totalCost,
     order: {
       id: String(order._id),

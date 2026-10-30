@@ -320,8 +320,40 @@ export interface Bom {
   isLocked: boolean
   effectiveFrom?: string | null
   effectiveTo?: string | null
+  /** Deleted after production used it — kept for its orders, hidden from lists. */
+  deletedAt?: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface BomRef {
+  id: string
+  bomNumber: string
+  version: number
+  productName: string
+}
+
+export interface BomOrderRef {
+  id: string
+  orderNumber: string
+  status: ProductionStatus
+}
+
+/** GET /boms/:id/delete-impact — what deleting a version would do. */
+export interface BomDeleteImpact {
+  bom: BomRef & { isDefault: boolean; isLocked: boolean }
+  /** delete = removed for good · archive = kept for its orders, hidden · blocked · deleted = already */
+  mode: 'delete' | 'archive' | 'blocked' | 'deleted'
+  blockers: string[]
+  orders: {
+    total: number
+    open: number
+    recent: BomOrderRef[]
+    draft: BomOrderRef[]
+  }
+  parentBoms: BomRef[]
+  nextDefault: BomRef | null
+  componentOf: number
 }
 
 export interface BomInput {
@@ -853,6 +885,15 @@ export interface IssueReversalPreview {
     gone: number
     batchNumber: string | null
     totalCost: number
+  }[]
+  /** What used its material — undo these first (receipts can be reversed). Empty when it can be deleted. */
+  usedBy?: {
+    kind: 'receipt' | 'return' | 'scrap'
+    id: string
+    number: string
+    date: string
+    detail?: string
+    reversible: boolean
   }[]
   order: {
     id: string
@@ -2275,6 +2316,7 @@ export const manufacturingApi = createApi({
         productId?: string
         isActive?: boolean
         isDefault?: boolean
+        deleted?: boolean
         bomNumber?: string
       }
     >({
@@ -2334,10 +2376,24 @@ export const manufacturingApi = createApi({
       }),
       invalidatesTags: ['MfgBom', 'MfgProduct', 'MfgDashboard'],
     }),
-    deleteBom: builder.mutation<void, string>({
+    getBomDeleteImpact: builder.query<BomDeleteImpact, string>({
+      query: (bomId) => `/manufacturing/boms/${bomId}/delete-impact`,
+      providesTags: ['MfgBom', 'MfgOrder'],
+    }),
+    deleteBom: builder.mutation<
+      Pick<BomDeleteImpact, 'mode' | 'bom' | 'nextDefault'>,
+      string
+    >({
       query: (bomId) => ({
         url: `/manufacturing/boms/${bomId}`,
         method: 'DELETE',
+      }),
+      invalidatesTags: ['MfgBom', 'MfgProduct', 'MfgDashboard'],
+    }),
+    restoreBom: builder.mutation<Bom, string>({
+      query: (bomId) => ({
+        url: `/manufacturing/boms/${bomId}/restore`,
+        method: 'POST',
       }),
       invalidatesTags: ['MfgBom', 'MfgProduct', 'MfgDashboard'],
     }),
@@ -3310,7 +3366,9 @@ export const {
   useCreateBomVersionMutation,
   useSetDefaultBomMutation,
   useSetBomActiveMutation,
+  useGetBomDeleteImpactQuery,
   useDeleteBomMutation,
+  useRestoreBomMutation,
   useGetProductionOrdersQuery,
   useGetProductionOrderQuery,
   useCreateProductionOrderMutation,

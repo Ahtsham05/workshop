@@ -6,25 +6,34 @@ import {
   Lock,
   Pencil,
   Power,
+  Printer,
+  RotateCcw,
   Star,
   Trash2,
 } from 'lucide-react'
+import { useSelector } from 'react-redux'
 import { toast } from 'sonner'
+import { useGetBranchQuery } from '@/stores/branch.api'
 import {
-  useDeleteBomMutation,
   useExplodeBomQuery,
   useGetBomQuery,
   useGetBomVersionsQuery,
   useGetWhereUsedQuery,
+  useRestoreBomMutation,
   useSetBomActiveMutation,
   useSetDefaultBomMutation,
   type Bom,
+  type BomExplosion,
   type BomTrackingInfo,
   type BomTreeNode,
   type ProductBatchTracking,
 } from '@/stores/manufacturing.api'
+import { useGetMyOrganizationQuery } from '@/stores/organization.api'
+import type { RootState } from '@/stores/store'
 import { getErrorMessage } from '@/lib/get-error-message'
+import { formatTotalsByUnit } from '@/lib/units'
 import { cn } from '@/lib/utils'
+import { resolveBranchCompanyName } from '@/utils/branch-company-name'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { Badge } from '@/components/ui/badge'
@@ -39,17 +48,33 @@ import {
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useConfirm } from '../lib/confirm'
+import { openPrintWindowForFormat } from '@/features/invoice/utils/print-utils'
+import { buildBomPrintDoc } from '../lib/bom-print'
 import { fmtDate, fmtQty } from '../lib/constants'
+import { generateReportHTML } from '../lib/report-print'
 import { BatchBadge } from './badges'
 import { BomEditorDialog, type BomEditorMode } from './bom-editor-dialog'
+import { DeleteBomDialog } from './delete-bom-dialog'
 
 export function BomStateBadges({
   bom,
 }: {
-  bom: Pick<Bom, 'isActive' | 'isDefault' | 'isLocked'>
+  bom: Pick<Bom, 'isActive' | 'isDefault' | 'isLocked' | 'deletedAt'>
 }) {
   const { t } = useLanguage()
+  if (bom.deletedAt) {
+    return (
+      <span className='inline-flex flex-wrap gap-1'>
+        <Badge
+          variant='outline'
+          className='gap-1 border-rose-500/30 bg-rose-500/5 text-rose-600 dark:text-rose-400'
+        >
+          <Trash2 className='h-3 w-3' />
+          {t('Deleted')}
+        </Badge>
+      </span>
+    )
+  }
   return (
     <span className='inline-flex flex-wrap gap-1'>
       {bom.isDefault && (
@@ -86,14 +111,58 @@ export function BomDetailSheet({
   onSelect: (id: string) => void
 }) {
   const { t } = useLanguage()
-  const confirm = useConfirm()
   const { hasPermission } = usePermissions()
   const canManage = hasPermission('manageBoms')
   const { data: bom, isLoading } = useGetBomQuery(bomId)
   const [editor, setEditor] = useState<BomEditorMode | null>(null)
   const [setDefault] = useSetDefaultBomMutation()
   const [setActive] = useSetBomActiveMutation()
-  const [deleteBom] = useDeleteBomMutation()
+  const [restoreBom] = useRestoreBomMutation()
+  const [deleting, setDeleting] = useState(false)
+  // "Explode for" quantity per BOM — the Structure tab and the print share it.
+  const [explodeFor, setExplodeFor] = useState<Record<string, string>>({})
+  const qtyText = bom ? (explodeFor[bom.id] ?? String(bom.quantity)) : ''
+  const quantity = Number(qtyText) > 0 ? Number(qtyText) : (bom?.quantity ?? 1)
+  const { data: explosion, isFetching: exploding } = useExplodeBomQuery(
+    { bomId, quantity },
+    { skip: !bom }
+  )
+  const activeBranchId = useSelector((s: RootState) => s.auth.activeBranchId)
+  const user = useSelector((s: RootState) => s.auth.data?.user)
+  const { data: branch } = useGetBranchQuery(activeBranchId!, {
+    skip: !activeBranchId,
+  })
+  const { data: org } = useGetMyOrganizationQuery(undefined)
+
+  const print = () => {
+    if (!bom || !explosion) return
+    try {
+      openPrintWindowForFormat(
+        generateReportHTML(
+          buildBomPrintDoc(bom, explosion, quantity, t),
+          {
+            companyName:
+              resolveBranchCompanyName(org?.name, branch?.name) || org?.name,
+            companyAddress: [branch?.location?.address, branch?.location?.city]
+              .filter(Boolean)
+              .join(', '),
+            companyPhone: branch?.phone,
+            companyLogo: org?.logo?.url,
+            branchName: branch?.name,
+            preparedBy: user?.name,
+          },
+          t
+        ),
+        'a4'
+      )
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t('Could not open the print window')
+      )
+    }
+  }
 
   const run = async (fn: () => Promise<unknown>, success: string) => {
     try {
@@ -153,88 +222,108 @@ export function BomDetailSheet({
                   </span>
                 </div>
               )}
-              {canManage && (
-                <div className='flex flex-wrap gap-2 pt-2'>
-                  {!bom.isLocked && (
+              {bom.deletedAt && (
+                <div className='flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs'>
+                  <span>
+                    {t('Deleted on')} {fmtDate(bom.deletedAt)}.{' '}
+                    {t(
+                      'Kept on record for the production orders made with it; not offered for new orders.'
+                    )}
+                  </span>
+                  {canManage && (
                     <Button
                       size='sm'
                       variant='outline'
-                      onClick={() => setEditor('edit')}
-                    >
-                      <Pencil className='mr-1.5 h-3.5 w-3.5' />
-                      {t('Edit')}
-                    </Button>
-                  )}
-                  <Button
-                    size='sm'
-                    variant={bom.isLocked ? 'default' : 'outline'}
-                    onClick={() => setEditor('version')}
-                  >
-                    <GitBranch className='mr-1.5 h-3.5 w-3.5' />
-                    {t('New version')}
-                  </Button>
-                  {!bom.isDefault && bom.isActive && (
-                    <Button
-                      size='sm'
-                      variant='outline'
+                      className='h-7'
                       onClick={() =>
                         run(
-                          () => setDefault(bom.id).unwrap(),
-                          t('Set as default')
+                          () => restoreBom(bom.id).unwrap(),
+                          t('Restored — activate it to use it again')
                         )
                       }
                     >
-                      <Star className='mr-1.5 h-3.5 w-3.5' />
-                      {t('Make default')}
-                    </Button>
-                  )}
-                  <Button
-                    size='sm'
-                    variant='ghost'
-                    onClick={() =>
-                      run(
-                        () =>
-                          setActive({
-                            bomId: bom.id,
-                            isActive: !bom.isActive,
-                          }).unwrap(),
-                        bom.isActive ? t('Deactivated') : t('Activated')
-                      )
-                    }
-                  >
-                    <Power className='mr-1.5 h-3.5 w-3.5' />
-                    {bom.isActive ? t('Deactivate') : t('Activate')}
-                  </Button>
-                  {!bom.isLocked && (
-                    <Button
-                      size='sm'
-                      variant='ghost'
-                      className='text-destructive hover:text-destructive'
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: t('Delete {{n}} v{{v}}?')
-                            .replace('{{n}}', bom.bomNumber)
-                            .replace('{{v}}', String(bom.version)),
-                          description: t(
-                            'This BOM version is removed permanently. This cannot be undone.'
-                          ),
-                          confirmText: t('Delete'),
-                          destructive: true,
-                        })
-                        if (!ok) return
-                        run(async () => {
-                          await deleteBom(bom.id).unwrap()
-                          onClose()
-                        }, t('BOM deleted'))
-                      }}
-                    >
-                      <Trash2 className='mr-1.5 h-3.5 w-3.5' />
-                      {t('Delete')}
+                      <RotateCcw className='mr-1.5 h-3.5 w-3.5' />
+                      {t('Restore')}
                     </Button>
                   )}
                 </div>
               )}
-              {bom.isLocked && (
+              <div className='flex flex-wrap gap-2 pt-2'>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  onClick={print}
+                  disabled={!explosion || exploding}
+                  title={t('Print or save as PDF')}
+                >
+                  <Printer className='mr-1.5 h-3.5 w-3.5' />
+                  {t('Print')}
+                </Button>
+                {canManage && !bom.deletedAt && (
+                  <>
+                    {!bom.isLocked && (
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => setEditor('edit')}
+                      >
+                        <Pencil className='mr-1.5 h-3.5 w-3.5' />
+                        {t('Edit')}
+                      </Button>
+                    )}
+                    <Button
+                      size='sm'
+                      variant={bom.isLocked ? 'default' : 'outline'}
+                      onClick={() => setEditor('version')}
+                    >
+                      <GitBranch className='mr-1.5 h-3.5 w-3.5' />
+                      {t('New version')}
+                    </Button>
+                    {!bom.isDefault && bom.isActive && (
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() =>
+                          run(
+                            () => setDefault(bom.id).unwrap(),
+                            t('Set as default')
+                          )
+                        }
+                      >
+                        <Star className='mr-1.5 h-3.5 w-3.5' />
+                        {t('Make default')}
+                      </Button>
+                    )}
+                    <Button
+                      size='sm'
+                      variant='ghost'
+                      onClick={() =>
+                        run(
+                          () =>
+                            setActive({
+                              bomId: bom.id,
+                              isActive: !bom.isActive,
+                            }).unwrap(),
+                          bom.isActive ? t('Deactivated') : t('Activated')
+                        )
+                      }
+                    >
+                      <Power className='mr-1.5 h-3.5 w-3.5' />
+                      {bom.isActive ? t('Deactivate') : t('Activate')}
+                    </Button>
+                    <Button
+                      size='sm'
+                      variant='ghost'
+                      className='text-destructive hover:text-destructive'
+                      onClick={() => setDeleting(true)}
+                    >
+                      <Trash2 className='mr-1.5 h-3.5 w-3.5' />
+                      {t('Delete')}
+                    </Button>
+                  </>
+                )}
+              </div>
+              {bom.isLocked && !bom.deletedAt && (
                 <p className='bg-muted/60 text-muted-foreground rounded-lg px-3 py-2 text-xs'>
                   {t(
                     'This version has been released to production, so its recipe is frozen. Create a new version to change it.'
@@ -261,7 +350,17 @@ export function BomDetailSheet({
               <TabsTrigger value='where-used'>{t('Where used')}</TabsTrigger>
             </TabsList>
             <TabsContent value='structure' className='mt-4'>
-              <StructureTab bom={bom} onSelect={onSelect} />
+              <StructureTab
+                bom={bom}
+                onSelect={onSelect}
+                qty={qtyText}
+                onQtyChange={(v) =>
+                  setExplodeFor((prev) => ({ ...prev, [bom.id]: v }))
+                }
+                quantity={quantity}
+                data={explosion}
+                isFetching={exploding}
+              />
             </TabsContent>
             <TabsContent value='routing' className='mt-4'>
               <RoutingTab bom={bom} />
@@ -275,6 +374,14 @@ export function BomDetailSheet({
           </Tabs>
         )}
 
+        {bom && (
+          <DeleteBomDialog
+            bom={bom}
+            open={deleting}
+            onOpenChange={setDeleting}
+            onDeleted={onClose}
+          />
+        )}
         {editor && bom && (
           <BomEditorDialog
             mode={editor}
@@ -291,15 +398,22 @@ export function BomDetailSheet({
 function StructureTab({
   bom,
   onSelect,
+  qty,
+  onQtyChange,
+  quantity,
+  data,
+  isFetching,
 }: {
   bom: Bom & BomTrackingInfo
   onSelect: (id: string) => void
+  qty: string
+  onQtyChange: (value: string) => void
+  quantity: number
+  data?: BomExplosion
+  isFetching: boolean
 }) {
   const { t } = useLanguage()
   const tracking = bom.tracking
-  const [qty, setQty] = useState(String(bom.quantity))
-  const quantity = Number(qty) > 0 ? Number(qty) : bom.quantity
-  const { data, isFetching } = useExplodeBomQuery({ bomId: bom.id, quantity })
 
   return (
     <div className='space-y-3'>
@@ -310,7 +424,7 @@ function StructureTab({
           min={0}
           step='any'
           value={qty}
-          onChange={(e) => setQty(e.target.value)}
+          onChange={(e) => onQtyChange(e.target.value)}
           className='h-8 w-24'
         />
         <span className='text-muted-foreground'>{bom.unit}</span>
@@ -336,6 +450,24 @@ function StructureTab({
           />
         ))}
         {!data && <Skeleton className='m-3 h-24' />}
+        {data && data.tree.children.length > 0 && (
+          <div className='bg-muted/40 grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-t px-3 py-2 text-sm font-semibold'>
+            <span>
+              {t('Total')}{' '}
+              <span className='text-muted-foreground text-xs font-normal'>
+                ({t('for')} {fmtQty(quantity)} {bom.unit})
+              </span>
+            </span>
+            <span className='text-right tabular-nums'>
+              {formatTotalsByUnit(
+                data.tree.children.map((n) => ({
+                  quantity: n.requiredQuantity,
+                  unit: n.unit,
+                }))
+              )}
+            </span>
+          </div>
+        )}
       </div>
       <p className='text-muted-foreground text-xs'>
         {t(

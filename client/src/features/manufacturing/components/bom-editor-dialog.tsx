@@ -27,6 +27,7 @@ import {
 } from '@/stores/manufacturing.api'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { afterPaint } from '@/lib/invoice-form-keyboard'
+import { formatTotalsByUnit } from '@/lib/units'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
@@ -368,6 +369,21 @@ export function BomEditorDialog({
   }, [])
 
   const componentCount = lines.filter((l) => l.productId).length
+  const pickedLines = lines.filter((l) => l.productId)
+  const componentTotal = formatTotalsByUnit(pickedLines)
+  // what the floor actually draws once each line's scrap allowance is added
+  const componentTotalWithScrap = pickedLines.some(
+    (l) => Number(l.scrapPercent) > 0
+  )
+    ? formatTotalsByUnit(
+        pickedLines.map((l) => ({
+          quantity:
+            (Number(l.quantity) || 0) *
+            (1 + (Number(l.scrapPercent) || 0) / 100),
+          unit: l.unit,
+        }))
+      )
+    : null
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -712,6 +728,24 @@ export function BomEditorDialog({
                     )}
                   </div>
                 ))}
+                {componentCount > 0 && (
+                  <div className='bg-muted/40 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t px-3 py-2 text-sm'>
+                    <span className='font-semibold'>
+                      {t('Total')}{' '}
+                      <span className='text-muted-foreground text-xs font-normal'>
+                        ({t('for')} {Number(quantity) || 0} {unit})
+                      </span>
+                    </span>
+                    <span className='flex flex-wrap items-baseline gap-x-4 tabular-nums'>
+                      <span className='font-semibold'>{componentTotal}</span>
+                      {componentTotalWithScrap && (
+                        <span className='text-muted-foreground text-xs'>
+                          {t('with scrap')} {componentTotalWithScrap}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </section>
