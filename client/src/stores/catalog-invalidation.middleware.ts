@@ -39,6 +39,14 @@ export const catalogInvalidationMiddleware: Middleware = (api) => {
   let timer: ReturnType<typeof setTimeout> | undefined
   return (next) => (action) => {
     const result = next(action)
+    // Whatever refreshes the Invoice/Purchase pickers (a sale, purchase, return, stock
+    // adjustment or product edit moved stock) refreshes the manufacturing pickers' cached
+    // catalog too — and only that entry, not the manufacturing product lists.
+    if (purchaseCatalogApi.util.invalidateTags.match(action)) {
+      api.dispatch(
+        manufacturingApi.util.invalidateTags([{ type: 'MfgProduct', id: 'CATALOG' }])
+      )
+    }
     if (isFulfilled(action)) {
       const meta = action.meta as { arg?: { type?: string; endpointName?: string } } | undefined
       const isQueryResult = meta?.arg?.type === 'query'

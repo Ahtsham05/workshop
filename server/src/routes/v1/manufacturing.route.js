@@ -80,6 +80,8 @@ router
 
 // Manufacturing view of the existing product catalog (no separate product system)
 router.get('/products', auth(VIEW), validate(v.getProducts), c.getProducts);
+// The whole catalog, lean, for the pickers' in-memory search (cached client-side).
+router.get('/products/catalog', auth(VIEW), c.getProductCatalog);
 router.get('/products/type-summary', auth(VIEW), c.getProductTypeSummary);
 router.get('/products/stats', auth(VIEW), validate(v.getProductStats), c.getProductStats);
 router.get('/products/ids', auth(VIEW), validate(v.getMatchingProductIds), c.getMatchingProductIds);

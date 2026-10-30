@@ -17,6 +17,7 @@ const REPORT_KEYS = [
   'batch-trace',
   'product-production',
   'product-summary',
+  'stock-sheet',
 ] as const
 const MENU_KEYS = REPORT_KEYS.filter((k) => k !== 'stock-register') as [
   Exclude<(typeof REPORT_KEYS)[number], 'stock-register'>,

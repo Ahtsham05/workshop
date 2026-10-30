@@ -68,7 +68,7 @@ const sectionHtml = (s: DocSection) => {
   const body = s.rows.length
     ? s.rows.map((r) => rowHtml(s.columns, r)).join('')
     : `<tr><td class="none" colspan="${s.columns.length}">${e(s.empty || '')}</td></tr>`
-  return `<section>
+  return `<section${s.breakBefore ? ' class="page"' : ''}>
     ${s.title ? `<h3>${e(s.title)}</h3>` : ''}
     <table class="grid">${head}<tbody>${body}</tbody></table>
     ${s.note ? `<p class="note">${e(s.note)}</p>` : ''}
@@ -136,6 +136,7 @@ export function generateReportHTML(doc: Omit<ReportDoc, 'key'>, header: ReportPr
   .em .sv { font-size: 1.5em; }
   .sh { font-size: 0.85em; margin-top: 1px; }
   section { margin-bottom: 14px; }
+  section.page { break-before: page; page-break-before: always; }
   h3 { font-size: 1.1em; margin: 0 0 5px; text-transform: uppercase; letter-spacing: 0.05em; border-left: 4px solid #000; padding-left: 7px; }
   table.grid { width: 100%; border-collapse: collapse; }
   table.grid thead { display: table-header-group; }
@@ -181,7 +182,7 @@ export function generateReportHTML(doc: Omit<ReportDoc, 'key'>, header: ReportPr
   <div class="rule"></div><div class="rule2"></div>
   <div class="info">${info.map((i) => `<div><div class="k">${e(i.label)}</div><div class="v">${e(i.value)}</div></div>`).join('')}</div>
   <div class="sum">${summary}</div>
-  ${doc.sections.map(sectionHtml).join('')}
+  ${(doc.printSections || doc.sections).map(sectionHtml).join('')}
   ${(doc.footnotes || []).map((f) => `<p class="foot">* ${e(f)}</p>`).join('')}
   <div class="sign"><div>${e(t('Prepared by'))}</div><div>${e(t('Checked by'))}</div><div>${e(t('Approved by'))}</div></div>
   <div class="gen">${e(t('This is a computer-generated report.'))}</div>

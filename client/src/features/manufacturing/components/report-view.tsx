@@ -26,6 +26,19 @@ const TONE: Record<string, string> = {
   muted: 'text-muted-foreground italic',
 }
 
+/** A pinned column of a wide sheet: fixed width, held at its left offset while scrolling. */
+const stickyStyle = (column: DocColumn): React.CSSProperties | undefined =>
+  column.sticky
+    ? {
+        left: column.sticky.left,
+        width: column.sticky.width,
+        minWidth: column.sticky.width,
+        maxWidth: column.sticky.width,
+      }
+    : undefined
+// Collapsed borders scroll away from a sticky cell — draw its edges with a shadow instead.
+const STICKY_CELL = 'sticky z-[1] shadow-[inset_-1px_0_0_var(--border),inset_0_-1px_0_var(--border)]'
+
 function GroupBands({ columns }: { columns: DocColumn[] }) {
   if (!columns.some((c) => c.group)) return null
   const cells: React.ReactNode[] = []
@@ -33,14 +46,17 @@ function GroupBands({ columns }: { columns: DocColumn[] }) {
     const g = columns[i].group
     let n = 1
     while (g && i + n < columns.length && columns[i + n].group === g) n += 1
+    const pinned = !g && columns[i].sticky
     cells.push(
       <th
         key={i}
         colSpan={n}
         className={cn(
-          'px-2 pt-2 pb-1 text-center text-[11px] font-semibold tracking-wider uppercase',
-          g ? 'border-border border-x border-t' : 'border-0'
+          'px-2 pt-2 pb-1 text-center text-[11px] font-semibold tracking-wider whitespace-nowrap uppercase',
+          g ? 'border-border border-x border-t' : 'border-0',
+          pinned && 'bg-card sticky z-[2]'
         )}
+        style={pinned ? stickyStyle(columns[i]) : undefined}
       >
         {g}
       </th>
@@ -60,8 +76,10 @@ function Cell({ column, value }: { column: DocColumn; value: DocRow['cells'][str
         column.align === 'center' && 'text-center',
         column.nowrap && 'whitespace-nowrap',
         c.strong && 'font-semibold',
-        c.tone && TONE[c.tone]
+        c.tone && TONE[c.tone],
+        column.sticky && cn(STICKY_CELL, 'bg-card')
       )}
+      style={stickyStyle(column)}
     >
       {c.text}
       {c.sub && (
@@ -114,8 +132,8 @@ function Row({
         <td
           colSpan={span}
           className={cn(
-            'border-border border px-2 py-1.5',
-            kind === 'group' ? 'font-semibold' : 'font-semibold'
+            'border-border border px-2 py-1.5 font-semibold',
+            columns[0]?.sticky && cn(STICKY_CELL, 'bg-card left-0')
           )}
         >
           <span className='inline-flex items-center gap-1'>
@@ -170,9 +188,10 @@ function Section({
                   scope='col'
                   className={cn(
                     'border-border border border-b-foreground/60 bg-muted/40 border-b-2 px-2 py-2 align-bottom text-[11px] font-semibold tracking-wide uppercase',
-                    c.align === 'right' ? 'text-right' : 'text-left'
+                    c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left',
+                    c.sticky && cn(STICKY_CELL, 'bg-muted z-[2]')
                   )}
-                  style={c.width ? { width: c.width } : undefined}
+                  style={stickyStyle(c) || (c.width ? { width: c.width } : undefined)}
                 >
                   {c.label}
                 </th>

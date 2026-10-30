@@ -18,6 +18,7 @@ import {
   Printer,
   RefreshCw,
   Scale,
+  Sheet,
   Trash2,
   Workflow,
   type LucideIcon,
@@ -54,6 +55,8 @@ import { FilterChips, SearchField } from '../components/list-controls'
 import { EmptyState, PageHeader } from '../components/page'
 import { ReportView } from '../components/report-view'
 import { ProductRegisterControls } from '../components/product-register-controls'
+import { StockSheetControls } from '../components/stock-sheet-controls'
+import { keysParam, useStockSheetState } from '../lib/stock-sheet-state'
 import { packWeightsParam, useProductRegisterState } from '../lib/product-register-state'
 import { fmtQty, orderPath, statusLabel } from '../lib/constants'
 import { buildReportDoc } from '../lib/report-doc'
@@ -70,13 +73,13 @@ const REPORTS: { key: MenuKey; label: string; hint: string; icon: LucideIcon }[]
   {
     key: 'product-production',
     label: 'Product Register',
-    hint: 'One product: batches, kg issued, packs, in process',
+    hint: 'Per product: batch qty, kg issued, packs, in process',
     icon: PackageOpen,
   },
   {
     key: 'product-summary',
     label: 'Product Summary',
-    hint: 'Product register — total issue, no raw materials',
+    hint: 'Product register sheets only, no material detail',
     icon: Sigma,
   },
   { key: 'batch', label: 'Batch Report', hint: 'One batch from issue to finished goods', icon: FileText },
@@ -84,6 +87,12 @@ const REPORTS: { key: MenuKey; label: string; hint: string; icon: LucideIcon }[]
   { key: 'material-consumption', label: 'Issue vs Consumption', hint: 'Issued, used, wasted, on floor', icon: Scale },
   { key: 'finished-goods', label: 'Finished Goods', hint: 'Produced, dispatched, remaining', icon: Boxes },
   { key: 'raw-materials', label: 'Raw Materials', hint: 'Purchased, issued, balance', icon: Factory },
+  {
+    key: 'stock-sheet',
+    label: 'Inventory Stock Sheet',
+    hint: 'Category-wise issue, receive, balance by date',
+    icon: Sheet,
+  },
   { key: 'in-process', label: 'In-Process Batches', hint: 'What is on the floor now', icon: Workflow },
   { key: 'scrap', label: 'Scrap & Rejection', hint: 'Losses by stage and reason', icon: Trash2 },
   { key: 'batch-stock', label: 'Batch Stock & Expiry', hint: 'Every lot, its age and expiry', icon: Layers },
@@ -101,6 +110,7 @@ const IDLE_LABEL: Partial<Record<ReportKey, string>> = {
 }
 const WITH_STATUS: ReportKey[] = ['production', 'material-consumption']
 const STATEMENTS: ReportKey[] = ['finished-goods', 'raw-materials']
+const DRILLS_TO_REGISTER: ReportKey[] = [...STATEMENTS, 'stock-sheet']
 const DRILLS_TO_BATCH: ReportKey[] = ['production', 'daily', 'product-production', 'product-summary', 'in-process', 'material-issues', 'material-consumption']
 
 export default function ManufacturingReportsPage({
@@ -135,6 +145,7 @@ export default function ManufacturingReportsPage({
   const [expiry, setExpiry] = useState<NonNullable<ReportParams['expiry']>>('all')
   const [withEmpty, setWithEmpty] = useState(false)
   const register = useProductRegisterState()
+  const sheet = useStockSheetState()
   const debouncedSearch = useDebouncedValue(search, 300)
 
   const isRegister = report === 'stock-register'
@@ -142,6 +153,7 @@ export default function ManufacturingReportsPage({
   const isBatchStock = report === 'batch-stock'
   const isTrace = report === 'batch-trace'
   const isRegisterOfProduct = report === 'product-production' || report === 'product-summary'
+  const isStockSheet = report === 'stock-sheet'
   const active: MenuKey = isRegister ? from || 'finished-goods' : (report as MenuKey)
 
   const changePeriod = (next: LedgerPeriod) => {
@@ -178,6 +190,20 @@ export default function ManufacturingReportsPage({
       ? {
           productIds: register.productIds.join(',') || undefined,
           packWeights: packWeightsParam(register.packWeights, register.productIds),
+          ...(register.combine && register.productIds.length > 1 ? { combine: true } : {}),
+        }
+      : {}),
+    ...(isStockSheet
+      ? {
+          categoryIds: keysParam(sheet.filters.categoryIds),
+          subCategoryIds: keysParam(sheet.filters.subCategoryIds),
+          brandIds: keysParam(sheet.filters.brandIds),
+          productTypes: keysParam(sheet.filters.productTypes),
+          groupBy: sheet.filters.groupBy,
+          interval: sheet.filters.interval,
+          activeDays: sheet.filters.activeDays,
+          hideIdle: sheet.filters.hideIdle,
+          search: debouncedSearch.trim() || undefined,
         }
       : {}),
   }
@@ -234,6 +260,7 @@ export default function ManufacturingReportsPage({
         ? buildReportDoc(current, {
             t,
             hideMoney: !canSeeCosts,
+            datesPerPage: sheet.filters.datesPerPage,
             // Money headers are recognised by this suffix, so it may never be empty.
             currency: currency.symbol?.trim() || currency.code || '¤',
             figure: (n) =>
@@ -243,7 +270,7 @@ export default function ManufacturingReportsPage({
               })}`,
           })
         : null,
-    [current, registerNeedsProduct, t, currency.symbol, currency.code, decimals, canSeeCosts]
+    [current, registerNeedsProduct, t, currency.symbol, currency.code, decimals, canSeeCosts, sheet.filters.datesPerPage]
   )
 
   const companyName = resolveBranchCompanyName(org?.name, branch?.name) || org?.name
@@ -476,6 +503,18 @@ export default function ManufacturingReportsPage({
             onProductIdsChange={register.setProductIds}
             packWeights={register.packWeights}
             onPackWeightChange={register.setPackWeight}
+            combine={register.combine}
+            onCombineChange={register.setCombine}
+          />
+        )}
+        {isStockSheet && (
+          <StockSheetControls
+            options={current?.report === 'stock-sheet' ? current.options : undefined}
+            loading={isFetching}
+            filters={sheet.filters}
+            onChange={sheet.update}
+            search={search}
+            onSearchChange={setSearch}
           />
         )}
         {(WITH_STATUS.includes(report) || STATEMENTS.includes(report) || IDLE_LABEL[report]) && (
@@ -552,9 +591,9 @@ export default function ManufacturingReportsPage({
         </div>
       ) : (
         <div className={cn('transition-opacity', isFetching && 'opacity-60')} aria-busy={isFetching}>
-          {(STATEMENTS.includes(report) || DRILLS_TO_BATCH.includes(report) || isBatchStock || isTrace) && (
+          {(DRILLS_TO_REGISTER.includes(report) || DRILLS_TO_BATCH.includes(report) || isBatchStock || isTrace) && (
             <p className='text-muted-foreground mb-2 text-xs'>
-              {STATEMENTS.includes(report)
+              {DRILLS_TO_REGISTER.includes(report)
                 ? t('Click a product to open its day-by-day stock register.')
                 : isBatchStock
                   ? t('Click a batch to trace it.')

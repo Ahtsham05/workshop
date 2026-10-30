@@ -467,7 +467,7 @@ describeTx('Packing', () => {
     expect(row(bulk).movements).toMatchObject({ produced: 100, packedOut: -80 });
     expect(row(bulk).closing).toBe(20);
 
-    const reg = await report('product-production', { productIds: String(bulk._id) });
+    const [reg] = (await report('product-production', { productIds: String(bulk._id) })).registers;
     const pack = Object.fromEntries(reg.packs.map((p) => [p.productId, p]));
     expect(pack[String(carton._id)]).toMatchObject({ quantity: 3, kgPerUnit: 20, weightSource: 'pack', kg: 60, loose: false });
     expect(pack[String(fiveKg._id)]).toMatchObject({ quantity: 4, kgPerUnit: 5, kg: 20 });

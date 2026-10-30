@@ -8,6 +8,7 @@ import {
   GripVertical,
   Hash,
   Layers,
+  Loader2,
   Lock,
   Package,
   Plus,
@@ -55,6 +56,7 @@ import {
   BUILDABLE_PRODUCT_TYPES,
   COMPONENT_PRODUCT_TYPES,
 } from '../lib/constants'
+import { useCatalogProduct } from '../lib/product-catalog'
 import {
   ROUTING_ADD_SELECTOR,
   fromRoutingDraft,
@@ -1150,7 +1152,11 @@ function DateField({
   )
 }
 
-/** Pin a specific BOM version of a sub-assembly, or follow its default ("Auto"). */
+/**
+ * Pin a specific BOM version of a sub-assembly, or follow its default ("Auto"). Whether
+ * the product has BOMs at all comes from the cached catalog, and its BOM list is only
+ * fetched when the menu opens (or a version is already pinned) — not once per row.
+ */
 function SubBomSelect({
   productId,
   value,
@@ -1161,30 +1167,52 @@ function SubBomSelect({
   onChange: (v: string) => void
 }) {
   const { t } = useLanguage()
-  const { data } = useGetBomsQuery(
+  const [menuOpen, setMenuOpen] = useState(false)
+  const { product, isLoading: catalogLoading } = useCatalogProduct(productId)
+  // Not in the catalog (yet): ask the server rather than guess "stocked".
+  const hasBoms = product ? product.activeBomCount > 0 : !catalogLoading
+  const pinned = value !== AUTO
+  const { data, isFetching } = useGetBomsQuery(
     { productId, isActive: true, limit: 20 },
-    { skip: !productId }
+    { skip: !productId || !hasBoms || (!menuOpen && !pinned) }
   )
   const boms = data?.results || []
-  if (!productId || boms.length === 0) {
+  if (!productId || !hasBoms || (data && boms.length === 0)) {
     return (
       <span className='text-muted-foreground px-1 text-xs'>
-        {productId ? t('Stocked item') : '—'}
+        {productId && !catalogLoading ? t('Stocked item') : '—'}
       </span>
     )
   }
   return (
-    <Select value={value} onValueChange={onChange}>
+    <Select
+      value={value}
+      onValueChange={onChange}
+      open={menuOpen}
+      onOpenChange={setMenuOpen}
+    >
       <SelectTrigger className={cn(FIELD, 'w-full')}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={AUTO}>{t('Default BOM')}</SelectItem>
+        {/* The pinned one, so the trigger can name it before the list arrives. */}
+        {pinned && !boms.some((b) => b.id === value) && (
+          <SelectItem value={value}>
+            {isFetching ? t('Loading…') : t('Pinned BOM')}
+          </SelectItem>
+        )}
         {boms.map((b) => (
           <SelectItem key={b.id} value={b.id}>
             {b.bomNumber} · v{b.version}
           </SelectItem>
         ))}
+        {!data && isFetching && (
+          <div className='text-muted-foreground flex items-center gap-2 px-2 py-1.5 text-xs'>
+            <Loader2 className='h-3.5 w-3.5 animate-spin' aria-hidden />
+            {t('Loading…')}
+          </div>
+        )}
       </SelectContent>
     </Select>
   )

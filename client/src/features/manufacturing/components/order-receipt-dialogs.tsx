@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
+import { skipToken } from '@reduxjs/toolkit/query'
 import { Loader2 } from 'lucide-react'
 import {
+  useGetPackingSetupQuery,
   useGetProductionOrderQuery,
   type ProductionOutput,
 } from '@/stores/manufacturing.api'
@@ -44,8 +46,16 @@ export function OrderReceiptDialogs({
   // The reverse dialog closes itself just before it asks to receive again — hold the
   // close one tick so "Reverse & receive again" can keep this host open.
   const receivingAgain = useRef(false)
+  // Receiving: the pack sizes load behind the spinner too, so the dialog opens with its
+  // Packing section filled (same arguments as the dialog's own query).
+  const receiving = !!receiveAgain || action.kind === 'receive'
+  const { isLoading: packLoading } = useGetPackingSetupQuery(
+    order && receiving
+      ? { productId: order.productId, variantId: order.variantId || null }
+      : skipToken
+  )
 
-  if (!order) {
+  if (!order || (receiving && packLoading)) {
     return (
       <Dialog open onOpenChange={(o) => !o && onClose()}>
         <DialogContent className='flex items-center justify-center gap-2 py-10 sm:max-w-sm'>
@@ -59,7 +69,7 @@ export function OrderReceiptDialogs({
     )
   }
 
-  if (receiveAgain || action.kind === 'receive') {
+  if (receiving) {
     return (
       <ReceiveFinishedGoodsDialog
         order={order}

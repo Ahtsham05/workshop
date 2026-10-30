@@ -29,7 +29,6 @@ import {
   useEditMaterialIssueMutation,
   useGetOperatorsQuery,
   useGetProductionOrdersQuery,
-  useGetManufacturingProductsQuery,
   useGetPendingMaterialsQuery,
   usePostMaterialIssueByMaterialMutation,
   useLazyGetMaterialIssuePlanQuery,
@@ -38,7 +37,7 @@ import {
   type IssueVoucherCheck,
   type IssueWarningCode,
   type MaterialIssue,
-  type ManufacturingProduct,
+  type ManufacturingCatalogProduct,
   type PendingMaterial,
   type ProductType,
   type MaterialIssuePlan,
@@ -90,6 +89,7 @@ import {
   fmtQty,
   orderPath,
 } from '../lib/constants'
+import { useCatalogProducts } from '../lib/product-catalog'
 import {
   blankIssueRow,
   createIssueConfig,
@@ -225,7 +225,10 @@ function IssueEditLoader({ issueId }: { issueId: string }) {
 }
 
 /** A finished good offered on an empty finished-good voucher's grid. */
-type FinishedGoodRef = { kind: 'finished-good'; product: ManufacturingProduct }
+type FinishedGoodRef = {
+  kind: 'finished-good'
+  product: ManufacturingCatalogProduct
+}
 
 /** The open order an "order" voucher issues against (for "Issue for N units"). */
 type OrderInfo = {
@@ -377,17 +380,16 @@ function IssueEntry({
   )
   // Before a finished good is chosen, row 1's list offers the finished goods themselves
   // (invoice-style): picking one fills the header and asks for the quantity.
-  const { data: buildablePage, isLoading: buildableLoading } =
-    useGetManufacturingProductsQuery({
+  // From the shared cached catalog — every one, not just the first 200.
+  const { products: buildable, isLoading: buildableLoading } =
+    useCatalogProducts({
       productType: BUILDABLE_PRODUCT_TYPES,
       hasBom: true,
       packRole: 'make',
-      limit: 200,
-      sort: 'name',
-    } as never)
+    })
   const finishedGoods = useMemo<EntryProduct[]>(
     () =>
-      (buildablePage?.results || []).map((p) => ({
+      buildable.map((p) => ({
         key: `fg:${p.id}`,
         productId: p.id,
         variantId: null,
@@ -408,7 +410,7 @@ function IssueEntry({
         imageUrl: p.image?.url,
         raw: { kind: 'finished-good', product: p } satisfies FinishedGoodRef,
       })),
-    [buildablePage, t]
+    [buildable, t]
   )
   // "Materials only": what open orders still need, per material.
   const {

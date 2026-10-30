@@ -147,6 +147,12 @@ export interface ManufacturingProduct {
   createdAt?: string
 }
 
+/** One row of the cached picker catalog (GET /manufacturing/products/catalog). */
+export type ManufacturingCatalogProduct = Omit<
+  ManufacturingProduct,
+  'tracking' | 'categories' | 'brandId' | 'brand' | 'createdAt'
+>
+
 export interface ProductBatchTracking {
   trackBatch: boolean
   trackExpiry: boolean
@@ -2192,6 +2198,21 @@ export const manufacturingApi = createApi({
       query: (params) => ({ url: '/manufacturing/products', params }),
       providesTags: ['MfgProduct'],
     }),
+    /**
+     * The whole branch catalog, fetched once and searched in memory by every picker
+     * (lib/product-catalog.ts). Product writes and stock movements invalidate
+     * 'MfgProduct'; invoices/purchases elsewhere reach it through
+     * catalog-invalidation.middleware.ts. An unused entry is dropped on invalidation, so
+     * the long keepUnusedDataFor never serves stale stock.
+     */
+    getManufacturingProductCatalog: builder.query<
+      ManufacturingCatalogProduct[],
+      void
+    >({
+      query: () => '/manufacturing/products/catalog',
+      providesTags: [{ type: 'MfgProduct', id: 'CATALOG' }],
+      keepUnusedDataFor: 30 * 60,
+    }),
     getManufacturingProductStats: builder.query<
       ManufacturingProductStats,
       ManufacturingProductFilters
@@ -3015,7 +3036,8 @@ export const manufacturingApi = createApi({
         method: 'PUT',
         body: { sizes },
       }),
-      invalidatesTags: ['MfgPacking'],
+      // Pack sizes decide which products are packs (pickers, products list).
+      invalidatesTags: ['MfgPacking', 'MfgProduct'],
     }),
     createPackProduct: builder.mutation<
       { id: string; name: string; sku: string; unit: string; price: number },
@@ -3342,6 +3364,7 @@ export const {
   useLoadDemoDataMutation,
   useRemoveDemoDataMutation,
   useGetManufacturingProductsQuery,
+  useGetManufacturingProductCatalogQuery,
   useGetManufacturingProductStatsQuery,
   useGetManufacturingProductOverviewQuery,
   useGetProductTypeSummaryQuery,

@@ -8,26 +8,33 @@ const {
   MaterialIssue,
   ScrapRecord,
   PackingVoucher,
+  PackSize,
 } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const { BUSINESS_TZ, eachBusinessCalendarDate } = require('../../utils/businessTimezone');
 const { roundQty, aggregateScope } = require('./common');
 
 /*
- * Product-wise production register — the factory's monthly sheet for one product line:
+ * Product-wise production register — the factory's monthly sheet, one per product:
  *
- *   Date │ Batches · each material issued · Total issue (kg)
+ *   Date │ Batch qty · KG (materials issued) · each by-product issued (Paste …)
  *        │ finished packs (Carton / 5 kg bag / 20 kg bag …) · Total finished goods (kg)
- *        │ Extra (loose) packing (kg) · Total finished weight (kg)
+ *        │ Extra packing (kg) · Total finished weight (kg)
  *        │ Total issue to date · Total finished to date · Remaining in process
  *
  * Everything is weighed in kg so issue and output can be set against each other:
  *   remaining in process = opening + issued − returned − finished − lost (scrap)
  *
- * The "product line" is one or more finished products (a pack size is often its own
- * product, or a variant of one). Only documents of their production orders count:
- * posted MIVs and returns, finished-goods receipts and in-process scrap. Every figure is
- * a sum of documents, so the opening is simply everything before the period.
+ * Batch qty is a count, not batch numbers: the different stock batches (lots) the KG
+ * materials were issued from that day (MIV lines carry the batch FEFO or the user picked).
+ * By-products (productType 'by_product') re-used as material get their own columns and stay
+ * out of KG and the batch count, though they do count in total issue.
+ *
+ * Each selected product gets its own register (registers[]); `combine` adds them up into
+ * one product line instead (a pack size kept as its own product). Only documents of their
+ * production orders count: posted MIVs and returns, finished-goods receipts and in-process
+ * scrap, plus packing vouchers of the product. Every figure is a sum of documents, so the
+ * opening is simply everything before the period.
  *
  * Weights: a material or pack measured in a weight unit converts directly; otherwise the
  * product's unit conversion to a weight unit is used; a finished pack can also take its
@@ -115,40 +122,23 @@ const productOptions = async (scope) => {
   }));
 };
 
-const productProductionReport = async (ctx, q, { resolveRange }) => {
-  const range = resolveRange(q);
-  const scope = aggregateScope(ctx);
-  const options = await productOptions(scope);
-  const productIds = [
-    ...new Set(
-      String(q.productIds || q.productId || '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => OBJECT_ID.test(s))
-    ),
-  ];
-  const base = { report: 'product-production', period: { startDate: range.startKey, endDate: range.endKey }, options };
-  if (!productIds.length) return { ...base, needsProduct: true };
-  if (productIds.length > MAX_PRODUCTS) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `Choose at most ${MAX_PRODUCTS} products for one register`);
-  }
-  const days = eachBusinessCalendarDate(range.start, range.end);
-  if (days.length > MAX_DAYS) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `Choose a period of at most ${MAX_DAYS} days for this register`);
-  }
-
-  const [finishedProducts, orders] = await Promise.all([
+/** One register: a single product, or several added up as one product line. */
+const buildRegister = async (scope, range, days, productIds, q) => {
+  const [finishedProducts, orders, packSizes] = await Promise.all([
     Product.find({ ...scope, _id: { $in: productIds.map(oid) } })
       .select('name sku unit unitConversions hasVariants productType')
       .lean(),
     ProductionOrder.find({ ...scope, productId: { $in: productIds.map(oid) } })
       .select(
-        'orderNumber batchNumber orderType status productId variantId productName unit plannedQuantity completedQuantity materials.productId materials.unit materials.baseQuantity createdAt actualCompletionDate'
+        'orderNumber batchNumber orderType status productId variantId productName unit bomId plannedQuantity completedQuantity materials.productId materials.unit materials.baseQuantity createdAt actualCompletionDate'
       )
       .sort({ createdAt: 1 })
       .lean(),
+    PackSize.find({ ...scope, productId: { $in: productIds.map(oid) }, isActive: { $ne: false } })
+      .select('productId name packProductId contentQuantity sequence')
+      .sort({ sequence: 1, contentQuantity: 1 })
+      .lean(),
   ]);
-  if (!finishedProducts.length) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
   const productOf = new Map(finishedProducts.map((p) => [String(p._id), p]));
   const selected = productIds
     .filter((id) => productOf.has(id))
@@ -179,6 +169,8 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
               },
               quantity: { $sum: '$lines.quantity' },
               name: { $last: '$lines.productName' },
+              // Stock batches (lots) the line was taken from.
+              lots: { $addToSet: { $ifNull: ['$lines.batchId', '$lines.batchNumber'] } },
             },
           },
         ]),
@@ -258,6 +250,7 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
   // Output of these orders may be booked to another product (e.g. loose kg) — name it too.
   receiptRows.forEach((r) => materialIds.add(String(r._id.product)));
   packingRows.forEach((r) => materialIds.add(String(r._id.product)));
+  packSizes.forEach((ps) => materialIds.add(String(ps.packProductId)));
   orders.forEach((o) => (o.materials || []).forEach((m) => materialIds.add(String(m.productId))));
   productIds.forEach((id) => materialIds.delete(id));
   const variantIds = [
@@ -293,6 +286,8 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
         unit: unit || product.unit || '',
         kgPerUnit: w.kgPerUnit,
         weightSource: w.source,
+        // A by-product re-used as material: its own column, kept out of KG.
+        byProduct: product.productType === 'by_product',
         issued: 0,
         returned: 0,
         scrapped: 0,
@@ -352,6 +347,8 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
         // Received by weight itself (loose kg) rather than in packs.
         // A pack size is always counted in packs, whatever unit its product uses.
         byWeight: !packed && !!KG_PER[String(packUnit).toLowerCase()],
+        // Order of the product's pack sizes (Carton, 5 kg bag, 20 kg bag …).
+        sequence: null,
         quantity: 0,
         kg: 0,
       });
@@ -362,6 +359,15 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
   orders.forEach((o) => packCol(o.productId, o.variantId, o.unit));
   selected.forEach((s) => {
     if (![...packs.values()].some((p) => p.productId === s.productId)) packCol(s.productId, null, s.unit);
+  });
+  // …and so does every pack size set up on it, packed this period or not — named as the
+  // factory names it ("Carton", "5 KG Bag").
+  packSizes.forEach((ps, i) => {
+    const bulk = productOf.get(String(ps.productId));
+    const per = unitWeight(bulk, bulk && bulk.unit).kgPerUnit;
+    const col = packCol(ps.packProductId, null, null, { kgPerUnit: per == null ? null : ps.contentQuantity * per });
+    col.shortName = ps.name || col.shortName;
+    col.sequence = i;
   });
   receiptRows.forEach((r) => packCol(r._id.product, r._id.variant, r._id.unit));
   const bulkKgPerUnit = (r) => unitWeight(productOf.get(String(r._id.bulk)), r._id.bulkUnit).kgPerUnit;
@@ -385,6 +391,11 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
     returned: {},
     packs: {},
     issueKg: 0,
+    // issueKg split: main materials (the KG column) and by-products re-used.
+    mainKg: 0,
+    byProductKg: 0,
+    // Stock batches (lots) the KG materials were issued from that day.
+    lots: new Set(),
     returnedKg: 0,
     packedKg: 0,
     looseKg: 0,
@@ -400,6 +411,7 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
     if (!perOrder.has(key)) {
       perOrder.set(key, {
         issuedKg: 0,
+        lots: new Set(),
         returnedKg: 0,
         finishedQty: 0,
         finishedKg: 0,
@@ -411,6 +423,7 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
     return perOrder.get(key);
   };
   const unweighed = { materials: new Set(), packs: new Set() };
+  const unbatched = new Set();
 
   issueRows.forEach((r) => {
     const b = bucket(r._id.day);
@@ -430,6 +443,18 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
       b.issued[col.key] = (b.issued[col.key] || 0) + r.quantity;
       b.issueKg += w;
       o.issuedKg += w;
+      if (col.byProduct) b.byProductKg += w;
+      else {
+        b.mainKg += w;
+        if (col.kgPerUnit != null) {
+          const lots = (r.lots || []).filter(Boolean).map(String);
+          lots.forEach((lot) => {
+            b.lots.add(lot);
+            o.lots.add(lot);
+          });
+          if (!lots.length && r._id.day !== '') unbatched.add(col.name);
+        }
+      }
       if (r._id.day !== '') col.issued += r.quantity;
     }
   });
@@ -519,12 +544,14 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
     cumScrap += d.scrapKg;
     return {
       date: d.date,
-      batches: d.newBatches.length,
+      batches: d.lots.size,
       batchNumbers: d.newBatches.sort(),
       issued: round(d.issued),
       returned: round(d.returned),
       packs: round(d.packs),
       issueKg: kg(d.issueKg),
+      mainKg: kg(d.mainKg),
+      byProductKg: kg(d.byProductKg),
       returnedKg: kg(d.returnedKg),
       packedKg: kg(d.packedKg),
       looseKg: kg(d.looseKg),
@@ -566,6 +593,7 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
         startedOn: startedOn.get(String(o._id)) || null,
         lastReceiptAt: t.lastReceipt,
         planned: roundQty(o.plannedQuantity),
+        batchCount: t.lots.size,
         issuedKg: kg(t.issuedKg),
         returnedKg: kg(t.returnedKg),
         netIssuedKg: kg(netIssued),
@@ -603,6 +631,7 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
         (packOrder.has(a.productId) ? packOrder.get(a.productId) : 99) -
           (packOrder.has(b.productId) ? packOrder.get(b.productId) : 99) ||
         a.byWeight - b.byWeight ||
+        (a.sequence == null ? 999 : a.sequence) - (b.sequence == null ? 999 : b.sequence) ||
         (a.kgPerUnit || 0) - (b.kgPerUnit || 0) ||
         a.name.localeCompare(b.name)
     )
@@ -615,6 +644,13 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
       names: [...unweighed.packs],
       message:
         'No kg weight for these finished goods — they are counted in packs but left out of every kg total. Enter the kg per pack on the report, or add a unit conversion to kg on the product.',
+    });
+  }
+  if (unbatched.size) {
+    warnings.push({
+      kind: 'batch',
+      names: [...unbatched],
+      message: 'These materials were issued without a stock batch (not batch-tracked) — they add nothing to Batch qty.',
     });
   }
   if (unweighed.materials.size) {
@@ -632,7 +668,7 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
   const completed = batchRows.filter((b) => b.status === 'completed' && b.netIssuedKg > 0);
   const completedIssued = completed.reduce((s, b) => s + b.netIssuedKg, 0);
   return {
-    ...base,
+    key: productIds.join(','),
     selected,
     baseUnit: 'kg',
     materials: materialList,
@@ -646,6 +682,8 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
     totals: {
       batches: dayRows.reduce((s, d) => s + d.batches, 0),
       issueKg: totalIssueKg,
+      mainKg: kg(sum(dayRows, 'mainKg')),
+      byProductKg: kg(sum(dayRows, 'byProductKg')),
       returnedKg: totalReturnedKg,
       netIssueKg: kg(totalIssueKg - totalReturnedKg),
       packedKg: kg(sum(dayRows, 'packedKg')),
@@ -660,6 +698,45 @@ const productProductionReport = async (ctx, q, { resolveRange }) => {
           ? Math.round((completed.reduce((s, b) => s + b.finishedKg, 0) / completedIssued) * 1000) / 10
           : null,
     },
+  };
+};
+
+const productProductionReport = async (ctx, q, { resolveRange }) => {
+  const range = resolveRange(q);
+  const scope = aggregateScope(ctx);
+  const options = await productOptions(scope);
+  const productIds = [
+    ...new Set(
+      String(q.productIds || q.productId || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => OBJECT_ID.test(s))
+    ),
+  ];
+  const base = { report: 'product-production', period: { startDate: range.startKey, endDate: range.endKey }, options };
+  if (!productIds.length) return { ...base, needsProduct: true };
+  if (productIds.length > MAX_PRODUCTS) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Choose at most ${MAX_PRODUCTS} products for one register`);
+  }
+  const days = eachBusinessCalendarDate(range.start, range.end);
+  if (days.length > MAX_DAYS) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Choose a period of at most ${MAX_DAYS} days for this register`);
+  }
+  const found = await Product.find({ ...scope, _id: { $in: productIds.map(oid) } })
+    .select('_id')
+    .lean();
+  const known = new Set(found.map((p) => String(p._id)));
+  const ids = productIds.filter((id) => known.has(id));
+  if (!ids.length) throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
+
+  const combined = (q.combine === true || q.combine === 'true') && ids.length > 1;
+  const groups = combined ? [ids] : ids.map((id) => [id]);
+  const registers = await Promise.all(groups.map((group) => buildRegister(scope, range, days, group, q)));
+  return {
+    ...base,
+    combined,
+    selected: registers.flatMap((r) => r.selected),
+    registers,
   };
 };
 

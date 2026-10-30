@@ -37,6 +37,7 @@ const { lineUsage } = require('./materialUsage.service');
 const { roundQty, roundMoney, aggregateScope, escapeRegex } = require('./common');
 const { batchStockReport, batchTraceReport } = require('./batchReports.service');
 const { productProductionReport } = require('./productProductionReport.service');
+const { stockSheetReport } = require('./stockSheetReport.service');
 
 /*
  * Manufacturing reports — read-only statements built from the documents the module (and
@@ -51,8 +52,9 @@ const { productProductionReport } = require('./productProductionReport.service')
  *  stock-register        one product's movements, bank-statement style, running balance
  *  in-process            every open batch (order) with what is on the floor right now
  *  scrap                 scrap & rejection register
- *  product-production    one product line day by day in kg: batches, issue, packs, in process
- *  product-summary       the same, issue as one total (no material columns)
+ *  product-production    each product day by day in kg: batches, issue, packs, in process
+ *  product-summary       the same day sheets, without the material and batch detail
+ *  stock-sheet           inventory stock sheet: per category, date by date issue · receive · balance
  *
  * Stock statements anchor on the stock the product has NOW and walk back: closing at the
  * end date = current − net movement after it; opening = closing − net movement inside the
@@ -1718,6 +1720,8 @@ const REPORTS = {
   'batch-stock': batchStockReport,
   'batch-trace': batchTraceReport,
   'product-production': (ctx, q) => productProductionReport(ctx, q, { resolveRange }),
+  'stock-sheet': (ctx, q) =>
+    stockSheetReport(ctx, q, { resolveRange, MOVEMENT_SOURCES, transferLegs, currentStock, stockUnitCosts }),
   // The same register without the material-by-material columns (total issue only).
   'product-summary': async (ctx, q) => ({
     ...(await productProductionReport(ctx, q, { resolveRange })),

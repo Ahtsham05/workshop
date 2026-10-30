@@ -41,8 +41,19 @@ export function exportReportToExcel(doc: ReportDoc, { companyName, branchName }:
 }
 
 function sectionSheet(s: DocSection) {
-  const header = s.columns.map((c) => (c.group ? `${c.group} — ${c.label}` : c.label))
-  const rows: (string | number)[][] = [header]
+  const header = s.columns.map((c) => c.label)
+  // Header bands ("01-10-2026" over Issue · Receive · Balance) become a merged row above.
+  const merges: XLSX.Range[] = []
+  const bands: string[] = s.columns.map((c, i) => (c.group && s.columns[i - 1]?.group !== c.group ? c.group : ''))
+  if (s.columns.some((c) => c.group)) {
+    bands.forEach((band, i) => {
+      if (!band) return
+      let end = i
+      while (s.columns[end + 1]?.group === band) end += 1
+      if (end > i) merges.push({ s: { r: 0, c: i }, e: { r: 0, c: end } })
+    })
+  }
+  const rows: (string | number)[][] = merges.length || bands.some(Boolean) ? [bands, header] : [header]
   s.rows.forEach((row) => {
     const out: (string | number)[] = []
     let start = 0
@@ -60,6 +71,7 @@ function sectionSheet(s: DocSection) {
     rows.push(out)
   })
   const sheet = XLSX.utils.aoa_to_sheet(rows)
+  if (merges.length) sheet['!merges'] = merges
   sheet['!cols'] = s.columns.map((c, i) => ({ wch: Math.min(40, Math.max(10, header[i].length + 2, c.align === 'right' ? 12 : 18)) }))
   return sheet
 }

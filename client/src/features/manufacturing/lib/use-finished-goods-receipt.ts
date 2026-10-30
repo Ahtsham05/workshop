@@ -6,6 +6,7 @@ import {
   useGetFloorUsageTemplateQuery,
   useGetManufacturingSettingsQuery,
   useGetPackingSetupQuery,
+  useGetStockDetailQuery,
   useReportOutputMutation,
   type FinishedGoodsInput,
   type ProductionOrder,
@@ -60,6 +61,31 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000
 export interface ReceiptPrefill {
   quantity?: number
   packCounts?: PackCounts
+}
+
+/**
+ * Loads what the receive dialog asks for — pack sizes, packing material, stock tracking —
+ * while the order page is open, so the dialog opens with its Packing section already
+ * filled instead of a skeleton. The arguments match the dialog's own queries exactly
+ * (same cache entries); `enabled` is false where the order cannot be received.
+ */
+export function useWarmFinishedGoodsReceipt(
+  order: ProductionOrder | undefined,
+  enabled: boolean
+) {
+  const on = !!order && enabled
+  useGetManufacturingSettingsQuery(on ? undefined : skipToken)
+  useGetPackingSetupQuery(
+    on ? { productId: order.productId, variantId: order.variantId || null } : skipToken
+  )
+  useGetFloorPickListQuery(on ? undefined : skipToken)
+  useGetFloorUsageTemplateQuery(on ? order.productId : skipToken)
+  // FinishedGoodsFields' look-up; an order without its variant waits for the dialog's choice.
+  useGetStockDetailQuery(
+    on && order.variantId
+      ? { productId: order.productId, variantId: order.variantId }
+      : skipToken
+  )
 }
 
 export function useFinishedGoodsReceipt(

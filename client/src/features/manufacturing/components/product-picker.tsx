@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronsUpDown, Loader2, Package, Plus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  Check,
+  ChevronsUpDown,
+  Loader2,
+  Package,
+  Plus,
+  RotateCw,
+} from 'lucide-react'
 import { useDispatch } from 'react-redux'
 import {
   manufacturingApi,
-  useGetManufacturingProductsQuery,
   type ManufacturingProduct,
   type ProductType,
 } from '@/stores/manufacturing.api'
@@ -14,7 +20,6 @@ import { afterPaint } from '@/lib/invoice-form-keyboard'
 import { cn } from '@/lib/utils'
 import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
-import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -30,6 +35,11 @@ import {
 } from '@/components/ui/popover'
 import { UsersActionDialog } from '@/features/products/components/users-action-dialog'
 import { PRODUCT_TYPE_META, fmtQty } from '../lib/constants'
+import {
+  highlightParts,
+  searchCatalog,
+  useCatalogProducts,
+} from '../lib/product-catalog'
 
 export type PickedProduct = Pick<
   ManufacturingProduct,
@@ -43,7 +53,8 @@ export type PickedProduct = Pick<
   | 'cost'
 >
 
-const LIMIT = 30
+// Rows drawn at once — the whole catalog is searched, only the best this many are shown.
+const RENDER_LIMIT = 60
 const NAV_KEYS = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp']
 
 const stockTone = (qty: number) =>
@@ -56,14 +67,18 @@ const stockTone = (qty: number) =>
         : 'text-green-600'
 
 /**
- * Searches the branch's EXISTING product catalog (server-side, debounced), laid out like
- * the invoice's product search. The manufacturing module never keeps its own product
- * list — it only references these (and "Add product" creates a normal catalog product).
+ * Searches the branch's EXISTING product catalog, laid out like the invoice's product
+ * search. The catalog is fetched once and cached (lib/product-catalog.ts) — every picker
+ * on every manufacturing screen shares it, and typing searches it in memory, so no
+ * request is sent per keystroke or per open. The manufacturing module never keeps its
+ * own product list ("Add product" creates a normal catalog product).
  *
  * Keyboard: type to search, ↑/↓ to move, Enter to pick. With nothing typed and nothing
  * chosen with the arrows, Enter calls `onEmptyEnter` ("done here") rather than picking
- * whatever happens to be first. Enter before the results arrive picks the best match
- * once they do (fast typing, barcode scanners).
+ * whatever happens to be first. Enter before the catalog's first load picks the best
+ * match once it arrives (fast typing, barcode scanners). When only near-spellings match,
+ * the first Enter highlights the top suggestion and a second one picks it — a typo never
+ * silently picks a different product.
  */
 export function ProductPicker({
   value,
@@ -151,17 +166,26 @@ export function ProductPicker({
     if (!next) updateSearch('')
   }
 
-  const debounced = useDebouncedValue(search, 250)
-  const { data, isFetching } = useGetManufacturingProductsQuery(
-    { search: debounced.trim() || undefined, productType, packRole, limit: LIMIT },
-    { skip: !open }
+  // Mounted = prefetched: the list is ready before the person opens it.
+  const catalog = useCatalogProducts({ productType, packRole })
+  const excludeKey = excludeIds.join(',')
+  const candidates = useMemo(() => {
+    if (!excludeKey) return catalog.products
+    const excluded = new Set(excludeKey.split(','))
+    return catalog.products.filter((p) => !excluded.has(p.id))
+  }, [catalog.products, excludeKey])
+  // Only an open list is searched — a BOM's many row pickers cost nothing while closed.
+  const result = useMemo(
+    () =>
+      open
+        ? searchCatalog(candidates, search, RENDER_LIMIT)
+        : { items: [], total: 0, fuzzy: false },
+    [open, candidates, search]
   )
-  const options = (data?.results || []).filter(
-    (p) => !excludeIds.includes(p.id)
-  )
-  const settled = !isFetching && debounced === search
+  const options = result.items
+  const settled = !!catalog.data
   const showCreate =
-    canCreate && settled && !!search.trim() && options.length === 0
+    canCreate && settled && !!search.trim() && (!options.length || result.fuzzy)
 
   const handOff = (action: () => void) => {
     action()
@@ -180,33 +204,45 @@ export function ProductPicker({
     setOpen(false)
     setCreating(name)
   }
-  const bestMatch = () => {
-    const q = searchRef.current.trim().toLowerCase()
-    return (
-      options.find(
-        (p) =>
-          (p.sku && p.sku.toLowerCase() === q) ||
-          (p.barcode && p.barcode.toLowerCase() === q)
-      ) ||
-      options.find((p) => p.id === active) ||
-      options[0]
-    )
+  // Ranked best-first, so the top row is the exact SKU / barcode / name match if any.
+  const bestMatch = () =>
+    (navigated.current && options.find((p) => p.id === active)) || options[0]
+  // Near-spellings only: the first Enter shows which product it would take.
+  const enterOnMatches = () => {
+    if (result.fuzzy && !navigated.current) {
+      if (options[0]) setActive(options[0].id)
+      markNavigated()
+      return
+    }
+    const match = bestMatch()
+    if (match) pick(match)
+    else if (showCreate) startCreate()
   }
+
+  // While typing, the highlighted row is the top-ranked one (what Enter takes) — cmdk
+  // would otherwise keep a row from the previous search highlighted.
+  useEffect(() => {
+    if (navigated.current || !searchRef.current.trim()) return
+    setActive(result.fuzzy ? '' : (options[0]?.id ?? ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result])
 
   useEffect(() => {
     if (!pendingEnter.current || !settled) return
     pendingEnter.current = false
-    const match = bestMatch()
-    if (match) pick(match)
-    else if (canCreate && searchRef.current.trim()) startCreate()
+    enterOnMatches()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settled, data])
+  }, [settled])
 
   const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (NAV_KEYS.includes(e.key)) {
-      // First move on an empty search starts from the top (or bottom), not from the
-      // row cmdk quietly pre-selected.
-      if (!navigated.current && !search.trim() && options.length) {
+      // First move on an empty search (or among near-spellings) starts from the top (or
+      // bottom), not from the row cmdk quietly pre-selected.
+      if (
+        !navigated.current &&
+        (!search.trim() || result.fuzzy) &&
+        options.length
+      ) {
         e.preventDefault()
         e.stopPropagation()
         const up = e.key === 'ArrowUp' || e.key === 'End' || e.key === 'PageUp'
@@ -231,9 +267,7 @@ export function ProductPicker({
       pendingEnter.current = true
       return
     }
-    const match = bestMatch()
-    if (match) pick(match)
-    else if (showCreate) startCreate()
+    enterOnMatches()
   }
 
   // Typing on the closed trigger opens the search with that first letter.
@@ -317,7 +351,23 @@ export function ProductPicker({
               className='max-h-[300px] overflow-y-auto'
               onPointerMoveCapture={markNavigated}
             >
-              {!data && isFetching ? (
+              {!settled && catalog.isError ? (
+                <div className='flex flex-col items-center gap-3 px-4 py-6 text-center'>
+                  <p className='text-muted-foreground text-sm'>
+                    {t('Could not load products.')}
+                  </p>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    className='gap-2'
+                    onClick={() => void catalog.refetch()}
+                  >
+                    <RotateCw className='h-4 w-4' />
+                    {t('Retry')}
+                  </Button>
+                </div>
+              ) : !settled ? (
                 <div className='text-muted-foreground flex flex-col items-center gap-2 py-8 text-sm'>
                   <Loader2 className='h-6 w-6 animate-spin' aria-hidden />
                   {t('Loading products…')}
@@ -325,7 +375,9 @@ export function ProductPicker({
               ) : options.length === 0 ? (
                 <div className='flex flex-col items-center gap-3 px-4 py-6 text-center'>
                   <p className='text-muted-foreground text-sm'>
-                    {settled ? t('No products found.') : t('Searching…')}
+                    {search.trim()
+                      ? t('No products found.')
+                      : t('No products yet.')}
                   </p>
                   {showCreate && (
                     <Button
@@ -343,7 +395,13 @@ export function ProductPicker({
                   )}
                 </div>
               ) : (
-                <CommandGroup>
+                <CommandGroup
+                  heading={
+                    result.fuzzy
+                      ? `${t('No exact match')} — ${t('did you mean')}…`
+                      : undefined
+                  }
+                >
                   {options.map((product) => {
                     const meta = product.productType
                       ? PRODUCT_TYPE_META[product.productType]
@@ -355,8 +413,9 @@ export function ProductPicker({
                         onSelect={() => pick(product)}
                         className={cn(
                           'flex cursor-pointer items-center gap-3 p-2.5',
-                          // Nothing chosen yet on an empty search: no row looks picked.
-                          !search.trim() &&
+                          // Nothing chosen yet on an empty search (or among mere
+                          // near-spellings): no row looks picked.
+                          (!search.trim() || result.fuzzy) &&
                             !showHighlight &&
                             'data-[selected=true]:text-foreground data-[selected=true]:bg-transparent'
                         )}
@@ -378,8 +437,25 @@ export function ProductPicker({
                               className='truncate text-sm font-medium'
                               title={product.name}
                             >
-                              {product.name}
+                              {highlightParts(product.name, search).map(
+                                (part, i) =>
+                                  part.match ? (
+                                    <mark
+                                      key={i}
+                                      className='text-primary rounded-sm bg-transparent font-semibold'
+                                    >
+                                      {part.text}
+                                    </mark>
+                                  ) : (
+                                    part.text
+                                  )
+                              )}
                             </span>
+                            {product.isActive === false && (
+                              <span className='text-muted-foreground shrink-0 rounded border border-dashed px-1.5 py-px text-[10px]'>
+                                {t('Inactive')}
+                              </span>
+                            )}
                             {meta && (
                               <span
                                 className={cn(
@@ -412,6 +488,10 @@ export function ProductPicker({
                           </div>
                           <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs'>
                             {product.sku && <span>{product.sku}</span>}
+                            {product.barcode &&
+                              product.barcode !== product.sku && (
+                                <span>{product.barcode}</span>
+                              )}
                             <span className={stockTone(product.stockQuantity)}>
                               {t('Stock')}: {fmtQty(product.stockQuantity)}{' '}
                               {product.unit}
@@ -431,11 +511,27 @@ export function ProductPicker({
                   })}
                 </CommandGroup>
               )}
+              {showCreate && options.length > 0 && (
+                <div className='border-t p-1.5'>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='sm'
+                    className='w-full justify-start gap-2'
+                    onClick={startCreate}
+                  >
+                    <Plus className='h-4 w-4 shrink-0' />
+                    <span className='truncate'>
+                      {t('Add product')} “{search.trim()}”
+                    </span>
+                  </Button>
+                </div>
+              )}
             </CommandList>
             <div className='text-muted-foreground flex items-center justify-between gap-2 border-t px-3 py-1.5 text-[11px]'>
               <span>
-                {data && data.totalResults > options.length
-                  ? `${options.length} ${t('of')} ${data.totalResults} · ${t('type to narrow')}`
+                {result.total > options.length
+                  ? `${options.length} ${t('of')} ${result.total.toLocaleString()} · ${t('type to narrow')}`
                   : `${options.length} ${t('products')}`}
               </span>
               <span className='max-sm:hidden'>

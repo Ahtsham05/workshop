@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import { Switch } from '@/components/ui/switch'
 import { fmtQty } from '../lib/constants'
 import { MAX_REGISTER_PRODUCTS as MAX_PRODUCTS } from '../lib/product-register-state'
 import { productLineName } from '../lib/report-doc'
@@ -14,9 +15,9 @@ import type {
 } from '../lib/report-types'
 
 /*
- * Controls of the product-wise production register: the product line (one product, or
- * several pack sizes of the same product) and the kg per pack used to weigh what was
- * received. Both are remembered in this browser.
+ * Controls of the product-wise production register: the products (each its own register,
+ * or added up as one product line) and the kg per pack used to weigh what was received.
+ * All remembered in this browser.
  */
 
 /** Products whose name starts with the same first words as `name` — the other pack sizes. */
@@ -36,12 +37,16 @@ export function ProductRegisterControls({
   onProductIdsChange,
   packWeights,
   onPackWeightChange,
+  combine,
+  onCombineChange,
 }: {
   data?: ProductProductionReport
   productIds: string[]
   onProductIdsChange: (ids: string[]) => void
   packWeights: Record<string, number>
   onPackWeightChange: (key: string, kg: number | null) => void
+  combine: boolean
+  onCombineChange: (value: boolean) => void
 }) {
   const { t } = useLanguage()
   const options = useMemo(() => data?.options || [], [data])
@@ -50,7 +55,8 @@ export function ProductRegisterControls({
     [options]
   )
   const selectedNames = productIds.map((id) => byId.get(id)?.name || '')
-  const line = productLineName(selectedNames.filter(Boolean))
+  const combined = combine && productIds.length > 1
+  const line = combined ? productLineName(selectedNames.filter(Boolean)) : ''
 
   // First visit: start with the product made most recently.
   useEffect(() => {
@@ -75,17 +81,20 @@ export function ProductRegisterControls({
   const related = first
     ? relatedTo(first, options).filter((o) => !productIds.includes(o.productId))
     : []
-  const packs =
-    data && !data.needsProduct ? data.packs.filter((p) => !p.byWeight) : []
+  const registers = data && !data.needsProduct ? data.registers : []
+  // A pack size states its own content, so only other packs ask for a weight.
+  const packs = registers.flatMap((r) =>
+    r.packs.filter((p) => !p.byWeight && p.weightSource !== 'pack')
+  )
 
   return (
     <div className='space-y-3 border-t pt-3'>
       <div className='flex flex-col gap-2 lg:flex-row lg:items-end'>
         <div className='min-w-0 flex-1 space-y-1'>
           <Label className='text-muted-foreground text-xs'>
-            {t('Product line')}
+            {t('Products')}
             {productIds.length > 1
-              ? ` — ${t('pack sizes added together in kg')}`
+              ? ` — ${combined ? t('added up as one product line') : t('each on its own register, one below the other')}`
               : ''}
           </Label>
           <div className='flex flex-wrap items-center gap-1.5'>
@@ -104,7 +113,7 @@ export function ProductRegisterControls({
                   title={name}
                 >
                   <span className='truncate'>
-                    {productIds.length > 1 && line && short !== name ? (
+                    {combined && line && short !== name ? (
                       <>
                         <span className='text-muted-foreground'>{line} · </span>
                         {short}
@@ -136,7 +145,7 @@ export function ProductRegisterControls({
                   }
                   placeholder={
                     productIds.length
-                      ? t('Add a pack size / product')
+                      ? t('Add another product')
                       : t('Choose a product')
                   }
                   searchPlaceholder={t('Search product')}
@@ -166,6 +175,19 @@ export function ProductRegisterControls({
           )}
       </div>
 
+      {productIds.length > 1 && (
+        <label className='flex items-center gap-2 text-sm'>
+          <Switch checked={combine} onCheckedChange={onCombineChange} />
+          <span>
+            {t('Add up as one product line')}
+            <span className='text-muted-foreground'>
+              {' '}
+              — {t('for pack sizes kept as separate products')}
+            </span>
+          </span>
+        </label>
+      )}
+
       {packs.length > 0 && (
         <div className='space-y-1.5'>
           <p className='text-muted-foreground text-xs'>
@@ -175,14 +197,14 @@ export function ProductRegisterControls({
           </p>
           <div className='grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4'>
             {packs.map((p) => (
-              <PackWeightInput
+              <KgInput
                 key={p.key}
                 label={
                   line && p.name.toLowerCase().startsWith(line.toLowerCase())
                     ? p.name.slice(line.length).trim() || p.name
                     : p.name
                 }
-                unit={p.unit}
+                per={p.unit}
                 auto={p.weightSource === 'manual' ? null : p.kgPerUnit}
                 typed={packWeights[p.key]}
                 missing={p.kgPerUnit == null}
@@ -196,16 +218,16 @@ export function ProductRegisterControls({
   )
 }
 
-function PackWeightInput({
+function KgInput({
   label,
-  unit,
+  per,
   auto,
   typed,
   missing,
   onChange,
 }: {
   label: string
-  unit: string
+  per: string
   auto: number | null
   typed?: number
   missing: boolean
@@ -222,7 +244,7 @@ function PackWeightInput({
     <label className='flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5'>
       <span className='min-w-0 flex-1 truncate text-sm' title={label}>
         {label}
-        <span className='text-muted-foreground'> / {unit}</span>
+        <span className='text-muted-foreground'> / {per}</span>
       </span>
       <Input
         inputMode='decimal'

@@ -730,7 +730,8 @@ const report = {
         'batch-stock',
         'batch-trace',
         'product-production',
-        'product-summary'
+        'product-summary',
+        'stock-sheet'
       )
       .required(),
   }),
@@ -749,8 +750,19 @@ const report = {
     stock: Joi.string().valid('in', 'all'),
     // Product-wise production register: up to 12 comma-separated product ids, and typed
     // kg per pack ("productId[:variantId]=kg,…") — both parsed strictly by the service.
+    // `combine` adds the products up into one register.
     productIds: Joi.string().max(400),
     packWeights: Joi.string().max(2000).allow(''),
+    combine: Joi.boolean(),
+    // Inventory stock sheet: comma-separated (URI-encoded) category / sub-category / brand
+    // keys and manufacturing types, the table grouping and the date columns.
+    categoryIds: Joi.string().max(4000).allow(''),
+    subCategoryIds: Joi.string().max(4000).allow(''),
+    brandIds: Joi.string().max(4000).allow(''),
+    productTypes: Joi.string().max(200).allow(''),
+    groupBy: Joi.string().valid('category', 'subcategory', 'brand', 'type', 'none'),
+    interval: Joi.string().valid('day', 'week', 'month'),
+    activeDays: Joi.boolean(),
   }),
 };
 

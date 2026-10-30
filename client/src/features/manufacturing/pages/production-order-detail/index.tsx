@@ -62,7 +62,10 @@ import {
 } from '../../components/execution-dialogs'
 import { ProductionOrderDialog } from '../../components/production-order-dialog'
 import { ReceiveFinishedGoodsDialog } from '../../components/receive-finished-goods-dialog'
-import type { ReceiptPrefill } from '../../lib/use-finished-goods-receipt'
+import {
+  useWarmFinishedGoodsReceipt,
+  type ReceiptPrefill,
+} from '../../lib/use-finished-goods-receipt'
 import { RecordScrapDialog } from '../../components/record-scrap-dialog'
 import { ReverseOutputDialog } from '../../components/reverse-output-dialog'
 import { useConfirm } from '../../lib/confirm'
@@ -160,6 +163,14 @@ export default function ProductionOrderDetail({
   } = useGetProductionOrderQuery(orderId)
   const { data: requirements } = useGetOrderRequirementsQuery(orderId)
   const { data: settings } = useGetManufacturingSettingsQuery()
+  // "Receive finished goods" opens with packing already loaded.
+  useWarmFinishedGoodsReceipt(
+    order,
+    hasPermission('receiveFinishedGoods') &&
+      !!order &&
+      order.orderType !== 'assembly' &&
+      EXECUTABLE.includes(order.status)
+  )
   const [changeStatus, { isLoading: changing }] =
     useChangeProductionStatusMutation()
   const [refreshMaterials] = useRefreshProductionMaterialsMutation()

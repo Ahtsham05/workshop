@@ -1,6 +1,6 @@
 import type {
   Bom,
-  ManufacturingProduct,
+  ManufacturingCatalogProduct,
   OrderBatchLine,
   ProductionPriority,
 } from '@/stores/manufacturing.api'
@@ -43,7 +43,7 @@ export type BatchHeader = {
 }
 
 export const productOf = (p: EntryProduct | null | undefined) =>
-  (p?.raw as ManufacturingProduct | undefined) ?? null
+  (p?.raw as ManufacturingCatalogProduct | undefined) ?? null
 
 export const blankBatchRow = (): Omit<BatchRow, 'id'> => ({
   product: null,
@@ -61,7 +61,7 @@ export const blankBatchRow = (): Omit<BatchRow, 'id'> => ({
 const BROWSE_RANK: Record<string, number> = { finished_good: 0, by_product: 1 }
 
 /** Manufacturing products → engine products (searched in memory). */
-export function buildableSource(list: ManufacturingProduct[]): ProductSource & {
+export function buildableSource(list: ManufacturingCatalogProduct[]): ProductSource & {
   products: EntryProduct[]
 } {
   const products: EntryProduct[] = list.map((p) => ({

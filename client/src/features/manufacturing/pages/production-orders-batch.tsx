@@ -17,7 +17,6 @@ import { toast } from 'sonner'
 import {
   useCreateProductionOrderBatchMutation,
   useGetBomsQuery,
-  useGetManufacturingProductsQuery,
   useGetManufacturingSettingsQuery,
   useGetOperatorsQuery,
   type Bom,
@@ -65,6 +64,7 @@ import {
   PRIORITIES,
   PRIORITY_META,
 } from '../lib/constants'
+import { useCatalogProducts } from '../lib/product-catalog'
 import {
   blankBatchRow,
   buildableSource,
@@ -172,12 +172,11 @@ export default function ProductionOrdersBatchPage({
   const userId = user?.id || user?._id || null
   const userKey = `${user?.organizationId || 'org'}:${userId || 'me'}`
 
-  const { data: productPage, isLoading: productsLoading } =
-    useGetManufacturingProductsQuery({
+  // The shared cached catalog — every buildable product, not just the first 200.
+  const { products: buildable, isLoading: productsLoading } =
+    useCatalogProducts({
       productType: BUILDABLE_PRODUCT_TYPES,
       packRole: 'make',
-      limit: 200,
-      sort: 'name',
     })
   const { data: bomPage, isLoading: bomsLoading } = useGetBomsQuery({
     isActive: true,
@@ -191,8 +190,8 @@ export default function ProductionOrdersBatchPage({
   const cardRef = useRef<HTMLDivElement>(null)
 
   const source = useMemo(
-    () => buildableSource(productPage?.results || []),
-    [productPage]
+    () => buildableSource(buildable),
+    [buildable]
   )
   const bomsByProduct = useMemo(() => {
     const map = new Map<string, Bom[]>()

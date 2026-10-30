@@ -136,6 +136,10 @@ const getMatchingProductIds = catchAsync(async (req, res) => {
   res.send(await productsService.matchingProductIds(readCtx(req), filter));
 });
 
+const getProductCatalog = catchAsync(async (req, res) => {
+  res.send(await productsService.getProductCatalog(readCtx(req)));
+});
+
 const getProductTypeSummary = catchAsync(async (req, res) => {
   res.send(await productsService.getTypeSummary(readCtx(req)));
 });
@@ -1314,6 +1318,7 @@ module.exports = {
   removeDemoData,
   getProducts,
   getMatchingProductIds,
+  getProductCatalog,
   getProductTypeSummary,
   updateProductAttributes,
   bulkClassifyProducts,

@@ -80,6 +80,39 @@ test('a type list may include unclassified: the BOM pickers (build vs components
   expect(await names('unclassified')).toEqual(['Loose bolt']);
 });
 
+test('picker catalog: whole branch in one lean read, with BOM counts and pack roles', async () => {
+  const { Bom, PackSize } = require('../../src/models');
+  const steel = await insert('Steel', { productType: 'raw_material', stockQuantity: 50, image: { url: 'u', publicId: 'p' } });
+  const bulk = await insert('Honey', { productType: 'finished_good' });
+  const jar = await insert('Honey 1 KG Jar', { productType: 'finished_good', isActive: false });
+  await insert('Other org', { organizationId: id() });
+  await insert('Other branch', { branchId: id() });
+  const bom = (extra) => ({ _id: id(), organizationId: ORG, branchId: BRANCH, productId: bulk._id, isActive: true, deletedAt: null, ...extra });
+  await Bom.collection.insertMany([bom(), bom({ isActive: false }), bom({ deletedAt: new Date() })]);
+  await PackSize.collection.insertOne({
+    organizationId: ORG,
+    branchId: BRANCH,
+    productId: bulk._id,
+    packProductId: jar._id,
+    name: '1 KG Jar',
+    contentQuantity: 1,
+    contentUnit: 'kg',
+  });
+
+  const catalog = await products.getProductCatalog(ctx);
+  expect(catalog.map((p) => p.name)).toEqual(['Honey', 'Honey 1 KG Jar', 'Steel']);
+  const byName = Object.fromEntries(catalog.map((p) => [p.name, p]));
+  expect(byName.Honey).toMatchObject({ id: String(bulk._id), bomCount: 2, activeBomCount: 1, packSizeCount: 1, packOf: null });
+  expect(byName['Honey 1 KG Jar']).toMatchObject({
+    isActive: false,
+    packSizeCount: 0,
+    packOf: { productId: String(bulk._id), productName: 'Honey', sizeName: '1 KG Jar', contentQuantity: 1, contentUnit: 'kg' },
+  });
+  expect(byName.Steel).toMatchObject({ stockQuantity: 50, cost: 10, image: { url: 'u' }, bomCount: 0, productType: 'raw_material' });
+  expect(byName.Steel.image.publicId).toBeUndefined();
+  expect(byName.Steel._id).toBeUndefined();
+});
+
 test('overview: BOMs, orders that make it, open orders that consume it, WIP', async () => {
   const steel = await insert('Steel', { productType: 'raw_material', stockQuantity: 50 });
   const fan = await insert('Fan', { productType: 'finished_good' });

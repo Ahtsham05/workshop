@@ -17,6 +17,7 @@ export type ReportKey =
   | 'batch-trace'
   | 'product-production'
   | 'product-summary'
+  | 'stock-sheet'
 
 export interface ReportParams {
   report: ReportKey
@@ -34,6 +35,15 @@ export interface ReportParams {
   /** Product-wise register: the product line (comma-separated ids) and typed kg per pack. */
   productIds?: string
   packWeights?: string
+  combine?: boolean
+  /** Inventory stock sheet: comma-separated (URI-encoded) keys, grouping and date columns. */
+  categoryIds?: string
+  subCategoryIds?: string
+  brandIds?: string
+  productTypes?: string
+  groupBy?: StockSheetGroupBy
+  interval?: StockSheetInterval
+  activeDays?: boolean
 }
 
 interface Period {
@@ -704,6 +714,8 @@ export interface ProductRegisterPack {
   byWeight: boolean
   /** Received by weight beside real packs — shown as "extra packing". */
   loose: boolean
+  /** Order among the product's pack sizes (null: not a pack size). */
+  sequence: number | null
   quantity: number
   kg: number
 }
@@ -716,14 +728,18 @@ export interface ProductRegisterMaterial {
   unit: string
   kgPerUnit: number | null
   weightSource: WeightSource
+  /** A by-product re-used as material: its own column, kept out of KG. */
+  byProduct: boolean
   issued: number
   returned: number
   scrapped: number
   netKg: number | null
 }
 
+
 export interface ProductRegisterDay {
   date: string
+  /** Batch qty: stock batches (lots) the KG materials were issued from that day. */
   batches: number
   batchNumbers: string[]
   /** Material key → quantity in the material's unit. */
@@ -732,6 +748,9 @@ export interface ProductRegisterDay {
   /** Pack key → quantity in the pack's unit. */
   packs: Record<string, number>
   issueKg: number
+  /** issueKg split: main materials (the KG column) and by-products. */
+  mainKg: number
+  byProductKg: number
   returnedKg: number
   packedKg: number
   looseKg: number
@@ -754,6 +773,7 @@ export interface ProductRegisterBatch {
   startedOn: string | null
   lastReceiptAt: string | null
   planned: number
+  batchCount: number
   issuedKg: number
   returnedKg: number
   netIssuedKg: number
@@ -771,12 +791,9 @@ interface ProductRegisterEmpty {
   needsProduct: true
 }
 
-export interface ProductRegisterData {
-  /** 'product-summary' is the same register with the issue as one total column. */
-  report: 'product-production' | 'product-summary'
-  period: Period
-  options: ProductRegisterOption[]
-  needsProduct?: false
+/** One product's register (or several products added up — `combined`). */
+export interface ProductRegister {
+  key: string
   selected: { productId: string; name: string; sku: string; unit: string }[]
   baseUnit: 'kg'
   materials: ProductRegisterMaterial[]
@@ -786,10 +803,12 @@ export interface ProductRegisterData {
   closingInProcessKg: number
   days: ProductRegisterDay[]
   batches: ProductRegisterBatch[]
-  warnings: { kind: 'pack' | 'material'; names: string[]; message: string }[]
+  warnings: { kind: 'pack' | 'material' | 'batch'; names: string[]; message: string }[]
   totals: {
     batches: number
     issueKg: number
+    mainKg: number
+    byProductKg: number
     returnedKg: number
     netIssueKg: number
     packedKg: number
@@ -802,9 +821,93 @@ export interface ProductRegisterData {
   }
 }
 
+export interface ProductRegisterData {
+  /** 'product-summary' is the same day sheets without the material and batch detail. */
+  report: 'product-production' | 'product-summary'
+  period: Period
+  options: ProductRegisterOption[]
+  needsProduct?: false
+  combined: boolean
+  selected: { productId: string; name: string; sku: string; unit: string }[]
+  /** One per product, in the order chosen; a single one when `combined`. */
+  registers: ProductRegister[]
+}
+
 export type ProductProductionReport = ProductRegisterEmpty | ProductRegisterData
 
+/* ── Inventory stock sheet (stockSheetReport.service.js) ─────────────────────── */
+
+export type StockSheetInterval = 'day' | 'week' | 'month'
+export type StockSheetGroupBy = 'category' | 'subcategory' | 'brand' | 'type' | 'none'
+
+export interface StockSheetRow {
+  productId: string
+  name: string
+  nameUrdu: string
+  sku: string
+  unit: string
+  productType: string | null
+  opening: number
+  /** Per date column: [issue, receive, balance]. */
+  cells: [number, number, number][]
+  issue: number
+  receive: number
+  closing: number
+  /** Live stock now (closing of a period ending today). */
+  current: number
+  unitCost: number
+  closingValue: number
+}
+
+export interface StockSheetGroup {
+  key: string
+  name: string
+  /** Sub-category grouping: the category it belongs to. */
+  parent: string | null
+  /** Items with no category / brand / type. */
+  none: boolean
+  /** Every item counts in this unit — the table can be totalled. */
+  unit: string | null
+  closingValue: number
+  rows: StockSheetRow[]
+}
+
+export interface StockSheetOption {
+  id: string
+  name: string
+  count: number
+}
+
+export interface StockSheetOptions {
+  categories: StockSheetOption[]
+  noCategory: number
+  subCategories: (StockSheetOption & { categoryId: string | null })[]
+  noSubCategory: number
+  brands: StockSheetOption[]
+  noBrand: number
+  types: { type: string | null; count: number }[]
+}
+
+export interface StockSheetReport {
+  report: 'stock-sheet'
+  period: Period
+  interval: StockSheetInterval
+  groupBy: StockSheetGroupBy
+  /** Date columns: a day, a week (Monday start, clipped to the period) or a month. */
+  buckets: { key: string; start: string; end: string }[]
+  /** Dates left out because nothing moved on them (activeDays). */
+  hiddenBuckets: number
+  groups: StockSheetGroup[]
+  totals: { products: number; moved: number; negative: number; closingValue: number }
+  truncated: boolean
+  maxRows: number
+  options: StockSheetOptions
+  /** Names of the filters the sheet was drawn with. */
+  applied: { categories: string[]; subCategories: string[]; brands: string[]; types: string[]; search: string }
+}
+
 export type ManufacturingReport =
+  | StockSheetReport
   | ProductProductionReport
   | BatchStockReport
   | BatchTraceReport

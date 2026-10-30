@@ -277,6 +277,59 @@ const queryProducts = async (ctx, rawFilter, options) => {
   };
 };
 
+const CATALOG_FIELDS =
+  'name nameUrdu sku barcode unit cost price stockQuantity hasVariants isActive image.url productType procurementType issueMethod defaultBomId manufacturingLeadTimeDays shelfLifeDays trackImei trackSerial';
+
+/**
+ * The whole branch catalog in one lean read, for the pickers: they cache it and search in
+ * memory instead of asking the server on every keystroke. Three queries however many
+ * products there are; no batch tracking (the products page has that), and the type / pack
+ * role filters are applied by the client from the fields returned here.
+ */
+const getProductCatalog = async (ctx) => {
+  const [products, counts, packSizes] = await Promise.all([
+    Product.find(scopeFilter(ctx)).select(CATALOG_FIELDS).sort({ name: 1 }).lean(),
+    Bom.aggregate([
+      { $match: { ...aggregateScope(ctx), deletedAt: null } },
+      { $group: { _id: '$productId', total: { $sum: 1 }, active: { $sum: { $cond: ['$isActive', 1, 0] } } } },
+    ]),
+    PackSize.find(scopeFilter(ctx)).select('packProductId productId name contentQuantity contentUnit').lean(),
+  ]);
+  const bomCounts = new Map(counts.map((r) => [String(r._id), r]));
+  const nameOf = new Map(products.map((p) => [String(p._id), p.name]));
+  const packOf = new Map();
+  const sizeCount = new Map();
+  packSizes.forEach((s) => {
+    const bulkId = String(s.productId);
+    sizeCount.set(bulkId, (sizeCount.get(bulkId) || 0) + 1);
+    if (s.packProductId) {
+      packOf.set(String(s.packProductId), {
+        productId: bulkId,
+        productName: nameOf.get(bulkId) || '',
+        sizeName: s.name,
+        contentQuantity: s.contentQuantity,
+        contentUnit: s.contentUnit,
+      });
+    }
+  });
+  return products.map(({ _id, image, ...product }) => {
+    const id = String(_id);
+    const bom = bomCounts.get(id);
+    return {
+      ...product,
+      id,
+      ...(image && image.url ? { image: { url: image.url } } : {}),
+      productType: product.productType || null,
+      procurementType: product.procurementType || null,
+      defaultBomId: product.defaultBomId ? String(product.defaultBomId) : null,
+      bomCount: bom ? bom.total : 0,
+      activeBomCount: bom ? bom.active : 0,
+      packOf: packOf.get(id) || null,
+      packSizeCount: sizeCount.get(id) || 0,
+    };
+  });
+};
+
 /**
  * Every product the current filter matches (id + name only), for "select all N matching"
  * on the list — capped at MAX_BULK_PRODUCTS, `total` says how many there really are.
@@ -703,6 +756,7 @@ const getProductOverview = async (ctx, productId) => {
 
 module.exports = {
   queryProducts,
+  getProductCatalog,
   getTypeSummary,
   updateAttributes,
   bulkClassify,
