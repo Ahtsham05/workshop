@@ -12,7 +12,7 @@ import type { AppDispatch } from '@/stores/store'
 import type { Category, Product } from '@/features/invoice/index'
 import { ProductCatalog } from '@/features/purchase-invoice/components/product-catalog'
 import type { PurchaseOrder } from '@/stores/purchaseOrder.api'
-import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { CATALOG_REVALIDATE_ON_MOUNT, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 
 import PurchaseOrderPanel from './purchase-order-panel'
 
@@ -90,7 +90,7 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
     })
   }, [dispatch])
 
-  const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery()
+  const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery(undefined, CATALOG_REVALIDATE_ON_MOUNT)
   // Manufacturing businesses don't buy finished goods — kept off tiles and scans.
   const purchaseFilter = useTradeProductFilter('purchase')
 

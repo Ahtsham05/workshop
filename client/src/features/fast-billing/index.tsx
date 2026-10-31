@@ -7,7 +7,7 @@ import type { RootState } from '@/stores/store'
 import { Button } from '@/components/ui/button'
 import { ArrowLeftRight, History, Layers, Package, Receipt, ShoppingCart, Trash2, Zap } from 'lucide-react'
 import { usePermissions } from '@/context/permission-context'
-import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { CATALOG_REVALIDATE_ON_MOUNT, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
@@ -57,7 +57,7 @@ export default function FastBillingPage() {
   const currencySymbol = currencyMeta.symbol
   const { hasExplicitPermission } = usePermissions()
   const canCreateInvoices = hasExplicitPermission('createInvoices')
-  const { data: catalog = EMPTY_CATALOG } = useGetPurchasableCatalogQuery()
+  const { data: catalog = EMPTY_CATALOG } = useGetPurchasableCatalogQuery(undefined, CATALOG_REVALIDATE_ON_MOUNT)
   // Manufacturing businesses don't sell raw materials: they're left out of suggestions
   // and name matches, and scanning one says why instead of adding it.
   const saleFilter = useTradeProductFilter('sale')

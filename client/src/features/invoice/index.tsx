@@ -9,7 +9,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { AppDispatch, RootState } from '@/stores/store'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchCustomers } from '@/stores/customer.slice'
-import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { CATALOG_REVALIDATE_ON_MOUNT, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
 import type { ImeiEntryInput } from '@/stores/imei.api'
 import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
 import { leadApi } from '@/stores/lead.api'
@@ -362,7 +362,7 @@ export default function InvoicePage() {
   // own real price/cost/stock) — feeds the "Product Catalog" tile grid so variant
   // products show as separate tiles instead of one rolled-up tile with a price range.
   // Same endpoint Purchases use — see docs/architecture/universal-product-migration.md.
-  const { data: sellableCatalog = EMPTY_SELLABLE_CATALOG } = useGetPurchasableCatalogQuery()
+  const { data: sellableCatalog = EMPTY_SELLABLE_CATALOG } = useGetPurchasableCatalogQuery(undefined, CATALOG_REVALIDATE_ON_MOUNT)
   // Manufacturing businesses don't sell raw materials — kept off tiles and scans.
   const saleFilter = useTradeProductFilter('sale')
   

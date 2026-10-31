@@ -91,6 +91,8 @@ import { taxExemptionApi } from './taxExemption.api';
 import { taxCalculatorApi } from './taxCalculator.api';
 import { exchangeRateApi } from './exchangeRate.api';
 
+const CATALOG_STATE_PATHS = ['product.data', 'product.products', `${purchaseCatalogApi.reducerPath}.queries`];
+
 export const store = configureStore({
   reducer: {
     handleErrors: errorReducer,
@@ -185,7 +187,13 @@ export const store = configureStore({
     [exchangeRateApi.reducerPath]: exchangeRateApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat(
+    // Dev-only checks walk the whole state after every action; skip the whole-branch
+    // product catalogs (thousands of rows each) or every keystroke on a big branch pays
+    // for re-walking them. Production builds never run these checks.
+    getDefaultMiddleware({
+      immutableCheck: { ignoredPaths: CATALOG_STATE_PATHS },
+      serializableCheck: { ignoredPaths: CATALOG_STATE_PATHS },
+    }).concat(
       invoiceApi.middleware,
       customerApi.middleware,
       purchaseApi.middleware,

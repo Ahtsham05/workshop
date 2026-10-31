@@ -271,7 +271,7 @@ const computeBranchProductMetrics = async ({ organizationId, branchId }) => {
   // with real Inventory-based stock and (when tracked) its active batches. See
   // product.service.js#getPurchasableCatalog and docs/architecture/universal-product-migration.md.
   const [products, dailySalesMap, incomingPOMap, seasonalFactors] = await Promise.all([
-    productService.getPurchasableCatalog({ organizationId: orgId, branchId: brId }),
+    productService.getPurchasableCatalog({ organizationId: orgId, branchId: brId }, { includeStockoutHistory: true }),
     aggregateDailyProductSales({ organizationId: orgId, branchId: brId, windowDays: CONFIG.DEMAND_WINDOW_LONG_DAYS }),
     aggregateIncomingPurchaseOrderQty({ organizationId: orgId, branchId: brId }),
     SeasonalFactor.find({ organizationId: orgId, isActive: true }).lean(),

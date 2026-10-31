@@ -9,6 +9,13 @@ export const MUTATION_API_TIMEOUT_MS = 60_000
 /** Timeout for bulk/batch endpoints that process many records sequentially. */
 export const BATCH_API_TIMEOUT_MS = 120_000
 
+/**
+ * Timeout for the whole-branch product catalog reads (/products/all, /products/purchasable)
+ * behind every item picker. A 7,000+ product branch is several MB that the server pulls
+ * from Atlas before it can answer — the 30s read default cut it off mid-transfer.
+ */
+export const CATALOG_API_TIMEOUT_MS = 120_000
+
 /** @deprecated Use DEFAULT_API_TIMEOUT_MS */
 export const API_TIMEOUT_MS = DEFAULT_API_TIMEOUT_MS
 
@@ -29,6 +36,10 @@ export function resolveRequestTimeoutMs(
   const normalizedMethod = method.toUpperCase()
   if (normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD') {
     return MUTATION_API_TIMEOUT_MS
+  }
+
+  if (/\/products\/(all|purchasable)(\/|\?|$)/.test(path)) {
+    return CATALOG_API_TIMEOUT_MS
   }
 
   return DEFAULT_API_TIMEOUT_MS

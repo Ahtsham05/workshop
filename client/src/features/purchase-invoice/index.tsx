@@ -1,10 +1,10 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { useFormatMoney } from '@/lib/format-money';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch, useSelector, useStore } from 'react-redux';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AppDispatch, RootState } from '@/stores/store';
 import { fetchAllProducts } from '@/stores/product.slice';
-import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api';
+import { CATALOG_REVALIDATE_ON_MOUNT, useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api';
 import type { ImeiEntryInput } from '@/stores/imei.api';
 
 // Stable empty-array reference — an inline `= []` default on `data` would create a new
@@ -205,6 +205,7 @@ const getInitialShowProductCatalog = (): boolean => {
 const PurchaseInvoicePage = () => {
   useCollapseSidebarOnMount();
   const dispatch = useDispatch<AppDispatch>();
+  const store = useStore<RootState>();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as {
     supplierId?: string;
@@ -256,7 +257,7 @@ const PurchaseInvoicePage = () => {
   // its own real price/cost/stock) — feeds the "Product Catalog" tile grid so variant
   // products show as separate tiles instead of one rolled-up tile with a price range.
   // See docs/architecture/universal-product-migration.md.
-  const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery();
+  const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery(undefined, CATALOG_REVALIDATE_ON_MOUNT);
   // Manufacturing businesses don't buy finished goods — kept off tiles and scans.
   const purchaseFilter = useTradeProductFilter('purchase');
 
@@ -501,31 +502,24 @@ const PurchaseInvoicePage = () => {
 
   // Fetch data on mount
   useEffect(() => {
-    console.log('=== PURCHASE INVOICE COMPONENT MOUNT ===');
-    console.log('Fetching products and suppliers data');
-    
-    setLoading(true);
-    
-    // Fetch products
+    // Another page this session may already have loaded the whole catalog: start from it
+    // so the page doesn't sit in `loading` while thousands of products re-download, and
+    // let the request below refresh it in the background.
+    const cachedProducts = store.getState().product.products as Product[];
+    const hasCachedProducts = cachedProducts.length > 0;
+    if (hasCachedProducts) setProducts(cachedProducts);
+    else setLoading(true);
+
     const fetchProductsPromise = dispatch(fetchAllProducts({}))
       .then((data) => {
-        console.log('Products response:', data);
-        let productsData = [];
-        
-        if (data.payload?.results) {
-          productsData = data.payload.results;
-        } else if (data.payload) {
-          productsData = Array.isArray(data.payload) ? data.payload : [];
-        } else {
-          productsData = [];
-        }
-        
-        console.log('Processed products data:', productsData.length, 'products');
-        setProducts(productsData);
-        console.log('Products state updated');
+        if (!fetchAllProducts.fulfilled.match(data)) throw data.payload ?? data.error;
+        const payload = data.payload as { results?: Product[] } | Product[] | undefined;
+        setProducts(Array.isArray(payload) ? payload : payload?.results ?? []);
       })
       .catch((error) => {
         console.error('Error fetching products:', error);
+        // A failed background refresh keeps the cached list instead of emptying the page.
+        if (hasCachedProducts) return;
         setProducts([]);
         toast.error('Failed to fetch products');
       });
@@ -541,7 +535,7 @@ const PurchaseInvoicePage = () => {
       .finally(() => {
         setLoading(false);
       });
-  }, [dispatch]);
+  }, [dispatch, store]);
 
   useEffect(() => {
     const supplierId = search.supplierId?.trim();

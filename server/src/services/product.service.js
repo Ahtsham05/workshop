@@ -393,9 +393,11 @@ const attachVariantAggregates = async (products) => {
           },
         ])
       : [],
+    // Only variants with a flag on can make either $max true, so the rest are skipped —
+    // same result, but a 7,000-product catalog no longer groups every default variant.
     allProductIds.length
       ? ProductVariant.aggregate([
-          { $match: { productId: { $in: allProductIds } } },
+          { $match: { productId: { $in: allProductIds }, $or: [{ trackBatch: true }, { trackExpiry: true }] } },
           { $group: { _id: '$productId', trackBatch: { $max: '$trackBatch' }, trackExpiry: { $max: '$trackExpiry' } } },
         ])
       : [],
@@ -1291,13 +1293,28 @@ const normalizeLeanProduct = (product) => {
   return { ...rest, id: _id.toString() };
 };
 
+// Whole-branch reads: one large first batch instead of the driver's default 101 docs,
+// which costs an extra round trip to Atlas before the 16 MB getMore batches start.
+const CATALOG_BATCH_SIZE = 5000;
+
+// Exactly the Product fields getPurchasableCatalog below reads — description, gallery,
+// unit conversions, sub-categories, audit fields etc. never leave the database for it.
+const PURCHASABLE_PRODUCT_FIELDS =
+  'name nameUrdu barcode image unit trackImei trackSerial productType brandId category categories price cost stockQuantity hasVariants createdAt supplier';
+
 const getAllProducts = async (filter = {}) => {
   // This is the app-wide "pick a product" source (Invoice, Fast Billing, POS, Purchase,
   // Stock Adjustment/Transfer, header search) and orgs can have tens of thousands of
   // products (the request this was timing out on came from an 18,811-product catalog) —
   // .lean() is the single biggest win at that scale, since it skips hydrating every row
-  // into a full Mongoose document.
-  const products = await Product.find({ ...filter, ...ACTIVE_ONLY_FILTER }).populate('brandId', 'name logo').lean();
+  // into a full Mongoose document. stockoutHistory is left out: it's an internal daily-job
+  // array no picker reads, and on a 7,000-product branch it was ~48% of the 12.9 MB
+  // response — the reason this request ran past the client timeout.
+  const products = await Product.find({ ...filter, ...ACTIVE_ONLY_FILTER })
+    .select('-stockoutHistory')
+    .populate('brandId', 'name logo')
+    .batchSize(CATALOG_BATCH_SIZE)
+    .lean();
   const withAggregates = await attachVariantAggregates(products);
   return withAggregates.map(normalizeLeanProduct);
 }
@@ -1308,9 +1325,16 @@ const getAllProducts = async (filter = {}) => {
  * range or total. This is what Purchase's product picker searches/lists, so the user
  * can pick the exact variant (and see its actual batches) instead of a vague rolled-up
  * product row. See docs/architecture/universal-product-migration.md.
+ *
+ * `includeStockoutHistory` is for purchase suggestions' safety-stock maths only — the
+ * HTTP picker endpoint never sends it (it was half the payload on large catalogs).
  */
-const getPurchasableCatalog = async (filter = {}) => {
-  const products = await Product.find({ ...filter, ...ACTIVE_ONLY_FILTER }).populate('brandId', 'name logo').lean();
+const getPurchasableCatalog = async (filter = {}, { includeStockoutHistory = false } = {}) => {
+  const products = await Product.find({ ...filter, ...ACTIVE_ONLY_FILTER })
+    .select(includeStockoutHistory ? `${PURCHASABLE_PRODUCT_FIELDS} stockoutHistory` : PURCHASABLE_PRODUCT_FIELDS)
+    .populate('brandId', 'name logo')
+    .batchSize(CATALOG_BATCH_SIZE)
+    .lean();
   const toBrand = (p) =>
     p.brandId && typeof p.brandId === 'object' ? { _id: p.brandId._id, name: p.brandId.name, logo: p.brandId.logo } : null;
 
@@ -1396,7 +1420,7 @@ const getPurchasableCatalog = async (filter = {}) => {
         batches: defaultVariant && inventory ? batchesByInventory.get(inventory._id.toString()) || [] : [],
         createdAt: product.createdAt,
         supplier: product.supplier,
-        stockoutHistory: product.stockoutHistory,
+        ...(includeStockoutHistory ? { stockoutHistory: product.stockoutHistory } : {}),
       });
       return;
     }

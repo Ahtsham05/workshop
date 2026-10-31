@@ -103,6 +103,9 @@ export const purchaseCatalogApi = createApi({
     getPurchasableCatalog: builder.query<PurchaseCatalogItem[], void>({
       query: () => '/purchasable',
       providesTags: [{ type: 'PurchaseCatalog', id: 'LIST' }],
+      // Kept across page changes (default is 60s after the last picker unmounts) so going
+      // Purchase → Invoice → Purchase doesn't re-download a 7,000-product catalog.
+      keepUnusedDataFor: 30 * 60,
     }),
     // Same tag type as the catalog, so every invalidateTags(['PurchaseCatalog']) after a
     // product write (catalog-invalidation.middleware.ts) refreshes this list too.
@@ -118,5 +121,15 @@ export const purchaseCatalogApi = createApi({
     }),
   }),
 })
+
+/**
+ * Stale-while-revalidate for the whole-branch catalog, passed by the transaction PAGES
+ * (not per-row pickers, which would refetch on every added row): a page opened on cached
+ * data older than this shows it at once and refreshes in the background — no "Loading
+ * products…" and no blocking re-download of thousands of rows per visit. Local writes
+ * still refresh it right away (catalog-invalidation.middleware.ts), and a branch switch
+ * reloads the page, so the cache never crosses branches.
+ */
+export const CATALOG_REVALIDATE_ON_MOUNT = { refetchOnMountOrArgChange: 120 } as const
 
 export const { useGetPurchasableCatalogQuery, useGetInactiveCatalogQuery, useLazyGetProductBranchAvailabilityQuery } = purchaseCatalogApi
