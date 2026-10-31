@@ -41,6 +41,7 @@ import { useFormatMoney, useCurrencyMeta } from '@/lib/format-money'
 import { useIsBelowXl, useIsPhone } from '@/hooks/use-mobile'
 import { useFitListToViewport } from '@/lib/use-fit-list-to-viewport'
 import { useIsNarrower } from '@/hooks/use-element-width'
+import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { PurchaseAiScanDialog, type PurchaseScanApplyPayload } from './purchase-ai-scan-dialog'
 import { PurchaseAttachmentsField } from './purchase-attachments-field'
 import { PurchaseItemVariantBatchFields } from './purchase-item-variant-batch-fields'
@@ -140,6 +141,7 @@ import {
   type QuickCreateState,
 } from '@/components/entity-create-shortcut'
 import { InactiveProductMatches, useInactiveProductMatches } from '@/components/inactive-product-matches'
+import { useTransactionLayout } from '@/lib/transaction-layout'
 
 const entryImei = (e: ImeiEntryInput) => (typeof e === 'string' ? e : e.imei)
 const entryImei2 = (e: ImeiEntryInput) => (typeof e === 'string' ? undefined : e.imei2)
@@ -651,6 +653,17 @@ export default function PurchasePanel({
     enabled: !showProductCatalog && !isPhone && !isBelowXl,
   })
   const [, setPaymentMethodSelectOpen] = useState(false)
+  // Settings → Invoice & Purchase screens. With Summary and Payment both off the right-hand
+  // column drops out and the items take its width. Hiding Payment moves Preview/Save/Save &
+  // Print into the page header even in catalog mode (they otherwise live in that card) —
+  // the page's `headerActions` follows the same rule.
+  const layout = useTransactionLayout('purchase')
+  const showStats = layout.isShown('stats')
+  const showSummary = layout.isShown('summary')
+  const showPayment = layout.isShown('payment')
+  const showPreview = layout.isShown('preview')
+  const hasSideColumn = showSummary || showPayment
+  const headerActions = !showProductCatalog || !showPayment
 
   // Auto-scroll items list when items change
   useEffect(() => {
@@ -702,7 +715,11 @@ export default function PurchasePanel({
   // rolled-up product row. See docs/architecture/universal-product-migration.md.
   const { data: purchaseCatalog = EMPTY_PURCHASE_CATALOG, isLoading: purchaseCatalogLoading } = useGetPurchasableCatalogQuery()
 
-  const filteredPurchaseProducts = filterAndRankBySearch(purchaseCatalog, productSearchQuery, (item) => [item.name, item.nameUrdu, item.barcode, item.brand?.name])
+  // Only the picker list is narrowed (Manufacturing: no finished goods on a purchase);
+  // lines already on the purchase still look themselves up in the full purchaseCatalog.
+  const { isAllowed: isPurchasable } = useTradeProductFilter('purchase')
+  const pickablePurchaseCatalog = useMemo(() => purchaseCatalog.filter(isPurchasable), [purchaseCatalog, isPurchasable])
+  const filteredPurchaseProducts = filterAndRankBySearch(pickablePurchaseCatalog, productSearchQuery, (item) => [item.name, item.nameUrdu, item.barcode, item.brand?.name])
   // Capped slice actually rendered — matches Invoice's identical
   // visibleSellableProducts/filteredSellableProducts split.
   const visiblePurchaseProducts = filteredPurchaseProducts.slice(0, MAX_VISIBLE_DROPDOWN_RESULTS)
@@ -2014,6 +2031,7 @@ export default function PurchasePanel({
         <span className='text-sm font-bold tabular-nums'>{formatMoney(totals.total)}</span>
       </div>
       <div className='flex items-center gap-2'>
+        {showPreview && (
         <Button
           type='button'
           onClick={previewPurchase}
@@ -2025,6 +2043,7 @@ export default function PurchasePanel({
           <Eye className='h-4 w-4' />
           <span className='sr-only'>{t('Preview')}</span>
         </Button>
+        )}
         <Button
           type='button'
           onClick={() => handleSavePurchase('none')}
@@ -2072,8 +2091,11 @@ export default function PurchasePanel({
           ? // Three columns — details / items / summary+payment+actions — mirrors
             // InvoicePanel's compact-mode grid exactly (see invoice-panel.tsx). Each
             // column is its own independent top-to-bottom stack (the wrapper divs
-            // below), so a column's height is just its own content.
-            'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
+            // below), so a column's height is just its own content. Two columns (details
+            // / items) once Summary and Payment are both turned off.
+            hasSideColumn
+              ? 'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
+              : 'grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)] items-start'
           : 'space-y-4',
         // Reserves room for the fixed mobile bar above (~7rem covers its two rows + the
         // safe-area inset baked into the same env() the bar itself pads with) so it never
@@ -2082,7 +2104,7 @@ export default function PurchasePanel({
       )}
     >
       {/* Column 1 (compact mode): Purchase Details. */}
-      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-1 xl:row-start-1 xl:col-start-1')}>
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && (hasSideColumn ? 'md:col-start-1 md:row-start-1 xl:row-start-1 xl:col-start-1' : 'xl:row-start-1 xl:col-start-1'))}>
       {/* Purchase Details */}
       <Card>
         <CardHeader>
@@ -2492,11 +2514,11 @@ export default function PurchasePanel({
           always runs full width; reverts to its own single track at xl once Details and
           Summary+Payment split back out into separate side columns. Mirrors InvoicePanel's
           Column 2 exactly (see invoice-panel.tsx). */}
-      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-2 md:col-span-2 xl:row-start-1 xl:col-span-1 xl:col-start-2')}>
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && (hasSideColumn ? 'md:col-start-1 md:row-start-2 md:col-span-2 xl:row-start-1 xl:col-span-1 xl:col-start-2' : 'xl:row-start-1 xl:col-start-2'))}>
       {/* At-a-glance totals strip — same numbers as the Summary card below. Hidden once the
           catalog is showing (Column 2 and Column 3 both stack into the same left-hand
           column there) and below sm (phone widths). */}
-      {!showProductCatalog && (
+      {!showProductCatalog && showStats && (
         <div className='hidden grid-cols-4 gap-2 sm:grid'>
           {[
             { label: t('items') || 'Items', value: String(purchase.items.filter((i) => (i.product.id || (i.product as any)?._id) && i.product.name).length) },
@@ -2760,11 +2782,13 @@ export default function PurchasePanel({
           in row 1 of the md-tier 2-col grid (md:col-start-2); at xl it moves out to its
           own third track via xl:col-start-3. Mirrors InvoicePanel's Column 3 exactly (see
           invoice-panel.tsx) — split out of the old combined Totals+Payment card. */}
+      {hasSideColumn && (
       <div className={cn('space-y-4', !showProductCatalog && 'md:col-start-2 md:row-start-1 xl:row-start-1 xl:col-start-3')}>
       {/* Summary — the same totals shown in the stats strip above the items table, laid
           out as a running receipt-style breakdown. Discount is now edited from the items
           table's footer ("Apply Discount" popover) rather than here, so this card is
           read-only. */}
+      {showSummary && (
       <Card>
         <CardHeader className='pb-3'>
           <CardTitle className='flex items-center gap-2 text-base'>
@@ -2853,8 +2877,10 @@ export default function PurchasePanel({
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Payment & Amount — right column (compact mode), below the Summary card */}
+      {showPayment && (
       <Card>
         <CardHeader className='pb-3'>
           <CardTitle className='flex items-center gap-2 text-base'>
@@ -2982,6 +3008,7 @@ export default function PurchasePanel({
               scrolling, which these buried-in-the-page duplicates never were. */}
           {showProductCatalog && (
           <div className="grid grid-cols-1 gap-3 max-sm:hidden">
+            {showPreview && (
             <Button
               type='button'
               onClick={previewPurchase}
@@ -2992,6 +3019,7 @@ export default function PurchasePanel({
               <Eye className='h-4 w-4' />
               {t('Preview')}
             </Button>
+            )}
             <Button
               onClick={() => handleSavePurchase('none')}
               className="w-full"
@@ -3037,21 +3065,25 @@ export default function PurchasePanel({
           )}
         </CardContent>
       </Card>
+      )}
       </div>
+      )}
 
       {/* Fast-purchasing header actions — catalog hidden means the panel is a 3-column
           layout; the primary actions are always reachable without scrolling. Portaled into
           a slot the page places in its header (see purchase-invoice/index.tsx). Falls back
           to a floating bottom bar (with item count/total for context) until that slot
           exists. Mirrors InvoicePanel's identical bar (see invoice-panel.tsx). */}
-      {!showProductCatalog && (() => {
+      {headerActions && (() => {
         const disabled = !(purchase.supplier?._id || (purchase.supplier as any)?.id) || purchase.items.length === 0 || isLoading
         const bar = (
           <div className='flex flex-wrap items-center gap-2'>
+            {showPreview && (
             <Button type='button' onClick={previewPurchase} size='sm' variant='ghost' disabled={purchase.items.length === 0} className='gap-1.5'>
               <Eye className='h-4 w-4' />
               {t('Preview')}
             </Button>
+            )}
             <Button
               type='button'
               onClick={() => handleSavePurchase('none')}
@@ -3093,7 +3125,7 @@ export default function PurchasePanel({
         // Hidden on phones — the dedicated fixed bottom bar below covers them, and this
         // is only ever on screen for the one frame before the portal ref attaches.
         return (
-          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90 max-sm:hidden'>
+          <div className='sticky bottom-3 z-20 col-span-full flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90 max-sm:hidden'>
             <div className='flex items-baseline gap-2 pl-1'>
               <span className='text-xs text-muted-foreground'>
                 {purchase.items.filter((i) => (i.product.id || (i.product as any)?._id) && i.product.name).length} {t('Purchase Items')}

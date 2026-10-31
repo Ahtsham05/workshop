@@ -81,6 +81,33 @@ describe('Appearance: profile photo + UI preferences', () => {
         .expect(httpStatus.BAD_REQUEST);
     });
 
+    test('saves the New Invoice / New Purchase screen layout without touching the colours', async () => {
+      await insertUsers([userOne]);
+      await User.findByIdAndUpdate(userOne._id, { uiPreferences: { rowScheme: 'mint' } });
+
+      const transactionLayout = { sale: ['summary', 'payment'], purchase: ['purchase-orders', 'catalog-toggle'] };
+      const res = await request(app)
+        .patch('/v1/users/me/ui-preferences')
+        .set('Authorization', `Bearer ${userOneAccessToken}`)
+        .send({ transactionLayout })
+        .expect(httpStatus.OK);
+
+      expect(res.body).toMatchObject({ rowScheme: 'mint', transactionLayout });
+      const dbUser = await User.findById(userOne._id);
+      expect(dbUser.uiPreferences.transactionLayout.sale).toEqual(['summary', 'payment']);
+      expect(dbUser.uiPreferences.transactionLayout.purchase).toEqual(['purchase-orders', 'catalog-toggle']);
+    });
+
+    test('rejects a screen layout id that is not a plain slug', async () => {
+      await insertUsers([userOne]);
+
+      await request(app)
+        .patch('/v1/users/me/ui-preferences')
+        .set('Authorization', `Bearer ${userOneAccessToken}`)
+        .send({ transactionLayout: { sale: ['<script>'] } })
+        .expect(httpStatus.BAD_REQUEST);
+    });
+
     test('requires a signed-in user', async () => {
       await request(app).patch('/v1/users/me/ui-preferences').send({ rowScheme: 'sand' }).expect(httpStatus.UNAUTHORIZED);
     });

@@ -16,11 +16,14 @@ import { PurchasePanel, PurchaseList } from './components';
 import { ProductCatalog } from './components/product-catalog';
 import { TransactionHistoryButton } from '@/components/transaction-history-sheet';
 import { RecordNavigatorButton } from '@/components/record-navigator';
+import { TransactionLayoutButton } from '@/components/transaction-layout-form';
+import { useTransactionLayout } from '@/lib/transaction-layout';
 import { useDoNotOrderWarning } from '@/features/products/lists/use-do-not-order-warning';
 import { toast } from 'sonner';
 import { useLanguage } from '@/context/language-context';
 import { usePermissions } from '@/context/permission-context';
 import { useCollapseSidebarOnMount } from '@/hooks/use-collapse-sidebar-on-mount';
+import { useTradeProductFilter } from '@/hooks/use-trade-product-filter';
 import type { Product, Category } from '../invoice/index';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -254,6 +257,8 @@ const PurchaseInvoicePage = () => {
   // products show as separate tiles instead of one rolled-up tile with a price range.
   // See docs/architecture/universal-product-migration.md.
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery();
+  // Manufacturing businesses don't buy finished goods — kept off tiles and scans.
+  const purchaseFilter = useTradeProductFilter('purchase');
 
   // UI state
   const [showImages, setShowImages] = useState(true);
@@ -274,6 +279,23 @@ const PurchaseInvoicePage = () => {
       return next;
     });
   }, []);
+
+  // Settings → Invoice & Purchase screens: toolbar buttons / cards this person turned off.
+  const layout = useTransactionLayout('purchase');
+  // Catalog button turned off = the catalog stays closed (otherwise it could get stuck open).
+  const catalogToggleShown = layout.isShown('catalog-toggle');
+  useEffect(() => {
+    if (catalogToggleShown || !showProductCatalog) return;
+    setShowProductCatalog(false);
+    try {
+      localStorage.setItem(PURCHASE_SHOW_CATALOG_KEY, 'false');
+    } catch {
+      /* quota / private mode */
+    }
+  }, [catalogToggleShown, showProductCatalog]);
+  // Preview/Save/Save & Print sit in the header whenever the Payment & Amount card that
+  // otherwise holds them (catalog-shown mode) isn't there. Same rule as PurchasePanel.
+  const headerActions = !showProductCatalog || !layout.isShown('payment');
 
   const [heldSheetOpen, setHeldSheetOpen] = useState(false);
   const [heldUiEpoch, setHeldUiEpoch] = useState(0);
@@ -558,6 +580,7 @@ const PurchaseInvoicePage = () => {
     const categoryMap = new Map<string, Category>();
 
     purchasableCatalog.forEach(item => {
+      if (!purchaseFilter.isAllowed(item)) return;
       let categoryId = 'other';
       let categoryName = 'Other';
 
@@ -609,7 +632,7 @@ const PurchaseInvoicePage = () => {
     });
 
     setCategorizedProducts(Array.from(categoryMap.values()));
-  }, [purchasableCatalog]);
+  }, [purchasableCatalog, purchaseFilter]);
 
   // Add product to purchase
   const warnIfDoNotOrder = useDoNotOrderWarning();
@@ -827,7 +850,9 @@ const PurchaseInvoicePage = () => {
   const handleBarcodeSearch = useCallback(
     (barcode: string) => {
       const product = products.find(p => p.barcode === barcode);
-      if (product) {
+      if (product && !purchaseFilter.isAllowed(product)) {
+        toast.error(purchaseFilter.blockedMessage(product.name));
+      } else if (product) {
         addToPurchase(product);
         setSearchTerm('');
         toast.success(`Product found: ${product.name}`);
@@ -835,7 +860,7 @@ const PurchaseInvoicePage = () => {
         toast.error('Product not found');
       }
     },
-    [products, addToPurchase]
+    [products, addToPurchase, purchaseFilter]
   );
 
   // Switch to list view
@@ -1113,10 +1138,11 @@ const PurchaseInvoicePage = () => {
               primary actions live inline in the Payment & Amount card instead — so the
               utility actions move to the right on their own instead of sitting flush left
               with empty space beside them. */}
-          <div className={cn('flex flex-wrap items-center gap-2', showProductCatalog ? 'justify-end' : 'justify-between')}>
+          <div className={cn('flex flex-wrap items-center gap-2', headerActions ? 'justify-between' : 'justify-end')}>
             <div className="flex flex-wrap items-center gap-2">
               {canViewList && (
                 <>
+                  {layout.isShown('history') && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1127,20 +1153,24 @@ const PurchaseInvoicePage = () => {
                     <History className="h-4 w-4 shrink-0" aria-hidden />
                     Purchase history
                   </Button>
+                  )}
                   <TransactionHistoryButton
                     mode="purchase"
+                    buttonHidden={!layout.isShown('recent')}
                     currentParty={
                       purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null
                     }
                   />
                   <RecordNavigatorButton
                     mode="purchase"
+                    buttonHidden={!layout.isShown('browse')}
                     currentParty={
                       purchase.supplier?._id ? { id: purchase.supplier._id, name: purchase.supplier.name } : null
                     }
                   />
                 </>
               )}
+              {layout.isShown('purchase-orders') && (
               <Button
                 type="button"
                 variant="outline"
@@ -1151,6 +1181,8 @@ const PurchaseInvoicePage = () => {
                 <ClipboardList className="h-4 w-4 shrink-0" aria-hidden />
                 Purchase orders
               </Button>
+              )}
+              {layout.isShown('hold') && (
               <Button
                 type="button"
                 variant="outline"
@@ -1161,7 +1193,9 @@ const PurchaseInvoicePage = () => {
                 <PauseCircle className="h-4 w-4 shrink-0" aria-hidden />
                 {t('hold_purchase')}
               </Button>
+              )}
 
+              {layout.isShown('held-drafts') && (
               <Sheet open={heldSheetOpen} onOpenChange={setHeldSheetOpen}>
                 <SheetTrigger asChild>
                   <Button type="button" variant="outline" size="sm" className="gap-2 shadow-sm">
@@ -1214,7 +1248,9 @@ const PurchaseInvoicePage = () => {
                   </div>
                 </SheetContent>
               </Sheet>
+              )}
 
+              {catalogToggleShown && (
               <Button
                 type="button"
                 variant="outline"
@@ -1239,11 +1275,13 @@ const PurchaseInvoicePage = () => {
                   </>
                 )}
               </Button>
+              )}
+              <TransactionLayoutButton kind="purchase" />
             </div>
             {/* max-sm:hidden: on phones PurchasePanel's own fixed bottom bar (Preview/Save/
                 Save & Print) covers this instead — always reachable without scrolling back
                 up to the header, unlike this slot once the form scrolls past it. */}
-            {!showProductCatalog && (
+            {headerActions && (
               <div ref={setHeaderActionsSlot} className="flex flex-wrap items-center gap-2 max-sm:hidden" />
             )}
           </div>
@@ -1299,6 +1337,7 @@ const PurchaseInvoicePage = () => {
           {/* Autosave banner — same info the old muted hint line carried (this device
               drafts to local storage as you type; see pos-hold-storage). Mirrors Invoice's
               banner exactly. */}
+          {layout.isShown('autosave-hint') && (
           <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
             <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
             {t('autosave_hint')}
@@ -1310,6 +1349,7 @@ const PurchaseInvoicePage = () => {
               {t('Save & Print Receipt')}
             </span>
           </div>
+          )}
         </div>
         </div>
       ) : null}

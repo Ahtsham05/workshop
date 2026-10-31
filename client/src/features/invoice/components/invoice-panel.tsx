@@ -28,6 +28,7 @@ import { useLanguage } from '@/context/language-context'
 import { useIsBelowXl, useIsPhone } from '@/hooks/use-mobile'
 import { useFitListToViewport } from '@/lib/use-fit-list-to-viewport'
 import { useIsNarrower } from '@/hooks/use-element-width'
+import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { Invoice, InvoiceItem, BatchAllocation, createEmptyManualInvoiceItem } from '../index'
 import { toast } from 'sonner'
 import { useCreateInvoiceMutation, useUpdateInvoiceMutation, useGetNextInvoiceNumberQuery, invoiceApi } from '@/stores/invoice.api'
@@ -163,6 +164,7 @@ import { useUpdateInvoiceFlagMutation } from '@/stores/invoice.api'
 import { formatAppDate } from '@/lib/date-format'
 
 import { useNativeLanguageName } from '@/hooks/use-native-language-name'
+import { useTransactionLayout } from '@/lib/transaction-layout'
 /** Toggle to show payment source fields on invoice checkout. */
 const SHOW_INVOICE_PAYMENT_METHOD_UI = true
 
@@ -358,6 +360,19 @@ export function InvoicePanel({
   const itemsListMaxHeight = useFitListToViewport(itemsScrollRef, panelRootRef, {
     enabled: !showProductCatalog && !isPhone && !isBelowXl,
   })
+  // Settings → Invoice & Purchase screens. With Summary and Payment both off the right-hand
+  // column drops out and the items take its width. Payment stays for Pending invoices (the
+  // send-by-SMS/WhatsApp choice lives there) and while editing a Quotation (Convert to
+  // Invoice). Hiding it moves Preview/Save/Save & Print into the page header even in catalog
+  // mode — the page's `headerActions` follows the same rule.
+  const layout = useTransactionLayout('sale')
+  const showStats = layout.isShown('stats')
+  const showSummary = layout.isShown('summary')
+  const showPayment =
+    layout.isShown('payment') || invoice.type === 'pending' || (isEditing && editingInvoice?.type === 'quotation')
+  const showPreview = layout.isShown('preview')
+  const hasSideColumn = showSummary || showPayment
+  const headerActions = !showProductCatalog || !showPayment
   const autoOpenedInvoiceItemIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -810,11 +825,18 @@ export function InvoicePanel({
   // picker shows "Toshiba — Black/64GB" with its own numbers instead of a vague
   // rolled-up product row. See docs/architecture/universal-product-migration.md.
   const { data: sellableCatalog = EMPTY_SELLABLE_CATALOG } = useGetPurchasableCatalogQuery()
+  // Only the picker list is narrowed (Manufacturing: no raw materials on a sale); lines
+  // already on the invoice still look themselves up in the full sellableCatalog.
+  const { isAllowed: isSellable } = useTradeProductFilter('sale')
+  const pickableSellableCatalog = useMemo(
+    () => sellableCatalog.filter(isSellable),
+    [sellableCatalog, isSellable],
+  )
   // Memoized for the same reason as filteredCustomers — 1500+ rows re-scanned on
   // every unrelated re-render was the biggest single source of the sluggishness.
   const filteredSellableProducts = useMemo(
-    () => filterAndRankBySearch(sellableCatalog, productSearchQuery, (item) => [item.name, item.nameUrdu, item.barcode, item.brand?.name]),
-    [sellableCatalog, productSearchQuery],
+    () => filterAndRankBySearch(pickableSellableCatalog, productSearchQuery, (item) => [item.name, item.nameUrdu, item.barcode, item.brand?.name]),
+    [pickableSellableCatalog, productSearchQuery],
   )
   // What actually renders — capped so opening the dropdown never mounts 1000+ rows.
   const visibleSellableProducts = useMemo(
@@ -2921,10 +2943,12 @@ export function InvoicePanel({
         <span className='text-sm font-bold tabular-nums'>{formatMoney(invoice.total)}</span>
       </div>
       <div className='flex items-center gap-2'>
+        {showPreview && (
         <Button type='button' onClick={previewInvoice} size='icon' variant='outline' disabled={invoice.items.length === 0} className='h-10 w-10 shrink-0'>
           <Eye className='h-4 w-4' />
           <span className='sr-only'>{t('Preview')}</span>
         </Button>
+        )}
         <Button
           type='button'
           onClick={() => handleSaveInvoice('none')}
@@ -2979,8 +3003,11 @@ export function InvoicePanel({
             // `1fr`: a bare `1fr` track's minimum is its content's natural (unwrapped)
             // size, so one long product name would force this whole column — and the
             // page — wider instead of letting the name column's flex-1/min-w-0/truncate
-            // chain actually clip it.
-            'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
+            // chain actually clip it. Two columns (details / items) once Summary and
+            // Payment are both turned off.
+            hasSideColumn
+              ? 'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[320px_minmax(0,1fr)_300px] items-start'
+              : 'grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)] items-start'
           : 'space-y-4',
         // Reserves room for the fixed mobile bar above (~7rem covers its two rows + the
         // safe-area inset baked into the same env() the bar itself pads with) so it never
@@ -2995,7 +3022,7 @@ export function InvoicePanel({
           min-w-0 matters here even though the track is a fixed 320px — a grid item's
           default min-width is content-based ("auto"), so a long customer/product name
           can still force this item wider than its fixed-length track and spill out. */}
-      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-1 xl:row-start-1 xl:col-start-1')}>
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && (hasSideColumn ? 'md:col-start-1 md:row-start-1 xl:row-start-1 xl:col-start-1' : 'xl:row-start-1 xl:col-start-1'))}>
       {/* Invoice Details */}
       <Card>
         <CardHeader className='pb-4'>
@@ -3680,7 +3707,7 @@ export function InvoicePanel({
           the md-tier 2-col grid (Details | Summary+Payment sit above it in row 1) so it
           always runs full width; reverts to its own single track at xl once Details and
           Summary+Payment split back out into separate side columns. */}
-      <div className={cn('min-w-0 space-y-4', !showProductCatalog && 'md:col-start-1 md:row-start-2 md:col-span-2 xl:row-start-1 xl:col-span-1 xl:col-start-2')}>
+      <div className={cn('min-w-0 space-y-4', !showProductCatalog && (hasSideColumn ? 'md:col-start-1 md:row-start-2 md:col-span-2 xl:row-start-1 xl:col-span-1 xl:col-start-2' : 'xl:row-start-1 xl:col-start-2'))}>
       {/* At-a-glance totals strip — same numbers as the Summary card below, surfaced here
           too so they're visible while scanning the items table itself. Purely derived from
           invoice state already computed elsewhere; no new totals logic. Hidden once the
@@ -3690,7 +3717,7 @@ export function InvoicePanel({
           time above it. Also hidden below sm (phone widths) — 5 cards in one line has no
           room to breathe that narrow and the Summary card right above (in the md-tier
           pairing) already covers the same numbers in full. */}
-      {!showProductCatalog && (
+      {!showProductCatalog && showStats && (
         <div className='hidden grid-cols-5 gap-2 sm:grid'>
           {[
             { label: t('items') || 'Items', value: String(invoice.items.filter((i) => i.productId && i.name).length) },
@@ -3990,11 +4017,13 @@ export function InvoicePanel({
       {/* Column 3 (compact mode): Summary, Payment & Amount. Sits beside Invoice Details
           in row 1 of the md-tier 2-col grid (md:col-start-2); at xl it moves out to its
           own third track via xl:col-start-3, same as before. */}
+      {hasSideColumn && (
       <div className={cn('space-y-4', !showProductCatalog && 'md:col-start-2 md:row-start-1 xl:row-start-1 xl:col-start-3')}>
       {/* Summary — the same totals shown in the stats strip above the items table, laid
           out as a running receipt-style breakdown. Discount and tax are now edited from
           the items table's footer ("Apply Discount"/"Add Tax" popovers) rather than here,
           so this card is read-only. */}
+      {showSummary && (
       <Card>
         <CardHeader className='pb-3'>
           <CardTitle className='flex items-center gap-2 text-base'>
@@ -4083,8 +4112,10 @@ export function InvoicePanel({
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Payment & Amount — right column (compact mode), below the Summary card */}
+      {showPayment && (
       <Card>
         <CardHeader className='pb-3'>
           <CardTitle className='flex items-center gap-2 text-base'>
@@ -4430,8 +4461,10 @@ export function InvoicePanel({
           </div>
         </CardContent>
       </Card>
+      )}
 
       </div>
+      )}
 
       {/* Fast-invoicing header actions — catalog hidden means the panel is a multi-column
           layout; the primary actions are always reachable without scrolling, same idea as
@@ -4441,14 +4474,16 @@ export function InvoicePanel({
           bar only shows once you've scrolled far enough for it, which isn't "always
           visible" when the cards column alone is taller than the viewport. Falls back to
           rendering inline (with its own sticky positioning) until that slot exists. */}
-      {!showProductCatalog && (() => {
+      {headerActions && (() => {
         const disabled = !invoice.customerId || invoice.items.length === 0 || savingType !== null
         const bar = (
           <div className='flex flex-wrap items-center gap-2'>
+            {showPreview && (
             <Button type='button' onClick={previewInvoice} size='sm' variant='ghost' disabled={invoice.items.length === 0} className='gap-1.5'>
               <Eye className='h-4 w-4' />
               {t('Preview')}
             </Button>
+            )}
             <Button
               type='button'
               onClick={() => handleSaveInvoice('none')}
@@ -4493,7 +4528,7 @@ export function InvoicePanel({
         // Hidden on phones — the dedicated fixed bottom bar below covers them, and this
         // is only ever on screen for the one frame before the portal ref attaches.
         return (
-          <div className='sticky bottom-3 z-20 md:col-start-1 md:col-span-2 xl:col-start-1 xl:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90 max-sm:hidden'>
+          <div className='sticky bottom-3 z-20 col-span-full flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/90 max-sm:hidden'>
             <div className='flex items-baseline gap-2 pl-1'>
               <span className='text-xs text-muted-foreground'>
                 {invoice.items.filter((i) => i.productId && i.name).length} {t('invoice_items')}

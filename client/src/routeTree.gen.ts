@@ -94,6 +94,7 @@ import { Route as AuthenticatedStockCountsCountIdImport } from './routes/_authen
 import { Route as AuthenticatedSmsLogImport } from './routes/_authenticated/sms/log'
 import { Route as AuthenticatedSettingsWhatsappImport } from './routes/_authenticated/settings/whatsapp'
 import { Route as AuthenticatedSettingsWebsiteConnectionsImport } from './routes/_authenticated/settings/website-connections'
+import { Route as AuthenticatedSettingsTransactionLayoutImport } from './routes/_authenticated/settings/transaction-layout'
 import { Route as AuthenticatedSettingsTaxRatesImport } from './routes/_authenticated/settings/tax-rates'
 import { Route as AuthenticatedSettingsTaxJurisdictionsImport } from './routes/_authenticated/settings/tax-jurisdictions'
 import { Route as AuthenticatedSettingsTaxExemptionsImport } from './routes/_authenticated/settings/tax-exemptions'
@@ -766,6 +767,13 @@ const AuthenticatedSettingsWebsiteConnectionsRoute =
   AuthenticatedSettingsWebsiteConnectionsImport.update({
     id: '/website-connections',
     path: '/website-connections',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+
+const AuthenticatedSettingsTransactionLayoutRoute =
+  AuthenticatedSettingsTransactionLayoutImport.update({
+    id: '/transaction-layout',
+    path: '/transaction-layout',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 
@@ -2287,6 +2295,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsTaxRatesImport
       parentRoute: typeof AuthenticatedSettingsRouteImport
     }
+    '/_authenticated/settings/transaction-layout': {
+      id: '/_authenticated/settings/transaction-layout'
+      path: '/transaction-layout'
+      fullPath: '/settings/transaction-layout'
+      preLoaderRoute: typeof AuthenticatedSettingsTransactionLayoutImport
+      parentRoute: typeof AuthenticatedSettingsRouteImport
+    }
     '/_authenticated/settings/website-connections': {
       id: '/_authenticated/settings/website-connections'
       path: '/website-connections'
@@ -3210,6 +3225,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsTaxExemptionsRoute: typeof AuthenticatedSettingsTaxExemptionsRoute
   AuthenticatedSettingsTaxJurisdictionsRoute: typeof AuthenticatedSettingsTaxJurisdictionsRoute
   AuthenticatedSettingsTaxRatesRoute: typeof AuthenticatedSettingsTaxRatesRoute
+  AuthenticatedSettingsTransactionLayoutRoute: typeof AuthenticatedSettingsTransactionLayoutRoute
   AuthenticatedSettingsWebsiteConnectionsRoute: typeof AuthenticatedSettingsWebsiteConnectionsRoute
   AuthenticatedSettingsWhatsappRoute: typeof AuthenticatedSettingsWhatsappRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
@@ -3250,6 +3266,8 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsTaxJurisdictionsRoute:
       AuthenticatedSettingsTaxJurisdictionsRoute,
     AuthenticatedSettingsTaxRatesRoute: AuthenticatedSettingsTaxRatesRoute,
+    AuthenticatedSettingsTransactionLayoutRoute:
+      AuthenticatedSettingsTransactionLayoutRoute,
     AuthenticatedSettingsWebsiteConnectionsRoute:
       AuthenticatedSettingsWebsiteConnectionsRoute,
     AuthenticatedSettingsWhatsappRoute: AuthenticatedSettingsWhatsappRoute,
@@ -3732,6 +3750,7 @@ export interface FileRoutesByFullPath {
   '/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
   '/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
+  '/settings/transaction-layout': typeof AuthenticatedSettingsTransactionLayoutRoute
   '/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
@@ -3937,6 +3956,7 @@ export interface FileRoutesByTo {
   '/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
   '/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
+  '/settings/transaction-layout': typeof AuthenticatedSettingsTransactionLayoutRoute
   '/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/sms/log': typeof AuthenticatedSmsLogRoute
@@ -4147,6 +4167,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/tax-exemptions': typeof AuthenticatedSettingsTaxExemptionsRoute
   '/_authenticated/settings/tax-jurisdictions': typeof AuthenticatedSettingsTaxJurisdictionsRoute
   '/_authenticated/settings/tax-rates': typeof AuthenticatedSettingsTaxRatesRoute
+  '/_authenticated/settings/transaction-layout': typeof AuthenticatedSettingsTransactionLayoutRoute
   '/_authenticated/settings/website-connections': typeof AuthenticatedSettingsWebsiteConnectionsRoute
   '/_authenticated/settings/whatsapp': typeof AuthenticatedSettingsWhatsappRoute
   '/_authenticated/sms/log': typeof AuthenticatedSmsLogRoute
@@ -4359,6 +4380,7 @@ export interface FileRouteTypes {
     | '/settings/tax-exemptions'
     | '/settings/tax-jurisdictions'
     | '/settings/tax-rates'
+    | '/settings/transaction-layout'
     | '/settings/website-connections'
     | '/settings/whatsapp'
     | '/sms/log'
@@ -4563,6 +4585,7 @@ export interface FileRouteTypes {
     | '/settings/tax-exemptions'
     | '/settings/tax-jurisdictions'
     | '/settings/tax-rates'
+    | '/settings/transaction-layout'
     | '/settings/website-connections'
     | '/settings/whatsapp'
     | '/sms/log'
@@ -4771,6 +4794,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/tax-exemptions'
     | '/_authenticated/settings/tax-jurisdictions'
     | '/_authenticated/settings/tax-rates'
+    | '/_authenticated/settings/transaction-layout'
     | '/_authenticated/settings/website-connections'
     | '/_authenticated/settings/whatsapp'
     | '/_authenticated/sms/log'
@@ -5105,6 +5129,7 @@ export const routeTree = rootRoute
         "/_authenticated/settings/tax-exemptions",
         "/_authenticated/settings/tax-jurisdictions",
         "/_authenticated/settings/tax-rates",
+        "/_authenticated/settings/transaction-layout",
         "/_authenticated/settings/website-connections",
         "/_authenticated/settings/whatsapp",
         "/_authenticated/settings/"
@@ -5501,6 +5526,10 @@ export const routeTree = rootRoute
     },
     "/_authenticated/settings/tax-rates": {
       "filePath": "_authenticated/settings/tax-rates.tsx",
+      "parent": "/_authenticated/settings"
+    },
+    "/_authenticated/settings/transaction-layout": {
+      "filePath": "_authenticated/settings/transaction-layout.tsx",
       "parent": "/_authenticated/settings"
     },
     "/_authenticated/settings/website-connections": {

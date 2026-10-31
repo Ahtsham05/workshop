@@ -90,6 +90,10 @@ const updateUiPreferences = {
         sections: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,60}$/)).max(20),
         cards: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,60}$/)).max(100),
       }),
+      transactionLayout: Joi.object().keys({
+        sale: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,40}$/)).max(30),
+        purchase: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]{1,40}$/)).max(30),
+      }),
       customColors: Joi.object().keys({
         background: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).allow(null),
         header: Joi.string().pattern(/^#[0-9a-fA-F]{6}$/).allow(null),

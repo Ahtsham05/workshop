@@ -210,10 +210,13 @@ export function RecordNavigatorButton({
   mode,
   currentParty,
   className,
+  buttonHidden = false,
 }: {
   mode: RecordNavigatorMode
   currentParty?: { id: string; name: string } | null
   className?: string
+  /** Hide just the button (screen customised); the keyboard shortcut and panel still work. */
+  buttonHidden?: boolean
 }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
@@ -231,6 +234,7 @@ export function RecordNavigatorButton({
 
   return (
     <>
+      {!buttonHidden && (
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -250,6 +254,7 @@ export function RecordNavigatorButton({
           <kbd className='ml-2 rounded border px-1 font-mono text-[10px]'>Alt+B</kbd>
         </TooltipContent>
       </Tooltip>
+      )}
       {open && <RecordNavigator mode={mode} open={open} onOpenChange={setOpen} currentParty={currentParty} />}
     </>
   )

@@ -2,6 +2,7 @@ import { useLanguage } from '@/context/language-context'
 import { usePermissions } from '@/context/permission-context'
 import { permissionMessage } from '@/lib/permission-messages'
 import { useCollapseSidebarOnMount } from '@/hooks/use-collapse-sidebar-on-mount'
+import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useDispatch, useSelector } from 'react-redux'
@@ -53,6 +54,8 @@ import { usePreviewTaxMutation, type TaxLine } from '@/stores/taxCalculator.api'
 import { formatAppDateTime } from '@/lib/date-format'
 import { TransactionHistoryButton } from '@/components/transaction-history-sheet'
 import { RecordNavigatorButton } from '@/components/record-navigator'
+import { TransactionLayoutButton } from '@/components/transaction-layout-form'
+import { useTransactionLayout } from '@/lib/transaction-layout'
 
 const INVOICE_URDU_ONLY_PREF_KEY = 'invoiceIsUrduOnly'
 const INVOICE_SHOW_CATALOG_KEY = 'invoiceShowProductCatalog'
@@ -258,6 +261,8 @@ export interface Product {
   // docs/architecture/universal-product-migration.md.
   variantStockTotal?: number
   variantPriceRange?: { minPrice: number; maxPrice: number; minCost: number; maxCost: number } | null
+  // Manufacturing classification (raw_material, finished_good…); null = unclassified.
+  productType?: string | null
   brandId?: { _id: string; name: string; logo?: { url: string; publicId: string } } | string | null
   // Set only when this Product object actually represents one specific real variant
   // (e.g. a row built from the flat purchasable catalog) rather than the legacy product
@@ -358,6 +363,8 @@ export default function InvoicePage() {
   // products show as separate tiles instead of one rolled-up tile with a price range.
   // Same endpoint Purchases use — see docs/architecture/universal-product-migration.md.
   const { data: sellableCatalog = EMPTY_SELLABLE_CATALOG } = useGetPurchasableCatalogQuery()
+  // Manufacturing businesses don't sell raw materials — kept off tiles and scans.
+  const saleFilter = useTradeProductFilter('sale')
   
   // UI state
   const [showImages, setShowImages] = useState(true)
@@ -387,6 +394,28 @@ export default function InvoicePage() {
       return next
     })
   }, [])
+
+  // Settings → Invoice & Purchase screens: toolbar buttons / cards this person turned off.
+  const layout = useTransactionLayout('sale')
+  // Catalog button turned off = the catalog stays closed (otherwise it could get stuck open).
+  const catalogToggleShown = layout.isShown('catalog-toggle')
+  useEffect(() => {
+    if (catalogToggleShown || !showProductCatalog) return
+    setShowProductCatalog(false)
+    try {
+      localStorage.setItem(INVOICE_SHOW_CATALOG_KEY, 'false')
+    } catch {
+      /* quota / private mode */
+    }
+  }, [catalogToggleShown, showProductCatalog])
+  // Preview/Save/Save & Print sit in the header whenever the Payment & Amount card that
+  // otherwise holds them (catalog-shown mode) isn't there. Same rule as InvoicePanel,
+  // which keeps that card for Pending invoices and while editing a Quotation.
+  const paymentCardShown =
+    layout.isShown('payment') ||
+    invoice.type === 'pending' ||
+    (currentView === 'edit' && editingInvoice?.type === 'quotation')
+  const headerActions = !showProductCatalog || !paymentCardShown
 
   const [heldSheetOpen, setHeldSheetOpen] = useState(false)
   const [heldUiEpoch, setHeldUiEpoch] = useState(0)
@@ -725,6 +754,7 @@ export default function InvoicePage() {
     const categoryMap = new Map<string, Category>()
 
     sellableCatalog.forEach(item => {
+      if (!saleFilter.isAllowed(item)) return
       let categoryId = 'other'
       let categoryName = 'Other'
 
@@ -776,7 +806,7 @@ export default function InvoicePage() {
     })
 
     setCategorizedProducts(Array.from(categoryMap.values()))
-  }, [sellableCatalog])
+  }, [sellableCatalog, saleFilter])
 
   useEffect(() => {
     setInvoice((prev) => {
@@ -1400,14 +1430,16 @@ export default function InvoicePage() {
   // Handle barcode search
   const handleBarcodeSearch = useCallback((barcode: string) => {
     const product = products.find(p => p.barcode === barcode)
-    if (product) {
+    if (product && !saleFilter.isAllowed(product)) {
+      toast.error(saleFilter.blockedMessage(product.name))
+    } else if (product) {
       addToInvoice(product)
       setSearchTerm('')
       toast.success(`Product found: ${product.name}`)
     } else {
       toast.error('Product not found')
     }
-  }, [products, addToInvoice])
+  }, [products, addToInvoice, saleFilter])
 
   // Update invoice type
   const updateInvoiceType = useCallback((type: 'cash' | 'credit' | 'pending' | 'quotation') => {
@@ -1809,10 +1841,11 @@ export default function InvoicePage() {
               those primary actions live inline in the Payment & Amount card instead —
               so the utility actions move to the right on their own instead of sitting
               flush left with empty space beside them. */}
-          <div className={cn('flex flex-wrap items-center gap-2', showProductCatalog ? 'justify-end' : 'justify-between')}>
+          <div className={cn('flex flex-wrap items-center gap-2', headerActions ? 'justify-between' : 'justify-end')}>
             <div className='flex flex-wrap items-center gap-2'>
               {canViewList && (
                 <>
+                  {layout.isShown('history') && (
                   <Button
                     type='button'
                     variant='outline'
@@ -1823,8 +1856,10 @@ export default function InvoicePage() {
                     <History className='h-4 w-4 shrink-0' aria-hidden />
                     {t('invoice_history')}
                   </Button>
+                  )}
                   <TransactionHistoryButton
                     mode='sale'
+                    buttonHidden={!layout.isShown('recent')}
                     currentParty={
                       invoice.customerId && invoice.customerId !== 'walk-in'
                         ? {
@@ -1839,6 +1874,7 @@ export default function InvoicePage() {
                   />
                   <RecordNavigatorButton
                     mode='sale'
+                    buttonHidden={!layout.isShown('browse')}
                     currentParty={
                       invoice.customerId && invoice.customerId !== 'walk-in'
                         ? {
@@ -1853,7 +1889,7 @@ export default function InvoicePage() {
                   />
                 </>
               )}
-              {canConvertPending && (
+              {canConvertPending && layout.isShown('convert-pending') && (
                 <Button
                   type='button'
                   variant='outline'
@@ -1865,6 +1901,7 @@ export default function InvoicePage() {
                   {t('convert_pending_invoices')}
                 </Button>
               )}
+              {layout.isShown('hold') && (
               <Button
                 type='button'
                 variant='outline'
@@ -1875,7 +1912,9 @@ export default function InvoicePage() {
                 <PauseCircle className='h-4 w-4 shrink-0' aria-hidden />
                 {t('hold_invoice')}
               </Button>
+              )}
 
+              {layout.isShown('held-drafts') && (
               <Sheet open={heldSheetOpen} onOpenChange={setHeldSheetOpen}>
                 <SheetTrigger asChild>
                   <Button type='button' variant='outline' size='sm' className='gap-2 shadow-sm'>
@@ -1928,7 +1967,9 @@ export default function InvoicePage() {
                   </div>
                 </SheetContent>
               </Sheet>
+              )}
 
+              {catalogToggleShown && (
               <Button
                 type='button'
                 variant='outline'
@@ -1953,11 +1994,13 @@ export default function InvoicePage() {
                   </>
                 )}
               </Button>
+              )}
+              <TransactionLayoutButton kind='sale' />
             </div>
             {/* max-sm:hidden: on phones InvoicePanel's own fixed bottom bar (Preview/Save/
                 Save & Print) covers this instead — always reachable without scrolling back
                 up to the header, unlike this slot once the form scrolls past it. */}
-            {!showProductCatalog && (
+            {headerActions && (
               <div ref={setHeaderActionsSlot} className='flex flex-wrap items-center gap-2 max-sm:hidden' />
             )}
           </div>
@@ -2028,6 +2071,7 @@ export default function InvoicePage() {
         {/* Autosave banner — same info the old muted hint line carried (this device
             drafts to local storage as you type; see pos-hold-storage). Moved to the
             bottom of the page per request, out of the way of the header/toolbar. */}
+        {layout.isShown('autosave-hint') && (
         <div className='mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'>
           <Check className='h-3.5 w-3.5 shrink-0' aria-hidden />
           {t('autosave_hint')}
@@ -2043,6 +2087,7 @@ export default function InvoicePage() {
             )}
           </span>
         </div>
+        )}
         </div>
       </div>
     </div>

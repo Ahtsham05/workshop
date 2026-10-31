@@ -1195,10 +1195,13 @@ export function TransactionHistoryButton({
   mode,
   currentParty,
   className,
+  buttonHidden = false,
 }: {
   mode: TransactionHistoryMode
   currentParty?: { id: string; name: string } | null
   className?: string
+  /** Hide just the button (screen customised); the keyboard shortcut and panel still work. */
+  buttonHidden?: boolean
 }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
@@ -1219,6 +1222,7 @@ export function TransactionHistoryButton({
   const label = mode === 'purchase' ? t('Recent purchases') : t('Recent sales')
   return (
     <>
+      {!buttonHidden && (
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -1241,6 +1245,7 @@ export function TransactionHistoryButton({
           <kbd className='ml-2 rounded border px-1 font-mono text-[10px]'>Alt+H</kbd>
         </TooltipContent>
       </Tooltip>
+      )}
       {mounted && <TransactionHistorySheet mode={mode} open={open} onOpenChange={setOpen} currentParty={currentParty} />}
     </>
   )

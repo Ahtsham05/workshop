@@ -119,6 +119,11 @@ const userSchema = mongoose.Schema(
         sections: { type: [String], default: undefined },
         cards: { type: [String], default: undefined },
       },
+      /** New Invoice / New Purchase screens: ids of the toolbar buttons and side cards the person hid. */
+      transactionLayout: {
+        sale: { type: [String], default: undefined },
+        purchase: { type: [String], default: undefined },
+      },
       /** Free-choice #rrggbb colours; null = use the theme / default for that surface. */
       customColors: {
         background: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },

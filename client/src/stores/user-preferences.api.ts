@@ -93,6 +93,14 @@ export const userPreferencesApi = createApi({
         body,
       }),
     }),
+    /** New Invoice / New Purchase screens: hidden toolbar buttons + side cards, saved on the account. */
+    updateTransactionLayout: builder.mutation<unknown, { transactionLayout: { sale: string[]; purchase: string[] } }>({
+      query: (body) => ({
+        url: '/users/me/ui-preferences',
+        method: 'PATCH',
+        body,
+      }),
+    }),
     /** Removes the signed-in user's profile photo (upload goes through ImageUpload). */
     deleteMyPhoto: builder.mutation<UserPhoto, void>({
       query: () => ({
@@ -111,5 +119,6 @@ export const {
   useUpdateLanguageMutation,
   useUpdateUiPreferencesMutation,
   useUpdateDashboardLayoutMutation,
+  useUpdateTransactionLayoutMutation,
   useDeleteMyPhotoMutation,
 } = userPreferencesApi
