@@ -122,8 +122,8 @@ export const sidebarData: SidebarData = {
           ],
         },
         {
-          // Manufacturing module — every section lives under /manufacturing with its own
-          // in-page section rail (features/manufacturing/components/manufacturing-shell.tsx).
+          // Manufacturing module — this group is the module's only menu (manufacturing pages
+          // have no module header or tab row; see manufacturing-shell.tsx).
           title: 'Manufacturing',
           icon: Factory,
           permission: 'viewManufacturing',
@@ -141,6 +141,7 @@ export const sidebarData: SidebarData = {
             { title: 'Production Orders', url: '/manufacturing/production-orders', icon: ClipboardList, permission: 'viewManufacturing' },
             { title: 'Packing', url: '/manufacturing/packing', icon: Package2, permission: 'viewManufacturing' },
             { title: 'Production Reports', url: '/manufacturing/reports', icon: BarChart3, permission: 'viewManufacturing' },
+            { title: 'Manufacturing Settings', url: '/manufacturing/settings', icon: IconSettings, permission: 'manageManufacturingSettings' },
           ],
         },
         {

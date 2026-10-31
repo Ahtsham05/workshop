@@ -5,12 +5,12 @@ import {
   type AnalyticsRange,
   type ManufacturingAnalytics,
 } from '@/stores/manufacturing.api'
-import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { useCanViewManufacturingCosts } from '@/lib/cost-visibility'
 import { getErrorMessage } from '@/lib/get-error-message'
 import { useLanguage } from '@/context/language-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import { QuickLinksPanel } from '@/features/dashboard/components/quick-links-panel'
+import { useFormatMoney } from '@/features/manufacturing/lib/use-mfg-money'
 import { PriorityText, ProgressBar } from '../components/badges'
 import {
   MaterialConsumptionChart,
@@ -36,6 +36,13 @@ const RANGES: { value: AnalyticsRange; label: string }[] = [
 ]
 
 type Kpis = ManufacturingAnalytics['kpis']
+
+/**
+ * The overview shows only Quick links for now (user asked to hide the dashboard). Every
+ * KPI card, chart, alert and the "Due this week" list is kept below — set this back to
+ * true to bring them back. While false, the analytics requests aren't sent at all.
+ */
+const SHOW_ANALYTICS = false
 
 function KpiCards({ kpis, days }: { kpis?: Kpis; days: number }) {
   const { t } = useLanguage()
@@ -109,10 +116,17 @@ function KpiCards({ kpis, days }: { kpis?: Kpis; days: number }) {
       />
       <Stat
         label={canSeeCosts ? t('WIP value') : t('Orders in WIP')}
-        value={canSeeCosts ? formatMoney(kpis.wipValue.value) : String(kpis.wipValue.orders)}
+        value={
+          canSeeCosts
+            ? formatMoney(kpis.wipValue.value)
+            : String(kpis.wipValue.orders)
+        }
         hint={
           canSeeCosts
-            ? t('Material on the floor across {{n}} order(s)').replace('{{n}}', String(kpis.wipValue.orders))
+            ? t('Material on the floor across {{n}} order(s)').replace(
+                '{{n}}',
+                String(kpis.wipValue.orders)
+              )
             : t('Orders with material on the floor')
         }
         href='/manufacturing/wip'
@@ -169,22 +183,18 @@ export default function ManufacturingDashboard() {
   const search = useSearch({ strict: false }) as { range?: AnalyticsRange }
   const range: AnalyticsRange = search.range || '30d'
 
-  const { data, isFetching, error } = useGetManufacturingAnalyticsQuery({
-    range,
+  const { data, isFetching, error } = useGetManufacturingAnalyticsQuery(
+    { range },
+    { skip: !SHOW_ANALYTICS }
+  )
+  const { data: board } = useGetManufacturingDashboardQuery(undefined, {
+    skip: !SHOW_ANALYTICS,
   })
-  const { data: board } = useGetManufacturingDashboardQuery()
   // Refetching a new range keeps the previous render, dimmed — no skeleton flash.
   const refreshing = isFetching && !!data && data.range !== range
 
   return (
     <div className='space-y-6'>
-      <PageHeader
-        title={t('Overview')}
-        description={t(
-          'Production performance for this branch. Every card, chart and alert follows the selected period.'
-        )}
-      />
-
       {/* The plant's everyday shortcuts — each user picks and orders their own. */}
       <QuickLinksPanel
         board='manufacturing'
@@ -192,128 +202,159 @@ export default function ManufacturingDashboard() {
         description='One tap to the manufacturing work you do most'
       />
 
-      <FilterChips
-        label={t('Time period')}
-        value={range}
-        onChange={(v) =>
-          navigate({
-            to: '/manufacturing' as never,
-            search: { range: v } as never,
-            replace: true,
-          })
-        }
-        options={RANGES.map((r) => ({ value: r.value, label: t(r.label) }))}
-      />
-
-      {board && (
-        <DemoDataBanner
-          hasOrders={Object.values(board.byStatus).some((n) => n > 0)}
-        />
-      )}
-
-      {error && !data ? (
-        <div className='text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm'>
-          {getErrorMessage(error, t('Could not load dashboard analytics'))}
-        </div>
-      ) : (
+      {SHOW_ANALYTICS && (
         <>
-          <div
-            className={refreshing ? 'opacity-60 transition-opacity' : undefined}
-          >
-            <KpiCards kpis={data?.kpis} days={data?.period.days || 30} />
-          </div>
+          <PageHeader
+            title={t('Overview')}
+            description={t(
+              'Production performance for this branch. Every card, chart and alert follows the selected period.'
+            )}
+          />
 
-          <div className='grid gap-4 lg:grid-cols-3'>
-            {/* Alerts come first on phones; on desktop they sit beside the headline chart. */}
-            <ProductionAlerts
-              className='lg:col-start-3 lg:row-start-1'
-              alerts={data?.alerts}
-              counts={data?.alertCounts}
-              loading={!data}
+          <FilterChips
+            label={t('Time period')}
+            value={range}
+            onChange={(v) =>
+              navigate({
+                to: '/manufacturing' as never,
+                search: { range: v } as never,
+                replace: true,
+              })
+            }
+            options={RANGES.map((r) => ({ value: r.value, label: t(r.label) }))}
+          />
+
+          {board && (
+            <DemoDataBanner
+              hasOrders={Object.values(board.byStatus).some((n) => n > 0)}
             />
-            <div className='min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1'>
-              {data ? (
-                <ProductionVsTargetChart data={data} fetching={refreshing} />
-              ) : (
-                <Skeleton className='h-[340px] w-full rounded-xl' />
-              )}
-            </div>
-          </div>
+          )}
 
-          {data ? (
-            <div className='grid gap-4 md:grid-cols-2'>
-              <ProductionTrendChart data={data} fetching={refreshing} />
-              {/* Value charts — only for roles that may see manufacturing costs. */}
-              {canSeeCosts && <ProductionCostChart data={data} fetching={refreshing} />}
-              {canSeeCosts && <MaterialConsumptionChart data={data} fetching={refreshing} />}
-              {canSeeCosts && <ScrapTrendChart data={data} fetching={refreshing} />}
-              <ProductionByProductChart data={data} fetching={refreshing} />
-              <ProductionByWorkCenterChart data={data} fetching={refreshing} />
-              <OrderStatusChart data={data} fetching={refreshing} />
-              <Panel
-                title={t('Due this week')}
-                description={t('Open orders by planned completion')}
-                flush
-              >
-                {!board ? (
-                  <div className='space-y-3 p-5'>
-                    <Skeleton className='h-10 w-full' />
-                    <Skeleton className='h-10 w-full' />
-                  </div>
-                ) : !board.dueSoon.length ? (
-                  <p className='text-muted-foreground px-5 py-10 text-center text-sm'>
-                    {t('Nothing due in the next 7 days')}
-                  </p>
-                ) : (
-                  <ul className='divide-y'>
-                    {board.dueSoon.map((o) => (
-                      <li key={o.id}>
-                        <Link
-                          to={orderPath(o) as never}
-                          className='hover:bg-muted/40 focus-visible:ring-ring block space-y-1.5 px-5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset max-sm:px-4'
-                        >
-                          <div className='flex items-center justify-between gap-2 text-sm'>
-                            <span className='truncate font-medium'>
-                              {o.productName}
-                            </span>
-                            <span className='text-muted-foreground shrink-0 text-xs tabular-nums'>
-                              {fmtDate(o.plannedCompletionDate)}
-                            </span>
-                          </div>
-                          <div className='text-muted-foreground flex items-center gap-2 text-xs'>
-                            <span className='font-mono'>{o.orderNumber}</span>
-                            <PriorityText priority={o.priority} />
-                            <span className='ml-auto tabular-nums'>
-                              {fmtQty(o.completedQuantity)} /{' '}
-                              {fmtQty(o.plannedQuantity)} {o.unit}
-                            </span>
-                          </div>
-                          <ProgressBar
-                            value={
-                              o.plannedQuantity
-                                ? (o.completedQuantity / o.plannedQuantity) *
-                                  100
-                                : 0
-                            }
-                            tone='emerald'
-                            label={t('{{n}} progress').replace(
-                              '{{n}}',
-                              o.orderNumber
-                            )}
-                          />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Panel>
+          {error && !data ? (
+            <div className='text-muted-foreground rounded-xl border border-dashed p-8 text-center text-sm'>
+              {getErrorMessage(error, t('Could not load dashboard analytics'))}
             </div>
           ) : (
-            <div className='grid gap-4 md:grid-cols-2'>
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className='h-[300px] w-full rounded-xl' />
-              ))}
-            </div>
+            <>
+              <div
+                className={
+                  refreshing ? 'opacity-60 transition-opacity' : undefined
+                }
+              >
+                <KpiCards kpis={data?.kpis} days={data?.period.days || 30} />
+              </div>
+
+              <div className='grid gap-4 lg:grid-cols-3'>
+                {/* Alerts come first on phones; on desktop they sit beside the headline chart. */}
+                <ProductionAlerts
+                  className='lg:col-start-3 lg:row-start-1'
+                  alerts={data?.alerts}
+                  counts={data?.alertCounts}
+                  loading={!data}
+                />
+                <div className='min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1'>
+                  {data ? (
+                    <ProductionVsTargetChart
+                      data={data}
+                      fetching={refreshing}
+                    />
+                  ) : (
+                    <Skeleton className='h-[340px] w-full rounded-xl' />
+                  )}
+                </div>
+              </div>
+
+              {data ? (
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <ProductionTrendChart data={data} fetching={refreshing} />
+                  {/* Value charts — only for roles that may see manufacturing costs. */}
+                  {canSeeCosts && (
+                    <ProductionCostChart data={data} fetching={refreshing} />
+                  )}
+                  {canSeeCosts && (
+                    <MaterialConsumptionChart
+                      data={data}
+                      fetching={refreshing}
+                    />
+                  )}
+                  {canSeeCosts && (
+                    <ScrapTrendChart data={data} fetching={refreshing} />
+                  )}
+                  <ProductionByProductChart data={data} fetching={refreshing} />
+                  <ProductionByWorkCenterChart
+                    data={data}
+                    fetching={refreshing}
+                  />
+                  <OrderStatusChart data={data} fetching={refreshing} />
+                  <Panel
+                    title={t('Due this week')}
+                    description={t('Open orders by planned completion')}
+                    flush
+                  >
+                    {!board ? (
+                      <div className='space-y-3 p-5'>
+                        <Skeleton className='h-10 w-full' />
+                        <Skeleton className='h-10 w-full' />
+                      </div>
+                    ) : !board.dueSoon.length ? (
+                      <p className='text-muted-foreground px-5 py-10 text-center text-sm'>
+                        {t('Nothing due in the next 7 days')}
+                      </p>
+                    ) : (
+                      <ul className='divide-y'>
+                        {board.dueSoon.map((o) => (
+                          <li key={o.id}>
+                            <Link
+                              to={orderPath(o) as never}
+                              className='hover:bg-muted/40 focus-visible:ring-ring block space-y-1.5 px-5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset max-sm:px-4'
+                            >
+                              <div className='flex items-center justify-between gap-2 text-sm'>
+                                <span className='truncate font-medium'>
+                                  {o.productName}
+                                </span>
+                                <span className='text-muted-foreground shrink-0 text-xs tabular-nums'>
+                                  {fmtDate(o.plannedCompletionDate)}
+                                </span>
+                              </div>
+                              <div className='text-muted-foreground flex items-center gap-2 text-xs'>
+                                <span className='font-mono'>
+                                  {o.orderNumber}
+                                </span>
+                                <PriorityText priority={o.priority} />
+                                <span className='ml-auto tabular-nums'>
+                                  {fmtQty(o.completedQuantity)} /{' '}
+                                  {fmtQty(o.plannedQuantity)} {o.unit}
+                                </span>
+                              </div>
+                              <ProgressBar
+                                value={
+                                  o.plannedQuantity
+                                    ? (o.completedQuantity /
+                                        o.plannedQuantity) *
+                                      100
+                                    : 0
+                                }
+                                tone='emerald'
+                                label={t('{{n}} progress').replace(
+                                  '{{n}}',
+                                  o.orderNumber
+                                )}
+                              />
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Panel>
+                </div>
+              ) : (
+                <div className='grid gap-4 md:grid-cols-2'>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className='h-[300px] w-full rounded-xl' />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </>
       )}
