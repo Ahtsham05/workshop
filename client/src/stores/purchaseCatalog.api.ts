@@ -64,6 +64,8 @@ export interface PurchaseCatalogItem {
   trackBatch?: boolean
   trackExpiry?: boolean
   batches?: PurchaseCatalogBatch[]
+  // Manufacturing classification (raw_material, finished_good…); null = unclassified.
+  productType?: string | null
 }
 
 /** One branch's stock for a single product/variant — see branchAvailability.service.js. */

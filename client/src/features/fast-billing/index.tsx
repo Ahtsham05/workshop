@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeftRight, History, Layers, Package, Receipt, ShoppingCart, Trash2, Zap } from 'lucide-react'
 import { usePermissions } from '@/context/permission-context'
 import { useGetPurchasableCatalogQuery, type PurchaseCatalogItem } from '@/stores/purchaseCatalog.api'
+import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { useCreateInvoiceMutation } from '@/stores/invoice.api'
 import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
@@ -57,6 +58,10 @@ export default function FastBillingPage() {
   const { hasExplicitPermission } = usePermissions()
   const canCreateInvoices = hasExplicitPermission('createInvoices')
   const { data: catalog = EMPTY_CATALOG } = useGetPurchasableCatalogQuery()
+  // Manufacturing businesses don't sell raw materials: they're left out of suggestions
+  // and name matches, and scanning one says why instead of adding it.
+  const saleFilter = useTradeProductFilter('sale')
+  const sellableCatalog = useMemo(() => catalog.filter(saleFilter.isAllowed), [catalog, saleFilter])
   const [createInvoice, { isLoading: charging }] = useCreateInvoiceMutation()
   const scanInputRef = useRef<BarcodeScanInputHandle>(null)
 
@@ -252,12 +257,17 @@ export default function FastBillingPage() {
     (rawValue: string) => {
       const { quantity, rest } = parseQuantityPrefix(rawValue)
       const exact = barcodeIndex.get(rest.trim().toLowerCase())
+      if (exact && !saleFilter.isAllowed(exact)) {
+        playBeep('error')
+        toast.error(saleFilter.blockedMessage(exact.name))
+        return
+      }
       if (exact) {
         addToCart(exact, quantity)
         return
       }
       const q = rest.trim().toLowerCase()
-      const nameMatches = filterAndRankBySearch(catalog, q, (p) => [p.name, p.nameUrdu])
+      const nameMatches = filterAndRankBySearch(sellableCatalog, q, (p) => [p.name, p.nameUrdu])
       if (nameMatches.length === 1) {
         addToCart(nameMatches[0], quantity)
         return
@@ -270,7 +280,7 @@ export default function FastBillingPage() {
       playBeep('error')
       toast.error(`No product found for "${rest}"`)
     },
-    [barcodeIndex, catalog, addToCart],
+    [barcodeIndex, sellableCatalog, saleFilter, addToCart],
   )
 
   // Batch-tracked lines try the currently-selected batch first — a quantity that fits
@@ -799,7 +809,7 @@ export default function FastBillingPage() {
         <div className='flex flex-col gap-3 xl:col-span-7'>
           <BarcodeScanInput
             ref={scanInputRef}
-            catalog={catalog}
+            catalog={sellableCatalog}
             onScanSubmit={handleScanSubmit}
             onSelectSuggestion={openAddDialog}
           />

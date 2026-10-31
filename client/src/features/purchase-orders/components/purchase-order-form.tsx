@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, ClipboardList, Columns2, LayoutGrid } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { cn } from '@/lib/utils'
 import { fetchAllProducts } from '@/stores/product.slice'
 import { fetchSuppliers } from '@/stores/supplier.slice'
@@ -90,6 +91,8 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   }, [dispatch])
 
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG, isLoading: catalogLoading } = useGetPurchasableCatalogQuery()
+  // Manufacturing businesses don't buy finished goods — kept off tiles and scans.
+  const purchaseFilter = useTradeProductFilter('purchase')
 
   // Build catalog tiles from the flat, variant-aware purchasable catalog — one tile
   // per real variant (its own price/cost/stock), one tile per non-variant product. See
@@ -97,6 +100,7 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   useEffect(() => {
     const categoryMap = new Map<string, Category>()
     purchasableCatalog.forEach((item) => {
+      if (!purchaseFilter.isAllowed(item)) return
       let categoryId = 'other'
       let categoryName = 'Other'
       if (item.categories && item.categories.length > 0) {
@@ -134,7 +138,7 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
       } as Product)
     })
     setCategorizedProducts(Array.from(categoryMap.values()))
-  }, [purchasableCatalog])
+  }, [purchasableCatalog, purchaseFilter])
 
   const addToOrder = useCallback((product: Product, quantity = 1, variantId?: string) => {
     addProductRef.current(product, quantity, variantId)
@@ -206,14 +210,16 @@ export default function PurchaseOrderForm({ onBack, onSaved, editing, prefillIte
   const handleBarcodeSearch = useCallback(
     (barcode: string) => {
       const product = products.find((p) => p.barcode === barcode)
-      if (product) {
+      if (product && !purchaseFilter.isAllowed(product)) {
+        toast.error(purchaseFilter.blockedMessage(product.name))
+      } else if (product) {
         addToOrder(product)
         toast.success(`Added: ${product.name}`)
       } else {
         toast.error('Product not found')
       }
     },
-    [products, addToOrder],
+    [products, addToOrder, purchaseFilter],
   )
 
   const title = editing ? `Edit ${editing.orderNumber}` : 'New Purchase Order'

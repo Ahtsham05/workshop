@@ -23,6 +23,7 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useTradeProductFilter } from '@/hooks/use-trade-product-filter'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -265,6 +266,9 @@ export default function PurchaseOrderPanel({
   const formatMoney = useFormatMoney()
   const currencySymbol = useCurrencyMeta().symbol
   const { data: purchasableCatalog = EMPTY_PURCHASE_CATALOG } = useGetPurchasableCatalogQuery()
+  // Only the picker list is narrowed (Manufacturing: no finished goods on a purchase);
+  // lines already on the order still look themselves up in the full purchasableCatalog.
+  const { isAllowed: isPurchasable } = useTradeProductFilter('purchase')
   const [draft, setDraft] = useState<PurchaseOrderDraft>(() =>
     buildInitialDraft(editing, purchasableCatalog, showProductCatalog)
   )
@@ -353,7 +357,7 @@ export default function PurchaseOrderPanel({
 
   const filteredSuppliers = filterAndRankBySearch(suppliers, supplierSearchQuery, (s) => [s.name, s.nameUrdu, s.phone])
 
-  const filteredCatalogItems = filterAndRankBySearch(purchasableCatalog, productSearchQuery, (p) => [p.name, p.nameUrdu, p.barcode, p.brand?.name])
+  const filteredCatalogItems = filterAndRankBySearch(purchasableCatalog.filter(isPurchasable), productSearchQuery, (p) => [p.name, p.nameUrdu, p.barcode, p.brand?.name])
   // Capped slice actually rendered — matches Invoice/Purchase Invoice's identical
   // visible/filtered split, so a large catalog doesn't render hundreds of DOM rows.
   const visibleCatalogItems = filteredCatalogItems.slice(0, MAX_VISIBLE_DROPDOWN_RESULTS)
