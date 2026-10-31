@@ -68,7 +68,8 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
           onAfterClose?.()
         }}
       >
-        <DialogHeader className='space-y-0 bg-muted/40 px-5 pb-4 pt-5'>
+        {/* pr-12 keeps the name clear of the dialog's ✕ button. */}
+        <DialogHeader className='space-y-0 border-b bg-muted/40 py-4 pl-5 pr-12'>
           <DialogTitle className='flex items-center gap-3 text-left'>
             <div className='flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-background shadow-sm'>
               {item.image?.url ? (
@@ -77,8 +78,11 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
                 <Package className='h-6 w-6 text-muted-foreground/50' />
               )}
             </div>
-            <div className='min-w-0'>
-              <p className='truncate text-base font-semibold leading-tight'>{item.name}</p>
+            <div className='min-w-0 flex-1'>
+              {/* Two lines, then ellipsis — the full name on hover — so long names stay readable. */}
+              <p className='line-clamp-2 break-words text-base font-semibold leading-snug' title={item.name}>
+                {item.name}
+              </p>
               <div className='mt-1 flex flex-wrap items-center gap-1.5'>
                 <span className='text-xs text-muted-foreground'>
                   {formatMoney(item.price)} · {item.unit || 'pcs'}
@@ -138,7 +142,11 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
                 <Plus className='h-4 w-4' />
               </Button>
             </div>
-            {overStock && <p className='text-xs font-medium text-destructive'>Only {item.stockQuantity} in stock</p>}
+            {overStock && (
+              <p className='text-xs font-medium text-destructive'>
+                {item.stockQuantity > 0 ? `Only ${item.stockQuantity} in stock` : 'Out of stock'} — this sale goes over stock
+              </p>
+            )}
           </div>
 
           <div className='space-y-1.5'>
@@ -167,11 +175,16 @@ export function AddToCartDialog({ item, onClose, onConfirm, onAfterClose }: Prop
                 )}
               />
             </div>
+            {unitPrice <= 0 && (
+              <p className='text-xs font-medium text-amber-600 dark:text-amber-500'>
+                No sale price set — enter the price to charge
+              </p>
+            )}
           </div>
 
-          <div className='flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2.5'>
-            <span className='text-sm font-medium text-muted-foreground'>Subtotal</span>
-            <span className='text-xl font-bold tabular-nums'>{formatMoney(subtotal)}</span>
+          <div className='flex items-center justify-between gap-3 rounded-lg border bg-muted/40 px-3 py-2.5'>
+            <span className='shrink-0 text-sm font-medium text-muted-foreground'>Subtotal</span>
+            <span className='min-w-0 truncate text-xl font-bold tabular-nums'>{formatMoney(subtotal)}</span>
           </div>
 
           <Button type='button' size='lg' className='h-12 w-full gap-2 text-base font-semibold' onClick={confirm}>
