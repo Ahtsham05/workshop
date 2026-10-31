@@ -345,27 +345,30 @@ export function ModeCard({
   )
 }
 
-export function SummaryRow({
+/** One figure in the receipt's bottom bar: small label over the value. */
+export function SummaryStat({
   label,
   value,
   tone,
   strong,
+  className,
 }: {
   label: string
   value: string
   tone?: 'ok' | 'bad' | 'info'
   strong?: boolean
+  className?: string
 }) {
   return (
-    <div className='flex items-baseline justify-between gap-3'>
-      <dt className='text-muted-foreground'>{label}</dt>
+    <div className={cn('min-w-0', className)}>
+      <dt className='text-muted-foreground truncate text-[11px]'>{label}</dt>
       <dd
         className={cn(
-          'tabular-nums',
+          'truncate text-sm font-medium tabular-nums',
           strong && 'text-base font-semibold',
-          tone === 'ok' && 'font-medium text-emerald-600 dark:text-emerald-400',
-          tone === 'bad' && 'font-medium text-rose-600 dark:text-rose-400',
-          tone === 'info' && 'font-medium text-sky-600 dark:text-sky-400'
+          tone === 'ok' && 'text-emerald-600 dark:text-emerald-400',
+          tone === 'bad' && 'text-rose-600 dark:text-rose-400',
+          tone === 'info' && 'text-sky-600 dark:text-sky-400'
         )}
       >
         {value}
@@ -392,14 +395,19 @@ export function ProgressAfter({
     Math.round(((order.completedQuantity + good) / order.plannedQuantity) * 100)
   )
   return (
-    <div className='space-y-1.5 border-t pt-3'>
-      <div className='text-muted-foreground flex justify-between text-xs'>
-        <span>{t('Order after this receipt')}</span>
+    <div className='min-w-0 space-y-1'>
+      <div className='text-muted-foreground flex justify-between gap-3 text-[11px]'>
+        <span className='truncate'>{t('Order after this receipt')}</span>
         <span className='tabular-nums'>
           {fmtQty(made)} / {fmtQty(order.plannedQuantity)}
         </span>
       </div>
-      <div className='bg-muted relative h-2 overflow-hidden rounded-full'>
+      <div
+        className='bg-muted relative h-1.5 overflow-hidden rounded-full'
+        role='img'
+        aria-label={`${t('Good')} ${goodPct}%, ${t('Made')} ${pct}%`}
+        title={`${t('Good')} ${goodPct}% · ${t('Made')} ${pct}%`}
+      >
         <div
           className='absolute inset-y-0 left-0 bg-sky-500/60'
           style={{ width: `${pct}%` }}
@@ -408,16 +416,6 @@ export function ProgressAfter({
           className='absolute inset-y-0 left-0 bg-emerald-600'
           style={{ width: `${goodPct}%` }}
         />
-      </div>
-      <div className='text-muted-foreground flex gap-3 text-[11px]'>
-        <span className='flex items-center gap-1'>
-          <span className='h-2 w-2 rounded-sm bg-emerald-600' /> {t('Good')}{' '}
-          {goodPct}%
-        </span>
-        <span className='flex items-center gap-1'>
-          <span className='h-2 w-2 rounded-sm bg-sky-500/60' /> {t('Made')}{' '}
-          {pct}%
-        </span>
       </div>
     </div>
   )

@@ -21,6 +21,7 @@ import { useLanguage } from '@/context/language-context'
 import { Button } from '@/components/ui/button'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DockedFooter } from '@/components/docked-footer'
 import { PriorityText, StatusBadge } from '../components/badges'
 import { InspectOutputDialog } from '../components/execution-dialogs'
 import { PageHeader } from '../components/page'
@@ -30,7 +31,7 @@ import { NoPackingConfirm } from '../components/receipt-packing-used'
 import {
   OrderStrip,
   ProgressAfter,
-  SummaryRow,
+  SummaryStat,
 } from '../components/receipt-parts'
 import {
   ReceiptProblems,
@@ -130,9 +131,9 @@ export default function FinishedGoodsReceiptPage({
           </div>
         </section>
       ) : !order || (isFetching && order.id !== orderId) ? (
-        <div className='grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
+        <div className='space-y-4'>
           <Skeleton className='h-96 w-full rounded-xl' />
-          <Skeleton className='h-64 w-full rounded-xl' />
+          <Skeleton className='h-16 w-full rounded-xl' />
         </div>
       ) : (
         <ReceiptVoucher
@@ -150,7 +151,7 @@ export default function FinishedGoodsReceiptPage({
   )
 }
 
-/** The receipt for one order: the full form on the left, the summary and Post on the right. */
+/** The receipt for one order: the full-width form, with the summary and Post in a bar docked to the bottom. */
 function ReceiptVoucher({
   order,
   picker,
@@ -220,7 +221,7 @@ function ReceiptVoucher({
   }
 
   return (
-    <div className='grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]'>
+    <div className='space-y-4'>
       <div className='min-w-0 space-y-4'>
         {/* 1. The finished good */}
         <section className='bg-card space-y-3 rounded-xl border p-4'>
@@ -269,24 +270,25 @@ function ReceiptVoucher({
         </section>
       </div>
 
-      {/* Summary */}
-      <aside className='lg:sticky lg:top-4 lg:self-start'>
-        <div className='bg-card space-y-4 rounded-xl border p-4'>
-          <div className='text-sm font-semibold'>{t('Receipt summary')}</div>
-          <dl className='space-y-2 text-sm'>
-            <SummaryRow
+      {/* Summary + Post — docked to the bottom of the screen while the form scrolls.
+          Phones keep only Made / where it goes + the buttons so the bar stays short. */}
+      <DockedFooter label={t('Receipt summary')} className='space-y-3'>
+        <ReceiptProblems problems={r.problems} />
+        <div className='flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-6'>
+          <dl className='grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 xl:flex xl:flex-wrap xl:items-center xl:gap-x-8'>
+            <SummaryStat
               label={t('Made')}
               value={`${fmtQty(r.quantity)} ${unit}`}
               strong
             />
             {direct ? (
               <>
-                <SummaryRow
+                <SummaryStat
                   label={t('To finished stock')}
                   value={fmtQty(r.good)}
                   tone='ok'
                 />
-                <SummaryRow
+                <SummaryStat
                   label={
                     r.quality.disposition === 'rework'
                       ? t('Rejected → rework')
@@ -297,14 +299,15 @@ function ReceiptVoucher({
                 />
               </>
             ) : (
-              <SummaryRow
+              <SummaryStat
                 label={t('To the QC hold')}
                 value={fmtQty(r.quantity)}
                 tone='info'
               />
             )}
             {direct && r.packEnabled && r.packing.packs > 0 && (
-              <SummaryRow
+              <SummaryStat
+                className='max-sm:hidden'
                 label={t('Packed')}
                 value={`${fmtQty(r.packing.packs)} ${t('packs')}${
                   r.packing.loose > EPS
@@ -313,28 +316,34 @@ function ReceiptVoucher({
                 }`}
               />
             )}
-            <SummaryRow
+            <SummaryStat
+              className='max-sm:hidden'
               label={t('Material used (at cost)')}
               value={formatMoney(r.materialCost)}
             />
             {r.quantity > 0 && (
-              <SummaryRow
+              <SummaryStat
+                className='max-sm:hidden'
                 label={t('Cost per unit')}
                 value={formatMoney(r.materialCost / r.quantity)}
               />
             )}
+            <div className='col-span-full xl:w-48 xl:flex-none max-sm:hidden'>
+              <ProgressAfter
+                order={order}
+                quantity={r.quantity}
+                good={direct ? r.good : 0}
+              />
+            </div>
           </dl>
-          <ProgressAfter
-            order={order}
-            quantity={r.quantity}
-            good={direct ? r.good : 0}
-          />
-          <ReceiptProblems problems={r.problems} />
-          <div className='flex flex-col gap-2'>
+          <div className='flex shrink-0 gap-2 max-sm:w-full max-sm:[&>*]:flex-1'>
+            <Button variant='outline' onClick={onAnother}>
+              {t('Cancel')}
+            </Button>
             <Button
               onClick={() => void submit()}
               disabled={!!r.problems.length || r.posting}
-              className='w-full justify-between'
+              className='min-w-52 justify-between gap-3'
             >
               <span className='flex items-center gap-1.5'>
                 {r.posting ? (
@@ -346,14 +355,11 @@ function ReceiptVoucher({
                 )}
                 {direct ? t('Receive into stock') : t('Send to QC')}
               </span>
-              <kbd className='text-[10px] opacity-70'>Ctrl+Enter</kbd>
-            </Button>
-            <Button variant='ghost' onClick={onAnother}>
-              {t('Cancel')}
+              <kbd className='text-[10px] opacity-70 max-sm:hidden'>Ctrl+Enter</kbd>
             </Button>
           </div>
         </div>
-      </aside>
+      </DockedFooter>
 
       <NoPackingConfirm
         r={r}
