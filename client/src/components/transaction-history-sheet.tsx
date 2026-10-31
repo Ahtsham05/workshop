@@ -1196,12 +1196,15 @@ export function TransactionHistoryButton({
   currentParty,
   className,
   buttonHidden = false,
+  shortcut = true,
 }: {
   mode: TransactionHistoryMode
   currentParty?: { id: string; name: string } | null
   className?: string
   /** Hide just the button (screen customised); the keyboard shortcut and panel still work. */
   buttonHidden?: boolean
+  /** Off on screens that already use Alt+H for something else (Fast Billing: Hold Cart). */
+  shortcut?: boolean
 }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
@@ -1209,6 +1212,7 @@ export function TransactionHistoryButton({
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    if (!shortcut) return undefined
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.code !== 'KeyH') return
       event.preventDefault()
@@ -1217,7 +1221,7 @@ export function TransactionHistoryButton({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [shortcut])
 
   const label = mode === 'purchase' ? t('Recent purchases') : t('Recent sales')
   return (
@@ -1234,7 +1238,7 @@ export function TransactionHistoryButton({
               setMounted(true)
               setOpen(true)
             }}
-            aria-keyshortcuts='Alt+H'
+            aria-keyshortcuts={shortcut ? 'Alt+H' : undefined}
           >
             <FileClock className='h-4 w-4 shrink-0' aria-hidden />
             {label}
@@ -1242,7 +1246,7 @@ export function TransactionHistoryButton({
         </TooltipTrigger>
         <TooltipContent>
           {mode === 'purchase' ? t('Previous purchases, invoice wise and item wise') : t('Previous sales, invoice wise and item wise')}
-          <kbd className='ml-2 rounded border px-1 font-mono text-[10px]'>Alt+H</kbd>
+          {shortcut && <kbd className='ml-2 rounded border px-1 font-mono text-[10px]'>Alt+H</kbd>}
         </TooltipContent>
       </Tooltip>
       )}

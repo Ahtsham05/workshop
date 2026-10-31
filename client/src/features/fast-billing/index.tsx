@@ -14,6 +14,8 @@ import { useGetBranchQuery } from '@/stores/branch.api'
 import { useGetMyOrganizationQuery } from '@/stores/organization.api'
 import { useGetWalletsQuery } from '@/stores/mobile-shop.api'
 import type { SplitPaymentValue } from '@/components/split-payment-fields'
+import { TransactionHistoryButton } from '@/components/transaction-history-sheet'
+import { RecordNavigatorButton } from '@/components/record-navigator'
 import type { ImeiEntryInput, ImeiRecord } from '@/stores/imei.api'
 import { autoAllocateBatches, type BatchAllocation } from '@/lib/batch-allocation'
 import { entryImei, SerialNumberDialog } from '@/components/serial-batch-line-controls'
@@ -57,6 +59,8 @@ export default function FastBillingPage() {
   const currencySymbol = currencyMeta.symbol
   const { hasExplicitPermission } = usePermissions()
   const canCreateInvoices = hasExplicitPermission('createInvoices')
+  // Same gate as the Invoice page's Recent sales / Browse invoices buttons.
+  const canViewInvoices = hasExplicitPermission('viewInvoices')
   const { data: catalog = EMPTY_CATALOG } = useGetPurchasableCatalogQuery(undefined, CATALOG_REVALIDATE_ON_MOUNT)
   // Manufacturing businesses don't sell raw materials: they're left out of suggestions
   // and name matches, and scanning one says why instead of adding it.
@@ -759,7 +763,7 @@ export default function FastBillingPage() {
             <h1 className='text-xl font-bold tracking-tight'>Fast Billing</h1>
             <p className='text-xs text-muted-foreground'>
               Type <span className='font-mono'>3*</span> for qty 3 · ↑↓ + Enter to pick · Alt+1 cash · Alt+2 credit ·
-              Alt+3 split · Alt+H hold · Alt+L held · Ctrl+Enter charge
+              Alt+3 split · Alt+H hold · Alt+L held · Alt+B browse invoices · Ctrl+Enter charge
             </p>
           </div>
         </div>
@@ -776,6 +780,14 @@ export default function FastBillingPage() {
               Invoice History
             </Link>
           </Button>
+          {canViewInvoices && (
+            <>
+              {/* Same panels as the Invoice page. Alt+H stays Hold Cart here, so Recent
+                  sales opens from its button only; Browse invoices keeps Alt+B. */}
+              <TransactionHistoryButton mode='sale' shortcut={false} currentParty={customer} />
+              <RecordNavigatorButton mode='sale' currentParty={customer} />
+            </>
+          )}
           <Button type='button' variant='outline' size='sm' onClick={() => setHeldOpen(true)} title='Alt+L'>
             <Layers className='mr-1.5 h-3.5 w-3.5' />
             Held {held.length > 0 && `(${held.length})`}
