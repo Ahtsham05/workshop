@@ -300,7 +300,9 @@ export default function StudentPromotion() {
                     <TableHead>Admission #</TableHead>
                     <TableHead>Section</TableHead>
                     <TableHead className="text-center">Fee Status</TableHead>
-                    <TableHead className="text-right">Pending Amount</TableHead>
+                    <TableHead className="text-right">Previous Pending</TableHead>
+                    <TableHead className="text-right">This Month</TableHead>
+                    <TableHead className="text-right">Total Pending</TableHead>
                     <TableHead className="text-center">Vouchers</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -350,6 +352,12 @@ export default function StudentPromotion() {
                               <AlertTriangle className="h-3 w-3 mr-1" /> Pending
                             </Badge>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right text-sm text-amber-700">
+                          {s.previousPending > 0 ? PKR(s.previousPending) : '—'}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {s.currentPending > 0 ? PKR(s.currentPending) : '—'}
                         </TableCell>
                         <TableCell className="text-right text-sm">
                           {s.pendingAmount > 0 ? (

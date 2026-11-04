@@ -4,6 +4,7 @@ const {
   toBusinessCalendarDate,
   getBusinessDayRange,
 } = require('../utils/businessTimezone');
+const { VOUCHER_FIELDS, createFundTally, currentFeeMonth, getFeePosition, paidByHead } = require('./feePosition.service');
 
 const MONTH_ORDER = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -46,6 +47,16 @@ const resolveStudentIds = async (scope, { studentId, classId, sectionId }) => {
   if (sectionId) studentFilter.sectionId = sectionId;
   const students = await Student.find(studentFilter).select('_id').lean();
   return students.map((s) => s._id);
+};
+
+/** Fund shares for each allocation row (row.funds), by the voucher it was paid against. */
+const attachFundShares = async (rows) => {
+  const ids = [...new Set(rows.map((r) => r.voucherId))];
+  const vouchers = ids.length ? await FeeVoucher.find({ _id: { $in: ids } }).select(VOUCHER_FIELDS).lean() : [];
+  const byId = new Map(vouchers.map((v) => [String(v._id), v]));
+  rows.forEach((r) => {
+    r.funds = paidByHead(byId.get(r.voucherId), r.amount);
+  });
 };
 
 const STUDENT_POPULATE = {
@@ -182,6 +193,9 @@ const getDashboardSummary = async (scope, filters = {}) => {
   const currentMonthCollection = rows.filter((r) => !r.late).reduce((s, r) => s + r.amount, 0);
   const previousDuesCollection = rows.filter((r) => r.late).reduce((s, r) => s + r.amount, 0);
   const discounts = await sumDiscountForRows(rows);
+  await attachFundShares(rows);
+  const collectionFunds = createFundTally();
+  rows.forEach((r) => collectionFunds.add({}, r.funds));
 
   const studentIds = await resolveStudentIds(scope, { classId, sectionId });
 
@@ -222,15 +236,21 @@ const getDashboardSummary = async (scope, filters = {}) => {
   ]);
 
   const totalRefunds = refundAgg[0]?.total || 0;
-  const totalOutstanding = await getOutstanding(scope, { classId, sectionId });
+  const { summary: position, heads: outstandingHeads } = await getFeePosition(scope, { ...currentFeeMonth(), classId, sectionId });
 
   return {
     totalCollectionToday: todayAgg[0]?.total || 0,
     totalCollectionThisMonth: monthAgg[0]?.total || 0,
     collectionInRange,
+    collectionFundNames: collectionFunds.names(),
+    collectionFunds: collectionFunds.totals(),
     currentMonthCollection,
     previousDuesCollection,
-    totalOutstanding,
+    totalOutstanding: position.totalPending + position.laterPending,
+    previousOutstanding: position.previousPending,
+    currentMonthOutstanding: position.currentPending,
+    laterOutstanding: position.laterPending,
+    outstandingHeads,
     totalDiscounts: discounts,
     totalRefunds,
     netCollection: collectionInRange - totalRefunds,
@@ -243,6 +263,8 @@ const getDashboardSummary = async (scope, filters = {}) => {
 const getMonthlyCollectionReport = async (scope, filters = {}) => {
   const receipts = await getReceipts(scope, { ...filters, status: 'completed' });
   const rows = flattenAllocations(receipts);
+  await attachFundShares(rows);
+  const funds = createFundTally();
 
   const byPeriod = new Map();
   for (const r of rows) {
@@ -253,6 +275,8 @@ const getMonthlyCollectionReport = async (scope, filters = {}) => {
     const bucket = byPeriod.get(key);
     bucket.students.add(r.studentId);
     bucket.voucherIds.add(r.voucherId);
+    bucket.funds = bucket.funds || {};
+    funds.add(bucket.funds, r.funds);
     if (r.late) bucket.previousDues += r.amount;
     else bucket.currentFee += r.amount;
   }
@@ -270,6 +294,7 @@ const getMonthlyCollectionReport = async (scope, filters = {}) => {
       currentFee: p.currentFee,
       previousDues: p.previousDues,
       discount,
+      funds: p.funds,
       totalCollected: p.currentFee + p.previousDues,
     });
   }
@@ -285,7 +310,7 @@ const getMonthlyCollectionReport = async (scope, filters = {}) => {
     { students: 0, currentFee: 0, previousDues: 0, discount: 0, totalCollected: 0 },
   );
 
-  return { rows: result, totals };
+  return { rows: result, fundNames: funds.names(), totals: { ...totals, funds: funds.totals() } };
 };
 
 /**
@@ -303,12 +328,15 @@ const getYearlyCollectionReport = async (scope, { year, classId, sectionId } = {
 
   const receipts = await getReceipts(scope, { startDate, endDate, classId, sectionId, status: 'completed' });
   const rows = flattenAllocations(receipts);
+  await attachFundShares(rows);
+  const funds = createFundTally();
 
   const byMonth = new Map();
-  MONTH_ORDER.forEach((m) => byMonth.set(m, { month: m, year: y, currentMonthCollection: 0, previousDues: 0 }));
+  MONTH_ORDER.forEach((m) => byMonth.set(m, { month: m, year: y, currentMonthCollection: 0, previousDues: 0, funds: {} }));
   for (const r of rows) {
     if (r.paymentYear !== y) continue; // safety guard; paymentDate range already restricts this
     const bucket = byMonth.get(r.paymentMonth);
+    funds.add(bucket.funds, r.funds);
     if (r.late) bucket.previousDues += r.amount;
     else bucket.currentMonthCollection += r.amount;
   }
@@ -337,6 +365,7 @@ const getYearlyCollectionReport = async (scope, { year, classId, sectionId } = {
       year: y,
       currentMonthCollection: bucket.currentMonthCollection,
       previousDues: bucket.previousDues,
+      funds: bucket.funds,
       totalCollection: bucket.currentMonthCollection + bucket.previousDues,
       outstanding: Math.max(0, billed - paid),
     };
@@ -352,13 +381,15 @@ const getYearlyCollectionReport = async (scope, { year, classId, sectionId } = {
   );
   const discounts = await sumDiscountForRows(rows);
 
-  return { rows: monthRows, totals: { ...totals, discounts }, year: y };
+  return { rows: monthRows, fundNames: funds.names(), totals: { ...totals, discounts, funds: funds.totals() }, year: y };
 };
 
 /** Section 4 — Daily Collection Report: one row per calendar day, columns are whichever fee months actually appear. */
 const getDailyCollectionReport = async (scope, filters = {}) => {
   const receipts = await getReceipts(scope, { ...filters, status: 'completed' });
   const rows = flattenAllocations(receipts);
+  await attachFundShares(rows);
+  const funds = createFundTally();
 
   const periodsSeen = new Map(); // key -> {month, year}
   rows.forEach((r) => periodsSeen.set(`${r.feeYear}-${r.feeMonth}`, { month: r.feeMonth, year: r.feeYear }));
@@ -368,12 +399,13 @@ const getDailyCollectionReport = async (scope, filters = {}) => {
   for (const r of rows) {
     const day = toBusinessCalendarDate(new Date(r.paymentDate));
     if (!byDay.has(day)) {
-      byDay.set(day, { date: day, receipts: new Set(), byPeriod: {}, total: 0 });
+      byDay.set(day, { date: day, receipts: new Set(), byPeriod: {}, funds: {}, total: 0 });
     }
     const bucket = byDay.get(day);
     bucket.receipts.add(r.paymentId);
     const key = `${r.feeYear}-${r.feeMonth}`;
     bucket.byPeriod[key] = (bucket.byPeriod[key] || 0) + r.amount;
+    funds.add(bucket.funds, r.funds);
     bucket.total += r.amount;
   }
 
@@ -383,16 +415,18 @@ const getDailyCollectionReport = async (scope, filters = {}) => {
       date: d.date,
       receiptCount: d.receipts.size,
       byPeriod: columns.map((c) => d.byPeriod[`${c.year}-${c.month}`] || 0),
+      funds: d.funds,
       total: d.total,
     }));
 
   const totals = {
     receiptCount: days.reduce((s, d) => s + d.receiptCount, 0),
     byPeriod: columns.map((_, i) => days.reduce((s, d) => s + d.byPeriod[i], 0)),
+    funds: funds.totals(),
     total: days.reduce((s, d) => s + d.total, 0),
   };
 
-  return { columns, days, totals };
+  return { columns, fundNames: funds.names(), days, totals };
 };
 
 /** Section 5 — Detailed Transaction Report: one row per fee-month allocation, paginated. */

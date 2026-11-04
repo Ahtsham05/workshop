@@ -13,6 +13,21 @@ const {
   TeacherPayroll,
   FeeCategory,
 } = require('../models');
+const {
+  getFeePosition,
+  getFeePositionYear,
+  voucherHeads,
+  loadVoucherGroups,
+  scaleShares,
+  paidByHead,
+  voucherHeadBalances,
+  createFundTally,
+  VOUCHER_FIELDS,
+  periodIndex,
+  resolveStudentIds,
+  effectiveNet,
+  PAYABLE_STATUSES,
+} = require('./feePosition.service');
 
 const VOUCHER_TYPE_LABELS = {
   monthly: 'Monthly Fee',
@@ -46,6 +61,8 @@ const aggFilter = (scope = {}) => {
   if (scope.branchId) f.branchId = new mongoose.Types.ObjectId(scope.branchId);
   return f;
 };
+
+const VOUCHER_STATUS_COLORS = { paid: '#10b981', partial: '#f59e0b', unpaid: '#ef4444', overdue: '#b91c1c' };
 
 const MONTH_NAMES = [
   'January','February','March','April','May','June',
@@ -120,7 +137,7 @@ const getMonthlyIncomeExpense = async (scope, year) => {
 
   // Get non-fee SchoolTransaction income (exclude fee payments — those come from FeeVoucher)
   // and all expenses
-  const [txnPipeline, feePipeline, payrollPipeline] = await Promise.all([
+  const [txnPipeline, feePipeline, payrollPipeline, unpaidVouchers, olderUnpaidVouchers] = await Promise.all([
     SchoolTransaction.aggregate([
       {
         $match: {
@@ -140,16 +157,7 @@ const getMonthlyIncomeExpense = async (scope, year) => {
       { $sort: { '_id.month': 1 } },
     ]),
     // Fee collection per month — the authoritative source for fee income
-    FeeVoucher.aggregate([
-      { $match: { ...af, year: Number(year), paidAmount: { $gt: 0 } } },
-      {
-        $group: {
-          _id: '$month',
-          feeCollected: { $sum: '$paidAmount' },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
+    loadVoucherGroups({ ...af, year: Number(year), paidAmount: { $gt: 0 } }),
     // Paid teacher payroll per month — counted as salary expense
     TeacherPayroll.aggregate([
       { $match: { ...af, year: Number(year), status: 'paid' } },
@@ -160,7 +168,39 @@ const getMonthlyIncomeExpense = async (scope, year) => {
         },
       },
     ]),
+    // Still unpaid today on each month's fees, by fund
+    loadVoucherGroups({ ...af, year: Number(year), status: { $in: PAYABLE_STATUSES } }),
+    // Still unpaid from earlier years: the balance each pending total starts from
+    loadVoucherGroups({ ...af, year: { $lt: Number(year) }, status: { $in: PAYABLE_STATUSES } }),
   ]);
+
+  // Each fund (Tuition, Paper Fund, ...) gets its own figure; together they make feeCollected.
+  const funds = createFundTally();
+  const feeByMonth = {};
+  feePipeline.forEach((v) => {
+    if (!feeByMonth[v.month]) feeByMonth[v.month] = { feeCollected: 0, count: 0, funds: {} };
+    const row = feeByMonth[v.month];
+    row.feeCollected += v.paidAmount * v.count;
+    row.count += v.count;
+    funds.add(row.funds, scaleShares(paidByHead(v, v.paidAmount), v.count));
+  });
+  const pendingByMonth = {};
+  const pendingTotals = {};
+  unpaidVouchers.forEach((v) => {
+    if (!pendingByMonth[v.month]) pendingByMonth[v.month] = { total: 0, funds: {} };
+    const shares = voucherHeadBalances(v).map((h) => ({ name: h.name, amount: h.pending * v.count }));
+    pendingByMonth[v.month].total += shares.reduce((sum, h) => sum + h.amount, 0);
+    funds.add(pendingByMonth[v.month].funds, shares, { countTowardTotal: false });
+    funds.add(pendingTotals, shares, { countTowardTotal: false });
+  });
+
+  const openingPendingFunds = {};
+  let openingPending = 0;
+  olderUnpaidVouchers.forEach((v) => {
+    const shares = voucherHeadBalances(v).map((h) => ({ name: h.name, amount: h.pending * v.count }));
+    openingPending += shares.reduce((sum, h) => sum + h.amount, 0);
+    funds.add(openingPendingFunds, shares, { countTowardTotal: false });
+  });
 
   const months = MONTH_NAMES.map((name, idx) => {
     const monthNum = idx + 1;
@@ -171,13 +211,13 @@ const getMonthlyIncomeExpense = async (scope, year) => {
         if (r._id.type === 'EXPENSE') { txnExpense = r.total; expenseCount = r.count; }
       }
     });
-    const feeRow = feePipeline.find((r) => r._id === name) || {};
+    const feeRow = feeByMonth[name] || {};
     const payrollRow = payrollPipeline.find((r) => r._id === monthNum) || {};
     const feeCollected = feeRow.feeCollected || 0;
     const salaryExpense = payrollRow.salaryPaid || 0;
     const income = otherIncome + feeCollected;
     const expense = txnExpense + salaryExpense;
-    return { month: name, income, feeCollected, otherIncome, expense, salaryExpense, profit: income - expense, incomeCount: incomeCount + (feeRow.count || 0), expenseCount };
+    return { month: name, income, feeCollected, funds: feeRow.funds || {}, feePending: pendingByMonth[name]?.total || 0, pendingFunds: pendingByMonth[name]?.funds || {}, otherIncome, expense, salaryExpense, profit: income - expense, incomeCount: incomeCount + (feeRow.count || 0), expenseCount };
   });
 
   const totals = months.reduce((a, m) => ({
@@ -187,7 +227,18 @@ const getMonthlyIncomeExpense = async (scope, year) => {
   }), { income: 0, expense: 0, profit: 0 });
 
   return {
-    summary: { year, ...totals, activeMonths: months.filter((m) => m.income > 0 || m.expense > 0).length },
+    summary: {
+      year,
+      ...totals,
+      funds: funds.totals(),
+      feePending: months.reduce((s, m) => s + m.feePending, 0),
+      pendingFunds: pendingTotals,
+      openingPending,
+      openingPendingFunds,
+      otherIncome: months.reduce((s, m) => s + m.otherIncome, 0),
+      activeMonths: months.filter((m) => m.income > 0 || m.expense > 0).length,
+    },
+    fundNames: funds.names(),
     data: months,
     chartData: months.map((m) => ({ name: m.month.slice(0, 3), income: m.income, expense: m.expense, profit: m.profit })),
   };
@@ -217,24 +268,20 @@ const getDailyCollection = async (scope, year, month) => {
       { $sort: { _id: 1 } },
     ]),
     // Fee vouchers paid in this month (grouped by paidDate day)
-    FeeVoucher.aggregate([
-      {
-        $match: {
-          ...af,
-          paidAmount: { $gt: 0 },
-          paidDate: { $gte: start, $lte: end },
-        },
-      },
-      {
-        $group: {
-          _id: { $dayOfMonth: '$paidDate' },
-          total: { $sum: '$paidAmount' },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]),
+    FeeVoucher.find({ ...af, paidAmount: { $gt: 0 }, paidDate: { $gte: start, $lte: end } })
+      .select(`${VOUCHER_FIELDS} paidDate`)
+      .lean(),
   ]);
+
+  const funds = createFundTally();
+  const feeByDay = {};
+  feeVoucherPipeline.forEach((v) => {
+    const day = new Date(v.paidDate).getUTCDate();
+    if (!feeByDay[day]) feeByDay[day] = { total: 0, count: 0, funds: {} };
+    feeByDay[day].total += v.paidAmount;
+    feeByDay[day].count += 1;
+    funds.add(feeByDay[day].funds, paidByHead(v, v.paidAmount));
+  });
 
   const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
   const days = [];
@@ -242,16 +289,25 @@ const getDailyCollection = async (scope, year, month) => {
   const activeDaySet = new Set();
   for (let d = 1; d <= daysInMonth; d++) {
     const txnRow = txnPipeline.find((r) => r._id === d);
-    const feeRow = feeVoucherPipeline.find((r) => r._id === d);
+    const feeRow = feeByDay[d];
     const amount = (txnRow?.total || 0) + (feeRow?.total || 0);
     const transactions = (txnRow?.count || 0) + (feeRow?.count || 0);
     grandTotal += amount;
     if (amount > 0) activeDaySet.add(d);
-    days.push({ day: d, date: `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`, amount, transactions });
+    days.push({ day: d, date: `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`, amount, funds: feeRow?.funds || {}, otherIncome: txnRow?.total || 0, transactions });
   }
 
   return {
-    summary: { year, month, totalCollected: grandTotal, totalDays: daysInMonth, activeDays: activeDaySet.size },
+    summary: {
+      year,
+      month,
+      totalCollected: grandTotal,
+      totalDays: daysInMonth,
+      activeDays: activeDaySet.size,
+      funds: funds.totals(),
+      otherIncome: days.reduce((sum, d) => sum + d.otherIncome, 0),
+    },
+    fundNames: funds.names(),
     data: days,
     chartData: days.map((d) => ({ name: `${d.day}`, amount: d.amount })),
   };
@@ -267,11 +323,13 @@ const getCategoryWiseReport = async (scope, startDate, endDate) => {
   const ed = endDate ? new Date(endDate) : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
   // Run both queries in parallel:
-  // (a) All SchoolTransaction records in range (expense + non-fee income that was manually entered)
-  // (b) FeeVoucher payments in range that have NO linked SchoolTransaction (= seeded / legacy data)
-  const [txnPipeline, orphanFeeVouchers] = await Promise.all([
+  // (a) SchoolTransaction records in range (expense + non-fee income that was manually entered)
+  // (b) Fee payments in range, split by fund below. Their stored category is a default
+  //     ("Tuition Fee"), so going by it would file a Paper Fund payment under tuition.
+  // (c) FeeVoucher payments in range that have NO linked SchoolTransaction (= seeded / legacy data)
+  const [txnPipeline, feeTransactions, orphanFeeVouchers] = await Promise.all([
     SchoolTransaction.aggregate([
-      { $match: { ...af, date: { $gte: sd, $lte: ed } } },
+      { $match: { ...af, date: { $gte: sd, $lte: ed }, referenceModel: { $ne: 'FeeVoucher' } } },
       {
         $group: {
           _id: { categoryId: '$categoryId', type: '$type' },
@@ -300,46 +358,45 @@ const getCategoryWiseReport = async (scope, startDate, endDate) => {
       },
       { $sort: { type: 1, total: -1 } },
     ]),
+    SchoolTransaction.find({ ...af, date: { $gte: sd, $lte: ed }, referenceModel: 'FeeVoucher', type: 'INCOME' })
+      .select('referenceId amount')
+      .lean(),
     // Fee vouchers paid in this period that lack a SchoolTransaction record
-    FeeVoucher.aggregate([
-      {
-        $match: {
-          ...af,
-          paidAmount: { $gt: 0 },
-          paidDate: { $gte: sd, $lte: ed },
-          transactionId: { $in: [null, undefined] },
-          $or: [{ transactionId: { $exists: false } }, { transactionId: null }],
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: '$paidAmount' },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
+    FeeVoucher.find({
+      ...af,
+      paidAmount: { $gt: 0 },
+      paidDate: { $gte: sd, $lte: ed },
+      $or: [{ transactionId: { $exists: false } }, { transactionId: null }],
+    })
+      .select(VOUCHER_FIELDS)
+      .lean(),
   ]);
-
-  // Merge orphan fee-voucher income into "Tuition Fee" income category
-  const orphanTotal = orphanFeeVouchers[0]?.total || 0;
-  const orphanCount = orphanFeeVouchers[0]?.count || 0;
 
   const income = txnPipeline.filter((r) => r.type === 'INCOME');
   const expense = txnPipeline.filter((r) => r.type === 'EXPENSE');
 
-  if (orphanTotal > 0) {
-    // Either add to an existing Tuition Fee entry or create one
-    const tfEntry = income.find((r) => r.name === 'Tuition Fee');
-    if (tfEntry) {
-      tfEntry.total += orphanTotal;
-      tfEntry.count += orphanCount;
+  const addFundIncome = (name, amount, count) => {
+    const entry = income.find((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (entry) {
+      entry.total += amount;
+      entry.count += count;
     } else {
-      income.push({ categoryId: null, type: 'INCOME', name: 'Tuition Fee', total: orphanTotal, count: orphanCount });
+      income.push({ categoryId: null, type: 'INCOME', name, total: amount, count });
     }
-    // Sort by total desc
-    income.sort((a, b) => b.total - a.total);
-  }
+  };
+
+  const feeVoucherIds = [...new Set(feeTransactions.map((t) => String(t.referenceId)))];
+  const feeVouchers = feeVoucherIds.length
+    ? await FeeVoucher.find({ _id: { $in: feeVoucherIds } }).select(VOUCHER_FIELDS).lean()
+    : [];
+  const feeVoucherById = new Map(feeVouchers.map((v) => [String(v._id), v]));
+  feeTransactions.forEach((t) => {
+    paidByHead(feeVoucherById.get(String(t.referenceId)), t.amount).forEach((h) => addFundIncome(h.name, h.amount, 1));
+  });
+  orphanFeeVouchers.forEach((v) => {
+    paidByHead(v, v.paidAmount).forEach((h) => addFundIncome(h.name, h.amount, 1));
+  });
+  income.sort((a, b) => b.total - a.total);
 
   const totalIncome = income.reduce((s, r) => s + r.total, 0);
   const totalExpense = expense.reduce((s, r) => s + r.total, 0);
@@ -463,8 +520,9 @@ const getProfitAndLoss = async (scope, year) => {
   const result = await getMonthlyIncomeExpense(scope, year);
   // Enrich with fee collection data
   const af = aggFilter(scope);
+  const positionYear = await getFeePositionYear(scope, { year });
   const voucherTrend = await FeeVoucher.aggregate([
-    { $match: { ...af, year: Number(year) } },
+    { $match: { ...af, year: Number(year), status: { $ne: 'cancelled' } } },
     {
       $addFields: {
         // Use effectiveNet equivalent in aggregation:
@@ -507,11 +565,14 @@ const getProfitAndLoss = async (scope, year) => {
     const vd = voucherTrend.find((v) => v._id === m.month) || {};
     const feeExpected = vd.expected || 0;
     const feeCollected = vd.collected || 0;
+    const position = positionYear.rows.find((r) => r.month === m.month);
     return {
       ...m,
       feeExpected,
       feeCollected,
       feePending: Math.max(0, feeExpected - feeCollected),
+      feePreviousPending: position?.previousPending || 0,
+      feeTotalPending: position?.totalPending || 0,
       voucherCount: vd.count || 0,
     };
   });
@@ -523,7 +584,14 @@ const getProfitAndLoss = async (scope, year) => {
   }), { feeExpected: 0, feeCollected: 0, feePending: 0 });
 
   return {
-    summary: { year, ...result.summary, ...feeTotals },
+    summary: {
+      year,
+      ...result.summary,
+      ...feeTotals,
+      feePreviousPending: positionYear.totals.previousPending,
+      feeTotalPending: positionYear.totals.totalPending,
+    },
+    fundNames: result.fundNames,
     data,
     chartData: data.map((m) => ({
       name: m.month.slice(0, 3),
@@ -999,7 +1067,7 @@ const getTeacherWorkload = async (scope) => {
 
 const getVouchersByStatus = async (scope, status, year, month, classId) => {
   const af = aggFilter(scope);
-  const match = { ...af, year: Number(year), month };
+  const match = { ...af, year: Number(year), month, status: { $ne: 'cancelled' } };
   if (status) match.status = status === 'pending' ? { $in: ['unpaid', 'partial'] } : status;
   if (classId) match.classId = new mongoose.Types.ObjectId(classId);
 
@@ -1035,6 +1103,10 @@ const getVouchersByStatus = async (scope, status, year, month, classId) => {
         className: '$class.name',
         month: 1,
         year: 1,
+        feeItems: 1,
+        discount: 1,
+        fine: 1,
+        voucherType: 1,
         netAmount: 1,
         paidAmount: 1,
         pending: { $subtract: ['$netAmount', '$paidAmount'] },
@@ -1050,6 +1122,32 @@ const getVouchersByStatus = async (scope, status, year, month, classId) => {
   const totalNet = pipeline.reduce((s, v) => s + (v.netAmount || 0), 0);
   const totalPaid = pipeline.reduce((s, v) => s + (v.paidAmount || 0), 0);
 
+  // A student can have several vouchers in a month, so their previous dues go on the
+  // first voucher only; otherwise the column total would count them once per voucher.
+  const position = await getFeePosition(scope, {
+    month,
+    year,
+    studentIds: [...new Set(pipeline.map((v) => String(v.studentId)))],
+    detail: 'students',
+  });
+  const studentPosition = new Map(position.students.map((row) => [row.studentId, row]));
+  const seenStudents = new Set();
+  const rows = pipeline.map(({ feeItems, discount, fine, voucherType, ...v }) => {
+    const sid = String(v.studentId);
+    const first = !seenStudents.has(sid);
+    seenStudents.add(sid);
+    const row = studentPosition.get(sid);
+    return {
+      ...v,
+      feeType: voucherHeads({ feeItems, discount, fine, voucherType, netAmount: v.netAmount })
+        .map((h) => h.name)
+        .join(', '),
+      previousPending: first ? row?.previousPending || 0 : 0,
+      previousMonths: first ? row?.previousMonths || [] : [],
+      studentTotalPending: first ? row?.totalPending || 0 : 0,
+    };
+  });
+
   // Status distribution for chart
   const statusCounts = {};
   pipeline.forEach((v) => { statusCounts[v.status] = (statusCounts[v.status] || 0) + 1; });
@@ -1058,9 +1156,11 @@ const getVouchersByStatus = async (scope, status, year, month, classId) => {
     summary: {
       month, year, totalVouchers: pipeline.length,
       totalAmount: totalNet, totalPaid, totalPending: totalNet - totalPaid,
+      previousPending: position.summary.previousPending,
+      totalPendingWithPrevious: position.summary.totalPending,
     },
-    data: pipeline,
-    chartData: Object.entries(statusCounts).map(([name, value]) => ({ name, value })),
+    data: rows,
+    chartData: Object.entries(statusCounts).map(([name, value]) => ({ name, value, color: VOUCHER_STATUS_COLORS[name] })),
   };
 };
 
@@ -1214,7 +1314,7 @@ const getYearlyFeeReport = async (scope, year, classId) => {
   const af = aggFilter(scope);
   const tenantFilter = getTenantFilter(scope);
   const yearNum = Number(year);
-  const match = { ...af, year: yearNum };
+  const match = { ...af, year: yearNum, status: { $ne: 'cancelled' } };
   const classObjectId = classId ? new mongoose.Types.ObjectId(classId) : null;
   if (classObjectId) match.classId = classObjectId;
 
@@ -1230,7 +1330,7 @@ const getYearlyFeeReport = async (scope, year, classId) => {
 
   const [voucherRows, students, classes] = await Promise.all([
     FeeVoucher.find(match)
-      .select('studentId classId month netAmount paidAmount status feeStructureId feeItems voucherType')
+      .select('studentId classId month netAmount paidAmount status feeStructureId feeItems.name voucherType')
       .lean(),
     Student.find(studentFilter)
       .select('firstName lastName rollNumber admissionNumber parent classId feeStructure')
@@ -1346,7 +1446,8 @@ const getYearlyFeeReport = async (scope, year, classId) => {
  * Returns aggregated receivable summary for a given month/year:
  * - thisMonthReceivable     : outstanding amount on unpaid/partial/overdue vouchers for this month
  * - thisMonthVouchers       : count of those pending vouchers
- * - previousArrears         : outstanding from all earlier months in the same year
+ * - previousArrears         : outstanding from all earlier months, including earlier years
+ * - laterPending            : outstanding on vouchers for later months (not arrears)
  * - arrearsVouchers         : count of arrear vouchers
  * - totalReceivable         : thisMonthReceivable + previousArrears
  * - totalReceivedThisMonth  : paidAmount collected on this month's vouchers
@@ -1358,95 +1459,23 @@ const getYearlyFeeReport = async (scope, year, classId) => {
 const getReceivableSummary = async (scope, year, month, classId) => {
   const af = aggFilter(scope);
   const monthIdx = MONTH_NAMES.indexOf(month);
-  const previousMonths = MONTH_NAMES.slice(0, monthIdx);
-  const classMatch = classId ? { classId: new mongoose.Types.ObjectId(classId) } : {};
+  const selected = periodIndex(month, year);
+  const studentIds = await resolveStudentIds(scope, { classId });
 
-  const [
-    thisMonthResult,
-    arrearsResult,
-    receivedResult,
-    creditResult,
-    walletAppliedResult,
-  ] = await Promise.all([
-    // Pending (receivable) for this month
-    FeeVoucher.aggregate([
-      {
-        $match: {
-          ...af,
-          ...classMatch,
-          year: Number(year),
-          month,
-          status: { $in: ['unpaid', 'partial', 'overdue'] },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          thisMonthReceivable: {
-            $sum: { $max: [0, { $subtract: ['$netAmount', { $ifNull: ['$paidAmount', 0] }] }] },
-          },
-          thisMonthVouchers: { $sum: 1 },
-        },
-      },
-    ]),
-
-    // Arrears from previous months of the same year
-    previousMonths.length > 0
-      ? FeeVoucher.aggregate([
-          {
-            $match: {
-              ...af,
-              ...classMatch,
-              year: Number(year),
-              month: { $in: previousMonths },
-              status: { $in: ['unpaid', 'partial', 'overdue'] },
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              previousArrears: {
-                $sum: { $max: [0, { $subtract: ['$netAmount', { $ifNull: ['$paidAmount', 0] }] }] },
-              },
-              arrearsVouchers: { $sum: 1 },
-            },
-          },
-        ])
-      : Promise.resolve([]),
-
-    // Amount already collected on this month's vouchers
-    FeeVoucher.aggregate([
-      {
-        $match: {
-          ...af,
-          ...classMatch,
-          year: Number(year),
-          month,
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalReceivedThisMonth: { $sum: { $ifNull: ['$paidAmount', 0] } },
-          paidVouchersThisMonth: {
-            $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] },
-          },
-        },
-      },
-    ]),
-
-    // Student advance/credit wallet (optionally scoped to a class)
-    Student.aggregate([
-      {
-        $match: {
-          ...af,
-          ...classMatch,
-          status: 'active',
-          creditBalance: { $gt: 0 },
-        },
-      },
-      { $group: { _id: null, totalCreditBalance: { $sum: '$creditBalance' } } },
-    ]),
+  const [position, payableVouchers, paidVouchersThisMonth, walletAppliedResult] = await Promise.all([
+    getFeePosition(scope, { month, year: Number(year), classId }),
+    loadVoucherGroups({
+      ...af,
+      ...(studentIds ? { studentId: { $in: studentIds.map((sid) => new mongoose.Types.ObjectId(String(sid))) } } : {}),
+      status: { $in: PAYABLE_STATUSES },
+    }),
+    FeeVoucher.countDocuments({
+      ...getTenantFilter(scope),
+      ...(studentIds ? { studentId: { $in: studentIds } } : {}),
+      month,
+      year: Number(year),
+      status: 'paid',
+    }),
     // Credit consumed from wallet in this month
     (classId
       ? StudentCreditLedger.aggregate([
@@ -1489,20 +1518,28 @@ const getReceivableSummary = async (scope, year, month, classId) => {
         ])),
   ]);
 
-  const thisMonthReceivable = thisMonthResult[0]?.thisMonthReceivable || 0;
-  const thisMonthVouchers   = thisMonthResult[0]?.thisMonthVouchers   || 0;
-  const previousArrears     = arrearsResult[0]?.previousArrears       || 0;
-  const arrearsVouchers     = arrearsResult[0]?.arrearsVouchers       || 0;
 
+  let thisMonthVouchers = 0;
+  let arrearsVouchers = 0;
+  payableVouchers.forEach((v) => {
+    if (effectiveNet(v) - (v.paidAmount || 0) <= 0) return;
+    const period = periodIndex(v.month, v.year);
+    if (period === selected) thisMonthVouchers += v.count;
+    else if (period < selected) arrearsVouchers += v.count;
+  });
+
+  const { summary } = position;
   return {
-    thisMonthReceivable,
+    thisMonthReceivable: summary.currentPending,
     thisMonthVouchers,
-    previousArrears,
+    previousArrears: summary.previousPending,
     arrearsVouchers,
-    totalReceivable:        thisMonthReceivable + previousArrears,
-    totalReceivedThisMonth: receivedResult[0]?.totalReceivedThisMonth || 0,
-    paidVouchersThisMonth:  receivedResult[0]?.paidVouchersThisMonth  || 0,
-    totalCreditBalance:     creditResult[0]?.totalCreditBalance       || 0,
+    totalReceivable: summary.totalPending,
+    laterPending: summary.laterPending,
+    totalReceivedThisMonth: summary.currentReceived,
+    previousReceivedThisMonth: summary.previousReceived,
+    paidVouchersThisMonth,
+    totalCreditBalance: summary.advanceCredit,
     totalWalletAppliedThisMonth: walletAppliedResult[0]?.totalWalletAppliedThisMonth || 0,
   };
 };

@@ -23,11 +23,13 @@ import {
   useRecordStudentAdvancePaymentMutation,
   useGetStudentBalancesQuery,
   useGetReceivableSummaryQuery,
+  useGetFeePositionQuery,
   useCreateFeeVoucherMutation,
   useGetStudentsQuery,
   useBulkDeleteFeeVouchersMutation,
   useClearOrphanCreditWalletsMutation,
 } from '@/stores/school.api';
+import { FeeHeadsTable } from './fee-position';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useGetBranchQuery } from '@/stores/branch.api';
 import { invoiceNoteToSafeHtml, escapeHtml } from '@/lib/escape-html';
@@ -421,6 +423,7 @@ export default function FeeVouchers() {
   };
 
   // Org-level receivable summary — scoped to selected class when not "All Classes"
+  const [showFeeTypes, setShowFeeTypes] = useState(false);
   const { data: receivable } = useGetReceivableSummaryQuery(
     {
       month: filters.month,
@@ -428,6 +431,15 @@ export default function FeeVouchers() {
       ...(filters.classId !== 'all' ? { classId: filters.classId } : {}),
     },
     { skip: false }
+  );
+
+  const { data: feePosition, isLoading: feePositionLoading } = useGetFeePositionQuery(
+    {
+      month: filters.month,
+      year: filters.year,
+      ...(filters.classId !== 'all' ? { classId: filters.classId } : {}),
+    },
+    { skip: !showFeeTypes }
   );
 
   // Stats from current page
@@ -1177,7 +1189,7 @@ export default function FeeVouchers() {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {/* This month receivable */}
         <div className="rounded-lg border bg-card px-3 py-2.5">
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{filters.month} {filters.year} Receivable</p>
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{filters.month} {filters.year} Pending</p>
           <p className="text-base font-bold text-amber-600">
             {formatMoney(receivable?.thisMonthReceivable || 0)}
           </p>
@@ -1185,20 +1197,20 @@ export default function FeeVouchers() {
         </div>
         {/* Previous arrears */}
         <div className="rounded-lg border bg-card px-3 py-2.5">
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Previous Arrears</p>
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Previous Pending</p>
           <p className={`text-base font-bold ${(receivable?.previousArrears || 0) > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
             {formatMoney(receivable?.previousArrears || 0)}
           </p>
-          <p className="text-[10px] text-muted-foreground">{receivable?.arrearsVouchers || 0} older month(s)</p>
+          <p className="text-[10px] text-muted-foreground">{receivable?.arrearsVouchers || 0} older voucher(s)</p>
         </div>
         {/* Total receivable */}
         <div className="rounded-lg border bg-amber-50 border-amber-200 px-3 py-2.5">
-          <p className="text-[10px] font-medium text-amber-700 uppercase tracking-wide mb-1">Total Receivable</p>
+          <p className="text-[10px] font-medium text-amber-700 uppercase tracking-wide mb-1">Total Pending</p>
           <p className="text-base font-bold text-amber-700">
             {formatMoney(receivable?.totalReceivable || 0)}
           </p>
           <p className="text-[10px] text-amber-600">
-            {filters.month} + {receivable?.arrearsVouchers || 0} arrear(s)
+            Previous + {filters.month}
           </p>
         </div>
         {/* Total Received This Month */}
@@ -1209,7 +1221,10 @@ export default function FeeVouchers() {
           <p className="text-base font-bold text-blue-700">
             {formatMoney(receivable?.totalReceivedThisMonth || 0)}
           </p>
-          <p className="text-[10px] text-blue-600">{receivable?.paidVouchersThisMonth || 0} voucher(s) paid</p>
+          <p className="text-[10px] text-blue-600">
+            {receivable?.paidVouchersThisMonth || 0} voucher(s) paid
+            {(receivable?.previousReceivedThisMonth || 0) > 0 && ` · +${formatMoney(receivable.previousReceivedThisMonth)} old dues`}
+          </p>
         </div>
         {/* Advance / credit wallet */}
         <div className="rounded-lg border bg-emerald-50 border-emerald-200 px-3 py-2.5">
@@ -1222,6 +1237,19 @@ export default function FeeVouchers() {
           <p className="text-[10px] text-emerald-600">held in credit wallet(s)</p>
           <p className="text-[10px] text-blue-600">{formatMoney(receivable?.totalWalletAppliedThisMonth || 0)} used from wallet this month</p>
         </div>
+      </div>
+
+      {/* Same figures split by fee type (Tuition, Paper Fund, ...) */}
+      <div>
+        <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setShowFeeTypes((v) => !v)} aria-expanded={showFeeTypes}>
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showFeeTypes ? 'rotate-180' : ''}`} />
+          {showFeeTypes ? 'Hide' : 'Show'} breakdown by fee type
+        </Button>
+        {showFeeTypes && (
+          <div className="mt-2">
+            <FeeHeadsTable heads={feePosition?.heads} summary={feePosition?.summary} month={filters.month} isLoading={feePositionLoading} />
+          </div>
+        )}
       </div>
 
       {/* Filters */}

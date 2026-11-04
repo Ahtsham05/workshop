@@ -16,6 +16,12 @@ export const BATCH_API_TIMEOUT_MS = 120_000
  */
 export const CATALOG_API_TIMEOUT_MS = 120_000
 
+/**
+ * Timeout for the school Reports Center, which adds up a whole school's fee records. They can
+ * be slow over a poor link to the database, and failing at 30s leaves the page with no report.
+ */
+export const REPORT_API_TIMEOUT_MS = 120_000
+
 /** @deprecated Use DEFAULT_API_TIMEOUT_MS */
 export const API_TIMEOUT_MS = DEFAULT_API_TIMEOUT_MS
 
@@ -40,6 +46,10 @@ export function resolveRequestTimeoutMs(
 
   if (/\/products\/(all|purchasable)(\/|\?|$)/.test(path)) {
     return CATALOG_API_TIMEOUT_MS
+  }
+
+  if (path.includes('/school-reports-engine')) {
+    return REPORT_API_TIMEOUT_MS
   }
 
   return DEFAULT_API_TIMEOUT_MS

@@ -12,6 +12,7 @@ const {
   SchoolTransaction,
 } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { currentFeeMonth, splitPending } = require('./feePosition.service');
 const { parseImportNumber, parseImportDate } = require('../utils/importRow');
 
 const getTenantFilter = (data = {}) => {
@@ -575,35 +576,34 @@ const checkStudentPendingFees = async (studentIds, scope = {}) => {
   const aggFilter = getAggregateFilter(scope);
   const objectIds = studentIds.map((id) => new mongoose.Types.ObjectId(id.toString()));
 
-  const pendingAgg = await FeeVoucher.aggregate([
-    {
-      $match: {
-        ...aggFilter,
-        studentId: { $in: objectIds },
-        status: { $in: ['unpaid', 'partial', 'overdue'] },
-      },
-    },
-    {
-      $group: {
-        _id: '$studentId',
-        pendingCount: { $sum: 1 },
-        // outstanding = what the student still owes on each voucher
-        pendingAmount: {
-          $sum: {
-            $max: [0, { $subtract: ['$netAmount', { $ifNull: ['$paidAmount', 0] }] }],
-          },
-        },
-      },
-    },
-  ]);
+  const vouchers = await FeeVoucher.find({
+    ...aggFilter,
+    studentId: { $in: objectIds },
+    status: { $in: ['unpaid', 'partial', 'overdue'] },
+  })
+    .select('studentId month year feeItems discount fine netAmount paidAmount status voucherType')
+    .lean();
 
+  const byStudent = new Map();
+  vouchers.forEach((v) => {
+    const key = v.studentId.toString();
+    if (!byStudent.has(key)) byStudent.set(key, []);
+    byStudent.get(key).push(v);
+  });
+
+  const { month, year } = currentFeeMonth();
   const pendingMap = {};
-  for (const row of pendingAgg) {
-    pendingMap[row._id.toString()] = {
-      pendingCount: row.pendingCount,
-      pendingAmount: Math.max(0, row.pendingAmount),
+  byStudent.forEach((studentVouchers, sid) => {
+    const split = splitPending(studentVouchers, month, year);
+    pendingMap[sid] = {
+      pendingCount: studentVouchers.length,
+      // outstanding = what the student still owes on each voucher
+      pendingAmount: split.totalPending,
+      previousPending: split.previousPending,
+      currentPending: split.currentPending,
+      laterPending: split.laterPending,
     };
-  }
+  });
 
   return pendingMap;
 };
@@ -720,6 +720,9 @@ const getPromotionEligibility = async (classId, scope = {}) => {
       ...s,
       pendingCount: pending.pendingCount,
       pendingAmount: pending.pendingAmount,
+      previousPending: pending.previousPending || 0,
+      currentPending: pending.currentPending || 0,
+      laterPending: pending.laterPending || 0,
       isEligible: pending.pendingAmount === 0,
     };
   });

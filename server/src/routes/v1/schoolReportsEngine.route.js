@@ -37,5 +37,10 @@ router.route('/analytics').get(schoolReportsController.getAnalytics);
 // Fee Collection
 router.route('/fee-collection/yearly').get(schoolReportsController.getYearlyFeeReport);
 router.route('/fee-collection/receivable').get(schoolReportsController.getReceivableSummary);
+router.route('/fee-position').get(schoolReportsController.getFeePosition);
+router.route('/fee-position/year').get(schoolReportsController.getFeePositionYear);
+router.route('/fee-funds').get(schoolReportsController.getFundReport);
+router.route('/fee-funds/years').get(schoolReportsController.getFundYears);
+router.route('/fee-funds/detail').get(schoolReportsController.getFundDetail);
 
 module.exports = router;

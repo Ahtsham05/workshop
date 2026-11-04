@@ -860,6 +860,7 @@ export const sidebarData: SidebarData = {
           requiredFeature: 'school_management',
           excludedSchoolRoles: ['teacher'],
           items: [
+            { title: 'Funds Report', url: '/school/fees/reports?tab=funds-report' as never, icon: DollarSign },
             { title: 'Monthly Income/Expense', url: '/school/fees/reports?tab=financial-monthly' as never, icon: DollarSign },
             { title: 'Daily Collection', url: '/school/fees/reports?tab=financial-daily' as never, icon: AlarmClock },
             { title: 'Expense Report', url: '/school/fees/reports?tab=financial-expense' as never, icon: Receipt },

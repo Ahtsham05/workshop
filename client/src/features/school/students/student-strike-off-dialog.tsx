@@ -82,6 +82,15 @@ export default function StudentStrikeOffDialog({ studentId, studentName, admissi
               <AlertDescription className="text-red-700 text-sm">
                 This student has <strong>{formatMoney(pendingAmount)}</strong> in unpaid fees. The amount will be
                 recorded against this leaving record and still shown as pending in fee reports until paid or written off.
+                <span className="mt-1.5 block text-xs">
+                  Previous months {formatMoney(feeSummary?.previousPending || 0)} · This month {formatMoney(feeSummary?.currentPending || 0)}
+                  {(feeSummary?.laterPending || 0) > 0 && ` · Later months ${formatMoney(feeSummary?.laterPending || 0)}`}
+                </span>
+                {(feeSummary?.pendingHeads || []).length > 0 && (
+                  <span className="mt-0.5 block text-xs">
+                    {feeSummary.pendingHeads.map((h: { name: string; pending: number }) => `${h.name} ${formatMoney(h.pending)}`).join(' · ')}
+                  </span>
+                )}
               </AlertDescription>
             </Alert>
           )}

@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, Wallet, AlertCircle, CheckCircle, Clock, Banknote, ArrowUpRight, ArrowDownRight, CalendarDays, Zap } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, AlertCircle, CheckCircle, Clock, CalendarDays, Zap } from 'lucide-react';
 import {
   useGetSchoolAccountingDashboardQuery,
 } from '@/stores/school.api';
+import { FeeHeadsTable, FeePositionCards } from './fee-position';
 import { useFormatMoney } from '@/lib/format-money';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -24,6 +25,7 @@ export default function FeeAccountingDashboard() {
     totalExpected: 0, totalCollected: 0, totalPending: 0, collectionRate: 0,
     paid: 0, unpaid: 0, partial: 0, overdue: 0,
   };
+  const position = dashboard?.feePosition?.summary;
   const recentTxns: any[] = dashboard?.recentTransactions ?? [];
   const pendingStudents: any[] = dashboard?.topPendingStudents ?? [];
 
@@ -140,12 +142,12 @@ export default function FeeAccountingDashboard() {
                 <p className="text-[11px] text-muted-foreground leading-tight">Collection Rate</p>
                 {isLoading ? <div className="h-6 w-12 bg-muted animate-pulse rounded mt-1" /> : (
                   <>
-                    <p className="text-base font-bold text-purple-600 mt-0.5">{fc.collectionRate}%</p>
+                    <p className="text-base font-bold text-purple-600 mt-0.5">{position?.collectionRate || 0}%</p>
                     <div className="h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
-                      <div className="h-1 bg-purple-500 rounded-full" style={{ width: `${fc.collectionRate || 0}%` }} />
+                      <div className="h-1 bg-purple-500 rounded-full" style={{ width: `${Math.min(100, position?.collectionRate || 0)}%` }} />
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {(fc.totalCollected || 0).toLocaleString()} / {(fc.totalExpected || 0).toLocaleString()}
+                      {(position?.totalReceived || 0).toLocaleString()} / {(position?.totalExpected || 0).toLocaleString()}
                     </p>
                   </>
                 )}
@@ -155,9 +157,14 @@ export default function FeeAccountingDashboard() {
         </Card>
       </div>
 
-      {/* Fee Collection Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Voucher Status Breakdown */}
+      {/* Fee position: previous + this month, split by fee type */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Fee Position — {month} {year}</h2>
+        <FeePositionCards summary={dashboard?.feePosition?.summary} month={month} isLoading={isLoading} />
+        <FeeHeadsTable heads={dashboard?.feePosition?.heads} summary={dashboard?.feePosition?.summary} month={month} isLoading={isLoading} />
+      </div>
+
+      {/* Voucher Status Breakdown */}
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Voucher Status — {month} {year}</CardTitle></CardHeader>
           <CardContent>
@@ -183,39 +190,6 @@ export default function FeeAccountingDashboard() {
             )}
           </CardContent>
         </Card>
-
-        {/* Fee Amount Breakdown */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-1.5"><Banknote className="h-4 w-4 text-blue-500" /> Fee Collection — {month} {year}</CardTitle></CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-5 bg-muted animate-pulse rounded" />)}</div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Total Expected</span>
-                  <span className="font-semibold">{formatMoney(fc.totalExpected || 0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="flex items-center gap-1 text-green-600"><ArrowUpRight className="h-3.5 w-3.5" /> Collected</span>
-                  <span className="font-semibold text-green-600">{formatMoney(fc.totalCollected || 0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="flex items-center gap-1 text-red-500"><ArrowDownRight className="h-3.5 w-3.5" /> Pending</span>
-                  <span className="font-semibold text-red-500">{formatMoney(fc.totalPending || 0)}</span>
-                </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
-                  <div
-                    className="h-2 bg-green-500 rounded-full transition-all"
-                    style={{ width: `${fc.collectionRate || 0}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground text-right">{fc.collectionRate || 0}% collected</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Recent Transactions */}
@@ -265,7 +239,10 @@ export default function FeeAccountingDashboard() {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-orange-600 font-semibold">{formatMoney(s.totalPending || s.pendingAmount || 0)}</p>
-                      <p className="text-xs text-muted-foreground">{s.voucherCount} voucher{s.voucherCount !== 1 ? 's' : ''}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Previous {(s.previousPending || 0).toLocaleString()} · {month.slice(0, 3)} {(s.currentPending || 0).toLocaleString()}
+                        {(s.totalPending || 0) > (s.previousPending || 0) + (s.currentPending || 0) && ` · Later ${((s.totalPending || 0) - (s.previousPending || 0) - (s.currentPending || 0)).toLocaleString()}`}
+                      </p>
                     </div>
                   </div>
                 ))}

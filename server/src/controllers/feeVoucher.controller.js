@@ -161,7 +161,10 @@ const getStudentVouchers = catchAsync(async (req, res) => {
 
 const getStudentFeeSummary = catchAsync(async (req, res) => {
   const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
-  const summary = await feeVoucherService.getStudentFeeSummary(req.params.studentId, scope);
+  const summary = await feeVoucherService.getStudentFeeSummary(req.params.studentId, scope, {
+    month: req.query.month,
+    year: req.query.year,
+  });
   res.send(summary);
 });
 

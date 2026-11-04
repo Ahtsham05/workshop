@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useSearch } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,8 @@ import {
   BookOpen, GraduationCap, DollarSign, PieChart, Activity, Briefcase, Wallet,
   CalendarClock, Receipt, LineChart as LineChartIcon, LayoutGrid, ClipboardList,
   CalendarCheck, Users, Landmark, UserX,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -22,7 +24,6 @@ import {
   useGetReportFinancialCategoriesQuery,
   useGetReportFinancialExpenseDetailQuery,
   useGetReportStudentListQuery,
-  useGetReportStudentFeeStatusQuery,
   useGetReportStudentAttendanceQuery,
   useGetReportStudentsLeftQuery,
   useGetReportTeacherSalaryQuery,
@@ -30,7 +31,9 @@ import {
   useGetReportVouchersQuery,
   useGetReportAnalyticsQuery,
   useGetYearlyFeeReportQuery,
-  useGetReceivableSummaryQuery,
+  useGetFeeFundReportQuery,
+  useGetFeePositionQuery,
+  useGetFeePositionYearQuery,
 } from '@/stores/school.api';
 import { useGetMyOrganizationQuery } from '@/stores/organization.api';
 import { useSelector } from 'react-redux';
@@ -39,7 +42,9 @@ import { toast } from 'sonner';
 import { useFormatMoney } from '@/lib/format-money';
 import ReceiptRegister from './receipt-register';
 import FeeCollectionReports from './fee-collection-reports';
-import { useOrgAndUser, printReport, openReportPrintWindow } from './report-print';
+import { useOrgAndUser, printReport, openReportPrintWindow, type PrintSection } from './report-print';
+import { ChoiceTabs, FeeHeadsTable, FeePositionCards, FeeReceivedTable, FeeTypeSummary, FundTotals, MonthDetail, feePositionPrintSections, paidForRows, receivedFigures, type FeeTypeRow } from './fee-position';
+import { FundReport } from './fee-fund-report';
 import { formatAppDate, formatAppDateTime } from '@/lib/date-format'
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -87,6 +92,7 @@ type TabKey =
   | 'fee-collection'
   | 'collection-reports'
   | 'receipt-register'
+  | 'funds-report'
   | 'financial-monthly'
   | 'financial-daily'
   | 'financial-expense'
@@ -107,6 +113,7 @@ const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: 'fee-collection', label: 'Fee Collection', icon: FileText },
   { key: 'collection-reports', label: 'Collection Reports', icon: PieChart },
   { key: 'receipt-register', label: 'Receipt Register', icon: Receipt },
+  { key: 'funds-report', label: 'Funds Report', icon: Wallet },
   { key: 'financial-monthly', label: 'Monthly Income/Expense', icon: DollarSign },
   { key: 'financial-daily', label: 'Daily Collection', icon: CalendarClock },
   { key: 'financial-expense', label: 'Expense Report', icon: Receipt },
@@ -210,8 +217,13 @@ export default function FeeReports() {
           <ReceiptRegister />
         </TabsContent>
 
+        <TabsContent value="funds-report" className="mt-4 space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">{classFilterSelect}</div>
+          <FundReport year={year} classId={classFilter !== 'all' ? classFilter : undefined} />
+        </TabsContent>
+
         <TabsContent value="financial-monthly" className="mt-4">
-          <FinancialMonthlyReport year={year} />
+          <FinancialMonthlyReport year={year} onOpenFunds={() => handleTabChange('funds-report')} />
         </TabsContent>
         <TabsContent value="financial-daily" className="mt-4">
           <FinancialDailyReport year={year} month={month} />
@@ -286,7 +298,7 @@ export default function FeeReports() {
 // base fee's amount — excluding extraFundNames keeps it from being counted
 // (and shown) in two places at once.
 function FeeMonthCell({ entry, isCurrent, extraFundNames }: { entry: any; isCurrent: boolean; extraFundNames: string[] }) {
-  const cellClass = `px-1 py-1.5 text-center ${isCurrent ? 'bg-blue-50/60' : ''}`;
+  const cellClass = `px-1 py-1.5 text-center ${isCurrent ? 'bg-blue-50/60 dark:bg-blue-950/40' : ''}`;
 
   if (!entry) {
     return <td className={cellClass}><span className="text-muted-foreground/30">-</span></td>;
@@ -378,8 +390,14 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
   const { data: yearlyReport, isLoading } = useGetYearlyFeeReportQuery(
     { year, ...(classFilter !== 'all' ? { classId: classFilter } : {}) }
   );
-  const { data: receivable } = useGetReceivableSummaryQuery({ month, year });
+  const classParam = classFilter !== 'all' ? { classId: classFilter } : {};
+  // The cards come from the fast summary, so they don't wait for the per-student figures.
+  const { data: position, isLoading: positionLoading } = useGetFeePositionQuery({ month, year, ...classParam }, { refetchOnMountOrArgChange: 60 });
+  const { data: studentPositions } = useGetFeePositionQuery({ month, year, detail: 'students', ...classParam }, { refetchOnMountOrArgChange: 60 });
+  const { data: positionYear } = useGetFeePositionYearQuery({ year, ...classParam }, { refetchOnMountOrArgChange: 60 });
   const formatMoney = useFormatMoney();
+  const studentPosition = (studentId: string) => studentPositions?.students?.find((row: any) => row.studentId === studentId);
+  const shortMonth = month.slice(0, 3);
 
   // Build monthly chart data from yearly report
   const monthlyChartData = MONTHS.map((m) => {
@@ -394,13 +412,6 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
     }
     return { name: m.slice(0, 3), expected, collected, pending: Math.max(0, expected - collected) };
   });
-
-  // Month-specific KPIs
-  const currentMonthChart = monthlyChartData[MONTHS.indexOf(month)] || { expected: 0, collected: 0, pending: 0 };
-  const monthExpected = currentMonthChart.expected;
-  const monthCollected = currentMonthChart.collected;
-  const monthPending = currentMonthChart.pending;
-  const monthRate = monthExpected > 0 ? Math.round((monthCollected / monthExpected) * 100) : 0;
 
   // Year totals
   const yearExpected = monthlyChartData.reduce((s, m) => s + m.expected, 0);
@@ -438,7 +449,11 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                   row[f] = paid === 0 ? '' : paid < net ? `${paid}/${net}` : paid;
                 });
                 MONTHS.slice(1).forEach(setMonth);
-                row.Paid = s.totalPaid; row.Pending = s.totalPending;
+                const pos = studentPosition(s.studentId);
+                row.Paid = s.totalPaid;
+                row['Previous Pending'] = pos?.previousPending || 0;
+                row[`${shortMonth} Pending`] = pos?.currentPending || 0;
+                row['Total Pending'] = pos?.totalPending || 0;
                 rows.push(row);
               });
             });
@@ -447,76 +462,24 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
             <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" /> Excel
           </Button>
           <Button variant="outline" size="sm"
-            onClick={() => printFeeReport(yearlyReport || [], orgName, year)}
+            onClick={() => printFeeReport(yearlyReport || [], orgName, year, month, studentPositions?.students || [])}
             disabled={!yearlyReport?.length}>
             <Printer className="mr-1.5 h-3.5 w-3.5" /> Print
           </Button>
         </div>
       </div>
 
-      {/* ── KPI Section ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left: Month KPIs */}
-        <Card className="border-2 border-blue-100">
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-              <Activity className="h-4 w-4 text-blue-500" /> {month} {year} — Monthly Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg bg-purple-50 border border-purple-100 p-3">
-                <p className="text-[10px] font-medium text-purple-500 uppercase tracking-wide mb-1">Expected</p>
-                <p className="text-lg font-bold text-purple-700">{formatMoney(monthExpected)}</p>
-              </div>
-              <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3">
-                <p className="text-[10px] font-medium text-emerald-500 uppercase tracking-wide mb-1">Collected</p>
-                <p className="text-lg font-bold text-emerald-700">{formatMoney(monthCollected)}</p>
-              </div>
-              <div className="rounded-lg bg-red-50 border border-red-100 p-3">
-                <p className="text-[10px] font-medium text-red-400 uppercase tracking-wide mb-1">Pending</p>
-                <p className="text-lg font-bold text-red-600">{formatMoney(monthPending)}</p>
-              </div>
-            </div>
-            {/* Collection rate bar */}
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-xs text-muted-foreground">Collection Rate</span>
-                <span className={`text-sm font-bold ${monthRate >= 80 ? 'text-emerald-600' : monthRate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{monthRate}%</span>
-              </div>
-              <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${monthRate >= 80 ? 'bg-emerald-500' : monthRate >= 50 ? 'bg-amber-400' : 'bg-red-500'}`}
-                  style={{ width: `${monthRate}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                <span>{formatMoney(monthCollected)} collected</span>
-                <span>{formatMoney(monthPending)} outstanding</span>
-              </div>
-            </div>
-            {/* Arrears & wallet row */}
-            {receivable && (
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-400" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground">Previous Arrears</p>
-                    <p className="text-sm font-semibold text-amber-600">{formatMoney((receivable.previousArrears || 0))}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-teal-400" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground">Advance Wallet</p>
-                    <p className="text-sm font-semibold text-teal-600">{formatMoney((receivable.totalCreditBalance || 0))}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* ── Fee position for the selected month ── */}
+      <div className="space-y-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+          <Activity className="h-4 w-4 text-blue-500" /> {month} {year} — Fee Position
+        </h3>
+        <FeePositionCards summary={position?.summary} month={month} isLoading={positionLoading} />
+        <FeeHeadsTable heads={position?.heads} summary={position?.summary} month={month} isLoading={positionLoading} />
+      </div>
 
+      {/* ── KPI Section ── */}
+      <div className="grid grid-cols-1 gap-4">
         {/* Right: Year KPIs */}
         <Card className="border-2 border-slate-100">
           <CardHeader className="pb-2 pt-4 px-4">
@@ -527,7 +490,7 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
           <CardContent className="px-4 pb-4 space-y-4">
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg bg-indigo-50 border border-indigo-100 p-3">
-                <p className="text-[10px] font-medium text-indigo-500 uppercase tracking-wide mb-1">Expected</p>
+                <p className="text-[10px] font-medium text-indigo-500 uppercase tracking-wide mb-1">Billed in {year}</p>
                 <p className="text-lg font-bold text-indigo-700">{formatMoney(yearExpected)}</p>
               </div>
               <div className="rounded-lg bg-green-50 border border-green-100 p-3">
@@ -535,7 +498,7 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                 <p className="text-lg font-bold text-green-700">{formatMoney(yearCollected)}</p>
               </div>
               <div className="rounded-lg bg-orange-50 border border-orange-100 p-3">
-                <p className="text-[10px] font-medium text-orange-400 uppercase tracking-wide mb-1">Pending</p>
+                <p className="text-[10px] font-medium text-orange-400 uppercase tracking-wide mb-1">Unpaid from {year}</p>
                 <p className="text-lg font-bold text-orange-600">{formatMoney((yearExpected - yearCollected))}</p>
               </div>
             </div>
@@ -587,7 +550,7 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
               <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tickLine={false} axisLine={false} />
               <Tooltip formatter={(v: number) => formatMoney(v)} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="expected" fill="#c7d2fe" name="Expected" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="expected" fill="#c7d2fe" name="Billed" radius={[3, 3, 0, 0]} />
               <Bar dataKey="collected" fill="#10b981" name="Collected" radius={[3, 3, 0, 0]} />
               <Bar dataKey="pending" fill="#fca5a5" name="Pending" radius={[3, 3, 0, 0]} />
             </BarChart>
@@ -597,54 +560,76 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
 
       {/* ── Per-month summary row ── */}
       <div className="rounded-lg border overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full min-w-[720px] text-xs">
           <thead>
             <tr className="border-b bg-muted/40">
               <th className="text-left px-3 py-2 font-semibold text-[11px]">Month</th>
-              <th className="text-right px-3 py-2 font-semibold text-[11px] text-purple-700">Expected</th>
-              <th className="text-right px-3 py-2 font-semibold text-[11px] text-emerald-700">Collected</th>
-              <th className="text-right px-3 py-2 font-semibold text-[11px] text-red-600">Pending</th>
+              <th className="text-right px-3 py-2 font-semibold text-[11px] text-amber-700 dark:text-amber-400">Previous Pending</th>
+              <th className="text-right px-3 py-2 font-semibold text-[11px] text-blue-700 dark:text-blue-400">Month's Fee</th>
+              <th className="text-right px-3 py-2 font-semibold text-[11px] text-purple-700 dark:text-purple-400">Total Expected</th>
+              <th className="text-right px-3 py-2 font-semibold text-[11px] text-emerald-700 dark:text-emerald-400">Received</th>
+              <th className="text-right px-3 py-2 font-semibold text-[11px] text-red-600 dark:text-red-400">Total Pending</th>
               <th className="text-right px-3 py-2 font-semibold text-[11px]">Rate</th>
             </tr>
           </thead>
           <tbody>
-            {monthlyChartData.map((row, i) => {
-              const rate = row.expected > 0 ? Math.round((row.collected / row.expected) * 100) : 0;
-              const isCurrent = MONTHS[i] === month;
+            {(positionYear?.rows || []).map((row: any) => {
+              const isCurrent = row.month === month;
+              const money = (v: number) => (v > 0 ? formatMoney(v) : '-');
               return (
-                <tr key={row.name} className={`border-b ${isCurrent ? 'bg-blue-50 font-semibold' : 'hover:bg-muted/20'}`}>
+                <tr key={row.month} className={`border-b ${isCurrent ? 'bg-blue-50 dark:bg-blue-950/50 font-semibold' : 'hover:bg-muted/20'}`}>
                   <td className="px-3 py-1.5 flex items-center gap-1.5">
                     {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />}
-                    {MONTHS[i]}
+                    {row.month}
                   </td>
-                  <td className="px-3 py-1.5 text-right text-purple-700">{row.expected > 0 ? formatMoney(row.expected) : '-'}</td>
-                  <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">{row.collected > 0 ? formatMoney(row.collected) : '-'}</td>
-                  <td className="px-3 py-1.5 text-right text-red-500">{row.pending > 0 ? formatMoney(row.pending) : '-'}</td>
+                  <td className="px-3 py-1.5 text-right text-amber-700 dark:text-amber-400">{money(row.previousDue)}</td>
+                  <td className="px-3 py-1.5 text-right text-blue-700 dark:text-blue-400">{money(row.currentFee)}</td>
+                  <td className="px-3 py-1.5 text-right text-purple-700 dark:text-purple-400">{money(row.totalExpected)}</td>
+                  <td className="px-3 py-1.5 text-right text-emerald-600 dark:text-emerald-400 font-semibold">{money(row.totalReceived)}</td>
+                  <td className="px-3 py-1.5 text-right text-red-500 dark:text-red-400">{money(row.totalPending)}</td>
                   <td className="px-3 py-1.5 text-right">
-                    {row.expected > 0 ? (
-                      <span className={`font-semibold ${rate >= 80 ? 'text-emerald-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</span>
+                    {row.totalExpected > 0 ? (
+                      <span className={`font-semibold ${row.collectionRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : row.collectionRate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{row.collectionRate}%</span>
                     ) : <span className="text-muted-foreground">-</span>}
                   </td>
                 </tr>
               );
             })}
           </tbody>
-          <tfoot>
-            <tr className="bg-muted font-bold text-[11px]">
-              <td className="px-3 py-2">Year Total</td>
-              <td className="px-3 py-2 text-right text-purple-700">{formatMoney(yearExpected)}</td>
-              <td className="px-3 py-2 text-right text-emerald-700">{formatMoney(yearCollected)}</td>
-              <td className="px-3 py-2 text-right text-red-700">{formatMoney((yearExpected - yearCollected))}</td>
-              <td className="px-3 py-2 text-right">{yearRate}%</td>
-            </tr>
-          </tfoot>
+          {positionYear?.totals && (
+            <tfoot>
+              <tr className="bg-muted font-bold text-[11px]">
+                <td className="px-3 py-2">Whole Year</td>
+                <td className="px-3 py-2 text-right text-amber-700 dark:text-amber-400">{formatMoney(positionYear.totals.previousDue)}</td>
+                <td className="px-3 py-2 text-right text-blue-700 dark:text-blue-400">{formatMoney(positionYear.totals.currentFee)}</td>
+                <td className="px-3 py-2 text-right text-purple-700 dark:text-purple-400">{formatMoney(positionYear.totals.totalExpected)}</td>
+                <td className="px-3 py-2 text-right text-emerald-700 dark:text-emerald-400">{formatMoney(positionYear.totals.totalReceived)}</td>
+                <td className="px-3 py-2 text-right text-red-700 dark:text-red-400">{formatMoney(positionYear.totals.totalPending)}</td>
+                <td className="px-3 py-2 text-right">{positionYear.totals.collectionRate}%</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
+        <p className="border-t px-3 py-2 text-[11px] text-muted-foreground">
+          Previous Pending is what is still unpaid today from earlier months, plus what was recovered during that month. Whole Year starts from dues older than January.
+        </p>
       </div>
 
       {/* ── Class-wise Detail ── */}
       {isLoading ? <Loading /> : !yearlyReport?.length ? <EmptyState text={`No fee data for ${year}`} /> : (
         yearlyReport.map((cls: any) => {
           const extraFunds = getClassExtraFunds(cls);
+          const clsPosition = cls.students.reduce(
+            (acc: { previous: number; current: number; total: number }, st: any) => {
+              const pos = studentPosition(st.studentId);
+              return {
+                previous: acc.previous + (pos?.previousPending || 0),
+                current: acc.current + (pos?.currentPending || 0),
+                total: acc.total + (pos?.totalPending || 0),
+              };
+            },
+            { previous: 0, current: 0, total: 0 },
+          );
           // per-month expected for this class — base recurring fee only, since
           // each extra fund already totals its own "Expected" via its column.
           const clsMonthExpected = MONTHS.reduce((acc: Record<string, number>, m) => {
@@ -656,21 +641,24 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
               {/* Class header */}
               <div className="flex items-center justify-between px-1">
                 <h3 className="text-sm font-bold flex items-center gap-2">
-                  <GraduationCap className="h-4 w-4 text-blue-500" /> {cls.className}
+                  <GraduationCap className="h-4 w-4 text-blue-500 dark:text-blue-400" /> {cls.className}
                   <span className="text-xs font-normal text-muted-foreground">· {cls.totalStudents} students</span>
                 </h3>
-                <div className="flex items-center gap-4 text-xs">
-                  <span className="flex items-center gap-1 text-purple-700 font-medium">
-                    Expected: {formatMoney(cls.students.reduce((s: number, st: any) => s + (st.totalPaid || 0) + (st.totalPending || 0), 0))}
+                <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-xs">
+                  <span className="flex items-center gap-1 text-purple-700 dark:text-purple-400 font-medium">
+                    Billed in {year}: {formatMoney(cls.students.reduce((s: number, st: any) => s + (st.totalPaid || 0) + (st.totalPending || 0), 0))}
                   </span>
-                  <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
                     Paid: {formatMoney(cls.classTotalPaid)}
                   </span>
-                  <span className="flex items-center gap-1 text-red-600 font-medium">
-                    Pending: {formatMoney(cls.classTotalPending)}
+                  <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
+                    Previous Pending: {formatMoney(clsPosition.previous)}
+                  </span>
+                  <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
+                    Total Pending: {formatMoney(clsPosition.total)}
                   </span>
                   {cls.classTotalPaid + cls.classTotalPending > 0 && (
-                    <span className={`font-bold ${Math.round(cls.classTotalPaid / (cls.classTotalPaid + cls.classTotalPending) * 100) >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    <span className={`font-bold ${Math.round(cls.classTotalPaid / (cls.classTotalPaid + cls.classTotalPending) * 100) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                       {Math.round(cls.classTotalPaid / (cls.classTotalPaid + cls.classTotalPending) * 100)}%
                     </span>
                   )}
@@ -685,7 +673,7 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                       <th className="text-left px-2 py-2 font-semibold text-[11px] min-w-[60px]">Roll#</th>
                       <th className="text-left px-2 py-2 font-semibold text-[11px] min-w-[130px]">Father Name</th>
                       <th className="text-left px-2 py-2 font-semibold text-[11px] min-w-[100px]">Phone</th>
-                      <th className={`text-center px-1 py-2 font-semibold text-[10px] min-w-[64px] ${MONTHS[0] === month ? 'bg-blue-50 text-blue-700' : ''}`}>
+                      <th className={`text-center px-1 py-2 font-semibold text-[10px] min-w-[64px] ${MONTHS[0] === month ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400' : ''}`}>
                         {MONTHS[0].slice(0, 3)}
                       </th>
                       {extraFunds.map((f) => (
@@ -694,12 +682,14 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                         </th>
                       ))}
                       {MONTHS.slice(1).map((m) => (
-                        <th key={m} className={`text-center px-1 py-2 font-semibold text-[10px] min-w-[64px] ${m === month ? 'bg-blue-50 text-blue-700' : ''}`}>
+                        <th key={m} className={`text-center px-1 py-2 font-semibold text-[10px] min-w-[64px] ${m === month ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400' : ''}`}>
                           {m.slice(0, 3)}
                         </th>
                       ))}
-                      <th className="text-right px-2 py-2 font-semibold text-[11px] min-w-[70px] text-emerald-700">Paid</th>
-                      <th className="text-right px-2 py-2 font-semibold text-[11px] min-w-[70px] text-red-600">Pending</th>
+                      <th className="text-right px-2 py-2 font-semibold text-[11px] min-w-[70px] text-emerald-700 dark:text-emerald-400">Paid</th>
+                      <th className="text-right px-2 py-2 font-semibold text-[11px] min-w-[80px] text-amber-700 dark:text-amber-400">Previous Pending</th>
+                      <th className="text-right px-2 py-2 font-semibold text-[11px] min-w-[70px] text-blue-700 dark:text-blue-400">{shortMonth} Pending</th>
+                      <th className="text-right px-2 py-2 font-semibold text-[11px] min-w-[70px] text-red-600 dark:text-red-400">Total Pending</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -717,8 +707,18 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                         {MONTHS.slice(1).map((m) => (
                           <FeeMonthCell key={m} entry={s.months[m]} isCurrent={m === month} extraFundNames={extraFunds} />
                         ))}
-                        <td className="px-2 py-1.5 text-right font-semibold text-emerald-600">{(s.totalPaid || 0).toLocaleString()}</td>
-                        <td className="px-2 py-1.5 text-right font-semibold text-red-600">{s.totalPending > 0 ? s.totalPending.toLocaleString() : <span className="text-muted-foreground/40">-</span>}</td>
+                        <td className="px-2 py-1.5 text-right font-semibold text-emerald-600 dark:text-emerald-400">{(s.totalPaid || 0).toLocaleString()}</td>
+                        {(() => {
+                          const pos = studentPosition(s.studentId);
+                          const amount = (v?: number) => ((v || 0) > 0 ? (v || 0).toLocaleString() : <span className="text-muted-foreground/40">-</span>);
+                          return (
+                            <>
+                              <td className="px-2 py-1.5 text-right font-medium text-amber-700 dark:text-amber-400" title={pos?.previousMonths?.join(', ')}>{amount(pos?.previousPending)}</td>
+                              <td className="px-2 py-1.5 text-right font-medium text-blue-700 dark:text-blue-400">{amount(pos?.currentPending)}</td>
+                              <td className="px-2 py-1.5 text-right font-semibold text-red-600 dark:text-red-400">{amount(pos?.totalPending)}</td>
+                            </>
+                          );
+                        })()}
                       </tr>
                     ))}
                   </tbody>
@@ -730,11 +730,11 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                           const mPaid = cls.students.reduce((s: number, st: any) => s + baseFundAmounts(st.months[m], extraFunds).paid, 0);
                           const mExp = clsMonthExpected[m] || 0;
                           return (
-                            <td key={m} className={`px-1 py-2 text-center ${m === month ? 'bg-blue-50' : ''}`}>
+                            <td key={m} className={`px-1 py-2 text-center ${m === month ? 'bg-blue-50 dark:bg-blue-950/50' : ''}`}>
                               {mExp > 0 ? (
                                 <div>
-                                  <div className={mPaid > 0 ? 'text-emerald-700' : 'text-muted-foreground/50'}>{mPaid > 0 ? mPaid.toLocaleString() : '-'}</div>
-                                  {mExp !== mPaid && <div className="text-[9px] text-purple-600">/{mExp.toLocaleString()}</div>}
+                                  <div className={mPaid > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground/50'}>{mPaid > 0 ? mPaid.toLocaleString() : '-'}</div>
+                                  {mExp !== mPaid && <div className="text-[9px] text-purple-600 dark:text-purple-400">/{mExp.toLocaleString()}</div>}
                                 </div>
                               ) : '-'}
                             </td>
@@ -750,8 +750,8 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                                 <td key={f} className="px-1 py-2 text-center">
                                   {fPaid > 0 ? (
                                     <div>
-                                      <div className="text-emerald-700">{fPaid.toLocaleString()}</div>
-                                      {fNet !== fPaid && <div className="text-[9px] text-purple-600">/{fNet.toLocaleString()}</div>}
+                                      <div className="text-emerald-700 dark:text-emerald-400">{fPaid.toLocaleString()}</div>
+                                      {fNet !== fPaid && <div className="text-[9px] text-purple-600 dark:text-purple-400">/{fNet.toLocaleString()}</div>}
                                     </div>
                                   ) : ''}
                                 </td>
@@ -761,8 +761,10 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
                           </>
                         );
                       })()}
-                      <td className="px-2 py-2 text-right text-emerald-700">{cls.classTotalPaid?.toLocaleString()}</td>
-                      <td className="px-2 py-2 text-right text-red-700">{cls.classTotalPending > 0 ? cls.classTotalPending.toLocaleString() : '-'}</td>
+                      <td className="px-2 py-2 text-right text-emerald-700 dark:text-emerald-400">{cls.classTotalPaid?.toLocaleString()}</td>
+                      <td className="px-2 py-2 text-right text-amber-700 dark:text-amber-400">{clsPosition.previous > 0 ? clsPosition.previous.toLocaleString() : '-'}</td>
+                      <td className="px-2 py-2 text-right text-blue-700 dark:text-blue-400">{clsPosition.current > 0 ? clsPosition.current.toLocaleString() : '-'}</td>
+                      <td className="px-2 py-2 text-right text-red-700 dark:text-red-400">{clsPosition.total > 0 ? clsPosition.total.toLocaleString() : '-'}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -779,31 +781,279 @@ function FeeCollectionTab({ year, month, classFilter, setClassFilter, classes, o
 // ─── Financial: Monthly Income/Expense ────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 
-function FinancialMonthlyReport({ year }: { year: number }) {
-  const { data, isLoading } = useGetReportFinancialMonthlyQuery({ year });
+// Paid once when a student joins, so it isn't part of the regular fee picture.
+const isOneOffFee = (name: string) => /admission/i.test(name);
+
+function FinancialMonthlyReport({ year, onOpenFunds }: { year: number; onOpenFunds: () => void }) {
+  const { data, isLoading } = useGetReportFinancialMonthlyQuery({ year }, { refetchOnMountOrArgChange: 60 });
+  const { data: fundReport, isLoading: fundReportLoading } = useGetFeeFundReportQuery({ year }, { refetchOnMountOrArgChange: 60 });
   const formatMoney = useFormatMoney();
   const { org, generatedByName } = useOrgAndUser();
+  const [feeView, setFeeView] = useState('all');
+  const [openMonths, setOpenMonths] = useState<Record<string, boolean>>({});
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: months, chartData } = data;
   const profitRate = summary.income > 0 ? Math.round((summary.profit / summary.income) * 100) : 0;
-  const pdfHeaders = ['Month', 'Income', 'Expense', 'Profit'];
-  const pdfRows = months.map((m: any) => [m.month, m.income.toLocaleString(), m.expense.toLocaleString(), m.profit.toLocaleString()]);
-  const handlePrint = () => printReport(org, {
-    title: `Monthly Income/Expense Report - ${year}`,
-    periodLabel: `Year ${year}`,
-    generatedByName,
-    sections: [{
-      type: 'summary', items: [
-        { label: 'Total Income', value: formatMoney(summary.income || 0) },
-        { label: 'Total Expense', value: formatMoney(summary.expense || 0) },
-        { label: 'Net Profit', value: formatMoney(summary.profit || 0) },
-        { label: 'Margin', value: `${profitRate}%` },
+  const allFundNames: string[] = data.fundNames || [];
+  // One-off fees stay out of these fee tables. Their money is still income, so it moves to Other Income.
+  const fundNames = allFundNames.filter((f) => !isOneOffFee(f));
+  const oneOffFunds = allFundNames.filter(isOneOffFee);
+  const otherIncomeOf = (m: any): number =>
+    (m.otherIncome || 0) + oneOffFunds.reduce((total, f) => total + (m.funds?.[f] || 0), 0);
+  const oneOffTotal = oneOffFunds.reduce((total, f) => total + (summary.funds?.[f] || 0), 0);
+  const totalOtherIncome = (summary.otherIncome || 0) + oneOffTotal;
+  const hasOtherIncome = totalOtherIncome > 0;
+  // An older server sends no fee breakdown: show income only rather than a false Rs0.00 pending.
+  const hasFeeDetail = summary.feePending !== undefined;
+  const money = (v: number) => (v > 0 ? formatMoney(v) : '-');
+
+  const feeTypes: FeeTypeRow[] = fundNames.map((name) => {
+    const collected = summary.funds?.[name] || 0;
+    const pending = summary.pendingFunds?.[name] || 0;
+    return { name, total: collected + pending, collected, pending };
+  });
+  const view = feeView !== 'all' && fundNames.includes(feeView) ? feeView : 'all';
+  const feesOf = (m: any, fund: string) => {
+    const sumOf = (bucket: any) => (fund === 'all' ? fundNames : [fund]).reduce((total, f) => total + (bucket?.[f] || 0), 0);
+    const collected = sumOf(m.funds);
+    const pending = sumOf(m.pendingFunds);
+    return { total: collected + pending, collected, pending };
+  };
+  const feeTotals = view === 'all'
+    ? feeTypes.reduce((acc, r) => ({ total: acc.total + r.total, collected: acc.collected + r.collected, pending: acc.pending + r.pending }), { total: 0, collected: 0, pending: 0 })
+    : feeTypes.find((r) => r.name === view) || { total: 0, collected: 0, pending: 0 };
+  const percent = (f: { total: number; collected: number }) => (f.total > 0 ? Math.min(100, Math.round((f.collected / f.total) * 100)) : 0);
+
+  const toggleMonth = (month: string) => setOpenMonths((prev) => ({ ...prev, [month]: !prev[month] }));
+  const monthHasFees = (m: any) => feesOf(m, 'all').total > 0;
+  // First cell of a month row: clicking anywhere on the row opens it, this keeps it reachable by keyboard.
+  const monthToggle = (m: any) => monthHasFees(m) ? (
+    <button
+      type="button"
+      aria-expanded={!!openMonths[m.month]}
+      className="flex items-center gap-1 underline-offset-2 hover:underline"
+      onClick={(event) => { event.stopPropagation(); toggleMonth(m.month); }}
+    >
+      {openMonths[m.month] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+      {m.month}
+    </button>
+  ) : <span className="pl-[18px]">{m.month}</span>;
+  const monthDetailRow = (m: any, columns: number, funds: string[]) => openMonths[m.month] && (
+    <tr className="border-b bg-blue-50/50 text-left dark:bg-blue-950/20">
+      <td colSpan={columns} className="p-0">
+        <div className="sticky left-0 px-3 py-3" style={{ width: 'max(280px, min(1100px, calc(100vw - 340px)))' }}>
+          <MonthDetail
+            month={m.month}
+            year={year}
+            funds={funds}
+            loading={fundReportLoading}
+            received={fundReport?.months?.find((row: any) => row.month === m.month)}
+            feeOf={(fund) => feesOf(m, fund)}
+          />
+        </div>
+      </td>
+    </tr>
+  );
+
+  // A bank-style balance after each month: income less expense, built up from January.
+  const closingBalance: Record<string, number> = {};
+  months.reduce((balance: number, m: any) => {
+    closingBalance[m.month] = balance + m.profit;
+    return closingBalance[m.month];
+  }, 0);
+  // What was already unpaid before January: every pending total starts from it.
+  const openingOf = (fund: string): number =>
+    (fund === 'all' ? fundNames : [fund]).reduce((total, f) => total + (summary.openingPendingFunds?.[f] || 0), 0);
+  const pendingBalanceOf = (fund: string) => {
+    const balances: Record<string, number> = {};
+    months.reduce((balance: number, m: any) => {
+      balances[m.month] = balance + feesOf(m, fund).pending;
+      return balances[m.month];
+    }, openingOf(fund));
+    return balances;
+  };
+  const closingPendingOf = (fund: string) => pendingBalanceOf(fund).December;
+  const feeGroups = [
+    ...(fundNames.length > 1 ? fundNames.map((f) => ({ key: f, label: f })) : []),
+    { key: 'all', label: 'All Fees' },
+  ];
+  const groupBalances = Object.fromEntries(feeGroups.map((g) => [g.key, pendingBalanceOf(g.key)]));
+  const hasOpening = openingOf('all') > 0;
+  const feeColumns = ['Expected', 'Collected', 'Pending', 'Pending Total'];
+  const viewPendingBalance = pendingBalanceOf(view);
+  const balanceText = (v: number) => `${formatMoney(Math.abs(v))} ${v < 0 ? 'Dr' : 'Cr'}`;
+  const signedText = (v: number) => (v < 0 ? `(${formatMoney(Math.abs(v))})` : formatMoney(v));
+  const hasIncomeOrExpense = (m: any) => m.income > 0 || m.expense > 0;
+  const hasSalaries = months.some((m: any) => (m.salaryExpense || 0) > 0);
+
+  // Every column, for Print and PDF: one line per month with activity, ending on its balance.
+  const pdfHeaders = [
+    'Month',
+    ...fundNames,
+    ...(hasOtherIncome ? ['Other Income'] : []),
+    'Total Income',
+    ...(hasSalaries ? ['Salaries', 'Other Expenses'] : []),
+    'Total Expense',
+    'Net',
+    'Balance',
+  ];
+  const pdfRows = months.filter(hasIncomeOrExpense).map((m: any) => [
+    m.month,
+    ...fundNames.map((f) => money(m.funds?.[f] || 0)),
+    ...(hasOtherIncome ? [money(otherIncomeOf(m))] : []),
+    money(m.income),
+    ...(hasSalaries ? [money(m.salaryExpense || 0), money(m.expense - (m.salaryExpense || 0))] : []),
+    money(m.expense),
+    signedText(m.profit),
+    balanceText(closingBalance[m.month]),
+  ]);
+  const salaryTotal = months.reduce((total: number, m: any) => total + (m.salaryExpense || 0), 0);
+  const statementFooter = [
+    'Year Total',
+    ...fundNames.map((f) => money(summary.funds?.[f] || 0)),
+    ...(hasOtherIncome ? [money(totalOtherIncome)] : []),
+    money(summary.income || 0),
+    ...(hasSalaries ? [money(salaryTotal), money((summary.expense || 0) - salaryTotal)] : []),
+    money(summary.expense || 0),
+    signedText(summary.profit || 0),
+    balanceText(summary.profit || 0),
+  ];
+  const excelRows = months.map((m: any) => ({
+    Month: m.month,
+    ...Object.fromEntries(fundNames.flatMap((f) => {
+      const fees = feesOf(m, f);
+      return [[`${f} Expected`, fees.total], [`${f} Collected`, fees.collected], [`${f} Pending`, fees.pending], [`${f} Pending Total`, pendingBalanceOf(f)[m.month]]];
+    })),
+    'All Fees Expected': feesOf(m, 'all').total,
+    'All Fees Collected': feesOf(m, 'all').collected,
+    'All Fees Pending': feesOf(m, 'all').pending,
+    'All Fees Pending Total': pendingBalanceOf('all')[m.month],
+    ...(hasOtherIncome ? { 'Other Income': otherIncomeOf(m) } : {}),
+    'Total Income': m.income,
+    ...(hasSalaries ? { Salaries: m.salaryExpense || 0, 'Other Expenses': m.expense - (m.salaryExpense || 0) } : {}),
+    'Total Expense': m.expense,
+    Net: m.profit,
+    Balance: closingBalance[m.month],
+  }));
+  // Same figures as the Fees by Type table on screen, older unpaid fees included.
+  const feeTypesWithOpening = feeTypes.map((r) => ({
+    ...r,
+    before: openingOf(r.name),
+    total: r.total + openingOf(r.name),
+    pending: r.pending + openingOf(r.name),
+  }));
+  const beforeLabel = `Of Which From Before ${year}`;
+  const feeTypeHeaders = ['Fee Type', ...(hasOpening ? [beforeLabel] : []), 'Total Fee', 'Collected', 'Pending', 'Collected %'];
+  const feeTypeRows = feeTypesWithOpening.map((r) => [r.name, ...(hasOpening ? [money(r.before)] : []), money(r.total), money(r.collected), money(r.pending), `${percent(r)}%`]);
+  const allFees = feeTypes.reduce((acc, r) => ({ total: acc.total + r.total, collected: acc.collected + r.collected, pending: acc.pending + r.pending }), { total: 0, collected: 0, pending: 0 });
+  const feeStatement = (heading: string, fund: string): PrintSection => {
+    const balances = pendingBalanceOf(fund);
+    const totals = fund === 'all' ? allFees : feeTypes.find((r) => r.name === fund) || allFees;
+    return {
+      type: 'table',
+      heading,
+      note: "Pending Total adds each month's pending to all earlier unpaid fees.",
+      balanceColumn: true,
+      headers: ['Month', 'Expected', 'Collected', 'Pending', 'Collected %', 'Pending Total'],
+      rows: [
+        ...(openingOf(fund) > 0 ? [[`Brought Forward from before ${year}`, '', '', '', '', money(openingOf(fund))]] : []),
+        ...months.filter((m: any) => feesOf(m, fund).total > 0).map((m: any) => {
+          const fees = feesOf(m, fund);
+          return [m.month, money(fees.total), money(fees.collected), money(fees.pending), `${percent(fees)}%`, money(balances[m.month])];
+        }),
       ],
-    }, {
-      type: 'table', heading: 'Monthly Breakdown', headers: pdfHeaders, rows: pdfRows,
-      footer: ['Year Total', formatMoney(summary.income || 0), formatMoney(summary.expense || 0), formatMoney(summary.profit || 0)],
-    }],
+      footer: ['Year Total', money(totals.total), money(totals.collected), money(totals.pending), `${percent(totals)}%`, money(closingPendingOf(fund))],
+    };
+  };
+  const receivedColumnsFor = fundNames.length > 1 ? [...fundNames.map((f) => ({ label: f, of: [f] })), { label: 'All Fees', of: fundNames }] : [{ label: 'All Fees', of: fundNames }];
+  const receivedMonths: any[] = fundReport?.months || [];
+  const receivedActive = receivedMonths.filter((m) => {
+    const r = receivedFigures(m, fundNames);
+    return r.current + r.previous + r.later > 0;
+  });
+  const lateRows = receivedActive.flatMap((m) =>
+    paidForRows(m, fundNames).map((row) => [
+      m.month,
+      row.timing === 'later' ? `${row.label} (advance)` : row.label,
+      ...fundNames.map((f) => money(row.funds.find((x) => x.name === f)?.amount || 0)),
+      money(row.funds.reduce((total, x) => total + x.amount, 0)),
+    ]),
+  );
+  const receivedSections: PrintSection[] = receivedActive.length ? [
+    {
+      type: 'table',
+      heading: 'Fee Received Each Month',
+      note: `Shows the month the money actually came in. "This" is that month's own fee, "Previous" is older fees paid late.`,
+      headers: ['Received In', ...receivedColumnsFor.flatMap((g) => [`${g.label} This`, `${g.label} Previous`, `${g.label} Total`])],
+      rows: receivedActive.map((m) => [
+        m.month,
+        ...receivedColumnsFor.flatMap((g) => {
+          const r = receivedFigures(m, g.of);
+          return [money(r.current), money(r.previous + r.later), money(r.current + r.previous + r.later)];
+        }),
+      ]),
+      footer: ['Year Total', ...receivedColumnsFor.flatMap((g) => {
+        const t = receivedActive.reduce((acc, m) => {
+          const r = receivedFigures(m, g.of);
+          return { current: acc.current + r.current, other: acc.other + r.previous + r.later };
+        }, { current: 0, other: 0 });
+        return [money(t.current), money(t.other), money(t.current + t.other)];
+      })],
+    },
+    ...(lateRows.length ? [{
+      type: 'table' as const,
+      heading: 'Late Payment Detail',
+      note: 'Fees paid in a different month from the one they belong to.',
+      headers: ['Received In', 'For Fee Month', ...fundNames, 'Total'],
+      rows: lateRows,
+    }] : []),
+  ] : [];
+
+  const handlePrint = () => printReport(org, {
+    title: `Income & Expense Statement - ${year}`,
+    periodLabel: `1 January ${year} to 31 December ${year}`,
+    generatedByName,
+    landscape: true,
+    sections: [
+      {
+        type: 'summary', items: [
+          { label: 'Total Income', value: formatMoney(summary.income || 0) },
+          { label: 'Total Expense', value: formatMoney(summary.expense || 0) },
+          { label: 'Closing Balance', value: balanceText(summary.profit || 0) },
+          ...(hasFeeDetail ? [
+            { label: 'Fee Expected', value: formatMoney(allFees.total) },
+            { label: 'Fee Collected', value: formatMoney(allFees.collected) },
+            { label: 'Pending Total', value: formatMoney(closingPendingOf('all')) },
+          ] : []),
+        ],
+      },
+      {
+        type: 'table',
+        heading: 'Income & Expense Statement',
+        note: `Balance is income less expense, added up month by month from January ${year}. Cr = income is more than expense, Dr = expense is more than income. It is not a bank or cash balance. Fees are shown under the month they belong to.${oneOffTotal > 0 ? ` ${oneOffFunds.join(', ')} is counted under Other Income.` : ''}`,
+        balanceColumn: true,
+        headers: pdfHeaders,
+        rows: pdfRows,
+        footer: statementFooter,
+      },
+      ...(hasFeeDetail ? [
+        {
+          type: 'table' as const, heading: 'Fees by Type', headers: feeTypeHeaders, rows: feeTypeRows,
+          footer: [
+            'Total',
+            ...(hasOpening ? [money(openingOf('all'))] : []),
+            money(allFees.total + openingOf('all')),
+            money(allFees.collected),
+            money(closingPendingOf('all')),
+            `${percent({ total: allFees.total + openingOf('all'), collected: allFees.collected })}%`,
+          ],
+        },
+        ...fundNames.map((f) => feeStatement(`Fee Statement: ${f}`, f)),
+        feeStatement('Fee Statement: All Fees', 'all'),
+      ] : []),
+      ...receivedSections,
+    ],
   });
 
   return (
@@ -829,15 +1079,285 @@ function FinancialMonthlyReport({ year }: { year: number }) {
         </div>
       </div>
 
-      {/* Chart + Export */}
-      <Card>
-        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2"><BarChart2 className="h-4 w-4 text-slate-500" /> Monthly Income vs Expense — {year}</CardTitle>
-          <ExportButtons data={months} sheetName="Monthly" fileName={`Monthly_Report_${year}`}
+      {/* Each fee type: total, collected, pending */}
+      {hasFeeDetail && feeTypes.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">Fees by Type — {year}</h3>
+          <FeeTypeSummary
+            rows={feeTypesWithOpening}
+            beforeLabel={beforeLabel}
+            selected={view === 'all' ? undefined : view}
+            onSelect={setFeeView}
+          />
+        </section>
+      )}
+
+      {/* Month by month, for all fees or one fee type */}
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Month by Month</h3>
+          <ExportButtons data={excelRows} sheetName="Monthly" fileName={`Monthly_Report_${year}`}
             pdfTitle={`Monthly Income/Expense - ${year}`}
             headers={pdfHeaders}
             rows={pdfRows}
+            landscape
             onPrint={handlePrint} />
+        </div>
+        {hasFeeDetail && fundNames.length > 0 && (
+          <ChoiceTabs
+            label="Fee type"
+            value={view}
+            onChange={setFeeView}
+            options={[{ value: 'all', label: 'All' }, ...fundNames.map((f) => ({ value: f, label: f }))]}
+          />
+        )}
+        {view === 'all' && hasFeeDetail ? (
+          <>
+            <div className="rounded-lg border overflow-x-auto">
+              <table className="w-full text-xs" style={{ minWidth: 150 + feeGroups.length * 460 + (hasOtherIncome ? 5 : 3) * 120 }}>
+                <thead>
+                  <tr className="bg-muted/60">
+                    <th rowSpan={2} className="sticky left-0 z-10 border-b bg-muted px-3 py-2 text-left font-semibold align-bottom">Month</th>
+                    {feeGroups.map((g) => (
+                      <th key={g.key} colSpan={feeColumns.length} className="border-b border-l px-3 py-1.5 text-center font-semibold">{g.label}</th>
+                    ))}
+                    <th colSpan={hasOtherIncome ? 5 : 3} className="border-b border-l px-3 py-1.5 text-center font-semibold">Income &amp; Expense</th>
+                  </tr>
+                  <tr className="border-b bg-muted/60 text-right text-[11px]">
+                    {feeGroups.map((g) => (
+                      <Fragment key={g.key}>
+                        <th className="border-l px-3 py-2 font-semibold whitespace-nowrap">Expected</th>
+                        <th className="px-3 py-2 font-semibold whitespace-nowrap text-emerald-700 dark:text-emerald-400">Collected</th>
+                        <th className="px-3 py-2 font-semibold whitespace-nowrap text-red-600 dark:text-red-400">Pending</th>
+                        <th className="px-3 py-2 font-semibold whitespace-nowrap text-red-700 dark:text-red-400">Pending Total</th>
+                      </Fragment>
+                    ))}
+                    {hasOtherIncome && (
+                      <>
+                        <th className="border-l px-3 py-2 font-semibold whitespace-nowrap">Other Income</th>
+                        <th className="px-3 py-2 font-semibold whitespace-nowrap">Total Income</th>
+                      </>
+                    )}
+                    <th className={`px-3 py-2 font-semibold whitespace-nowrap text-red-600 dark:text-red-400 ${hasOtherIncome ? '' : 'border-l'}`}>Expense</th>
+                    <th className="px-3 py-2 font-semibold whitespace-nowrap">Profit / Loss</th>
+                    <th className="px-3 py-2 font-semibold whitespace-nowrap">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hasOpening && (
+                    <tr className="border-b bg-amber-50/60 text-right tabular-nums dark:bg-amber-950/20">
+                      <td className="sticky left-0 z-10 bg-amber-50 px-3 py-2 text-left font-medium whitespace-nowrap dark:bg-amber-950">Brought Forward</td>
+                      {feeGroups.map((g) => (
+                        <Fragment key={g.key}>
+                          <td colSpan={3} className="border-l" />
+                          <td className="px-3 py-2 font-semibold whitespace-nowrap text-red-700 dark:text-red-400">{money(openingOf(g.key))}</td>
+                        </Fragment>
+                      ))}
+                      <td colSpan={hasOtherIncome ? 5 : 3} className="border-l" />
+                    </tr>
+                  )}
+                  {months.map((m: any) => {
+                    const hasData = feesOf(m, 'all').total > 0 || m.income > 0 || m.expense > 0;
+                    return (
+                      <Fragment key={m.month}>
+                      <tr
+                        onClick={monthHasFees(m) ? () => toggleMonth(m.month) : undefined}
+                        className={`border-b text-right tabular-nums hover:bg-muted/20 ${monthHasFees(m) ? 'cursor-pointer' : ''} ${hasData ? '' : 'text-muted-foreground/50'}`}
+                      >
+                        <td className="sticky left-0 z-10 bg-background px-3 py-2 text-left font-medium">{monthToggle(m)}</td>
+                        {feeGroups.map((g) => {
+                          const fees = feesOf(m, g.key);
+                          return (
+                            <Fragment key={g.key}>
+                              <td className="border-l px-3 py-2 font-medium whitespace-nowrap">{money(fees.total)}</td>
+                              <td className={`px-3 py-2 whitespace-nowrap ${hasData ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>{money(fees.collected)}</td>
+                              <td className={`px-3 py-2 whitespace-nowrap ${hasData ? 'text-red-600 dark:text-red-400' : ''}`}>{money(fees.pending)}</td>
+                              <td className={`bg-muted/30 px-3 py-2 font-semibold whitespace-nowrap ${hasData ? 'text-red-700 dark:text-red-400' : ''}`}>{money(groupBalances[g.key][m.month])}</td>
+                            </Fragment>
+                          );
+                        })}
+                        {hasOtherIncome && (
+                          <>
+                            <td className="border-l px-3 py-2 whitespace-nowrap">{money(otherIncomeOf(m))}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{money(m.income)}</td>
+                          </>
+                        )}
+                        <td className={`px-3 py-2 whitespace-nowrap ${hasOtherIncome ? '' : 'border-l'} ${hasData ? 'text-red-500 dark:text-red-400' : ''}`}>{money(m.expense)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {hasIncomeOrExpense(m) ? <span className={`font-semibold ${m.profit >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600'}`}>{signedText(m.profit)}</span> : '-'}
+                        </td>
+                        <td className="px-3 py-2 font-semibold whitespace-nowrap">{hasIncomeOrExpense(m) ? balanceText(closingBalance[m.month]) : '-'}</td>
+                      </tr>
+                      {monthDetailRow(m, 1 + feeGroups.length * feeColumns.length + (hasOtherIncome ? 5 : 3), fundNames)}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-muted text-right font-bold tabular-nums">
+                    <td className="sticky left-0 z-10 bg-muted px-3 py-2.5 text-left whitespace-nowrap">Year Total</td>
+                    {feeGroups.map((g) => {
+                      const totals = g.key === 'all' ? allFees : feeTypes.find((r) => r.name === g.key) || allFees;
+                      return (
+                        <Fragment key={g.key}>
+                          <td className="border-l px-3 py-2.5 whitespace-nowrap">{money(totals.total)}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap text-emerald-700 dark:text-emerald-400">{money(totals.collected)}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap text-red-600 dark:text-red-400">{money(totals.pending)}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap text-red-700 dark:text-red-400">{money(closingPendingOf(g.key))}</td>
+                        </Fragment>
+                      );
+                    })}
+                    {hasOtherIncome && (
+                      <>
+                        <td className="border-l px-3 py-2.5 whitespace-nowrap">{money(totalOtherIncome)}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">{formatMoney(summary.income || 0)}</td>
+                      </>
+                    )}
+                    <td className={`px-3 py-2.5 whitespace-nowrap text-red-600 dark:text-red-400 ${hasOtherIncome ? '' : 'border-l'}`}>{formatMoney(summary.expense || 0)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{signedText(summary.profit || 0)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{balanceText(summary.profit || 0)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Click a month to see how much came from the current month and previous months. <strong>Expected</strong> is the fee for that month. <strong>Pending</strong> is what is still unpaid from that month. <strong>Pending Total</strong> adds it to all earlier unpaid fees.
+              {feeGroups.length > 1 && ' Scroll sideways to see each fee type.'}
+            </p>
+          </>
+        ) : (
+        <div className="rounded-lg border overflow-x-auto">
+          <table className="w-full min-w-[820px] text-sm">
+            <thead>
+              <tr className="bg-muted/50 border-b text-right text-xs">
+                <th className="text-left px-4 py-2.5 font-semibold">Month</th>
+                {hasFeeDetail && (
+                  <>
+                    <th className="px-4 py-2.5 font-semibold">Expected</th>
+                    <th className="px-4 py-2.5 font-semibold text-emerald-700 dark:text-emerald-400">Collected</th>
+                    <th className="px-4 py-2.5 font-semibold text-red-600 dark:text-red-400">Pending</th>
+                  </>
+                )}
+                {view === 'all' ? (
+                  <>
+                    {hasOtherIncome && <th className="px-4 py-2.5 font-semibold">Other Income</th>}
+                    {(hasOtherIncome || !hasFeeDetail) && <th className="px-4 py-2.5 font-semibold text-emerald-700 dark:text-emerald-400">Total Income</th>}
+                    <th className="px-4 py-2.5 font-semibold text-red-600 dark:text-red-400">Expense</th>
+                    <th className="px-4 py-2.5 font-semibold">Profit / Loss</th>
+                    <th className="px-4 py-2.5 font-semibold">Balance</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="px-4 py-2.5 font-semibold">Collected %</th>
+                    <th className="px-4 py-2.5 font-semibold text-red-600 dark:text-red-400">Pending Total</th>
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {view !== 'all' && openingOf(view) > 0 && (
+                <tr className="border-b bg-amber-50/60 text-right tabular-nums dark:bg-amber-950/20">
+                  <td className="px-4 py-2 text-left font-medium">Brought Forward from before {year}</td>
+                  <td colSpan={4} />
+                  <td className="px-4 py-2 font-semibold text-red-600 dark:text-red-400">{money(openingOf(view))}</td>
+                </tr>
+              )}
+              {months.map((m: any) => {
+                const fees = feesOf(m, view);
+                const hasData = view === 'all' ? m.income > 0 || m.expense > 0 || fees.total > 0 : fees.total > 0;
+                return (
+                  <Fragment key={m.month}>
+                  <tr
+                    onClick={view !== 'all' && fees.total > 0 ? () => toggleMonth(m.month) : undefined}
+                    className={`border-b text-right tabular-nums hover:bg-muted/20 ${view !== 'all' && fees.total > 0 ? 'cursor-pointer' : ''} ${!hasData ? 'opacity-40' : ''}`}
+                  >
+                    <td className="px-4 py-2 text-left font-medium">{view !== 'all' && fees.total > 0 ? monthToggle(m) : m.month}</td>
+                    {hasFeeDetail && (
+                      <>
+                        <td className="px-4 py-2 font-medium">{money(fees.total)}</td>
+                        <td className="px-4 py-2 text-emerald-600 dark:text-emerald-400">{money(fees.collected)}</td>
+                        <td className="px-4 py-2 text-red-600 dark:text-red-400">{money(fees.pending)}</td>
+                      </>
+                    )}
+                    {view === 'all' ? (
+                      <>
+                        {hasOtherIncome && <td className="px-4 py-2">{money(otherIncomeOf(m))}</td>}
+                        {(hasOtherIncome || !hasFeeDetail) && <td className="px-4 py-2 text-emerald-600 dark:text-emerald-400">{money(m.income)}</td>}
+                        <td className="px-4 py-2 text-red-500 dark:text-red-400">{money(m.expense)}</td>
+                        <td className="px-4 py-2">
+                          {m.income > 0 || m.expense > 0 ? <span className={`font-semibold ${m.profit >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600'}`}>{formatMoney(m.profit)}</span> : '-'}
+                        </td>
+                        <td className="px-4 py-2 font-semibold whitespace-nowrap">{hasIncomeOrExpense(m) ? balanceText(closingBalance[m.month]) : '-'}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-2">{fees.total > 0 ? `${percent(fees)}%` : '-'}</td>
+                        <td className="px-4 py-2 font-semibold text-red-600 dark:text-red-400">{money(viewPendingBalance[m.month])}</td>
+                      </>
+                    )}
+                  </tr>
+                  {view !== 'all' && monthDetailRow(m, 6, [view])}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-muted font-bold text-right tabular-nums">
+                <td className="px-4 py-2.5 text-left">Year Total</td>
+                {hasFeeDetail && (
+                  <>
+                    <td className="px-4 py-2.5">{money(feeTotals.total)}</td>
+                    <td className="px-4 py-2.5 text-emerald-700 dark:text-emerald-400">{money(feeTotals.collected)}</td>
+                    <td className="px-4 py-2.5 text-red-600 dark:text-red-400">{money(closingPendingOf(view))}</td>
+                  </>
+                )}
+                {view === 'all' ? (
+                  <>
+                    {hasOtherIncome && <td className="px-4 py-2.5">{money(totalOtherIncome)}</td>}
+                    {(hasOtherIncome || !hasFeeDetail) && <td className="px-4 py-2.5 text-emerald-700 dark:text-emerald-400">{formatMoney(summary.income || 0)}</td>}
+                    <td className="px-4 py-2.5 text-red-600 dark:text-red-400">{formatMoney(summary.expense || 0)}</td>
+                    <td className="px-4 py-2.5"><span className={summary.profit >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-orange-700'}>{formatMoney(summary.profit || 0)}</span></td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">{balanceText(summary.profit || 0)}</td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-4 py-2.5">{percent(feeTotals)}%</td>
+                    <td className="px-4 py-2.5 text-red-600 dark:text-red-400">{money(feeTotals.pending)}</td>
+                  </>
+                )}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        )}
+        {oneOffTotal > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {oneOffFunds.join(', ')} ({formatMoney(oneOffTotal)}) is not included in the fee columns or All Fees. It is counted under Other Income, so Total Income and Profit stay correct.
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Fees are shown under the month they belong to. To see when money actually came in, how it was paid, and who still owes, open the{' '}
+          <button type="button" className="font-medium text-primary underline underline-offset-2" onClick={onOpenFunds}>Funds Report</button>.
+        </p>
+      </section>
+
+      {/* What actually came in each month: this month's fee vs late payments */}
+      {hasFeeDetail && fundNames.length > 0 && (
+        <section className="space-y-2">
+          <div>
+            <h3 className="text-sm font-semibold">Fee Received Each Month</h3>
+            <p className="text-xs text-muted-foreground">
+              The month the money actually came in. <strong>This Month's Fee</strong> was paid on time. <strong>Previous Months</strong> is older fee paid late: click a month to see which month it was for.
+            </p>
+          </div>
+          {fundReportLoading ? <Loading /> : <FeeReceivedTable months={receivedMonths} funds={fundNames} />}
+        </section>
+      )}
+
+      {/* Chart */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2"><BarChart2 className="h-4 w-4 text-slate-500" /> Monthly Income vs Expense — {year}</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           <ResponsiveContainer width="100%" height={260}>
@@ -853,52 +1373,6 @@ function FinancialMonthlyReport({ year }: { year: number }) {
           </ResponsiveContainer>
         </CardContent>
       </Card>
-
-      {/* Table */}
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-muted/50 border-b">
-              <th className="text-left px-4 py-2.5 font-semibold text-[11px]" style={{ width: 120 }}>Month</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-emerald-700">Income</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-red-600">Expense</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px]">Profit / Loss</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px]">Margin</th>
-              <th className="px-4 py-2.5" style={{ width: 24 }} />
-            </tr>
-          </thead>
-          <tbody>
-            {months.map((m: any) => {
-              const margin = m.income > 0 ? Math.round((m.profit / m.income) * 100) : 0;
-              const hasData = m.income > 0 || m.expense > 0;
-              return (
-                <tr key={m.month} className={`border-b hover:bg-muted/20 ${!hasData ? 'opacity-40' : ''}`}>
-                  <td className="px-4 py-2 font-medium">{m.month}</td>
-                  <td className="px-4 py-2 text-right text-emerald-600 font-semibold">{m.income > 0 ? formatMoney(m.income) : '-'}</td>
-                  <td className="px-4 py-2 text-right text-red-500">{m.expense > 0 ? formatMoney(m.expense) : '-'}</td>
-                  <td className="px-4 py-2 text-right">
-                    {hasData ? <span className={`font-bold ${m.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{formatMoney(m.profit)}</span> : '-'}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    {hasData ? <span className={`font-semibold ${margin >= 30 ? 'text-emerald-600' : margin >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{margin}%</span> : '-'}
-                  </td>
-                  <td className="px-4 py-2 text-right">{hasData ? (m.profit >= 0 ? <TrendingUp className="h-3.5 w-3.5 text-blue-400 inline" /> : <TrendingDown className="h-3.5 w-3.5 text-orange-400 inline" />) : null}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="bg-muted font-bold text-[11px]">
-              <td className="px-4 py-2.5">Year Total</td>
-              <td className="px-4 py-2.5 text-right text-emerald-700">{formatMoney((summary.income || 0))}</td>
-              <td className="px-4 py-2.5 text-right text-red-600">{formatMoney((summary.expense || 0))}</td>
-              <td className="px-4 py-2.5 text-right"><span className={summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}>{formatMoney((summary.profit || 0))}</span></td>
-              <td className="px-4 py-2.5 text-right"><span className={profitRate >= 0 ? 'text-blue-700' : 'text-orange-700'}>{profitRate}%</span></td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
-      </div>
     </div>
   );
 }
@@ -908,7 +1382,7 @@ function FinancialMonthlyReport({ year }: { year: number }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function FinancialDailyReport({ year, month }: { year: number; month: string }) {
-  const { data, isLoading } = useGetReportFinancialDailyQuery({ year, month });
+  const { data, isLoading } = useGetReportFinancialDailyQuery({ year, month }, { refetchOnMountOrArgChange: 60 });
   const formatMoney = useFormatMoney();
   const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
@@ -916,8 +1390,26 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
   const { summary, data: days, chartData } = data;
   const avgDaily = summary.activeDays > 0 ? Math.round(summary.totalCollected / summary.activeDays) : 0;
   const activePct = summary.totalDays > 0 ? Math.round((summary.activeDays / summary.totalDays) * 100) : 0;
-  const pdfHeaders = ['Day', 'Date', 'Amount', 'Transactions'];
-  const pdfRows = days.map((d: any) => [String(d.day), d.date, d.amount.toLocaleString(), String(d.transactions)]);
+  const fundNames: string[] = data.fundNames || [];
+  const hasOtherIncome = (summary.otherIncome || 0) > 0;
+  const activeDays = days.filter((d: any) => d.amount > 0);
+  const pdfHeaders = ['Day', 'Date', ...fundNames, ...(hasOtherIncome ? ['Other Income'] : []), 'Total', 'Transactions'];
+  const pdfRows = activeDays.map((d: any) => [
+    String(d.day),
+    d.date,
+    ...fundNames.map((f) => (d.funds?.[f] || 0).toLocaleString()),
+    ...(hasOtherIncome ? [(d.otherIncome || 0).toLocaleString()] : []),
+    d.amount.toLocaleString(),
+    String(d.transactions),
+  ]);
+  const excelRows = activeDays.map((d: any) => ({
+    Day: d.day,
+    Date: d.date,
+    ...Object.fromEntries(fundNames.map((f) => [f, d.funds?.[f] || 0])),
+    ...(hasOtherIncome ? { 'Other Income': d.otherIncome || 0 } : {}),
+    Total: d.amount,
+    Transactions: d.transactions,
+  }));
   const handlePrint = () => printReport(org, {
     title: `Daily Collection Report - ${month} ${year}`,
     periodLabel: `${month} ${year}`,
@@ -931,7 +1423,14 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
       ],
     }, {
       type: 'table', heading: 'Daily Breakdown', headers: pdfHeaders, rows: pdfRows,
-      footer: [`Total (${summary.activeDays} days)`, '', formatMoney(summary.totalCollected || 0), String(days.reduce((s: number, d: any) => s + (d.transactions || 0), 0))],
+      footer: [
+        `Total (${summary.activeDays} days)`,
+        '',
+        ...fundNames.map((f) => formatMoney(summary.funds?.[f] || 0)),
+        ...(hasOtherIncome ? [formatMoney(summary.otherIncome || 0)] : []),
+        formatMoney(summary.totalCollected || 0),
+        String(days.reduce((s: number, d: any) => s + (d.transactions || 0), 0)),
+      ],
     }],
   });
 
@@ -961,11 +1460,13 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
         </div>
       </div>
 
+      <FundTotals names={fundNames} totals={summary.funds} otherIncome={summary.otherIncome} label={`Collected by Fund — ${month} ${year}`} />
+
       {/* Chart */}
       <Card>
-        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+        <CardHeader className="pb-2 pt-4 px-4 flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2"><Activity className="h-4 w-4 text-emerald-500" /> Daily Collection — {month} {year}</CardTitle>
-          <ExportButtons data={days} sheetName="Daily" fileName={`Daily_Collection_${month}_${year}`}
+          <ExportButtons data={excelRows} sheetName="Daily" fileName={`Daily_Collection_${month}_${year}`}
             pdfTitle={`Daily Collection - ${month} ${year}`}
             headers={pdfHeaders}
             rows={pdfRows}
@@ -985,24 +1486,32 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
       </Card>
 
       {/* Table — only active days */}
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-xs">
+      <div className="rounded-lg border overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 360 + fundNames.length * 100 }}>
           <thead>
             <tr className="bg-muted/50 border-b">
               <th className="text-left px-4 py-2.5 font-semibold text-[11px]">Day</th>
               <th className="text-left px-4 py-2.5 font-semibold text-[11px]">Date</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-emerald-700">Amount Collected</th>
+              {fundNames.map((f) => (
+                <th key={f} className="text-right px-4 py-2.5 font-semibold text-[11px] text-emerald-700 dark:text-emerald-400">{f}</th>
+              ))}
+              {hasOtherIncome && <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-emerald-700 dark:text-emerald-400">Other Income</th>}
+              <th className="text-right px-4 py-2.5 font-semibold text-[11px]">Total Collected</th>
               <th className="text-right px-4 py-2.5 font-semibold text-[11px]">Transactions</th>
             </tr>
           </thead>
           <tbody>
-            {days.filter((d: any) => d.amount > 0).length === 0 ? (
-              <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">No collections recorded for {month}</td></tr>
-            ) : days.filter((d: any) => d.amount > 0).map((d: any) => (
+            {activeDays.length === 0 ? (
+              <tr><td colSpan={4 + fundNames.length + (hasOtherIncome ? 1 : 0)} className="text-center py-8 text-muted-foreground">No collections recorded for {month}</td></tr>
+            ) : activeDays.map((d: any) => (
               <tr key={d.day} className="border-b hover:bg-muted/20">
                 <td className="px-4 py-2 font-medium text-slate-600">{d.day}</td>
                 <td className="px-4 py-2 text-muted-foreground">{d.date}</td>
-                <td className="px-4 py-2 text-right font-bold text-emerald-600">{formatMoney(d.amount)}</td>
+                {fundNames.map((f) => (
+                  <td key={f} className="px-4 py-2 text-right text-emerald-600 dark:text-emerald-400">{d.funds?.[f] > 0 ? formatMoney(d.funds[f]) : '-'}</td>
+                ))}
+                {hasOtherIncome && <td className="px-4 py-2 text-right text-emerald-600 dark:text-emerald-400">{d.otherIncome > 0 ? formatMoney(d.otherIncome) : '-'}</td>}
+                <td className="px-4 py-2 text-right font-bold">{formatMoney(d.amount)}</td>
                 <td className="px-4 py-2 text-right text-slate-600">{d.transactions}</td>
               </tr>
             ))}
@@ -1010,7 +1519,11 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
           <tfoot>
             <tr className="bg-muted font-bold text-[11px]">
               <td colSpan={2} className="px-4 py-2.5">Total ({summary.activeDays} days)</td>
-              <td className="px-4 py-2.5 text-right text-emerald-700">{formatMoney((summary.totalCollected || 0))}</td>
+              {fundNames.map((f) => (
+                <td key={f} className="px-4 py-2.5 text-right text-emerald-700 dark:text-emerald-400">{formatMoney(summary.funds?.[f] || 0)}</td>
+              ))}
+              {hasOtherIncome && <td className="px-4 py-2.5 text-right text-emerald-700 dark:text-emerald-400">{formatMoney(summary.otherIncome || 0)}</td>}
+              <td className="px-4 py-2.5 text-right">{formatMoney((summary.totalCollected || 0))}</td>
               <td className="px-4 py-2.5 text-right">{days.reduce((s: number, d: any) => s + (d.transactions || 0), 0)}</td>
             </tr>
           </tfoot>
@@ -1025,15 +1538,16 @@ function FinancialDailyReport({ year, month }: { year: number; month: string }) 
 // ═══════════════════════════════════════════════════════════════════════════
 
 function FinancialPnlReport({ year }: { year: number }) {
-  const { data, isLoading } = useGetReportFinancialPnlQuery({ year });
+  const { data, isLoading } = useGetReportFinancialPnlQuery({ year }, { refetchOnMountOrArgChange: 60 });
   const formatMoney = useFormatMoney();
   const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
   const { summary, data: months, chartData } = data;
   const feeRate = summary.feeExpected > 0 ? Math.round((summary.feeCollected / summary.feeExpected) * 100) : 0;
-  const pdfHeaders = ['Month', 'Income', 'Expense', 'Profit', 'Fee Expected', 'Fee Collected', 'Fee Pending'];
-  const pdfRows = months.map((m: any) => [m.month, m.income.toLocaleString(), m.expense.toLocaleString(), m.profit.toLocaleString(), m.feeExpected.toLocaleString(), m.feeCollected.toLocaleString(), m.feePending.toLocaleString()]);
+  const fundNames: string[] = data.fundNames || [];
+  const pdfHeaders = ['Month', ...fundNames, 'Income', 'Expense', 'Profit', 'Previous Pending', "Month's Fee", 'Collected', "Month's Pending", 'Total Pending'];
+  const pdfRows = months.map((m: any) => [m.month, ...fundNames.map((f) => (m.funds?.[f] || 0).toLocaleString()), m.income.toLocaleString(), m.expense.toLocaleString(), m.profit.toLocaleString(), (m.feePreviousPending || 0).toLocaleString(), m.feeExpected.toLocaleString(), m.feeCollected.toLocaleString(), m.feePending.toLocaleString(), (m.feeTotalPending || 0).toLocaleString()]);
   const handlePrint = () => printReport(org, {
     title: `Profit & Loss Report - ${year}`,
     periodLabel: `Year ${year}`,
@@ -1047,7 +1561,7 @@ function FinancialPnlReport({ year }: { year: number }) {
       ],
     }, {
       type: 'table', heading: 'Monthly Breakdown', headers: pdfHeaders, rows: pdfRows,
-      footer: ['Year Total', formatMoney(summary.income || 0), formatMoney(summary.expense || 0), formatMoney(summary.profit || 0), formatMoney(summary.feeExpected || 0), formatMoney(summary.feeCollected || 0), formatMoney(summary.feePending || 0)],
+      footer: ['Year Total', ...fundNames.map((f) => formatMoney(summary.funds?.[f] || 0)), formatMoney(summary.income || 0), formatMoney(summary.expense || 0), formatMoney(summary.profit || 0), formatMoney(summary.feePreviousPending || 0), formatMoney(summary.feeExpected || 0), formatMoney(summary.feeCollected || 0), formatMoney(summary.feePending || 0), formatMoney(summary.feeTotalPending || 0)],
     }],
   });
 
@@ -1056,43 +1570,44 @@ function FinancialPnlReport({ year }: { year: number }) {
       {/* Top KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4">
-          <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Income</p>
-          <p className="text-2xl font-bold text-emerald-700">{formatMoney((summary.income || 0))}</p>
+          <p className="text-[10px] font-semibold text-emerald-500 dark:text-emerald-400 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Income</p>
+          <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{formatMoney((summary.income || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4">
-          <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Expense</p>
-          <p className="text-2xl font-bold text-red-700">{formatMoney((summary.expense || 0))}</p>
+          <p className="text-[10px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wide mb-1 flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Expense</p>
+          <p className="text-2xl font-bold text-red-700 dark:text-red-400">{formatMoney((summary.expense || 0))}</p>
         </div>
         <div className={`rounded-xl border-2 p-4 ${summary.profit >= 0 ? 'border-blue-100 bg-blue-50' : 'border-orange-100 bg-orange-50'}`}>
-          <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${summary.profit >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>Net Profit / Loss</p>
-          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatMoney((summary.profit || 0))}</p>
+          <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${summary.profit >= 0 ? 'text-blue-500 dark:text-blue-400' : 'text-orange-500'}`}>Net Profit / Loss</p>
+          <p className={`text-2xl font-bold ${summary.profit >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-orange-700'}`}>{formatMoney((summary.profit || 0))}</p>
         </div>
       </div>
 
       {/* Fee Collection KPIs */}
       <Card className="border-2 border-purple-100">
         <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold text-purple-700 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Fee Collection Overview — {year}</CardTitle>
+          <CardTitle className="text-sm font-semibold text-purple-700 dark:text-purple-400 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Fee Collection Overview — {year}</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="text-center">
-              <p className="text-[10px] text-purple-500 font-semibold uppercase tracking-wide mb-1">Fee Expected</p>
-              <p className="text-xl font-bold text-purple-700">{formatMoney((summary.feeExpected || 0))}</p>
+              <p className="text-[10px] text-purple-500 dark:text-purple-400 font-semibold uppercase tracking-wide mb-1">Fees Billed in {year}</p>
+              <p className="text-xl font-bold text-purple-700 dark:text-purple-400">{formatMoney((summary.feeExpected || 0))}</p>
             </div>
             <div className="text-center">
-              <p className="text-[10px] text-emerald-500 font-semibold uppercase tracking-wide mb-1">Fee Collected</p>
-              <p className="text-xl font-bold text-emerald-700">{formatMoney((summary.feeCollected || 0))}</p>
+              <p className="text-[10px] text-emerald-500 dark:text-emerald-400 font-semibold uppercase tracking-wide mb-1">Fee Collected</p>
+              <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{formatMoney((summary.feeCollected || 0))}</p>
             </div>
             <div className="text-center">
-              <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wide mb-1">Fee Pending</p>
-              <p className="text-xl font-bold text-amber-600">{formatMoney((summary.feePending || 0))}</p>
+              <p className="text-[10px] text-amber-500 dark:text-amber-400 font-semibold uppercase tracking-wide mb-1">Total Fee Pending</p>
+              <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{formatMoney((summary.feeTotalPending || 0))}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Before {year}: {formatMoney((summary.feePreviousPending || 0))} · From {year}: {formatMoney((summary.feePending || 0))}</p>
             </div>
           </div>
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-muted-foreground">Collection Rate</span>
-              <span className={`font-bold ${feeRate >= 80 ? 'text-emerald-600' : feeRate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{feeRate}%</span>
+              <span className={`font-bold ${feeRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : feeRate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{feeRate}%</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div className={`h-full rounded-full ${feeRate >= 80 ? 'bg-emerald-500' : feeRate >= 50 ? 'bg-amber-400' : 'bg-red-500'}`} style={{ width: `${feeRate}%` }} />
@@ -1103,9 +1618,9 @@ function FinancialPnlReport({ year }: { year: number }) {
 
       {/* Chart */}
       <Card>
-        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2"><Activity className="h-4 w-4 text-purple-500" /> P&L Trend — {year}</CardTitle>
-          <ExportButtons data={months} sheetName="PnL" fileName={`PnL_${year}`}
+        <CardHeader className="pb-2 pt-4 px-4 flex flex-row flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2"><Activity className="h-4 w-4 text-purple-500 dark:text-purple-400" /> P&L Trend — {year}</CardTitle>
+          <ExportButtons data={months.map(({ funds, ...m }: any) => ({ month: m.month, ...Object.fromEntries(fundNames.map((f) => [f, funds?.[f] || 0])), ...Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'month')) }))} sheetName="PnL" fileName={`PnL_${year}`}
             pdfTitle={`Profit & Loss - ${year}`}
             headers={pdfHeaders}
             rows={pdfRows}
@@ -1129,17 +1644,24 @@ function FinancialPnlReport({ year }: { year: number }) {
       </Card>
 
       {/* Detail Table */}
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-xs">
+      <FundTotals names={fundNames} totals={summary.funds} otherIncome={summary.otherIncome} />
+
+      <div className="rounded-lg border overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 1040 + fundNames.length * 100 }}>
           <thead>
             <tr className="bg-muted/50 border-b">
               <th className="text-left px-4 py-2.5 font-semibold text-[11px]">Month</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-emerald-700">Income</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-red-600">Expense</th>
+              {fundNames.map((f) => (
+                <th key={f} className="text-right px-4 py-2.5 font-semibold text-[11px] text-emerald-700 dark:text-emerald-400">{f}</th>
+              ))}
+              <th className="text-right px-4 py-2.5 font-semibold text-[11px]">Total Income</th>
+              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-red-600 dark:text-red-400">Expense</th>
               <th className="text-right px-4 py-2.5 font-semibold text-[11px]">Profit</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-purple-700">Fee Expected</th>
+              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-amber-700 dark:text-amber-400">Previous Pending</th>
+              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-purple-700 dark:text-purple-400">Month's Fee</th>
               <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-teal-700">Fee Collected</th>
-              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-amber-600">Fee Pending</th>
+              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-amber-600 dark:text-amber-400">Month's Pending</th>
+              <th className="text-right px-4 py-2.5 font-semibold text-[11px] text-red-600 dark:text-red-400">Total Pending</th>
               <th className="text-right px-4 py-2.5 font-semibold text-[11px]">Rate</th>
             </tr>
           </thead>
@@ -1150,13 +1672,18 @@ function FinancialPnlReport({ year }: { year: number }) {
               return (
                 <tr key={m.month} className={`border-b hover:bg-muted/20 ${!hasData ? 'opacity-40' : ''}`}>
                   <td className="px-4 py-2 font-medium">{m.month}</td>
-                  <td className="px-4 py-2 text-right text-emerald-600 font-semibold">{m.income > 0 ? formatMoney(m.income) : '-'}</td>
-                  <td className="px-4 py-2 text-right text-red-500">{m.expense > 0 ? formatMoney(m.expense) : '-'}</td>
-                  <td className="px-4 py-2 text-right"><span className={`font-bold ${m.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{hasData ? formatMoney(m.profit) : '-'}</span></td>
-                  <td className="px-4 py-2 text-right text-purple-600">{m.feeExpected > 0 ? formatMoney(m.feeExpected) : '-'}</td>
+                  {fundNames.map((f) => (
+                    <td key={f} className="px-4 py-2 text-right text-emerald-600 dark:text-emerald-400">{m.funds?.[f] > 0 ? formatMoney(m.funds[f]) : '-'}</td>
+                  ))}
+                  <td className="px-4 py-2 text-right font-semibold">{m.income > 0 ? formatMoney(m.income) : '-'}</td>
+                  <td className="px-4 py-2 text-right text-red-500 dark:text-red-400">{m.expense > 0 ? formatMoney(m.expense) : '-'}</td>
+                  <td className="px-4 py-2 text-right"><span className={`font-bold ${m.profit >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600'}`}>{hasData ? formatMoney(m.profit) : '-'}</span></td>
+                  <td className="px-4 py-2 text-right text-amber-700 dark:text-amber-400">{m.feePreviousPending > 0 ? formatMoney(m.feePreviousPending) : '-'}</td>
+                  <td className="px-4 py-2 text-right text-purple-600 dark:text-purple-400">{m.feeExpected > 0 ? formatMoney(m.feeExpected) : '-'}</td>
                   <td className="px-4 py-2 text-right text-teal-600 font-semibold">{m.feeCollected > 0 ? formatMoney(m.feeCollected) : '-'}</td>
-                  <td className="px-4 py-2 text-right text-amber-600">{m.feePending > 0 ? formatMoney(m.feePending) : '-'}</td>
-                  <td className="px-4 py-2 text-right">{m.feeExpected > 0 ? <span className={`font-semibold ${rate >= 80 ? 'text-emerald-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</span> : '-'}</td>
+                  <td className="px-4 py-2 text-right text-amber-600 dark:text-amber-400">{m.feePending > 0 ? formatMoney(m.feePending) : '-'}</td>
+                  <td className="px-4 py-2 text-right text-red-600 dark:text-red-400">{m.feeTotalPending > 0 ? formatMoney(m.feeTotalPending) : '-'}</td>
+                  <td className="px-4 py-2 text-right">{m.feeExpected > 0 ? <span className={`font-semibold ${rate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : rate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{rate}%</span> : '-'}</td>
                 </tr>
               );
             })}
@@ -1164,13 +1691,18 @@ function FinancialPnlReport({ year }: { year: number }) {
           <tfoot>
             <tr className="bg-muted font-bold text-[11px]">
               <td className="px-4 py-2.5">Year Total</td>
-              <td className="px-4 py-2.5 text-right text-emerald-700">{formatMoney((summary.income || 0))}</td>
-              <td className="px-4 py-2.5 text-right text-red-600">{formatMoney((summary.expense || 0))}</td>
-              <td className="px-4 py-2.5 text-right"><span className={summary.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}>{formatMoney((summary.profit || 0))}</span></td>
-              <td className="px-4 py-2.5 text-right text-purple-700">{formatMoney((summary.feeExpected || 0))}</td>
+              {fundNames.map((f) => (
+                <td key={f} className="px-4 py-2.5 text-right text-emerald-700 dark:text-emerald-400">{formatMoney(summary.funds?.[f] || 0)}</td>
+              ))}
+              <td className="px-4 py-2.5 text-right">{formatMoney((summary.income || 0))}</td>
+              <td className="px-4 py-2.5 text-right text-red-600 dark:text-red-400">{formatMoney((summary.expense || 0))}</td>
+              <td className="px-4 py-2.5 text-right"><span className={summary.profit >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-orange-700'}>{formatMoney((summary.profit || 0))}</span></td>
+              <td className="px-4 py-2.5 text-right text-amber-700 dark:text-amber-400">{formatMoney((summary.feePreviousPending || 0))}</td>
+              <td className="px-4 py-2.5 text-right text-purple-700 dark:text-purple-400">{formatMoney((summary.feeExpected || 0))}</td>
               <td className="px-4 py-2.5 text-right text-teal-700">{formatMoney((summary.feeCollected || 0))}</td>
-              <td className="px-4 py-2.5 text-right text-amber-600">{formatMoney((summary.feePending || 0))}</td>
-              <td className="px-4 py-2.5 text-right"><span className={`${feeRate >= 80 ? 'text-emerald-700' : feeRate >= 50 ? 'text-amber-700' : 'text-red-700'}`}>{feeRate}%</span></td>
+              <td className="px-4 py-2.5 text-right text-amber-600 dark:text-amber-400">{formatMoney((summary.feePending || 0))}</td>
+              <td className="px-4 py-2.5 text-right text-red-600 dark:text-red-400">{formatMoney((summary.feeTotalPending || 0))}</td>
+              <td className="px-4 py-2.5 text-right"><span className={`${feeRate >= 80 ? 'text-emerald-700 dark:text-emerald-400' : feeRate >= 50 ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`}>{feeRate}%</span></td>
             </tr>
           </tfoot>
         </table>
@@ -1184,7 +1716,7 @@ function FinancialPnlReport({ year }: { year: number }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function FinancialCategoryReport() {
-  const { data, isLoading } = useGetReportFinancialCategoriesQuery({});
+  const { data, isLoading } = useGetReportFinancialCategoriesQuery({}, { refetchOnMountOrArgChange: 60 });
   const formatMoney = useFormatMoney();
   const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
@@ -1754,137 +2286,171 @@ function StudentLeftReport({ classId }: { classId?: string }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function StudentFeeStatusReport({ year, month, classId }: { year: number; month: string; classId?: string }) {
-  const { data, isLoading } = useGetReportStudentFeeStatusQuery({ year, month, ...(classId ? { classId } : {}) });
+  const { data, isLoading } = useGetFeePositionQuery({ year, month, detail: 'students', ...(classId ? { classId } : {}) }, { refetchOnMountOrArgChange: 60 });
   const formatMoney = useFormatMoney();
   const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
   if (!data) return <EmptyState />;
-  const { summary, data: students, chartData } = data;
-  const totalCollected = students.reduce((s: number, st: any) => s + (st.paidAmount || 0), 0);
-  const totalPending = students.reduce((s: number, st: any) => s + (st.pending || 0), 0);
-  const pdfHeaders = ['Student', 'Class', 'Net Amount', 'Paid', 'Pending', 'Status'];
-  const pdfRows = students.map((s: any) => [s.name, s.className, formatMoney(s.netAmount), formatMoney(s.paidAmount), s.pending > 0 ? formatMoney(s.pending) : '-', s.status]);
+
+  const summary = data.summary;
+  const students: any[] = data.students || [];
+  // One column per fee billed this month, so Paper Fund etc. never hide inside a total.
+  const feeColumns: string[] = (data.heads || []).filter((h: any) => h.currentFee > 0).map((h: any) => h.name);
+  const headAmount = (s: any, name: string) => s.heads.find((h: any) => h.name === name)?.currentFee || 0;
+  const counts = {
+    paid: students.filter((s) => s.status === 'paid').length,
+    partial: students.filter((s) => s.status === 'partial').length,
+    unpaid: students.filter((s) => s.status === 'unpaid').length,
+  };
+  const chartData = [
+    { name: 'Cleared', value: counts.paid, color: '#10b981' },
+    { name: 'Partial', value: counts.partial, color: '#f59e0b' },
+    { name: 'Unpaid', value: counts.unpaid, color: '#ef4444' },
+  ];
+  const money = (v: number) => (v > 0 ? formatMoney(v) : '-');
+
+  const pdfHeaders = ['Student', 'Class', 'Previous Pending', ...feeColumns, 'Total Expected', 'Received', 'Total Pending', 'Status'];
+  const pdfRows = students.map((s) => [
+    s.previousMonths.length ? `${s.name} (Prev: ${s.previousMonths.join(', ')})` : s.name,
+    s.className,
+    money(s.previousDue),
+    ...feeColumns.map((f) => money(headAmount(s, f))),
+    money(s.totalExpected),
+    money(s.totalReceived),
+    money(s.totalPending),
+    s.status === 'paid' ? 'Cleared' : s.status === 'partial' ? 'Partial' : 'Unpaid',
+  ]);
+  const totalFor = (f: string) => data.heads.find((h: any) => h.name === f)?.currentFee || 0;
+  const pdfFooter = ['Total', '', formatMoney(summary.previousDue), ...feeColumns.map((f) => formatMoney(totalFor(f))), formatMoney(summary.totalExpected), formatMoney(summary.totalReceived), formatMoney(summary.totalPending), `${summary.collectionRate}%`];
   const handlePrint = () => printReport(org, {
     title: 'Student Fee Status Report',
     periodLabel: `${month} ${year}`,
     generatedByName,
-    sections: [{
-      type: 'summary', items: [
-        { label: 'Students', value: String(summary.totalStudents) },
-        { label: 'Paid', value: String(summary.paid) },
-        { label: 'Unpaid', value: String(summary.unpaid) },
-        { label: 'Expected', value: formatMoney(summary.totalExpected || 0) },
-        { label: 'Collection Rate', value: `${summary.collectionRate}%` },
-      ],
-    }, {
-      type: 'table', heading: 'Students', headers: pdfHeaders, rows: pdfRows,
-      footer: ['Total', '', formatMoney(summary.totalExpected || 0), formatMoney(totalCollected), formatMoney(totalPending), ''],
-    }],
+    sections: [
+      ...feePositionPrintSections(data, month, formatMoney),
+      { type: 'table', heading: 'Students', headers: pdfHeaders, rows: pdfRows, footer: pdfFooter },
+    ],
   });
+  const excelRows = students.map((s) => ({
+    Student: s.name,
+    'Admission #': s.admissionNumber,
+    'Roll #': s.rollNumber,
+    Father: s.fatherName,
+    Phone: s.phone,
+    Class: s.className,
+    Section: s.section,
+    'Previous Pending': s.previousDue,
+    'Previous Months Unpaid': s.previousMonths.join(', '),
+    ...Object.fromEntries(feeColumns.map((f) => [f, headAmount(s, f)])),
+    [`${month} Fee`]: s.currentFee,
+    'Total Expected': s.totalExpected,
+    'Received (Previous)': s.previousReceived,
+    [`Received (${month})`]: s.currentReceived,
+    'Total Received': s.totalReceived,
+    'Previous Still Pending': s.previousPending,
+    [`${month} Pending`]: s.currentPending,
+    'Total Pending': s.totalPending,
+    Status: s.status,
+  }));
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-end">
-        <ExportButtons data={students} sheetName="Fee Status" fileName={`Fee_Status_${month}_${year}`}
+        <ExportButtons data={excelRows} sheetName="Fee Status" fileName={`Fee_Status_${month}_${year}`}
           pdfTitle={`Student Fee Status - ${month} ${year}`}
           headers={pdfHeaders}
           rows={pdfRows}
+          landscape
           onPrint={handlePrint} />
       </div>
-      {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="rounded-xl border-2 border-blue-100 bg-blue-50 p-3 text-center">
-          <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide mb-1">Students</p>
-          <p className="text-xl font-bold text-blue-700">{summary.totalStudents}</p>
-        </div>
-        <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-3 text-center">
-          <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1">Paid</p>
-          <p className="text-xl font-bold text-emerald-700">{summary.paid}</p>
-        </div>
-        <div className="rounded-xl border-2 border-red-100 bg-red-50 p-3 text-center">
-          <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1">Unpaid</p>
-          <p className="text-xl font-bold text-red-700">{summary.unpaid}</p>
-        </div>
-        <div className="rounded-xl border-2 border-purple-100 bg-purple-50 p-3 text-center">
-          <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-1">Expected</p>
-          <p className="text-lg font-bold text-purple-700">{formatMoney((summary.totalExpected || 0))}</p>
-        </div>
-        <div className="rounded-xl border-2 border-teal-100 bg-teal-50 p-3 text-center">
-          <p className="text-[10px] font-semibold text-teal-500 uppercase tracking-wide mb-1">Collection Rate</p>
-          <p className={`text-xl font-bold ${summary.collectionRate >= 80 ? 'text-emerald-600' : summary.collectionRate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{summary.collectionRate}%</p>
-        </div>
-      </div>
 
-      {/* Collected vs Pending bar */}
-      {(totalCollected + totalPending) > 0 && (
-        <div className="rounded-lg border p-4">
-          <div className="flex justify-between text-xs mb-2">
-            <span className="font-semibold text-emerald-600">Collected: {formatMoney(totalCollected)}</span>
-            <span className="font-semibold text-red-600">Pending: {formatMoney(totalPending)}</span>
-          </div>
-          <div className="h-3 bg-red-100 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.round(totalCollected / (totalCollected + totalPending) * 100)}%` }} />
-          </div>
-        </div>
-      )}
+      <FeePositionCards summary={summary} month={month} />
 
-      {/* Chart + Table */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="md:col-span-1">
-          <CardHeader className="pb-0 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground">Status Distribution</CardTitle></CardHeader>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="min-w-0 lg:col-span-2">
+          <FeeHeadsTable heads={data.heads} summary={summary} month={month} />
+        </div>
+        <Card className="min-w-0">
+          <CardHeader className="pb-0 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground">Students ({students.length})</CardTitle></CardHeader>
           <CardContent className="pt-2 pb-4">
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={160}>
               <RePieChart>
-                <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} label={({ name, value }: any) => `${name}: ${value}`} fontSize={10}>
-                  {chartData.map((e: any, i: number) => <Cell key={i} fill={e.color || PIE_COLORS[i]} />)}
+                <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={55} label={({ name, value }: any) => `${name}: ${value}`} fontSize={10}>
+                  {chartData.map((e, i) => <Cell key={i} fill={e.color} />)}
                 </Pie>
                 <Tooltip />
               </RePieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
-        <div className="md:col-span-3">
-          <div className="rounded-lg border overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-muted/50 border-b">
-                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">#</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Student</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Class</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-purple-700">Net Amount</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-emerald-700">Paid</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-red-600">Pending</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-[11px]">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {students.map((s: any, i: number) => (
-                  <tr key={s.admissionNumber || i} className="border-b hover:bg-muted/20">
-                    <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
-                    <td className="px-3 py-1.5">
-                      <p className="font-semibold">{s.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{s.admissionNumber}</p>
-                    </td>
-                    <td className="px-3 py-1.5 text-muted-foreground">{s.className}</td>
-                    <td className="px-3 py-1.5 text-right text-purple-600">{formatMoney(s.netAmount)}</td>
-                    <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">{formatMoney(s.paidAmount)}</td>
-                    <td className="px-3 py-1.5 text-right text-red-500">{s.pending > 0 ? formatMoney(s.pending) : '-'}</td>
-                    <td className="px-3 py-1.5 text-center"><StatusBadge status={s.status} /></td>
-                  </tr>
+      </div>
+
+      <div className="rounded-lg border overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 640 + feeColumns.length * 90 }}>
+          <thead>
+            <tr className="bg-muted/50 text-[11px]">
+              <th colSpan={3} />
+              <th className="px-3 pt-2 text-right font-semibold text-amber-700 dark:text-amber-400 align-bottom" rowSpan={2}>Previous Pending</th>
+              {feeColumns.length > 0 && (
+                <th colSpan={feeColumns.length} className="border-x border-b px-3 py-1 text-center font-semibold text-blue-700 dark:text-blue-400">{month} Fee</th>
+              )}
+              <th className="px-3 pt-2 text-right font-semibold text-purple-700 dark:text-purple-400 align-bottom" rowSpan={2}>Total Expected</th>
+              <th className="px-3 pt-2 text-right font-semibold text-emerald-700 dark:text-emerald-400 align-bottom" rowSpan={2}>Received</th>
+              <th className="px-3 pt-2 text-right font-semibold text-red-600 dark:text-red-400 align-bottom" rowSpan={2}>Total Pending</th>
+              <th className="px-3 pt-2 text-center font-semibold align-bottom" rowSpan={2}>Status</th>
+            </tr>
+            <tr className="bg-muted/50 border-b text-[11px]">
+              <th className="text-left px-3 py-2 font-semibold">#</th>
+              <th className="text-left px-3 py-2 font-semibold">Student</th>
+              <th className="text-left px-3 py-2 font-semibold">Class</th>
+              {feeColumns.map((f, i) => (
+                <th key={f} className={`px-3 py-2 text-right font-semibold text-blue-700 dark:text-blue-400 ${i === 0 ? 'border-l' : ''} ${i === feeColumns.length - 1 ? 'border-r' : ''}`}>{f}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {students.length === 0 ? (
+              <tr><td colSpan={8 + feeColumns.length} className="py-8 text-center text-muted-foreground">No fees for this month or earlier</td></tr>
+            ) : students.map((s, i) => (
+              <tr key={s.studentId} className="border-b hover:bg-muted/20">
+                <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
+                <td className="px-3 py-1.5">
+                  <p className="font-semibold">{s.name}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.admissionNumber}</p>
+                </td>
+                <td className="px-3 py-1.5 text-muted-foreground">{s.className}{s.section ? ` · ${s.section}` : ''}</td>
+                <td className="px-3 py-1.5 text-right text-amber-700 dark:text-amber-400">
+                  {money(s.previousDue)}
+                  {s.previousMonths.length > 0 && (
+                    <p className="text-[10px] font-normal text-muted-foreground" title={s.previousMonths.join(', ')}>
+                      {s.previousMonths.length <= 3 ? s.previousMonths.map((label: string) => label.slice(0, 3)).join(', ') : `${s.previousMonths.length} months`}
+                    </p>
+                  )}
+                </td>
+                {feeColumns.map((f) => (
+                  <td key={f} className="px-3 py-1.5 text-right text-blue-700 dark:text-blue-400">{money(headAmount(s, f))}</td>
                 ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-muted font-bold text-[11px]">
-                  <td colSpan={3} className="px-3 py-2">Total</td>
-                  <td className="px-3 py-2 text-right text-purple-700">{formatMoney((summary.totalExpected || 0))}</td>
-                  <td className="px-3 py-2 text-right text-emerald-700">{formatMoney(totalCollected)}</td>
-                  <td className="px-3 py-2 text-right text-red-600">{formatMoney(totalPending)}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
+                <td className="px-3 py-1.5 text-right font-medium text-purple-700 dark:text-purple-400">{money(s.totalExpected)}</td>
+                <td className="px-3 py-1.5 text-right font-semibold text-emerald-600 dark:text-emerald-400">{money(s.totalReceived)}</td>
+                <td className="px-3 py-1.5 text-right font-semibold text-red-600 dark:text-red-400">{money(s.totalPending)}</td>
+                <td className="px-3 py-1.5 text-center"><StatusBadge status={s.status} /></td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-muted font-bold text-[11px]">
+              <td colSpan={3} className="px-3 py-2">Total</td>
+              <td className="px-3 py-2 text-right text-amber-700 dark:text-amber-400">{formatMoney(summary.previousDue)}</td>
+              {feeColumns.map((f) => (
+                <td key={f} className="px-3 py-2 text-right text-blue-700 dark:text-blue-400">{formatMoney(totalFor(f))}</td>
+              ))}
+              <td className="px-3 py-2 text-right text-purple-700 dark:text-purple-400">{formatMoney(summary.totalExpected)}</td>
+              <td className="px-3 py-2 text-right text-emerald-700 dark:text-emerald-400">{formatMoney(summary.totalReceived)}</td>
+              <td className="px-3 py-2 text-right text-red-600 dark:text-red-400">{formatMoney(summary.totalPending)}</td>
+              <td className="px-3 py-2 text-center">{summary.collectionRate}%</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );
@@ -2081,7 +2647,7 @@ function TeacherSalaryReport({ year }: { year: number }) {
 
       {/* Chart — paid (green) vs pending (amber) bars */}
       <Card>
-        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+        <CardHeader className="pb-2 pt-4 px-4 flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Briefcase className="h-4 w-4 text-indigo-500" /> Monthly Salary — Paid vs Pending — {year}
           </CardTitle>
@@ -2247,7 +2813,7 @@ function TeacherWorkloadReport() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function VoucherReport({ year, month, status, classId }: { year: number; month: string; status?: string; classId?: string }) {
-  const { data, isLoading } = useGetReportVouchersQuery({ year, month, ...(status ? { status } : {}), ...(classId ? { classId } : {}) });
+  const { data, isLoading } = useGetReportVouchersQuery({ year, month, ...(status ? { status } : {}), ...(classId ? { classId } : {}) }, { refetchOnMountOrArgChange: 60 });
   const formatMoney = useFormatMoney();
   const { org, generatedByName } = useOrgAndUser();
   if (isLoading) return <Loading />;
@@ -2256,8 +2822,8 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
   const summary = data.summary;
   const chartData: any[] = data.chartData || [];
   const collRate = summary.totalAmount > 0 ? Math.round((summary.totalPaid / summary.totalAmount) * 100) : 0;
-  const pdfHeaders = ['V#', 'Student', 'Class', 'Amount', 'Paid', 'Pending', 'Status'];
-  const pdfRows = vouchers.map((v: any) => [v.voucherNumber || '', v.name, v.className, v.netAmount?.toLocaleString(), v.paidAmount?.toLocaleString(), v.pending?.toLocaleString(), v.status]);
+  const pdfHeaders = ['V#', 'Student', 'Class', 'Fee Type', 'Amount', 'Paid', 'Pending', 'Previous Pending', 'Student Total Pending', 'Status'];
+  const pdfRows = vouchers.map((v: any) => [v.voucherNumber || '', v.name, v.className, v.feeType || '', v.netAmount?.toLocaleString(), v.paidAmount?.toLocaleString(), v.pending?.toLocaleString(), v.previousPending ? v.previousPending.toLocaleString() : '-', v.studentTotalPending ? v.studentTotalPending.toLocaleString() : '-', v.status]);
   const handlePrint = () => printReport(org, {
     title: `Voucher Report - ${month} ${year}`,
     periodLabel: `${month} ${year}${status ? ` · ${status}` : ''}`,
@@ -2267,33 +2833,43 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
         { label: 'Total Vouchers', value: String(summary.totalVouchers) },
         { label: 'Total Amount', value: formatMoney(summary.totalAmount || 0) },
         { label: 'Total Paid', value: formatMoney(summary.totalPaid || 0) },
-        { label: 'Total Pending', value: formatMoney(summary.totalPending || 0) },
+        { label: `${month} Pending`, value: formatMoney(summary.totalPending || 0) },
+        { label: 'Previous Pending', value: formatMoney(summary.previousPending || 0) },
+        { label: 'Total Pending', value: formatMoney(summary.totalPendingWithPrevious || 0) },
       ],
     }, {
       type: 'table', heading: 'Vouchers', headers: pdfHeaders, rows: pdfRows,
-      footer: [`Total (${vouchers.length})`, '', '', formatMoney(summary.totalAmount || 0), formatMoney(summary.totalPaid || 0), formatMoney(summary.totalPending || 0), `${collRate}%`],
+      footer: [`Total (${vouchers.length})`, '', '', '', formatMoney(summary.totalAmount || 0), formatMoney(summary.totalPaid || 0), formatMoney(summary.totalPending || 0), formatMoney(summary.previousPending || 0), formatMoney(summary.totalPendingWithPrevious || 0), `${collRate}%`],
     }],
   });
 
   return (
     <div className="space-y-5">
       {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="rounded-xl border-2 border-blue-100 bg-blue-50 p-4 text-center">
-          <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide mb-1">Total Vouchers</p>
-          <p className="text-2xl font-bold text-blue-700">{summary.totalVouchers}</p>
+          <p className="text-[10px] font-semibold text-blue-500 dark:text-blue-400 uppercase tracking-wide mb-1">Total Vouchers</p>
+          <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{summary.totalVouchers}</p>
         </div>
         <div className="rounded-xl border-2 border-purple-100 bg-purple-50 p-4 text-center">
-          <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide mb-1">Total Amount</p>
-          <p className="text-xl font-bold text-purple-700">{formatMoney((summary.totalAmount || 0))}</p>
+          <p className="text-[10px] font-semibold text-purple-500 dark:text-purple-400 uppercase tracking-wide mb-1">Total Amount</p>
+          <p className="text-xl font-bold text-purple-700 dark:text-purple-400">{formatMoney((summary.totalAmount || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 p-4 text-center">
-          <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wide mb-1">Total Paid</p>
-          <p className="text-xl font-bold text-emerald-700">{formatMoney((summary.totalPaid || 0))}</p>
+          <p className="text-[10px] font-semibold text-emerald-500 dark:text-emerald-400 uppercase tracking-wide mb-1">Total Paid</p>
+          <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{formatMoney((summary.totalPaid || 0))}</p>
         </div>
         <div className="rounded-xl border-2 border-red-100 bg-red-50 p-4 text-center">
+          <p className="text-[10px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wide mb-1">{month} Pending</p>
+          <p className="text-xl font-bold text-red-700 dark:text-red-400">{formatMoney((summary.totalPending || 0))}</p>
+        </div>
+        <div className="rounded-xl border-2 border-amber-100 bg-amber-50 p-4 text-center">
+          <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1">Previous Pending</p>
+          <p className="text-xl font-bold text-amber-700 dark:text-amber-400">{formatMoney((summary.previousPending || 0))}</p>
+        </div>
+        <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-center">
           <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-1">Total Pending</p>
-          <p className="text-xl font-bold text-red-700">{formatMoney((summary.totalPending || 0))}</p>
+          <p className="text-xl font-bold text-red-700">{formatMoney((summary.totalPendingWithPrevious || 0))}</p>
         </div>
       </div>
 
@@ -2301,12 +2877,12 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="md:col-span-2">
           <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2"><BookOpen className="h-4 w-4 text-blue-500" /> {month} {year} — Collection Summary</CardTitle>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2"><BookOpen className="h-4 w-4 text-blue-500 dark:text-blue-400" /> {month} {year} — Collection Summary</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Collection Rate</span>
-              <span className={`font-bold text-lg ${collRate >= 80 ? 'text-emerald-600' : collRate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{collRate}%</span>
+              <span className={`font-bold text-lg ${collRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : collRate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{collRate}%</span>
             </div>
             <div className="h-3 bg-red-100 rounded-full overflow-hidden">
               <div className={`h-full rounded-full transition-all ${collRate >= 80 ? 'bg-emerald-500' : collRate >= 50 ? 'bg-amber-400' : 'bg-red-500'}`} style={{ width: `${collRate}%` }} />
@@ -2343,7 +2919,7 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
       </div>
 
       {/* Voucher Table */}
-      <div className="rounded-lg border overflow-hidden">
+      <div className="rounded-lg border overflow-x-auto">
         <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b">
           <span className="text-sm font-semibold">{vouchers.length} Vouchers</span>
           <ExportButtons data={vouchers} sheetName="Vouchers" fileName={`Vouchers_${month}_${year}`}
@@ -2359,15 +2935,18 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
               <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Voucher#</th>
               <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Student</th>
               <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Class</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-purple-700">Amount</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-emerald-700">Paid</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-red-600">Pending</th>
+              <th className="text-left px-3 py-2.5 font-semibold text-[11px]">Fee Type</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-purple-700 dark:text-purple-400">Amount</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-emerald-700 dark:text-emerald-400">Paid</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-red-600 dark:text-red-400">Pending</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-amber-700 dark:text-amber-400">Previous Pending</th>
+              <th className="text-right px-3 py-2.5 font-semibold text-[11px] text-red-700 dark:text-red-400">Student Total Pending</th>
               <th className="text-center px-3 py-2.5 font-semibold text-[11px]">Status</th>
             </tr>
           </thead>
           <tbody>
             {vouchers.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No vouchers found</td></tr>
+              <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No vouchers found</td></tr>
             ) : vouchers.map((v: any, i: number) => (
               <tr key={v.voucherNumber || i} className="border-b hover:bg-muted/20">
                 <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
@@ -2377,19 +2956,24 @@ function VoucherReport({ year, month, status, classId }: { year: number; month: 
                   {v.fatherName && <p className="text-[10px] text-muted-foreground">{v.fatherName}</p>}
                 </td>
                 <td className="px-3 py-1.5 text-muted-foreground">{v.className || '-'}</td>
-                <td className="px-3 py-1.5 text-right text-purple-600">{formatMoney(v.netAmount)}</td>
-                <td className="px-3 py-1.5 text-right text-emerald-600 font-semibold">{formatMoney(v.paidAmount)}</td>
-                <td className="px-3 py-1.5 text-right text-red-500">{v.pending > 0 ? formatMoney(v.pending) : '-'}</td>
+                <td className="px-3 py-1.5 text-muted-foreground">{v.feeType || '-'}</td>
+                <td className="px-3 py-1.5 text-right text-purple-600 dark:text-purple-400">{formatMoney(v.netAmount)}</td>
+                <td className="px-3 py-1.5 text-right text-emerald-600 dark:text-emerald-400 font-semibold">{formatMoney(v.paidAmount)}</td>
+                <td className="px-3 py-1.5 text-right text-red-500 dark:text-red-400">{v.pending > 0 ? formatMoney(v.pending) : '-'}</td>
+                <td className="px-3 py-1.5 text-right text-amber-700 dark:text-amber-400" title={v.previousMonths?.join(', ')}>{v.previousPending > 0 ? formatMoney(v.previousPending) : '-'}</td>
+                <td className="px-3 py-1.5 text-right font-semibold text-red-600 dark:text-red-400">{v.studentTotalPending > 0 ? formatMoney(v.studentTotalPending) : '-'}</td>
                 <td className="px-3 py-1.5 text-center"><StatusBadge status={v.status} /></td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="bg-muted font-bold text-[11px]">
-              <td colSpan={4} className="px-3 py-2.5">Total ({vouchers.length} vouchers)</td>
-              <td className="px-3 py-2.5 text-right text-purple-700">{formatMoney((summary.totalAmount || 0))}</td>
-              <td className="px-3 py-2.5 text-right text-emerald-700">{formatMoney((summary.totalPaid || 0))}</td>
-              <td className="px-3 py-2.5 text-right text-red-600">{formatMoney((summary.totalPending || 0))}</td>
+              <td colSpan={5} className="px-3 py-2.5">Total ({vouchers.length} vouchers)</td>
+              <td className="px-3 py-2.5 text-right text-purple-700 dark:text-purple-400">{formatMoney((summary.totalAmount || 0))}</td>
+              <td className="px-3 py-2.5 text-right text-emerald-700 dark:text-emerald-400">{formatMoney((summary.totalPaid || 0))}</td>
+              <td className="px-3 py-2.5 text-right text-red-600 dark:text-red-400">{formatMoney((summary.totalPending || 0))}</td>
+              <td className="px-3 py-2.5 text-right text-amber-700 dark:text-amber-400">{formatMoney((summary.previousPending || 0))}</td>
+              <td className="px-3 py-2.5 text-right text-red-700 dark:text-red-400">{formatMoney((summary.totalPendingWithPrevious || 0))}</td>
               <td className="px-3 py-2.5 text-center">{collRate}%</td>
             </tr>
           </tfoot>
@@ -2480,7 +3064,7 @@ function AnalyticsTab({ year }: { year: number }) {
 
       {/* Income vs Expense Bar Chart */}
       <Card>
-        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+        <CardHeader className="pb-2 pt-4 px-4 flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <BarChart2 className="h-4 w-4 text-emerald-500" /> Monthly Income vs Expense — {year}
           </CardTitle>
@@ -2507,7 +3091,7 @@ function AnalyticsTab({ year }: { year: number }) {
 
       {/* Fee Collection Trend */}
       <Card>
-        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+        <CardHeader className="pb-2 pt-4 px-4 flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Activity className="h-4 w-4 text-purple-500" /> Fee Collection Trend — {year}
           </CardTitle>
@@ -2534,7 +3118,7 @@ function AnalyticsTab({ year }: { year: number }) {
 
       {/* Expense Breakdown */}
       <Card>
-        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+        <CardHeader className="pb-2 pt-4 px-4 flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <PieChart className="h-4 w-4 text-red-500" /> Expense Breakdown — {year}
           </CardTitle>
@@ -2670,8 +3254,10 @@ export function EmptyState({ text }: { text?: string }) {
 // ─── Print Fee Collection Report ──────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
 
-function printFeeReport(reportData: any[], schoolName: string, year: number) {
+function printFeeReport(reportData: any[], schoolName: string, year: number, month: string, positionRows: any[]) {
   if (!reportData.length) return;
+  const positionOf = (studentId: string) => positionRows.find((row) => row.studentId === studentId);
+  const shortMonth = month.slice(0, 3);
 
   const classPages = reportData.map((cls: any) => {
     const extraFunds = getClassExtraFunds(cls);
@@ -2688,11 +3274,19 @@ function printFeeReport(reportData: any[], schoolName: string, year: number) {
       return paid === 0 ? '<td class="mc"></td>' : `<td class="mc paid">${paid.toLocaleString()}</td>`;
     };
 
+    const amount = (v: number) => (v > 0 ? v.toLocaleString() : '-');
+    const pendingCells = (studentId: string) => {
+      const pos = positionOf(studentId);
+      return `<td class="tot">${amount(pos?.previousPending || 0)}</td><td class="tot">${amount(pos?.currentPending || 0)}</td><td class="tot unpaid">${amount(pos?.totalPending || 0)}</td>`;
+    };
+    const classPending = (field: 'previousPending' | 'currentPending' | 'totalPending') =>
+      cls.students.reduce((sum: number, st: any) => sum + (positionOf(st.studentId)?.[field] || 0), 0);
+
     const rows = cls.students.map((s: any, idx: number) => {
       const monthCells = monthCell(s.months[MONTHS[0]])
         + extraFunds.map((f) => fundCell(s, f)).join('')
         + MONTHS.slice(1).map((m) => monthCell(s.months[m])).join('');
-      return `<tr><td class="sno">${idx + 1}</td><td class="name">${s.name}</td><td>${s.rollNumber || '-'}</td><td>${s.fatherName || '-'}</td><td>${s.phone || '-'}</td>${monthCells}<td class="tot paid">${s.totalPaid.toLocaleString()}</td><td class="tot unpaid">${s.totalPending > 0 ? s.totalPending.toLocaleString() : '-'}</td></tr>`;
+      return `<tr><td class="sno">${idx + 1}</td><td class="name">${s.name}</td><td>${s.rollNumber || '-'}</td><td>${s.fatherName || '-'}</td><td>${s.phone || '-'}</td>${monthCells}<td class="tot paid">${s.totalPaid.toLocaleString()}</td>${pendingCells(s.studentId)}</tr>`;
     }).join('');
 
     const monthFooterCell = (m: string) => {
@@ -2715,9 +3309,9 @@ function printFeeReport(reportData: any[], schoolName: string, year: number) {
     // repeated by the browser at the bottom of every printed page a table
     // spans across, which would show the class total on every sheet instead
     // of once at the end of that class's table.
-    const totalRow = `<tr class="frow"><td colspan="5" class="ftlabel">Total</td>${footerCells}<td class="ftot paid">${cls.classTotalPaid.toLocaleString()}</td><td class="ftot unpaid">${cls.classTotalPending.toLocaleString()}</td></tr>`;
+    const totalRow = `<tr class="frow"><td colspan="5" class="ftlabel">Total</td>${footerCells}<td class="ftot paid">${cls.classTotalPaid.toLocaleString()}</td><td class="ftot paid" style="color:#000">${classPending('previousPending').toLocaleString()}</td><td class="ftot paid" style="color:#000">${classPending('currentPending').toLocaleString()}</td><td class="ftot unpaid">${classPending('totalPending').toLocaleString()}</td></tr>`;
 
-    return `<div class="page"><div class="header"><h1>${schoolName}</h1><h2>Fee Collection Report - ${year}</h2><h3>Class: ${cls.className} | Students: ${cls.totalStudents}</h3></div><table><thead><tr><th class="sno">#</th><th class="name">Student</th><th>Roll#</th><th>Father</th><th>Phone</th>${monthHeaders}<th class="toth">Paid</th><th class="toth">Pending</th></tr></thead><tbody>${rows}${totalRow}</tbody></table><div class="footer"><span>Printed: ${formatAppDate(new Date())}</span><span>${schoolName}</span></div></div>`;
+    return `<div class="page"><div class="header"><h1>${schoolName}</h1><h2>Fee Collection Report - ${year}</h2><h3>Class: ${cls.className} | Students: ${cls.totalStudents}</h3></div><table><thead><tr><th class="sno">#</th><th class="name">Student</th><th>Roll#</th><th>Father</th><th>Phone</th>${monthHeaders}<th class="toth">Paid</th><th class="toth">Previous Pending</th><th class="toth">${shortMonth} Pending</th><th class="toth">Total Pending</th></tr></thead><tbody>${rows}${totalRow}</tbody></table><div class="footer"><span>Printed: ${formatAppDate(new Date())}</span><span>${schoolName}</span></div></div>`;
   }).join('');
 
   openReportPrintWindow(`<!DOCTYPE html><html><head><title>Fee Report</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:8px;color:#000;background:#fff}.page{padding:8mm 6mm;page-break-after:always}.page:last-child{page-break-after:auto}.header{text-align:center;margin-bottom:6px}.header h1{font-size:16px;font-weight:900;text-transform:uppercase}.header h2{font-size:11px;font-weight:700}.header h3{font-size:10px;color:#444}table{width:100%;border-collapse:collapse;margin-top:4px}th,td{border:1px solid #999;padding:3px 4px}thead tr{background:#e8e8e8}th{font-size:7.5px;font-weight:700;text-transform:uppercase}th.sno{width:20px;text-align:center}th.name{min-width:100px}th.mh{text-align:center;width:48px}th.toth{text-align:right;width:52px}td.sno{text-align:center;color:#555;font-size:7px}td.name{font-weight:600;white-space:nowrap}td.mc{text-align:center;font-size:7.5px}td.mc.paid{color:#047857;font-weight:700}td.mc.partial{color:#2563eb;font-weight:600}td.mc.unpaid{color:#dc2626;font-weight:700}td.tot{text-align:right;font-weight:700;font-size:8px}td.tot.paid{color:#047857}td.tot.unpaid{color:#dc2626}td.ftlabel{font-weight:800;font-size:8px}td.ftot{text-align:center;font-weight:800;font-size:8px}td.ftot.paid{color:#047857;text-align:right}td.ftot.unpaid{color:#dc2626;text-align:right}tbody tr:nth-child(even){background:#fafafa}tbody tr.frow{background:#f3f3f3;break-inside:avoid}.footer{display:flex;justify-content:space-between;margin-top:6px;font-size:7px;color:#888;border-top:1px solid #ccc;padding-top:3px}@media print{@page{size:A4 landscape;margin:5mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${classPages}</body></html>`);

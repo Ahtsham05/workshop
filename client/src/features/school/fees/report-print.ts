@@ -16,11 +16,21 @@ import { formatAppDateTime } from '@/lib/date-format'
 
 export type PrintSection =
   | { type: 'summary'; heading?: string; items: { label: string; value: string }[] }
-  | { type: 'table'; heading: string; headers: string[]; rows: (string | number)[][]; footer?: (string | number)[] };
+  | {
+      type: 'table';
+      heading: string;
+      /** One line under the heading, explaining how to read the table. */
+      note?: string;
+      headers: string[];
+      rows: (string | number)[][];
+      footer?: (string | number)[];
+      /** Shades the last column: a statement's running balance. */
+      balanceColumn?: boolean;
+    };
 
 export function buildCollectionReportPrintHTML(
   org: any,
-  opts: { title: string; periodLabel: string; generatedByName: string; sections: PrintSection[] },
+  opts: { title: string; periodLabel: string; generatedByName: string; sections: PrintSection[]; landscape?: boolean },
 ): string {
   const logoHtml = org?.logo?.url ? `<img src="${org.logo.url}" class="logo" />` : '';
   const addressLine = [org?.address, org?.phone].filter(Boolean).join(' · ');
@@ -33,7 +43,8 @@ export function buildCollectionReportPrintHTML(
     const headRow = `<tr>${s.headers.map((h) => `<th>${h}</th>`).join('')}</tr>`;
     const bodyRows = s.rows.map((r) => `<tr>${r.map((c, i) => `<td class="${i === 0 ? '' : 'r'}">${c}</td>`).join('')}</tr>`).join('');
     const footRow = s.footer ? `<tfoot><tr>${s.footer.map((c) => `<td class="r">${c}</td>`).join('')}</tr></tfoot>` : '';
-    return `<h4 class="section">${s.heading}</h4><table><thead>${headRow}</thead><tbody>${bodyRows}</tbody>${footRow}</table>`;
+    const note = s.note ? `<p class="note">${s.note}</p>` : '';
+    return `<h4 class="section">${s.heading}</h4>${note}<table${s.balanceColumn ? ' class="statement"' : ''}><thead>${headRow}</thead><tbody>${bodyRows}</tbody>${footRow}</table>`;
   }).join('');
 
   return `<!DOCTYPE html><html><head><title>${opts.title}</title><style>
@@ -50,19 +61,25 @@ body{font-family:Arial,sans-serif;font-size:9px;color:#111;background:#fff;paddi
 .box .l{font-size:7.5px;text-transform:uppercase;color:#666;font-weight:700}
 .box .v{font-size:13px;font-weight:800;margin-top:2px}
 h4.section{font-size:11px;text-transform:uppercase;margin:14px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}
+h4.section,.note{break-after:avoid;page-break-after:avoid}
+tr{break-inside:avoid;page-break-inside:avoid}
 table{width:100%;border-collapse:collapse;margin-top:2px}
 th,td{border:1px solid #ccc;padding:4px 5px}
 thead{display:table-header-group}
 th{background:#f0f0f0;font-size:8px;text-transform:uppercase;font-weight:700;text-align:left}
+th:not(:first-child){text-align:right}
 td{font-size:8.5px}
 td.r{text-align:right;font-weight:600}
 tbody tr:nth-child(even){background:#fafafa}
+tfoot{display:table-row-group}
 tfoot td{font-weight:800;background:#f0f0f0}
+.note{font-size:8px;color:#555;margin:0 0 3px}
+table.statement td:last-child,table.statement th:last-child{background:#eef2f7;font-weight:800;white-space:nowrap}
 .sigs{display:flex;justify-content:space-between;margin-top:26px}
 .sig-box{width:180px;text-align:center;font-size:8px;color:#444}
 .sig-line{border-top:1px solid #444;margin-bottom:3px;height:26px}
 .footer{display:flex;justify-content:space-between;margin-top:14px;font-size:7.5px;color:#888;border-top:1px solid #ccc;padding-top:4px}
-@media print{@page{size:A4 portrait;margin:8mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+@media print{@page{size:A4 ${opts.landscape ? 'landscape' : 'portrait'};margin:8mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
 <div class="header">
   ${logoHtml}
@@ -112,6 +129,6 @@ export function useOrgAndUser() {
 }
 
 /** One-liner used by every Reports Center tab's Print button. */
-export function printReport(org: any, opts: { title: string; periodLabel: string; generatedByName: string; sections: PrintSection[] }) {
+export function printReport(org: any, opts: { title: string; periodLabel: string; generatedByName: string; sections: PrintSection[]; landscape?: boolean }) {
   openReportPrintWindow(buildCollectionReportPrintHTML(org, opts));
 }

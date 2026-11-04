@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { Student, Teacher, SchoolClass, SchoolAttendance, FeeVoucher, Exam, TeacherAttendance, SchoolTransaction, TeacherPayroll } = require('../models');
+const { MONTH_ORDER, PAYABLE_STATUSES, currentFeeMonth, periodIndex } = require('./feePosition.service');
 
 const getTenantFilter = (data = {}) => {
   const filter = {};
@@ -38,6 +39,8 @@ const getDashboardStats = async (scope = {}) => {
   const now = new Date();
   const currentMonth = now.getMonth() + 1; // 1-12
   const currentYear = now.getFullYear();
+  const feeMonth = currentFeeMonth(now);
+  const currentFeePeriod = periodIndex(feeMonth.month, feeMonth.year);
 
   // Consolidate same-collection queries using $facet to reduce DB round-trips
   // Student collection: 1 $facet (count + enrolledByClass + enrolledBySection) instead of 3 queries
@@ -146,9 +149,10 @@ const getDashboardStats = async (scope = {}) => {
         },
       },
     ]),
-    // --- FeeVoucher $facet: pending/outstanding count + total amount ---
-    // We consider all vouchers that still have an outstanding balance as "pending fees".
+    // --- FeeVoucher $facet: pending/outstanding count + total amount, split into earlier
+    // months, the current month and later months ---
     FeeVoucher.aggregate([
+      { $match: { ...atf, status: { $in: PAYABLE_STATUSES } } },
       // Compute effective net (mirrors FeeVoucher effectiveNet logic used elsewhere)
       {
         $addFields: {
@@ -159,27 +163,33 @@ const getDashboardStats = async (scope = {}) => {
               else: {
                 $subtract: [
                   {
-                    $reduce: {
-                      input: { $ifNull: ['$feeItems', []] },
-                      initialValue: 0,
-                      in: { $add: ['$$value', { $ifNull: ['$$this.amount', 0] }] },
-                    },
+                    $add: [
+                      {
+                        $reduce: {
+                          input: { $ifNull: ['$feeItems', []] },
+                          initialValue: 0,
+                          in: { $add: ['$$value', { $ifNull: ['$$this.amount', 0] }] },
+                        },
+                      },
+                      { $ifNull: ['$fine', 0] },
+                    ],
                   },
                   { $ifNull: ['$discount', 0] },
                 ],
               },
             },
           },
-          outstanding: {
-            $max: [0, { $subtract: ['$effectiveNet', { $ifNull: ['$paidAmount', 0] }] }],
-          },
+          periodIndex: { $add: [{ $multiply: ['$year', 12] }, { $indexOfArray: [MONTH_ORDER, '$month'] }] },
         },
       },
-      { $match: { ...atf, status: { $in: ['unpaid', 'partial', 'overdue'] }, outstanding: { $gt: 0 } } },
+      // A separate stage: $addFields can't see fields added earlier in its own stage.
+      { $addFields: { outstanding: { $max: [0, { $subtract: ['$effectiveNet', { $ifNull: ['$paidAmount', 0] }] }] } } },
+      { $match: { outstanding: { $gt: 0 } } },
       {
         $facet: {
           count: [{ $count: 'count' }],
           amount: [{ $group: { _id: null, total: { $sum: '$outstanding' } } }],
+          split: [{ $group: { _id: { $cmp: ['$periodIndex', currentFeePeriod] }, total: { $sum: '$outstanding' } } }],
         },
       },
     ]),
@@ -238,9 +248,10 @@ const getDashboardStats = async (scope = {}) => {
   const classWiseAttendanceAgg = attData.byClass;
   const sectionWiseAttendanceAgg = attData.bySection;
 
-  const feeData = feeFacet[0] || { count: [], amount: [] };
+  const feeData = feeFacet[0] || { count: [], amount: [], split: [] };
   const pendingFees = feeData.count[0]?.count || 0;
   const pendingFeesAmount = feeData.amount[0]?.total || 0;
+  const pendingFeesSplit = (cmp) => feeData.split.find((row) => row._id === cmp)?.total || 0;
 
   const attStats = todayAttendanceAgg[0] || { present: 0, absent: 0, late: 0, leave: 0, half_day: 0, marked: 0 };
   const todayCollection = todayCollectionAgg[0] || { total: 0, count: 0 };
@@ -297,6 +308,10 @@ const getDashboardStats = async (scope = {}) => {
     pendingFees: {
       count: pendingFees,
       amount: pendingFeesAmount,
+      previous: pendingFeesSplit(-1),
+      current: pendingFeesSplit(0),
+      later: pendingFeesSplit(1),
+      month: feeMonth.month,
     },
     upcomingExams,
     recentAdmissions,

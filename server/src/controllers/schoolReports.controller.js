@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
-const { schoolReportsService } = require('../services');
+const { schoolReportsService, feePositionService } = require('../services');
 
 /**
  * Unified report endpoint — dispatches by ?type= param
@@ -118,6 +118,69 @@ const getReceivableSummary = catchAsync(async (req, res) => {
   res.send(await schoolReportsService.getReceivableSummary(scope, year, month, classId));
 });
 
+const parseFeePositionFilters = (req) => {
+  const { classId, sectionId } = req.query;
+  return {
+    classId: classId && mongoose.Types.ObjectId.isValid(classId) ? classId : undefined,
+    sectionId: sectionId && mongoose.Types.ObjectId.isValid(sectionId) ? sectionId : undefined,
+  };
+};
+
+/** Previous + this month's fees for one fee month. ?detail=classes|students adds rows. */
+const getFeePosition = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  const fallback = feePositionService.currentFeeMonth();
+  const { month, year, detail } = req.query;
+  res.send(
+    await feePositionService.getFeePosition(scope, {
+      month: feePositionService.MONTH_ORDER.includes(month) ? month : fallback.month,
+      year: parseInt(year, 10) || fallback.year,
+      detail: ['classes', 'students'].includes(detail) ? detail : 'summary',
+      ...parseFeePositionFilters(req),
+    })
+  );
+});
+
+/** The same figures for each month of a year. */
+const getFeePositionYear = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  res.send(
+    await feePositionService.getFeePositionYear(scope, {
+      year: parseInt(req.query.year, 10) || feePositionService.currentFeeMonth().year,
+      ...parseFeePositionFilters(req),
+    })
+  );
+});
+
+/** Each fund: billed, the month money arrived, still owed. */
+const getFundReport = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  res.send(
+    await feePositionService.getFundReport(scope, {
+      year: parseInt(req.query.year, 10) || feePositionService.currentFeeMonth().year,
+      ...parseFeePositionFilters(req),
+    })
+  );
+});
+
+/** One fund in full: ?fund=Paper Fund. */
+const getFundDetail = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  res.send(
+    await feePositionService.getFundDetail(scope, {
+      year: parseInt(req.query.year, 10) || feePositionService.currentFeeMonth().year,
+      fund: String(req.query.fund || ''),
+      ...parseFeePositionFilters(req),
+    })
+  );
+});
+
+/** Every fund, year by year. */
+const getFundYears = catchAsync(async (req, res) => {
+  const scope = { organizationId: req.user.organizationId, branchId: req.branchId };
+  res.send(await feePositionService.getFundYears(scope, parseFeePositionFilters(req)));
+});
+
 module.exports = {
   getReport,
   getMonthlyIncomeExpense,
@@ -135,4 +198,9 @@ module.exports = {
   getAnalytics,
   getYearlyFeeReport,
   getReceivableSummary,
+  getFeePosition,
+  getFeePositionYear,
+  getFundReport,
+  getFundDetail,
+  getFundYears,
 };

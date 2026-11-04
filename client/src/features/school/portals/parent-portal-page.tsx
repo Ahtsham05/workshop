@@ -159,7 +159,13 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
   const attPct = report?.attendance?.percentage;
   const overallGrade = report?.overall?.grade;
   const overallPct = report?.overall?.percentage;
-  const pendingFees = (fees as any[]).filter((f: any) => f.status !== 'paid').reduce((s: number, f: any) => s + ((f.amount || 0) - (f.paidAmount || 0)), 0);
+  const pendingFees = (fees as any[]).filter((f: any) => f.status !== 'paid' && f.status !== 'cancelled').reduce((s: number, f: any) => s + Math.max(0, (f.amount || 0) - (f.paidAmount || 0)), 0);
+  // Earlier months' unpaid fees vs this month's, by each voucher's own fee month
+  const now = new Date();
+  const thisPeriod = now.getFullYear() * 12 + now.getMonth();
+  const feePeriod = (f: any) => (f.year || 0) * 12 + MONTH_NAMES.indexOf(f.month);
+  const previousFees = (fees as any[]).filter((f: any) => f.status !== 'paid' && f.status !== 'cancelled' && f.month && feePeriod(f) < thisPeriod).reduce((s: number, f: any) => s + Math.max(0, (f.amount || 0) - (f.paidAmount || 0)), 0);
+  const thisMonthFees = pendingFees - previousFees;
 
   // Payable (unpaid/partial/overdue) vouchers eligible for online payment
   const payableFees = (fees as any[]).filter((f: any) => f.status !== 'paid' && f.status !== 'cancelled');
@@ -308,7 +314,7 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
           icon={<CreditCard className="h-5 w-5 text-amber-500" />}
           label="Pending Fees"
           value={formatMoney(pendingFees)}
-          sub={pendingFees <= 0 ? 'All Clear' : 'Due'}
+          sub={pendingFees <= 0 ? 'All Clear' : `Previous ${formatMoney(previousFees)} · This month ${formatMoney(thisMonthFees)}`}
           ok={pendingFees <= 0}
         />
         <QuickStat
@@ -515,9 +521,19 @@ export default function ParentPortalPage({ variant = 'parent' }: { variant?: 'pa
                     );
                   })}
 
-                  <div className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-3 font-bold">
-                    <span>Total Outstanding</span>
-                    <span>{formatMoney(pendingFees)}</span>
+                  <div className="space-y-1 rounded-lg bg-muted/40 px-3 py-3">
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>Previous months</span>
+                      <span>{formatMoney(previousFees)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>This month</span>
+                      <span>{formatMoney(thisMonthFees)}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t pt-1 font-bold">
+                      <span>Total Outstanding</span>
+                      <span>{formatMoney(pendingFees)}</span>
+                    </div>
                   </div>
                 </div>
               )}

@@ -4,6 +4,7 @@ const { FeeVoucher, SchoolTransaction, Student, FeeCategory, StudentCreditLedger
 const ApiError = require('../utils/ApiError');
 const accountsSystemService = require('./accountsSystem.service');
 const logger = require('../config/logger');
+const { currentFeeMonth, splitPending } = require('./feePosition.service');
 
 const getTenantFilter = (scope = {}) => {
   const filter = {};
@@ -1092,7 +1093,7 @@ const getVouchersForPrint = async (ids, scope = {}, options = {}) => {
  * - Pending vouchers with per-month breakdown
  * - Last payment info
  */
-const getStudentFeeSummary = async (studentId, scope = {}) => {
+const getStudentFeeSummary = async (studentId, scope = {}, period = {}) => {
   const [allVouchers, student] = await Promise.all([
     FeeVoucher.find({ ...getTenantFilter(scope), studentId })
       .populate('classId', 'name')
@@ -1108,8 +1109,9 @@ const getStudentFeeSummary = async (studentId, scope = {}) => {
     return MONTH_ORDER.indexOf(b.month) - MONTH_ORDER.indexOf(a.month);
   });
 
-  const totalBilled   = allVouchers.reduce((s, v) => s + effectiveNet(v), 0);
-  const totalReceived = allVouchers.reduce((s, v) => s + (v.paidAmount  || 0), 0);
+  const liveVouchers  = allVouchers.filter((v) => v.status !== 'cancelled');
+  const totalBilled   = liveVouchers.reduce((s, v) => s + effectiveNet(v), 0);
+  const totalReceived = liveVouchers.reduce((s, v) => s + (v.paidAmount  || 0), 0);
 
   const pendingVouchers = allVouchers.filter((v) =>
     ['unpaid', 'partial', 'overdue'].includes(v.status)
@@ -1119,6 +1121,9 @@ const getStudentFeeSummary = async (studentId, scope = {}) => {
     0
   );
 
+  const { month: viewMonth, year: viewYear } = period.month && period.year ? period : currentFeeMonth();
+  const split = splitPending(pendingVouchers, viewMonth, Number(viewYear));
+
   // Last voucher with any payment
   const lastPaidVoucher = allVouchers.find((v) => v.paidAmount > 0);
 
@@ -1126,6 +1131,12 @@ const getStudentFeeSummary = async (studentId, scope = {}) => {
     totalBilled,
     totalReceived,
     totalPending,
+    previousPending: split.previousPending,
+    currentPending: split.currentPending,
+    laterPending: split.laterPending,
+    pendingHeads: split.heads
+      .map((h) => ({ name: h.name, pending: Math.round((h.totalPending + h.laterPending) * 100) / 100 }))
+      .filter((h) => h.pending > 0),
     totalOutstanding: totalBilled - totalReceived,
     creditBalance: student?.creditBalance || 0,
     totalVouchers: allVouchers.length,
@@ -1581,11 +1592,12 @@ const getReceivableSummary = async (scope, month, year) => {
   for (const v of pendingVouchers) {
     const net         = effectiveNet(v);
     const outstanding = Math.max(0, net - (v.paidAmount || 0));
-    const isCurrent   = v.month === month && Number(v.year) === numYear;
-    if (isCurrent) {
+    const period = voucherPeriodIndex(v.month, v.year);
+    const selected = voucherPeriodIndex(month, numYear);
+    if (period === selected) {
       thisMonthReceivable += outstanding;
       thisMonthVouchers++;
-    } else {
+    } else if (period < selected) {
       previousArrears += outstanding;
       arrearsVouchers++;
     }

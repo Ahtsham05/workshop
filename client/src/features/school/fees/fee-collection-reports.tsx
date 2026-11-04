@@ -28,6 +28,7 @@ import { useFormatMoney } from '@/lib/format-money';
 import { formatBusinessDate, formatBusinessDateTimeShort, getBusinessToday } from '@/lib/business-timezone';
 import { ExportButtons, Loading, EmptyState } from './fee-reports';
 import { buildCollectionReportPrintHTML, openReportPrintWindow, useOrgAndUser, type PrintSection } from './report-print';
+import { FundTotals } from './fee-position';
 
 const PIE_COLORS = ['#10b981', '#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
@@ -118,6 +119,8 @@ function DashboardSubTab({ filters, year, setYear }: { filters: CollectionFilter
         </CardContent>
       </Card>
 
+      <FundTotals names={data.collectionFundNames} totals={data.collectionFunds} label={`Collected by Fund — ${rangeLabel}`} />
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         <KpiCard icon={CalendarClock} label="Collected Today" value={formatMoney(data.totalCollectionToday)} tone="good" />
@@ -125,12 +128,42 @@ function DashboardSubTab({ filters, year, setYear }: { filters: CollectionFilter
         <KpiCard icon={TrendingUp} label="Current-Period Fees" value={formatMoney(data.currentMonthCollection)} />
         <KpiCard icon={TrendingDown} label="Previous Dues Recovered" value={formatMoney(data.previousDuesCollection)} />
         <KpiCard icon={Scale} label="Total Outstanding" value={formatMoney(data.totalOutstanding)} tone={data.totalOutstanding > 0 ? 'warn' : 'good'} />
+        <KpiCard icon={Scale} label="Previous Months Pending" value={formatMoney(data.previousOutstanding || 0)} tone={(data.previousOutstanding || 0) > 0 ? 'bad' : 'good'} />
+        <KpiCard icon={Scale} label="This Month Pending" value={formatMoney(data.currentMonthOutstanding || 0)} tone={(data.currentMonthOutstanding || 0) > 0 ? 'warn' : 'good'} />
         <KpiCard icon={Percent} label="Total Discounts" value={formatMoney(data.totalDiscounts)} />
         <KpiCard icon={Undo2} label="Total Refunds" value={formatMoney(data.totalRefunds)} tone={data.totalRefunds > 0 ? 'bad' : 'default'} />
         <KpiCard icon={Wallet} label="Net Collection" value={formatMoney(data.netCollection)} tone="good" />
         <KpiCard icon={Receipt} label="Transactions" value={String(data.transactionCount)} />
         <KpiCard icon={Users} label="Students Who Paid" value={String(data.studentsWhoPaid)} />
       </div>
+
+      {/* Outstanding today, by fee type */}
+      {(data.outstandingHeads || []).some((h: any) => h.previousPending + h.currentPending + h.laterPending > 0) && (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[480px] text-xs">
+            <thead>
+              <tr className="border-b bg-muted/40 text-right text-[11px]">
+                <th className="px-3 py-2 text-left font-semibold">Outstanding by Fee Type</th>
+                <th className="px-3 py-2 font-semibold">Previous Months</th>
+                <th className="px-3 py-2 font-semibold">This Month</th>
+                <th className="px-3 py-2 font-semibold">Later Months</th>
+                <th className="px-3 py-2 font-semibold text-red-600">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.outstandingHeads.map((h: any) => (
+                <tr key={h.name} className="border-b text-right tabular-nums last:border-0">
+                  <td className="px-3 py-1.5 text-left font-medium">{h.name}</td>
+                  <td className="px-3 py-1.5">{formatMoney(h.previousPending)}</td>
+                  <td className="px-3 py-1.5">{formatMoney(h.currentPending)}</td>
+                  <td className="px-3 py-1.5">{formatMoney(h.laterPending)}</td>
+                  <td className="px-3 py-1.5 font-semibold text-red-600">{formatMoney(h.previousPending + h.currentPending + h.laterPending)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Charts */}
       <div className="flex items-center justify-between">
@@ -222,8 +255,9 @@ function MonthlySubTab({ filters }: { filters: CollectionFilters }) {
   if (isLoading) return <Loading />;
   if (!data || data.rows.length === 0) return <EmptyState text="No collections in this range." />;
 
-  const headers = ['Fee Month', 'Students', 'Current Fee', 'Previous Dues', 'Discount', 'Total Collected'];
-  const rows = data.rows.map((r: any) => [`${r.month} ${r.year}`, r.students, formatMoney(r.currentFee), formatMoney(r.previousDues), formatMoney(r.discount), formatMoney(r.totalCollected)]);
+  const fundNames: string[] = data.fundNames || [];
+  const headers = ['Fee Month', 'Students', ...fundNames, 'Current Fee', 'Previous Dues', 'Discount', 'Total Collected'];
+  const rows = data.rows.map((r: any) => [`${r.month} ${r.year}`, r.students, ...fundNames.map((f) => formatMoney(r.funds?.[f] || 0)), formatMoney(r.currentFee), formatMoney(r.previousDues), formatMoney(r.discount), formatMoney(r.totalCollected)]);
 
   const handlePrint = () => openReportPrintWindow(buildCollectionReportPrintHTML(org, {
     title: 'Monthly Collection Report',
@@ -231,7 +265,7 @@ function MonthlySubTab({ filters }: { filters: CollectionFilters }) {
     generatedByName,
     sections: [{
       type: 'table', heading: 'Fee Month Breakdown', headers, rows,
-      footer: ['Total', data.totals.students, formatMoney(data.totals.currentFee), formatMoney(data.totals.previousDues), formatMoney(data.totals.discount), formatMoney(data.totals.totalCollected)],
+      footer: ['Total', data.totals.students, ...fundNames.map((f) => formatMoney(data.totals.funds?.[f] || 0)), formatMoney(data.totals.currentFee), formatMoney(data.totals.previousDues), formatMoney(data.totals.discount), formatMoney(data.totals.totalCollected)],
     }],
   }));
 
@@ -240,7 +274,7 @@ function MonthlySubTab({ filters }: { filters: CollectionFilters }) {
       <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="mr-1 h-3 w-3" /> Print</Button>
         <ExportButtons
-          data={data.rows.map((r: any) => ({ 'Fee Month': `${r.month} ${r.year}`, Students: r.students, 'Current Fee': r.currentFee, 'Previous Dues': r.previousDues, Discount: r.discount, 'Total Collected': r.totalCollected }))}
+          data={data.rows.map((r: any) => ({ 'Fee Month': `${r.month} ${r.year}`, Students: r.students, ...Object.fromEntries(fundNames.map((f) => [f, r.funds?.[f] || 0])), 'Current Fee': r.currentFee, 'Previous Dues': r.previousDues, Discount: r.discount, 'Total Collected': r.totalCollected }))}
           sheetName="MonthlyCollection" fileName="monthly-collection" pdfTitle="Monthly Collection Report"
           headers={headers} rows={rows}
         />
@@ -259,6 +293,7 @@ function MonthlySubTab({ filters }: { filters: CollectionFilters }) {
             <tr className="bg-muted font-bold">
               <td className="px-4 py-2 text-xs">Total</td>
               <td className="px-4 py-2 text-xs">{data.totals.students}</td>
+              {fundNames.map((f) => <td key={f} className="px-4 py-2 text-xs">{formatMoney(data.totals.funds?.[f] || 0)}</td>)}
               <td className="px-4 py-2 text-xs">{formatMoney(data.totals.currentFee)}</td>
               <td className="px-4 py-2 text-xs">{formatMoney(data.totals.previousDues)}</td>
               <td className="px-4 py-2 text-xs">{formatMoney(data.totals.discount)}</td>
@@ -281,8 +316,9 @@ function YearlySubTab({ year, setYear, classId }: { year: number; setYear: (y: n
   const { org, generatedByName } = useOrgAndUser();
   if (isLoading || !data) return <Loading />;
 
-  const headers = ['Month', 'Current Month Collection', 'Previous Dues', 'Total Collection', 'Outstanding'];
-  const rows = data.rows.map((r: any) => [r.month, formatMoney(r.currentMonthCollection), formatMoney(r.previousDues), formatMoney(r.totalCollection), formatMoney(r.outstanding)]);
+  const fundNames: string[] = data.fundNames || [];
+  const headers = ['Month', ...fundNames, 'Current Month Collection', 'Previous Dues Received', 'Total Collection', 'Outstanding'];
+  const rows = data.rows.map((r: any) => [r.month, ...fundNames.map((f) => formatMoney(r.funds?.[f] || 0)), formatMoney(r.currentMonthCollection), formatMoney(r.previousDues), formatMoney(r.totalCollection), formatMoney(r.outstanding)]);
 
   const handlePrint = () => openReportPrintWindow(buildCollectionReportPrintHTML(org, {
     title: 'Yearly Fee Collection Report',
@@ -290,7 +326,7 @@ function YearlySubTab({ year, setYear, classId }: { year: number; setYear: (y: n
     generatedByName,
     sections: [{
       type: 'table', heading: `${year} — Month by Month`, headers, rows,
-      footer: ['Annual Total', formatMoney(data.totals.currentMonthCollection), formatMoney(data.totals.previousDues), formatMoney(data.totals.totalCollection), formatMoney(data.totals.discounts) + ' discounts'],
+      footer: ['Annual Total', ...fundNames.map((f) => formatMoney(data.totals.funds?.[f] || 0)), formatMoney(data.totals.currentMonthCollection), formatMoney(data.totals.previousDues), formatMoney(data.totals.totalCollection), formatMoney(data.totals.discounts) + ' discounts'],
     }],
   }));
 
@@ -304,7 +340,7 @@ function YearlySubTab({ year, setYear, classId }: { year: number; setYear: (y: n
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="mr-1 h-3 w-3" /> Print</Button>
           <ExportButtons
-            data={data.rows} sheetName="YearlyCollection" fileName={`yearly-collection-${year}`}
+            data={data.rows.map(({ funds, ...r }: any) => ({ ...r, ...Object.fromEntries(fundNames.map((f) => [f, funds?.[f] || 0])) }))} sheetName="YearlyCollection" fileName={`yearly-collection-${year}`}
             pdfTitle={`Yearly Fee Collection Report — ${year}`} headers={headers} rows={rows}
           />
         </div>
@@ -322,6 +358,7 @@ function YearlySubTab({ year, setYear, classId }: { year: number; setYear: (y: n
           <tfoot>
             <tr className="bg-muted font-bold">
               <td className="px-4 py-2 text-xs">Annual Total</td>
+              {fundNames.map((f) => <td key={f} className="px-4 py-2 text-xs">{formatMoney(data.totals.funds?.[f] || 0)}</td>)}
               <td className="px-4 py-2 text-xs">{formatMoney(data.totals.currentMonthCollection)}</td>
               <td className="px-4 py-2 text-xs">{formatMoney(data.totals.previousDues)}</td>
               <td className="px-4 py-2 text-xs">{formatMoney(data.totals.totalCollection)}</td>
@@ -372,8 +409,9 @@ function DailySubTab({ filters }: { filters: CollectionFilters }) {
   if (isLoading) return <Loading />;
   if (!data || data.days.length === 0) return <EmptyState text="No collections in this range." />;
 
-  const headers = ['Date', 'Receipts', ...data.columns.map((c: any) => `${c.month.slice(0, 3)} ${c.year}`), 'Total'];
-  const printRows = data.days.map((d: any) => [formatBusinessDate(d.date), d.receiptCount, ...d.byPeriod.map((v: number) => formatMoney(v)), formatMoney(d.total)]);
+  const fundNames: string[] = data.fundNames || [];
+  const headers = ['Date', 'Receipts', ...fundNames, ...data.columns.map((c: any) => `For ${c.month.slice(0, 3)} ${c.year}`), 'Total'];
+  const printRows = data.days.map((d: any) => [formatBusinessDate(d.date), d.receiptCount, ...fundNames.map((f) => formatMoney(d.funds?.[f] || 0)), ...d.byPeriod.map((v: number) => formatMoney(v)), formatMoney(d.total)]);
 
   const handlePrint = () => openReportPrintWindow(buildCollectionReportPrintHTML(org, {
     title: 'Daily Collection Report',
@@ -381,7 +419,7 @@ function DailySubTab({ filters }: { filters: CollectionFilters }) {
     generatedByName,
     sections: [{
       type: 'table', heading: 'Day by Day', headers, rows: printRows,
-      footer: ['Total', data.totals.receiptCount, ...data.totals.byPeriod.map((v: number) => formatMoney(v)), formatMoney(data.totals.total)],
+      footer: ['Total', data.totals.receiptCount, ...fundNames.map((f) => formatMoney(data.totals.funds?.[f] || 0)), ...data.totals.byPeriod.map((v: number) => formatMoney(v)), formatMoney(data.totals.total)],
     }],
   }));
 
@@ -403,6 +441,7 @@ function DailySubTab({ filters }: { filters: CollectionFilters }) {
                     {formatBusinessDate(d.date)}
                   </td>
                   <td className="px-4 py-2 text-xs">{d.receiptCount}</td>
+                  {fundNames.map((f) => <td key={f} className="px-4 py-2 text-xs">{formatMoney(d.funds?.[f] || 0)}</td>)}
                   {d.byPeriod.map((v: number, i: number) => <td key={i} className="px-4 py-2 text-xs">{formatMoney(v)}</td>)}
                   <td className="px-4 py-2 text-xs font-semibold">{formatMoney(d.total)}</td>
                 </tr>
@@ -416,6 +455,7 @@ function DailySubTab({ filters }: { filters: CollectionFilters }) {
             <tr className="bg-muted font-bold">
               <td className="px-4 py-2 text-xs">Total</td>
               <td className="px-4 py-2 text-xs">{data.totals.receiptCount}</td>
+              {fundNames.map((f) => <td key={f} className="px-4 py-2 text-xs">{formatMoney(data.totals.funds?.[f] || 0)}</td>)}
               {data.totals.byPeriod.map((v: number, i: number) => <td key={i} className="px-4 py-2 text-xs">{formatMoney(v)}</td>)}
               <td className="px-4 py-2 text-xs">{formatMoney(data.totals.total)}</td>
             </tr>
@@ -736,7 +776,9 @@ function PrintFullReportButton({ filters }: { filters: CollectionFilters }) {
           { label: 'Discounts', value: formatMoney(dashboard.totalDiscounts) },
           { label: 'Refunds', value: formatMoney(dashboard.totalRefunds) },
           { label: 'Net Collection', value: formatMoney(dashboard.netCollection) },
-          { label: 'Outstanding', value: formatMoney(dashboard.totalOutstanding) },
+          { label: 'Previous Months Pending', value: formatMoney(dashboard.previousOutstanding || 0) },
+          { label: 'This Month Pending', value: formatMoney(dashboard.currentMonthOutstanding || 0) },
+          { label: 'Total Outstanding', value: formatMoney(dashboard.totalOutstanding) },
           { label: 'Transactions', value: String(dashboard.transactionCount) },
         ],
       },
@@ -745,17 +787,17 @@ function PrintFullReportButton({ filters }: { filters: CollectionFilters }) {
     if (monthly?.rows.length) {
       sections.push({
         type: 'table', heading: 'Fee Month Breakdown',
-        headers: ['Fee Month', 'Students', 'Current Fee', 'Previous Dues', 'Discount', 'Total Collected'],
-        rows: monthly.rows.map((r: any) => [`${r.month} ${r.year}`, r.students, formatMoney(r.currentFee), formatMoney(r.previousDues), formatMoney(r.discount), formatMoney(r.totalCollected)]),
-        footer: ['Total', monthly.totals.students, formatMoney(monthly.totals.currentFee), formatMoney(monthly.totals.previousDues), formatMoney(monthly.totals.discount), formatMoney(monthly.totals.totalCollected)],
+        headers: ['Fee Month', 'Students', ...(monthly.fundNames || []), 'Current Fee', 'Previous Dues', 'Discount', 'Total Collected'],
+        rows: monthly.rows.map((r: any) => [`${r.month} ${r.year}`, r.students, ...(monthly.fundNames || []).map((f: string) => formatMoney(r.funds?.[f] || 0)), formatMoney(r.currentFee), formatMoney(r.previousDues), formatMoney(r.discount), formatMoney(r.totalCollected)]),
+        footer: ['Total', monthly.totals.students, ...(monthly.fundNames || []).map((f: string) => formatMoney(monthly.totals.funds?.[f] || 0)), formatMoney(monthly.totals.currentFee), formatMoney(monthly.totals.previousDues), formatMoney(monthly.totals.discount), formatMoney(monthly.totals.totalCollected)],
       });
     }
     if (daily?.days.length) {
       sections.push({
         type: 'table', heading: 'Daily Collection',
-        headers: ['Date', 'Receipts', ...daily.columns.map((c: any) => `${c.month.slice(0, 3)} ${c.year}`), 'Total'],
-        rows: daily.days.map((d: any) => [formatBusinessDate(d.date), d.receiptCount, ...d.byPeriod.map((v: number) => formatMoney(v)), formatMoney(d.total)]),
-        footer: ['Total', daily.totals.receiptCount, ...daily.totals.byPeriod.map((v: number) => formatMoney(v)), formatMoney(daily.totals.total)],
+        headers: ['Date', 'Receipts', ...(daily.fundNames || []), ...daily.columns.map((c: any) => `For ${c.month.slice(0, 3)} ${c.year}`), 'Total'],
+        rows: daily.days.map((d: any) => [formatBusinessDate(d.date), d.receiptCount, ...(daily.fundNames || []).map((f: string) => formatMoney(d.funds?.[f] || 0)), ...d.byPeriod.map((v: number) => formatMoney(v)), formatMoney(d.total)]),
+        footer: ['Total', daily.totals.receiptCount, ...(daily.fundNames || []).map((f: string) => formatMoney(daily.totals.funds?.[f] || 0)), ...daily.totals.byPeriod.map((v: number) => formatMoney(v)), formatMoney(daily.totals.total)],
       });
     }
     if (byMethod?.length) {

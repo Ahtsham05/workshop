@@ -80,6 +80,7 @@ module.exports.feeCollectionReportService = require('./feeCollectionReport.servi
 module.exports.feePaymentRequestService = require('./feePaymentRequest.service.js');
 module.exports.schoolAccountingService = require('./schoolAccounting.service.js');
 module.exports.schoolReportsService = require('./schoolReports.service.js');
+module.exports.feePositionService = require('./feePosition.service');
 module.exports.accountsSystemService = require('./accountsSystem.service.js');
 
 // School Services

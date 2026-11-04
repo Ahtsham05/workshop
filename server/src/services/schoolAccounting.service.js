@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { FeeVoucher, SchoolTransaction, Student, Teacher, TeacherPayroll } = require('../models');
+const { MONTH_ORDER, getFeePosition, periodIndex } = require('./feePosition.service');
 
 const MONTH_NAMES = [
   'January','February','March','April','May','June',
@@ -47,6 +48,7 @@ const getAccountingDashboard = async (scope, month, year) => {
   const aggFilter = getAggregateFilter(scope);
 
   const { startDate, endDate } = monthDateRange(currentMonth, currentYear);
+  const selectedPeriod = periodIndex(currentMonth, currentYear);
 
   // Today's date range
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -59,10 +61,11 @@ const getAccountingDashboard = async (scope, month, year) => {
     recentTransactions,
     topPendingStudents,
     monthPayroll,
+    feePosition,
   ] = await Promise.all([
     // Voucher collection stats
     FeeVoucher.aggregate([
-      { $match: { ...aggFilter, month: currentMonth, year: Number(currentYear) } },
+      { $match: { ...aggFilter, month: currentMonth, year: Number(currentYear), status: { $ne: 'cancelled' } } },
       {
         // Compute effective net amount (mirrors JS effectiveNet()): use netAmount if > 0,
         // otherwise fall back to sum(feeItems.amount) - discount.
@@ -133,12 +136,16 @@ const getAccountingDashboard = async (scope, month, year) => {
               },
             },
           },
+          periodIndex: { $add: [{ $multiply: ['$year', 12] }, { $indexOfArray: [MONTH_ORDER, '$month'] }] },
         },
       },
+      { $addFields: { balance: { $subtract: ['$effectiveNet', { $ifNull: ['$paidAmount', 0] }] } } },
       {
         $group: {
           _id: '$studentId',
-          totalPending: { $sum: { $subtract: ['$effectiveNet', { $ifNull: ['$paidAmount', 0] }] } },
+          totalPending: { $sum: '$balance' },
+          previousPending: { $sum: { $cond: [{ $lt: ['$periodIndex', selectedPeriod] }, '$balance', 0] } },
+          currentPending: { $sum: { $cond: [{ $eq: ['$periodIndex', selectedPeriod] }, '$balance', 0] } },
           voucherCount: { $sum: 1 },
         },
       },
@@ -158,6 +165,8 @@ const getAccountingDashboard = async (scope, month, year) => {
         $project: {
           _id: 1,
           totalPending: 1,
+          previousPending: 1,
+          currentPending: 1,
           voucherCount: 1,
           studentName: {
             $concat: [
@@ -176,6 +185,9 @@ const getAccountingDashboard = async (scope, month, year) => {
       { $match: { ...aggFilter, month: MONTH_NAMES.indexOf(currentMonth) + 1, year: Number(currentYear), status: 'paid' } },
       { $group: { _id: null, salaryPaid: { $sum: '$netSalary' }, count: { $sum: 1 } } },
     ]),
+
+    // Previous + this month's fees, by fee type
+    getFeePosition(scope, { month: currentMonth, year: Number(currentYear) }),
   ]);
 
   // Reshape voucher stats
@@ -229,6 +241,7 @@ const getAccountingDashboard = async (scope, month, year) => {
     },
     recentTransactions,
     topPendingStudents,
+    feePosition,
   };
 };
 
@@ -258,7 +271,7 @@ const getMonthlyReport = async (scope, year) => {
     ]),
 
     FeeVoucher.aggregate([
-      { $match: { ...aggFilter, year: Number(year) } },
+      { $match: { ...aggFilter, year: Number(year), status: { $ne: 'cancelled' } } },
       {
         $group: {
           _id: '$month',

@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Users, GraduationCap, BookOpen, Calendar, DollarSign, Clock, UserPlus, ClipboardCheck, ArrowRight, CheckCircle2, XCircle, Timer, Umbrella, CalendarMinus, LayoutList, Layers, UserCheck, TrendingUp, AlertCircle, Banknote, Wallet, FileText } from 'lucide-react';
+import { Users, GraduationCap, BookOpen, Calendar, DollarSign, Clock, UserPlus, ClipboardCheck, ArrowRight, CheckCircle2, XCircle, Timer, Umbrella, CalendarMinus, LayoutList, Layers, UserCheck, AlertCircle, Banknote, Wallet, FileText } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { useGetSchoolDashboardQuery, useGetSchoolAccountingDashboardQuery, useGetStudentsQuery } from '@/stores/school.api';
+import { FeeHeadsTable, FeePositionCards } from '../fees/fee-position';
 import { useFormatMoney } from '@/lib/format-money';
 
 type NavigateOptions = Parameters<ReturnType<typeof useNavigate>>[0];
@@ -29,6 +30,7 @@ export default function SchoolDashboard() {
   const currentYear = now.getFullYear();
   const { data: acctDashboard, isLoading: isLoadingAcct } = useGetSchoolAccountingDashboardQuery({ month: currentMonth, year: currentYear });
   const fc = acctDashboard?.feeCollection;
+  const feePosition = acctDashboard?.feePosition;
   const allStudents: any[] = allStudentsData?.results || [];
 
   const classWiseStrength = useMemo(() => {
@@ -83,7 +85,13 @@ export default function SchoolDashboard() {
     },
     {
       title: 'Pending Fees',
-      value: stats?.pendingFees?.count || 0,
+      value: formatMoney(stats?.pendingFees?.amount || 0),
+      compact: true,
+      detail: [
+        `Previous ${formatMoney(stats?.pendingFees?.previous || 0)}`,
+        `${(stats?.pendingFees?.month || currentMonth).slice(0, 3)} ${formatMoney(stats?.pendingFees?.current || 0)}`,
+        ...((stats?.pendingFees?.later || 0) > 0 ? [`Later ${formatMoney(stats?.pendingFees?.later || 0)}`] : []),
+      ],
       icon: DollarSign,
       gradient: 'from-rose-500 to-red-600',
       bg: 'bg-rose-50',
@@ -128,7 +136,10 @@ export default function SchoolDashboard() {
                   {isLoading ? (
                     <div className="h-9 w-16 bg-muted animate-pulse rounded mt-1" />
                   ) : (
-                    <p className="text-4xl font-bold mt-1">{stat.value}</p>
+                    <>
+                      <p className={`font-bold mt-1 ${stat.compact ? 'text-2xl' : 'text-4xl'}`}>{stat.value}</p>
+                      {stat.detail?.map((line) => <p key={line} className="text-[11px] text-muted-foreground mt-0.5">{line}</p>)}
+                    </>
                   )}
                 </div>
                 <div className={`h-11 w-11 rounded-xl ${stat.bg} flex items-center justify-center`}>
@@ -210,7 +221,13 @@ export default function SchoolDashboard() {
             Full Report <ArrowRight className="h-3 w-3" />
           </Button>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="space-y-3">
+          <FeePositionCards summary={feePosition?.summary} month={currentMonth} isLoading={isLoadingAcct} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="min-w-0 lg:col-span-2">
+              <FeeHeadsTable heads={feePosition?.heads} summary={feePosition?.summary} month={currentMonth} isLoading={isLoadingAcct} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3 content-start">
           {/* Collected Today */}
           <Card>
             <CardContent className="pt-4 pb-4">
@@ -230,48 +247,6 @@ export default function SchoolDashboard() {
               </div>
             </CardContent>
           </Card>
-          {/* Total Expected */}
-          <Card>
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                  <DollarSign className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Expected</p>
-                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold">{formatMoney(fc?.totalExpected || 0)}</p>}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          {/* Collected */}
-          <Card>
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Collected</p>
-                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold text-green-600">{formatMoney(fc?.totalCollected || 0)}</p>}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          {/* Pending */}
-          <Card>
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Pending</p>
-                  {isLoadingAcct ? <div className="h-6 w-20 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold text-red-500">{formatMoney(fc?.totalPending || 0)}</p>}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
           {/* Collection Rate + voucher breakdown */}
           <Card>
             <CardContent className="pt-4 pb-4">
@@ -281,13 +256,13 @@ export default function SchoolDashboard() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Collection Rate</p>
-                  {isLoadingAcct ? <div className="h-6 w-14 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold text-purple-600">{fc?.collectionRate || 0}%</p>}
+                  {isLoadingAcct ? <div className="h-6 w-14 bg-muted animate-pulse rounded mt-0.5" /> : <p className="text-lg font-bold text-purple-600">{feePosition?.summary?.collectionRate || 0}%</p>}
                 </div>
               </div>
               {!isLoadingAcct && (
                 <>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-1.5 bg-purple-500 rounded-full transition-all" style={{ width: `${fc?.collectionRate || 0}%` }} />
+                    <div className="h-1.5 bg-purple-500 rounded-full transition-all" style={{ width: `${Math.min(100, feePosition?.summary?.collectionRate || 0)}%` }} />
                   </div>
                   <div className="flex gap-2 mt-2 flex-wrap">
                     {[
@@ -303,6 +278,8 @@ export default function SchoolDashboard() {
               )}
             </CardContent>
           </Card>
+            </div>
+          </div>
         </div>
       </div>
 

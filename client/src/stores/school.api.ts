@@ -1185,6 +1185,30 @@ export const schoolApi = createApi({
       },
       providesTags: ['FeeVoucher'],
     }),
+    getFeePosition: builder.query({
+      query: (params: { month: string; year: number; classId?: string; sectionId?: string; detail?: 'classes' | 'students' }) =>
+        ({ url: '/school-reports-engine/fee-position', params }),
+      providesTags: ['FeeVoucher', 'FeePayment'],
+    }),
+    getFeePositionYear: builder.query({
+      query: (params: { year: number; classId?: string; sectionId?: string }) =>
+        ({ url: '/school-reports-engine/fee-position/year', params }),
+      providesTags: ['FeeVoucher', 'FeePayment'],
+    }),
+    getFeeFundReport: builder.query({
+      query: (params: { year: number; classId?: string }) =>
+        ({ url: '/school-reports-engine/fee-funds', params }),
+      providesTags: ['FeeVoucher', 'FeePayment'],
+    }),
+    getFeeFundDetail: builder.query({
+      query: (params: { year: number; fund: string; classId?: string }) =>
+        ({ url: '/school-reports-engine/fee-funds/detail', params }),
+      providesTags: ['FeeVoucher', 'FeePayment'],
+    }),
+    getFeeFundYears: builder.query({
+      query: (params: { classId?: string }) => ({ url: '/school-reports-engine/fee-funds/years', params }),
+      providesTags: ['FeeVoucher', 'FeePayment'],
+    }),
     getYearlyFeeReport: builder.query({
       query: (params: { year: number; classId?: string }) =>
         ({ url: '/school-reports-engine/fee-collection/yearly', params }),
@@ -1848,6 +1872,11 @@ export const {
   useGetFeeCollectionDiscountsQuery,
   useGetFeeCollectionRefundsQuery,
   useGetReceivableSummaryQuery,
+  useGetFeePositionQuery,
+  useGetFeePositionYearQuery,
+  useGetFeeFundReportQuery,
+  useGetFeeFundDetailQuery,
+  useGetFeeFundYearsQuery,
   useGetYearlyFeeReportQuery,
   // School Transactions
   useGetSchoolTransactionsQuery,
